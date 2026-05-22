@@ -1,4 +1,4 @@
-import { type RefObject, useMemo } from "react";
+import { type RefObject, useCallback, useMemo } from "react";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   useAgentOperations,
@@ -168,18 +168,20 @@ export function useAgentsPageOrchestrationShellModel({
     startSessionRequest: orchestration.startSessionRequest,
   });
 
+  const handleResolveGitConflictQuickAction = useCallback(() => {
+    void gitConflictQuickActionContextRef.current?.resolveWithBuilder();
+  }, [gitConflictQuickActionContextRef]);
+
   const agentStudioHeaderModel = useMemo(
     () => ({
       ...orchestration.agentStudioHeaderModel,
       onResolveGitConflictQuickAction: gitConflictQuickActionContext
-        ? () => {
-            void gitConflictQuickActionContextRef.current?.resolveWithBuilder();
-          }
+        ? handleResolveGitConflictQuickAction
         : null,
     }),
     [
       gitConflictQuickActionContext,
-      gitConflictQuickActionContextRef,
+      handleResolveGitConflictQuickAction,
       orchestration.agentStudioHeaderModel,
     ],
   );

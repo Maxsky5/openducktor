@@ -72,13 +72,22 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unlinkingPullRequestTaskId,
     setTaskTargetBranch,
   } = useTasksState();
-  const agentOperations = useAgentOperations();
   const {
+    bootstrapTaskSessions,
     hydrateRequestedTaskSessionHistory,
     ensureSessionReadyForView,
+    readSessionFileSearch,
     readSessionModelCatalog,
+    readSessionSlashCommands,
     readSessionTodos,
-  } = agentOperations;
+    startAgentSession,
+    settleStartedAgentSession,
+    sendAgentMessage,
+    stopAgentSession,
+    updateAgentSessionModel,
+    replyAgentApproval,
+    answerAgentQuestion,
+  } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
 
   const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
@@ -165,7 +174,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     agentStudioHeaderModel,
   } = useAgentsPageOrchestrationShellModel({
     activeWorkspace,
-    branches,
+    branches: branches ?? [],
     runtimeDefinitions,
     isForegroundLoadingTasks,
     routeSession,
@@ -173,7 +182,19 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     gitConflictQuickActionContext,
     gitConflictQuickActionContextRef,
     openTaskDetails,
-    agentOperations,
+    agentOperations: {
+      bootstrapTaskSessions,
+      hydrateRequestedTaskSessionHistory,
+      readSessionFileSearch,
+      readSessionSlashCommands,
+      startAgentSession,
+      settleStartedAgentSession,
+      sendAgentMessage,
+      stopAgentSession,
+      updateAgentSessionModel,
+      replyAgentApproval,
+      answerAgentQuestion,
+    },
     humanRequestChangesTask,
     setTaskTargetBranch,
   });

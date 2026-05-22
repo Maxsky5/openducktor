@@ -16,7 +16,7 @@ import {
 
 type UseAgentsPageRightPanelShellModelArgs = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
-  branches: UseAgentsPageRightPanelModelArgs["branches"];
+  branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
   selection: AgentStudioOrchestrationSelectionContext;
   orchestration: ReturnType<typeof useAgentStudioOrchestrationController>;
@@ -101,7 +101,7 @@ export function useAgentsPageRightPanelShellModel({
         onResolveGitConflict={onResolveGitConflict}
         onGitConflictQuickActionContextChange={onGitConflictQuickActionContextChange}
         refreshWorktreeRef={rightPanelRefreshWorktreeRef}
-        {...(branches ? { branches } : {})}
+        branches={branches}
       />
     </>
   ) : null;
