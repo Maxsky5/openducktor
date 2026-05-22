@@ -873,6 +873,11 @@ export const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => 
   if (part.kind === "attachment" && part.attachment.kind === "image") {
     return { type: "localImage", path: part.attachment.path };
   }
+  if (part.kind === "attachment") {
+    throw new Error(
+      `Codex app-server does not support ${part.attachment.kind} attachments. Codex user input supports text, file references, and images only.`,
+    );
+  }
 
   throw new Error(`Codex app-server does not support '${part.kind}' user message parts.`);
 };

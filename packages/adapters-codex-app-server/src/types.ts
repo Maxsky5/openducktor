@@ -61,6 +61,8 @@ export type CodexRepoRuntimeResolverPort = {
   requireRuntimeById?(ref: RepoRuntimeRef, runtimeId: string): Promise<RuntimeInstanceSummary>;
 };
 
+export type CodexInputModality = "text" | "image";
+
 export type CodexModelCatalogRecord = {
   id: string;
   model: string;
@@ -72,7 +74,7 @@ export type CodexModelCatalogRecord = {
     description?: string;
   }>;
   defaultReasoningEffort?: string | { reasoningEffort: string; description?: string };
-  inputModalities: string[];
+  inputModalities: CodexInputModality[];
   supportsPersonality?: boolean;
   isDefault?: boolean;
 };
