@@ -28,13 +28,13 @@ export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): Ta
 
   if (canUseQaWorkflowFromStatus(task.status)) {
     actions.push("qa_start");
-  } else {
-    const canStartBuild =
-      isQaRejectedRework(task) ||
-      (task.status !== "in_progress" && allowsTransition(task, task.status, "in_progress"));
-    if (canStartBuild) {
-      actions.push("build_start");
-    }
+  }
+
+  const canStartBuild =
+    isQaRejectedRework(task) ||
+    (!isActiveOrReviewStatus(task.status) && allowsTransition(task, task.status, "in_progress"));
+  if (canStartBuild) {
+    actions.push("build_start");
   }
 
   if (isActiveOrReviewStatus(task.status)) {

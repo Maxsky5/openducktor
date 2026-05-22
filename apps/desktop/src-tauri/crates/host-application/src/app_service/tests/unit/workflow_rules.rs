@@ -290,6 +290,20 @@ fn qa_rejected_in_progress_tasks_expose_rework_and_open_qa_actions() {
 }
 
 #[test]
+fn qa_rejected_blocked_tasks_expose_qa_start_rework_and_open_qa_actions() {
+    let mut task = make_task("task-1", "task", TaskStatus::Blocked);
+    task.document_summary.qa_report.has = true;
+    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+
+    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+
+    assert!(actions.contains(&TaskAction::QaStart));
+    assert!(actions.contains(&TaskAction::BuildStart));
+    assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(actions.contains(&TaskAction::OpenQa));
+}
+
+#[test]
 fn ai_review_tasks_expose_qa_start_request_changes_approve_and_hide_build_start() {
     let task = make_task("task-1", "task", TaskStatus::AiReview);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));

@@ -107,15 +107,17 @@ fn module_derive_available_actions_hides_document_updates_for_terminal_or_deferr
 
 #[test]
 fn module_derive_available_actions_exposes_rework_and_open_qa_for_qa_rejected_tasks() {
-    let mut task = make_task("task-1", "task", TaskStatus::InProgress);
-    task.document_summary.qa_report.has = true;
-    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+    for status in [TaskStatus::InProgress, TaskStatus::Blocked] {
+        let mut task = make_task("task-1", "task", status);
+        task.document_summary.qa_report.has = true;
+        task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
 
-    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
 
-    assert!(actions.contains(&TaskAction::BuildStart));
-    assert!(actions.contains(&TaskAction::OpenBuilder));
-    assert!(actions.contains(&TaskAction::OpenQa));
+        assert!(actions.contains(&TaskAction::BuildStart));
+        assert!(actions.contains(&TaskAction::OpenBuilder));
+        assert!(actions.contains(&TaskAction::OpenQa));
+    }
 }
 
 #[test]

@@ -86,6 +86,37 @@ describe("task domain policy", () => {
     expect(actions).toContain("qa_start");
   });
 
+  test("keeps rework build action for blocked QA-rejected tasks", () => {
+    const blockedTask = task({
+      status: "blocked",
+      aiReviewEnabled: true,
+      documentSummary: {
+        spec: { has: false },
+        plan: { has: false },
+        qaReport: { has: true, verdict: "rejected" },
+      },
+    });
+    const actions = deriveAvailableActions(blockedTask, [blockedTask]);
+
+    expect(actions).toContain("qa_start");
+    expect(actions).toContain("build_start");
+    expect(actions).toContain("open_qa");
+  });
+
+  test("keeps QA unavailable outside QA workflow statuses", () => {
+    for (const status of ["ready_for_dev", "in_progress", "deferred"] as const) {
+      const workItem = task({
+        status,
+        aiReviewEnabled: true,
+      });
+      const workflows = deriveAgentWorkflows(workItem);
+      const actions = deriveAvailableActions(workItem, [workItem]);
+
+      expect(workflows.qa.available).toBe(false);
+      expect(actions).not.toContain("qa_start");
+    }
+  });
+
   test("derives human approval only when closing policy allows it", () => {
     const reviewTask = task({ status: "human_review" });
 
