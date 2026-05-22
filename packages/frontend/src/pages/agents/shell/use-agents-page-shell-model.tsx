@@ -180,7 +180,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
 
   const { isRightPanelVisible, rightPanelContent } = useAgentsPageRightPanelShellModel({
     activeWorkspace,
-    branches: branches ?? [],
+    branches,
     activeBranch,
     selection: orchestrationSelection,
     orchestration,

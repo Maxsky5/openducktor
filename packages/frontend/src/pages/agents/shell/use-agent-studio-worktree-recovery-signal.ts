@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
+
+type WorktreeRecoverySelection = {
+  viewTaskId: string;
+  viewSelectedTask: {
+    status?: string | null;
+    updatedAt?: string | null;
+  } | null;
+  viewActiveSession: {
+    externalSessionId: string;
+    status: string;
+    workingDirectory: string | null;
+  } | null;
+  isViewSessionHistoryHydrating: boolean;
+};
 
 type UseAgentStudioWorktreeRecoverySignalArgs = {
   workspaceRepoPath: string | null;
-  selection: AgentsPageRouteSessionModel["selection"];
+  selection: WorktreeRecoverySelection;
   isForegroundLoadingTasks: boolean;
 };
 
