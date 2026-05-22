@@ -111,8 +111,9 @@ export const createSystemCommandLaunch = (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ) => {
-  const launchEnv =
-    env.ComSpec?.trim() || !process.env.ComSpec ? env : { ...env, ComSpec: process.env.ComSpec };
+  const envComSpec = env.ComSpec?.trim();
+  const processComSpec = process.env.ComSpec?.trim();
+  const launchEnv = envComSpec || !processComSpec ? env : { ...env, ComSpec: processComSpec };
   return createProcessCommandLaunch(command, args, launchEnv, platform);
 };
 

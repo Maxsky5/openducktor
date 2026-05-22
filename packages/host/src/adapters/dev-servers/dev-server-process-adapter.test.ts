@@ -31,7 +31,7 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 500): Promise<void>
   }
 };
 
-const quoteCommandArg = (value: string): string => {
+const quoteShellCommandArgForTest = (value: string): string => {
   if (value.length === 0) {
     return `""`;
   }
@@ -88,7 +88,10 @@ setInterval(() => {}, 1000);
       startGracePeriodMs: 20,
       stopTimeoutMs: 750,
     });
-    const command = [quoteCommandArg(process.execPath), quoteCommandArg(scriptPath)].join(" ");
+    const command = [
+      quoteShellCommandArgForTest(process.execPath),
+      quoteShellCommandArgForTest(scriptPath),
+    ].join(" ");
 
     try {
       const handle = await port.start({
@@ -140,8 +143,8 @@ setInterval(() => {}, 1000);
       stopTimeoutMs: 750,
     });
     const command = [
-      `cd ${quoteCommandArg(nestedDir)}`,
-      `ODT_INLINE_ENV=from-shell ${quoteCommandArg(process.execPath)} server.mjs`,
+      `cd ${quoteShellCommandArgForTest(nestedDir)}`,
+      `ODT_INLINE_ENV=from-shell ${quoteShellCommandArgForTest(process.execPath)} server.mjs`,
     ].join(" && ");
 
     try {
@@ -183,7 +186,10 @@ setInterval(() => {}, 1000);
       startGracePeriodMs: 20,
       stopTimeoutMs: 1_000,
     });
-    const command = [quoteCommandArg(process.execPath), quoteCommandArg(parentPath)].join(" ");
+    const command = [
+      quoteShellCommandArgForTest(process.execPath),
+      quoteShellCommandArgForTest(parentPath),
+    ].join(" ");
 
     try {
       const handle = await port.start({
@@ -211,9 +217,9 @@ setInterval(() => {}, 1000);
       stopTimeoutMs: 100,
     });
     const command = [
-      quoteCommandArg(process.execPath),
+      quoteShellCommandArgForTest(process.execPath),
       "-e",
-      quoteCommandArg("process.exit(42);"),
+      quoteShellCommandArgForTest("process.exit(42);"),
     ].join(" ");
 
     await expect(
@@ -328,7 +334,11 @@ setInterval(() => {}, 1000);
           stopTimeoutMs: 1_000,
         });
         const handle = await port.start({
-          command: `${quoteCommandArg(script)} one ${quoteCommandArg("two words")}`,
+          command: [
+            quoteShellCommandArgForTest(script),
+            "one",
+            quoteShellCommandArgForTest("two words"),
+          ].join(" "),
           cwd: root,
           onExit: () => {},
           onOutput: (output) => outputs.push(output.data),

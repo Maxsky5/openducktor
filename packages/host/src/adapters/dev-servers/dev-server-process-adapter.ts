@@ -47,6 +47,8 @@ const createDevServerCommandLaunch = (
   platform: NodeJS.Platform,
 ): DevServerCommandLaunch => {
   if (platform !== "win32") {
+    // Repo dev-server commands are configured as shell command strings so users can
+    // keep common scripts such as `cd app && npm run dev` or inline env assignments.
     return { command: "/bin/sh", args: ["-lc", command] };
   }
 
@@ -100,6 +102,9 @@ const trackDevServerProcess = ({
       }, timeoutMs);
       signal.addEventListener("abort", abort, { once: true });
       closeListeners.add(resolveTrue);
+      if (closeResult !== null || spawnError !== null) {
+        resolveTrue();
+      }
     });
   };
 
