@@ -1,5 +1,5 @@
 use crate::app_service::service_core::AppService;
-use crate::app_service::workflow_rules::validate_transition;
+use crate::app_service::workflow_rules::{can_use_qa_workflow_from_status, validate_transition};
 use anyhow::{anyhow, Context, Result};
 use host_domain::{QaVerdict, SpecDocument, TaskCard, TaskStatus};
 
@@ -52,12 +52,9 @@ impl AppService {
         verdict: QaVerdict,
     ) -> Result<TaskCard> {
         let mut context = self.load_task_context(repo_path, task_id)?;
-        if !matches!(
-            context.task.status,
-            TaskStatus::AiReview | TaskStatus::HumanReview
-        ) {
+        if !can_use_qa_workflow_from_status(&context.task.status) {
             return Err(anyhow!(
-                "QA outcomes are only allowed from ai_review or human_review (current: {}).",
+                "QA outcomes are only allowed from blocked, ai_review, or human_review (current: {}).",
                 context.task.status.as_cli_value()
             ));
         }

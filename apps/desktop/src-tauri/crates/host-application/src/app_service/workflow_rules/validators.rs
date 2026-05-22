@@ -5,8 +5,8 @@ use host_domain::{
 };
 
 use super::transitions::{
-    allows_transition, can_set_plan, can_set_spec_from_status, default_qa_required_for_issue_type,
-    is_open_state,
+    allows_transition, can_set_plan, can_set_spec_from_status, can_use_qa_workflow_from_status,
+    default_qa_required_for_issue_type, is_active_or_review_status, is_open_state,
 };
 
 pub(crate) fn validate_transition(
@@ -173,10 +173,12 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
         actions.push(TaskAction::SetPlan);
     }
 
-    if matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview) {
+    if can_use_qa_workflow_from_status(&task.status) {
         actions.push(TaskAction::QaStart);
-    } else if is_qa_rejected_rework(task)
-        || (!matches!(task.status, TaskStatus::InProgress | TaskStatus::Blocked)
+    }
+
+    if is_qa_rejected_rework(task)
+        || (!is_active_or_review_status(&task.status)
             && allows_transition(task, &task.status, &TaskStatus::InProgress))
     {
         actions.push(TaskAction::BuildStart);

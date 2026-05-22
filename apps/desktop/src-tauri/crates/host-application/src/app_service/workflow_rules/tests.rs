@@ -48,8 +48,12 @@ fn module_derive_available_actions_exposes_resume_for_deferred_task() {
 }
 
 #[test]
-fn module_derive_available_actions_exposes_qa_start_for_review_states() {
-    for status in [TaskStatus::AiReview, TaskStatus::HumanReview] {
+fn module_derive_available_actions_exposes_qa_start_for_blocked_and_review_states() {
+    for status in [
+        TaskStatus::Blocked,
+        TaskStatus::AiReview,
+        TaskStatus::HumanReview,
+    ] {
         let task = make_task("task-1", "task", status);
 
         let actions = derive_available_actions(&task, std::slice::from_ref(&task));
@@ -103,15 +107,17 @@ fn module_derive_available_actions_hides_document_updates_for_terminal_or_deferr
 
 #[test]
 fn module_derive_available_actions_exposes_rework_and_open_qa_for_qa_rejected_tasks() {
-    let mut task = make_task("task-1", "task", TaskStatus::InProgress);
-    task.document_summary.qa_report.has = true;
-    task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
+    for status in [TaskStatus::InProgress, TaskStatus::Blocked] {
+        let mut task = make_task("task-1", "task", status);
+        task.document_summary.qa_report.has = true;
+        task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
 
-    let actions = derive_available_actions(&task, std::slice::from_ref(&task));
+        let actions = derive_available_actions(&task, std::slice::from_ref(&task));
 
-    assert!(actions.contains(&TaskAction::BuildStart));
-    assert!(actions.contains(&TaskAction::OpenBuilder));
-    assert!(actions.contains(&TaskAction::OpenQa));
+        assert!(actions.contains(&TaskAction::BuildStart));
+        assert!(actions.contains(&TaskAction::OpenBuilder));
+        assert!(actions.contains(&TaskAction::OpenQa));
+    }
 }
 
 #[test]
@@ -330,6 +336,10 @@ fn module_derive_agent_workflows_qa_flags_and_completion_follow_payload() {
     task.status = TaskStatus::HumanReview;
     let human_review = derive_agent_workflows(&task);
     assert!(human_review.qa.available);
+
+    task.status = TaskStatus::Blocked;
+    let blocked = derive_agent_workflows(&task);
+    assert!(blocked.qa.available);
 
     task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
     let rejected = derive_agent_workflows(&task);

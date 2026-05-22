@@ -6,6 +6,7 @@ import {
   canSetPlan,
   canSetSpecFromStatus,
   canTransitionToClosed,
+  canUseQaWorkflowFromStatus,
   isActiveOrReviewStatus,
   isOpenState,
 } from "./status-transition-policy";
@@ -25,17 +26,15 @@ export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): Ta
     actions.push("set_plan");
   }
 
-  if (task.status === "ai_review" || task.status === "human_review") {
+  if (canUseQaWorkflowFromStatus(task.status)) {
     actions.push("qa_start");
-  } else {
-    const canStartBuild =
-      isQaRejectedRework(task) ||
-      (task.status !== "in_progress" &&
-        task.status !== "blocked" &&
-        allowsTransition(task, task.status, "in_progress"));
-    if (canStartBuild) {
-      actions.push("build_start");
-    }
+  }
+
+  const canStartBuild =
+    isQaRejectedRework(task) ||
+    (!isActiveOrReviewStatus(task.status) && allowsTransition(task, task.status, "in_progress"));
+  if (canStartBuild) {
+    actions.push("build_start");
   }
 
   if (isActiveOrReviewStatus(task.status)) {

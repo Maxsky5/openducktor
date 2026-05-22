@@ -84,7 +84,7 @@ The backend is the single source of truth for which actions are currently allowe
 
 ### `qa_start`
 - Purpose: request or start a QA review loop for the current task state.
-- Transition: none directly; it opens the QA workflow from `ai_review` or `human_review`.
+- Transition: none directly; it opens the QA workflow from `blocked`, `ai_review`, or `human_review`.
 
 ### `open_qa`
 - Purpose: open existing QA context/run UX.

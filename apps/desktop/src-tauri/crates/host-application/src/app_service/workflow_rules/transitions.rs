@@ -13,6 +13,13 @@ pub(crate) fn is_open_state(status: &TaskStatus) -> bool {
     !matches!(status, TaskStatus::Closed | TaskStatus::Deferred)
 }
 
+pub(crate) fn can_use_qa_workflow_from_status(status: &TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::Blocked | TaskStatus::AiReview | TaskStatus::HumanReview
+    )
+}
+
 fn can_skip_spec_and_planning(task: &TaskCard) -> bool {
     matches!(task.issue_type, IssueType::Task | IssueType::Bug)
 }
@@ -65,11 +72,7 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
         TaskStatus::AiReview | TaskStatus::HumanReview | TaskStatus::Closed
     );
 
-    let qa_available = if is_closed {
-        false
-    } else {
-        matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview)
-    };
+    let qa_available = !is_closed && can_use_qa_workflow_from_status(&task.status);
     let qa_completed = task.document_summary.qa_report.verdict == QaWorkflowVerdict::Approved;
 
     AgentWorkflows {
