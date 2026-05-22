@@ -7,10 +7,15 @@ const WRITE_OPERATION = "codexAppServerTransport.writeLine";
 export const writeJsonLine = (
   stdin: Writable,
   payload: unknown,
+  options: { onWriteStarted?: () => void } = {},
 ): Effect.Effect<void, HostOperationError> =>
   Effect.async((resume) => {
     let active = true;
+    let writeCallbackFinished = false;
+    let writeCallbackFailed = false;
     stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
+      writeCallbackFinished = true;
+      writeCallbackFailed = Boolean(error);
       if (!active) {
         return;
       }
@@ -20,6 +25,9 @@ export const writeJsonLine = (
       }
       resume(Effect.void);
     });
+    if (!writeCallbackFinished || !writeCallbackFailed) {
+      options.onWriteStarted?.();
+    }
     return Effect.sync(() => {
       active = false;
     });

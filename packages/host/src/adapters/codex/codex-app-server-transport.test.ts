@@ -196,6 +196,78 @@ describe("createCodexAppServerTransport", () => {
     }
   });
 
+  test("keeps the transport usable after a late response to an interrupted sent request", async () => {
+    let writeCount = 0;
+    const stdin = {
+      write(_chunk: string, callback: (error?: Error | null) => void) {
+        writeCount += 1;
+        if (writeCount > 1) {
+          callback();
+        }
+        return true;
+      },
+      destroy() {},
+    } as unknown as Writable;
+    const child = createChild(stdin);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+
+    try {
+      const interruptedFiber = Effect.runFork(
+        transport.request({
+          method: "model/list",
+          params: {},
+        }),
+      );
+      await waitForStreamEvents();
+
+      expect(writeCount).toBe(1);
+
+      await Effect.runPromise(Fiber.interrupt(interruptedFiber));
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { data: [], nextCursor: null } })}\n`,
+      );
+      await waitForStreamEvents();
+
+      const nextResponse = Effect.runPromise(
+        transport.request({
+          method: "model/list",
+          params: {},
+        }),
+      );
+      await waitForStreamEvents();
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 2, result: { data: [], nextCursor: null } })}\n`,
+      );
+
+      await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test("still fails fast for responses with genuinely unexpected ids", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+
+    try {
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 99, result: { data: [], nextCursor: null } })}\n`,
+      );
+      await waitForStreamEvents();
+
+      await expect(
+        Effect.runPromise(
+          transport.request({
+            method: "model/list",
+            params: {},
+          }),
+        ),
+      ).rejects.toThrow("Received Codex app-server response with unexpected id 99 for runtime-1");
+    } finally {
+      await Effect.runPromise(transport.close());
+    }
+  });
+
   test("clears the pending request timeout when send fails", async () => {
     const stdin = {
       write(_chunk: string, callback: (error?: Error | null) => void) {

@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -8,33 +8,31 @@ import {
 } from "../../effect/host-errors";
 import type {
   CodexAppServerProtocolMessage,
-  CodexAppServerRequestMethod,
-  CodexAppServerRequestResult,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import {
   type CodexAppServerClientRequest,
   parseCodexAppServerRequestResult,
 } from "../../ports/codex-app-server-protocol";
+import { acquirePendingResponse } from "./codex-app-server-pending-response";
 import {
   appendCapturedStderr,
   extractErrorMessage,
   isJsonRecord,
   parseStreamMessage,
   pushBoundedMessage,
-  resolveAfterQueuedMessages,
 } from "./codex-app-server-transport-messages";
 import type {
   CodexAppServerChildTransport,
   CodexAppServerEventEmitter,
   CodexAppServerStreamEvent,
-  CodexAppServerTransportError,
   CodexChildProcess,
   PendingCodexAppServerRequest,
 } from "./codex-app-server-transport-types";
 import { writeJsonLine } from "./codex-json-line-writer";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const MAX_CANCELLED_SENT_REQUEST_IDS = 1_000;
 
 export const createCodexAppServerTransport = (
   runtimeId: string,
@@ -46,6 +44,7 @@ export const createCodexAppServerTransport = (
   let closed = false;
   let fatalError: Error | null = null;
   const pending = new Map<number, PendingCodexAppServerRequest>();
+  const cancelledSentRequests = new Map<number, NodeJS.Timeout>();
   const notifications: CodexAppServerProtocolMessage[] = [];
   const serverRequests: CodexAppServerProtocolMessage[] = [];
   let stderrOutput = "";
@@ -57,6 +56,10 @@ export const createCodexAppServerTransport = (
       fatalError = error;
     }
     closed = true;
+    for (const timeout of cancelledSentRequests.values()) {
+      clearTimeout(timeout);
+    }
+    cancelledSentRequests.clear();
     for (const [id, request] of pending) {
       clearTimeout(request.timeout);
       request.reject(error);
@@ -85,10 +88,13 @@ export const createCodexAppServerTransport = (
         toHostOperationError(cause, "codexAppServerTransport.ensureOpen", { runtimeId }),
     });
 
-  const sendMessage = (message: Record<string, unknown>) =>
+  const sendMessage = (
+    message: Record<string, unknown>,
+    options: { onWriteStarted?: () => void } = {},
+  ) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
-      yield* writeJsonLine(child.stdin, message).pipe(
+      yield* writeJsonLine(child.stdin, message, options).pipe(
         Effect.mapError(
           (error) =>
             new HostOperationError({
@@ -101,89 +107,37 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const acquirePendingResponse = (id: number, method: CodexAppServerRequestMethod) =>
-    Effect.sync(() => {
-      type ResponseEffect = Effect.Effect<
-        CodexAppServerRequestResult,
-        CodexAppServerTransportError
-      >;
-      let timeout: NodeJS.Timeout;
-      let released = false;
-      let finished = false;
-      let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
-      let settledEffect: ResponseEffect | null = null;
+  const forgetCancelledSentRequest = (id: number): boolean => {
+    const timeout = cancelledSentRequests.get(id);
+    if (!timeout) {
+      return false;
+    }
+    clearTimeout(timeout);
+    cancelledSentRequests.delete(id);
+    return true;
+  };
 
-      const release = (): void => {
-        if (released) {
-          return;
-        }
-        released = true;
-        clearTimeout(timeout);
-        pending.delete(id);
-      };
-
-      const finish = (effect: ResponseEffect): void => {
-        if (finished) {
-          return;
-        }
-        finished = true;
-        release();
-        if (resumeEffect) {
-          resumeEffect(effect);
-          return;
-        }
-        settledEffect = effect;
-      };
-
-      timeout = setTimeout(() => {
-        finish(
-          Effect.fail(
-            new HostOperationError({
-              operation: `codexAppServerTransport.request.${method}`,
-              message: `Timed out waiting for Codex app-server request ${method} on runtime ${runtimeId} after ${requestTimeoutMs}ms`,
-              details: { runtimeId, method, requestTimeoutMs },
-            }),
-          ),
-        );
-      }, requestTimeoutMs);
-
-      pending.set(id, {
-        method,
-        timeout,
-        resolve: (value) => {
-          resolveAfterQueuedMessages(
-            (resolvedValue) => finish(Effect.succeed(resolvedValue)),
-            value,
-          );
-        },
-        reject: (error) => {
-          finish(
-            Effect.fail(
-              toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
-                runtimeId,
-                method,
-              }),
-            ),
-          );
-        },
-      });
-
-      const response = Effect.async<CodexAppServerRequestResult, CodexAppServerTransportError>(
-        (resume) => {
-          if (settledEffect) {
-            resume(settledEffect);
-            return;
-          }
-          resumeEffect = resume;
-        },
-      );
-
-      return { release, response };
-    });
+  const rememberCancelledSentRequest = (id: number): void => {
+    forgetCancelledSentRequest(id);
+    const timeout = setTimeout(() => {
+      cancelledSentRequests.delete(id);
+    }, requestTimeoutMs);
+    cancelledSentRequests.set(id, timeout);
+    if (cancelledSentRequests.size <= MAX_CANCELLED_SENT_REQUEST_IDS) {
+      return;
+    }
+    const oldestId = cancelledSentRequests.keys().next().value;
+    if (typeof oldestId === "number") {
+      forgetCancelledSentRequest(oldestId);
+    }
+  };
 
   const resolveResponse = (id: number, message: Record<string, unknown>): void => {
     const request = pending.get(id);
     if (!request) {
+      if (forgetCancelledSentRequest(id)) {
+        return;
+      }
       failFast(
         new HostValidationError({
           message: `Received Codex app-server response with unexpected id ${id} for ${runtimeId}`,
@@ -409,18 +363,31 @@ export const createCodexAppServerTransport = (
         yield* ensureOpenEffect();
         const id = nextRequestId++;
         return yield* Effect.acquireUseRelease(
-          acquirePendingResponse(id, method),
-          ({ response }) =>
+          acquirePendingResponse({
+            id,
+            method,
+            pending,
+            rememberCancelledSentRequest,
+            requestTimeoutMs,
+            runtimeId,
+          }),
+          ({ markWriteStarted, response }) =>
             Effect.gen(function* () {
-              yield* sendMessage({
-                jsonrpc: "2.0",
-                id,
-                method,
-                ...(params !== undefined ? { params } : {}),
-              });
+              yield* sendMessage(
+                {
+                  jsonrpc: "2.0",
+                  id,
+                  method,
+                  ...(params !== undefined ? { params } : {}),
+                },
+                {
+                  onWriteStarted: markWriteStarted,
+                },
+              );
               return yield* response;
             }),
-          ({ release }) => Effect.sync(release),
+          ({ release }, exit) =>
+            Effect.sync(() => release({ preserveLateResponse: Exit.isInterrupted(exit) })),
         );
       });
     },
@@ -474,6 +441,10 @@ export const createCodexAppServerTransport = (
         child.stdin.destroy();
         child.stdout.destroy();
         child.stderr.destroy();
+        for (const timeout of cancelledSentRequests.values()) {
+          clearTimeout(timeout);
+        }
+        cancelledSentRequests.clear();
         for (const [id, request] of pending) {
           clearTimeout(request.timeout);
           request.reject(
