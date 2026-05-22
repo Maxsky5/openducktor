@@ -15,6 +15,7 @@ import {
   parseCodexAppServerRequestResult,
 } from "../../ports/codex-app-server-protocol";
 import { acquirePendingResponse } from "./codex-app-server-pending-response";
+import { writeCodexAppServerRequestLine } from "./codex-app-server-request-writer";
 import {
   appendCapturedStderr,
   extractErrorMessage,
@@ -88,13 +89,10 @@ export const createCodexAppServerTransport = (
         toHostOperationError(cause, "codexAppServerTransport.ensureOpen", { runtimeId }),
     });
 
-  const sendMessage = (
-    message: Record<string, unknown>,
-    options: { onWriteStarted?: () => void } = {},
-  ) =>
+  const sendMessage = (message: Record<string, unknown>) =>
     Effect.gen(function* () {
       yield* ensureOpenEffect();
-      yield* writeJsonLine(child.stdin, message, options).pipe(
+      yield* writeJsonLine(child.stdin, message).pipe(
         Effect.mapError(
           (error) =>
             new HostOperationError({
@@ -105,6 +103,17 @@ export const createCodexAppServerTransport = (
             }),
         ),
       );
+    });
+
+  const sendRequestMessage = (message: Record<string, unknown>, markWriteStarted: () => void) =>
+    Effect.gen(function* () {
+      yield* ensureOpenEffect();
+      yield* writeCodexAppServerRequestLine({
+        stdin: child.stdin,
+        payload: message,
+        runtimeId,
+        markWriteStarted,
+      });
     });
 
   const forgetCancelledSentRequest = (id: number): boolean => {
@@ -373,16 +382,14 @@ export const createCodexAppServerTransport = (
           }),
           ({ markWriteStarted, response }) =>
             Effect.gen(function* () {
-              yield* sendMessage(
+              yield* sendRequestMessage(
                 {
                   jsonrpc: "2.0",
                   id,
                   method,
                   ...(params !== undefined ? { params } : {}),
                 },
-                {
-                  onWriteStarted: markWriteStarted,
-                },
+                markWriteStarted,
               );
               return yield* response;
             }),
