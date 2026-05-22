@@ -4,17 +4,25 @@ import {
   type AgentSessionState,
   createAdapter,
   createLoadAgentSessions,
+  createPresence,
   createTaskFixture,
   createTestQueryClient,
   getSession,
   type LegacyRunSummary,
+  type ListSessionPresenceInput,
+  type LoadSessionHistoryInput,
   OPENCODE_RUNTIME_DESCRIPTOR,
   persistedSessionRecord,
   type RuntimeInstanceSummary,
   runtimeQueryKeys,
+  type SessionLifecycleAdapter,
   sessionMessagesToArray,
   setupDefaultLoadSessionsHost,
 } from "./load-sessions-test-harness";
+
+type LoadSessionTodosInput = Parameters<
+  NonNullable<SessionLifecycleAdapter["loadSessionTodos"]>
+>[0];
 
 let legacyHost!: { runsList: (repoPath?: string) => Promise<LegacyRunSummary[]> };
 
@@ -593,6 +601,166 @@ describe("agent-orchestrator load-session runtime policy", () => {
     expect(presenceCalls).toEqual([]);
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
     expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
+  });
+
+  test("hydrates requested history, todos, and status from the persisted session runtime", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-build-worktree": {
+          externalSessionId: "external-build-worktree",
+          taskId: "task-1",
+          repoPath: "/tmp/repo",
+          role: "build",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeKind: "opencode",
+          runtimeId: "runtime-build-worktree",
+          workingDirectory: "/tmp/repo/worktrees/task-1",
+          historyHydrationState: "not_requested",
+          runtimeRecoveryState: "idle",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+        },
+      },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const historyInputs: LoadSessionHistoryInput[] = [];
+    const todosInputs: LoadSessionTodosInput[] = [];
+    const statusInputs: ListSessionPresenceInput[] = [];
+    const runtimeEnsureCalls: string[] = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[externalSessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [externalSessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      queryClient,
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        loadSessionHistory: async (input) => {
+          historyInputs.push(input);
+          return [];
+        },
+        loadSessionTodos: async (input) => {
+          todosInputs.push(input);
+          return [];
+        },
+        listSessionPresence: async (input) => {
+          statusInputs.push(input);
+          return [
+            createPresence("external-build-worktree", "/tmp/repo/worktrees/task-1", {
+              status: { type: "idle" },
+            }),
+          ];
+        },
+        readSessionPresence: async (input) => {
+          return createPresence(input.externalSessionId, input.workingDirectory, {
+            status: { type: "idle" },
+          });
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [createTaskFixture()] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const hostModule = await import("../../shared/host");
+    const originalRuntimeList = hostModule.host.runtimeList;
+    const originalEnsure = hostModule.host.runtimeEnsure;
+    hostModule.host.runtimeList = async () => [
+      {
+        kind: "opencode",
+        runtimeId: "runtime-repo-default",
+        repoPath: "/tmp/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/tmp/repo",
+        runtimeRoute: {
+          type: "local_http",
+          endpoint: "http://127.0.0.1:4999",
+        },
+        startedAt: "2026-02-22T08:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      },
+    ];
+    hostModule.host.runtimeEnsure = async (repoPath) => {
+      runtimeEnsureCalls.push(repoPath);
+      throw new Error("runtimeEnsure should not be called during requested-history hydration");
+    };
+
+    try {
+      await loadAgentSessions("task-1", {
+        mode: "requested_history",
+        targetExternalSessionId: "external-build-worktree",
+        historyPolicy: "requested_only",
+        persistedRecords: [
+          persistedSessionRecord({
+            runtimeKind: "opencode",
+            externalSessionId: "external-build-worktree",
+            taskId: "task-1",
+            role: "build",
+            status: "running",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            updatedAt: "2026-02-22T08:00:00.000Z",
+            workingDirectory: "/tmp/repo/worktrees/task-1",
+          }),
+        ],
+      });
+    } finally {
+      hostModule.host.runtimeList = originalRuntimeList;
+      hostModule.host.runtimeEnsure = originalEnsure;
+    }
+
+    expect(runtimeEnsureCalls).toEqual([]);
+    expect(historyInputs.map((input) => input.workingDirectory)).toEqual([
+      "/tmp/repo/worktrees/task-1",
+    ]);
+    expect(todosInputs.map((input) => input.workingDirectory)).toEqual([
+      "/tmp/repo/worktrees/task-1",
+    ]);
+    expect(statusInputs.map((input) => input.directories)).toEqual([
+      ["/tmp/repo/worktrees/task-1"],
+    ]);
+    expect(getSession(state, "external-build-worktree").status).toBe("idle");
   });
 
   test("hydrates build worktree sessions through the shared repo runtime", async () => {

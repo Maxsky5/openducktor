@@ -6,7 +6,7 @@ Session hydration, loading, runtime attachment, operation-scoped session-presenc
 
 ## Design/Patterns
 
-Lifecycle work is split into loaders, runtime-resolution helpers, operation-scoped presence helpers, and reattach logic so recoverability stays explicit.
+Lifecycle work is split into loaders, runtime-resolution helpers, focused load-session stage modules, operation-scoped presence helpers, and reattach logic so recoverability stays explicit.
 
 ## Data & Control Flow
 
@@ -14,4 +14,4 @@ Persisted session records are loaded, hydrated from durable session/runtime iden
 
 ## Integration Points
 
-`load-sessions.ts`, `session-loaders.ts`, `hydration-runtime-resolution.ts`, `hydration-runtime-policy.ts`, `reattach-live-session.ts`, `session-presence-source.ts`, `session-presence-cache.ts`, `repo-session-hydration-service.ts`, `repo-session-presence-preloads.ts`, `session-view-lifecycle.ts`, `ensure-ready.ts`, and `session-hydration-operations.ts`.
+`load-sessions.ts`, `load-sessions-*-stage.ts`, `session-loaders.ts`, `hydration-runtime-resolution.ts`, `hydration-runtime-policy.ts`, `reattach-live-session.ts`, `session-presence-*`, `session-presence-source.ts`, `session-presence-cache.ts`, `repo-session-hydration-service.ts`, `repo-session-presence-preloads.ts`, `session-view-lifecycle.ts`, `ensure-ready.ts`, and `session-hydration-operations.ts`.
