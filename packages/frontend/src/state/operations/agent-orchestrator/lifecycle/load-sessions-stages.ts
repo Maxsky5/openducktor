@@ -18,10 +18,7 @@ import {
   getSessionMessagesSlice,
 } from "../support/messages";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
-import {
-  settlePendingOutboundSendFields,
-  shouldSettlePendingOutboundSendFromHydratedHistory,
-} from "../support/pending-outbound-send";
+import { settlePendingOutboundSendFields } from "../support/pending-outbound-send";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
@@ -808,6 +805,7 @@ const applyMissingHydrationRuntime = ({
 
 const hydrateRuntimeOnlyRecord = async ({
   loadMode,
+  livePresenceMode,
   updateSession,
   isStaleRepoOperation,
   record,
@@ -815,6 +813,7 @@ const hydrateRuntimeOnlyRecord = async ({
   runtimePlanner,
 }: {
   loadMode: AgentSessionLoadMode;
+  livePresenceMode: LivePresenceHydrationMode;
   updateSession: UpdateSession;
   isStaleRepoOperation: () => boolean;
   record: AgentSessionRecord;
@@ -822,7 +821,9 @@ const hydrateRuntimeOnlyRecord = async ({
   runtimePlanner: HydrationRuntimePlanner;
 }): Promise<void> => {
   const shouldReadSessionPresenceSnapshot =
-    loadMode === "reconcile_live" || loadMode === "recover_runtime_attachment";
+    livePresenceMode === "apply" ||
+    loadMode === "reconcile_live" ||
+    loadMode === "recover_runtime_attachment";
   const sessionPresence = shouldReadSessionPresenceSnapshot
     ? await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
     : null;
@@ -881,14 +882,7 @@ const applyHydratedRecordHistory = (
     : current;
   const liveSessionTitle =
     sessionPresence?.presence === "runtime" ? sessionPresence.title : undefined;
-  const shouldSettlePendingOutboundSend = shouldSettlePendingOutboundSendFromHydratedHistory(
-    current,
-    history,
-    sessionPresence,
-  );
-  const nextStatus: AgentSessionState["status"] = shouldSettlePendingOutboundSend
-    ? "idle"
-    : sessionWithLivePresence.status;
+  const nextStatus: AgentSessionState["status"] = sessionWithLivePresence.status;
   const pendingOutboundSendFields =
     nextStatus === "running"
       ? {
@@ -1068,6 +1062,7 @@ const hydrateSessionRecord = async ({
     if (!shouldHydrateHistory) {
       await hydrateRuntimeOnlyRecord({
         loadMode,
+        livePresenceMode,
         updateSession,
         isStaleRepoOperation,
         record,

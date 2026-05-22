@@ -6,7 +6,10 @@ import {
   toPersistedOnlyAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { hasPendingOutboundSend } from "../support/pending-outbound-send";
+import {
+  hasPendingOutboundSend,
+  settlePendingOutboundSendFields,
+} from "../support/pending-outbound-send";
 import type { ResolvedHydrationRuntime } from "./hydration-runtime-resolution";
 
 export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@openducktor/core";
@@ -91,10 +94,11 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       if (options.preserveStartingStatusForIdlePresence === true && current.status === "starting") {
         status = "starting";
       }
-      if (hasPendingOutboundSend(current)) {
-        status = "running";
-      }
     }
+    // Runtime idle presence is authoritative for outbound-send settlement; the send path
+    // invalidates cached presence before starting a new turn.
+    const pendingOutboundSendFields =
+      snapshot.agentSessionStatus === "idle" ? settlePendingOutboundSendFields() : {};
 
     return {
       ...current,
@@ -106,6 +110,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       title: snapshot.title,
       pendingApprovals: snapshot.pendingApprovals,
       pendingQuestions: snapshot.pendingQuestions,
+      ...pendingOutboundSendFields,
       ...promptOverridesPatch,
       selectedModel,
     };

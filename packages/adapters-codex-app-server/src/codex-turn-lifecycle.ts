@@ -1,6 +1,10 @@
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import { extractTurnId, isTerminalTurnStatus } from "./codex-app-server-requests";
 import { type ActiveCodexTurn, isPlainObject } from "./codex-app-server-shared";
+import {
+  type CodexThreadStatusSnapshot,
+  codexThreadStatusSnapshot,
+} from "./codex-app-server-threads";
 import { toCodexUserInputList } from "./codex-app-server-transcript";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
@@ -19,6 +23,7 @@ export type CodexTurnLifecycleContext = {
   ensureRuntimeEventSubscription(runtimeId: string): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
+  setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
   handlePendingServerRequests(
     session: CodexSessionState,
     handledRequestKeys: Set<string>,
@@ -180,6 +185,7 @@ export const startCodexTurnForSession = async (
         context.emitUserMessage(session, parts, model);
         activeTurnState.markTurnSettled();
       } else if (isPlainObject(result.turn) && isTerminalTurnStatus(result.turn)) {
+        context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
         activeTurnState.markTurnSettled();
       }
       return result;

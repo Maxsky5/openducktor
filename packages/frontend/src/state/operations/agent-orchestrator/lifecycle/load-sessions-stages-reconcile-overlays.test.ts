@@ -170,9 +170,16 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["external-1"]?.status).toBe("starting");
   });
 
-  test("keeps pending outbound sends active when reconcile sees idle runtime presence", async () => {
+  test("settles pending outbound sends when reconcile sees idle runtime presence", async () => {
     const stateHarness = createStateHarness({
-      "external-1": createSession({ status: "running", pendingUserMessageStartedAt: 123 }),
+      "external-1": createSession({
+        status: "running",
+        pendingUserMessageStartedAt: 123,
+        draftAssistantText: "partial assistant",
+        draftAssistantMessageId: "assistant-draft",
+        draftReasoningText: "partial reasoning",
+        draftReasoningMessageId: "reasoning-draft",
+      }),
     });
 
     await hydrateSessionRecordsStage({
@@ -203,10 +210,16 @@ describe("load-sessions-stages", () => {
       getRepoPromptOverrides: async () => ({}),
     });
 
-    expect(stateHarness.getState()["external-1"]?.status).toBe("running");
+    const session = stateHarness.getState()["external-1"];
+    expect(session?.status).toBe("idle");
+    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
+    expect(session?.draftAssistantText).toBe("");
+    expect(session?.draftAssistantMessageId).toBeNull();
+    expect(session?.draftReasoningText).toBe("");
+    expect(session?.draftReasoningMessageId).toBeNull();
   });
 
-  test("settles pending outbound sends when requested history confirms an idle completed turn", async () => {
+  test("settles pending outbound sends when requested-history runtime presence is idle", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -248,6 +261,51 @@ describe("load-sessions-stages", () => {
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 
+  test("keeps pending outbound sends when requested-history runtime presence is running", async () => {
+    const stateHarness = createStateHarness({
+      "external-1": createSession({
+        status: "running",
+        pendingUserMessageStartedAt,
+      }),
+    });
+
+    await hydrateSessionRecordsStage({
+      loadMode: "requested_history",
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter({
+        loadSessionHistory: async () => createCompletedAssistantHistory(),
+      }),
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["external-1"]),
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => ({
+          ok: true,
+          runtimeRef: { repoPath: "/tmp/repo", runtimeKind: "opencode" },
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+        readSessionPresence: async () =>
+          createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
+            status: { type: "busy" },
+          }),
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+      livePresenceMode: "apply",
+    });
+
+    const session = stateHarness.getState()["external-1"];
+    expect(session?.status).toBe("running");
+    expect(session?.pendingUserMessageStartedAt).toBe(pendingUserMessageStartedAt);
+    expect(session?.historyHydrationState).toBe("hydrated");
+  });
+
   test("keeps pending outbound sends when requested history skips live presence", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
@@ -282,7 +340,7 @@ describe("load-sessions-stages", () => {
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 
-  test("keeps pending outbound sends when hydrated history has no stop finish", async () => {
+  test("settles pending outbound sends from idle presence even when hydrated history has no stop finish", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -311,8 +369,8 @@ describe("load-sessions-stages", () => {
     });
 
     const session = stateHarness.getState()["external-1"];
-    expect(session?.status).toBe("running");
-    expect(session?.pendingUserMessageStartedAt).toBe(pendingUserMessageStartedAt);
+    expect(session?.status).toBe("idle");
+    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 

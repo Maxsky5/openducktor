@@ -73,4 +73,29 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.isHistoryHydrationFailed).toBe(false);
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
+
+  test("requests a view readiness refresh for hydrated attached sessions that still appear running", () => {
+    const lifecycle = deriveAgentSessionViewLifecycle({
+      session: createSession({
+        status: "running",
+        historyHydrationState: "hydrated",
+        runtimeId: "runtime-1",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "already hydrated",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("ready");
+    expect(lifecycle.canRenderHistory).toBe(true);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(true);
+  });
 });

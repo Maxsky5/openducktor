@@ -5,6 +5,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import type {
+  AgentSessionHistoryHydrationPolicy,
   AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
 } from "@/types/agent-orchestrator";
@@ -16,6 +17,7 @@ export type SessionHydrationOperations = {
   hydrateRequestedTaskSession: (input: {
     taskId: string;
     externalSessionId: string;
+    historyPolicy?: AgentSessionHistoryHydrationPolicy;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
     allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
@@ -53,6 +55,7 @@ export const createSessionHydrationOperations = ({
     hydrateRequestedTaskSession: ({
       taskId,
       externalSessionId,
+      historyPolicy,
       historyPreludeMode,
       allowLiveSessionResume,
       persistedRecords,
@@ -63,7 +66,7 @@ export const createSessionHydrationOperations = ({
           {
             mode: "requested_history",
             targetExternalSessionId: externalSessionId,
-            historyPolicy: "requested_only",
+            historyPolicy: historyPolicy ?? "requested_only",
             ...(historyPreludeMode ? { historyPreludeMode } : {}),
             allowLiveSessionResume: allowLiveSessionResume ?? false,
           },

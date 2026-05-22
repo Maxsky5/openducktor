@@ -294,7 +294,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates restored token usage replayed by Codex thread resume", async () => {
+  test("hydrates loaded idle history without resuming the Codex thread", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     drainNotifications.mockImplementation(async () => [
@@ -319,13 +319,9 @@ describe("CodexAppServerAdapter history hydration", () => {
       externalSessionId: "thread-idle",
     });
 
-    expect(transports.get("runtime-ensure")?.calls).toContainEqual({
-      method: "thread/resume",
-      params: {
-        threadId: "thread-idle",
-        cwd: "/repo",
-      },
-    });
+    expect(
+      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/resume"),
+    ).toBe(false);
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({
         role: "assistant",
@@ -357,6 +353,64 @@ describe("CodexAppServerAdapter history hydration", () => {
         contextWindow: 200_000,
       }),
     );
+  });
+
+  test("hydrates listed idle history without requiring the Codex thread to be loaded", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [{ id: "thread-unloaded", cwd: "/repo", createdAt: 1, status: { type: "idle" } }],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return {
+            data: [
+              {
+                id: "turn-1",
+                status: "completed",
+                startedAt: 1,
+                completedAt: 2,
+                items: [
+                  {
+                    id: "msg-1",
+                    type: "agentMessage",
+                    phase: "final_answer",
+                    text: "Hydrated from turns",
+                  },
+                ],
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        throw new Error(`Unexpected method '${request.method}'.`);
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-unloaded",
+    });
+
+    expect(history).toContainEqual(
+      expect.objectContaining({
+        messageId: "msg-1",
+        role: "assistant",
+        text: "Hydrated from turns",
+      }),
+    );
+    expect(calls.some((call) => call.method === "thread/read")).toBe(false);
+    expect(calls.some((call) => call.method === "thread/resume")).toBe(false);
   });
 
   test("hydrates documented thread-read tool item shapes", async () => {

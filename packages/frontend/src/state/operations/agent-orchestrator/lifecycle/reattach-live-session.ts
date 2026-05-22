@@ -59,11 +59,25 @@ export const createReattachLiveSession = ({
     if (sessionPresence === STALE_REPO_ABORT) {
       return false;
     }
+    const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!isAttachableAgentSessionPresenceSnapshot(sessionPresence)) {
+      if (sessionPresence.presence === "runtime") {
+        if (isStaleRepoOperation()) {
+          return false;
+        }
+        updateSession(
+          record.externalSessionId,
+          (current) =>
+            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+              promptOverrides,
+              selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
+            }),
+          { persist: false },
+        );
+      }
       return false;
     }
 
-    const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!attachedExistingSession) {
       if (!allowAttachMissingSession) {
         return false;

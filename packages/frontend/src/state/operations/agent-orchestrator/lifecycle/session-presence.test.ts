@@ -115,7 +115,7 @@ describe("session-presence", () => {
     expect(applied.runtimeRecoveryState).toBe("recovering_runtime");
   });
 
-  test("keeps pending outbound sends running when idle presence arrives", () => {
+  test("settles pending outbound sends when runtime idle presence arrives", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       runtimeId: "runtime-1",
@@ -135,7 +135,12 @@ describe("session-presence", () => {
       snapshot,
     );
 
-    expect(applied.status).toBe("running");
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.draftAssistantText).toBe("");
+    expect(applied.draftAssistantMessageId).toBeNull();
+    expect(applied.draftReasoningText).toBe("");
+    expect(applied.draftReasoningMessageId).toBeNull();
   });
 
   test("marks persisted-only pending outbound sends as recovering runtime", () => {

@@ -10,6 +10,7 @@ import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "../lifecycle/session-view-lifecycle";
+import { requiresHydratedAgentSessionHistory } from "../support/history-hydration";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 
 type LoadAgentSessions = (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
@@ -128,6 +129,7 @@ export const useAgentSessionHydration = ({
       await sessionHydration.hydrateRequestedTaskSession({
         taskId,
         externalSessionId,
+        historyPolicy: requiresHydratedAgentSessionHistory(session) ? "requested_only" : "none",
         ...(historyPreludeMode ? { historyPreludeMode } : {}),
         ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
         ...(persistedRecords ? { persistedRecords } : {}),

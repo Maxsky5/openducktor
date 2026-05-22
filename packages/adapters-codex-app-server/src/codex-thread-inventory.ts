@@ -33,17 +33,26 @@ export class CodexThreadInventoryReader {
     }
     const nextPending = this.fetch(client, runtimeId).then(
       (inventory) => {
-        this.inventoryByRuntimeId.set(runtimeId, inventory);
-        this.pendingInventoryByRuntimeId.delete(runtimeId);
+        if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
+          this.inventoryByRuntimeId.set(runtimeId, inventory);
+          this.pendingInventoryByRuntimeId.delete(runtimeId);
+        }
         return inventory;
       },
       (error) => {
-        this.pendingInventoryByRuntimeId.delete(runtimeId);
+        if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
+          this.pendingInventoryByRuntimeId.delete(runtimeId);
+        }
         throw error;
       },
     );
     this.pendingInventoryByRuntimeId.set(runtimeId, nextPending);
     return nextPending;
+  }
+
+  async refresh(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
+    this.clear(runtimeId);
+    return this.read(client, runtimeId);
   }
 
   async findThread(
@@ -91,16 +100,31 @@ export class CodexThreadInventoryReader {
     runtimeId: string,
     input: { externalSessionId: string; workingDirectory: string },
   ): Promise<unknown | null> {
-    const thread = await this.findThread(client, runtimeId, input.externalSessionId);
+    const inventory = await this.read(client, runtimeId);
+    const thread = inventory.threadsById.get(input.externalSessionId) ?? null;
     if (!thread || thread.cwd !== input.workingDirectory) {
       return null;
     }
-    const response = await client.threadResume({
-      threadId: input.externalSessionId,
-      cwd: input.workingDirectory,
-    });
-    this.clear(runtimeId);
-    return response;
+    if (inventory.loadedIds.has(thread.id)) {
+      try {
+        return await this.readThreadWithTurns(client, thread.id);
+      } catch (error) {
+        if (!isCodexThreadNotLoadedError(error)) {
+          throw error;
+        }
+        this.clear(runtimeId);
+      }
+    }
+    const turns = await this.fetchThreadTurns(client, thread.id);
+    return {
+      thread: {
+        id: thread.id,
+        cwd: thread.cwd,
+        createdAt: Date.parse(thread.startedAt) / 1000,
+        status: thread.status.status,
+        turns,
+      },
+    };
   }
 
   async readThreadWithTurns(client: CodexAppServerClient, threadId: string): Promise<unknown> {
