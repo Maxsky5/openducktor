@@ -917,8 +917,15 @@ type CodexUserInputDisplayContext = {
   messageId: string;
 };
 
+const stagedAttachmentUuidPrefixPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
+
 const codexLocalImageNameFromPath = (path: string): string => {
-  return path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
+  const fileName = path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
+  if (fileName.length <= 37 || !stagedAttachmentUuidPrefixPattern.test(fileName)) {
+    return fileName;
+  }
+  return fileName.slice(37);
 };
 
 const codexUserInputToDisplayPart = (

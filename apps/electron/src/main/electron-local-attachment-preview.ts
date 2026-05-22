@@ -67,17 +67,37 @@ export const readElectronLocalAttachmentPreviewRequestPath = (requestUrl: string
   }
 };
 
+const createLocalAttachmentPreviewErrorResponse = (error: unknown, status: 400 | 500): Response =>
+  new Response(error instanceof Error ? error.message : "Local attachment preview failed.", {
+    status,
+  });
+
 export const registerElectronLocalAttachmentPreviewProtocol = ({
   net,
   resolveLocalAttachmentPath,
   session,
 }: RegisterElectronLocalAttachmentPreviewProtocolInput): void => {
   session.protocol.handle(ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL, async (request) => {
-    const requestedPath = readElectronLocalAttachmentPreviewRequestPath(request.url);
-    const resolvedPath = readLocalAttachmentPreviewPath(
-      await resolveLocalAttachmentPath(requestedPath),
-    );
+    let requestedPath: string;
+    try {
+      requestedPath = readElectronLocalAttachmentPreviewRequestPath(request.url);
+    } catch (error) {
+      return createLocalAttachmentPreviewErrorResponse(error, 400);
+    }
 
-    return net.fetch(pathToFileURL(resolvedPath).href);
+    let resolvedPath: string;
+    try {
+      resolvedPath = readLocalAttachmentPreviewPath(
+        await resolveLocalAttachmentPath(requestedPath),
+      );
+    } catch (error) {
+      return createLocalAttachmentPreviewErrorResponse(error, 400);
+    }
+
+    try {
+      return await net.fetch(pathToFileURL(resolvedPath).href);
+    } catch (error) {
+      return createLocalAttachmentPreviewErrorResponse(error, 500);
+    }
   });
 };

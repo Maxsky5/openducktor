@@ -80,4 +80,105 @@ describe("electron local attachment previews", () => {
     expect(servedUrls).toEqual(["file:///tmp/openducktor-local-attachments/resolved.png"]);
     expect(await response.text()).toBe("image bytes");
   });
+
+  test("returns structured error responses for invalid preview requests", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Fetch should not run for invalid requests.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        throw new Error("Resolve should not run for invalid requests.");
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(new Request("file:///tmp/not-a-preview.png"));
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe("Invalid local attachment preview URL.");
+  });
+
+  test("returns structured error responses for rejected host resolution", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Fetch should not run when resolution fails.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        throw new Error("Attachment path is not a staged local attachment.");
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(
+      new Request(
+        createElectronLocalAttachmentPreviewUrl("/tmp/openducktor-local-attachments/outside.png"),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toBe("Attachment path is not a staged local attachment.");
+  });
+
+  test("returns structured error responses for preview file serving failures", async () => {
+    let protocolHandler: ((request: Request) => Response | Promise<Response>) | null = null;
+
+    registerElectronLocalAttachmentPreviewProtocol({
+      session: {
+        protocol: {
+          handle(_scheme, handler) {
+            protocolHandler = handler;
+          },
+        },
+      },
+      net: {
+        async fetch() {
+          throw new Error("Failed to load preview bytes.");
+        },
+      },
+      async resolveLocalAttachmentPath() {
+        return "/tmp/openducktor-local-attachments/resolved.png";
+      },
+    });
+
+    if (!protocolHandler) {
+      throw new Error("Preview protocol handler was not registered.");
+    }
+
+    const response = await protocolHandler(
+      new Request(
+        createElectronLocalAttachmentPreviewUrl("/tmp/openducktor-local-attachments/staged.png"),
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("Failed to load preview bytes.");
+  });
 });

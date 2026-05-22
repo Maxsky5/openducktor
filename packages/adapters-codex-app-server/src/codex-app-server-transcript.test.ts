@@ -82,7 +82,7 @@ describe("Codex App Server transcript parsing", () => {
                   },
                   {
                     type: "localImage",
-                    path: "/tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
+                    path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png",
                   },
                   {
                     type: "localImage",
@@ -100,7 +100,7 @@ describe("Codex App Server transcript parsing", () => {
 
     expect(message).toMatchObject({
       role: "user",
-      text: "Inspect this screenshot /tmp/openducktor-local-attachments/Screenshot 2026-05-20.png /tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
+      text: "Inspect this screenshot /tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png /tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
       displayParts: [
         { kind: "text", text: "Inspect this screenshot" },
         {
@@ -109,7 +109,7 @@ describe("Codex App Server transcript parsing", () => {
             id: "codex-local-image:user-1:1",
             kind: "image",
             name: "Screenshot 2026-05-20.png",
-            path: "/tmp/openducktor-local-attachments/Screenshot 2026-05-20.png",
+            path: "/tmp/openducktor-local-attachments/550e8400-e29b-41d4-a716-446655440000-Screenshot 2026-05-20.png",
           },
         },
         {
