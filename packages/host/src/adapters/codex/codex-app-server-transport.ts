@@ -28,6 +28,7 @@ import type {
   CodexAppServerChildTransport,
   CodexAppServerEventEmitter,
   CodexAppServerStreamEvent,
+  CodexAppServerTransportError,
   CodexChildProcess,
   PendingCodexAppServerRequest,
 } from "./codex-app-server-transport-types";
@@ -100,86 +101,85 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const waitForResponse = (id: number, method: CodexAppServerRequestMethod) => {
-    type ResponseEffect = Effect.Effect<
-      CodexAppServerRequestResult,
-      HostOperationError | HostResourceError | HostValidationError
-    >;
-    let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
-    let settledEffect: ResponseEffect | null = null;
-    let abortSignal: AbortSignal | null = null;
-    let abortHandler: (() => void) | null = null;
+  const acquirePendingResponse = (id: number, method: CodexAppServerRequestMethod) =>
+    Effect.sync(() => {
+      type ResponseEffect = Effect.Effect<
+        CodexAppServerRequestResult,
+        CodexAppServerTransportError
+      >;
+      let timeout: NodeJS.Timeout;
+      let released = false;
+      let finished = false;
+      let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
+      let settledEffect: ResponseEffect | null = null;
 
-    const finish = (effect: ResponseEffect): void => {
-      if (abortSignal && abortHandler) {
-        abortSignal.removeEventListener("abort", abortHandler);
-        abortSignal = null;
-        abortHandler = null;
-      }
-      if (resumeEffect) {
-        resumeEffect(effect);
-        return;
-      }
-      settledEffect = effect;
-    };
-
-    const timeout = setTimeout(() => {
-      pending.delete(id);
-      finish(
-        Effect.fail(
-          new HostOperationError({
-            operation: `codexAppServerTransport.request.${method}`,
-            message: `Timed out waiting for Codex app-server request ${method} on runtime ${runtimeId} after ${requestTimeoutMs}ms`,
-            details: { runtimeId, method, requestTimeoutMs },
-          }),
-        ),
-      );
-    }, requestTimeoutMs);
-
-    pending.set(id, {
-      method,
-      timeout,
-      resolve: (value) => {
-        resolveAfterQueuedMessages((resolvedValue) => finish(Effect.succeed(resolvedValue)), value);
-      },
-      reject: (error) => {
-        finish(
-          Effect.fail(
-            toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
-              runtimeId,
-              method,
-            }),
-          ),
-        );
-      },
-    });
-
-    return Effect.async<
-      CodexAppServerRequestResult,
-      HostOperationError | HostResourceError | HostValidationError
-    >((resume, signal) => {
-      if (settledEffect) {
-        resume(settledEffect);
-        return;
-      }
-      resumeEffect = resume;
-      abortSignal = signal;
-      abortHandler = () => {
+      const release = (): void => {
+        if (released) {
+          return;
+        }
+        released = true;
         clearTimeout(timeout);
         pending.delete(id);
+      };
+
+      const finish = (effect: ResponseEffect): void => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        release();
+        if (resumeEffect) {
+          resumeEffect(effect);
+          return;
+        }
+        settledEffect = effect;
+      };
+
+      timeout = setTimeout(() => {
         finish(
           Effect.fail(
             new HostOperationError({
               operation: `codexAppServerTransport.request.${method}`,
-              message: `Codex app-server request ${method} was interrupted for runtime ${runtimeId}.`,
-              details: { runtimeId, method },
+              message: `Timed out waiting for Codex app-server request ${method} on runtime ${runtimeId} after ${requestTimeoutMs}ms`,
+              details: { runtimeId, method, requestTimeoutMs },
             }),
           ),
         );
-      };
-      signal.addEventListener("abort", abortHandler, { once: true });
+      }, requestTimeoutMs);
+
+      pending.set(id, {
+        method,
+        timeout,
+        resolve: (value) => {
+          resolveAfterQueuedMessages(
+            (resolvedValue) => finish(Effect.succeed(resolvedValue)),
+            value,
+          );
+        },
+        reject: (error) => {
+          finish(
+            Effect.fail(
+              toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
+                runtimeId,
+                method,
+              }),
+            ),
+          );
+        },
+      });
+
+      const response = Effect.async<CodexAppServerRequestResult, CodexAppServerTransportError>(
+        (resume) => {
+          if (settledEffect) {
+            resume(settledEffect);
+            return;
+          }
+          resumeEffect = resume;
+        },
+      );
+
+      return { release, response };
     });
-  };
 
   const resolveResponse = (id: number, message: Record<string, unknown>): void => {
     const request = pending.get(id);
@@ -408,24 +408,20 @@ export const createCodexAppServerTransport = (
       return Effect.gen(function* () {
         yield* ensureOpenEffect();
         const id = nextRequestId++;
-        const response = waitForResponse(id, method);
-        const sendResult = yield* Effect.either(
-          sendMessage({
-            jsonrpc: "2.0",
-            id,
-            method,
-            ...(params !== undefined ? { params } : {}),
-          }),
+        return yield* Effect.acquireUseRelease(
+          acquirePendingResponse(id, method),
+          ({ response }) =>
+            Effect.gen(function* () {
+              yield* sendMessage({
+                jsonrpc: "2.0",
+                id,
+                method,
+                ...(params !== undefined ? { params } : {}),
+              });
+              return yield* response;
+            }),
+          ({ release }) => Effect.sync(release),
         );
-        if (sendResult._tag === "Left") {
-          const pendingRequest = pending.get(id);
-          if (pendingRequest) {
-            clearTimeout(pendingRequest.timeout);
-            pending.delete(id);
-          }
-          return yield* Effect.fail(sendResult.left);
-        }
-        return yield* response;
       });
     },
     notify(notification) {

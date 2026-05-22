@@ -1,19 +1,38 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { PassThrough } from "node:stream";
-import { Effect } from "effect";
+import { PassThrough, Writable } from "node:stream";
+import { Effect, Fiber } from "effect";
 import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 
-const createChild = (): ChildProcessByStdio<PassThrough, PassThrough, PassThrough> => {
-  const child = new EventEmitter() as ChildProcessByStdio<PassThrough, PassThrough, PassThrough>;
-  child.stdin = new PassThrough();
+const createChild = (
+  stdin: Writable = new PassThrough(),
+): ChildProcessByStdio<Writable, PassThrough, PassThrough> => {
+  const child = new EventEmitter() as ChildProcessByStdio<Writable, PassThrough, PassThrough>;
+  child.stdin = stdin;
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   return child;
 };
 
 const waitForStreamEvents = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+const recordClearTimeouts = () => {
+  const originalClearTimeout = globalThis.clearTimeout;
+  const clearedTimeouts: ReturnType<typeof globalThis.setTimeout>[] = [];
+
+  globalThis.clearTimeout = ((timeoutId: ReturnType<typeof globalThis.setTimeout>) => {
+    clearedTimeouts.push(timeoutId);
+    originalClearTimeout(timeoutId);
+  }) as typeof globalThis.clearTimeout;
+
+  return {
+    clearedTimeouts,
+    restore() {
+      globalThis.clearTimeout = originalClearTimeout;
+    },
+  };
+};
 
 describe("createCodexAppServerTransport", () => {
   test("keeps emitted notifications drainable after a request response", async () => {
@@ -144,5 +163,65 @@ describe("createCodexAppServerTransport", () => {
     await expect(
       Effect.runPromise(transport.request({ method: "model/list", params: {} })),
     ).rejects.not.toThrow("first-error-line");
+  });
+
+  test("clears the pending request timeout when interrupted during send", async () => {
+    let writeCount = 0;
+    const stdin = new Writable({
+      write(_chunk, _encoding, _callback) {
+        writeCount += 1;
+      },
+    });
+    const child = createChild(stdin);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const clearTimeoutRecorder = recordClearTimeouts();
+
+    try {
+      const fiber = Effect.runFork(
+        transport.request({
+          method: "model/list",
+          params: {},
+        }),
+      );
+      await waitForStreamEvents();
+
+      expect(writeCount).toBe(1);
+
+      await Effect.runPromise(Fiber.interrupt(fiber));
+
+      expect(clearTimeoutRecorder.clearedTimeouts).toHaveLength(1);
+    } finally {
+      clearTimeoutRecorder.restore();
+      await Effect.runPromise(transport.close());
+    }
+  });
+
+  test("clears the pending request timeout when send fails", async () => {
+    const stdin = {
+      write(_chunk: string, callback: (error?: Error | null) => void) {
+        callback(new Error("write failed"));
+        return false;
+      },
+      destroy() {},
+    } as unknown as Writable;
+    const child = createChild(stdin);
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const clearTimeoutRecorder = recordClearTimeouts();
+
+    try {
+      await expect(
+        Effect.runPromise(
+          transport.request({
+            method: "model/list",
+            params: {},
+          }),
+        ),
+      ).rejects.toThrow("Failed writing Codex app-server message for runtime runtime-1");
+
+      expect(clearTimeoutRecorder.clearedTimeouts).toHaveLength(1);
+    } finally {
+      clearTimeoutRecorder.restore();
+      await Effect.runPromise(transport.close());
+    }
   });
 });
