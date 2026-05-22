@@ -321,6 +321,41 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(typeof unsubscribe).toBe("function");
   });
 
+  test("detaches a Codex session by clearing only local adapter state", async () => {
+    const { adapter, transports } = createHarness();
+
+    await adapter.attachSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "thread-saved",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    const unsubscribe = adapter.subscribeEvents("thread-saved", () => {});
+    const transport = transports.get("runtime-live");
+    const callsBeforeDetach = transport?.calls.length ?? 0;
+
+    await adapter.detachSession("thread-saved");
+
+    expect(adapter.hasSession("thread-saved")).toBe(false);
+    expect(() => adapter.subscribeEvents("thread-saved", () => {})).toThrow(
+      "Unknown Codex session 'thread-saved'.",
+    );
+    expect(transport?.calls).toHaveLength(callsBeforeDetach);
+    unsubscribe();
+  });
+
+  test("ignores detach for unknown Codex sessions", async () => {
+    const { adapter } = createHarness();
+
+    await expect(adapter.detachSession("missing-thread")).resolves.toBeUndefined();
+
+    expect(adapter.hasSession("missing-thread")).toBe(false);
+  });
+
   test("rejects missing or unsupported model variants", async () => {
     const missingVariant = createHarness();
 

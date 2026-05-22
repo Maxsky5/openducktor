@@ -80,6 +80,8 @@ import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import {
+  type CodexLocalSessionStateStore,
+  clearLocalSessionState,
   sessionStateFromThreadAttach,
   sessionStateFromThreadFork,
   sessionStateFromThreadResume,
@@ -459,8 +461,15 @@ export class CodexAppServerAdapter
     return summary;
   }
 
-  async detachSession(_: string): Promise<void> {
-    return unsupported("detachSession");
+  async detachSession(externalSessionId: string): Promise<void> {
+    const session = this.sessions.get(externalSessionId);
+    clearLocalSessionState(this.localSessionStateStore(), externalSessionId);
+    if (
+      session &&
+      ![...this.sessions.values()].some((candidate) => candidate.runtimeId === session.runtimeId)
+    ) {
+      this.stopRuntimeEventSubscription(session.runtimeId);
+    }
   }
 
   async listLiveAgentSessions(
@@ -649,7 +658,7 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${externalSessionId}'.`);
     }
-    this.cleanupSessionState(externalSessionId);
+    clearLocalSessionState(this.localSessionStateStore(), externalSessionId);
     if (
       ![...this.sessions.values()].some((candidate) => candidate.runtimeId === session.runtimeId)
     ) {
@@ -657,44 +666,27 @@ export class CodexAppServerAdapter
     }
   }
 
-  private cleanupSessionState(externalSessionId: string): void {
-    this.sessions.delete(externalSessionId);
-    this.listenersBySessionId.delete(externalSessionId);
-    this.bufferedNotificationsByThreadId.delete(externalSessionId);
-    this.bufferedServerRequestsByThreadId.delete(externalSessionId);
-    this.handledStreamRequestKeysByThreadId.delete(externalSessionId);
-    this.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
-    this.eventBacklogBySessionId.delete(externalSessionId);
-    this.latestTodosBySessionId.delete(externalSessionId);
-    this.activeTurnsBySessionId.delete(externalSessionId);
-    const approvalRequestIds = this.pendingApprovalIdsBySessionId.get(externalSessionId) ?? [];
-    for (const requestId of approvalRequestIds) {
-      this.pendingApprovalsByRequestId.delete(requestId);
-      this.activeTurnsByApprovalRequestId.delete(requestId);
-    }
-    this.pendingApprovalIdsBySessionId.delete(externalSessionId);
-    const questionRequestIds = this.pendingQuestionIdsBySessionId.get(externalSessionId) ?? [];
-    for (const requestId of questionRequestIds) {
-      this.pendingQuestionsByRequestId.delete(requestId);
-      this.activeTurnsByQuestionRequestId.delete(requestId);
-    }
-    this.pendingQuestionIdsBySessionId.delete(externalSessionId);
-    const turnKeyPrefix = `${externalSessionId}:`;
-    for (const turnKey of [...this.completedAgentMessagesByTurnKey.keys()]) {
-      if (turnKey.startsWith(turnKeyPrefix)) {
-        this.completedAgentMessagesByTurnKey.delete(turnKey);
-      }
-    }
-    for (const turnKey of [...this.tokenUsageByTurnKey.keys()]) {
-      if (turnKey.startsWith(turnKeyPrefix)) {
-        this.tokenUsageByTurnKey.delete(turnKey);
-      }
-    }
-    for (const turnKey of [...this.modelByTurnKey.keys()]) {
-      if (turnKey.startsWith(turnKeyPrefix)) {
-        this.modelByTurnKey.delete(turnKey);
-      }
-    }
+  private localSessionStateStore(): CodexLocalSessionStateStore {
+    return {
+      sessions: this.sessions,
+      listenersBySessionId: this.listenersBySessionId,
+      bufferedNotificationsByThreadId: this.bufferedNotificationsByThreadId,
+      bufferedServerRequestsByThreadId: this.bufferedServerRequestsByThreadId,
+      handledStreamRequestKeysByThreadId: this.handledStreamRequestKeysByThreadId,
+      syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
+      eventBacklogBySessionId: this.eventBacklogBySessionId,
+      latestTodosBySessionId: this.latestTodosBySessionId,
+      activeTurnsBySessionId: this.activeTurnsBySessionId,
+      pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
+      pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
+      activeTurnsByApprovalRequestId: this.activeTurnsByApprovalRequestId,
+      pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
+      pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
+      activeTurnsByQuestionRequestId: this.activeTurnsByQuestionRequestId,
+      completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
+      tokenUsageByTurnKey: this.tokenUsageByTurnKey,
+      modelByTurnKey: this.modelByTurnKey,
+    };
   }
 
   private ensureRuntimeEventSubscription(runtimeId: string): void {

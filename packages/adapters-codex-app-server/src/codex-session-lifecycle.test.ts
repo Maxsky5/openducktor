@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AttachAgentSessionInput, ResumeAgentSessionInput } from "@openducktor/core";
 import {
+  clearLocalSessionState,
   sessionStateFromThreadAttach,
   sessionStateFromThreadResume,
 } from "./codex-session-lifecycle";
@@ -83,5 +84,60 @@ describe("codex session lifecycle", () => {
     expect(attached.model).toBeUndefined();
     expect(attached.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
     expect(attached.liveStatus?.agentSessionStatus).toBe("running");
+  });
+
+  test("clears local session-scoped state without touching other sessions", () => {
+    const store = {
+      sessions: new Map([["thread-1", {}]]),
+      listenersBySessionId: new Map([["thread-1", new Set()]]),
+      bufferedNotificationsByThreadId: new Map([["thread-1", []]]),
+      bufferedServerRequestsByThreadId: new Map([["thread-1", []]]),
+      handledStreamRequestKeysByThreadId: new Map([["thread-1", new Set()]]),
+      syntheticUserMessageTextsByThreadId: new Map([["thread-1", []]]),
+      eventBacklogBySessionId: new Map([["thread-1", []]]),
+      latestTodosBySessionId: new Map([["thread-1", []]]),
+      activeTurnsBySessionId: new Map([["thread-1", {}]]),
+      pendingApprovalIdsBySessionId: new Map([["thread-1", new Set(["approval-1"])]]),
+      pendingApprovalsByRequestId: new Map([
+        ["approval-1", {}],
+        ["approval-other", {}],
+      ]),
+      activeTurnsByApprovalRequestId: new Map([["approval-1", {}]]),
+      pendingQuestionIdsBySessionId: new Map([["thread-1", new Set(["question-1"])]]),
+      pendingQuestionsByRequestId: new Map([
+        ["question-1", {}],
+        ["question-other", {}],
+      ]),
+      activeTurnsByQuestionRequestId: new Map([["question-1", {}]]),
+      completedAgentMessagesByTurnKey: new Map([
+        ["thread-1:turn-1", {}],
+        ["thread-2:turn-1", {}],
+      ]),
+      tokenUsageByTurnKey: new Map([
+        ["thread-1:turn-1", {}],
+        ["thread-2:turn-1", {}],
+      ]),
+      modelByTurnKey: new Map([
+        ["thread-1:turn-1", {}],
+        ["thread-2:turn-1", {}],
+      ]),
+    };
+
+    clearLocalSessionState(store, "thread-1");
+
+    expect(store.sessions.has("thread-1")).toBe(false);
+    expect(store.listenersBySessionId.has("thread-1")).toBe(false);
+    expect(store.pendingApprovalIdsBySessionId.has("thread-1")).toBe(false);
+    expect(store.pendingApprovalsByRequestId.has("approval-1")).toBe(false);
+    expect(store.pendingApprovalsByRequestId.has("approval-other")).toBe(true);
+    expect(store.pendingQuestionIdsBySessionId.has("thread-1")).toBe(false);
+    expect(store.pendingQuestionsByRequestId.has("question-1")).toBe(false);
+    expect(store.pendingQuestionsByRequestId.has("question-other")).toBe(true);
+    expect(store.completedAgentMessagesByTurnKey.has("thread-1:turn-1")).toBe(false);
+    expect(store.completedAgentMessagesByTurnKey.has("thread-2:turn-1")).toBe(true);
+    expect(store.tokenUsageByTurnKey.has("thread-1:turn-1")).toBe(false);
+    expect(store.tokenUsageByTurnKey.has("thread-2:turn-1")).toBe(true);
+    expect(store.modelByTurnKey.has("thread-1:turn-1")).toBe(false);
+    expect(store.modelByTurnKey.has("thread-2:turn-1")).toBe(true);
   });
 });
