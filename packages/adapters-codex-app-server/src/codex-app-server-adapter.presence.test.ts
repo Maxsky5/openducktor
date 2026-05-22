@@ -18,8 +18,32 @@ class ThreadIdOnlyResumeTransport extends RecordingTransport {
   }
 }
 
+class MutableThreadListTransport extends RecordingTransport {
+  threadSavedStatus: Record<string, unknown> = { type: "active", activeFlags: [] };
+
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return {
+        data: [
+          {
+            id: "thread-saved",
+            cwd: "/repo",
+            createdAt: 1_778_112_000,
+            preview: "Saved session",
+            status: this.threadSavedStatus,
+          },
+        ],
+        nextCursor: null,
+        backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
 describe("CodexAppServerAdapter presence", () => {
-  test("uses one Codex thread inventory during startup presence checks", async () => {
+  test("refreshes Codex thread inventory during presence checks", async () => {
     const { adapter, transports } = createHarness();
 
     await expect(
@@ -48,8 +72,8 @@ describe("CodexAppServerAdapter presence", () => {
     ]);
 
     const transport = transports.get("runtime-live");
-    expect(transport?.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(1);
-    expect(transport?.calls.filter((call) => call.method === "thread/list")).toHaveLength(1);
+    expect(transport?.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(2);
+    expect(transport?.calls.filter((call) => call.method === "thread/list")).toHaveLength(2);
     await expect(
       adapter.readSessionPresence({
         repoPath: "/repo",
@@ -64,8 +88,42 @@ describe("CodexAppServerAdapter presence", () => {
       }),
     );
     expect(transport?.calls.filter((call) => call.method === "thread/read")).toHaveLength(0);
-    expect(transport?.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(1);
-    expect(transport?.calls.filter((call) => call.method === "thread/list")).toHaveLength(1);
+    expect(transport?.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(3);
+    expect(transport?.calls.filter((call) => call.method === "thread/list")).toHaveLength(3);
+  });
+
+  test("refreshes a known Codex session from runtime thread status", async () => {
+    const transport = new MutableThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+
+    await adapter.attachSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "thread-saved",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    transport.threadSavedStatus = { type: "idle" };
+
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-saved",
+      }),
+    ).resolves.toMatchObject({
+      presence: "runtime",
+      classification: "idle",
+      agentSessionStatus: "idle",
+      status: { type: "idle" },
+    });
   });
 
   test("detects live Codex sessions from App Server after adapter refresh", async () => {
@@ -119,6 +177,33 @@ describe("CodexAppServerAdapter presence", () => {
         status: { type: "idle" },
       },
     ]);
+  });
+
+  test("reports a newly started local session while loaded-thread inventory catches up", async () => {
+    const { adapter } = createHarness();
+
+    const summary = await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: summary.externalSessionId,
+      }),
+    ).resolves.toMatchObject({
+      presence: "runtime",
+      agentSessionStatus: "running",
+      ref: expect.objectContaining({ externalSessionId: summary.externalSessionId }),
+    });
   });
 
   test("attaches a missing live Codex session without starting a turn", async () => {
@@ -249,7 +334,13 @@ describe("CodexAppServerAdapter presence", () => {
     });
     const drainNotifications = mock(async () => [] as unknown[]);
     const drainServerRequests = mock(async () => [] as unknown[]);
-    const { adapter } = createHarness({ drainNotifications, drainServerRequests, subscribeEvents });
+    const transport = new MutableThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications,
+      drainServerRequests,
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
 
     await adapter.attachSession({
       repoPath: "/repo",
@@ -294,6 +385,7 @@ describe("CodexAppServerAdapter presence", () => {
     for (const message of notifications) {
       streamListeners[0]?.({ runtimeId: "runtime-live", kind: "notification", message });
     }
+    transport.threadSavedStatus = { type: "idle" };
 
     await waitForEvent(
       events,
@@ -324,6 +416,65 @@ describe("CodexAppServerAdapter presence", () => {
     unsubscribe();
   });
 
+  test("does not resurrect an idle local session from stale active thread inventory", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const transport = new MutableThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications: mock(async () => [] as unknown[]),
+      drainServerRequests: mock(async () => [] as unknown[]),
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
+
+    await adapter.attachSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      externalSessionId: "thread-saved",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "notification",
+      message: {
+        method: "turn/completed",
+        params: {
+          threadId: "thread-saved",
+          turn: { id: "turn-live", status: "completed" },
+        },
+      },
+    });
+
+    await waitForEvent(
+      events,
+      (event) =>
+        typeof event === "object" &&
+        event !== null &&
+        (event as { type?: unknown }).type === "session_idle",
+    );
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-saved",
+      }),
+    ).resolves.toMatchObject({ classification: "idle", agentSessionStatus: "idle" });
+    unsubscribe();
+  });
+
   test("streams messages and completion after refresh resume reattach", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
@@ -334,7 +485,13 @@ describe("CodexAppServerAdapter presence", () => {
     });
     const drainNotifications = mock(async () => [] as unknown[]);
     const drainServerRequests = mock(async () => [] as unknown[]);
-    const { adapter } = createHarness({ drainNotifications, drainServerRequests, subscribeEvents });
+    const transport = new MutableThreadListTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      drainNotifications,
+      drainServerRequests,
+      subscribeEvents,
+      transportFactory: mock(() => transport),
+    });
 
     await adapter.resumeSession({
       repoPath: "/repo",
@@ -360,6 +517,7 @@ describe("CodexAppServerAdapter presence", () => {
         },
       },
     });
+    transport.threadSavedStatus = { type: "idle" };
 
     await waitForEvent(
       events,

@@ -230,6 +230,14 @@ export const createLoadAgentSessions = ({
           }
         }
 
+        const currentRequestedSession = intent.requestedSessionId
+          ? (sessionsRef.current[intent.requestedSessionId] ?? null)
+          : null;
+        const shouldApplyLivePresenceDuringHydration =
+          intent.shouldReconcileLiveSessions ||
+          (intent.shouldHydrateRequestedSession &&
+            currentRequestedSession !== null &&
+            currentRequestedSession.runtimeId !== null);
         await hydrateSessionRecordsStage({
           loadMode: intent.mode,
           repoPath: intent.repoPath,
@@ -243,7 +251,7 @@ export const createLoadAgentSessions = ({
           runtimePlanner,
           promptAssembler,
           getRepoPromptOverrides,
-          livePresenceMode: intent.shouldReconcileLiveSessions ? "apply" : "skip",
+          livePresenceMode: shouldApplyLivePresenceDuringHydration ? "apply" : "skip",
         });
       }
     };

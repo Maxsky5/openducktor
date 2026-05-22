@@ -17,7 +17,10 @@ import {
   isPlainObject,
   MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
 } from "./codex-app-server-shared";
-import { codexThreadStatusSnapshot } from "./codex-app-server-threads";
+import {
+  type CodexThreadStatusSnapshot,
+  codexThreadStatusSnapshot,
+} from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
   codexItemId,
@@ -62,6 +65,7 @@ export type CodexStreamingContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   bufferNotification(notification: CodexNotificationRecord): void;
+  setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
   listenersForSession(externalSessionId: string): Set<(event: AgentEvent) => void> | undefined;
 };
 
@@ -381,11 +385,11 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "turn/started") {
-      session.liveStatus = {
+      context.setSessionLiveStatus(session, {
         classification: "running",
         status: { type: "busy" },
         agentSessionStatus: "running",
-      };
+      });
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
       if (turnId && activeTurn && context.bindActiveTurnId(activeTurn, turnId)) {
@@ -396,7 +400,10 @@ export const handleCodexPendingNotifications = async (
 
     if (notification.method === "thread/status/changed") {
       if (isPlainObject(notification.params)) {
-        session.liveStatus = codexThreadStatusSnapshot(notification.params.status);
+        context.setSessionLiveStatus(
+          session,
+          codexThreadStatusSnapshot(notification.params.status),
+        );
       }
       continue;
     }
@@ -480,11 +487,11 @@ export const handleCodexPendingNotifications = async (
         activeTurn.markTurnSettled();
       }
       if (!activeTurn || shouldSettleActiveTurn) {
-        session.liveStatus = {
+        context.setSessionLiveStatus(session, {
           classification: "idle",
           status: { type: "idle" },
           agentSessionStatus: "idle",
-        };
+        });
       }
       emitCanonicalEvents(
         context,

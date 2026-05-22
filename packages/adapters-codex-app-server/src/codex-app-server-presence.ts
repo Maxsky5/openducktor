@@ -14,12 +14,16 @@ export const toPresenceSnapshot = (
 ): AgentSessionPresenceSnapshot => {
   const hasPendingInput = pendingApprovals.length > 0 || pendingQuestions.length > 0;
   const liveStatus = session.liveStatus;
+  const agentSessionStatus =
+    liveStatus?.agentSessionStatus ?? (session.summary.status === "running" ? "running" : "idle");
+  const status =
+    liveStatus?.status ?? (agentSessionStatus === "running" ? { type: "busy" } : { type: "idle" });
   const classification =
     pendingQuestions.length > 0
       ? "waiting_for_question"
       : pendingApprovals.length > 0
         ? "waiting_for_permission"
-        : (liveStatus?.classification ?? "idle");
+        : (liveStatus?.classification ?? agentSessionStatus);
   return {
     presence: "runtime",
     classification,
@@ -32,8 +36,8 @@ export const toPresenceSnapshot = (
     runtimeId: session.runtimeId,
     title: session.role ? `Codex ${session.role}` : "Codex",
     startedAt: session.summary.startedAt,
-    status: hasPendingInput ? { type: "busy" } : (liveStatus?.status ?? { type: "idle" }),
-    agentSessionStatus: hasPendingInput ? "running" : (liveStatus?.agentSessionStatus ?? "idle"),
+    status: hasPendingInput ? { type: "busy" } : status,
+    agentSessionStatus: hasPendingInput ? "running" : agentSessionStatus,
     pendingApprovals,
     pendingQuestions,
   };

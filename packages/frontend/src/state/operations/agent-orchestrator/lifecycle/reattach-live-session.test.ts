@@ -82,8 +82,8 @@ const createSessionStateFixture = (): AgentSessionState => ({
 });
 
 describe("reattach-live-session", () => {
-  test("does not resume an idle snapshot with no pending input", async () => {
-    let state = createSessionStateFixture();
+  test("applies an idle snapshot without resuming or attaching", async () => {
+    let state: AgentSessionState = { ...createSessionStateFixture(), status: "running" };
     let resumed = false;
     let attachedSessionId: string | null = null;
 
@@ -123,7 +123,9 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(false);
     expect(resumed).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
+    expect(state.status).toBe("idle");
+    expect(state.runtimeId).toBe("runtime-1");
+    expect(state.pendingApprovals).toEqual([]);
   });
 
   test("reattaches an idle snapshot when pending input is still live", async () => {
@@ -356,6 +358,51 @@ describe("reattach-live-session", () => {
 
     expect(reattached).toBe(false);
     expect(resumeCalls).toBe(0);
+  });
+
+  test("does not update idle presence when the repo becomes stale before state update", async () => {
+    let state: AgentSessionState = { ...createSessionStateFixture(), status: "running" };
+    let staleChecks = 0;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => true,
+      },
+      repoPath: "/tmp/repo",
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: () => {
+        throw new Error("should not attach idle session");
+      },
+      promptOverrides: {},
+      attachMissingLiveSession: async () => {
+        throw new Error("should not resume idle session");
+      },
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
+          externalSessionId: "external-1",
+          title: "Session",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+      isStaleRepoOperation: () => {
+        staleChecks += 1;
+        return staleChecks > 1;
+      },
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(state.status).toBe("running");
+    expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
   });
 
   test("attempts live discovery for stdio OpenCode runtimes", async () => {

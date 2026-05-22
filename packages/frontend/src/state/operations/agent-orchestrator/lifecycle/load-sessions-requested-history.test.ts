@@ -7,6 +7,7 @@ import {
   createAdapter,
   createDeferred,
   createLoadAgentSessions,
+  createPresence,
   createTaskFixture,
   createTestQueryClient,
   getSession,
@@ -158,6 +159,304 @@ describe("agent-orchestrator requested history hydration", () => {
     ]);
     expect(attachCalls).toEqual([{ externalSessionId: "external-child-1" }]);
     expect(state["external-child-1"]?.status).toBe("running");
+  });
+
+  test("applies passive presence during requested-history hydration without attaching", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-codex-1": {
+          externalSessionId: "external-codex-1",
+          taskId: "task-1",
+          repoPath: "/tmp/repo",
+          role: "build",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeKind: "codex",
+          runtimeId: "runtime-codex",
+          workingDirectory: "/tmp/repo",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+          historyHydrationState: "not_requested",
+          runtimeRecoveryState: "idle",
+        },
+      },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    const presenceScans: string[][] = [];
+    const attachCalls: string[] = [];
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[externalSessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [externalSessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      queryClient,
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        loadSessionHistory: async () => [],
+        attachSession: async (input: AttachSessionInput) => {
+          attachCalls.push(input.externalSessionId);
+          return {
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
+        listSessionPresence: async (input) => {
+          presenceScans.push(input.directories ?? []);
+          const presence = createPresence("external-codex-1", "/tmp/repo", {
+            status: { type: "idle" },
+          });
+          return [
+            {
+              ...presence,
+              ref: { ...presence.ref, runtimeKind: "codex" },
+              runtimeId: "runtime-codex",
+            },
+          ];
+        },
+        readSessionPresence: async (input) => {
+          const presence = createPresence(input.externalSessionId, input.workingDirectory, {
+            status: { type: "idle" },
+          });
+          return {
+            ...presence,
+            ref: { ...presence.ref, runtimeKind: "codex" },
+            runtimeId: "runtime-codex",
+          };
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [createTaskFixture()] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const preloadedRuntimeLists = new Map<"codex", RuntimeInstanceSummary[]>([
+      [
+        "codex",
+        [
+          {
+            kind: "codex",
+            runtimeId: "runtime-codex",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:1430",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: CODEX_RUNTIME_DESCRIPTOR,
+          },
+        ],
+      ],
+    ]);
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetExternalSessionId: "external-codex-1",
+      historyPolicy: "requested_only",
+      preloadedRuntimeLists,
+      persistedRecords: [
+        persistedSessionRecord({
+          runtimeKind: "codex",
+          externalSessionId: "external-codex-1",
+          taskId: "task-1",
+          role: "build",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo",
+        }),
+      ],
+    });
+
+    expect(presenceScans).toEqual([["/tmp/repo"]]);
+    expect(attachCalls).toEqual([]);
+    expect(getSession(state, "external-codex-1").status).toBe("idle");
+  });
+
+  test("applies passive presence for already hydrated requested sessions without reloading history", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-codex-1": {
+          externalSessionId: "external-codex-1",
+          taskId: "task-1",
+          repoPath: "/tmp/repo",
+          role: "build",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeKind: "codex",
+          runtimeId: "runtime-codex",
+          workingDirectory: "/tmp/repo",
+          messages: [
+            {
+              id: "message-1",
+              role: "assistant",
+              content: "hydrated transcript",
+              timestamp: "2026-02-22T08:00:03.000Z",
+            },
+          ],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+          historyHydrationState: "hydrated",
+          runtimeRecoveryState: "idle",
+        },
+      },
+    };
+    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    let listPresenceCount = 0;
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[externalSessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [externalSessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      queryClient,
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        loadSessionHistory: async () => {
+          throw new Error("history should not be reloaded for a presence-only refresh");
+        },
+        listSessionPresence: async () => {
+          listPresenceCount += 1;
+          const presence = createPresence("external-codex-1", "/tmp/repo", {
+            status: { type: "idle" },
+          });
+          return [
+            {
+              ...presence,
+              ref: { ...presence.ref, runtimeKind: "codex" },
+              runtimeId: "runtime-codex",
+            },
+          ];
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [createTaskFixture()] },
+      updateSession,
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    const preloadedRuntimeLists = new Map<"codex", RuntimeInstanceSummary[]>([
+      [
+        "codex",
+        [
+          {
+            kind: "codex",
+            runtimeId: "runtime-codex",
+            repoPath: "/tmp/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/tmp/repo",
+            runtimeRoute: {
+              type: "local_http",
+              endpoint: "http://127.0.0.1:1430",
+            },
+            startedAt: "2026-02-22T08:00:00.000Z",
+            descriptor: CODEX_RUNTIME_DESCRIPTOR,
+          },
+        ],
+      ],
+    ]);
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetExternalSessionId: "external-codex-1",
+      historyPolicy: "none",
+      preloadedRuntimeLists,
+      persistedRecords: [
+        persistedSessionRecord({
+          runtimeKind: "codex",
+          externalSessionId: "external-codex-1",
+          taskId: "task-1",
+          role: "build",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo",
+        }),
+      ],
+    });
+
+    expect(listPresenceCount).toBe(1);
+    expect(getSession(state, "external-codex-1").status).toBe("idle");
+    expect(getSession(state, "external-codex-1").historyHydrationState).toBe("hydrated");
   });
 
   test("hydrates Codex history with per-turn model metadata instead of current selection", async () => {
