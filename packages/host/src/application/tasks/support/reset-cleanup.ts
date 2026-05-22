@@ -5,10 +5,10 @@ import {
   type TaskStatus,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import { normalizePathForComparison } from "./builder-worktree-cleanup";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const taskResetSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);

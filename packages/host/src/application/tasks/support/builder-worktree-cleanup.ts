@@ -1,5 +1,6 @@
 import type { DirectMergeRecord, GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../../ports/git-port";
@@ -23,21 +24,6 @@ type BuildWorktreeCleanupError =
   | HostValidationError
   | TaskWorktreeServiceError
   | WorkspaceSettingsError;
-export const normalizePathForComparison = (value: string): string => {
-  const absolute = value.trim().replace(/\\/g, "/");
-  const segments: string[] = [];
-  for (const segment of absolute.split("/")) {
-    if (!segment || segment === ".") {
-      continue;
-    }
-    if (segment === "..") {
-      segments.pop();
-      continue;
-    }
-    segments.push(segment);
-  }
-  return absolute.startsWith("/") ? `/${segments.join("/")}` : segments.join("/");
-};
 export const findLatestCleanupTarget = (
   dependencies: {
     gitPort: GitPort;
