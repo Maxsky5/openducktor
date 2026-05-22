@@ -753,11 +753,24 @@ describe("createElectronHostCommandRouter", () => {
 
   test("registers migrated Codex app-server host commands", async () => {
     const calls: unknown[] = [];
+    const modelListResponse = {
+      data: [
+        {
+          id: "gpt-5",
+          model: "gpt-5",
+          displayName: "GPT-5",
+          supportedReasoningEfforts: [{ reasoningEffort: "medium" }],
+          inputModalities: ["text", "image"],
+          isDefault: true,
+        },
+      ],
+      nextCursor: null,
+    };
     const codexAppServer: CodexAppServerPort = {
       request: (input) =>
         Effect.sync(() => {
           calls.push({ method: "request", input });
-          return { ok: true };
+          return modelListResponse;
         }),
       drainNotifications: (runtimeId) =>
         Effect.sync(() => {
@@ -788,7 +801,7 @@ describe("createElectronHostCommandRouter", () => {
         method: "model/list",
         params: { request: "catalog" },
       }),
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual(modelListResponse);
     await expect(
       router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
     ).resolves.toEqual([{ method: "codex/app-server/ready" }]);

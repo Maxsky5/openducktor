@@ -103,6 +103,7 @@ describe("agent-runtime-registry", () => {
               id: "gpt-5",
               model: "gpt-5",
               displayName: "GPT-5",
+              inputModalities: ["text", "image"],
               supportedReasoningEfforts: [
                 { reasoningEffort: "medium", description: "Balanced reasoning" },
               ],
@@ -189,6 +190,7 @@ describe("agent-runtime-registry", () => {
               id: "gpt-5",
               model: "gpt-5",
               displayName: "GPT-5",
+              inputModalities: ["text", "image"],
               supportedReasoningEfforts: [
                 { reasoningEffort: "medium", description: "Balanced reasoning" },
               ],
