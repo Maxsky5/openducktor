@@ -1,21 +1,18 @@
-import { memo, type ReactElement, useEffect, useMemo, useRef } from "react";
-import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
+import { type ReactElement, useMemo, useRef } from "react";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
-import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import type {
   AgentStudioOrchestrationSelectionContext,
   useAgentStudioOrchestrationController,
 } from "../use-agent-studio-orchestration-controller";
-import {
-  type AgentStudioGitConflictQuickActionContext,
-  type UseAgentsPageRightPanelModelArgs,
-  useAgentsPageRightPanelModel,
+import type {
+  AgentStudioGitConflictQuickActionContext,
+  UseAgentsPageRightPanelModelArgs,
 } from "../use-agents-page-right-panel-model";
 import {
-  useForwardedWorktreeRefresh,
-  type WorktreeRefreshRef,
-} from "./use-forwarded-worktree-refresh";
+  AgentsPageBuildWorktreeRefreshRuntime,
+  AgentsPageRightPanelRuntime,
+} from "./agents-page-right-panel-runtime";
 
 type UseAgentsPageRightPanelShellModelArgs = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
@@ -37,53 +34,6 @@ export type AgentsPageRightPanelShellModel = {
   isRightPanelVisible: boolean;
   rightPanelContent: ReactElement | null;
 };
-
-const AgentsPageRightPanelRuntime = memo(function AgentsPageRightPanelRuntime({
-  refreshWorktreeRef,
-  ...args
-}: UseAgentsPageRightPanelModelArgs & {
-  refreshWorktreeRef: WorktreeRefreshRef;
-}): ReactElement | null {
-  const { rightPanelModel, refreshWorktree } = useAgentsPageRightPanelModel(args);
-
-  useEffect(() => {
-    refreshWorktreeRef.current = refreshWorktree;
-    return () => {
-      if (refreshWorktreeRef.current === refreshWorktree) {
-        refreshWorktreeRef.current = null;
-      }
-    };
-  }, [refreshWorktree, refreshWorktreeRef]);
-
-  return rightPanelModel ? <MemoizedAgentStudioRightPanel model={rightPanelModel} /> : null;
-});
-
-function AgentsPageBuildWorktreeRefreshRuntime({
-  panelKind,
-  isPanelOpen,
-  viewRole,
-  activeSession,
-  isSessionHistoryHydrating,
-  refreshWorktreeRef,
-}: {
-  panelKind: "documents" | "build_tools" | null;
-  isPanelOpen: boolean;
-  viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
-  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
-  isSessionHistoryHydrating: boolean;
-  refreshWorktreeRef: WorktreeRefreshRef;
-}): null {
-  const refreshWorktree = useForwardedWorktreeRefresh(refreshWorktreeRef);
-
-  useAgentStudioBuildWorktreeRefresh({
-    viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
-    activeSession,
-    isSessionHistoryHydrating,
-    refreshWorktree,
-  });
-
-  return null;
-}
 
 export function useAgentsPageRightPanelShellModel({
   activeWorkspace,
