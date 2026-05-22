@@ -96,6 +96,77 @@ export const sessionStateFromThreadAttach = (
   response: CodexThreadResumeResult,
 ): CodexSessionState => sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
 
+type SessionScopedMap = {
+  delete(key: string): boolean;
+  keys(): IterableIterator<string>;
+};
+
+type RequestIdsBySession = {
+  get(key: string): Set<string> | undefined;
+  delete(key: string): boolean;
+};
+
+export type InternalCodexLocalSessionStateStore = {
+  sessions: { delete(key: string): boolean };
+  listenersBySessionId: { delete(key: string): boolean };
+  bufferedNotificationsByThreadId: { delete(key: string): boolean };
+  bufferedServerRequestsByThreadId: { delete(key: string): boolean };
+  handledStreamRequestKeysByThreadId: { delete(key: string): boolean };
+  syntheticUserMessageTextsByThreadId: { delete(key: string): boolean };
+  eventBacklogBySessionId: { delete(key: string): boolean };
+  latestTodosBySessionId: { delete(key: string): boolean };
+  activeTurnsBySessionId: { delete(key: string): boolean };
+  pendingApprovalIdsBySessionId: RequestIdsBySession;
+  pendingApprovalsByRequestId: { delete(key: string): boolean };
+  activeTurnsByApprovalRequestId: { delete(key: string): boolean };
+  pendingQuestionIdsBySessionId: RequestIdsBySession;
+  pendingQuestionsByRequestId: { delete(key: string): boolean };
+  activeTurnsByQuestionRequestId: { delete(key: string): boolean };
+  completedAgentMessagesByTurnKey: SessionScopedMap;
+  tokenUsageByTurnKey: SessionScopedMap;
+  modelByTurnKey: SessionScopedMap;
+};
+
+export const clearLocalSessionState = (
+  store: InternalCodexLocalSessionStateStore,
+  externalSessionId: string,
+): void => {
+  store.sessions.delete(externalSessionId);
+  store.listenersBySessionId.delete(externalSessionId);
+  store.bufferedNotificationsByThreadId.delete(externalSessionId);
+  store.bufferedServerRequestsByThreadId.delete(externalSessionId);
+  store.handledStreamRequestKeysByThreadId.delete(externalSessionId);
+  store.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
+  store.eventBacklogBySessionId.delete(externalSessionId);
+  store.latestTodosBySessionId.delete(externalSessionId);
+  store.activeTurnsBySessionId.delete(externalSessionId);
+  const approvalRequestIds = store.pendingApprovalIdsBySessionId.get(externalSessionId) ?? [];
+  for (const requestId of approvalRequestIds) {
+    store.pendingApprovalsByRequestId.delete(requestId);
+    store.activeTurnsByApprovalRequestId.delete(requestId);
+  }
+  store.pendingApprovalIdsBySessionId.delete(externalSessionId);
+  const questionRequestIds = store.pendingQuestionIdsBySessionId.get(externalSessionId) ?? [];
+  for (const requestId of questionRequestIds) {
+    store.pendingQuestionsByRequestId.delete(requestId);
+    store.activeTurnsByQuestionRequestId.delete(requestId);
+  }
+  store.pendingQuestionIdsBySessionId.delete(externalSessionId);
+  const turnKeyPrefix = `${externalSessionId}:`;
+  const turnScopedMaps = [
+    store.completedAgentMessagesByTurnKey,
+    store.tokenUsageByTurnKey,
+    store.modelByTurnKey,
+  ];
+  for (const turnScopedMap of turnScopedMaps) {
+    for (const turnKey of turnScopedMap.keys()) {
+      if (turnKey.startsWith(turnKeyPrefix)) {
+        turnScopedMap.delete(turnKey);
+      }
+    }
+  }
+};
+
 const sessionStateFromThreadResumeResponse = (
   input: ResumeAgentSessionInput | AttachAgentSessionInput,
   runtimeId: string,

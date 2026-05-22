@@ -246,6 +246,10 @@ export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary>;
+  /**
+   * Releases the adapter's local attachment to a runtime session without terminating the runtime
+   * session itself. Use stopSession when the remote/live session should be stopped.
+   */
   detachSession(externalSessionId: ExternalSessionId): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
