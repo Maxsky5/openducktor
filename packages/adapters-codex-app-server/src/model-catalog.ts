@@ -47,10 +47,8 @@ export const toTransportModelSelection = (model: AgentModelSelection) => ({
 });
 
 const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
-  const modalities = new Set(inputModalities);
-
   return {
-    image: modalities.has("image"),
+    image: inputModalities.includes("image"),
     audio: false,
     video: false,
     pdf: false,

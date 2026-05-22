@@ -8,7 +8,7 @@ import {
   codexItemTypeMatches,
   codexUserInputListToText,
   codexUserInputsFromItem,
-  codexUserInputToDisplayPart,
+  codexUserInputsToDisplayParts,
   terminalHistoryPart,
 } from "../codex-app-server-transcript";
 import type { CodexMappingResult } from "../codex-canonical-events";
@@ -55,7 +55,7 @@ export const userMessageMapper: CodexEventMapper = {
           message,
           displayParts:
             parts.length > 0
-              ? parts.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }))
+              ? codexUserInputsToDisplayParts(parts, messageId)
               : [{ kind: "text", text: message }],
           state: "read",
         },

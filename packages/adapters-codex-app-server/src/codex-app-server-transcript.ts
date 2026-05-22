@@ -305,7 +305,7 @@ export const toHistoryMessage = (
       text,
       displayParts:
         input.length > 0
-          ? input.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }))
+          ? codexUserInputsToDisplayParts(input, messageId)
           : [{ kind: "text", text }],
       state: "read",
       parts: toHistoryParts(item, messageId, text),
@@ -921,7 +921,7 @@ const codexLocalImageNameFromPath = (path: string): string => {
   return path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
 };
 
-export const codexUserInputToDisplayPart = (
+const codexUserInputToDisplayPart = (
   input: CodexUserInput,
   context: CodexUserInputDisplayContext,
 ): AgentUserMessageDisplayPart => {
@@ -941,6 +941,12 @@ export const codexUserInputToDisplayPart = (
   }
   return { kind: "text", text: userInputText(input), synthetic: true };
 };
+
+export const codexUserInputsToDisplayParts = (
+  input: CodexUserInput[],
+  messageId: string,
+): AgentUserMessageDisplayPart[] =>
+  input.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }));
 
 export const codexUserInputListToText = (input: CodexUserInput[]): string => {
   return input.map(userInputText).join(" ").trim();
