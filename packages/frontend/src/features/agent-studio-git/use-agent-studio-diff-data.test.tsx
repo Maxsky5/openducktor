@@ -750,6 +750,44 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
+  test("resets cached diff data when switching between task worktrees", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      worktreeResolutionTaskId: "task-a",
+      worktreePath: "/repo/.worktrees/task-a",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.run((state) => {
+        state.setDiffScope("target");
+      });
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
+      await harness.waitFor((state) => state.diffScope === "target");
+
+      await harness.update({
+        ...createBaseArgs(),
+        worktreeResolutionTaskId: "task-b",
+        worktreePath: "/repo/.worktrees/task-b",
+      });
+
+      await harness.waitFor((state) => state.diffScope === "uncommitted");
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
+      expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(
+        3,
+        "/repo",
+        "origin/main",
+        "uncommitted",
+        "/repo/.worktrees/task-b",
+      );
+      expect(harness.getLatest().worktreePath).toBe("/repo/.worktrees/task-b");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refresh syncs shared branch/upstream fields for cached inactive scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 
@@ -2707,6 +2745,33 @@ describe("useAgentStudioDiffData", () => {
       expect(taskWorktreeEntriesMock).not.toHaveBeenCalled();
       expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
       expect(harness.getLatest().worktreePath).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("blocks diff loading and refresh while the selected runtime is unavailable", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      preconditionError:
+        "Runtime unavailable for this task. Select an available runtime before loading git diff data.",
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          state.error ===
+          "Runtime unavailable for this task. Select an available runtime before loading git diff data.",
+      );
+
+      await harness.run(async (state) => {
+        await state.refresh();
+      });
+
+      expect(gitFetchRemoteMock).not.toHaveBeenCalled();
+      expect(gitGetWorktreeStatusMock).not.toHaveBeenCalled();
+      expect(retryWorktreeResolutionMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

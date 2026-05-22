@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
+import {
+  createScheduledFetchCooldownKey,
+  shouldRunScheduledFetch,
+} from "./agent-studio-diff-polling-policy";
 import type { DiffDataState, GitDiffRefresh, GitDiffRefreshMode } from "./contracts";
 
 export type DiffRefreshContext = {
@@ -40,8 +44,6 @@ type UseAgentStudioDiffRefreshControllerResult = {
   isRefreshing: boolean;
 };
 
-const SCHEDULED_FETCH_COOLDOWN_MS = 5 * 60 * 1000;
-
 const refreshModePriority = (mode: GitDiffRefreshMode): number => {
   switch (mode) {
     case "hard":
@@ -63,13 +65,6 @@ const mergeRefreshRequests = (
 
   return refreshModePriority(next.mode) > refreshModePriority(current.mode) ? next : current;
 };
-
-const buildScheduledFetchCooldownKey = ({
-  repoPath,
-  targetBranch,
-  workingDir,
-}: Pick<DiffRefreshContext, "repoPath" | "targetBranch" | "workingDir">): string =>
-  `${repoPath}::${targetBranch}::${workingDir ?? ""}`;
 
 export function useAgentStudioDiffRefreshController({
   refreshContext,
@@ -119,10 +114,13 @@ export function useAgentStudioDiffRefreshController({
       const hasSameRefreshContext = (): boolean =>
         refreshContextRef.current?.requestContextKey === activeRefreshContext.requestContextKey;
       const showLoading = activeRefreshRequest.mode !== "scheduled";
-      const scheduledFetchCooldownKey = buildScheduledFetchCooldownKey(activeRefreshContext);
-      const shouldRunScheduledFetch = (): boolean => {
+      const scheduledFetchCooldownKey = createScheduledFetchCooldownKey(activeRefreshContext);
+      const canRunScheduledFetch = (): boolean => {
         const lastFetchedAt = scheduledFetchAtByContextRef.current.get(scheduledFetchCooldownKey);
-        return lastFetchedAt == null || Date.now() - lastFetchedAt >= SCHEDULED_FETCH_COOLDOWN_MS;
+        return shouldRunScheduledFetch({
+          lastFetchedAtMs: lastFetchedAt ?? null,
+          nowMs: Date.now(),
+        });
       };
       const updateScheduledFetchCooldown = (): void => {
         scheduledFetchAtByContextRef.current.set(scheduledFetchCooldownKey, Date.now());
@@ -175,7 +173,7 @@ export function useAgentStudioDiffRefreshController({
         }
 
         let scheduledFetchError: string | null = null;
-        if (shouldRunScheduledFetch()) {
+        if (canRunScheduledFetch()) {
           try {
             const fetchCompleted = await fetchRemote();
             if (!fetchCompleted) {

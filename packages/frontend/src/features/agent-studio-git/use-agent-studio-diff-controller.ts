@@ -1,39 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { appQueryClient } from "@/lib/query-client";
-import {
-  loadWorktreeStatusFromQuery,
-  loadWorktreeStatusSummaryFromQuery,
-} from "@/state/queries/git";
-import {
-  type DiffBatchState,
-  type LoadDataMode,
-  type ScopeSnapshot,
-  toScopeSnapshot,
-  toScopeSummaryFields,
-} from "./agent-studio-diff-data-model";
+import type { DiffBatchState, ScopeSnapshot } from "./agent-studio-diff-data-model";
 import type { DiffScope } from "./contracts";
-import {
-  type LoadRequestContext,
-  useAgentStudioDiffBatchState,
-} from "./use-agent-studio-diff-batch-state";
+import { useAgentStudioDiffBatchState } from "./use-agent-studio-diff-batch-state";
+import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-agent-studio-diff-loader";
 import { useAgentStudioDiffRequestController } from "./use-agent-studio-diff-request-controller";
-
-type LoadDataContext = {
-  repoPath: string | null;
-  targetBranch: string;
-  workingDir: string | null;
-  scope: DiffScope;
-  mode?: LoadDataMode;
-  force?: boolean;
-  replayIfInFlight?: boolean;
-};
-
-type InFlightRequestContext = LoadRequestContext & {
-  mode: LoadDataMode;
-  requestKey: string;
-  requestSequence: number;
-  version: number;
-};
 
 type UseAgentStudioDiffControllerArgs = {
   repoPath: string | null;
@@ -115,204 +85,23 @@ export function useAgentStudioDiffController({
     setDiffScope("uncommitted");
   }, []);
 
-  const hasLoadContextChanged = useCallback(
-    (path: string, nextTargetBranch: string, nextWorkingDir: string | null): boolean =>
-      repoPathRef.current !== path ||
-      targetBranchRef.current !== nextTargetBranch ||
-      (workingDirRef.current ?? null) !== nextWorkingDir,
-    [],
-  );
-
-  const runSummaryLoad = useCallback(
-    async ({
-      repoPath: activeRepoPath,
-      requestSequence,
-      scope,
-      targetBranch: activeTargetBranch,
-      version,
-      workingDir: nextWorkingDir,
-    }: InFlightRequestContext): Promise<void> => {
-      if (
-        hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) ||
-        !shouldApplyResult(scope, "summary", version)
-      ) {
-        return;
-      }
-      const summary = await loadWorktreeStatusSummaryFromQuery(
-        appQueryClient,
-        activeRepoPath,
-        activeTargetBranch,
-        scope,
-        nextWorkingDir,
-      );
-
-      if (
-        !hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) &&
-        shouldApplyResult(scope, "summary", version)
-      ) {
-        const summaryFields = toScopeSummaryFields(summary);
-        applySummaryResult({
-          loadContext: {
-            repoPath: activeRepoPath,
-            scope,
-            targetBranch: activeTargetBranch,
-            workingDir: nextWorkingDir,
-          },
-          markScopeInvalidated,
-          requestSequence,
-          scope,
-          summaryFields,
-        });
-      }
-    },
-    [applySummaryResult, hasLoadContextChanged, markScopeInvalidated, shouldApplyResult],
-  );
-
-  const runFullLoad = useCallback(
-    async ({
-      force = false,
-      repoPath: activeRepoPath,
-      requestSequence,
-      scope,
-      targetBranch: activeTargetBranch,
-      version,
-      workingDir: nextWorkingDir,
-    }: InFlightRequestContext & { force?: boolean }): Promise<void> => {
-      if (
-        hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) ||
-        !shouldApplyResult(scope, "full", version)
-      ) {
-        return;
-      }
-      const snapshot = await loadWorktreeStatusFromQuery(
-        appQueryClient,
-        activeRepoPath,
-        activeTargetBranch,
-        scope,
-        nextWorkingDir,
-        { force },
-      );
-
-      if (
-        !hasLoadContextChanged(activeRepoPath, activeTargetBranch, nextWorkingDir) &&
-        shouldApplyResult(scope, "full", version)
-      ) {
-        applyFullResult({
-          clearScopeInvalidation,
-          requestSequence,
-          scope,
-          snapshot: toScopeSnapshot(snapshot),
-        });
-      }
-    },
-    [applyFullResult, clearScopeInvalidation, hasLoadContextChanged, shouldApplyResult],
-  );
-
-  const loadData = useCallback(
-    async (showLoading = false, context?: LoadDataContext) => {
-      const activeRepoPath = context?.repoPath ?? repoPathRef.current;
-      if (!activeRepoPath) {
-        return;
-      }
-
-      const loadContext: LoadRequestContext = {
-        repoPath: activeRepoPath,
-        scope: context?.scope ?? diffScopeRef.current,
-        targetBranch: context?.targetBranch ?? targetBranchRef.current,
-        workingDir: context?.workingDir ?? workingDirRef.current,
-      };
-      const mode = context?.mode ?? "full";
-      const force = context?.force === true;
-      const replayIfInFlight = context?.replayIfInFlight === true;
-      const requestKey = `${loadContext.repoPath}::${loadContext.targetBranch}::${loadContext.workingDir ?? ""}`;
-
-      const beginRequestResult = beginRequest({
-        scope: loadContext.scope,
-        mode,
-        requestKey,
-        showLoading,
-        replayIfInFlight,
-        force,
-      });
-      if (beginRequestResult.kind === "skip") {
-        return;
-      }
-      const { requestSequence, version } = beginRequestResult;
-      if (showLoading) {
-        setBatchLoading(true);
-      }
-
-      try {
-        const inFlightRequestContext: InFlightRequestContext = {
-          ...loadContext,
-          mode,
-          requestKey,
-          requestSequence,
-          version,
-        };
-
-        if (mode === "summary") {
-          await runSummaryLoad(inFlightRequestContext);
-          return;
-        }
-
-        await runFullLoad({ ...inFlightRequestContext, force });
-      } catch (error) {
-        if (
-          hasLoadContextChanged(
-            loadContext.repoPath,
-            loadContext.targetBranch,
-            loadContext.workingDir,
-          )
-        ) {
-          return;
-        }
-
-        if (shouldApplyResult(loadContext.scope, mode, version)) {
-          applyScopeLoadError({
-            scope: loadContext.scope,
-            mode,
-            error: String(error),
-          });
-        }
-      } finally {
-        const { clearLoading, replayFullLoad } = finishRequest({
-          scope: loadContext.scope,
-          mode,
-          requestKey,
-          requestSequence,
-          showLoading,
-        });
-
-        if (clearLoading) {
-          setBatchLoading(false);
-        }
-
-        if (mode === "full" && replayFullLoad) {
-          globalThis.queueMicrotask(() => {
-            void loadData(false, {
-              repoPath: loadContext.repoPath,
-              targetBranch: loadContext.targetBranch,
-              workingDir: loadContext.workingDir,
-              scope: loadContext.scope,
-              mode: "full",
-              force: replayFullLoad.force,
-            });
-          });
-        }
-      }
-    },
-    [
+  const { loadData, refreshActiveScope, refreshActiveScopeSummary, reloadActiveScope } =
+    useAgentStudioDiffLoader({
+      repoPathRef,
+      targetBranchRef,
+      workingDirRef,
+      diffScopeRef,
+      shouldBlockDiffLoading,
+      applyFullResult,
       applyScopeLoadError,
+      applySummaryResult,
       beginRequest,
+      clearScopeInvalidation,
       finishRequest,
-      hasLoadContextChanged,
-      runFullLoad,
-      runSummaryLoad,
+      markScopeInvalidated,
       setBatchLoading,
       shouldApplyResult,
-    ],
-  );
+    });
 
   useEffect(() => {
     if (!pendingFullReload) {
@@ -403,78 +192,6 @@ export function useAgentStudioDiffController({
     targetBranch,
     workingDir,
   ]);
-
-  const refreshActiveScope = useCallback(
-    async (
-      context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
-    ): Promise<void> => {
-      const refreshContext = context ?? {
-        repoPath: repoPathRef.current,
-        targetBranch: targetBranchRef.current,
-        workingDir: workingDirRef.current,
-        scope: diffScopeRef.current,
-      };
-
-      if (shouldBlockDiffLoading || !refreshContext.repoPath) {
-        return;
-      }
-
-      await loadData(true, {
-        repoPath: refreshContext.repoPath,
-        targetBranch: refreshContext.targetBranch,
-        workingDir: refreshContext.workingDir,
-        scope: refreshContext.scope,
-        force: true,
-        replayIfInFlight: true,
-      });
-    },
-    [loadData, shouldBlockDiffLoading],
-  );
-
-  const refreshActiveScopeSummary = useCallback(
-    async (
-      context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
-    ): Promise<void> => {
-      const refreshContext = context ?? {
-        repoPath: repoPathRef.current,
-        targetBranch: targetBranchRef.current,
-        workingDir: workingDirRef.current,
-        scope: diffScopeRef.current,
-      };
-
-      if (shouldBlockDiffLoading || !refreshContext.repoPath) {
-        return;
-      }
-
-      await loadData(false, {
-        repoPath: refreshContext.repoPath,
-        targetBranch: refreshContext.targetBranch,
-        workingDir: refreshContext.workingDir,
-        scope: refreshContext.scope,
-        mode: "summary",
-      });
-    },
-    [loadData, shouldBlockDiffLoading],
-  );
-
-  const reloadActiveScope = useCallback(
-    (showLoading = false): void => {
-      if (shouldBlockDiffLoading || !repoPathRef.current) {
-        return;
-      }
-
-      void loadData(showLoading, {
-        repoPath: repoPathRef.current,
-        targetBranch: targetBranchRef.current,
-        workingDir: workingDirRef.current,
-        scope: diffScopeRef.current,
-        mode: "full",
-        force: true,
-        replayIfInFlight: true,
-      });
-    },
-    [loadData, shouldBlockDiffLoading],
-  );
 
   return {
     activeScopeState,
