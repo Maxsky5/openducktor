@@ -282,7 +282,9 @@ const emitCompletedItem = (
       timestamp,
       messageId: itemId,
       message,
-      parts: input.map(codexUserInputToDisplayPart),
+      parts: input.map((part, index) =>
+        codexUserInputToDisplayPart(part, { index, messageId: itemId }),
+      ),
       state: "read",
       ...(model ? { model } : {}),
     });

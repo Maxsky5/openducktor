@@ -38,6 +38,7 @@ export const userMessageMapper: CodexEventMapper = {
     if (message.trim().length === 0) {
       return emptyCodexMappingResult();
     }
+    const messageId = codexItemId(input.item, `${ctx.threadId}-user-${input.index}`);
     return {
       handled: true,
       events: [
@@ -50,11 +51,11 @@ export const userMessageMapper: CodexEventMapper = {
             ? { timestamp: ctx.timestamp ?? input.timestamp }
             : {}),
           raw: input.item,
-          messageId: codexItemId(input.item, `${ctx.threadId}-user-${input.index}`),
+          messageId,
           message,
           displayParts:
             parts.length > 0
-              ? parts.map(codexUserInputToDisplayPart)
+              ? parts.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }))
               : [{ kind: "text", text: message }],
           state: "read",
         },

@@ -304,7 +304,9 @@ export const toHistoryMessage = (
       timestamp: messageTimestamp,
       text,
       displayParts:
-        input.length > 0 ? input.map(codexUserInputToDisplayPart) : [{ kind: "text", text }],
+        input.length > 0
+          ? input.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }))
+          : [{ kind: "text", text }],
       state: "read",
       parts: toHistoryParts(item, messageId, text),
       ...(model ? { model } : {}),
@@ -910,11 +912,19 @@ export const userInputText = (input: CodexUserInput): string => {
   return input.path;
 };
 
+type CodexUserInputDisplayContext = {
+  index: number;
+  messageId: string;
+};
+
 const codexLocalImageNameFromPath = (path: string): string => {
   return path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
 };
 
-export const codexUserInputToDisplayPart = (input: CodexUserInput): AgentUserMessageDisplayPart => {
+export const codexUserInputToDisplayPart = (
+  input: CodexUserInput,
+  context: CodexUserInputDisplayContext,
+): AgentUserMessageDisplayPart => {
   if (input.type === "text") {
     return { kind: "text", text: input.text };
   }
@@ -922,7 +932,7 @@ export const codexUserInputToDisplayPart = (input: CodexUserInput): AgentUserMes
     return {
       kind: "attachment",
       attachment: {
-        id: `codex-local-image:${input.path}`,
+        id: `codex-local-image:${context.messageId}:${context.index}`,
         kind: "image",
         name: codexLocalImageNameFromPath(input.path),
         path: input.path,
