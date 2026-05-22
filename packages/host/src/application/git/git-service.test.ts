@@ -16,7 +16,11 @@ import type {
 } from "@openducktor/contracts";
 import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
+import {
+  HostDependencyError,
+  HostOperationError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type {
   GitPort,
   GitPushBranchOptions,
@@ -499,7 +503,7 @@ const createFakeGitPort = ({
       });
     },
   }) as GitPort as unknown as GitPort;
-const createFakeSettingsConfig = (config: GlobalConfig): SettingsConfigPort => ({
+const createFakeSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort => ({
   readConfig() {
     return Effect.tryPromise({
       try: async () => {
@@ -1013,6 +1017,87 @@ describe("createGitService", () => {
       "copyConfiguredPaths:/canonical/repo|/worktrees/repo-task|.env",
     ]);
   });
+  test("fails create worktree through the Effect channel when settings config is missing", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.createWorktree({
+          repoPath: "/repo",
+          worktreePath: "/worktrees/repo-task",
+          branch: "feature/task",
+          createBranch: true,
+        }),
+      ),
+    );
+    expect(error).toBeInstanceOf(HostDependencyError);
+    if (!(error instanceof HostDependencyError)) {
+      throw new Error("expected missing settings config to fail with HostDependencyError");
+    }
+    expect(error.dependency).toBe("settingsConfig");
+    expect(calls).toEqual([]);
+  });
+  test("fails create worktree through the Effect channel when worktree files are missing", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      settingsConfig: createFakeSettingsConfig(createConfig()),
+    });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.createWorktree({
+          repoPath: "/repo",
+          worktreePath: "/worktrees/repo-task",
+          branch: "feature/task",
+          createBranch: true,
+        }),
+      ),
+    );
+    expect(error).toBeInstanceOf(HostDependencyError);
+    if (!(error instanceof HostDependencyError)) {
+      throw new Error("expected missing worktree files to fail with HostDependencyError");
+    }
+    expect(error.dependency).toBe("worktreeFiles");
+    expect(calls).toEqual([]);
+  });
+  test("fails create worktree through the Effect channel when workspace config is missing", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      settingsConfig: createFakeSettingsConfig(null),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.createWorktree({
+          repoPath: "/repo",
+          worktreePath: "/worktrees/repo-task",
+          branch: "feature/task",
+          createBranch: true,
+        }),
+      ),
+    );
+    expect(error).toBeInstanceOf(HostValidationError);
+    expect(error.message).toBe(
+      "No OpenDucktor workspace config is available for git worktree mutation.",
+    );
+    expect(calls).toEqual([]);
+  });
   test("removes a worktree and cleans up the filesystem path", async () => {
     const calls: string[] = [];
     const service = createGitService({
@@ -1037,6 +1122,32 @@ describe("createGitService", () => {
       "removeWorktree:/canonical/repo|/managed/repo/task-1|true",
       "removePathIfPresent:/managed/repo/task-1",
     ]);
+  });
+  test("fails remove worktree through the Effect channel when settings config is missing", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+      }),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/managed/repo/task-1",
+          force: true,
+        }),
+      ),
+    );
+    expect(error).toBeInstanceOf(HostDependencyError);
+    if (!(error instanceof HostDependencyError)) {
+      throw new Error("expected missing settings config to fail with HostDependencyError");
+    }
+    expect(error.dependency).toBe("settingsConfig");
+    expect(calls).toEqual([]);
   });
   test("rejects forced stranded worktree cleanup outside managed roots", async () => {
     const calls: string[] = [];

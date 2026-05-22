@@ -228,9 +228,9 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
       return Effect.gen(function* () {
         const { repoPath, worktreePath, branch, createBranch } = input;
         const canonicalRepoPath = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);
-        const config = requireSettingsConfig(settingsConfig);
+        const config = yield* requireSettingsConfig(settingsConfig);
         const repoConfig = yield* findRepoConfigByPath(config, canonicalRepoPath);
-        const files = requireWorktreeFiles(worktreeFiles);
+        const files = yield* requireWorktreeFiles(worktreeFiles);
         yield* gitPort.createWorktree(canonicalRepoPath, worktreePath, branch, createBranch);
         yield* files
           .copyConfiguredPaths(canonicalRepoPath, worktreePath, repoConfig.worktreeCopyPaths)
@@ -272,11 +272,12 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
       return Effect.gen(function* () {
         const { repoPath, worktreePath, force } = input;
         const canonicalRepoPath = yield* resolveGitWorkingDirectory(gitPort, repoPath, undefined);
-        const files = requireWorktreeFiles(worktreeFiles);
+        const files = yield* requireWorktreeFiles(worktreeFiles);
+        const config = yield* requireSettingsConfig(settingsConfig);
         yield* removeWorktreeAndFilesystemPath(
           {
             gitPort,
-            settingsConfig: requireSettingsConfig(settingsConfig),
+            settingsConfig: config,
             worktreeFiles: files,
           },
           {
