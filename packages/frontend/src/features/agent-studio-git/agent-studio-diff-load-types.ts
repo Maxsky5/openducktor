@@ -59,7 +59,6 @@ export type UseAgentStudioDiffLoaderResult = {
   loadData: (showLoading?: boolean, context?: LoadDataContext) => Promise<void>;
   refreshActiveScope: (context?: DiffRefreshScopeContext) => Promise<void>;
   refreshActiveScopeSummary: (context?: DiffRefreshScopeContext) => Promise<void>;
-  reloadActiveScope: (showLoading?: boolean) => void;
 };
 
 export type DiffLoadRunner = {

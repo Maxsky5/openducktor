@@ -4,7 +4,8 @@ import type { DiffScope } from "./contracts";
 
 type RequestStatusByScopeAndMode = Record<DiffScope, Record<LoadDataMode, number>>;
 type InFlightRequestState = Record<DiffScope, Record<LoadDataMode, string | null>>;
-type QueuedReloadState = Record<DiffScope, boolean>;
+type QueuedFullReloadState = Record<DiffScope, { force: boolean } | null>;
+type ScopeInvalidationState = Record<DiffScope, boolean>;
 
 type BeginRequestArgs = {
   scope: DiffScope;
@@ -65,7 +66,12 @@ const createInFlightState = (): InFlightRequestState => ({
   uncommitted: { full: null, summary: null },
 });
 
-const createQueuedReloadState = (): QueuedReloadState => ({
+const createQueuedFullReloadState = (): QueuedFullReloadState => ({
+  target: null,
+  uncommitted: null,
+});
+
+const createScopeInvalidationState = (): ScopeInvalidationState => ({
   target: false,
   uncommitted: false,
 });
@@ -74,16 +80,14 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
   const versionByScopeAndModeRef = useRef(createVersionState());
   const requestSequenceRef = useRef(0);
   const inFlightScopeRequestRef = useRef(createInFlightState());
-  const queuedFullReloadByScopeRef = useRef(createQueuedReloadState());
-  const queuedFullReloadForceByScopeRef = useRef(createQueuedReloadState());
-  const invalidatedFullReloadByScopeRef = useRef(createQueuedReloadState());
+  const queuedFullReloadByScopeRef = useRef(createQueuedFullReloadState());
+  const invalidatedFullReloadByScopeRef = useRef(createScopeInvalidationState());
   const latestLoadingRequestSequenceRef = useRef<number | null>(null);
 
   const resetRequestTracking = useCallback((): void => {
     versionByScopeAndModeRef.current = invalidateVersionState(versionByScopeAndModeRef.current);
     inFlightScopeRequestRef.current = createInFlightState();
-    queuedFullReloadByScopeRef.current = createQueuedReloadState();
-    queuedFullReloadForceByScopeRef.current = createQueuedReloadState();
+    queuedFullReloadByScopeRef.current = createQueuedFullReloadState();
     invalidatedFullReloadByScopeRef.current = {
       target: true,
       uncommitted: true,
@@ -102,9 +106,9 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
     }: BeginRequestArgs): BeginRequestResult => {
       if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
         if (mode === "full" && replayIfInFlight) {
-          queuedFullReloadByScopeRef.current[scope] = true;
-          queuedFullReloadForceByScopeRef.current[scope] =
-            queuedFullReloadForceByScopeRef.current[scope] || force;
+          queuedFullReloadByScopeRef.current[scope] = {
+            force: (queuedFullReloadByScopeRef.current[scope]?.force ?? false) || force,
+          };
         }
         return { kind: "skip" };
       }
@@ -148,20 +152,19 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
         latestLoadingRequestSequenceRef.current = null;
       }
 
-      if (mode !== "full" || !queuedFullReloadByScopeRef.current[scope]) {
+      const replayFullLoad = queuedFullReloadByScopeRef.current[scope];
+      if (mode !== "full" || replayFullLoad == null) {
         return {
           clearLoading,
           replayFullLoad: null,
         };
       }
 
-      queuedFullReloadByScopeRef.current[scope] = false;
-      const force = queuedFullReloadForceByScopeRef.current[scope];
-      queuedFullReloadForceByScopeRef.current[scope] = false;
+      queuedFullReloadByScopeRef.current[scope] = null;
 
       return {
         clearLoading,
-        replayFullLoad: { force },
+        replayFullLoad,
       };
     },
     [],

@@ -42,31 +42,7 @@ export const gitGetWorktreeStatusMock = mock(
     targetBranch: string,
     diffScope?: "target" | "uncommitted",
     workingDir?: string,
-  ): Promise<GitWorktreeStatus> =>
-    withSnapshotHashes({
-      currentBranch: { name: "feature/task-10", detached: false },
-      fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-      fileDiffs:
-        (diffScope ?? "target") === "target"
-          ? [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 0,
-                diff: "@@ -1 +1 @@",
-              },
-            ]
-          : [],
-      targetAheadBehind: { ahead: 0, behind: 0 },
-      upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-      snapshot: {
-        effectiveWorkingDir: workingDir ?? "/repo",
-        targetBranch,
-        diffScope: diffScope ?? "target",
-        observedAtMs: 1731000000000,
-      },
-    }),
+  ): Promise<GitWorktreeStatus> => createDefaultWorktreeStatus(targetBranch, diffScope, workingDir),
 );
 export const gitGetWorktreeStatusSummaryMock = mock(
   async (
@@ -74,34 +50,8 @@ export const gitGetWorktreeStatusSummaryMock = mock(
     targetBranch: string,
     diffScope?: "target" | "uncommitted",
     workingDir?: string,
-  ): Promise<GitWorktreeStatusSummary> => {
-    const fullStatus = withSnapshotHashes({
-      currentBranch: { name: "feature/task-10", detached: false },
-      fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-      fileDiffs:
-        (diffScope ?? "target") === "target"
-          ? [
-              {
-                file: "src/main.ts",
-                type: "modified",
-                additions: 1,
-                deletions: 0,
-                diff: "@@ -1 +1 @@",
-              },
-            ]
-          : [],
-      targetAheadBehind: { ahead: 0, behind: 0 },
-      upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-      snapshot: {
-        effectiveWorkingDir: workingDir ?? "/repo",
-        targetBranch,
-        diffScope: diffScope ?? "target",
-        observedAtMs: 1731000000000,
-      },
-    });
-
-    return toWorktreeStatusSummary(fullStatus);
-  },
+  ): Promise<GitWorktreeStatusSummary> =>
+    createDefaultWorktreeStatusSummary(targetBranch, diffScope, workingDir),
 );
 
 type UseAgentStudioDiffDataHook =
@@ -126,15 +76,8 @@ export const createDeferred = <T>() => {
   return { promise, resolve, reject };
 };
 
-const hashTestPayload = (value: unknown): string => {
-  const payload = new TextEncoder().encode(JSON.stringify(value));
-  let hash = 0xcbf29ce484222325n;
-  for (const byte of payload) {
-    hash ^= BigInt(byte);
-    hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
-  }
-
-  return hash.toString(16).padStart(16, "0");
+const stableTestToken = (value: unknown): string => {
+  return `test:${JSON.stringify(value)}`;
 };
 
 export const withSnapshotHashes = (
@@ -142,13 +85,13 @@ export const withSnapshotHashes = (
     snapshot: Omit<GitWorktreeStatus["snapshot"], "hashVersion" | "statusHash" | "diffHash">;
   },
 ): GitWorktreeStatus => {
-  const statusHash = hashTestPayload({
+  const statusHash = stableTestToken({
     currentBranch: status.currentBranch,
     fileStatuses: status.fileStatuses,
     targetAheadBehind: status.targetAheadBehind,
     upstreamAheadBehind: status.upstreamAheadBehind,
   });
-  const diffHash = hashTestPayload({
+  const diffHash = stableTestToken({
     fileDiffs: status.fileDiffs,
   });
 
@@ -179,6 +122,43 @@ export const toWorktreeStatusSummary = (status: GitWorktreeStatus): GitWorktreeS
     snapshot: status.snapshot,
   };
 };
+
+const createDefaultWorktreeStatus = (
+  targetBranch: string,
+  diffScope: "target" | "uncommitted" = "target",
+  workingDir?: string,
+): GitWorktreeStatus =>
+  withSnapshotHashes({
+    currentBranch: { name: "feature/task-10", detached: false },
+    fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
+    fileDiffs:
+      diffScope === "target"
+        ? [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 1,
+              deletions: 0,
+              diff: "@@ -1 +1 @@",
+            },
+          ]
+        : [],
+    targetAheadBehind: { ahead: 0, behind: 0 },
+    upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
+    snapshot: {
+      effectiveWorkingDir: workingDir ?? "/repo",
+      targetBranch,
+      diffScope,
+      observedAtMs: 1731000000000,
+    },
+  });
+
+const createDefaultWorktreeStatusSummary = (
+  targetBranch: string,
+  diffScope?: "target" | "uncommitted",
+  workingDir?: string,
+): GitWorktreeStatusSummary =>
+  toWorktreeStatusSummary(createDefaultWorktreeStatus(targetBranch, diffScope, workingDir));
 
 export const createBaseArgs = (): HookArgs => ({
   repoPath: "/repo",
@@ -239,30 +219,7 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
         diffScope?: "target" | "uncommitted",
         workingDir?: string,
       ): Promise<GitWorktreeStatus> =>
-        withSnapshotHashes({
-          currentBranch: { name: "feature/task-10", detached: false },
-          fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-          fileDiffs:
-            (diffScope ?? "target") === "target"
-              ? [
-                  {
-                    file: "src/main.ts",
-                    type: "modified",
-                    additions: 1,
-                    deletions: 0,
-                    diff: "@@ -1 +1 @@",
-                  },
-                ]
-              : [],
-          targetAheadBehind: { ahead: 0, behind: 0 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-          snapshot: {
-            effectiveWorkingDir: workingDir ?? "/repo",
-            targetBranch,
-            diffScope: diffScope ?? "target",
-            observedAtMs: 1731000000000,
-          },
-        }),
+        createDefaultWorktreeStatus(targetBranch, diffScope, workingDir),
     );
     gitGetWorktreeStatusSummaryMock.mockImplementation(
       async (
@@ -270,34 +227,8 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
         targetBranch: string,
         diffScope?: "target" | "uncommitted",
         workingDir?: string,
-      ): Promise<GitWorktreeStatusSummary> => {
-        const fullStatus = withSnapshotHashes({
-          currentBranch: { name: "feature/task-10", detached: false },
-          fileStatuses: [{ path: "src/main.ts", status: "M", staged: false }],
-          fileDiffs:
-            (diffScope ?? "target") === "target"
-              ? [
-                  {
-                    file: "src/main.ts",
-                    type: "modified",
-                    additions: 1,
-                    deletions: 0,
-                    diff: "@@ -1 +1 @@",
-                  },
-                ]
-              : [],
-          targetAheadBehind: { ahead: 0, behind: 0 },
-          upstreamAheadBehind: { outcome: "tracking", ahead: 1, behind: 0 },
-          snapshot: {
-            effectiveWorkingDir: workingDir ?? "/repo",
-            targetBranch,
-            diffScope: diffScope ?? "target",
-            observedAtMs: 1731000000000,
-          },
-        });
-
-        return toWorktreeStatusSummary(fullStatus);
-      },
+      ): Promise<GitWorktreeStatusSummary> =>
+        createDefaultWorktreeStatusSummary(targetBranch, diffScope, workingDir),
     );
   });
 

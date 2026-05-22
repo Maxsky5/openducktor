@@ -25,7 +25,6 @@ type UseAgentStudioDiffControllerResult = {
   refreshActiveScopeSummary: (
     context?: Pick<LoadDataContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
   ) => Promise<void>;
-  reloadActiveScope: (showLoading?: boolean) => void;
 };
 
 export function useAgentStudioDiffController({
@@ -85,23 +84,22 @@ export function useAgentStudioDiffController({
     setDiffScope("uncommitted");
   }, []);
 
-  const { loadData, refreshActiveScope, refreshActiveScopeSummary, reloadActiveScope } =
-    useAgentStudioDiffLoader({
-      repoPathRef,
-      targetBranchRef,
-      workingDirRef,
-      diffScopeRef,
-      shouldBlockDiffLoading,
-      applyFullResult,
-      applyScopeLoadError,
-      applySummaryResult,
-      beginRequest,
-      clearScopeInvalidation,
-      finishRequest,
-      markScopeInvalidated,
-      setBatchLoading,
-      shouldApplyResult,
-    });
+  const { loadData, refreshActiveScope, refreshActiveScopeSummary } = useAgentStudioDiffLoader({
+    repoPathRef,
+    targetBranchRef,
+    workingDirRef,
+    diffScopeRef,
+    shouldBlockDiffLoading,
+    applyFullResult,
+    applyScopeLoadError,
+    applySummaryResult,
+    beginRequest,
+    clearScopeInvalidation,
+    finishRequest,
+    markScopeInvalidated,
+    setBatchLoading,
+    shouldApplyResult,
+  });
 
   useEffect(() => {
     if (!pendingFullReload) {
@@ -201,6 +199,5 @@ export function useAgentStudioDiffController({
     statusSnapshotKey,
     refreshActiveScope,
     refreshActiveScopeSummary,
-    reloadActiveScope,
   };
 }

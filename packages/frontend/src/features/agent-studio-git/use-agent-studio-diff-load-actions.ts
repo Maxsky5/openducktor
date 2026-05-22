@@ -67,28 +67,8 @@ export const useAgentStudioDiffLoadActions = ({
     [diffScopeRef, loadData, repoPathRef, shouldBlockDiffLoading, targetBranchRef, workingDirRef],
   );
 
-  const reloadActiveScope = useCallback(
-    (showLoading = false): void => {
-      if (shouldBlockDiffLoading || !repoPathRef.current) {
-        return;
-      }
-
-      void loadData(showLoading, {
-        repoPath: repoPathRef.current,
-        targetBranch: targetBranchRef.current,
-        workingDir: workingDirRef.current,
-        scope: diffScopeRef.current,
-        mode: "full",
-        force: true,
-        replayIfInFlight: true,
-      });
-    },
-    [diffScopeRef, loadData, repoPathRef, shouldBlockDiffLoading, targetBranchRef, workingDirRef],
-  );
-
   return {
     refreshActiveScope,
     refreshActiveScopeSummary,
-    reloadActiveScope,
   };
 };
