@@ -1,6 +1,6 @@
 import type { RepoConfig, TaskWorktreeSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { toHostOperationError } from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type {
   DevServerProcessHandle,
@@ -248,7 +248,8 @@ describe("createDevServerService", () => {
       "No builder dev server scripts are configured for /canonical/repo. Add them in repository settings first.",
     );
   });
-  test("keeps successful scripts running when another script fails to start", async () => {
+  test("stops started scripts and fails when any configured script fails to start", async () => {
+    const stoppedPids: number[] = [];
     const processPort: DevServerProcessPort = {
       start(input) {
         if (input.command === "exit 42") {
@@ -258,7 +259,11 @@ describe("createDevServerService", () => {
         }
         return Effect.succeed({
           pid: 501,
-          stop: () => Effect.succeed(undefined),
+          stop: () =>
+            Effect.sync(() => {
+              stoppedPids.push(501);
+              input.onExit({ pid: 501, exitCode: 0, signal: null, error: null });
+            }),
         });
       },
     };
@@ -274,11 +279,44 @@ describe("createDevServerService", () => {
         }),
       ),
     });
+    const startResult = await Effect.runPromise(
+      Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    );
+
+    if (startResult._tag === "Right") {
+      throw new Error("Expected dev server start to fail.");
+    }
+    const startError = startResult.left;
+    expect(startError).toBeInstanceOf(HostOperationError);
+    expect(startError).toMatchObject({
+      message: expect.stringContaining("Failed to start all configured dev server scripts."),
+      details: {
+        failedScripts: [
+          {
+            command: "exit 42",
+            message: "Dev server exited with code 42.",
+            name: "API",
+            scriptId: "api",
+          },
+        ],
+        stoppedScripts: [
+          {
+            command: "bun run dev",
+            name: "Web",
+            pid: 501,
+            repoPath: "/canonical/repo",
+            scriptId: "web",
+            taskId: "task-1",
+          },
+        ],
+      },
+    });
+    expect(stoppedPids).toEqual([501]);
     await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toMatchObject({
       scripts: [
-        { scriptId: "web", status: "running", pid: 501 },
+        { scriptId: "web", status: "stopped", pid: null },
         {
           scriptId: "api",
           status: "failed",

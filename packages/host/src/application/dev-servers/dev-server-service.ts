@@ -18,6 +18,7 @@ import {
   DevServerProcessStartExitError,
   devServerExitMessage,
 } from "../../ports/dev-server-process-port";
+import { listRunningScripts } from "./dev-server-runtime-scripts";
 import type {
   CreateDevServerServiceInput,
   DevServerService,
@@ -25,6 +26,11 @@ import type {
   DisposableDevServerService,
   StoppedDevServerScript,
 } from "./dev-server-service-types";
+import {
+  createDevServerStartFailureError,
+  type FailedDevServerScriptStart,
+  stopStartedScriptsAfterStartFailure,
+} from "./dev-server-start-failure";
 import {
   buildGroupState,
   DEV_SERVER_CLICOLOR_FORCE,
@@ -351,21 +357,6 @@ export const createDevServerService = ({
       }
       return errors;
     });
-  const listRunningScripts = (runtime: DevServerGroupRuntime): StoppedDevServerScript[] =>
-    runtime.state.scripts.flatMap((script) =>
-      script.pid === null
-        ? []
-        : [
-            {
-              command: script.command,
-              name: script.name,
-              pid: script.pid,
-              repoPath: runtime.state.repoPath,
-              scriptId: script.scriptId,
-              taskId: runtime.state.taskId,
-            },
-          ],
-    );
   const service: DevServerService = {
     getState(input) {
       return Effect.gen(function* () {
@@ -415,21 +406,43 @@ export const createDevServerService = ({
           );
         }
         emitSnapshot(runtime);
-        const errors: string[] = [];
+        const failedScripts: FailedDevServerScriptStart[] = [];
         for (const script of repoConfig.devServers) {
           const startResult = yield* Effect.either(startScript(runtime, worktreePath, script));
           if (startResult._tag === "Left") {
-            errors.push(errorMessage(startResult.left));
+            failedScripts.push({
+              command: script.command,
+              message: errorMessage(startResult.left),
+              name: script.name,
+              scriptId: script.id,
+            });
+            break;
           }
         }
+        if (failedScripts.length > 0) {
+          const { cleanupErrors, stoppedScripts } = yield* stopStartedScriptsAfterStartFailure(
+            runtime,
+            updateScriptState,
+          );
+          emitSnapshot(runtime);
+          return yield* Effect.fail(
+            createDevServerStartFailureError({
+              cleanupErrors,
+              failedScripts,
+              repoPath,
+              stoppedScripts,
+              taskId,
+            }),
+          );
+        }
         emitSnapshot(runtime);
-        if (errors.length === 0 || runtime.state.scripts.some(scriptHasLiveProcess)) {
+        if (runtime.state.scripts.some(scriptHasLiveProcess)) {
           return devServerGroupStateSchema.parse(runtime.state);
         }
         return yield* Effect.fail(
           new HostOperationError({
             operation: "dev_server.start",
-            message: errors.join("\n"),
+            message: "Dev server start completed without any live script processes.",
             details: { repoPath, taskId },
           }),
         );
