@@ -18,7 +18,11 @@ import {
   DevServerProcessStartExitError,
   devServerExitMessage,
 } from "../../ports/dev-server-process-port";
-import { listRunningScripts } from "./dev-server-runtime-scripts";
+import {
+  listRunningScripts,
+  markScriptProcessHandleMissing,
+  stopScriptProcessHandle,
+} from "./dev-server-runtime-scripts";
 import type {
   CreateDevServerServiceInput,
   DevServerService,
@@ -317,12 +321,13 @@ export const createDevServerService = ({
         }
         const handle = runtime.processes.get(script.scriptId);
         if (!handle) {
-          const message = `Dev server process handle missing for pid ${script.pid}.`;
-          errors.push(`Failed stopping dev server ${script.scriptId}: ${message}`);
-          updateScriptState(runtime, script.scriptId, (state) => {
-            state.status = "failed";
-            state.lastError = message;
+          const message = markScriptProcessHandleMissing({
+            pid: script.pid,
+            runtime,
+            scriptId: script.scriptId,
+            updateScriptState,
           });
+          errors.push(`Failed stopping dev server ${script.scriptId}: ${message}`);
           continue;
         }
         updateScriptState(runtime, script.scriptId, (state) => {
@@ -332,27 +337,14 @@ export const createDevServerService = ({
         targets.push({ handle, scriptId: script.scriptId });
       }
       for (const target of targets) {
-        const stopResult = yield* Effect.either(target.handle.stop());
-        if (stopResult._tag === "Right") {
-          runtime.processes.delete(target.scriptId);
-          const script = runtime.state.scripts.find(
-            (candidate) => candidate.scriptId === target.scriptId,
-          );
-          if (script?.pid === target.handle.pid) {
-            updateScriptState(runtime, target.scriptId, (state) => {
-              state.status = "stopped";
-              state.pid = null;
-              state.startedAt = null;
-              state.lastError = null;
-            });
-          }
-        } else {
-          const message = errorMessage(stopResult.left);
-          errors.push(`Failed stopping dev server ${target.scriptId}: ${message}`);
-          updateScriptState(runtime, target.scriptId, (script) => {
-            script.status = "failed";
-            script.lastError = message;
-          });
+        const stopError = yield* stopScriptProcessHandle({
+          handle: target.handle,
+          runtime,
+          scriptId: target.scriptId,
+          updateScriptState,
+        });
+        if (stopError !== null) {
+          errors.push(`Failed stopping dev server ${target.scriptId}: ${stopError}`);
         }
       }
       return errors;
