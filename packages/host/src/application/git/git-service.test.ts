@@ -1038,10 +1038,7 @@ describe("createGitService", () => {
       ),
     );
     expect(error).toBeInstanceOf(HostDependencyError);
-    if (!(error instanceof HostDependencyError)) {
-      throw new Error("expected missing settings config to fail with HostDependencyError");
-    }
-    expect(error.dependency).toBe("settingsConfig");
+    expect(error).toMatchObject({ dependency: "settingsConfig" });
     expect(calls).toEqual([]);
   });
   test("fails create worktree through the Effect channel when worktree files are missing", async () => {
@@ -1065,10 +1062,7 @@ describe("createGitService", () => {
       ),
     );
     expect(error).toBeInstanceOf(HostDependencyError);
-    if (!(error instanceof HostDependencyError)) {
-      throw new Error("expected missing worktree files to fail with HostDependencyError");
-    }
-    expect(error.dependency).toBe("worktreeFiles");
+    expect(error).toMatchObject({ dependency: "worktreeFiles" });
     expect(calls).toEqual([]);
   });
   test("fails create worktree through the Effect channel when workspace config is missing", async () => {
@@ -1143,10 +1137,7 @@ describe("createGitService", () => {
       ),
     );
     expect(error).toBeInstanceOf(HostDependencyError);
-    if (!(error instanceof HostDependencyError)) {
-      throw new Error("expected missing settings config to fail with HostDependencyError");
-    }
-    expect(error.dependency).toBe("settingsConfig");
+    expect(error).toMatchObject({ dependency: "settingsConfig" });
     expect(calls).toEqual([]);
   });
   test("fails remove worktree through the Effect channel when worktree files are missing", async () => {
@@ -1169,10 +1160,7 @@ describe("createGitService", () => {
       ),
     );
     expect(error).toBeInstanceOf(HostDependencyError);
-    if (!(error instanceof HostDependencyError)) {
-      throw new Error("expected missing worktree files to fail with HostDependencyError");
-    }
-    expect(error.dependency).toBe("worktreeFiles");
+    expect(error).toMatchObject({ dependency: "worktreeFiles" });
     expect(calls).toEqual([]);
   });
   test("rejects forced stranded worktree cleanup outside managed roots", async () => {
