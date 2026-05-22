@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { toCatalog } from "./model-catalog";
-import type { CodexInputModality, CodexModelListResponse } from "./types";
+import type { CodexModelListResponse } from "./types";
 
-const createModelListResponse = (
-  inputModalities: CodexInputModality[],
-): CodexModelListResponse => ({
+const createModelListResponse = (inputModalities: string[]): CodexModelListResponse => ({
   data: [
     {
       id: "gpt-5",

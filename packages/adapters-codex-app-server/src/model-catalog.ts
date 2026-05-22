@@ -5,7 +5,7 @@ import type {
   AgentModelSelection,
 } from "@openducktor/core";
 import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
-import type { CodexAppServerClient, CodexInputModality, CodexModelListResponse } from "./types";
+import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
 export const requireModelSelection = (
   model: AgentModelSelection | undefined,
@@ -46,9 +46,7 @@ export const toTransportModelSelection = (model: AgentModelSelection) => ({
   effort: model.variant as string,
 });
 
-const toAttachmentSupport = (
-  inputModalities: CodexInputModality[],
-): AgentModelAttachmentSupport => {
+const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
   const modalities = new Set(inputModalities);
 
   return {
