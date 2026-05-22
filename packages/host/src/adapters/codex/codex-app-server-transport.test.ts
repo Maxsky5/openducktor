@@ -69,6 +69,35 @@ describe("createCodexAppServerTransport", () => {
     await Effect.runPromise(transport.close());
   });
 
+  test("accepts thread settings update notifications from Codex app-server", async () => {
+    const child = createChild();
+    const emitted: unknown[] = [];
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000, (event) =>
+      emitted.push(event),
+    );
+    const notification = {
+      method: "thread/settings/updated",
+      params: {
+        threadId: "thread-1",
+        settings: {
+          model: "gpt-5",
+        },
+      },
+    } satisfies CodexAppServerProtocolMessage;
+
+    child.stdout.write(`${JSON.stringify(notification)}\n`);
+    await waitForStreamEvents();
+
+    expect(emitted).toEqual([
+      { runtimeId: "runtime-1", kind: "notification", message: notification },
+    ]);
+    await expect(Effect.runPromise(transport.drainNotifications())).resolves.toEqual([
+      notification,
+    ]);
+
+    await Effect.runPromise(transport.close());
+  });
+
   test("does not retain emitted server requests for later drain polling", async () => {
     const child = createChild();
     const emitted: unknown[] = [];
