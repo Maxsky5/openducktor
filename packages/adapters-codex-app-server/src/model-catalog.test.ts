@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { toCatalog } from "./model-catalog";
 import type { CodexModelListResponse } from "./types";
 
-const createModelListResponse = (inputModalities?: string[]): CodexModelListResponse => ({
+const createModelListResponse = (inputModalities: string[]): CodexModelListResponse => ({
   data: [
     {
       id: "gpt-5",
@@ -12,7 +12,7 @@ const createModelListResponse = (inputModalities?: string[]): CodexModelListResp
       hidden: false,
       supportedReasoningEfforts: [{ reasoningEffort: "medium", description: "Balanced" }],
       defaultReasoningEffort: "medium",
-      ...(inputModalities ? { inputModalities } : {}),
+      inputModalities,
       supportsPersonality: true,
       isDefault: true,
     },
@@ -37,17 +37,6 @@ describe("Codex model catalog mapping", () => {
 
     expect(catalog.models[0]?.attachmentSupport).toEqual({
       image: false,
-      audio: false,
-      video: false,
-      pdf: false,
-    });
-  });
-
-  test("uses Codex protocol default modalities for legacy model records", () => {
-    const catalog = toCatalog(createModelListResponse());
-
-    expect(catalog.models[0]?.attachmentSupport).toEqual({
-      image: true,
       audio: false,
       video: false,
       pdf: false,

@@ -72,7 +72,7 @@ export type CodexModelCatalogRecord = {
     description?: string;
   }>;
   defaultReasoningEffort?: string | { reasoningEffort: string; description?: string };
-  inputModalities?: string[];
+  inputModalities: string[];
   supportsPersonality?: boolean;
   isDefault?: boolean;
 };

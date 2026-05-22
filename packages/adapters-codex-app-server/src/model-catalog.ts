@@ -7,8 +7,6 @@ import type {
 import { CODEX_MODEL_CATALOG_TTL_MS } from "./codex-app-server-shared";
 import type { CodexAppServerClient, CodexModelListResponse } from "./types";
 
-const DEFAULT_CODEX_INPUT_MODALITIES = ["text", "image"] as const;
-
 export const requireModelSelection = (
   model: AgentModelSelection | undefined,
 ): AgentModelSelection => {
@@ -48,8 +46,8 @@ export const toTransportModelSelection = (model: AgentModelSelection) => ({
   effort: model.variant as string,
 });
 
-const toAttachmentSupport = (inputModalities?: string[]): AgentModelAttachmentSupport => {
-  const modalities = new Set(inputModalities ?? DEFAULT_CODEX_INPUT_MODALITIES);
+const toAttachmentSupport = (inputModalities: string[]): AgentModelAttachmentSupport => {
+  const modalities = new Set(inputModalities);
 
   return {
     image: modalities.has("image"),
