@@ -910,9 +910,24 @@ export const userInputText = (input: CodexUserInput): string => {
   return input.path;
 };
 
+const codexLocalImageNameFromPath = (path: string): string => {
+  return path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
+};
+
 export const codexUserInputToDisplayPart = (input: CodexUserInput): AgentUserMessageDisplayPart => {
   if (input.type === "text") {
     return { kind: "text", text: input.text };
+  }
+  if (input.type === "localImage") {
+    return {
+      kind: "attachment",
+      attachment: {
+        id: `codex-local-image:${input.path}`,
+        kind: "image",
+        name: codexLocalImageNameFromPath(input.path),
+        path: input.path,
+      },
+    };
   }
   return { kind: "text", text: userInputText(input), synthetic: true };
 };
