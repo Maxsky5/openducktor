@@ -74,6 +74,18 @@ describe("task domain policy", () => {
     expect(workflows.builder.available).toBe(true);
   });
 
+  test("keeps QA available while a build is blocked", () => {
+    const blockedTask = task({
+      status: "blocked",
+      aiReviewEnabled: true,
+    });
+    const workflows = deriveAgentWorkflows(blockedTask);
+    const actions = deriveAvailableActions(blockedTask, [blockedTask]);
+
+    expect(workflows.qa.available).toBe(true);
+    expect(actions).toContain("qa_start");
+  });
+
   test("derives human approval only when closing policy allows it", () => {
     const reviewTask = task({ status: "human_review" });
 

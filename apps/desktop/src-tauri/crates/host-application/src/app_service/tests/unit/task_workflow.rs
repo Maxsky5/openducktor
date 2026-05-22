@@ -260,6 +260,87 @@ fn assert_task_reset_implementation_discards_builder_state_and_rolls_back_to_rea
 }
 
 #[test]
+fn qa_approved_from_blocked_transitions_to_human_review() -> Result<()> {
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-1", "task", TaskStatus::Blocked)],
+        vec![],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.qa_approved("/tmp/odt-repo-qa-approved-blocked", "task-1", "Looks good")?;
+    assert_eq!(task.status, TaskStatus::HumanReview);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.qa_outcome_calls,
+        vec![(
+            "task-1".to_string(),
+            TaskStatus::HumanReview,
+            "Looks good".to_string(),
+            host_domain::QaVerdict::Approved
+        )]
+    );
+    Ok(())
+}
+
+#[test]
+fn qa_rejected_from_blocked_transitions_to_in_progress() -> Result<()> {
+    let (service, task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-1", "task", TaskStatus::Blocked)],
+        vec![],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let task = service.qa_rejected(
+        "/tmp/odt-repo-qa-rejected-blocked",
+        "task-1",
+        "Still needs work",
+    )?;
+    assert_eq!(task.status, TaskStatus::InProgress);
+
+    let task_state = task_state.lock().expect("task lock poisoned");
+    assert_eq!(
+        task_state.qa_outcome_calls,
+        vec![(
+            "task-1".to_string(),
+            TaskStatus::InProgress,
+            "Still needs work".to_string(),
+            host_domain::QaVerdict::Rejected
+        )]
+    );
+    Ok(())
+}
+
+#[test]
+fn qa_outcomes_reject_non_blocked_or_review_tasks() {
+    let (service, _task_state, _git_state) = build_service_with_git_state(
+        vec![make_task("task-1", "task", TaskStatus::InProgress)],
+        vec![],
+        host_domain::GitCurrentBranch {
+            name: Some("main".to_string()),
+            detached: false,
+            revision: None,
+        },
+    );
+
+    let error = service
+        .qa_approved("/tmp/odt-repo-qa-approved-invalid", "task-1", "Looks good")
+        .expect_err("qa approval should be rejected outside blocked or review statuses");
+
+    assert!(error
+        .to_string()
+        .contains("QA outcomes are only allowed from blocked, ai_review, or human_review"));
+}
+
+#[test]
 fn task_reset_implementation_uses_document_presence_for_rollback_target() -> Result<()> {
     let repo_path = unique_temp_path("reset-implementation-status-repo");
     fs::create_dir_all(&repo_path)?;

@@ -48,8 +48,12 @@ fn module_derive_available_actions_exposes_resume_for_deferred_task() {
 }
 
 #[test]
-fn module_derive_available_actions_exposes_qa_start_for_review_states() {
-    for status in [TaskStatus::AiReview, TaskStatus::HumanReview] {
+fn module_derive_available_actions_exposes_qa_start_for_blocked_and_review_states() {
+    for status in [
+        TaskStatus::Blocked,
+        TaskStatus::AiReview,
+        TaskStatus::HumanReview,
+    ] {
         let task = make_task("task-1", "task", status);
 
         let actions = derive_available_actions(&task, std::slice::from_ref(&task));
@@ -330,6 +334,10 @@ fn module_derive_agent_workflows_qa_flags_and_completion_follow_payload() {
     task.status = TaskStatus::HumanReview;
     let human_review = derive_agent_workflows(&task);
     assert!(human_review.qa.available);
+
+    task.status = TaskStatus::Blocked;
+    let blocked = derive_agent_workflows(&task);
+    assert!(blocked.qa.available);
 
     task.document_summary.qa_report.verdict = QaWorkflowVerdict::Rejected;
     let rejected = derive_agent_workflows(&task);

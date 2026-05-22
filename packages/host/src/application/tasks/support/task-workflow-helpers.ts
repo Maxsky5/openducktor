@@ -163,11 +163,15 @@ export const recordQaOutcome = (
   Effect.gen(function* () {
     const { repoPath, taskId, markdown, verdict, targetStatus } = input;
     const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
-    if (current.status !== "ai_review" && current.status !== "human_review") {
+    if (
+      current.status !== "blocked" &&
+      current.status !== "ai_review" &&
+      current.status !== "human_review"
+    ) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `QA outcomes are only allowed from ai_review or human_review (current: ${current.status}).`,
+          message: `QA outcomes are only allowed from blocked, ai_review, or human_review (current: ${current.status}).`,
           details: { repoPath, taskId, status: current.status },
         }),
       );

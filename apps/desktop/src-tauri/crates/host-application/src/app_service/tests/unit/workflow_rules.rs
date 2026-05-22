@@ -316,6 +316,7 @@ fn blocked_tasks_expose_builder_and_reset_implementation_actions() {
     let task = make_task("task-1", "task", TaskStatus::Blocked);
     let actions = derive_available_actions(&task, std::slice::from_ref(&task));
     assert!(actions.contains(&TaskAction::OpenBuilder));
+    assert!(actions.contains(&TaskAction::QaStart));
     assert!(actions.contains(&TaskAction::ResetImplementation));
     assert!(!actions.contains(&TaskAction::BuildStart));
 }

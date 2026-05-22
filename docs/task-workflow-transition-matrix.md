@@ -61,8 +61,8 @@ Native task actions:
 | `odt_build_completed` | `blocked` | `qaRequired=false` or latest QA verdict is `approved` | `human_review` |
 | `odt_build_completed` | `ai_review`, `human_review` | idempotent no-op (no hooks, no transition patch) | unchanged |
 | `odt_set_pull_request` | `in_progress`, `ai_review`, `human_review` | provider id and PR number required; OpenDucktor resolves canonical PR metadata | unchanged |
-| `odt_qa_rejected` | `ai_review`, `human_review` | report markdown required | `in_progress` |
-| `odt_qa_approved` | `ai_review`, `human_review` | report markdown required | `human_review` |
+| `odt_qa_rejected` | `blocked`, `ai_review`, `human_review` | report markdown required | `in_progress` |
+| `odt_qa_approved` | `blocked`, `ai_review`, `human_review` | report markdown required | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | note optional | `in_progress` |
 | `human_approve` | `ai_review`, `human_review` | epic completion guard passes | `closed` |
 | `defer_issue` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | not subtask | `deferred` |

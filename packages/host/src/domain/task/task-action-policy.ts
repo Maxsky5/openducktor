@@ -25,14 +25,12 @@ export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): Ta
     actions.push("set_plan");
   }
 
-  if (task.status === "ai_review" || task.status === "human_review") {
+  if (task.status === "blocked" || task.status === "ai_review" || task.status === "human_review") {
     actions.push("qa_start");
   } else {
     const canStartBuild =
       isQaRejectedRework(task) ||
-      (task.status !== "in_progress" &&
-        task.status !== "blocked" &&
-        allowsTransition(task, task.status, "in_progress"));
+      (task.status !== "in_progress" && allowsTransition(task, task.status, "in_progress"));
     if (canStartBuild) {
       actions.push("build_start");
     }

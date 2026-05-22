@@ -54,10 +54,10 @@ impl AppService {
         let mut context = self.load_task_context(repo_path, task_id)?;
         if !matches!(
             context.task.status,
-            TaskStatus::AiReview | TaskStatus::HumanReview
+            TaskStatus::Blocked | TaskStatus::AiReview | TaskStatus::HumanReview
         ) {
             return Err(anyhow!(
-                "QA outcomes are only allowed from ai_review or human_review (current: {}).",
+                "QA outcomes are only allowed from blocked, ai_review, or human_review (current: {}).",
                 context.task.status.as_cli_value()
             ));
         }

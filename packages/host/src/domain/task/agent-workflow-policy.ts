@@ -32,7 +32,11 @@ export const deriveAgentWorkflows = (task: TaskCard): AgentWorkflows => {
     qa: {
       required: task.aiReviewEnabled,
       canSkip: !task.aiReviewEnabled,
-      available: !isClosed && (task.status === "ai_review" || task.status === "human_review"),
+      available:
+        !isClosed &&
+        (task.status === "blocked" ||
+          task.status === "ai_review" ||
+          task.status === "human_review"),
       completed: qaVerdict === "approved",
     },
   };

@@ -68,7 +68,10 @@ pub(crate) fn derive_agent_workflows(task: &TaskCard) -> AgentWorkflows {
     let qa_available = if is_closed {
         false
     } else {
-        matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview)
+        matches!(
+            task.status,
+            TaskStatus::Blocked | TaskStatus::AiReview | TaskStatus::HumanReview
+        )
     };
     let qa_completed = task.document_summary.qa_report.verdict == QaWorkflowVerdict::Approved;
 

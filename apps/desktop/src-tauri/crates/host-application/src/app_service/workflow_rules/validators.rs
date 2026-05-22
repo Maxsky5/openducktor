@@ -173,7 +173,10 @@ pub(crate) fn derive_available_actions(task: &TaskCard, all_tasks: &[TaskCard]) 
         actions.push(TaskAction::SetPlan);
     }
 
-    if matches!(task.status, TaskStatus::AiReview | TaskStatus::HumanReview) {
+    if matches!(
+        task.status,
+        TaskStatus::Blocked | TaskStatus::AiReview | TaskStatus::HumanReview
+    ) {
         actions.push(TaskAction::QaStart);
     } else if is_qa_rejected_rework(task)
         || (!matches!(task.status, TaskStatus::InProgress | TaskStatus::Blocked)

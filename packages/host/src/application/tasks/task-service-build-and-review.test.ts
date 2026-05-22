@@ -1251,10 +1251,51 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      createTask() {
+    };
+    const approved = await Effect.runPromise(
+      createTaskService({ taskStore }).qaApproved({
+        repoPath: "/repo",
+        taskId: "task-1",
+        markdown: "Looks good",
+      }),
+    );
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      {
+        type: "qa",
+        input: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "human_review",
+          markdown: "Looks good",
+          verdict: "approved",
+        },
+      },
+    ]);
+    expect(approved).toMatchObject({
+      id: "task-1",
+      status: "human_review",
+      agentWorkflows: { qa: { completed: true } },
+    });
+  });
+
+  test("records approved QA from a blocked task", async () => {
+    const calls: unknown[] = [];
+    const approvedTask = task({
+      id: "task-1",
+      status: "human_review",
+      documentSummary: {
+        spec: { has: false },
+        plan: { has: false },
+        qaReport: { has: true, verdict: "approved" },
+      },
+    });
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
         return Effect.tryPromise({
           try: async () => {
-            throw new Error("unexpected create");
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", status: "blocked" })];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1264,49 +1305,11 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      updateTask() {
+      recordQaOutcome(input) {
         return Effect.tryPromise({
           try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
+            calls.push({ type: "qa", input });
+            return approvedTask;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1382,71 +1385,6 @@ describe("createTaskService build and review", () => {
             }),
         });
       },
-      createTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected create");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      updateTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected update");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      getTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected get");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      transitionTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected transition");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      deleteTask() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected delete");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
     };
     const rejected = await Effect.runPromise(
       createTaskService({ taskStore }).qaRejected({
@@ -1474,7 +1412,74 @@ describe("createTaskService build and review", () => {
       availableActions: expect.arrayContaining(["open_qa"]),
     });
   });
-  test("rejects QA outcomes outside review statuses before persisting", async () => {
+
+  test("records rejected QA from a blocked task", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "list", input });
+            return [task({ id: "task-1", status: "blocked" })];
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+      recordQaOutcome(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            calls.push({ type: "qa", input });
+            return task({
+              id: "task-1",
+              status: "in_progress",
+              documentSummary: {
+                spec: { has: false },
+                plan: { has: false },
+                qaReport: { has: true, verdict: "rejected" },
+              },
+            });
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    };
+    const rejected = await Effect.runPromise(
+      createTaskService({ taskStore }).qaRejected({
+        repoPath: "/repo",
+        taskId: "task-1",
+        markdown: "Still needs work",
+      }),
+    );
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      {
+        type: "qa",
+        input: {
+          repoPath: "/repo",
+          taskId: "task-1",
+          status: "in_progress",
+          markdown: "Still needs work",
+          verdict: "rejected",
+        },
+      },
+    ]);
+    expect(rejected).toMatchObject({
+      id: "task-1",
+      status: "in_progress",
+      availableActions: expect.arrayContaining(["open_qa"]),
+    });
+  });
+  test("rejects QA outcomes outside blocked or review statuses before persisting", async () => {
     const taskStore: TaskStorePort = {
       listTasks() {
         return Effect.tryPromise({
@@ -1576,7 +1581,7 @@ describe("createTaskService build and review", () => {
           markdown: "Looks good",
         }),
       ),
-    ).rejects.toThrow("QA outcomes are only allowed from ai_review or human_review");
+    ).rejects.toThrow("QA outcomes are only allowed from blocked, ai_review, or human_review");
   });
   test("requests human changes after checking direct merge metadata", async () => {
     const calls: unknown[] = [];
