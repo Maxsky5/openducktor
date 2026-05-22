@@ -20,15 +20,18 @@ describe("createProcessCommandLaunch", () => {
       command: String.raw`C:\Windows\System32\cmd.exe`,
       args: [
         "/d",
-        "/s",
         "/c",
-        String.raw`""C:\Program Files\Codex\codex.cmd" --config "mcp_servers.openducktor.command=""mcp-bin""" path=%APPDATA%\foo caret=foo^bar"`,
+        "call",
+        String.raw`C:\Program Files\Codex\codex.cmd`,
+        "--config",
+        'mcp_servers.openducktor.command="mcp-bin"',
+        "path=%APPDATA%\\foo",
+        "caret=foo^bar",
       ],
-      windowsVerbatimArguments: true,
     });
   });
 
-  test("quotes Windows shell arguments without rewriting percent or caret characters", () => {
+  test("passes Windows shell arguments through without rewriting percent or caret characters", () => {
     const launch = createProcessCommandLaunch(
       "tool.cmd",
       ["plain", "two words", 'quote="value"', "percent=%APPDATA%", "caret=foo^bar"],
@@ -40,11 +43,15 @@ describe("createProcessCommandLaunch", () => {
       command: "cmd.exe",
       args: [
         "/d",
-        "/s",
         "/c",
-        '"tool.cmd plain "two words" "quote=""value""" percent=%APPDATA% caret=foo^bar"',
+        "call",
+        "tool.cmd",
+        "plain",
+        "two words",
+        'quote="value"',
+        "percent=%APPDATA%",
+        "caret=foo^bar",
       ],
-      windowsVerbatimArguments: true,
     });
   });
 
@@ -58,8 +65,14 @@ describe("createProcessCommandLaunch", () => {
 
     expect(launch).toEqual({
       command: String.raw`C:\Windows\System32\cmd.exe`,
-      args: ["/d", "/s", "/c", String.raw`""C:\Program Files\Dev Server\start.bat" --port 5173"`],
-      windowsVerbatimArguments: true,
+      args: [
+        "/d",
+        "/c",
+        "call",
+        String.raw`C:\Program Files\Dev Server\start.bat`,
+        "--port",
+        "5173",
+      ],
     });
   });
 

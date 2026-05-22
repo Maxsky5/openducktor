@@ -11,16 +11,6 @@ type ParsedProcessCommand = {
   args: string[];
 };
 
-const quoteWindowsCommandArgument = (value: string): string => {
-  if (value.length === 0) {
-    return `""`;
-  }
-  if (!/[\s"]/u.test(value)) {
-    return value;
-  }
-  return `"${value.replaceAll(`"`, `""`)}"`;
-};
-
 const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>
   platform === "win32" && /\.(?:cmd|bat)$/iu.test(command);
 
@@ -35,14 +25,10 @@ export const createProcessCommandLaunch = (
   }
 
   const windowsCommandShell = env.ComSpec?.trim() || "cmd.exe";
-  const shellOptions = ["/d", "/s", "/c"];
-  const quotedScriptInvocation = [command, ...args].map(quoteWindowsCommandArgument).join(" ");
-  const shellCommandLine = `"${quotedScriptInvocation}"`;
 
   return {
     command: windowsCommandShell,
-    args: [...shellOptions, shellCommandLine],
-    windowsVerbatimArguments: true,
+    args: ["/d", "/c", "call", command, ...args],
   };
 };
 
