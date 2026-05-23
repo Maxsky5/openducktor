@@ -2,11 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
-import {
-  createScheduledFetchCooldownKey,
-  shouldRunScheduledFetch,
-} from "./agent-studio-diff-polling-policy";
-import type { DiffDataState, GitDiffRefresh, GitDiffRefreshMode } from "./contracts";
+import type { DiffDataState, GitDiffRefresh, GitDiffRefreshMode } from "../contracts";
+import { createScheduledFetchCooldownKey, shouldRunScheduledFetch } from "./polling-policy";
 
 export type DiffRefreshContext = {
   requestContextKey: string;

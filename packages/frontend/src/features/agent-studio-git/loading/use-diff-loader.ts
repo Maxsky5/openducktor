@@ -1,13 +1,10 @@
-import type {
-  UseAgentStudioDiffLoaderArgs,
-  UseAgentStudioDiffLoaderResult,
-} from "./agent-studio-diff-load-types";
+import type { UseAgentStudioDiffLoaderArgs, UseAgentStudioDiffLoaderResult } from "./load-types";
 
-export type { LoadDataContext } from "./agent-studio-diff-load-types";
+export type { LoadDataContext } from "./load-types";
 
-import { useAgentStudioDiffLoadActions } from "./use-agent-studio-diff-load-actions";
-import { useAgentStudioDiffLoadData } from "./use-agent-studio-diff-load-data";
-import { useAgentStudioDiffLoadRunner } from "./use-agent-studio-diff-load-runner";
+import { useAgentStudioDiffLoadActions } from "./use-diff-load-actions";
+import { useAgentStudioDiffLoadData } from "./use-diff-load-data";
+import { useAgentStudioDiffLoadRunner } from "./use-diff-load-runner";
 
 export function useAgentStudioDiffLoader({
   repoPathRef,

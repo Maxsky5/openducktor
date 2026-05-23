@@ -9,5 +9,6 @@ export type {
   GitConflictOperation,
   GitDiffRefresh,
   GitDiffRefreshMode,
+  UseAgentStudioDiffDataInput,
 } from "./contracts";
 export { useAgentStudioDiffData } from "./use-agent-studio-diff-data";

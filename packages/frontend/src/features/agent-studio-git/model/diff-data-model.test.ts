@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { ScopeSnapshot, ScopeSummaryFields } from "./agent-studio-diff-data-model";
+import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
 import {
   applySummarySnapshot,
   createInitialDiffBatchState,
   getSummaryReloadDecision,
   toStatusSnapshotKey,
-} from "./agent-studio-diff-data-model";
+} from "./diff-data-model";
 
 const createScopeSnapshot = (overrides: Partial<ScopeSnapshot> = {}): ScopeSnapshot => ({
   branch: "feature/task-10",
@@ -45,7 +45,7 @@ const createScopeSummaryFields = (
   ...overrides,
 });
 
-describe("agent-studio-diff-data-model", () => {
+describe("diff-data-model", () => {
   test("does not request a full reload when the active scope is not loaded", () => {
     const state = createInitialDiffBatchState();
     state.byScope.target = createScopeSnapshot();

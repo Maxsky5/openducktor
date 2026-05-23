@@ -1,10 +1,7 @@
-import type { LoadDataMode } from "./agent-studio-diff-data-model";
-import type { DiffScope } from "./contracts";
-import type {
-  LoadRequestContext,
-  useAgentStudioDiffBatchState,
-} from "./use-agent-studio-diff-batch-state";
-import type { useAgentStudioDiffRequestController } from "./use-agent-studio-diff-request-controller";
+import type { DiffScope } from "../contracts";
+import type { LoadDataMode } from "../model/diff-data-model";
+import type { LoadRequestContext, useAgentStudioDiffBatchState } from "./use-diff-batch-state";
+import type { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
 
 export type CurrentRef<T> = {
   current: T;

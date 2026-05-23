@@ -3,7 +3,7 @@ import type {
   DiffLoadRefs,
   DiffRefreshScopeContext,
   UseAgentStudioDiffLoaderResult,
-} from "./agent-studio-diff-load-types";
+} from "./load-types";
 
 type UseDiffLoadActionsArgs = DiffLoadRefs & {
   loadData: UseAgentStudioDiffLoaderResult["loadData"];

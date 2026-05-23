@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { DiffScope } from "../contracts";
 import {
   applyFullSnapshot,
   applyScopeError,
@@ -9,8 +10,7 @@ import {
   type ScopeSnapshot,
   type ScopeSummaryFields,
   toStatusSnapshotKey,
-} from "./agent-studio-diff-data-model";
-import type { DiffScope } from "./contracts";
+} from "../model/diff-data-model";
 
 export type LoadRequestContext = {
   repoPath: string;

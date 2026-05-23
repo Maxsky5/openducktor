@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiffBatchState, ScopeSnapshot } from "./agent-studio-diff-data-model";
-import type { DiffScope } from "./contracts";
-import { useAgentStudioDiffBatchState } from "./use-agent-studio-diff-batch-state";
-import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-agent-studio-diff-loader";
-import { useAgentStudioDiffRequestController } from "./use-agent-studio-diff-request-controller";
+import type { DiffScope } from "../contracts";
+import type { DiffBatchState, ScopeSnapshot } from "../model/diff-data-model";
+import { useAgentStudioDiffBatchState } from "./use-diff-batch-state";
+import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-diff-loader";
+import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
 
 type UseAgentStudioDiffControllerArgs = {
   repoPath: string | null;

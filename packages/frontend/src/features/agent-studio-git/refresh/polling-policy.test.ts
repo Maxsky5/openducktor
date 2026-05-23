@@ -3,9 +3,9 @@ import {
   createScheduledFetchCooldownKey,
   SCHEDULED_FETCH_COOLDOWN_MS,
   shouldRunScheduledFetch,
-} from "./agent-studio-diff-polling-policy";
+} from "./polling-policy";
 
-describe("agent-studio-diff-polling-policy", () => {
+describe("diff-polling-policy", () => {
   test("keys scheduled fetch cooldowns by repo branch and worktree", () => {
     expect(
       createScheduledFetchCooldownKey({

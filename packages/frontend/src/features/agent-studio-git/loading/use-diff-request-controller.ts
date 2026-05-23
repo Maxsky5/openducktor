@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
-import type { LoadDataMode } from "./agent-studio-diff-data-model";
-import type { DiffScope } from "./contracts";
+import type { DiffScope } from "../contracts";
+import type { LoadDataMode } from "../model/diff-data-model";
 
 type RequestStatusByScopeAndMode = Record<DiffScope, Record<LoadDataMode, number>>;
 type InFlightRequestState = Record<DiffScope, Record<LoadDataMode, string | null>>;

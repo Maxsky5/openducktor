@@ -1,13 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
-import type { UseAgentStudioDiffDataInput } from "./agent-studio-diff-data-model";
-import type { DiffDataState } from "./contracts";
-import { useAgentStudioDiffController } from "./use-agent-studio-diff-controller";
-import { useAgentStudioDiffPolling } from "./use-agent-studio-diff-polling";
+import type { DiffDataState, UseAgentStudioDiffDataInput } from "./contracts";
+import { useAgentStudioDiffController } from "./loading/use-diff-controller";
+import { useAgentStudioDiffPolling } from "./refresh/use-diff-polling";
 import {
   type DiffRefreshContext,
   useAgentStudioDiffRefreshController,
-} from "./use-agent-studio-diff-refresh-controller";
+} from "./refresh/use-diff-refresh-controller";
 
 export function useAgentStudioDiffData({
   repoPath,

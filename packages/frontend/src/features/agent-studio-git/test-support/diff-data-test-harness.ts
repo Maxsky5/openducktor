@@ -55,7 +55,7 @@ export const gitGetWorktreeStatusSummaryMock = mock(
 );
 
 type UseAgentStudioDiffDataHook =
-  typeof import("./use-agent-studio-diff-data")["useAgentStudioDiffData"];
+  typeof import("../use-agent-studio-diff-data")["useAgentStudioDiffData"];
 
 let useAgentStudioDiffData: UseAgentStudioDiffDataHook;
 
@@ -203,7 +203,7 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
       },
     }));
 
-    ({ useAgentStudioDiffData } = await import("./use-agent-studio-diff-data"));
+    ({ useAgentStudioDiffData } = await import("../use-agent-studio-diff-data"));
     await clearAppQueryClient();
     taskWorktreeEntriesMock.mockClear();
     taskWorktreeGetMock.mockClear();

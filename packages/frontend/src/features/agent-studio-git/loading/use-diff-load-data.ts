@@ -6,8 +6,8 @@ import type {
   LoadDataContext,
   UseAgentStudioDiffLoaderArgs,
   UseAgentStudioDiffLoaderResult,
-} from "./agent-studio-diff-load-types";
-import type { LoadRequestContext } from "./use-agent-studio-diff-batch-state";
+} from "./load-types";
+import type { LoadRequestContext } from "./use-diff-batch-state";
 
 type UseDiffLoadDataArgs = DiffLoadRefs &
   Pick<

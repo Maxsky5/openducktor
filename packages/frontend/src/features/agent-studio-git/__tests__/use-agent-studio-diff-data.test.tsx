@@ -7,7 +7,7 @@ import {
   type HookArgs,
   setupAgentStudioDiffDataTestHarness,
   withSnapshotHashes,
-} from "./use-agent-studio-diff-data-test-harness";
+} from "../test-support/diff-data-test-harness";
 
 setupAgentStudioDiffDataTestHarness();
 

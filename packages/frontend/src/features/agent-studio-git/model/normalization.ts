@@ -3,8 +3,8 @@ import type {
   GitWorktreeStatus,
   GitWorktreeStatusSummary,
 } from "@openducktor/contracts";
-import type { ScopeSnapshot, ScopeSummaryFields } from "./agent-studio-diff-data-model";
-import type { GitConflict } from "./contracts";
+import type { GitConflict } from "../contracts";
+import type { ScopeSnapshot, ScopeSummaryFields } from "./diff-data-model";
 
 const toGitConflict = (
   conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],

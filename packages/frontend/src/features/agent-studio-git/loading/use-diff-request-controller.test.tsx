@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import { useAgentStudioDiffRequestController } from "./use-agent-studio-diff-request-controller";
+import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
 
 type HookResult = ReturnType<typeof useAgentStudioDiffRequestController>;
 

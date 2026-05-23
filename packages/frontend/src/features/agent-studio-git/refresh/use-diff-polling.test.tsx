@@ -3,7 +3,7 @@ import {
   createHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
-import { useAgentStudioDiffPolling } from "./use-agent-studio-diff-polling";
+import { useAgentStudioDiffPolling } from "./use-diff-polling";
 
 enableReactActEnvironment();
 

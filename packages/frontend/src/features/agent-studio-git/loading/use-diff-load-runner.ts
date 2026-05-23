@@ -4,12 +4,12 @@ import {
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
 } from "@/state/queries/git";
+import { toScopeSnapshot, toScopeSummaryFields } from "../model/normalization";
 import type {
   DiffLoadRunner,
   InFlightRequestContext,
   UseAgentStudioDiffLoaderArgs,
-} from "./agent-studio-diff-load-types";
-import { toScopeSnapshot, toScopeSummaryFields } from "./agent-studio-diff-normalization";
+} from "./load-types";
 
 type UseDiffLoadRunnerArgs = Pick<
   UseAgentStudioDiffLoaderArgs,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
-import { toScopeSnapshot, toScopeSummaryFields } from "./agent-studio-diff-normalization";
+import { toScopeSnapshot, toScopeSummaryFields } from "./normalization";
 
 const createStatus = (overrides: Partial<GitWorktreeStatus> = {}): GitWorktreeStatus => ({
   currentBranch: { name: "feature/task-10", detached: false },
@@ -31,7 +31,7 @@ const createStatus = (overrides: Partial<GitWorktreeStatus> = {}): GitWorktreeSt
   ...overrides,
 });
 
-describe("agent-studio-diff-normalization", () => {
+describe("diff-normalization", () => {
   test("normalizes dirty worktree snapshots without querying or polling state", () => {
     const snapshot = toScopeSnapshot(createStatus());
 

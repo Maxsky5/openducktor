@@ -3,6 +3,7 @@ import type {
   FileDiff,
   FileStatus,
   GitResetWorktreeSelection,
+  GitTargetBranch,
 } from "@openducktor/contracts";
 
 export type DiffScope = "target" | "uncommitted";
@@ -10,6 +11,20 @@ export type DiffScope = "target" | "uncommitted";
 export type GitDiffRefreshMode = "hard" | "soft" | "scheduled";
 
 export type GitDiffRefresh = (mode?: GitDiffRefreshMode) => Promise<void>;
+
+export type UseAgentStudioDiffDataInput = {
+  repoPath: string | null;
+  worktreePath: string | null;
+  worktreeResolutionTaskId: string | null;
+  shouldBlockDiffLoading: boolean;
+  isWorktreeResolutionResolving: boolean;
+  worktreeResolutionError: string | null;
+  retryWorktreeResolution: () => void | Promise<void>;
+  defaultTargetBranch: GitTargetBranch;
+  preconditionError?: string | null;
+  branchIdentityKey?: string | null;
+  enablePolling: boolean;
+};
 
 export type DiffScopeState = {
   branch: string | null;

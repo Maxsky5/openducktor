@@ -1,24 +1,5 @@
-import type {
-  CommitsAheadBehind,
-  FileDiff,
-  FileStatus,
-  GitTargetBranch,
-} from "@openducktor/contracts";
-import type { DiffScope, DiffScopeState } from "./contracts";
-
-export type UseAgentStudioDiffDataInput = {
-  repoPath: string | null;
-  worktreePath: string | null;
-  worktreeResolutionTaskId: string | null;
-  shouldBlockDiffLoading: boolean;
-  isWorktreeResolutionResolving: boolean;
-  worktreeResolutionError: string | null;
-  retryWorktreeResolution: () => void | Promise<void>;
-  defaultTargetBranch: GitTargetBranch;
-  preconditionError?: string | null;
-  branchIdentityKey?: string | null;
-  enablePolling: boolean;
-};
+import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
+import type { DiffScope, DiffScopeState } from "../contracts";
 
 export type DiffBatchState = {
   byScope: Record<DiffScope, ScopeSnapshot>;
