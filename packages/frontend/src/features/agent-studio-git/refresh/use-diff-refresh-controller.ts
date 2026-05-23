@@ -2,21 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
-import type { DiffDataState, GitDiffRefresh, GitDiffRefreshMode } from "../contracts";
-import { createScheduledFetchCooldownKey, shouldRunScheduledFetch } from "./polling-policy";
-
-export type DiffRefreshContext = {
-  requestContextKey: string;
-  repoPath: string;
-  targetBranch: string;
-  workingDir: string | null;
-  scope: DiffDataState["diffScope"];
-};
-
-type RefreshRequest = {
-  context: DiffRefreshContext;
-  mode: GitDiffRefreshMode;
-};
+import type { GitDiffRefresh } from "../contracts";
+import { mergeRefreshRequests, runDiffRefreshRequest } from "./refresh-execution";
+import type { DiffRefreshContext, RefreshRequest, RefreshScopeContext } from "./refresh-types";
 
 type UseAgentStudioDiffRefreshControllerArgs = {
   refreshContext: DiffRefreshContext | null;
@@ -27,40 +15,14 @@ type UseAgentStudioDiffRefreshControllerArgs = {
   retryWorktreeResolution: () => void;
   isControllerLoading: boolean;
   activeScopeError: string | null;
-  refreshActiveScope: (
-    context: Pick<DiffRefreshContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
-  ) => Promise<void>;
-  refreshActiveScopeSummary: (
-    context: Pick<DiffRefreshContext, "repoPath" | "targetBranch" | "workingDir" | "scope">,
-  ) => Promise<void>;
+  refreshActiveScope: (context: RefreshScopeContext) => Promise<void>;
+  refreshActiveScopeSummary: (context: RefreshScopeContext) => Promise<void>;
 };
 
 type UseAgentStudioDiffRefreshControllerResult = {
   refresh: GitDiffRefresh;
   refreshError: string | null;
   isRefreshing: boolean;
-};
-
-const refreshModePriority = (mode: GitDiffRefreshMode): number => {
-  switch (mode) {
-    case "hard":
-      return 3;
-    case "soft":
-      return 2;
-    case "scheduled":
-      return 1;
-  }
-};
-
-const mergeRefreshRequests = (
-  current: RefreshRequest | null,
-  next: RefreshRequest,
-): RefreshRequest => {
-  if (current == null || current.context.requestContextKey !== next.context.requestContextKey) {
-    return next;
-  }
-
-  return refreshModePriority(next.mode) > refreshModePriority(current.mode) ? next : current;
 };
 
 export function useAgentStudioDiffRefreshController({
@@ -106,99 +68,23 @@ export function useAgentStudioDiffRefreshController({
   }, [activeScopeError, isControllerLoading, refreshError]);
 
   const runRefreshRequest = useCallback(
-    async (activeRefreshRequest: RefreshRequest): Promise<boolean> => {
-      const activeRefreshContext = activeRefreshRequest.context;
-      const hasSameRefreshContext = (): boolean =>
-        refreshContextRef.current?.requestContextKey === activeRefreshContext.requestContextKey;
-      const showLoading = activeRefreshRequest.mode !== "scheduled";
-      const scheduledFetchCooldownKey = createScheduledFetchCooldownKey(activeRefreshContext);
-      const canRunScheduledFetch = (): boolean => {
-        const lastFetchedAt = scheduledFetchAtByContextRef.current.get(scheduledFetchCooldownKey);
-        return shouldRunScheduledFetch({
-          lastFetchedAtMs: lastFetchedAt ?? null,
-          nowMs: Date.now(),
-        });
-      };
-      const updateScheduledFetchCooldown = (): void => {
-        scheduledFetchAtByContextRef.current.set(scheduledFetchCooldownKey, Date.now());
-      };
-      const fetchRemote = async (): Promise<boolean> => {
-        if (!hasSameRefreshContext()) {
-          return false;
-        }
-        const fetchResult = await hostClient.gitFetchRemote(
-          activeRefreshContext.repoPath,
-          activeRefreshContext.targetBranch,
-          activeRefreshContext.workingDir ?? undefined,
-        );
-        if (hasSameRefreshContext() && fetchResult.outcome === "fetched") {
-          await invalidateRepoBranchesQuery(appQueryClient, activeRefreshContext.repoPath);
-        }
-
-        if (!hasSameRefreshContext()) {
-          return false;
-        }
-
-        updateScheduledFetchCooldown();
-        return true;
-      };
-
-      if (!hasSameRefreshContext()) {
-        return false;
-      }
-
-      if (showLoading) {
-        setIsRefreshing(true);
-      }
-
-      try {
-        if (activeRefreshRequest.mode === "hard") {
-          const fetchCompleted = await fetchRemote();
-          if (!fetchCompleted) {
-            return false;
-          }
-
-          setRefreshError(null);
-          await refreshActiveScope(activeRefreshContext);
-          return true;
-        }
-
-        if (activeRefreshRequest.mode === "soft") {
-          setRefreshError(null);
-          await refreshActiveScope(activeRefreshContext);
-          return true;
-        }
-
-        let scheduledFetchError: string | null = null;
-        if (canRunScheduledFetch()) {
-          try {
-            const fetchCompleted = await fetchRemote();
-            if (!fetchCompleted) {
-              return false;
-            }
-          } catch (error) {
-            if (hasSameRefreshContext()) {
-              scheduledFetchError = String(error);
-            }
-          }
-        }
-
-        if (hasSameRefreshContext()) {
-          setRefreshError(scheduledFetchError);
-        }
-        await refreshActiveScopeSummary(activeRefreshContext);
-        return true;
-      } catch (error) {
-        if (hasSameRefreshContext()) {
-          setRefreshError(String(error));
-        }
-        return true;
-      } finally {
-        if (showLoading && hasSameRefreshContext()) {
-          setIsRefreshing(false);
-        }
-      }
-    },
+    (activeRefreshRequest: RefreshRequest): Promise<boolean> =>
+      runDiffRefreshRequest(activeRefreshRequest, {
+        getCurrentRefreshContextKey: () => refreshContextRef.current?.requestContextKey ?? null,
+        setIsRefreshing,
+        setRefreshError,
+        scheduledFetchAtByContext: scheduledFetchAtByContextRef.current,
+        nowMs: Date.now,
+        fetchRemote: (context) =>
+          hostClient.gitFetchRemote(
+            context.repoPath,
+            context.targetBranch,
+            context.workingDir ?? undefined,
+          ),
+        invalidateRepoBranches: (repoPath) => invalidateRepoBranchesQuery(appQueryClient, repoPath),
+        refreshActiveScope,
+        refreshActiveScopeSummary,
+      }),
     [refreshActiveScope, refreshActiveScopeSummary],
   );
 

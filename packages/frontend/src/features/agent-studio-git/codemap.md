@@ -8,7 +8,7 @@ The root module exposes the public hook and public state contracts. Internals ar
 
 - `model/`: pure diff batch state, snapshot comparison, and host-status normalization.
 - `loading/`: request sequencing, in-flight/queued load tracking, and host query execution.
-- `refresh/`: manual refresh, scheduled refresh, and polling policy.
+- `refresh/`: manual refresh, scheduled refresh, refresh execution, and polling policy.
 - `test-support/`: shared hook harness and git host fakes for behavior tests.
 - `__tests__/`: public `useAgentStudioDiffData` behavior tests.
 

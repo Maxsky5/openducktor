@@ -1,4 +1,4 @@
-import type { DiffRefreshContext } from "./use-diff-refresh-controller";
+import type { DiffRefreshContext } from "./refresh-types";
 
 export const SCHEDULED_FETCH_COOLDOWN_MS = 5 * 60 * 1000;
 

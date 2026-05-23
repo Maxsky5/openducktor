@@ -2,11 +2,9 @@ import { useCallback, useMemo } from "react";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import type { DiffDataState, UseAgentStudioDiffDataInput } from "./contracts";
 import { useAgentStudioDiffController } from "./loading/use-diff-controller";
+import type { DiffRefreshContext } from "./refresh/refresh-types";
 import { useAgentStudioDiffPolling } from "./refresh/use-diff-polling";
-import {
-  type DiffRefreshContext,
-  useAgentStudioDiffRefreshController,
-} from "./refresh/use-diff-refresh-controller";
+import { useAgentStudioDiffRefreshController } from "./refresh/use-diff-refresh-controller";
 
 export function useAgentStudioDiffData({
   repoPath,
