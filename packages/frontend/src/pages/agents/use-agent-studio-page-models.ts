@@ -233,6 +233,9 @@ export function useAgentStudioPageModels({
     [contextUsageContextWindow, contextUsageOutputLimit, contextUsageTotalTokens],
   );
   const selectedRuntimeReadiness = selectedSession.runtime.runtimeReadiness;
+  const isSessionHistoryBlockingRender =
+    selectedSession.runtime.isSessionHistoryHydrating &&
+    !selectedSession.runtime.isSessionHistoryHydrated;
   const runtimeReadiness = useMemo(
     () => ({
       readinessState: selectedRuntimeReadiness.readinessState,
@@ -377,7 +380,7 @@ export function useAgentStudioPageModels({
     isSessionSelectionResolving: selectedSession.runtime.isSessionSelectionResolving,
     showThinkingMessages: chatSettings.showThinkingMessages,
     isSessionWorking: sessionActions.isSessionWorking,
-    isSessionHistoryLoading: selectedSession.runtime.isSessionHistoryHydrating,
+    isSessionHistoryLoading: isSessionHistoryBlockingRender,
     isWaitingForRuntimeReadiness: selectedSession.runtime.isWaitingForRuntimeReadiness,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
     sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,

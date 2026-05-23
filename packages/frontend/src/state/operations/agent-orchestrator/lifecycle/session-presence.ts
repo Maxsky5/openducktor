@@ -95,8 +95,6 @@ export const applyAgentSessionPresenceSnapshotToSession = (
         status = "starting";
       }
     }
-    // Runtime idle presence is authoritative for outbound-send settlement; the send path
-    // invalidates cached presence before starting a new turn.
     const pendingOutboundSendFields =
       snapshot.agentSessionStatus === "idle" ? settlePendingOutboundSendFields() : {};
 

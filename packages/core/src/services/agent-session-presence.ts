@@ -48,15 +48,20 @@ export const toLiveAgentSessionRuntimeStatus = (
   return "idle";
 };
 
-export const toAgentSessionPresenceSnapshotFromLiveSnapshot = ({
-  ref,
-  runtimeId,
-  snapshot,
-}: {
-  ref: AgentSessionRef;
-  runtimeId: string | null;
-  snapshot: LiveAgentSessionSnapshot | null;
-}): AgentSessionPresenceSnapshot => {
+export const toAgentSessionPresenceSnapshotFromLiveSnapshot = (
+  input:
+    | {
+        ref: AgentSessionRef;
+        runtimeId: string | null;
+        snapshot: LiveAgentSessionSnapshot;
+      }
+    | {
+        ref: AgentSessionRef;
+        runtimeId: string | null;
+        snapshot: null;
+      },
+): AgentSessionPresenceSnapshot => {
+  const { ref, runtimeId, snapshot } = input;
   if (!snapshot) {
     return {
       presence: "stale",
