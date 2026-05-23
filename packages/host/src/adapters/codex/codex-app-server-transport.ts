@@ -33,7 +33,6 @@ import type {
 import { writeJsonLine } from "./codex-json-line-writer";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
-const MAX_CANCELLED_SENT_REQUEST_IDS = 1_000;
 
 export const createCodexAppServerTransport = (
   runtimeId: string,
@@ -52,19 +51,21 @@ export const createCodexAppServerTransport = (
   let stdoutClosed = false;
   let stderrClosed = false;
 
+  const clearCancelledSentRequests = (): void => {
+    for (const timeout of cancelledSentRequests.values()) {
+      clearTimeout(timeout);
+    }
+    cancelledSentRequests.clear();
+  };
+
   const failFast = (error: Error): void => {
     if (!fatalError) {
       fatalError = error;
     }
     closed = true;
-    for (const timeout of cancelledSentRequests.values()) {
-      clearTimeout(timeout);
-    }
-    cancelledSentRequests.clear();
-    for (const [id, request] of pending) {
-      clearTimeout(request.timeout);
+    clearCancelledSentRequests();
+    for (const request of pending.values()) {
       request.reject(error);
-      pending.delete(id);
     }
   };
 
@@ -127,18 +128,10 @@ export const createCodexAppServerTransport = (
   };
 
   const rememberCancelledSentRequest = (id: number): void => {
-    forgetCancelledSentRequest(id);
     const timeout = setTimeout(() => {
       cancelledSentRequests.delete(id);
     }, requestTimeoutMs);
     cancelledSentRequests.set(id, timeout);
-    if (cancelledSentRequests.size <= MAX_CANCELLED_SENT_REQUEST_IDS) {
-      return;
-    }
-    const oldestId = cancelledSentRequests.keys().next().value;
-    if (typeof oldestId === "number") {
-      forgetCancelledSentRequest(oldestId);
-    }
   };
 
   const resolveResponse = (id: number, message: Record<string, unknown>): void => {
@@ -156,8 +149,6 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    pending.delete(id);
-    clearTimeout(request.timeout);
 
     if ("error" in message) {
       request.reject(
@@ -448,12 +439,8 @@ export const createCodexAppServerTransport = (
         child.stdin.destroy();
         child.stdout.destroy();
         child.stderr.destroy();
-        for (const timeout of cancelledSentRequests.values()) {
-          clearTimeout(timeout);
-        }
-        cancelledSentRequests.clear();
+        clearCancelledSentRequests();
         for (const [id, request] of pending) {
-          clearTimeout(request.timeout);
           request.reject(
             new HostResourceError({
               resource: "codexAppServerTransport",
@@ -462,7 +449,6 @@ export const createCodexAppServerTransport = (
               details: { runtimeId, requestId: id },
             }),
           );
-          pending.delete(id);
         }
       });
     },

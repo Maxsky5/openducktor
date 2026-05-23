@@ -76,8 +76,8 @@ export const acquirePendingResponse = ({
 
     pending.set(id, {
       method,
-      timeout,
       resolve: (value) => {
+        release();
         resolveAfterQueuedMessages((resolvedValue) => finish(Effect.succeed(resolvedValue)), value);
       },
       reject: (error) => {
