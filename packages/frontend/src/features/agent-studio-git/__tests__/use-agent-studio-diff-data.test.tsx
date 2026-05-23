@@ -61,7 +61,7 @@ describe("useAgentStudioDiffData", () => {
     }
   });
 
-  test("reuses the cached full snapshot when remounting within the stale window", async () => {
+  test("refetches full snapshots when remounting because worktree status is immediately stale", async () => {
     const firstHarness = createHookHarness(createBaseArgs());
     const secondHarness = createHookHarness(createBaseArgs());
 
@@ -71,11 +71,12 @@ describe("useAgentStudioDiffData", () => {
       await firstHarness.unmount();
 
       await secondHarness.mount();
+      await secondHarness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 2);
       await secondHarness.waitFor((state) => state.diffScope === "uncommitted" && !state.isLoading);
       expect(secondHarness.getLatest().fileStatuses[0]?.path).toBe("src/main.ts");
       expect(secondHarness.getLatest().upstreamAheadBehind).toEqual({ ahead: 1, behind: 0 });
 
-      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(1);
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
     } finally {
       await firstHarness.unmount();
       await secondHarness.unmount();

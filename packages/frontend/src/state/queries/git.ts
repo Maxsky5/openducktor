@@ -13,7 +13,7 @@ type GitWorktreeStatusQueryHost = Pick<typeof host, "gitGetWorktreeStatus">;
 type GitWorktreeStatusSummaryQueryHost = Pick<typeof host, "gitGetWorktreeStatusSummary">;
 
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
-export const WORKTREE_STATUS_STALE_TIME_MS = 5_000;
+export const WORKTREE_STATUS_STALE_TIME_MS = 0;
 
 export const gitQueryKeys = {
   all: ["git"] as const,

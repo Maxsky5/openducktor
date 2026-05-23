@@ -124,12 +124,19 @@ export function useAgentStudioDiffController({
       previousContextKey !== null && previousContextKey !== requestContextKey;
     requestContextKeyRef.current = requestContextKey;
 
-    if (repoPath && !shouldBlockDiffLoading) {
-      if (hasContextChanged) {
-        resetToDefaultScope();
-        resetControllerState();
-      }
+    if (!repoPath) {
+      requestContextKeyRef.current = null;
+      resetToDefaultScope();
+      resetControllerState();
+      return;
+    }
 
+    if (hasContextChanged) {
+      resetToDefaultScope();
+      resetControllerState();
+    }
+
+    if (!shouldBlockDiffLoading) {
       void loadData(true, {
         repoPath,
         targetBranch,
@@ -137,20 +144,7 @@ export function useAgentStudioDiffController({
         scope: hasContextChanged ? "uncommitted" : diffScopeRef.current,
         force: hasContextChanged,
       });
-      return;
     }
-
-    if (repoPath) {
-      if (hasContextChanged) {
-        resetToDefaultScope();
-        resetControllerState();
-      }
-      return;
-    }
-
-    requestContextKeyRef.current = null;
-    resetToDefaultScope();
-    resetControllerState();
   }, [
     loadData,
     repoPath,

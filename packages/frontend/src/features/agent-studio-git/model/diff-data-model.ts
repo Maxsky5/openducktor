@@ -31,14 +31,11 @@ type SummaryReloadDecision = {
   shouldReloadFullScope: boolean;
 };
 
-const EMPTY_DIFFS: FileDiff[] = [];
-const EMPTY_STATUSES: FileStatus[] = [];
-
-const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
+const createEmptyScopeSnapshot = (): ScopeSnapshot => ({
   branch: null,
   gitConflict: null,
-  fileDiffs: EMPTY_DIFFS,
-  fileStatuses: EMPTY_STATUSES,
+  fileDiffs: [],
+  fileStatuses: [],
   uncommittedFileCount: 0,
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
@@ -47,14 +44,14 @@ const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   hashVersion: null,
   statusHash: null,
   diffHash: null,
-};
+});
 
 const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
 
 export const createInitialDiffBatchState = (): DiffBatchState => ({
   byScope: {
-    target: EMPTY_SCOPE_SNAPSHOT,
-    uncommitted: EMPTY_SCOPE_SNAPSHOT,
+    target: createEmptyScopeSnapshot(),
+    uncommitted: createEmptyScopeSnapshot(),
   },
   loadedByScope: {
     target: false,
@@ -283,7 +280,7 @@ export const applySummarySnapshot = ({
       if (sharedHashesChanged && state.loadedByScope[otherScope]) {
         const invalidatedOtherScopeSnapshot: ScopeSnapshot = {
           ...nextByScope[otherScope],
-          fileDiffs: EMPTY_DIFFS,
+          fileDiffs: [],
           diffHash: null,
         };
         if (!scopeSnapshotEqual(nextByScope[otherScope], invalidatedOtherScopeSnapshot)) {

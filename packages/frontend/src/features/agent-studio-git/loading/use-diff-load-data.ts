@@ -117,7 +117,7 @@ export const useAgentStudioDiffLoadData = ({
         }
 
         if (mode === "full" && replayFullLoad) {
-          globalThis.queueMicrotask(() => {
+          queueMicrotask(() => {
             void loadData(false, {
               repoPath: loadContext.repoPath,
               targetBranch: loadContext.targetBranch,

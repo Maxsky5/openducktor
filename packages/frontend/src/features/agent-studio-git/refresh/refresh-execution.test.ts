@@ -121,6 +121,32 @@ describe("refresh execution", () => {
     expect(harness.loadingStates).toEqual([]);
   });
 
+  test("scheduled refresh preserves fetch errors when summary refresh also fails", async () => {
+    const harness = createExecutionDeps();
+    harness.fetchRemote.mockRejectedValueOnce(new Error("remote unavailable"));
+    harness.refreshActiveScopeSummary.mockRejectedValueOnce(new Error("summary unavailable"));
+
+    const shouldContinue = await runDiffRefreshRequest(createRequest("scheduled"), harness.deps);
+
+    expect(shouldContinue).toBe(true);
+    expect(harness.refreshErrors).toEqual([
+      "Error: remote unavailable",
+      "Error: remote unavailable",
+    ]);
+    expect(harness.refreshActiveScopeSummary).toHaveBeenCalledWith(createContext());
+  });
+
+  test("scheduled refresh reports summary errors when fetch succeeds", async () => {
+    const harness = createExecutionDeps();
+    harness.refreshActiveScopeSummary.mockRejectedValueOnce(new Error("summary unavailable"));
+
+    const shouldContinue = await runDiffRefreshRequest(createRequest("scheduled"), harness.deps);
+
+    expect(shouldContinue).toBe(true);
+    expect(harness.refreshErrors).toEqual([null, "Error: summary unavailable"]);
+    expect(harness.refreshActiveScopeSummary).toHaveBeenCalledWith(createContext());
+  });
+
   test("scheduled refresh skips remote fetch while cooldown is active", async () => {
     const harness = createExecutionDeps({ nowMs: 1_731_000_000_500 });
     harness.scheduledFetchAtByContext.set("/repo::origin/main::", 1_731_000_000_000);
@@ -131,6 +157,21 @@ describe("refresh execution", () => {
     expect(harness.fetchRemote).not.toHaveBeenCalled();
     expect(harness.refreshErrors).toEqual([null]);
     expect(harness.refreshActiveScopeSummary).toHaveBeenCalledWith(createContext());
+  });
+
+  test("scheduled refresh stops before summary reload when context changes during fetch", async () => {
+    const harness = createExecutionDeps();
+    harness.fetchRemote.mockImplementationOnce(async () => {
+      harness.setContextKey("next");
+      return { outcome: "fetched" as const };
+    });
+
+    const shouldContinue = await runDiffRefreshRequest(createRequest("scheduled"), harness.deps);
+
+    expect(shouldContinue).toBe(false);
+    expect(harness.invalidateRepoBranches).not.toHaveBeenCalled();
+    expect(harness.refreshErrors).toEqual([]);
+    expect(harness.refreshActiveScopeSummary).not.toHaveBeenCalled();
   });
 
   test("stale refresh contexts stop before mutating query or scope state", async () => {

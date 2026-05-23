@@ -140,10 +140,18 @@ export const runDiffRefreshRequest = async (
       }
     }
 
-    if (hasSameRefreshContext(context, deps)) {
-      deps.setRefreshError(scheduledFetchError);
+    if (!hasSameRefreshContext(context, deps)) {
+      return false;
     }
-    await deps.refreshActiveScopeSummary(context);
+
+    deps.setRefreshError(scheduledFetchError);
+    try {
+      await deps.refreshActiveScopeSummary(context);
+    } catch (error) {
+      if (hasSameRefreshContext(context, deps)) {
+        deps.setRefreshError(scheduledFetchError ?? String(error));
+      }
+    }
     return true;
   } catch (error) {
     if (hasSameRefreshContext(context, deps)) {
