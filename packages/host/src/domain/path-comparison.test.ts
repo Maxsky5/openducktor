@@ -9,6 +9,8 @@ describe("normalizePathForComparison", () => {
     ["repo/worktree/task", "repo/worktree/task"],
     ["repo/worktree/", "repo/worktree"],
     ["repo\\worktree\\task", "repo/worktree/task"],
+    ["\\repo\\worktree\\task", "/repo/worktree/task"],
+    [" \\repo\\worktree\\task ", "/repo/worktree/task"],
     ["/repo\\.\\worktree\\task", "/repo/worktree/task"],
     ["/repo/./worktree/./task", "/repo/worktree/task"],
     ["/repo/worktree/../task", "/repo/task"],

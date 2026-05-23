@@ -1,7 +1,8 @@
 export const normalizePathForComparison = (value: string): string => {
-  const normalized = value.trim().replace(/\\/g, "/");
+  const trimmed = value.trim();
+  const absolute = /^[\\/]/.test(trimmed);
   const segments: string[] = [];
-  for (const segment of normalized.split("/")) {
+  for (const segment of trimmed.split(/[\\/]+/)) {
     if (!segment || segment === ".") {
       continue;
     }
@@ -11,5 +12,5 @@ export const normalizePathForComparison = (value: string): string => {
     }
     segments.push(segment);
   }
-  return normalized.startsWith("/") ? `/${segments.join("/")}` : segments.join("/");
+  return absolute ? `/${segments.join("/")}` : segments.join("/");
 };
