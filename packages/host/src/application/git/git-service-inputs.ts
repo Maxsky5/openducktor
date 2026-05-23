@@ -112,20 +112,24 @@ export const resolveGitWorkingDirectory = (
     }
     return canonicalWorkingDir;
   });
-export const requireGlobalConfig = (payload: GlobalConfig | null): GlobalConfig => {
+export const requireGlobalConfig = (
+  payload: GlobalConfig | null,
+): Effect.Effect<GlobalConfig, HostValidationError> => {
   if (payload === null) {
-    throw new HostValidationError({
-      message: "No OpenDucktor workspace config is available for git worktree mutation.",
-    });
+    return Effect.fail(
+      new HostValidationError({
+        message: "No OpenDucktor workspace config is available for git worktree mutation.",
+      }),
+    );
   }
-  return payload;
+  return Effect.succeed(payload);
 };
 export const findRepoConfigByPath = (
   settingsConfig: SettingsConfigPort,
   canonicalRepoPath: string,
 ) =>
   Effect.gen(function* () {
-    const config = requireGlobalConfig(yield* settingsConfig.readConfig());
+    const config = yield* requireGlobalConfig(yield* settingsConfig.readConfig());
     for (const repoConfig of Object.values(config.workspaces)) {
       const configuredRepoPath = yield* settingsConfig.canonicalizePath(repoConfig.repoPath);
       if (configuredRepoPath === canonicalRepoPath) {
@@ -150,27 +154,31 @@ export const isDefinitiveNonWorktreeGitError = (error: unknown): boolean => {
 };
 export const requireSettingsConfig = (
   settingsConfig: SettingsConfigPort | undefined,
-): SettingsConfigPort => {
+): Effect.Effect<SettingsConfigPort, HostDependencyError> => {
   if (!settingsConfig) {
-    throw new HostDependencyError({
-      dependency: "settingsConfig",
-      operation: "git.worktree_mutation",
-      message: "Settings config port is required for git worktree mutation commands.",
-    });
+    return Effect.fail(
+      new HostDependencyError({
+        dependency: "settingsConfig",
+        operation: "git.worktree_mutation",
+        message: "Settings config port is required for git worktree mutation commands.",
+      }),
+    );
   }
-  return settingsConfig;
+  return Effect.succeed(settingsConfig);
 };
 export const requireWorktreeFiles = (
   worktreeFiles: WorktreeFilePort | undefined,
-): WorktreeFilePort => {
+): Effect.Effect<WorktreeFilePort, HostDependencyError> => {
   if (!worktreeFiles) {
-    throw new HostDependencyError({
-      dependency: "worktreeFiles",
-      operation: "git.worktree_mutation",
-      message: "Worktree file port is required for git worktree mutation commands.",
-    });
+    return Effect.fail(
+      new HostDependencyError({
+        dependency: "worktreeFiles",
+        operation: "git.worktree_mutation",
+        message: "Worktree file port is required for git worktree mutation commands.",
+      }),
+    );
   }
-  return worktreeFiles;
+  return Effect.succeed(worktreeFiles);
 };
 export const cleanupFailedCreatedWorktree = (
   gitPort: GitPort,

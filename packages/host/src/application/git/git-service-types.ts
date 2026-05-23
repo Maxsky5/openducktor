@@ -18,7 +18,11 @@ import type {
   GitWorktreeSummary,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
-import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type {
+  HostDependencyError,
+  HostOperationError,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type { GitPortError } from "../../ports/git-port";
 import type { SettingsConfigError } from "../../ports/settings-config-port";
 import type { WorktreeFileError } from "../../ports/worktree-file-port";
@@ -38,6 +42,7 @@ import type {
 
 export type GitServiceError =
   | GitPortError
+  | HostDependencyError
   | HostOperationError
   | HostValidationError
   | SettingsConfigError
