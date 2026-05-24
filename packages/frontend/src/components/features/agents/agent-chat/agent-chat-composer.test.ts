@@ -69,6 +69,8 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
     expect(html).toContain("22.5%");
+    expect(html).toContain("lucide-brain-cog");
+    expect(html).toContain("high");
   });
 
   test("hides stop and context widgets when not available", () => {
@@ -111,7 +113,7 @@ describe("AgentChatComposer", () => {
     );
 
     expect(html).toContain("GPT-5.3 Codex");
-    expect(html).not.toContain("No variants");
+    expect(html).not.toContain("lucide-brain-cog");
     expect(html).not.toContain("Search variant...");
   });
 

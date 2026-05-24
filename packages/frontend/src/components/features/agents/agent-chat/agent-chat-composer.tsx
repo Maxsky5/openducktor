@@ -113,10 +113,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   isSelectionCatalogLoading,
   supportsProfiles,
   selectorDisabled,
-  taskId,
-  isInteractionEnabled,
-  isStarting,
-  isReadOnly,
   onSelectAgent,
   onSelectModel,
   onSelectVariant,
@@ -137,10 +133,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   isSelectionCatalogLoading: boolean;
   supportsProfiles: boolean;
   selectorDisabled: boolean;
-  taskId: string;
-  isInteractionEnabled: boolean;
-  isStarting: boolean;
-  isReadOnly: boolean;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
   onSelectModel: AgentChatComposerModel["onSelectModel"];
   onSelectVariant: AgentChatComposerModel["onSelectVariant"];
@@ -213,7 +205,7 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
               placeholder="Variant"
               searchPlaceholder="Search variant..."
               triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-              disabled={!taskId || isStarting || !isInteractionEnabled || isReadOnly}
+              disabled={selectorDisabled}
               onValueChange={onSelectVariant}
             />
           </div>
@@ -292,11 +284,7 @@ function AgentChatComposerFormView({
   submitAction,
 }: AgentChatComposerFormViewProps): ReactElement {
   const {
-    taskId,
-    isInteractionEnabled,
-    isReadOnly,
     pendingInlineCommentCount,
-    isStarting,
     isSessionWorking,
     isWaitingInput,
     isSelectionCatalogLoading,
@@ -417,10 +405,6 @@ function AgentChatComposerFormView({
             isSelectionCatalogLoading={isSelectionCatalogLoading}
             supportsProfiles={supportsProfiles ?? true}
             selectorDisabled={selectorDisabled}
-            taskId={taskId}
-            isInteractionEnabled={isInteractionEnabled}
-            isStarting={isStarting}
-            isReadOnly={isReadOnly}
             onSelectAgent={onSelectAgent}
             onSelectModel={onSelectModel}
             onSelectVariant={onSelectVariant}
