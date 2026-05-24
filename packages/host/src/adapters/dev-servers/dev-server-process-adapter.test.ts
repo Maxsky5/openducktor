@@ -233,6 +233,36 @@ setInterval(() => {}, 1000);
     ).rejects.toThrow("Dev server exited with code 42.");
   });
 
+  test("reports process exits that happen during the start grace period", async () => {
+    const exits: unknown[] = [];
+    const port = createDevServerProcessAdapter({
+      startGracePeriodMs: 1_000,
+      stopTimeoutMs: 100,
+    });
+    const command = [
+      quoteShellCommandArgForTest(process.execPath),
+      "-e",
+      quoteShellCommandArgForTest("process.exit(42);"),
+    ].join(" ");
+
+    await expect(
+      port.start({
+        command,
+        cwd: process.cwd(),
+        onExit: (exit) => exits.push(exit),
+        onOutput: () => {},
+      }),
+    ).rejects.toThrow("Dev server exited with code 42.");
+    expect(exits).toEqual([
+      {
+        pid: expect.any(Number),
+        exitCode: 42,
+        signal: null,
+        error: null,
+      },
+    ]);
+  });
+
   test("rejects unmatched POSIX shell command quotes as shell exits", async () => {
     if (process.platform === "win32") {
       return;

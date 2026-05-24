@@ -58,20 +58,27 @@ const createDevServerCommandLaunch = (
 
 const trackDevServerProcess = ({
   child,
-  isStarted,
   onExit,
   onOutput,
   pid,
 }: {
   child: DevServerChildProcess;
-  isStarted: () => boolean;
   onExit: (exit: DevServerProcessExit) => void;
   onOutput: (output: { data: string }) => void;
   pid: number | undefined;
 }) => {
   let closeResult: DevServerProcessExit | null = null;
+  let exitNotified = false;
   let spawnError: Error | null = null;
   const closeListeners = new Set<() => void>();
+
+  const notifyExit = (exit: DevServerProcessExit): void => {
+    if (exitNotified) {
+      return;
+    }
+    exitNotified = true;
+    onExit(exit);
+  };
 
   const notifyCloseListeners = (): void => {
     for (const listener of closeListeners) {
@@ -117,14 +124,12 @@ const trackDevServerProcess = ({
   child.once("error", (error) => {
     spawnError = error;
     notifyCloseListeners();
-    if (isStarted()) {
-      onExit({
-        pid: pid ?? -1,
-        exitCode: null,
-        signal: null,
-        error: error.message,
-      });
-    }
+    notifyExit({
+      pid: pid ?? -1,
+      exitCode: null,
+      signal: null,
+      error: error.message,
+    });
   });
   child.once("close", (exitCode, signal) => {
     closeResult = {
@@ -134,9 +139,7 @@ const trackDevServerProcess = ({
       error: null,
     };
     notifyCloseListeners();
-    if (isStarted()) {
-      onExit(closeResult);
-    }
+    notifyExit(closeResult);
   });
 
   return {
@@ -186,10 +189,8 @@ export const createDevServerProcessAdapter = ({
           toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),
       });
       const pid = child.pid;
-      let started = false;
       const processTracker = trackDevServerProcess({
         child,
-        isStarted: () => started,
         onExit,
         onOutput,
         pid,
@@ -241,8 +242,6 @@ export const createDevServerProcessAdapter = ({
           new DevServerProcessStartExitError(immediateClose.exitCode, immediateClose.signal),
         );
       }
-
-      started = true;
 
       return {
         pid,
