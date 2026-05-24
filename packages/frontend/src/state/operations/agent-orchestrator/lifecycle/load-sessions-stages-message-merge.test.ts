@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mergeHydratedMessages } from "../support/hydrated-message-merge";
 import {
   createIntent,
   createRecord,
   createSession,
   createStateHarness,
   getSessionMessageCount,
-  mergeHydratedMessages,
   preparePersistedSessionMergeStage,
   type SessionStateMap,
   type SetStateAction,

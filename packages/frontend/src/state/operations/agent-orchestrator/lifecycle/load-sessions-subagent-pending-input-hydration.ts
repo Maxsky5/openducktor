@@ -49,30 +49,6 @@ const readSubagentSessionIds = (
   return Array.from(externalSessionIds);
 };
 
-const toHydratedSubagentPendingInputOverlay = (
-  scannedChildExternalSessionIds: string[],
-  pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId,
-  pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId,
-  hydrationError: SubagentPendingInputHydrationError | null = null,
-): HydratedSubagentPendingInputOverlay => {
-  if (scannedChildExternalSessionIds.length === 0 && hydrationError === null) {
-    return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
-  }
-
-  return {
-    scannedChildExternalSessionIds,
-    pendingApprovalsByChildExternalSessionId:
-      Object.keys(pendingApprovalsByChildExternalSessionId).length > 0
-        ? pendingApprovalsByChildExternalSessionId
-        : EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
-    pendingQuestionsByChildExternalSessionId:
-      Object.keys(pendingQuestionsByChildExternalSessionId).length > 0
-        ? pendingQuestionsByChildExternalSessionId
-        : EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
-    hydrationError,
-  };
-};
-
 export const loadHydratedSubagentPendingInputOverlay = async ({
   record,
   messages,
@@ -127,10 +103,10 @@ export const loadHydratedSubagentPendingInputOverlay = async ({
         )
       : null;
 
-  return toHydratedSubagentPendingInputOverlay(
+  return {
     scannedChildExternalSessionIds,
     pendingApprovalsByChildExternalSessionId,
     pendingQuestionsByChildExternalSessionId,
     hydrationError,
-  );
+  };
 };
