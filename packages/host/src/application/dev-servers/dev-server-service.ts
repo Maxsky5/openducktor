@@ -398,20 +398,20 @@ export const createDevServerService = ({
           );
         }
         emitSnapshot(runtime);
-        const failedScripts: FailedDevServerScriptStart[] = [];
+        let failedScript: FailedDevServerScriptStart | null = null;
         for (const script of repoConfig.devServers) {
           const startResult = yield* Effect.either(startScript(runtime, worktreePath, script));
           if (startResult._tag === "Left") {
-            failedScripts.push({
+            failedScript = {
               command: script.command,
               message: errorMessage(startResult.left),
               name: script.name,
               scriptId: script.id,
-            });
+            };
             break;
           }
         }
-        if (failedScripts.length > 0) {
+        if (failedScript) {
           const { cleanupErrors, stoppedScripts } = yield* stopStartedScriptsAfterStartFailure(
             runtime,
             updateScriptState,
@@ -420,7 +420,7 @@ export const createDevServerService = ({
           return yield* Effect.fail(
             createDevServerStartFailureError({
               cleanupErrors,
-              failedScripts,
+              failedScript,
               repoPath,
               stoppedScripts,
               taskId,

@@ -60,22 +60,20 @@ export const stopStartedScriptsAfterStartFailure = (
 
 export const createDevServerStartFailureError = ({
   cleanupErrors,
-  failedScripts,
+  failedScript,
   repoPath,
   stoppedScripts,
   taskId,
 }: {
   cleanupErrors: string[];
-  failedScripts: FailedDevServerScriptStart[];
+  failedScript: FailedDevServerScriptStart;
   repoPath: string;
   stoppedScripts: StoppedDevServerScript[];
   taskId: string;
 }): HostOperationError => {
   const sections = [
     "Failed to start all configured dev server scripts.",
-    ...failedScripts.map(
-      (script) => `Failed starting dev server ${script.scriptId}: ${script.message}`,
-    ),
+    `Failed starting dev server ${failedScript.scriptId}: ${failedScript.message}`,
     ...cleanupErrors,
   ];
   return new HostOperationError({
@@ -83,7 +81,7 @@ export const createDevServerStartFailureError = ({
     message: sections.join("\n"),
     details: {
       cleanupErrors,
-      failedScripts,
+      failedScripts: [failedScript],
       repoPath,
       stoppedScripts,
       taskId,

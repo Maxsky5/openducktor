@@ -46,10 +46,6 @@ export const markScriptProcessHandleMissing = ({
   return message;
 };
 
-const scriptHasRecordedPid = (
-  script: DevServerScriptState,
-): script is DevServerScriptState & { pid: number } => script.pid !== null;
-
 export const stopScriptProcessHandle = ({
   handle,
   runtime,
@@ -87,5 +83,5 @@ export const stopScriptProcessHandle = ({
 
 export const listRunningScripts = (runtime: DevServerGroupRuntime): StoppedDevServerScript[] =>
   runtime.state.scripts.flatMap((script) =>
-    scriptHasRecordedPid(script) ? [stoppedScriptFromState(runtime, script, script.pid)] : [],
+    script.pid === null ? [] : [stoppedScriptFromState(runtime, script, script.pid)],
   );
