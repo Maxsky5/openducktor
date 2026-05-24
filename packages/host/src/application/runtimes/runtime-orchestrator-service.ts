@@ -6,6 +6,7 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -23,7 +24,6 @@ import {
   findWorkspaceRuntime,
   isoFromMillis,
   loadTargetSession,
-  normalizePathForComparison,
   type RuntimeOrchestratorLogger,
   type RuntimeOrchestratorService,
   resolveRepoPath,
@@ -56,7 +56,7 @@ export const createRuntimeOrchestratorService = ({
 }): RuntimeOrchestratorService => {
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
-    `${runtimeKind}::${repoPath}`;
+    `${runtimeKind}::${normalizePathForComparison(repoPath)}`;
   const resolveSessionStopRoute = (
     request: Parameters<RuntimeOrchestratorService["agentSessionStop"]>[0],
     repoPath: string,

@@ -10,6 +10,7 @@ import {
   repoRuntimeStartupStatusSchema,
 } from "@openducktor/contracts";
 import { Clock, Effect, Schedule } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { GitPort, GitPortError } from "../../ports/git-port";
 import type {
@@ -123,20 +124,6 @@ export const resolveRepoPath = (gitPort: GitPort, repoPath: string) =>
     }
     return canonicalRepoPath;
   });
-export const normalizePathForComparison = (path: string): string => {
-  const components: string[] = [];
-  for (const component of path.trim().split(/[\\/]+/)) {
-    if (!component || component === ".") {
-      continue;
-    }
-    if (component === "..") {
-      components.pop();
-      continue;
-    }
-    components.push(component);
-  }
-  return path.startsWith("/") ? `/${components.join("/")}` : components.join("/");
-};
 export const runtimeRouteKey = (runtimeRoute: RuntimeRoute): string => JSON.stringify(runtimeRoute);
 export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute): string => {
   if (runtimeRoute.type === "local_http") {
@@ -197,10 +184,9 @@ export const validateSessionStopTarget = (
         }),
       );
     }
-    if (
-      normalizePathForComparison(session.workingDirectory) !==
-      normalizePathForComparison(request.workingDirectory)
-    ) {
+    const sessionWorkingDirectory = normalizePathForComparison(session.workingDirectory);
+    const requestWorkingDirectory = normalizePathForComparison(request.workingDirectory);
+    if (sessionWorkingDirectory !== requestWorkingDirectory) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "workingDirectory",

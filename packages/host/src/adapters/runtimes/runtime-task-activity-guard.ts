@@ -4,6 +4,7 @@ import type {
   RuntimeRoute,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
@@ -12,20 +13,6 @@ export type CreateRuntimeTaskActivityGuardInput = {
 };
 type ActiveWorkEvidence = {
   activeSessionRoles: string[];
-};
-const normalizePathForComparison = (path: string): string => {
-  const components: string[] = [];
-  for (const component of path.trim().split(/[\\/]+/)) {
-    if (!component || component === ".") {
-      continue;
-    }
-    if (component === "..") {
-      components.pop();
-      continue;
-    }
-    components.push(component);
-  }
-  return path.startsWith("/") ? `/${components.join("/")}` : components.join("/");
 };
 const routeIndexKey = (runtimeKind: string): string => runtimeKind.trim();
 const collectRuntimeRoutes = (runtimeRegistry: RuntimeRegistryPort, repoPath: string) =>
