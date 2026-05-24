@@ -2,6 +2,8 @@ import type {
   CodexAppServerClient,
   CodexJsonRpcTransport,
   CodexModelListResponse,
+  CodexSkillsListParams,
+  CodexSkillsListResponse,
   CodexThreadForkParams,
   CodexThreadResumeParams,
   CodexThreadStartParams,
@@ -19,6 +21,9 @@ export const createCodexAppServerClient = (
     },
     async modelList() {
       return transport.request<CodexModelListResponse>({ method: "model/list", params: {} });
+    },
+    async skillsList(params: CodexSkillsListParams) {
+      return transport.request<CodexSkillsListResponse>({ method: "skills/list", params });
     },
     async threadStart(params: CodexThreadStartParams) {
       return transport.request({ method: "thread/start", params });

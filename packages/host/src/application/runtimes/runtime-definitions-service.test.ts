@@ -8,6 +8,10 @@ describe("createRuntimeDefinitionsService", () => {
 
     expect(definitions.map((definition) => definition.kind)).toEqual(["opencode", "codex"]);
     expect(definitions[0]?.capabilities.workflow.supportsOdtWorkflowTools).toBe(true);
-    expect(definitions[1]?.capabilities.promptInput.supportedParts).toEqual(["text"]);
+    expect(definitions[1]?.capabilities.promptInput.supportedParts).toEqual([
+      "text",
+      "skill_mention",
+    ]);
+    expect(definitions[1]?.capabilities.promptInput.supportsSkillReferences).toBe(true);
   });
 });

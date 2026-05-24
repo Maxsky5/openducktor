@@ -277,6 +277,7 @@ pub struct RuntimePromptInputCapabilities {
     pub supported_parts: Vec<RuntimePromptInputPartType>,
     pub supports_slash_commands: bool,
     pub supports_file_search: bool,
+    pub supports_skill_references: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -647,6 +648,22 @@ impl RuntimeCapabilities {
         {
             errors.push(
                 "[optional_enhancement] file search support requires file or folder prompt references"
+                    .to_string(),
+            );
+        }
+        let declares_skill_mention = self
+            .prompt_input
+            .supported_parts
+            .contains(&RuntimePromptInputPartType::SkillMention);
+        if self.prompt_input.supports_skill_references && !declares_skill_mention {
+            errors.push(
+                "[optional_enhancement] skill reference support requires skill_mention prompt part"
+                    .to_string(),
+            );
+        }
+        if !self.prompt_input.supports_skill_references && declares_skill_mention {
+            errors.push(
+                "[optional_enhancement] skill_mention prompt part requires skill reference support"
                     .to_string(),
             );
         }

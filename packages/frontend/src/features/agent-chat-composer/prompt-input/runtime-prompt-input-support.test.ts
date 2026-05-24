@@ -7,29 +7,59 @@ describe("runtime-prompt-input-support", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        readyActiveSessionRuntimeKind: null,
+        hasActiveSession: false,
+        activeSessionRuntimeKind: null,
         selectedRuntimeKind: "opencode",
       }),
-    ).toEqual({ runtimeSupportsSlashCommands: true, supportsFileSearch: true });
+    ).toEqual({
+      runtimeSupportsSlashCommands: true,
+      supportsFileSearch: true,
+      supportsSkillReferences: false,
+    });
   });
 
   test("returns false when no runtime kind is available", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        readyActiveSessionRuntimeKind: null,
+        hasActiveSession: false,
+        activeSessionRuntimeKind: null,
         selectedRuntimeKind: null,
       }),
-    ).toEqual({ runtimeSupportsSlashCommands: false, supportsFileSearch: false });
+    ).toEqual({
+      runtimeSupportsSlashCommands: false,
+      supportsFileSearch: false,
+      supportsSkillReferences: false,
+    });
   });
 
-  test("prefers the ready active-session runtime kind over the selected runtime kind", () => {
+  test("prefers the active-session runtime kind over the selected runtime kind", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        readyActiveSessionRuntimeKind: "opencode",
+        hasActiveSession: true,
+        activeSessionRuntimeKind: "opencode",
         selectedRuntimeKind: "unregistered-runtime" as RuntimeKind,
       }),
-    ).toEqual({ runtimeSupportsSlashCommands: true, supportsFileSearch: true });
+    ).toEqual({
+      runtimeSupportsSlashCommands: true,
+      supportsFileSearch: true,
+      supportsSkillReferences: false,
+    });
+  });
+
+  test("does not fall back to the selected runtime while active session context is unresolved", () => {
+    expect(
+      resolveRuntimePromptInputSupport({
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        hasActiveSession: true,
+        activeSessionRuntimeKind: null,
+        selectedRuntimeKind: "opencode",
+      }),
+    ).toEqual({
+      runtimeSupportsSlashCommands: false,
+      supportsFileSearch: false,
+      supportsSkillReferences: false,
+    });
   });
 });

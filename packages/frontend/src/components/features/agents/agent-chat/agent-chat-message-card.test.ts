@@ -1273,6 +1273,47 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
   });
 
+  test("renders user skill references as inline chips inside the user message text", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-skill-ref",
+          role: "user",
+          content: "use $review please",
+          timestamp: "2026-02-22T10:28:30.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "text",
+                text: "use $review please",
+              },
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/review/SKILL.md",
+                  path: "/skills/review/SKILL.md",
+                  name: "review",
+                  title: "Review",
+                },
+              },
+            ],
+          },
+        },
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain("use ");
+    expect(html).toContain(">$review<");
+    expect(html).toContain("bg-purple-100");
+    expect(html).toContain("lucide-blocks");
+    expect(html).toContain("please");
+  });
+
   test("renders fallback user file reference text as an inline chip", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

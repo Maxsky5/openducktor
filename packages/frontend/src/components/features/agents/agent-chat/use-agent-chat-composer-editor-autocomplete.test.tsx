@@ -27,8 +27,29 @@ const slashCommands = [
   },
 ];
 
+const skills = [
+  {
+    id: "/skills/review/SKILL.md",
+    name: "review",
+    path: "/skills/review/SKILL.md",
+    title: "Review",
+    description: "Review code",
+  },
+  {
+    id: "/skills/refactor/SKILL.md",
+    name: "refactor",
+    path: "/skills/refactor/SKILL.md",
+    title: "Refactor",
+    description: "Improve structure",
+  },
+];
+
 const createHarness = (
   searchFiles: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>,
+  options: {
+    supportsSkillReferences?: boolean;
+    skills?: typeof skills;
+  } = {},
 ) => {
   return createHookHarness(
     () =>
@@ -36,7 +57,9 @@ const createHarness = (
         disabled: false,
         supportsSlashCommands: true,
         supportsFileSearch: true,
+        supportsSkillReferences: options.supportsSkillReferences ?? false,
         slashCommands: [...slashCommands],
+        skills: options.skills ? [...options.skills] : [],
         searchFiles,
       }),
     undefined,
@@ -79,6 +102,54 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(latest.showFileMenu).toBe(false);
 
     await harness.unmount();
+  });
+
+  test("filters skills from dollar trigger only when skill references are supported", async () => {
+    const searchFiles = mock(async () => []);
+    const harness = createHarness(searchFiles, {
+      supportsSkillReferences: true,
+      skills,
+    });
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("use $rev"), {
+        segmentId: "segment-1",
+        offset: 8,
+      });
+    });
+
+    expect(harness.getLatest().showSkillMenu).toBe(true);
+    expect(harness.getLatest().filteredSkills.map((skill) => skill.name)).toEqual(["review"]);
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("use $rev"), {
+        segmentId: "segment-1",
+        offset: 8,
+      });
+    });
+
+    expect(harness.getLatest().filteredSkills.map((skill) => skill.name)).toEqual(["review"]);
+
+    await harness.unmount();
+
+    const unsupportedHarness = createHarness(searchFiles, {
+      supportsSkillReferences: false,
+      skills,
+    });
+    await unsupportedHarness.mount();
+
+    await unsupportedHarness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("use $rev"), {
+        segmentId: "segment-1",
+        offset: 8,
+      });
+    });
+
+    expect(unsupportedHarness.getLatest().showSkillMenu).toBe(false);
+    expect(unsupportedHarness.getLatest().filteredSkills).toEqual([]);
+
+    await unsupportedHarness.unmount();
   });
 
   test("keeps previous file results while a newer search is loading", async () => {

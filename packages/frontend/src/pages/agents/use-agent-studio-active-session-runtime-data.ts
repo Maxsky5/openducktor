@@ -1,19 +1,7 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import {
-  type AgentSessionViewLifecyclePhase,
-  deriveAgentSessionViewLifecycle,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
-import {
-  SESSION_MODEL_CATALOG_STALE_TIME_MS,
-  SESSION_TODOS_STALE_TIME_MS,
-  sessionModelCatalogQueryOptions,
-  sessionTodosQueryOptions,
-} from "@/state/queries/agent-session-runtime";
+import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
+import type { AgentSessionViewLifecyclePhase } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
@@ -45,130 +33,11 @@ export const useAgentStudioActiveSessionRuntimeData = ({
   agentStudioReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
-}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentStudioSessionRuntimeDataState => {
-  const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
-    () => resolveAttachedSessionRuntimeQueryState(session),
-    [session],
-  );
-  const sessionViewLifecycle = useMemo(
-    () =>
-      deriveAgentSessionViewLifecycle({
-        session,
-        repoReadinessState: agentStudioReadinessState,
-      }),
-    [agentStudioReadinessState, session],
-  );
-  const shouldHydrateRuntimeData =
-    sessionViewLifecycle.canReadRuntimeData &&
-    runtimeQueryInput !== null &&
-    runtimeDataSupportError === null &&
-    session?.status !== "starting";
-  const runtimeDefinition = session?.runtimeKind
-    ? findRuntimeDefinition(runtimeDefinitions, session.runtimeKind)
-    : null;
-  const supportsTodos = runtimeDefinition
-    ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
-    : false;
-  const shouldHydrateTodos =
-    shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
-  const catalogQuery = useQuery({
-    queryKey:
-      shouldHydrateRuntimeData && runtimeQueryInput
-        ? sessionModelCatalogQueryOptions(
-            runtimeQueryInput.repoPath,
-            runtimeQueryInput.runtimeKind,
-            readSessionModelCatalog,
-          ).queryKey
-        : (["agent-session-runtime", "model-catalog", "", ""] as const),
-    queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!runtimeQueryInput) {
-        throw new Error("Session runtime catalog query is disabled.");
-      }
-      return readSessionModelCatalog(runtimeQueryInput.repoPath, runtimeQueryInput.runtimeKind);
-    },
-    enabled: shouldHydrateRuntimeData,
-    staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
-  });
-  const todosQuery = useQuery({
-    queryKey:
-      shouldHydrateTodos && runtimeQueryInput && session
-        ? sessionTodosQueryOptions(
-            runtimeQueryInput.repoPath,
-            runtimeQueryInput.runtimeKind,
-            runtimeQueryInput.workingDirectory,
-            session.externalSessionId,
-            readSessionTodos,
-          ).queryKey
-        : (["agent-session-runtime", "todos", "", "", "", ""] as const),
-    queryFn: async (): Promise<AgentSessionTodoItem[]> => {
-      if (!runtimeQueryInput || !session) {
-        throw new Error("Session todos query is disabled.");
-      }
-      return readSessionTodos(
-        runtimeQueryInput.repoPath,
-        runtimeQueryInput.runtimeKind,
-        runtimeQueryInput.workingDirectory,
-        session.externalSessionId,
-      );
-    },
-    enabled: shouldHydrateTodos,
-    staleTime: SESSION_TODOS_STALE_TIME_MS,
-  });
-
-  return useMemo(() => {
-    if (!session) {
-      return {
-        session: null,
-        runtimeDataError: null,
-        sessionViewLifecyclePhase: sessionViewLifecycle.phase,
-      };
-    }
-
-    const catalogQueryError =
-      catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
-    const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
-    const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
-    const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
-    const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
-    const isLoadingModelCatalog =
-      runtimeDataSupportError || catalogQueryError
-        ? false
-        : shouldHydrateRuntimeData
-          ? resolvedCatalog === null && catalogQuery.isPending
-          : session.isLoadingModelCatalog && resolvedCatalog === null;
-
-    if (
-      resolvedCatalog === session.modelCatalog &&
-      resolvedTodos === session.todos &&
-      isLoadingModelCatalog === session.isLoadingModelCatalog
-    ) {
-      return {
-        session,
-        runtimeDataError,
-        sessionViewLifecyclePhase: sessionViewLifecycle.phase,
-      };
-    }
-
-    return {
-      session: {
-        ...session,
-        modelCatalog: resolvedCatalog,
-        todos: resolvedTodos,
-        isLoadingModelCatalog,
-      },
-      runtimeDataError,
-      sessionViewLifecyclePhase: sessionViewLifecycle.phase,
-    };
-  }, [
-    catalogQuery.data,
-    catalogQuery.error,
-    catalogQuery.isPending,
+}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentStudioSessionRuntimeDataState =>
+  useSessionRuntimeData({
     session,
-    shouldHydrateRuntimeData,
-    todosQuery.data,
-    todosQuery.error,
-    runtimeDataSupportError,
-    sessionViewLifecycle.phase,
-  ]);
-};
+    runtimeDefinitions,
+    repoReadinessState: agentStudioReadinessState,
+    readSessionModelCatalog,
+    readSessionTodos,
+  });

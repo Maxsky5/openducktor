@@ -290,9 +290,13 @@ function AgentChatComposerFormView({
     supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
+    supportsSkillReferences = false,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    skills = [],
+    skillsError = null,
+    isSkillsLoading = false,
     searchFiles,
     agentOptions,
     modelOptions,
@@ -387,9 +391,13 @@ function AgentChatComposerFormView({
             onSend={onSend}
             supportsSlashCommands={supportsSlashCommands}
             supportsFileSearch={supportsFileSearch}
+            supportsSkillReferences={supportsSkillReferences}
             slashCommands={slashCommands}
             slashCommandsError={slashCommandsError}
             isSlashCommandsLoading={isSlashCommandsLoading}
+            skills={skills}
+            skillsError={skillsError}
+            isSkillsLoading={isSkillsLoading}
             searchFiles={searchFiles}
           />
 

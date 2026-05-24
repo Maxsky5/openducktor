@@ -249,6 +249,7 @@ export const runtimePromptInputCapabilitiesSchema = z
     supportedParts: runtimePromptInputPartTypesSchema,
     supportsSlashCommands: z.boolean(),
     supportsFileSearch: z.boolean(),
+    supportsSkillReferences: z.boolean(),
   })
   .strict();
 export type RuntimePromptInputCapabilities = z.infer<typeof runtimePromptInputCapabilitiesSchema>;
@@ -508,6 +509,21 @@ export const runtimeCapabilitiesSchema = z
       );
     }
 
+    const supportsSkillReferences = capabilities.promptInput.supportsSkillReferences;
+    const declaresSkillMention = capabilities.promptInput.supportedParts.includes("skill_mention");
+    if (supportsSkillReferences && !declaresSkillMention) {
+      addIssue(
+        ["promptInput", "supportedParts"],
+        "Runtime descriptors that support skill references must declare skill mention prompt parts.",
+      );
+    }
+    if (!supportsSkillReferences && declaresSkillMention) {
+      addIssue(
+        ["promptInput", "supportedParts"],
+        "Runtime descriptors that do not support skill references must not declare skill mention prompt parts.",
+      );
+    }
+
     if (
       capabilities.optionalSurfaces.supportsSubagents &&
       capabilities.optionalSurfaces.supportedSubagentExecutionModes.length === 0
@@ -545,6 +561,7 @@ export const runtimeCapabilityKeyValues = [
   "promptInput.supportedParts",
   "promptInput.supportsSlashCommands",
   "promptInput.supportsFileSearch",
+  "promptInput.supportsSkillReferences",
   "optionalSurfaces.supportsProfiles",
   "optionalSurfaces.supportsVariants",
   "optionalSurfaces.supportsTodos",
@@ -573,6 +590,7 @@ export const optionalRuntimeCapabilityKeys = [
   "structuredInput.supportsQuestions",
   "promptInput.supportsSlashCommands",
   "promptInput.supportsFileSearch",
+  "promptInput.supportsSkillReferences",
   "optionalSurfaces.supportsProfiles",
   "optionalSurfaces.supportsVariants",
   "optionalSurfaces.supportsTodos",
@@ -627,6 +645,7 @@ export const runtimeCapabilityClasses = {
   "promptInput.supportedParts": "baseline",
   "promptInput.supportsSlashCommands": "optional_enhancement",
   "promptInput.supportsFileSearch": "optional_enhancement",
+  "promptInput.supportsSkillReferences": "optional_enhancement",
   "optionalSurfaces.supportsProfiles": "optional_enhancement",
   "optionalSurfaces.supportsVariants": "optional_enhancement",
   "optionalSurfaces.supportsTodos": "optional_enhancement",

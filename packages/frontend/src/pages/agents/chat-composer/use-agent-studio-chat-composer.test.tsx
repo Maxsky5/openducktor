@@ -713,7 +713,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Active session file search is unavailable until the session runtime is ready.",
+        "Active session runtime context is missing runtime kind.",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {

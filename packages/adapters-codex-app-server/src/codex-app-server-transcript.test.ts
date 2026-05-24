@@ -1,7 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { codexTurnItemsFromThreadRead, toHistoryMessage } from "./codex-app-server-transcript";
+import {
+  codexTurnItemsFromThreadRead,
+  toCodexUserInput,
+  toHistoryMessage,
+  userInputText,
+} from "./codex-app-server-transcript";
 
 describe("Codex App Server transcript parsing", () => {
+  test("maps skill message parts to structured Codex skill input", () => {
+    const skill = {
+      id: "/skills/review/SKILL.md",
+      name: "review",
+      path: "/skills/review/SKILL.md",
+    };
+
+    const input = toCodexUserInput({ kind: "skill_mention", skill });
+    expect(input).toEqual({ type: "skill", name: "review", path: "/skills/review/SKILL.md" });
+    expect(userInputText(input)).toBe("$review");
+  });
+
   test("preserves turn model and reasoning effort from thread reads", () => {
     const items = codexTurnItemsFromThreadRead({
       thread: {

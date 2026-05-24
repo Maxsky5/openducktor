@@ -130,12 +130,17 @@ const toSlashCommandExecutionRequest = (
     return null;
   }
   if (
-    normalizedParts.some((part) => part.kind === "file_reference" || part.kind === "attachment")
+    normalizedParts.some(
+      (part) =>
+        part.kind === "file_reference" ||
+        part.kind === "attachment" ||
+        part.kind === "skill_mention",
+    )
   ) {
     throw toOpenCodeRequestError(
       "run slash command",
       new Error(
-        "OpenCode slash commands do not support structured attachments or file references.",
+        "OpenCode slash commands do not support structured attachments, file references, or skill references.",
       ),
     );
   }

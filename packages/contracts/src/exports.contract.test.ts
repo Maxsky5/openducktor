@@ -385,6 +385,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "SetPullRequestInputSchema",
   "setSpecResultSchema",
   "SetSpecInputSchema",
+  "skillCatalogSchema",
+  "skillDescriptorSchema",
   "slashCommandCatalogSchema",
   "slashCommandDescriptorSchema",
   "slashCommandSourceSchema",

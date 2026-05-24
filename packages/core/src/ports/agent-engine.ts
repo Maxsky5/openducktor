@@ -14,6 +14,7 @@ import type {
   AgentRole,
   AgentSessionContext,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentStreamPart,
   AgentUserMessageDisplayPart,
@@ -85,6 +86,8 @@ export type LoadAgentSessionTodosInput = RuntimeWorkingDirectoryRef & {
 export type ListAgentModelsInput = RepoRuntimeRef;
 
 export type ListAgentSlashCommandsInput = RepoRuntimeRef;
+
+export type ListAgentSkillsInput = RuntimeWorkingDirectoryRef;
 
 export type SearchAgentFilesInput = RuntimeWorkingDirectoryRef & {
   query: string;
@@ -239,6 +242,7 @@ export interface AgentRuntimeRegistryPort {
 export interface AgentCatalogPort {
   listAvailableModels(input: ListAgentModelsInput): Promise<AgentModelCatalog>;
   listAvailableSlashCommands(input: ListAgentSlashCommandsInput): Promise<AgentSlashCommandCatalog>;
+  listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog>;
   searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
 }
 

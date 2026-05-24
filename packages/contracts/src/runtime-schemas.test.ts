@@ -1295,6 +1295,7 @@ describe("runtime schemas", () => {
           ],
           supportsSlashCommands: true,
           supportsFileSearch: true,
+          supportsSkillReferences: true,
         },
       }),
     });
@@ -1306,6 +1307,38 @@ describe("runtime schemas", () => {
     );
     expect(itemHistoryDescriptor.capabilities.promptInput.supportedParts).toContain(
       "runtime_specific",
+    );
+  });
+
+  test("runtime descriptor validates skill reference capability invariants", () => {
+    expectRuntimeDescriptorIssue(
+      {
+        ...CODEX_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          promptInput: {
+            ...CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+            supportedParts: ["text"],
+            supportsSkillReferences: true,
+          },
+        }),
+      },
+      "Runtime descriptors that support skill references must declare skill mention prompt parts.",
+    );
+
+    expectRuntimeDescriptorIssue(
+      {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: withRuntimeCapabilities({
+          promptInput: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.promptInput,
+            supportedParts: ["text", "skill_mention"],
+            supportsSlashCommands: false,
+            supportsFileSearch: false,
+            supportsSkillReferences: false,
+          },
+        }),
+      },
+      "Runtime descriptors that do not support skill references must not declare skill mention prompt parts.",
     );
   });
 

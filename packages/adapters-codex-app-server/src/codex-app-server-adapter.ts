@@ -9,12 +9,14 @@ import type {
   AgentSessionPresenceSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
   AgentUserMessagePart,
   AgentWorkspaceInspectionPort,
   AttachAgentSessionInput,
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
+  ListAgentSkillsInput,
   ListAgentSlashCommandsInput,
   ListLiveAgentSessionsInput,
   ListSessionPresenceInput,
@@ -106,6 +108,7 @@ import {
   toCatalog,
   toTransportModelSelection,
 } from "./model-catalog";
+import { toCodexSkillCatalog } from "./skill-catalog";
 import type {
   CodexAppServerAdapterOptions,
   CodexNotificationRecord,
@@ -279,6 +282,18 @@ export class CodexAppServerAdapter
 
   async listAvailableSlashCommands(_: ListAgentSlashCommandsInput) {
     return unsupported("listAvailableSlashCommands");
+  }
+
+  async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
+    const { client } = await this.runtimeClients.resolve(input, "list available skills", {
+      requireLive: true,
+    });
+    return toCodexSkillCatalog(
+      await client.skillsList({
+        cwd: input.workingDirectory,
+        forceReload: false,
+      }),
+    );
   }
 
   async searchFiles(

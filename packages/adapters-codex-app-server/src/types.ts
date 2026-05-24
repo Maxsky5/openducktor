@@ -13,6 +13,7 @@ import type {
   AgentSessionActivity,
   AgentSessionHistoryMessage,
   AgentSessionSummary,
+  AgentSkillCatalog,
   ForkAgentSessionInput,
   LiveAgentSessionStatus,
   ResumeAgentSessionInput,
@@ -82,6 +83,31 @@ export type CodexModelListResponse = {
   nextCursor: string | null;
 };
 
+export type CodexSkillRecord = {
+  name?: unknown;
+  path?: unknown;
+  scope?: unknown;
+  title?: unknown;
+  displayName?: unknown;
+  description?: unknown;
+  enabled?: unknown;
+};
+
+export type CodexSkillsListParams = {
+  cwd: string;
+  forceReload?: boolean;
+};
+
+export type CodexSkillCatalogEntry = {
+  cwd?: unknown;
+  skills: CodexSkillRecord[];
+};
+
+export type CodexSkillsListResponse = {
+  data?: unknown;
+  errors?: unknown;
+};
+
 export type CodexModelSelectionPayload = {
   model: string;
   effort: string;
@@ -95,6 +121,11 @@ export type CodexUserInput =
     }
   | {
       type: "mention";
+      name: string;
+      path: string;
+    }
+  | {
+      type: "skill";
       name: string;
       path: string;
     }
@@ -215,6 +246,7 @@ export type CodexSessionState = {
 export type CodexAppServerClient = {
   initialize(params: CodexInitializeParams): Promise<void>;
   modelList(): Promise<CodexModelListResponse>;
+  skillsList(params: CodexSkillsListParams): Promise<CodexSkillsListResponse>;
   threadStart(params: CodexThreadStartParams): Promise<CodexThreadStartResult>;
   threadResume(params: CodexThreadResumeParams): Promise<CodexThreadResumeResult>;
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
@@ -255,6 +287,7 @@ export type {
   AgentRole,
   AgentSessionHistoryMessage,
   AgentSessionSummary,
+  AgentSkillCatalog,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   RuntimeDescriptor,

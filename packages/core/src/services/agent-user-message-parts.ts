@@ -12,6 +12,9 @@ const serializeAgentUserMessagePart = (part: AgentUserMessagePart): string | nul
   if (part.kind === "file_reference") {
     return `@${part.file.path}`;
   }
+  if (part.kind === "skill_mention") {
+    return `$${part.skill.name}`;
+  }
   return null;
 };
 

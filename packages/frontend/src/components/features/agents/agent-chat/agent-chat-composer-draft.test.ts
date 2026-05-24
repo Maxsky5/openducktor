@@ -10,6 +10,7 @@ import {
   draftToSerializedText,
   normalizeComposerDraft,
   readFileTriggerMatchForDraft,
+  readSkillTriggerMatchForDraft,
   readSlashTriggerMatchForDraft,
 } from "./agent-chat-composer-draft";
 
@@ -27,7 +28,40 @@ const FILE = {
   kind: "code" as const,
 };
 
+const SKILL = {
+  id: "/skills/review/SKILL.md",
+  name: "review",
+  path: "/skills/review/SKILL.md",
+  title: "Review",
+};
+
 describe("applyComposerDraftEdit", () => {
+  test("inserts skill references in the middle of text and serializes them", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("use $rev now", "text-1")],
+      attachments: [],
+    };
+
+    const result = applyComposerDraftEdit(draft, {
+      type: "insert_skill_reference",
+      textSegmentId: "text-1",
+      rangeStart: 4,
+      rangeEnd: 8,
+      skill: SKILL,
+    });
+
+    expect(result?.draft.segments).toEqual([
+      expect.objectContaining({ id: "text-1", kind: "text", text: "use " }),
+      expect.objectContaining({ kind: "skill_mention", skill: SKILL }),
+      expect.objectContaining({ kind: "text", text: " now" }),
+    ]);
+    expect(result?.focusTarget).toEqual({
+      segmentId: expect.any(String),
+      offset: 0,
+    });
+    expect(draftToSerializedText(result?.draft ?? draft)).toBe("use $review now");
+  });
+
   test("inserts a newline into a text segment and returns a focus target", () => {
     const draft: AgentChatComposerDraft = {
       segments: [createTextSegment("hello world", "text-1")],
@@ -135,6 +169,20 @@ describe("applyComposerDraftEdit", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  test("exposes skill autocomplete from a dollar trigger in text", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("please $rev now", "text-1")],
+      attachments: [],
+    };
+
+    expect(readSkillTriggerMatchForDraft(draft, "text-1", 11)).toEqual({
+      query: "rev",
+      rangeStart: 7,
+      rangeEnd: 11,
+    });
+    expect(readSkillTriggerMatchForDraft(draft, "text-1", 15)).toBeNull();
   });
 
   test("replaces an @query range with a file reference chip", () => {

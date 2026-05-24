@@ -4,6 +4,8 @@ import type {
   AgentToolName as ContractsAgentToolName,
   KnownGitProviderId as ContractsKnownGitProviderId,
   RuntimeSubagentExecutionMode as ContractsRuntimeSubagentExecutionMode,
+  SkillCatalog as ContractsSkillCatalog,
+  SkillDescriptor as ContractsSkillDescriptor,
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
   RepoRuntimeRef,
@@ -62,6 +64,8 @@ export type AgentModelCatalog = {
 
 export type AgentRuntimeCapabilities = RuntimeCapabilities;
 export type AgentRuntimeDefinition = RuntimeDescriptor;
+export type AgentSkillReference = ContractsSkillDescriptor;
+export type AgentSkillCatalog = ContractsSkillCatalog;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
 export type AgentSlashCommandCatalog = ContractsSlashCommandCatalog;
 export type AgentSubagentExecutionMode = ContractsRuntimeSubagentExecutionMode;
@@ -124,6 +128,10 @@ export type AgentUserMessagePart =
       file: AgentFileReference;
     }
   | {
+      kind: "skill_mention";
+      skill: AgentSkillReference;
+    }
+  | {
       kind: "attachment";
       attachment: AgentAttachmentReference;
     };
@@ -143,6 +151,11 @@ export type AgentUserMessageDisplayPart =
   | {
       kind: "file_reference";
       file: AgentFileReference;
+      sourceText?: AgentUserMessageSourceText;
+    }
+  | {
+      kind: "skill_mention";
+      skill: AgentSkillReference;
       sourceText?: AgentUserMessageSourceText;
     }
   | {

@@ -872,6 +872,12 @@ export const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => 
   if (part.kind === "file_reference") {
     return { type: "mention", name: part.file.name, path: part.file.path };
   }
+  if (part.kind === "skill_mention") {
+    if (part.skill.name.trim().length === 0 || part.skill.path.trim().length === 0) {
+      throw new Error("Codex skill references require a non-empty name and path.");
+    }
+    return { type: "skill", name: part.skill.name, path: part.skill.path };
+  }
   if (part.kind === "attachment" && part.attachment.kind === "image") {
     return { type: "localImage", path: part.attachment.path };
   }
@@ -889,6 +895,9 @@ export const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDispl
   }
   if (part.kind === "file_reference") {
     return { kind: "file_reference", file: part.file };
+  }
+  if (part.kind === "skill_mention") {
+    return { kind: "skill_mention", skill: part.skill };
   }
   if (part.kind === "attachment") {
     return { kind: "attachment", attachment: part.attachment };
@@ -908,6 +917,9 @@ export const userInputText = (input: CodexUserInput): string => {
   }
   if (input.type === "mention") {
     return `@${input.name}`;
+  }
+  if (input.type === "skill") {
+    return `$${input.name}`;
   }
   return input.path;
 };

@@ -4,6 +4,8 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSkillCatalog,
+  AgentSkillReference,
   AgentSlashCommand,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
@@ -86,10 +88,15 @@ export type AgentChatComposerModel = {
   supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
+  supportsSkillReferences?: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog | null;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  skillCatalog?: AgentSkillCatalog | null;
+  skills?: AgentSkillReference[];
+  skillsError?: string | null;
+  isSkillsLoading?: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];

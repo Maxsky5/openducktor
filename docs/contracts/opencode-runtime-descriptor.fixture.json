@@ -134,7 +134,8 @@
         "folder_reference"
       ],
       "supportsSlashCommands": true,
-      "supportsFileSearch": true
+      "supportsFileSearch": true,
+      "supportsSkillReferences": false
     },
     "optionalSurfaces": {
       "supportsProfiles": true,

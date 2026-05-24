@@ -208,6 +208,28 @@ export type CodexAppServerThreadTurnsListResponse = {
   nextCursor: string | null;
 };
 
+export type CodexAppServerSkillRecord = {
+  name: string;
+  path: string;
+  scope?: string | null;
+  title?: string | null;
+  displayName?: string | null;
+  description?: string | null;
+  enabled?: boolean | null;
+};
+export type CodexAppServerSkillCatalogEntry = {
+  cwd: string;
+  skills: CodexAppServerSkillRecord[];
+};
+export type CodexAppServerSkillsListParams = {
+  cwd: string;
+  forceReload?: boolean | null;
+};
+export type CodexAppServerSkillsListResponse = {
+  data: CodexAppServerSkillCatalogEntry[];
+  errors?: CodexAppServerJsonValue[] | null;
+};
+
 export type CodexAppServerUserInput =
   | { detail?: string; path: string; type: "localImage" }
   | { detail?: string; type: "image"; url: string }
@@ -467,6 +489,10 @@ export type CodexAppServerClientRequestMap = {
   "thread/turns/list": {
     params: CodexAppServerThreadTurnsListParams;
     result: CodexAppServerThreadTurnsListResponse;
+  };
+  "skills/list": {
+    params: CodexAppServerSkillsListParams;
+    result: CodexAppServerSkillsListResponse;
   };
   "turn/start": {
     params: CodexAppServerTurnStartParams;

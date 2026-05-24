@@ -150,10 +150,15 @@ type AgentChatComposerConfig = {
   supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
   slashCommandCatalog: AgentChatComposerModel["slashCommandCatalog"];
   slashCommands: AgentChatComposerModel["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  skillCatalog: AgentChatComposerModel["skillCatalog"];
+  skills: AgentChatComposerModel["skills"];
+  skillsError: string | null;
+  isSkillsLoading: boolean;
   searchFiles: (query: string) => Promise<import("@openducktor/core").AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -369,10 +374,15 @@ export function useAgentChatSurfaceModel({
   const composerSupportsProfiles = composer?.supportsProfiles ?? true;
   const composerSupportsSlashCommands = composer?.supportsSlashCommands ?? false;
   const composerSupportsFileSearch = composer?.supportsFileSearch ?? false;
+  const composerSupportsSkillReferences = composer?.supportsSkillReferences ?? false;
   const composerSlashCommandCatalog = composer?.slashCommandCatalog ?? null;
   const composerSlashCommands = composer?.slashCommands ?? [];
   const composerSlashCommandsError = composer?.slashCommandsError ?? null;
   const composerIsSlashCommandsLoading = composer?.isSlashCommandsLoading ?? false;
+  const composerSkillCatalog = composer?.skillCatalog ?? null;
+  const composerSkills = composer?.skills ?? [];
+  const composerSkillsError = composer?.skillsError ?? null;
+  const composerIsSkillsLoading = composer?.isSkillsLoading ?? false;
   const composerSearchFiles = composer?.searchFiles ?? missingInteractiveComposerFileSearch;
   const composerAgentOptions = composer?.agentOptions ?? [];
   const composerModelOptions = composer?.modelOptions ?? [];
@@ -489,10 +499,15 @@ export function useAgentChatSurfaceModel({
       supportsProfiles: composerSupportsProfiles,
       supportsSlashCommands: composerSupportsSlashCommands,
       supportsFileSearch: composerSupportsFileSearch,
+      supportsSkillReferences: composerSupportsSkillReferences,
       slashCommandCatalog: composerSlashCommandCatalog,
       slashCommands: composerSlashCommands,
       slashCommandsError: composerSlashCommandsError,
       isSlashCommandsLoading: composerIsSlashCommandsLoading,
+      skillCatalog: composerSkillCatalog,
+      skills: composerSkills,
+      skillsError: composerSkillsError,
+      isSkillsLoading: composerIsSkillsLoading,
       searchFiles: composerSearchFiles,
       agentOptions: composerAgentOptions,
       modelOptions: composerModelOptions,
@@ -521,6 +536,7 @@ export function useAgentChatSurfaceModel({
     composerDraftStateKey,
     composerIsReadOnly,
     composerIsSelectionCatalogLoading,
+    composerIsSkillsLoading,
     composerSupportsProfiles,
     composerIsSending,
     composerIsSessionWorking,
@@ -537,10 +553,14 @@ export function useAgentChatSurfaceModel({
     composerSearchFiles,
     composerSelectedModelDescriptor,
     composerSelectedModelSelection,
+    composerSkillCatalog,
+    composerSkills,
+    composerSkillsError,
     composerSlashCommandCatalog,
     composerSlashCommands,
     composerSlashCommandsError,
     composerSupportsFileSearch,
+    composerSupportsSkillReferences,
     composerSupportsSlashCommands,
     composerTaskId,
     composerVariantOptions,

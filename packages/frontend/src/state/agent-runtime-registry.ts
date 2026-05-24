@@ -16,9 +16,12 @@ import type {
 } from "@openducktor/core";
 import { DEFAULT_RUNTIME_KIND, validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import { subscribeCodexAppServerEvents } from "@/lib/host-client";
+import { appQueryClient } from "@/lib/query-client";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { host } from "./operations/shared/host";
 import type { RuntimeCatalogAdapter } from "./operations/shared/runtime-catalog";
+import { agentSessionRuntimeQueryKeys } from "./queries/agent-session-runtime";
+import { runtimeCatalogQueryKeys } from "./queries/runtime-catalog";
 
 type RegisteredRuntimeAdapter = AgentCatalogPort &
   AgentSessionPort &
@@ -88,6 +91,27 @@ const hostRepoRuntimeResolver: HostRepoRuntimeResolver = {
 
 export { DEFAULT_RUNTIME_KIND };
 
+const isSkillsChangedNotification = (message: unknown): boolean => {
+  if (typeof message !== "object" || message === null || Array.isArray(message)) {
+    return false;
+  }
+  return (message as { method?: unknown }).method === "skills/changed";
+};
+
+const isSkillCatalogQueryKey = (queryKey: readonly unknown[]): boolean => {
+  const [scope, resource] = queryKey;
+  return (
+    (scope === runtimeCatalogQueryKeys.all[0] && resource === "skills") ||
+    (scope === agentSessionRuntimeQueryKeys.all[0] && resource === "skills")
+  );
+};
+
+const invalidateSkillCatalogQueries = (): void => {
+  void appQueryClient.invalidateQueries({
+    predicate: (query) => isSkillCatalogQueryKey(query.queryKey),
+  });
+};
+
 export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
   const codexTransportFactory: CodexJsonRpcTransportFactory = (runtimeId) => ({
     request: async <Response = unknown>(request: CodexJsonRpcRequest) =>
@@ -120,6 +144,9 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
         }
         if (event.kind !== "notification" && event.kind !== "server_request") {
           return;
+        }
+        if (event.kind === "notification" && isSkillsChangedNotification(event.message)) {
+          invalidateSkillCatalogQueries();
         }
         listener({ runtimeId, kind: event.kind, message: event.message });
       });
@@ -182,6 +209,7 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     this.listRuntimeDefinitions = this.listRuntimeDefinitions.bind(this);
     this.listAvailableModels = this.listAvailableModels.bind(this);
     this.listAvailableSlashCommands = this.listAvailableSlashCommands.bind(this);
+    this.listAvailableSkills = this.listAvailableSkills.bind(this);
     this.searchFiles = this.searchFiles.bind(this);
     this.listLiveAgentSessions = this.listLiveAgentSessions.bind(this);
     this.listSessionPresence = this.listSessionPresence.bind(this);
@@ -281,6 +309,12 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     return this.getAdapter(
       this.requireInputRuntimeKind(input.runtimeKind, "slash command catalog"),
     ).listAvailableSlashCommands(input);
+  }
+
+  listAvailableSkills(input: Parameters<AgentEnginePort["listAvailableSkills"]>[0]) {
+    return this.getAdapter(
+      this.requireInputRuntimeKind(input.runtimeKind, "skill catalog"),
+    ).listAvailableSkills(input);
   }
 
   searchFiles(input: Parameters<AgentEnginePort["searchFiles"]>[0]) {

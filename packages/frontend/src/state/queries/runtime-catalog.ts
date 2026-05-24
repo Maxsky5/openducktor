@@ -2,19 +2,29 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
-const runtimeCatalogQueryKeys = {
+export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
   repo: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, repoPath, runtimeKind] as const,
   repoSlashCommands: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, "slash-commands", repoPath, runtimeKind] as const,
+  repoSkills: (repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string) =>
+    [
+      ...runtimeCatalogQueryKeys.all,
+      "skills",
+      normalizeWorkingDirectory(repoPath),
+      runtimeKind,
+      normalizeWorkingDirectory(workingDirectory),
+    ] as const,
   repoFileSearch: (repoPath: string, runtimeKind: RuntimeKind, query: string) =>
     [...runtimeCatalogQueryKeys.all, "file-search", repoPath, runtimeKind, query] as const,
 };
@@ -45,6 +55,23 @@ export const repoRuntimeSlashCommandsQueryOptions = (
     queryKey: runtimeCatalogQueryKeys.repoSlashCommands(repoPath, runtimeKind),
     queryFn: (): Promise<AgentSlashCommandCatalog> =>
       loadRepoRuntimeSlashCommands(repoPath, runtimeKind),
+    staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
+  });
+
+export const repoRuntimeSkillsQueryOptions = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+  workingDirectory: string,
+  loadRepoRuntimeSkills: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>,
+) =>
+  queryOptions({
+    queryKey: runtimeCatalogQueryKeys.repoSkills(repoPath, runtimeKind, workingDirectory),
+    queryFn: (): Promise<AgentSkillCatalog> =>
+      loadRepoRuntimeSkills(repoPath, runtimeKind, workingDirectory),
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 
