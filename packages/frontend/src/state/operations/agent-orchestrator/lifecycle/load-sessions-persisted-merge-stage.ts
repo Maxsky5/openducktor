@@ -80,6 +80,49 @@ const toRequestedHistoryRecordFromSession = (
   };
 };
 
+const mergePersistedSessionRecords = ({
+  current,
+  persistedRecords,
+  intent,
+}: {
+  current: Record<string, AgentSessionState>;
+  persistedRecords: AgentSessionRecord[];
+  intent: PersistedSessionMergeStageInput["intent"];
+}): Record<string, AgentSessionState> => {
+  const next = { ...current };
+  for (const record of persistedRecords) {
+    const nextPurpose = resolveAgentSessionPurposeForLoad({
+      requestedSessionId: intent.requestedSessionId,
+      externalSessionId: record.externalSessionId,
+      shouldHydrateRequestedSession: intent.shouldHydrateRequestedSession,
+      mode: intent.mode,
+    });
+    const existingSession = next[record.externalSessionId];
+    const shouldPreserveTranscriptSession =
+      intent.mode !== "requested_history" && intent.mode !== "recover_runtime_attachment";
+    if (existingSession) {
+      next[record.externalSessionId] = mergePersistedSessionRecord(
+        existingSession,
+        record,
+        intent.taskId,
+        intent.repoPath,
+        existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
+        nextPurpose,
+        shouldPreserveTranscriptSession,
+      );
+      continue;
+    }
+    next[record.externalSessionId] = {
+      ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
+      purpose: nextPurpose,
+      pendingApprovals: [],
+      pendingQuestions: [],
+      promptOverrides: EMPTY_PROMPT_OVERRIDES,
+    };
+  }
+  return next;
+};
+
 export const preparePersistedSessionMergeStage = async ({
   intent,
   options,
@@ -121,44 +164,14 @@ export const preparePersistedSessionMergeStage = async ({
     return repoPromptOverridesPromise;
   };
 
+  let sessionsForHydration = sessionsRef.current;
   if (!shouldSkipPersistedSessionReload) {
-    setSessionsById((current) => {
-      if (isStaleRepoOperation()) {
-        return current;
-      }
-      const next = { ...current };
-      for (const record of persistedRecords) {
-        const nextPurpose = resolveAgentSessionPurposeForLoad({
-          requestedSessionId: intent.requestedSessionId,
-          externalSessionId: record.externalSessionId,
-          shouldHydrateRequestedSession: intent.shouldHydrateRequestedSession,
-          mode: intent.mode,
-        });
-        const existingSession = next[record.externalSessionId];
-        const shouldPreserveTranscriptSession =
-          intent.mode !== "requested_history" && intent.mode !== "recover_runtime_attachment";
-        if (existingSession) {
-          next[record.externalSessionId] = mergePersistedSessionRecord(
-            existingSession,
-            record,
-            intent.taskId,
-            intent.repoPath,
-            existingSession.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
-            nextPurpose,
-            shouldPreserveTranscriptSession,
-          );
-          continue;
-        }
-        next[record.externalSessionId] = {
-          ...fromPersistedSessionRecord(record, intent.taskId, intent.repoPath),
-          purpose: nextPurpose,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          promptOverrides: EMPTY_PROMPT_OVERRIDES,
-        };
-      }
-      return next;
+    sessionsForHydration = mergePersistedSessionRecords({
+      current: sessionsForHydration,
+      persistedRecords,
+      intent,
     });
+    setSessionsById(sessionsForHydration);
   }
 
   if (isStaleRepoOperation()) {
@@ -176,7 +189,7 @@ export const preparePersistedSessionMergeStage = async ({
       ? persistedRecords.filter((record) => record.externalSessionId === intent.requestedSessionId)
       : persistedRecords;
   const recordsToHydrate = recordsToHydrateSource.map((record) => {
-    const existingSession = sessionsRef.current[record.externalSessionId];
+    const existingSession = sessionsForHydration[record.externalSessionId];
     const existingWorkingDirectory = existingSession?.workingDirectory.trim() ?? "";
     if (
       existingSession &&

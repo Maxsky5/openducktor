@@ -58,6 +58,56 @@ const createSuccessfulHydrationRuntimePlanner = (
 });
 
 describe("load-sessions-stages", () => {
+  test("skips hydration work when there are no records to hydrate", async () => {
+    const initialSession = createSession({ historyHydrationState: "not_requested" });
+    const stateHarness = createStateHarness({ "external-1": initialSession });
+    let setSessionsCalls = 0;
+    let updateSessionCalls = 0;
+    let promptLoads = 0;
+
+    await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter({
+        loadSessionHistory: async () => {
+          throw new Error("history should not load without records");
+        },
+      }),
+      setSessionsById: (updater) => {
+        setSessionsCalls += 1;
+        stateHarness.setSessionsById(updater);
+      },
+      updateSession: (externalSessionId, updater) => {
+        updateSessionCalls += 1;
+        stateHarness.updateSession(externalSessionId, updater);
+      },
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [],
+      historyHydrationSessionIds: new Set(["external-1"]),
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => {
+          throw new Error("runtime should not resolve without records");
+        },
+        readSessionPresence: async () => {
+          throw new Error("presence should not load without records");
+        },
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => {
+          promptLoads += 1;
+          return [];
+        },
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(setSessionsCalls).toBe(0);
+    expect(updateSessionCalls).toBe(0);
+    expect(promptLoads).toBe(0);
+    expect(stateHarness.getState()["external-1"]).toBe(initialSession);
+  });
+
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
     const stateHarness = createStateHarness({ "external-1": createSession() });
     let promptLoads = 0;
@@ -285,6 +335,36 @@ describe("load-sessions-stages", () => {
     expect(session?.draftAssistantMessageId).toBe("assistant-draft");
     expect(session?.draftReasoningText).toBe("partial reasoning");
     expect(session?.draftReasoningMessageId).toBe("reasoning-draft");
+    expect(session?.historyHydrationState).toBe("hydrated");
+  });
+
+  test("preserves requested-history starting status when history hydration completes", async () => {
+    const stateHarness = createStateHarness({
+      "external-1": createSession({
+        status: "starting",
+      }),
+    });
+
+    await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter({
+        loadSessionHistory: async () => createCompletedAssistantHistory(),
+      }),
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["external-1"]),
+      runtimePlanner: createSuccessfulHydrationRuntimePlanner("idle"),
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    const session = stateHarness.getState()["external-1"];
+    expect(session?.status).toBe("starting");
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 

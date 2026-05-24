@@ -156,6 +156,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           workingDirectory: "/repo/.worktrees/task-24",
           hasActiveSession: true,
         },
+        worktreeRecoverySignal: 5,
       }),
     );
 
@@ -170,33 +171,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
         shouldBlockDiffLoading: false,
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
-      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
-        worktreePath: "/repo/.worktrees/task-24",
-        shouldBlockDiffLoading: false,
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("keeps diff and status hydration scoped to the direct build worktree", async () => {
-    const harness = createHookHarness(
-      createBaseArgs({
-        session: {
-          role: "build",
-          status: "running",
-          workingDirectory: "/repo/.worktrees/task-24",
-          hasActiveSession: true,
-        },
-        worktreeRecoverySignal: 5,
-      }),
-    );
-
-    try {
-      await harness.mount();
-
-      expect(taskWorktreeGetMock).not.toHaveBeenCalled();
-      expect(harness.getLatest().diffData.worktreePath).toBe("/repo/.worktrees/task-24");
       expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
         repoPath: "/repo",
         worktreePath: "/repo/.worktrees/task-24",

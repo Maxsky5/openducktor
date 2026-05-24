@@ -4,13 +4,11 @@ import {
   type AgentSessionState,
   createAdapter,
   createLoadAgentSessions,
-  createPresence,
   createStateHarness,
   createTaskFixture,
   createTestQueryClient,
   getSession,
   type LegacyRunSummary,
-  type ListSessionPresenceInput,
   type LoadSessionHistoryInput,
   OPENCODE_RUNTIME_DESCRIPTOR,
   persistedSessionRecord,
@@ -533,7 +531,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
     expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
   });
 
-  test("hydrates requested history, todos, and status from the persisted session runtime", async () => {
+  test("hydrates requested history and todos from the persisted session runtime without passive presence", async () => {
     const stateHarness = createStateHarness({
       "external-build-worktree": {
         externalSessionId: "external-build-worktree",
@@ -564,7 +562,6 @@ describe("agent-orchestrator load-session runtime policy", () => {
     });
     const historyInputs: LoadSessionHistoryInput[] = [];
     const todosInputs: LoadSessionTodosInput[] = [];
-    const statusInputs: ListSessionPresenceInput[] = [];
     const runtimeEnsureCalls: string[] = [];
 
     const loadAgentSessions = createLoadAgentSessions({
@@ -583,18 +580,11 @@ describe("agent-orchestrator load-session runtime policy", () => {
           todosInputs.push(input);
           return [];
         },
-        listSessionPresence: async (input) => {
-          statusInputs.push(input);
-          return [
-            createPresence("external-build-worktree", "/tmp/repo/worktrees/task-1", {
-              status: { type: "idle" },
-            }),
-          ];
+        listSessionPresence: async () => {
+          throw new Error("requested-history hydration must not read passive liveness");
         },
-        readSessionPresence: async (input) => {
-          return createPresence(input.externalSessionId, input.workingDirectory, {
-            status: { type: "idle" },
-          });
+        readSessionPresence: async () => {
+          throw new Error("requested-history hydration must not read direct liveness");
         },
       }),
       repoEpochRef: { current: 2 },
@@ -660,10 +650,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
     expect(todosInputs.map((input) => input.workingDirectory)).toEqual([
       "/tmp/repo/worktrees/task-1",
     ]);
-    expect(statusInputs.map((input) => input.directories)).toEqual([
-      ["/tmp/repo/worktrees/task-1"],
-    ]);
-    expect(getSession(stateHarness.getState(), "external-build-worktree").status).toBe("idle");
+    expect(getSession(stateHarness.getState(), "external-build-worktree").status).toBe("running");
   });
 
   test("hydrates build worktree sessions through the shared repo runtime", async () => {
