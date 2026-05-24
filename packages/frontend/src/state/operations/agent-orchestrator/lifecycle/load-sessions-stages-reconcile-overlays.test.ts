@@ -42,7 +42,9 @@ const createCompletedAssistantHistory = (reason = "stop") => [
   },
 ];
 
-const createSuccessfulHydrationRuntimePlanner = (): HydrationRuntimePlanner => ({
+const createSuccessfulHydrationRuntimePlanner = (
+  status: "busy" | "idle" = "busy",
+): HydrationRuntimePlanner => ({
   repoPath: "/tmp/repo",
   resolveHydrationRuntime: async () => ({
     ok: true,
@@ -51,7 +53,7 @@ const createSuccessfulHydrationRuntimePlanner = (): HydrationRuntimePlanner => (
   }),
   readSessionPresence: async () =>
     createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
-      status: { type: "idle" },
+      status: { type: status },
     }),
 });
 
@@ -170,7 +172,7 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["external-1"]?.status).toBe("starting");
   });
 
-  test("settles pending outbound sends when reconcile sees idle runtime presence", async () => {
+  test("keeps pending outbound sends when adapter reports the session is still active", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -200,7 +202,7 @@ describe("load-sessions-stages", () => {
         }),
         readSessionPresence: async () =>
           createSessionPresenceSnapshot("external-1", "/tmp/repo/worktree", {
-            status: { type: "idle" },
+            status: { type: "busy" },
           }),
       },
       promptAssembler: {
@@ -211,15 +213,15 @@ describe("load-sessions-stages", () => {
     });
 
     const session = stateHarness.getState()["external-1"];
-    expect(session?.status).toBe("idle");
-    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
-    expect(session?.draftAssistantText).toBe("");
-    expect(session?.draftAssistantMessageId).toBeNull();
-    expect(session?.draftReasoningText).toBe("");
-    expect(session?.draftReasoningMessageId).toBeNull();
+    expect(session?.status).toBe("running");
+    expect(session?.pendingUserMessageStartedAt).toBe(123);
+    expect(session?.draftAssistantText).toBe("partial assistant");
+    expect(session?.draftAssistantMessageId).toBe("assistant-draft");
+    expect(session?.draftReasoningText).toBe("partial reasoning");
+    expect(session?.draftReasoningMessageId).toBe("reasoning-draft");
   });
 
-  test("settles pending outbound sends when requested-history runtime presence is idle", async () => {
+  test("settles pending outbound sends when adapter reports idle presence", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -242,7 +244,7 @@ describe("load-sessions-stages", () => {
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
-      runtimePlanner: createSuccessfulHydrationRuntimePlanner(),
+      runtimePlanner: createSuccessfulHydrationRuntimePlanner("idle"),
       promptAssembler: {
         buildHydrationPreludeMessages: async () => [],
         buildHydrationSystemPrompt: async () => "",
@@ -340,7 +342,7 @@ describe("load-sessions-stages", () => {
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 
-  test("settles pending outbound sends from idle presence even when hydrated history has no stop finish", async () => {
+  test("settles pending outbound sends from idle presence without a stop finish", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -359,7 +361,7 @@ describe("load-sessions-stages", () => {
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
-      runtimePlanner: createSuccessfulHydrationRuntimePlanner(),
+      runtimePlanner: createSuccessfulHydrationRuntimePlanner("idle"),
       promptAssembler: {
         buildHydrationPreludeMessages: async () => [],
         buildHydrationSystemPrompt: async () => "",

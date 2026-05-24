@@ -446,6 +446,61 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("does not mark session history loading during background hydration when transcript can render", async () => {
+    const cachedSession = createSession("session-hydrating", "external-hydrating", {
+      messages: [
+        {
+          id: "assistant-cached",
+          role: "assistant",
+          content: "Cached transcript",
+          timestamp: "2026-02-22T08:00:05.000Z",
+        },
+      ],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          activeSession: cachedSession,
+          sessionsForTask: [cachedSession],
+          isSessionHistoryHydrated: true,
+          isSessionHistoryHydrating: true,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const thread = harness.getLatest().agentChatModel.thread;
+    expect(thread.isSessionHistoryLoading).toBe(false);
+    const html = renderToStaticMarkup(createElement(AgentChatThread, { model: thread }));
+    expect(html).toContain("Cached transcript");
+    expect(html).not.toContain("Loading session");
+
+    await harness.unmount();
+  });
+
+  test("marks session history loading while hydration blocks transcript rendering", async () => {
+    const pendingSession = createSession("session-pending", "external-pending", {
+      messages: [],
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          activeSession: pendingSession,
+          sessionsForTask: [pendingSession],
+          isSessionHistoryHydrated: false,
+          isSessionHistoryHydrating: true,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    expect(harness.getLatest().agentChatModel.thread.isSessionHistoryLoading).toBe(true);
+
+    await harness.unmount();
+  });
+
   test("selects role-specific sidebar document", async () => {
     const specSession = createSession("session-spec", "external-spec", { role: "spec" });
     const harness = createHookHarness(

@@ -29,17 +29,32 @@ const sessionRecordFixture: AgentSessionRecord = {
 const toSessionPresenceSnapshot = (
   snapshot: Parameters<typeof toAgentSessionPresenceSnapshotFromLiveSnapshot>[0]["snapshot"],
   runtimeResolution: Extract<ResolvedHydrationRuntime, { ok: true }> = localHttpRuntimeResolution,
-) =>
-  toAgentSessionPresenceSnapshotFromLiveSnapshot({
+) => {
+  const ref = {
+    repoPath: "/tmp/repo",
+    runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
+    externalSessionId: sessionRecordFixture.externalSessionId,
+    workingDirectory: runtimeResolution.workingDirectory,
+  };
+  const runtimeId = runtimeResolution === stdioRuntimeResolution ? "runtime-stdio" : "runtime-1";
+  if (!snapshot) {
+    return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref,
+      runtimeId,
+      snapshot: null,
+    });
+  }
+  return toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref: {
       repoPath: "/tmp/repo",
       runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
       externalSessionId: sessionRecordFixture.externalSessionId,
       workingDirectory: runtimeResolution.workingDirectory,
     },
-    runtimeId: runtimeResolution === stdioRuntimeResolution ? "runtime-stdio" : "runtime-1",
+    runtimeId,
     snapshot,
   });
+};
 
 const createSessionStateFixture = (): AgentSessionState => ({
   externalSessionId: "external-1",

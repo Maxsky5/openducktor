@@ -18,6 +18,20 @@ type TestAdapterInternals = {
   clearPendingSubagentInputEvent: (externalSessionId: string, requestId: string) => void;
 };
 
+const createDeferred = <T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+} => {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (error: unknown) => void = () => undefined;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+};
+
 const defaultRepoPath = "/repo";
 const defaultWorkingDirectory = "/repo";
 
@@ -817,6 +831,276 @@ describe("opencode-sdk-adapter", () => {
             ],
           },
         ],
+      },
+    ]);
+  });
+
+  test("readSessionPresence keeps a newly attached local session active through idle runtime status", async () => {
+    const mock = makeMockClient();
+    const idleStatusClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return {
+            data: [
+              {
+                id: "external-session-1",
+                projectID: "project-1",
+                directory: defaultWorkingDirectory,
+                title: "BUILD task-1",
+                time: {
+                  created: Date.parse("2026-02-22T12:00:00.000Z"),
+                  updated: Date.parse("2026-02-22T12:00:00.000Z"),
+                },
+              },
+            ],
+            error: undefined,
+          };
+        },
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return {
+            data: {
+              "external-session-1": { type: "idle" },
+            },
+            error: undefined,
+          };
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      question: {
+        ...mock.client.question,
+        list: async (input?: unknown) => {
+          mock.questionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => idleStatusClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const snapshot = await adapter.readSessionPresence({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      externalSessionId: "external-session-1",
+    });
+
+    expect(snapshot).toMatchObject({
+      presence: "runtime",
+      classification: "running",
+      agentSessionStatus: "running",
+      status: { type: "busy" },
+    });
+    expect(mock.listCalls).toEqual([undefined]);
+    expect(mock.statusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
+  });
+
+  test("sendUserMessage keeps presence active while resolving workflow tools", async () => {
+    const mock = makeMockClient();
+    const mcpStatusDeferred = createDeferred<{
+      data: { openducktor: { status: string } };
+      error: undefined;
+    }>();
+    const mcpStatusCalls: unknown[] = [];
+    const toolIdCalls: unknown[] = [];
+    const promptAsyncCalls: unknown[] = [];
+    const activeDuringToolSelectionClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        status: async (input?: unknown) => {
+          mock.statusCalls.push(input);
+          return {
+            data: {
+              "external-session-1": { type: "idle" },
+            },
+            error: undefined,
+          };
+        },
+        promptAsync: async (input: unknown) => {
+          promptAsyncCalls.push(input);
+          return { data: undefined, error: undefined };
+        },
+      },
+      permission: {
+        ...mock.client.permission,
+        list: async (input?: unknown) => {
+          mock.permissionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      question: {
+        ...mock.client.question,
+        list: async (input?: unknown) => {
+          mock.questionListCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+      mcp: {
+        status: async (input: unknown) => {
+          mcpStatusCalls.push(input);
+          return mcpStatusDeferred.promise;
+        },
+        connect: async () => ({ data: true, error: undefined }),
+      },
+      tool: {
+        ids: async (input: unknown) => {
+          toolIdCalls.push(input);
+          return { data: ["odt_read_task"], error: undefined };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => activeDuringToolSelectionClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const sendPromise = adapter.sendUserMessage({
+      externalSessionId: "external-session-1",
+      parts: [{ kind: "text", text: "Continue" }],
+    });
+
+    expect(mcpStatusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
+
+    const snapshot = await adapter.readSessionPresence({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      externalSessionId: "external-session-1",
+    });
+
+    expect(snapshot).toMatchObject({
+      presence: "runtime",
+      classification: "running",
+      agentSessionStatus: "running",
+      status: { type: "busy" },
+    });
+
+    mcpStatusDeferred.resolve({
+      data: { openducktor: { status: "connected" } },
+      error: undefined,
+    });
+    await sendPromise;
+
+    expect(toolIdCalls).toEqual([{ directory: defaultWorkingDirectory }]);
+    expect(promptAsyncCalls).toHaveLength(1);
+  });
+
+  test("readSessionPresence does not synthesize local presence for another working directory", async () => {
+    const mock = makeMockClient();
+    const emptyListClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => emptyListClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const snapshot = await adapter.readSessionPresence({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: "/other",
+      externalSessionId: "external-session-1",
+    });
+
+    expect(snapshot).toMatchObject({
+      presence: "stale",
+      classification: "stale",
+      ref: {
+        externalSessionId: "external-session-1",
+        workingDirectory: "/other",
+      },
+    });
+  });
+
+  test("listSessionPresence includes attached local sessions before runtime list catches up", async () => {
+    const mock = makeMockClient();
+    const emptyListClient = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return { data: [], error: undefined };
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => emptyListClient,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.startSession({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "system",
+    });
+
+    const snapshots = await adapter.listSessionPresence({
+      repoPath: defaultRepoPath,
+      runtimeKind: "opencode",
+      directories: [defaultWorkingDirectory],
+    });
+
+    expect(snapshots).toMatchObject([
+      {
+        presence: "runtime",
+        classification: "running",
+        ref: {
+          externalSessionId: "external-session-1",
+          workingDirectory: defaultWorkingDirectory,
+        },
+        status: { type: "busy" },
+        pendingApprovals: [],
+        pendingQuestions: [],
       },
     ]);
   });

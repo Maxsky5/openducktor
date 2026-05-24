@@ -143,6 +143,71 @@ describe("session-presence", () => {
     expect(applied.draftReasoningMessageId).toBeNull();
   });
 
+  test("keeps pending outbound sends running when runtime presence is busy", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "busy" },
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({
+        pendingUserMessageStartedAt: 123,
+        draftAssistantText: "partial assistant",
+        draftAssistantMessageId: "assistant-draft",
+      }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("running");
+    expect(applied.pendingUserMessageStartedAt).toBe(123);
+    expect(applied.draftAssistantText).toBe("partial assistant");
+    expect(applied.draftAssistantMessageId).toBe("assistant-draft");
+  });
+
+  test("settles pending outbound sends when runtime reports pending input", () => {
+    const liveApproval = {
+      requestId: "live-approval",
+    } as AgentSessionState["pendingApprovals"][number];
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "idle" },
+        pendingApprovals: [liveApproval],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({
+        pendingUserMessageStartedAt: 123,
+        draftAssistantText: "partial assistant",
+        draftAssistantMessageId: "assistant-draft",
+      }),
+      snapshot,
+    );
+
+    expect(snapshot.classification).toBe("waiting_for_permission");
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.draftAssistantText).toBe("");
+    expect(applied.draftAssistantMessageId).toBeNull();
+    expect(applied.pendingApprovals).toEqual([liveApproval]);
+  });
+
   test("marks persisted-only pending outbound sends as recovering runtime", () => {
     const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
       ref: sessionRefFixture,
@@ -213,6 +278,45 @@ describe("session-presence", () => {
     expect(applied.status).toBe("running");
     expect(applied.pendingApprovals).toEqual([]);
     expect(applied.pendingQuestions).toEqual([]);
+  });
+
+  test("keeps pending outbound sends when runtime presence is retrying", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({
+        status: "idle",
+        pendingUserMessageStartedAt: 123,
+        draftAssistantText: "partial assistant",
+        draftAssistantMessageId: "assistant-draft",
+        draftReasoningText: "partial reasoning",
+        draftReasoningMessageId: "reasoning-draft",
+      }),
+      snapshot,
+    );
+
+    if (snapshot.presence !== "runtime") {
+      throw new Error("Expected live snapshot.");
+    }
+    expect(snapshot.agentSessionStatus).toBe("running");
+    expect(applied.status).toBe("running");
+    expect(applied.pendingUserMessageStartedAt).toBe(123);
+    expect(applied.draftAssistantText).toBe("partial assistant");
+    expect(applied.draftAssistantMessageId).toBe("assistant-draft");
+    expect(applied.draftReasoningText).toBe("partial reasoning");
+    expect(applied.draftReasoningMessageId).toBe("reasoning-draft");
   });
 
   test("treats pending input and non-idle runtime status as attachable", () => {
