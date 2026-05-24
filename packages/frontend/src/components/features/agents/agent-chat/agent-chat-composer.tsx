@@ -13,7 +13,6 @@ import {
   type Ref,
   type RefObject,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -316,6 +315,7 @@ function AgentChatComposerFormView({
       <input
         ref={attachmentInputRef}
         type="file"
+        aria-label="Add attachments"
         multiple
         accept={CHAT_ATTACHMENT_ACCEPT}
         disabled={attachmentIntakeDisabled}
@@ -476,7 +476,7 @@ function useAgentChatComposerFocus({
     [composerEditorRef],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);
@@ -534,8 +534,17 @@ export function AgentChatComposer({
     syncBottomAfterComposerLayoutRef,
   } = model;
 
-  const [draft, setDraft] = useState(createEmptyComposerDraft);
-  const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
+  const [draftState, setDraftState] = useState(() => ({
+    key: draftStateKey,
+    draft: createEmptyComposerDraft(),
+  }));
+  const latestDraftRef = useRef<AgentChatComposerDraft>(draftState.draft);
+  let draft = draftState.draft;
+  if (draftState.key !== draftStateKey) {
+    draft = createEmptyComposerDraft();
+    latestDraftRef.current = draft;
+    setDraftState({ key: draftStateKey, draft });
+  }
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -548,16 +557,13 @@ export function AgentChatComposer({
     Boolean(busySendBlockedReason);
   const attachmentIntakeDisabled = isComposerInputDisabled || isSubmitting;
 
-  useEffect(() => {
-    void draftStateKey;
-    setDraft(createEmptyComposerDraft());
-    onComposerEditorInput();
-  }, [draftStateKey, onComposerEditorInput]);
-
-  const handleDraftChange = useCallback((nextDraft: AgentChatComposerDraft) => {
-    latestDraftRef.current = nextDraft;
-    setDraft(nextDraft);
-  }, []);
+  const handleDraftChange = useCallback(
+    (nextDraft: AgentChatComposerDraft) => {
+      latestDraftRef.current = nextDraft;
+      setDraftState({ key: draftStateKey, draft: nextDraft });
+    },
+    [draftStateKey],
+  );
 
   const handleRemoveAttachment = useCallback(
     (attachmentId: string): void => {
@@ -588,10 +594,10 @@ export function AgentChatComposer({
       if (attachments.length === 0) {
         return;
       }
-      setDraft((currentDraft) => {
-        const nextDraft = appendAttachmentsToDraft(currentDraft, attachments);
+      setDraftState((currentState) => {
+        const nextDraft = appendAttachmentsToDraft(currentState.draft, attachments);
         latestDraftRef.current = nextDraft;
-        return nextDraft;
+        return { key: currentState.key, draft: nextDraft };
       });
       onComposerEditorInput();
     },
@@ -688,15 +694,18 @@ export function AgentChatComposer({
       return;
     }
     const submittedDraft = latestDraftRef.current;
-    setDraft(createEmptyComposerDraft());
+    setDraftState({ key: draftStateKey, draft: createEmptyComposerDraft() });
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
       const didSend = await latestOnSendRef.current(submittedDraft);
       if (!didSend) {
-        setDraft((currentDraft) =>
-          draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
-        );
+        setDraftState((currentState) => ({
+          key: currentState.key,
+          draft: draftHasMeaningfulContent(currentState.draft)
+            ? currentState.draft
+            : submittedDraft,
+        }));
         onComposerEditorInput();
         scheduleComposerFocus();
         return;
@@ -707,13 +716,14 @@ export function AgentChatComposer({
       toast.error("Unable to send message", {
         description,
       });
-      setDraft((currentDraft) =>
-        draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
-      );
+      setDraftState((currentState) => ({
+        key: currentState.key,
+        draft: draftHasMeaningfulContent(currentState.draft) ? currentState.draft : submittedDraft,
+      }));
       onComposerEditorInput();
       scheduleComposerFocus();
     }
-  }, [onComposerEditorInput, scheduleComposerFocus]);
+  }, [draftStateKey, onComposerEditorInput, scheduleComposerFocus]);
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
