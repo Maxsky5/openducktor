@@ -67,6 +67,7 @@ export const createCodexAppServerTransport = (
     for (const request of pending.values()) {
       request.reject(error);
     }
+    pending.clear();
   };
 
   const ensureOpen = (): void => {
@@ -450,6 +451,7 @@ export const createCodexAppServerTransport = (
             }),
           );
         }
+        pending.clear();
       });
     },
   };

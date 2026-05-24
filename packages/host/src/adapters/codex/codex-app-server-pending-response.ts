@@ -30,7 +30,7 @@ export const acquirePendingResponse = ({
   rememberCancelledSentRequest,
 }: PendingResponseInput) =>
   Effect.sync(() => {
-    let timeout: NodeJS.Timeout;
+    let timeout: NodeJS.Timeout | undefined;
     let released = false;
     let finished = false;
     let writeStarted = false;

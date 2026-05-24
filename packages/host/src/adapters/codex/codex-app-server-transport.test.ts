@@ -296,4 +296,41 @@ describe("createCodexAppServerTransport", () => {
       await Effect.runPromise(transport.close());
     }
   });
+
+  test("clears the pending request timeout when serialization fails", async () => {
+    const child = createChild();
+    const transport = createCodexAppServerTransport("runtime-1", child, 1_000);
+    const clearTimeoutRecorder = recordClearTimeouts();
+    const circularParams: Record<string, unknown> = {};
+    circularParams.self = circularParams;
+
+    try {
+      await expect(
+        Effect.runPromise(
+          transport.request({
+            method: "model/list",
+            params: circularParams as never,
+          }),
+        ),
+      ).rejects.toThrow("Failed writing Codex app-server message for runtime runtime-1");
+
+      expect(clearTimeoutRecorder.clearedTimeouts).toHaveLength(1);
+
+      const nextResponse = Effect.runPromise(
+        transport.request({
+          method: "model/list",
+          params: {},
+        }),
+      );
+      await waitForStreamEvents();
+      child.stdout.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: 2, result: { data: [], nextCursor: null } })}\n`,
+      );
+
+      await expect(nextResponse).resolves.toEqual({ data: [], nextCursor: null });
+    } finally {
+      clearTimeoutRecorder.restore();
+      await Effect.runPromise(transport.close());
+    }
+  });
 });
