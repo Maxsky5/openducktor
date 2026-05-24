@@ -5,12 +5,15 @@ export const normalizePathForComparison = (value: string): string => {
   const leadingSeparatorRoot = /^[\\/]/.test(trimmed);
   const windowsDrivePath = WINDOWS_DRIVE_PATH_PATTERN.test(trimmed);
   const segments: string[] = [];
+  const minimumSegments = windowsDrivePath ? 1 : 0;
   for (const segment of trimmed.split(/[\\/]+/)) {
     if (!segment || segment === ".") {
       continue;
     }
     if (segment === "..") {
-      segments.pop();
+      if (segments.length > minimumSegments) {
+        segments.pop();
+      }
       continue;
     }
     segments.push(segment);

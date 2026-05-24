@@ -56,7 +56,7 @@ export const createRuntimeOrchestratorService = ({
 }): RuntimeOrchestratorService => {
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
-    `${runtimeKind}::${repoPath}`;
+    `${runtimeKind}::${normalizePathForComparison(repoPath)}`;
   const resolveSessionStopRoute = (
     request: Parameters<RuntimeOrchestratorService["agentSessionStop"]>[0],
     repoPath: string,

@@ -13,12 +13,16 @@ import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorServ
 const createRuntimeOrchestratorService = (
   input: Parameters<typeof createEffectRuntimeOrchestratorService>[0],
 ) => createEffectRuntimeOrchestratorService(input);
-const createGitPort = (): GitPort =>
+const createGitPort = (
+  canonicalizePath: (path: string) => string = (path) =>
+    path === "/repo" ? "/canonical/repo" : path,
+  isGitRepository: (path: string) => boolean = (path) => path === "/canonical/repo",
+): GitPort =>
   ({
     canonicalizePath(path: string) {
       return Effect.tryPromise({
         try: async () => {
-          return path === "/repo" ? "/canonical/repo" : path;
+          return canonicalizePath(path);
         },
         catch: (cause) =>
           new HostOperationError({
@@ -31,7 +35,7 @@ const createGitPort = (): GitPort =>
     isGitRepository(path: string) {
       return Effect.tryPromise({
         try: async () => {
-          return path === "/canonical/repo";
+          return isGitRepository(path);
         },
         catch: (cause) =>
           new HostOperationError({
@@ -291,6 +295,52 @@ describe("createRuntimeOrchestratorService", () => {
     });
     resolveEnsure(createRuntime());
     await expect(ensure).resolves.toMatchObject({ runtimeId: "runtime-1" });
+  });
+  test("matches startup status keys by normalized canonical repository path", async () => {
+    let resolveEnsure: (runtime: RuntimeInstanceSummary) => void = () => {};
+    const ensureStarted = new Promise<RuntimeInstanceSummary>((resolve) => {
+      resolveEnsure = resolve;
+    });
+    const registry = createRegistry([], {
+      ensureWorkspaceRuntime() {
+        return Effect.tryPromise({
+          try: async () => {
+            return ensureStarted;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause: cause,
+            }),
+        });
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(
+        (path) => path,
+        (path) => path === "C:\\Repo" || path === "c:/repo",
+      ),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: registry,
+      taskReader: createTaskStore(),
+    });
+    const ensure = Effect.runPromise(
+      service.runtimeEnsure({ runtimeKind: "opencode", repoPath: "C:\\Repo" }),
+    );
+    await expect(
+      Effect.runPromise(
+        service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "c:/repo" }),
+      ),
+    ).resolves.toMatchObject({
+      runtimeKind: "opencode",
+      repoPath: "C:\\Repo",
+      stage: "waiting_for_runtime",
+      runtime: null,
+      attempts: 0,
+    });
+    resolveEnsure(createRuntime({ repoPath: "C:\\Repo", workingDirectory: "C:\\Repo" }));
+    await expect(ensure).resolves.toMatchObject({ repoPath: "C:\\Repo" });
   });
   test("records startup failure status when runtime ensure fails", async () => {
     const service = createRuntimeOrchestratorService({

@@ -184,10 +184,9 @@ export const validateSessionStopTarget = (
         }),
       );
     }
-    if (
-      normalizePathForComparison(session.workingDirectory) !==
-      normalizePathForComparison(request.workingDirectory)
-    ) {
+    const sessionWorkingDirectory = normalizePathForComparison(session.workingDirectory);
+    const requestWorkingDirectory = normalizePathForComparison(request.workingDirectory);
+    if (sessionWorkingDirectory !== requestWorkingDirectory) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "workingDirectory",
