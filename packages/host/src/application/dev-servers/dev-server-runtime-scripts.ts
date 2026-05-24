@@ -41,6 +41,8 @@ export const markScriptProcessHandleMissing = ({
   const message = missingProcessHandleMessage(pid);
   updateScriptState(runtime, scriptId, (state) => {
     state.status = "failed";
+    state.pid = null;
+    state.startedAt = null;
     state.lastError = message;
   });
   return message;
@@ -60,7 +62,9 @@ export const stopScriptProcessHandle = ({
   Effect.gen(function* () {
     const stopResult = yield* Effect.either(handle.stop());
     if (stopResult._tag === "Right") {
-      runtime.processes.delete(scriptId);
+      if (runtime.processes.get(scriptId) === handle) {
+        runtime.processes.delete(scriptId);
+      }
       const script = runtime.state.scripts.find((candidate) => candidate.scriptId === scriptId);
       if (script?.pid === handle.pid) {
         updateScriptState(runtime, scriptId, (state) => {

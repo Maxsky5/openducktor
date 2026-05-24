@@ -249,9 +249,11 @@ describe("createDevServerService", () => {
     );
   });
   test("stops started scripts and fails when any configured script fails to start", async () => {
+    const starts: string[] = [];
     const stoppedPids: number[] = [];
     const processPort: DevServerProcessPort = {
       start(input) {
+        starts.push(input.command);
         if (input.command === "exit 42") {
           return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
             DevServerProcessPort["start"]
@@ -275,6 +277,7 @@ describe("createDevServerService", () => {
           devServers: [
             { id: "web", name: "Web", command: "bun run dev" },
             { id: "api", name: "API", command: "exit 42" },
+            { id: "worker", name: "Worker", command: "bun run worker" },
           ],
         }),
       ),
@@ -287,36 +290,119 @@ describe("createDevServerService", () => {
       throw new Error("Expected dev server start to fail.");
     }
     const startError = startResult.left;
-    expect(startError).toBeInstanceOf(HostOperationError);
-    expect(startError).toMatchObject({
-      message: expect.stringContaining("Failed to start all configured dev server scripts."),
-      details: {
-        failedScripts: [
-          {
-            command: "exit 42",
-            message: "Dev server exited with code 42.",
-            name: "API",
-            scriptId: "api",
-          },
-        ],
-        stoppedScripts: [
-          {
-            command: "bun run dev",
-            name: "Web",
-            pid: 501,
-            repoPath: "/canonical/repo",
-            scriptId: "web",
-            taskId: "task-1",
-          },
-        ],
-      },
+    if (!(startError instanceof HostOperationError)) {
+      throw new Error("Expected dev server start to fail with HostOperationError.");
+    }
+    expect(startError.message).toContain("Failed to start all configured dev server scripts.");
+    expect(startError.details).toEqual({
+      cleanupErrors: [],
+      failedScripts: [
+        {
+          command: "exit 42",
+          message: "Dev server exited with code 42.",
+          name: "API",
+          scriptId: "api",
+        },
+      ],
+      repoPath: "/repo",
+      stoppedScripts: [
+        {
+          command: "bun run dev",
+          name: "Web",
+          pid: 501,
+          repoPath: "/canonical/repo",
+          scriptId: "web",
+          taskId: "task-1",
+        },
+      ],
+      taskId: "task-1",
     });
+    expect(starts).toEqual(["bun run dev", "exit 42"]);
     expect(stoppedPids).toEqual([501]);
     await expect(
       Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toMatchObject({
       scripts: [
         { scriptId: "web", status: "stopped", pid: null },
+        {
+          scriptId: "api",
+          status: "failed",
+          pid: null,
+          exitCode: 42,
+          lastError: "Dev server exited with code 42.",
+        },
+        { scriptId: "worker", status: "stopped", pid: null },
+      ],
+    });
+  });
+  test("reports cleanup errors when a started script cannot be stopped after start failure", async () => {
+    const processPort: DevServerProcessPort = {
+      start(input) {
+        if (input.command === "exit 42") {
+          return Effect.fail(new DevServerProcessStartExitError(42, null)) as unknown as ReturnType<
+            DevServerProcessPort["start"]
+          >;
+        }
+        return Effect.succeed({
+          pid: 501,
+          stop: () =>
+            Effect.fail(
+              new HostOperationError({
+                operation: "test.devServerProcess.stop",
+                message: "stop failed",
+              }),
+            ),
+        });
+      },
+    };
+    const service = createDevServerService({
+      processPort,
+      taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
+      workspaceSettingsService: createWorkspaceSettingsService(
+        repoConfig({
+          devServers: [
+            { id: "web", name: "Web", command: "bun run dev" },
+            { id: "api", name: "API", command: "exit 42" },
+          ],
+        }),
+      ),
+    });
+    const startResult = await Effect.runPromise(
+      Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    );
+
+    if (startResult._tag === "Right") {
+      throw new Error("Expected dev server start to fail.");
+    }
+    const startError = startResult.left;
+    if (!(startError instanceof HostOperationError)) {
+      throw new Error("Expected dev server start to fail with HostOperationError.");
+    }
+    expect(startError.message).toContain("Failed cleaning up dev server web: stop failed");
+    expect(startError.details).toEqual({
+      cleanupErrors: ["Failed cleaning up dev server web: stop failed"],
+      failedScripts: [
+        {
+          command: "exit 42",
+          message: "Dev server exited with code 42.",
+          name: "API",
+          scriptId: "api",
+        },
+      ],
+      repoPath: "/repo",
+      stoppedScripts: [],
+      taskId: "task-1",
+    });
+    await expect(
+      Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
+    ).resolves.toMatchObject({
+      scripts: [
+        {
+          scriptId: "web",
+          status: "failed",
+          pid: 501,
+          lastError: "stop failed",
+        },
         {
           scriptId: "api",
           status: "failed",
@@ -342,9 +428,31 @@ describe("createDevServerService", () => {
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    await expect(
-      Effect.runPromise(service.start({ repoPath: "/repo", taskId: "task-1" })),
-    ).rejects.toThrow("Dev server exited with code 9.");
+    const startResult = await Effect.runPromise(
+      Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
+    );
+
+    if (startResult._tag === "Right") {
+      throw new Error("Expected dev server start to fail.");
+    }
+    const startError = startResult.left;
+    if (!(startError instanceof HostOperationError)) {
+      throw new Error("Expected dev server start to fail with HostOperationError.");
+    }
+    expect(startError.details).toEqual({
+      cleanupErrors: [],
+      failedScripts: [
+        {
+          command: "bun run dev",
+          message: "Dev server exited with code 9.",
+          name: "Web",
+          scriptId: "web",
+        },
+      ],
+      repoPath: "/repo",
+      stoppedScripts: [],
+      taskId: "task-1",
+    });
     await expect(
       Effect.runPromise(service.getState({ repoPath: "/repo", taskId: "task-1" })),
     ).resolves.toMatchObject({
