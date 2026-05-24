@@ -13,7 +13,6 @@ import {
   type Ref,
   type RefObject,
   useCallback,
-  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -113,10 +112,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   isSelectionCatalogLoading,
   supportsProfiles,
   selectorDisabled,
-  taskId,
-  isInteractionEnabled,
-  isStarting,
-  isReadOnly,
   onSelectAgent,
   onSelectModel,
   onSelectVariant,
@@ -137,10 +132,6 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   isSelectionCatalogLoading: boolean;
   supportsProfiles: boolean;
   selectorDisabled: boolean;
-  taskId: string;
-  isInteractionEnabled: boolean;
-  isStarting: boolean;
-  isReadOnly: boolean;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
   onSelectModel: AgentChatComposerModel["onSelectModel"];
   onSelectVariant: AgentChatComposerModel["onSelectVariant"];
@@ -151,6 +142,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   sendDisabled: boolean;
   pendingInlineCommentCount: number;
 }): ReactElement {
+  const hasVariantOptions = variantOptions.length > 0;
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
@@ -201,25 +194,21 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           />
         </div>
 
-        <div className="relative">
-          <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Combobox
-            value={selectedModelSelection?.variant ?? ""}
-            options={variantOptions}
-            className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
-            placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-            searchPlaceholder="Search variant..."
-            triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-            disabled={
-              !taskId ||
-              variantOptions.length === 0 ||
-              isStarting ||
-              !isInteractionEnabled ||
-              isReadOnly
-            }
-            onValueChange={onSelectVariant}
-          />
-        </div>
+        {hasVariantOptions ? (
+          <div className="relative">
+            <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Combobox
+              value={selectedModelSelection?.variant ?? ""}
+              options={variantOptions}
+              className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
+              placeholder="Variant"
+              searchPlaceholder="Search variant..."
+              triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+              disabled={selectorDisabled}
+              onValueChange={onSelectVariant}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -294,11 +283,7 @@ function AgentChatComposerFormView({
   submitAction,
 }: AgentChatComposerFormViewProps): ReactElement {
   const {
-    taskId,
-    isInteractionEnabled,
-    isReadOnly,
     pendingInlineCommentCount,
-    isStarting,
     isSessionWorking,
     isWaitingInput,
     isSelectionCatalogLoading,
@@ -330,6 +315,7 @@ function AgentChatComposerFormView({
       <input
         ref={attachmentInputRef}
         type="file"
+        aria-label="Add attachments"
         multiple
         accept={CHAT_ATTACHMENT_ACCEPT}
         disabled={attachmentIntakeDisabled}
@@ -419,10 +405,6 @@ function AgentChatComposerFormView({
             isSelectionCatalogLoading={isSelectionCatalogLoading}
             supportsProfiles={supportsProfiles ?? true}
             selectorDisabled={selectorDisabled}
-            taskId={taskId}
-            isInteractionEnabled={isInteractionEnabled}
-            isStarting={isStarting}
-            isReadOnly={isReadOnly}
             onSelectAgent={onSelectAgent}
             onSelectModel={onSelectModel}
             onSelectVariant={onSelectVariant}
@@ -494,7 +476,7 @@ function useAgentChatComposerFocus({
     [composerEditorRef],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);
@@ -552,8 +534,17 @@ export function AgentChatComposer({
     syncBottomAfterComposerLayoutRef,
   } = model;
 
-  const [draft, setDraft] = useState(createEmptyComposerDraft);
-  const latestDraftRef = useRef<AgentChatComposerDraft>(draft);
+  const [draftState, setDraftState] = useState(() => ({
+    key: draftStateKey,
+    draft: createEmptyComposerDraft(),
+  }));
+  const latestDraftRef = useRef<AgentChatComposerDraft>(draftState.draft);
+  let draft = draftState.draft;
+  if (draftState.key !== draftStateKey) {
+    draft = createEmptyComposerDraft();
+    latestDraftRef.current = draft;
+    setDraftState({ key: draftStateKey, draft });
+  }
   const latestSendDisabledRef = useRef(false);
   const latestOnSendRef = useRef(onSend);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
@@ -566,16 +557,13 @@ export function AgentChatComposer({
     Boolean(busySendBlockedReason);
   const attachmentIntakeDisabled = isComposerInputDisabled || isSubmitting;
 
-  useEffect(() => {
-    void draftStateKey;
-    setDraft(createEmptyComposerDraft());
-    onComposerEditorInput();
-  }, [draftStateKey, onComposerEditorInput]);
-
-  const handleDraftChange = useCallback((nextDraft: AgentChatComposerDraft) => {
-    latestDraftRef.current = nextDraft;
-    setDraft(nextDraft);
-  }, []);
+  const handleDraftChange = useCallback(
+    (nextDraft: AgentChatComposerDraft) => {
+      latestDraftRef.current = nextDraft;
+      setDraftState({ key: draftStateKey, draft: nextDraft });
+    },
+    [draftStateKey],
+  );
 
   const handleRemoveAttachment = useCallback(
     (attachmentId: string): void => {
@@ -606,10 +594,10 @@ export function AgentChatComposer({
       if (attachments.length === 0) {
         return;
       }
-      setDraft((currentDraft) => {
-        const nextDraft = appendAttachmentsToDraft(currentDraft, attachments);
+      setDraftState((currentState) => {
+        const nextDraft = appendAttachmentsToDraft(currentState.draft, attachments);
         latestDraftRef.current = nextDraft;
-        return nextDraft;
+        return { key: currentState.key, draft: nextDraft };
       });
       onComposerEditorInput();
     },
@@ -705,16 +693,21 @@ export function AgentChatComposer({
     if (latestSendDisabledRef.current) {
       return;
     }
+    const submitKey = draftStateKey;
     const submittedDraft = latestDraftRef.current;
-    setDraft(createEmptyComposerDraft());
+    setDraftState({ key: submitKey, draft: createEmptyComposerDraft() });
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
       const didSend = await latestOnSendRef.current(submittedDraft);
       if (!didSend) {
-        setDraft((currentDraft) =>
-          draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
-        );
+        setDraftState((currentState) => ({
+          key: currentState.key,
+          draft:
+            currentState.key !== submitKey || draftHasMeaningfulContent(currentState.draft)
+              ? currentState.draft
+              : submittedDraft,
+        }));
         onComposerEditorInput();
         scheduleComposerFocus();
         return;
@@ -725,13 +718,17 @@ export function AgentChatComposer({
       toast.error("Unable to send message", {
         description,
       });
-      setDraft((currentDraft) =>
-        draftHasMeaningfulContent(currentDraft) ? currentDraft : submittedDraft,
-      );
+      setDraftState((currentState) => ({
+        key: currentState.key,
+        draft:
+          currentState.key !== submitKey || draftHasMeaningfulContent(currentState.draft)
+            ? currentState.draft
+            : submittedDraft,
+      }));
       onComposerEditorInput();
       scheduleComposerFocus();
     }
-  }, [onComposerEditorInput, scheduleComposerFocus]);
+  }, [draftStateKey, onComposerEditorInput, scheduleComposerFocus]);
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);

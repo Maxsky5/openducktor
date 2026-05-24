@@ -69,6 +69,8 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
     expect(html).toContain("22.5%");
+    expect(html).toContain("lucide-brain-cog");
+    expect(html).toContain("high");
   });
 
   test("hides stop and context widgets when not available", () => {
@@ -98,6 +100,21 @@ describe("AgentChatComposer", () => {
 
     expect(html).not.toContain("Hephaestus (Deep Agent)");
     expect(html).toContain("GPT-5.3 Codex");
+  });
+
+  test("hides the variant selector when no variants are available", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          variantOptions: [],
+        },
+      }),
+    );
+
+    expect(html).toContain("GPT-5.3 Codex");
+    expect(html).not.toContain("lucide-brain-cog");
+    expect(html).not.toContain("Search variant...");
   });
 
   test("stop button is enabled when session is working even when sends are otherwise disabled", () => {

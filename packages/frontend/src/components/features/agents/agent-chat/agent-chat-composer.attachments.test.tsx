@@ -235,6 +235,40 @@ describe("AgentChatComposer attachments", () => {
     });
   });
 
+  test("does not restore a failed send draft after the draft key changes", async () => {
+    let resolveSend: (didSend: boolean) => void = () => {};
+    const onSend = mock(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    const initialModel = {
+      ...buildModel(),
+      onSend,
+    };
+    const { container, rerender } = render(<AgentChatComposer model={initialModel} />);
+
+    typeIntoComposer(container, "old session draft");
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    rerender(
+      <AgentChatComposer
+        model={{
+          ...initialModel,
+          draftStateKey: "draft-2",
+          displayedSessionId: "session-2",
+        }}
+      />,
+    );
+    resolveSend?.(false);
+
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("old session draft");
+    });
+  });
+
   test("pastes unnamed images as attachments without disturbing existing text", async () => {
     const { container } = render(
       <AgentChatComposer
