@@ -8,7 +8,8 @@ use host_domain::DevServerGroupState;
 
 use self::processes::{stop_process_group, DEV_SERVER_STOP_TIMEOUT};
 use self::state::{
-    build_group_state, dev_server_group_key, script_has_live_process, sync_group_state,
+    build_group_state, dev_server_group_key, mark_started_dev_servers_stopping_after_start_failure,
+    script_has_live_process, sync_group_state,
 };
 use self::terminal::emit_group_snapshot;
 
@@ -109,12 +110,13 @@ impl AppService {
 
         emit_group_snapshot(self.dev_server_groups.clone(), &key);
 
-        let mut errors = Vec::new();
+        let mut start_error = None;
         for script in repo_config.dev_servers.iter().cloned() {
+            let script_id = script.id.clone();
             tracing::info!(
                 target: "openducktor.lifecycle",
                 "Starting dev server script {} for task {task_id} in {repo_path}",
-                script.id
+                script_id
             );
             match self.start_dev_server_script(
                 key.as_str(),
@@ -124,17 +126,36 @@ impl AppService {
                 script,
             ) {
                 Ok(_pid) => {}
-                Err(error) => errors.push(error.to_string()),
+                Err(error) => {
+                    start_error =
+                        Some(format!("Failed starting dev server {script_id}: {error:#}"));
+                    break;
+                }
             }
+        }
+
+        if let Some(start_error) = start_error {
+            let cleanup_errors =
+                self.stop_started_dev_servers_after_start_failure(key.as_str(), task_id)?;
+            let _state = self.dev_server_get_state(repo_path.as_str(), task_id)?;
+            emit_group_snapshot(self.dev_server_groups.clone(), &key);
+            let mut messages = vec![
+                "Failed to start all configured dev server scripts.".to_string(),
+                start_error,
+            ];
+            messages.extend(cleanup_errors);
+            return Err(anyhow!(messages.join("\n")));
         }
 
         let state = self.dev_server_get_state(repo_path.as_str(), task_id)?;
         emit_group_snapshot(self.dev_server_groups.clone(), &key);
-        if errors.is_empty() || state.scripts.iter().any(script_has_live_process) {
-            Ok(state)
-        } else {
-            Err(anyhow!(errors.join("\n")))
+        if state.scripts.iter().any(script_has_live_process) {
+            return Ok(state);
         }
+
+        Err(anyhow!(
+            "Dev server start completed without any live script processes."
+        ))
     }
 
     pub fn dev_server_stop(&self, repo_path: &str, task_id: &str) -> Result<DevServerGroupState> {
@@ -208,6 +229,40 @@ impl AppService {
     pub(crate) fn stop_dev_servers_for_task(&self, repo_path: &str, task_id: &str) -> Result<()> {
         let _ = self.dev_server_stop(repo_path, task_id)?;
         Ok(())
+    }
+
+    fn stop_started_dev_servers_after_start_failure(
+        &self,
+        group_key: &str,
+        task_id: &str,
+    ) -> Result<Vec<String>> {
+        let targets = mark_started_dev_servers_stopping_after_start_failure(
+            self.dev_server_groups.clone(),
+            group_key,
+        )?;
+        let mut errors = Vec::new();
+
+        for (script_id, pid) in targets {
+            tracing::info!(
+                target: "openducktor.lifecycle",
+                "Stopping dev server script {script_id} for task {task_id} after start failure (pid {pid})"
+            );
+            if let Err(error) = stop_process_group(pid, DEV_SERVER_STOP_TIMEOUT) {
+                self.mark_dev_server_stop_failed(
+                    group_key,
+                    script_id.as_str(),
+                    pid,
+                    &error.to_string(),
+                );
+                errors.push(format!(
+                    "Failed cleaning up dev server {script_id}: {error:#}"
+                ));
+                continue;
+            }
+            self.mark_dev_server_stopped(group_key, script_id.as_str(), pid, None);
+        }
+
+        Ok(errors)
     }
 
     pub(crate) fn stop_all_dev_servers(&self) -> Result<()> {

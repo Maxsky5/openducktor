@@ -626,7 +626,7 @@ fn start_dev_server_script_reports_immediate_shell_failures() {
 
 #[cfg(unix)]
 #[test]
-fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails() {
+fn dev_server_start_stops_successful_scripts_when_another_script_fails() {
     let root = unique_temp_path("dev-server-partial-start");
     let repo = root.join("repo");
     init_git_repo(&repo).expect("test repo should initialize");
@@ -688,17 +688,26 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
         .expect("builder session should persist");
 
     let emitter: DevServerEmitter = Arc::new(|_| {});
-    let state = service
+    let error = service
         .dev_server_start(repo_path.as_str(), "task-1", emitter)
-        .expect("partial dev server start should keep successful scripts running");
+        .expect_err("partial dev server start should fail");
+    assert!(error
+        .to_string()
+        .contains("Failed to start all configured dev server scripts."));
+    assert!(error
+        .to_string()
+        .contains("Failed starting dev server backend: Dev server exited with code 127."));
 
+    let state = service
+        .dev_server_get_state(repo_path.as_str(), "task-1")
+        .expect("dev server state should be readable");
     let frontend = state
         .scripts
         .iter()
         .find(|script| script.script_id == "frontend")
         .expect("frontend script present");
-    assert_eq!(frontend.status, DevServerScriptStatus::Running);
-    assert!(frontend.pid.is_some());
+    assert_eq!(frontend.status, DevServerScriptStatus::Stopped);
+    assert_eq!(frontend.pid, None);
 
     let backend = state
         .scripts
@@ -712,18 +721,115 @@ fn dev_server_start_keeps_successful_scripts_running_when_another_script_fails()
         Some(message) if message.contains("Dev server exited with code 127")
     ));
 
-    let stopped = service
-        .dev_server_stop(repo_path.as_str(), "task-1")
-        .expect("running scripts should stop cleanly");
-    let stopped_frontend = stopped
-        .scripts
-        .iter()
-        .find(|script| script.script_id == "frontend")
-        .expect("frontend script present after stop");
-    assert_eq!(stopped_frontend.status, DevServerScriptStatus::Stopped);
-    assert_eq!(stopped_frontend.pid, None);
-
     let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(unix)]
+#[test]
+fn start_dev_server_script_reports_live_node_startup_failures_from_terminal_output() {
+    let (service, _task_state, _git_state) = build_service_with_state(Vec::new());
+    let repo_path = "/repo";
+    let task_id = "task-node-startup";
+    let worktree_path = unique_temp_path("dev-server-node-startup-worktree");
+    fs::create_dir_all(&worktree_path).expect("create worktree path");
+    let script_path = worktree_path.join("node-fatal-watch.sh");
+    write_executable_script(
+        &script_path,
+        r#"#!/bin/sh
+printf '%s\n' '/tmp/index.ts:15'
+printf '%s\n' "export { InvitationStatus } from '@prisma/client';"
+printf '%s\n' '^'
+printf '%s\n' "SyntaxError: The requested module '@prisma/client' does not provide an export named 'InvitationStatus'"
+printf '%s\n' 'Node.js v25.8.2'
+sleep 20
+"#,
+    )
+    .expect("write simulated watcher script");
+    let worktree_path = worktree_path.to_string_lossy().to_string();
+    let group_key = dev_server_group_key(repo_path, task_id);
+    let script = RepoDevServerScript {
+        id: "backend".to_string(),
+        name: "Backend".to_string(),
+        command: script_path.to_string_lossy().to_string(),
+    };
+
+    service
+        .dev_server_groups
+        .lock()
+        .expect("group lock poisoned")
+        .insert(
+            group_key.clone(),
+            DevServerGroupRuntime {
+                state: build_group_state(
+                    repo_path,
+                    task_id,
+                    Some(worktree_path.clone()),
+                    &repo_config(vec![script.clone()]),
+                ),
+                emitter: None,
+            },
+        );
+
+    let start_result = service.start_dev_server_script(
+        group_key.as_str(),
+        repo_path,
+        task_id,
+        worktree_path.as_str(),
+        script,
+    );
+    let pid = match start_result {
+        Ok(pid) => Some(pid),
+        Err(error) => {
+            assert!(error
+                .to_string()
+                .contains("Dev server reported a startup failure: SyntaxError"));
+            None
+        }
+    };
+
+    let mut detected_failure = false;
+    for _ in 0..30 {
+        thread::sleep(Duration::from_millis(100));
+        let groups = service
+            .dev_server_groups
+            .lock()
+            .expect("group lock poisoned");
+        let runtime = groups.get(&group_key).expect("runtime present");
+        let script = &runtime.state.scripts[0];
+        if script.status == DevServerScriptStatus::Failed {
+            detected_failure = true;
+            break;
+        }
+    }
+    assert!(
+        detected_failure,
+        "fatal Node startup output should fail the dev server state"
+    );
+
+    let groups = service
+        .dev_server_groups
+        .lock()
+        .expect("group lock poisoned");
+    let runtime = groups.get(&group_key).expect("runtime present");
+    let script = &runtime.state.scripts[0];
+    assert_eq!(script.status, DevServerScriptStatus::Failed);
+    assert_eq!(script.pid, None);
+    assert_eq!(script.started_at, None);
+    assert_eq!(script.exit_code, None);
+    assert!(matches!(
+        script.last_error.as_deref(),
+        Some(message) if message.contains("Dev server reported a startup failure: SyntaxError")
+    ));
+    assert!(script
+        .buffered_terminal_chunks
+        .iter()
+        .any(|chunk| chunk.data.contains("InvitationStatus")));
+    if let Some(pid) = pid {
+        assert!(
+            wait_for_process_exit(pid as i32, Duration::from_secs(3)),
+            "failed watcher process group should be stopped"
+        );
+    }
 }
 
 #[cfg(unix)]
