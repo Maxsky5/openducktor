@@ -1,26 +1,5 @@
-import type {
-  CommitsAheadBehind,
-  FileDiff,
-  FileStatus,
-  GitTargetBranch,
-  GitWorktreeStatus,
-  GitWorktreeStatusSummary,
-} from "@openducktor/contracts";
-import type { DiffScope, DiffScopeState, GitConflict } from "./contracts";
-
-export type UseAgentStudioDiffDataInput = {
-  repoPath: string | null;
-  worktreePath: string | null;
-  worktreeResolutionTaskId: string | null;
-  shouldBlockDiffLoading: boolean;
-  isWorktreeResolutionResolving: boolean;
-  worktreeResolutionError: string | null;
-  retryWorktreeResolution: () => void | Promise<void>;
-  defaultTargetBranch: GitTargetBranch;
-  preconditionError?: string | null;
-  branchIdentityKey?: string | null;
-  enablePolling: boolean;
-};
+import type { CommitsAheadBehind, FileDiff, FileStatus } from "@openducktor/contracts";
+import type { DiffScope, DiffScopeState } from "../contracts";
 
 export type DiffBatchState = {
   byScope: Record<DiffScope, ScopeSnapshot>;
@@ -52,14 +31,11 @@ type SummaryReloadDecision = {
   shouldReloadFullScope: boolean;
 };
 
-const EMPTY_DIFFS: FileDiff[] = [];
-const EMPTY_STATUSES: FileStatus[] = [];
-
-const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
+const createEmptyScopeSnapshot = (): ScopeSnapshot => ({
   branch: null,
   gitConflict: null,
-  fileDiffs: EMPTY_DIFFS,
-  fileStatuses: EMPTY_STATUSES,
+  fileDiffs: [],
+  fileStatuses: [],
   uncommittedFileCount: 0,
   commitsAheadBehind: null,
   upstreamAheadBehind: null,
@@ -68,14 +44,14 @@ const EMPTY_SCOPE_SNAPSHOT: ScopeSnapshot = {
   hashVersion: null,
   statusHash: null,
   diffHash: null,
-};
+});
 
 const ALL_SCOPES: DiffScope[] = ["target", "uncommitted"];
 
 export const createInitialDiffBatchState = (): DiffBatchState => ({
   byScope: {
-    target: EMPTY_SCOPE_SNAPSHOT,
-    uncommitted: EMPTY_SCOPE_SNAPSHOT,
+    target: createEmptyScopeSnapshot(),
+    uncommitted: createEmptyScopeSnapshot(),
   },
   loadedByScope: {
     target: false,
@@ -129,26 +105,9 @@ const aheadBehindEqual = (
   return left.ahead === right.ahead && left.behind === right.behind;
 };
 
-const toGitConflict = (
-  conflict: GitWorktreeStatus["gitConflict"] | GitWorktreeStatusSummary["gitConflict"],
-): GitConflict | null => {
-  if (!conflict) {
-    return null;
-  }
-
-  return {
-    operation: conflict.operation,
-    currentBranch: conflict.currentBranch ?? null,
-    targetBranch: conflict.targetBranch,
-    conflictedFiles: conflict.conflictedFiles,
-    output: conflict.output,
-    workingDir: conflict.workingDir ?? null,
-  };
-};
-
 const gitConflictEqual = (
-  left: GitConflict | null | undefined,
-  right: GitConflict | null | undefined,
+  left: ScopeSnapshot["gitConflict"] | null | undefined,
+  right: ScopeSnapshot["gitConflict"] | null | undefined,
 ): boolean => {
   if (left === right) {
     return true;
@@ -208,80 +167,6 @@ const scopeSnapshotEqual = (left: ScopeSnapshot, right: ScopeSnapshot): boolean 
     left.error === right.error &&
     hashMetadataEqual(left, right)
   );
-};
-
-const toUpstreamState = (
-  upstreamAheadBehind: GitWorktreeStatus["upstreamAheadBehind"],
-): {
-  upstreamAheadBehind: CommitsAheadBehind | null;
-  upstreamStatus: "tracking" | "untracked" | "error";
-  error: string | null;
-} => {
-  if (upstreamAheadBehind.outcome === "tracking") {
-    return {
-      upstreamAheadBehind: {
-        ahead: upstreamAheadBehind.ahead,
-        behind: upstreamAheadBehind.behind,
-      },
-      upstreamStatus: "tracking",
-      error: null,
-    };
-  }
-
-  if (upstreamAheadBehind.outcome === "untracked") {
-    return {
-      upstreamAheadBehind: {
-        ahead: upstreamAheadBehind.ahead,
-        behind: 0,
-      },
-      upstreamStatus: "untracked",
-      error: null,
-    };
-  }
-
-  return {
-    upstreamAheadBehind: null,
-    upstreamStatus: "error",
-    error: `Upstream status unavailable: ${upstreamAheadBehind.message}`,
-  };
-};
-
-export const toScopeSnapshot = (snapshot: GitWorktreeStatus): ScopeSnapshot => {
-  const { upstreamAheadBehind, upstreamStatus, error } = toUpstreamState(
-    snapshot.upstreamAheadBehind,
-  );
-  return {
-    branch: snapshot.currentBranch.name ?? null,
-    gitConflict: toGitConflict(snapshot.gitConflict),
-    fileDiffs: snapshot.fileDiffs,
-    fileStatuses: snapshot.fileStatuses,
-    uncommittedFileCount: snapshot.fileStatuses.length,
-    commitsAheadBehind: snapshot.targetAheadBehind,
-    upstreamAheadBehind,
-    upstreamStatus,
-    error,
-    hashVersion: snapshot.snapshot.hashVersion,
-    statusHash: snapshot.snapshot.statusHash,
-    diffHash: snapshot.snapshot.diffHash,
-  };
-};
-
-export const toScopeSummaryFields = (summary: GitWorktreeStatusSummary): ScopeSummaryFields => {
-  const { upstreamAheadBehind, upstreamStatus, error } = toUpstreamState(
-    summary.upstreamAheadBehind,
-  );
-  return {
-    branch: summary.currentBranch.name ?? null,
-    gitConflict: toGitConflict(summary.gitConflict),
-    uncommittedFileCount: summary.fileStatusCounts.total,
-    commitsAheadBehind: summary.targetAheadBehind,
-    upstreamAheadBehind,
-    upstreamStatus,
-    error,
-    hashVersion: summary.snapshot.hashVersion,
-    statusHash: summary.snapshot.statusHash,
-    diffHash: summary.snapshot.diffHash,
-  };
 };
 
 const mergeSharedSnapshotFields = (base: ScopeSnapshot, source: ScopeSnapshot): ScopeSnapshot => ({
@@ -395,7 +280,7 @@ export const applySummarySnapshot = ({
       if (sharedHashesChanged && state.loadedByScope[otherScope]) {
         const invalidatedOtherScopeSnapshot: ScopeSnapshot = {
           ...nextByScope[otherScope],
-          fileDiffs: EMPTY_DIFFS,
+          fileDiffs: [],
           diffHash: null,
         };
         if (!scopeSnapshotEqual(nextByScope[otherScope], invalidatedOtherScopeSnapshot)) {

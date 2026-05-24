@@ -13,7 +13,7 @@ type GitWorktreeStatusQueryHost = Pick<typeof host, "gitGetWorktreeStatus">;
 type GitWorktreeStatusSummaryQueryHost = Pick<typeof host, "gitGetWorktreeStatusSummary">;
 
 const BRANCH_DATA_STALE_TIME_MS = 60_000;
-const WORKTREE_STATUS_STALE_TIME_MS = 5_000;
+export const WORKTREE_STATUS_STALE_TIME_MS = 0;
 
 export const gitQueryKeys = {
   all: ["git"] as const,
@@ -69,7 +69,7 @@ const currentBranchQueryOptions = (
     staleTime: BRANCH_DATA_STALE_TIME_MS,
   });
 
-const worktreeStatusQueryOptions = (
+export const worktreeStatusQueryOptions = (
   repoPath: string,
   targetBranch: string,
   diffScope: "target" | "uncommitted",
@@ -83,7 +83,7 @@ const worktreeStatusQueryOptions = (
     staleTime: WORKTREE_STATUS_STALE_TIME_MS,
   });
 
-const worktreeStatusSummaryQueryOptions = (
+export const worktreeStatusSummaryQueryOptions = (
   repoPath: string,
   targetBranch: string,
   diffScope: "target" | "uncommitted",
