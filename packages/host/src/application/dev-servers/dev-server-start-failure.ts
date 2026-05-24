@@ -27,11 +27,11 @@ export const stopStartedScriptsAfterStartFailure = (
       if (script.pid === null) {
         continue;
       }
-      const stoppedScript = stoppedScriptFromState(runtime, script, script.pid);
+      const pid = script.pid;
       const handle = runtime.processes.get(script.scriptId);
       if (!handle) {
         const message = markScriptProcessHandleMissing({
-          pid: script.pid,
+          pid,
           runtime,
           scriptId: script.scriptId,
           updateScriptState,
@@ -50,6 +50,7 @@ export const stopStartedScriptsAfterStartFailure = (
         updateScriptState,
       });
       if (stopError === null) {
+        const stoppedScript = stoppedScriptFromState(runtime, script, pid);
         stoppedScripts.push(stoppedScript);
       } else {
         cleanupErrors.push(`Failed cleaning up dev server ${script.scriptId}: ${stopError}`);
