@@ -1,5 +1,4 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHydratedMessages } from "../support/hydrated-message-merge";
 import { historyToSessionContextUsage } from "../support/persistence";
@@ -14,7 +13,7 @@ import type { HydratedSubagentPendingInputOverlay } from "./load-sessions-subage
 export type HydratedRecordHistoryState = {
   promptOverrides: RepoPromptOverrides;
   history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
-  todos: Awaited<ReturnType<AgentEnginePort["loadSessionTodos"]>>;
+  todos: Awaited<ReturnType<NonNullable<SessionLifecycleAdapter["loadSessionTodos"]>>>;
   runtimeResolution: SuccessfulHydrationRuntime;
   hydratedMessages: AgentSessionState["messages"];
   hydratedSubagentPendingInputByExternalSessionId: HydratedSubagentPendingInputOverlay;

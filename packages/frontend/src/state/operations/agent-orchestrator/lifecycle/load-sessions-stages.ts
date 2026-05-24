@@ -65,7 +65,6 @@ export type RuntimeResolutionPlannerStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
-  recordsToHydrate: AgentSessionRecord[];
 };
 
 export type HydrationPromptAssembler = {
@@ -120,7 +119,6 @@ export type HistoryHydrationStageInput = {
 
 export type SubagentPendingInputHydrationMode = "skip" | "hydrate";
 
-export { mergeHydratedMessages } from "../support/hydrated-message-merge";
 export { hydrateSessionRecordsStage } from "./load-sessions-history-hydration-stage";
 export { reconcileLiveSessionsStage } from "./load-sessions-live-reconciliation-stage";
 export { preparePersistedSessionMergeStage } from "./load-sessions-persisted-merge-stage";

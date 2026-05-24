@@ -87,6 +87,37 @@ export const getSession = (
   return session;
 };
 
+export const createStateHarness = (sessions: Record<string, AgentSessionState> = {}) => {
+  let state = sessions;
+  const sessionsRef = { current: state };
+  return {
+    sessionsRef,
+    setSessionsById: (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    },
+    updateSession: (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[externalSessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [externalSessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    },
+    getState: () => state,
+  };
+};
+
 export const persistedSessionRecord = (
   input: {
     externalSessionId: string;

@@ -5,6 +5,7 @@ import {
   createAdapter,
   createLoadAgentSessions,
   createPresence,
+  createStateHarness,
   createTaskFixture,
   createTestQueryClient,
   getSession,
@@ -225,16 +226,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
   });
 
   test("rejects hydration when a persisted session record is missing runtime metadata", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
+    const stateHarness = createStateHarness();
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -246,8 +238,8 @@ describe("agent-orchestrator load-session runtime policy", () => {
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
       updateSession: () => {},
       loadRepoPromptOverrides: async () => ({}),
@@ -276,41 +268,27 @@ describe("agent-orchestrator load-session runtime policy", () => {
           historyPolicy: "requested_only",
         }),
       ).rejects.toThrow("Persisted session 'external-1' is missing runtime kind metadata.");
-      expect(state["external-1"]?.messages ?? []).toEqual([]);
+      expect(stateHarness.getState()["external-1"]?.messages ?? []).toEqual([]);
     } finally {
       hostModule.host.agentSessionsList = originalList;
     }
   });
 
   test("hydrates qa worktree sessions through the shared repo runtime", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const stateHarness = createStateHarness();
     let observedRuntimeEndpoint: string | null = null;
-
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
 
     const updateSession = (
       externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = state[externalSessionId];
+      const current = stateHarness.getState()[externalSessionId];
       if (!current) {
         return;
       }
       const next = updater(current);
       observedRuntimeEndpoint = next.runtimeId;
-      state = {
-        ...state,
-        [externalSessionId]: next,
-      };
-      sessionsRef.current = state;
+      stateHarness.updateSession(externalSessionId, () => next);
     };
 
     const loadAgentSessions = createLoadAgentSessions({
@@ -323,8 +301,8 @@ describe("agent-orchestrator load-session runtime policy", () => {
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
       updateSession,
       loadRepoPromptOverrides: async () => ({}),
@@ -374,39 +352,16 @@ describe("agent-orchestrator load-session runtime policy", () => {
     }
 
     expect(observedRuntimeEndpoint as string | null).toBeNull();
-    expect(state["external-qa-1"]?.runtimeId).toBeNull();
-    expect(state["external-qa-1"]?.workingDirectory).toBe("/tmp/repo/worktree");
-    expect(sessionMessagesToArray(getSession(state, "external-qa-1")).length).toBeGreaterThan(0);
+    expect(stateHarness.getState()["external-qa-1"]?.runtimeId).toBeNull();
+    expect(stateHarness.getState()["external-qa-1"]?.workingDirectory).toBe("/tmp/repo/worktree");
+    expect(
+      sessionMessagesToArray(getSession(stateHarness.getState(), "external-qa-1")).length,
+    ).toBeGreaterThan(0);
   });
 
   test("does not bind qa repo-root sessions to an existing workspace runtime", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const stateHarness = createStateHarness();
     const ensuredRuntimeKinds: string[] = [];
-
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = state[externalSessionId];
-      if (!current) {
-        return;
-      }
-      state = {
-        ...state,
-        [externalSessionId]: updater(current),
-      };
-      sessionsRef.current = state;
-    };
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -418,10 +373,10 @@ describe("agent-orchestrator load-session runtime policy", () => {
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
-      updateSession,
+      updateSession: stateHarness.updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -496,40 +451,15 @@ describe("agent-orchestrator load-session runtime policy", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["external-qa-root"]?.runtimeId).toBeNull();
+    expect(stateHarness.getState()["external-qa-root"]?.runtimeId).toBeNull();
     expect(
-      state["external-qa-root"] ? sessionMessagesToArray(state["external-qa-root"]) : undefined,
+      sessionMessagesToArray(getSession(stateHarness.getState(), "external-qa-root")),
     ).toHaveLength(1);
   });
 
   test("hydrates requested history without probing the runtime list cache", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const stateHarness = createStateHarness();
     const presenceCalls: string[] = [];
-
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = state[externalSessionId];
-      if (!current) {
-        return;
-      }
-      state = {
-        ...state,
-        [externalSessionId]: updater(current),
-      };
-      sessionsRef.current = state;
-    };
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -550,10 +480,10 @@ describe("agent-orchestrator load-session runtime policy", () => {
       }),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
-      updateSession,
+      updateSession: stateHarness.updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -600,69 +530,42 @@ describe("agent-orchestrator load-session runtime policy", () => {
     expect(runtimeEnsureCalls).toEqual([]);
     expect(presenceCalls).toEqual([]);
     expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(false);
-    expect(state["external-1"]?.historyHydrationState).toBe("hydrated");
+    expect(stateHarness.getState()["external-1"]?.historyHydrationState).toBe("hydrated");
   });
 
   test("hydrates requested history, todos, and status from the persisted session runtime", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-build-worktree": {
-          externalSessionId: "external-build-worktree",
-          taskId: "task-1",
-          repoPath: "/tmp/repo",
-          role: "build",
-          status: "running",
-          startedAt: "2026-02-22T08:00:00.000Z",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-build-worktree",
-          workingDirectory: "/tmp/repo/worktrees/task-1",
-          historyHydrationState: "not_requested",
-          runtimeRecoveryState: "idle",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          contextUsage: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          todos: [],
-          modelCatalog: null,
-          selectedModel: null,
-          isLoadingModelCatalog: false,
-          promptOverrides: {},
-        },
+    const stateHarness = createStateHarness({
+      "external-build-worktree": {
+        externalSessionId: "external-build-worktree",
+        taskId: "task-1",
+        repoPath: "/tmp/repo",
+        role: "build",
+        status: "running",
+        startedAt: "2026-02-22T08:00:00.000Z",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-build-worktree",
+        workingDirectory: "/tmp/repo/worktrees/task-1",
+        historyHydrationState: "not_requested",
+        runtimeRecoveryState: "idle",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        contextUsage: null,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: null,
+        isLoadingModelCatalog: false,
+        promptOverrides: {},
       },
-    };
-    let state: Record<string, AgentSessionState> = sessionsRef.current;
+    });
     const historyInputs: LoadSessionHistoryInput[] = [];
     const todosInputs: LoadSessionTodosInput[] = [];
     const statusInputs: ListSessionPresenceInput[] = [];
     const runtimeEnsureCalls: string[] = [];
-
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = state[externalSessionId];
-      if (!current) {
-        return;
-      }
-      state = {
-        ...state,
-        [externalSessionId]: updater(current),
-      };
-      sessionsRef.current = state;
-    };
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -696,10 +599,10 @@ describe("agent-orchestrator load-session runtime policy", () => {
       }),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
-      updateSession,
+      updateSession: stateHarness.updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -760,38 +663,12 @@ describe("agent-orchestrator load-session runtime policy", () => {
     expect(statusInputs.map((input) => input.directories)).toEqual([
       ["/tmp/repo/worktrees/task-1"],
     ]);
-    expect(getSession(state, "external-build-worktree").status).toBe("idle");
+    expect(getSession(stateHarness.getState(), "external-build-worktree").status).toBe("idle");
   });
 
   test("hydrates build worktree sessions through the shared repo runtime", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const stateHarness = createStateHarness();
     const ensuredRuntimeKinds: string[] = [];
-
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = state[externalSessionId];
-      if (!current) {
-        return;
-      }
-      const next = updater(current);
-      state = {
-        ...state,
-        [externalSessionId]: next,
-      };
-      sessionsRef.current = state;
-    };
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -803,10 +680,10 @@ describe("agent-orchestrator load-session runtime policy", () => {
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
-      updateSession,
+      updateSession: stateHarness.updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -876,39 +753,18 @@ describe("agent-orchestrator load-session runtime policy", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["external-1"]?.runtimeId).toBeNull();
-    expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/conflict-worktree");
-    expect(sessionMessagesToArray(getSession(state, "external-1")).length).toBeGreaterThan(0);
+    expect(stateHarness.getState()["external-1"]?.runtimeId).toBeNull();
+    expect(stateHarness.getState()["external-1"]?.workingDirectory).toBe(
+      "/tmp/repo/conflict-worktree",
+    );
+    expect(
+      sessionMessagesToArray(getSession(stateHarness.getState(), "external-1")).length,
+    ).toBeGreaterThan(0);
   });
 
   test("hydrates qa worktree history without ensuring a shared workspace runtime", async () => {
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    let state: Record<string, AgentSessionState> = {};
+    const stateHarness = createStateHarness();
     const ensuredRuntimeKinds: string[] = [];
-
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    };
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = state[externalSessionId];
-      if (!current) {
-        return;
-      }
-      state = {
-        ...state,
-        [externalSessionId]: updater(current),
-      };
-      sessionsRef.current = state;
-    };
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -920,10 +776,10 @@ describe("agent-orchestrator load-session runtime policy", () => {
       adapter: createAdapter(),
       repoEpochRef: { current: 2 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
-      setSessionsById,
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
-      updateSession,
+      updateSession: stateHarness.updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -978,7 +834,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
     }
 
     expect(ensuredRuntimeKinds).toEqual([]);
-    expect(state["external-qa-worktree"]?.runtimeId).toBeNull();
-    expect(state["external-qa-worktree"]?.historyHydrationState).toBe("hydrated");
+    expect(stateHarness.getState()["external-qa-worktree"]?.runtimeId).toBeNull();
+    expect(stateHarness.getState()["external-qa-worktree"]?.historyHydrationState).toBe("hydrated");
   });
 });

@@ -12,6 +12,7 @@ import {
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
 import type { SetStateAction } from "react";
+import { mergeHydratedMessages } from "@/state/operations/agent-orchestrator/support/hydrated-message-merge";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -21,7 +22,6 @@ import {
   createRuntimeResolutionPlannerStage,
   type HydrationRuntimePlanner,
   hydrateSessionRecordsStage,
-  mergeHydratedMessages,
   preparePersistedSessionMergeStage,
   reconcileLiveSessionsStage,
   type SessionLifecycleAdapter,

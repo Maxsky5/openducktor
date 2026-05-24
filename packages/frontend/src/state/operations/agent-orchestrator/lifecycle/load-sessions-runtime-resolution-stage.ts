@@ -9,11 +9,11 @@ import type {
 import { type AgentSessionPresenceSnapshot, createSessionPresenceReader } from "./session-presence";
 import { createAgentSessionPresenceSnapshotSource } from "./session-presence-source";
 
-export const createRuntimeResolutionPlannerStage = async ({
+export const createRuntimeResolutionPlannerStage = ({
   intent,
   options,
   adapter,
-}: RuntimeResolutionPlannerStageInput): Promise<HydrationRuntimePlanner> => {
+}: RuntimeResolutionPlannerStageInput): HydrationRuntimePlanner => {
   const preloadedSessionPresenceByKey =
     options?.preloadedSessionPresenceByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
 
@@ -37,6 +37,5 @@ export const createRuntimeResolutionPlannerStage = async ({
   };
 };
 
-export type { ResolvedHydrationRuntime };
 export type SuccessfulHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: true }>;
 export type FailedHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: false }>;
