@@ -693,8 +693,9 @@ export function AgentChatComposer({
     if (latestSendDisabledRef.current) {
       return;
     }
+    const submitKey = draftStateKey;
     const submittedDraft = latestDraftRef.current;
-    setDraftState({ key: draftStateKey, draft: createEmptyComposerDraft() });
+    setDraftState({ key: submitKey, draft: createEmptyComposerDraft() });
     onComposerEditorInput();
     scheduleComposerFocus();
     try {
@@ -702,9 +703,10 @@ export function AgentChatComposer({
       if (!didSend) {
         setDraftState((currentState) => ({
           key: currentState.key,
-          draft: draftHasMeaningfulContent(currentState.draft)
-            ? currentState.draft
-            : submittedDraft,
+          draft:
+            currentState.key !== submitKey || draftHasMeaningfulContent(currentState.draft)
+              ? currentState.draft
+              : submittedDraft,
         }));
         onComposerEditorInput();
         scheduleComposerFocus();
@@ -718,7 +720,10 @@ export function AgentChatComposer({
       });
       setDraftState((currentState) => ({
         key: currentState.key,
-        draft: draftHasMeaningfulContent(currentState.draft) ? currentState.draft : submittedDraft,
+        draft:
+          currentState.key !== submitKey || draftHasMeaningfulContent(currentState.draft)
+            ? currentState.draft
+            : submittedDraft,
       }));
       onComposerEditorInput();
       scheduleComposerFocus();
