@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
   createHydrationRuntimeResolver,
   type ResolvedHydrationRuntime,
@@ -9,13 +8,6 @@ import type {
 } from "./load-sessions-stages";
 import { type AgentSessionPresenceSnapshot, createSessionPresenceReader } from "./session-presence";
 import { createAgentSessionPresenceSnapshotSource } from "./session-presence-source";
-
-export const readPlannerAgentSessionPresenceSnapshot = async (
-  runtimePlanner: HydrationRuntimePlanner,
-  record: AgentSessionRecord,
-): Promise<AgentSessionPresenceSnapshot> => {
-  return runtimePlanner.readSessionPresence(record);
-};
 
 export const createRuntimeResolutionPlannerStage = async ({
   intent,
@@ -46,3 +38,5 @@ export const createRuntimeResolutionPlannerStage = async ({
 };
 
 export type { ResolvedHydrationRuntime };
+export type SuccessfulHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: true }>;
+export type FailedHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: false }>;

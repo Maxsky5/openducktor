@@ -1,32 +1,13 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { mergeHydratedMessages } from "../support/hydrated-message-merge";
-import {
-  createSessionMessagesState,
-  forEachSessionMessage,
-  getSessionMessagesSlice,
-} from "../support/messages";
-import { normalizePersistedSelection } from "../support/models";
-import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
-import {
-  EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
-  EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
-  mergeSubagentPendingApprovalOverlay,
-  mergeSubagentPendingQuestionOverlay,
-  type SubagentPendingApprovalsByExternalSessionId,
-  type SubagentPendingQuestionsByExternalSessionId,
-} from "../support/subagent-approval-overlay";
-import { isSubagentMessage } from "../support/subagent-messages";
-import {
-  type ResolvedHydrationRuntime,
-  readPlannerAgentSessionPresenceSnapshot,
+import { applyHydratedRecordHistory } from "./load-sessions-hydrated-history-application";
+import { loadHydratedRecordHistory } from "./load-sessions-record-history-loader";
+import type {
+  FailedHydrationRuntime,
+  SuccessfulHydrationRuntime,
 } from "./load-sessions-runtime-resolution-stage";
 import {
   EMPTY_PROMPT_OVERRIDES,
-  INITIAL_SESSION_HISTORY_LIMIT,
   SESSION_HISTORY_HYDRATION_CONCURRENCY,
 } from "./load-sessions-stage-constants";
 import type {
@@ -36,9 +17,7 @@ import type {
   SubagentPendingInputHydrationMode,
   UpdateSession,
 } from "./load-sessions-stages";
-
-type SuccessfulHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: true }>;
-type FailedHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: false }>;
+import { SubagentPendingInputHydrationError } from "./load-sessions-subagent-pending-input-hydration";
 
 type HydrateSessionRecordInput = {
   repoPath: string;
@@ -52,139 +31,6 @@ type HydrateSessionRecordInput = {
   promptAssembler: HistoryHydrationStageInput["promptAssembler"];
   getRepoPromptOverrides: HistoryHydrationStageInput["getRepoPromptOverrides"];
   subagentPendingInputMode: SubagentPendingInputHydrationMode;
-};
-
-type HydratedRecordHistoryState = {
-  promptOverrides: Awaited<ReturnType<HistoryHydrationStageInput["getRepoPromptOverrides"]>>;
-  history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
-  todos: Awaited<ReturnType<AgentEnginePort["loadSessionTodos"]>>;
-  runtimeResolution: SuccessfulHydrationRuntime;
-  hydratedMessages: AgentSessionState["messages"];
-  hydratedSubagentPendingInputByExternalSessionId: HydratedSubagentPendingInputOverlay;
-};
-
-type HydratedSubagentPendingInputOverlay = {
-  scannedChildExternalSessionIds: string[];
-  pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId;
-  pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId;
-  hydrationError: SubagentPendingInputHydrationError | null;
-};
-
-class SubagentPendingInputHydrationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SubagentPendingInputHydrationError";
-  }
-}
-
-const EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY = Object.freeze({
-  scannedChildExternalSessionIds: [],
-  pendingApprovalsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
-  pendingQuestionsByChildExternalSessionId: EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
-  hydrationError: null,
-}) satisfies HydratedSubagentPendingInputOverlay;
-
-const readSubagentSessionIds = (
-  externalSessionId: string,
-  messages: AgentSessionState["messages"],
-): string[] => {
-  const externalSessionIds = new Set<string>();
-  forEachSessionMessage({ externalSessionId, messages }, (message) => {
-    if (!isSubagentMessage(message)) {
-      return;
-    }
-    const subagentSessionId = message.meta.externalSessionId?.trim();
-    if (subagentSessionId) {
-      externalSessionIds.add(subagentSessionId);
-    }
-  });
-  return Array.from(externalSessionIds);
-};
-
-const toHydratedSubagentPendingInputOverlay = (
-  scannedChildExternalSessionIds: string[],
-  pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId,
-  pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId,
-  hydrationError: SubagentPendingInputHydrationError | null = null,
-): HydratedSubagentPendingInputOverlay => {
-  if (scannedChildExternalSessionIds.length === 0 && hydrationError === null) {
-    return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
-  }
-
-  return {
-    scannedChildExternalSessionIds,
-    pendingApprovalsByChildExternalSessionId:
-      Object.keys(pendingApprovalsByChildExternalSessionId).length > 0
-        ? pendingApprovalsByChildExternalSessionId
-        : EMPTY_SUBAGENT_PENDING_APPROVALS_BY_EXTERNAL_SESSION_ID,
-    pendingQuestionsByChildExternalSessionId:
-      Object.keys(pendingQuestionsByChildExternalSessionId).length > 0
-        ? pendingQuestionsByChildExternalSessionId
-        : EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID,
-    hydrationError,
-  };
-};
-
-const loadHydratedSubagentPendingInputOverlay = async ({
-  record,
-  messages,
-  runtimePlanner,
-}: {
-  record: AgentSessionRecord;
-  messages: AgentSessionState["messages"];
-  runtimePlanner: HydrationRuntimePlanner;
-}): Promise<HydratedSubagentPendingInputOverlay> => {
-  const childExternalSessionIds = readSubagentSessionIds(record.externalSessionId, messages);
-  if (childExternalSessionIds.length === 0) {
-    return EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
-  }
-
-  const results = await Promise.allSettled(
-    childExternalSessionIds.map(async (childExternalSessionId) => {
-      try {
-        return {
-          childExternalSessionId,
-          snapshot: await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, {
-            ...record,
-            externalSessionId: childExternalSessionId,
-          }),
-        };
-      } catch (error) {
-        throw new Error(`subagent session '${childExternalSessionId}': ${errorMessage(error)}`);
-      }
-    }),
-  );
-  const pendingApprovalsByChildExternalSessionId: SubagentPendingApprovalsByExternalSessionId = {};
-  const pendingQuestionsByChildExternalSessionId: SubagentPendingQuestionsByExternalSessionId = {};
-  const scannedChildExternalSessionIds: string[] = [];
-  const failures: string[] = [];
-  for (const result of results) {
-    if (result.status === "rejected") {
-      failures.push(errorMessage(result.reason));
-      continue;
-    }
-    const { childExternalSessionId, snapshot } = result.value;
-    scannedChildExternalSessionIds.push(childExternalSessionId);
-    if (snapshot.presence === "runtime" && snapshot.pendingApprovals.length > 0) {
-      pendingApprovalsByChildExternalSessionId[childExternalSessionId] = snapshot.pendingApprovals;
-    }
-    if (snapshot.presence === "runtime" && snapshot.pendingQuestions.length > 0) {
-      pendingQuestionsByChildExternalSessionId[childExternalSessionId] = snapshot.pendingQuestions;
-    }
-  }
-  const hydrationError =
-    failures.length > 0
-      ? new SubagentPendingInputHydrationError(
-          `Failed to hydrate subagent pending input: ${failures.join("; ")}`,
-        )
-      : null;
-
-  return toHydratedSubagentPendingInputOverlay(
-    scannedChildExternalSessionIds,
-    pendingApprovalsByChildExternalSessionId,
-    pendingQuestionsByChildExternalSessionId,
-    hydrationError,
-  );
 };
 
 const markHistoryHydrationFailed = (
@@ -291,42 +137,6 @@ const hydrateRuntimeOnlyRecord = async ({
   );
 };
 
-const applyHydratedRecordHistory = (
-  current: AgentSessionState,
-  {
-    promptOverrides,
-    history,
-    todos,
-    runtimeResolution,
-    hydratedMessages,
-    hydratedSubagentPendingInputByExternalSessionId,
-  }: HydratedRecordHistoryState,
-): AgentSessionState => ({
-  ...current,
-  runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
-  workingDirectory: runtimeResolution.workingDirectory,
-  promptOverrides,
-  historyHydrationState: "hydrated",
-  runtimeRecoveryState: current.runtimeRecoveryState ?? "idle",
-  todos,
-  subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
-    current: current.subagentPendingApprovalsByExternalSessionId,
-    scannedChildExternalSessionIds:
-      hydratedSubagentPendingInputByExternalSessionId.scannedChildExternalSessionIds,
-    pendingApprovalsByChildExternalSessionId:
-      hydratedSubagentPendingInputByExternalSessionId.pendingApprovalsByChildExternalSessionId,
-  }),
-  subagentPendingQuestionsByExternalSessionId: mergeSubagentPendingQuestionOverlay({
-    current: current.subagentPendingQuestionsByExternalSessionId,
-    scannedChildExternalSessionIds:
-      hydratedSubagentPendingInputByExternalSessionId.scannedChildExternalSessionIds,
-    pendingQuestionsByChildExternalSessionId:
-      hydratedSubagentPendingInputByExternalSessionId.pendingQuestionsByChildExternalSessionId,
-  }),
-  contextUsage: historyToSessionContextUsage(history),
-  messages: mergeHydratedMessages(current.externalSessionId, hydratedMessages, current.messages),
-});
-
 const hydrateRecordHistory = async ({
   repoPath,
   adapter,
@@ -341,71 +151,28 @@ const hydrateRecordHistory = async ({
 }: Omit<HydrateSessionRecordInput, "shouldHydrateHistory" | "failOnRuntimeResolutionError"> & {
   runtimeResolution: SuccessfulHydrationRuntime;
 }): Promise<void> => {
-  const shouldHydrateSubagentPendingInput = subagentPendingInputMode === "hydrate";
-  const { runtimeRef, workingDirectory } = runtimeResolution;
-  const [promptOverrides, history, todos] = await Promise.all([
-    getRepoPromptOverrides(),
-    adapter.loadSessionHistory({
-      repoPath,
-      runtimeKind: runtimeRef.runtimeKind,
-      workingDirectory,
-      externalSessionId: record.externalSessionId,
-      limit: INITIAL_SESSION_HISTORY_LIMIT,
-    }),
-    adapter.loadSessionTodos
-      ? adapter.loadSessionTodos({
-          repoPath,
-          runtimeKind: runtimeRef.runtimeKind,
-          workingDirectory,
-          externalSessionId: record.externalSessionId,
-        })
-      : Promise.resolve([]),
-  ]);
-  const preludeMessages = await promptAssembler.buildHydrationPreludeMessages({
+  const hydratedHistory = await loadHydratedRecordHistory({
+    repoPath,
+    adapter,
     record,
-    promptOverrides,
+    runtimeResolution,
+    runtimePlanner,
+    promptAssembler,
+    getRepoPromptOverrides,
+    subagentPendingInputMode,
   });
-  const selectedModel = normalizePersistedSelection(record.selectedModel);
-  const hydratedMessages = createSessionMessagesState(record.externalSessionId, [
-    ...getSessionMessagesSlice(
-      {
-        externalSessionId: record.externalSessionId,
-        messages: preludeMessages,
-      },
-      0,
-    ),
-    ...historyToChatMessages(history, {
-      role: record.role,
-      selectedModel,
-    }),
-  ]);
-  const hydratedSubagentPendingInputByExternalSessionId = shouldHydrateSubagentPendingInput
-    ? await loadHydratedSubagentPendingInputOverlay({
-        record,
-        messages: hydratedMessages,
-        runtimePlanner,
-      })
-    : EMPTY_HYDRATED_SUBAGENT_PENDING_INPUT_OVERLAY;
   if (isStaleRepoOperation()) {
     return;
   }
 
   updateSession(
     record.externalSessionId,
-    (current) =>
-      applyHydratedRecordHistory(current, {
-        promptOverrides,
-        history,
-        todos,
-        runtimeResolution,
-        hydratedMessages,
-        hydratedSubagentPendingInputByExternalSessionId,
-      }),
+    (current) => applyHydratedRecordHistory(current, hydratedHistory),
     { persist: false },
   );
 
-  if (hydratedSubagentPendingInputByExternalSessionId.hydrationError) {
-    throw hydratedSubagentPendingInputByExternalSessionId.hydrationError;
+  if (hydratedHistory.hydratedSubagentPendingInputByExternalSessionId.hydrationError) {
+    throw hydratedHistory.hydratedSubagentPendingInputByExternalSessionId.hydrationError;
   }
 };
 

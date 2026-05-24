@@ -1,5 +1,4 @@
 import { normalizePersistedSelection } from "../support/models";
-import { readPlannerAgentSessionPresenceSnapshot } from "./load-sessions-runtime-resolution-stage";
 import {
   EMPTY_PROMPT_OVERRIDES,
   SESSION_HISTORY_HYDRATION_CONCURRENCY,
@@ -33,8 +32,7 @@ export const reconcileLiveSessionsStage = async ({
     updateSession,
     ...(attachSessionListener ? { attachSessionListener } : {}),
     promptOverrides: EMPTY_PROMPT_OVERRIDES,
-    readSessionPresence: (record) =>
-      readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record),
+    readSessionPresence: (record) => runtimePlanner.readSessionPresence(record),
     attachMissingLiveSession: async ({ record, runtimeKind, workingDirectory }) => {
       if (isStaleRepoOperation()) {
         return;
