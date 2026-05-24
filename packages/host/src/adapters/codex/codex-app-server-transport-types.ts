@@ -36,7 +36,6 @@ export type CodexAppServerEventEmitter = (event: CodexAppServerStreamEvent) => v
 
 export type PendingCodexAppServerRequest = {
   method: CodexAppServerRequestMethod;
-  timeout: NodeJS.Timeout;
   resolve(value: CodexAppServerRequestResult): void;
   reject(error: Error): void;
 };

@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import {
   HostOperationError,
   HostResourceError,
@@ -8,21 +8,20 @@ import {
 } from "../../effect/host-errors";
 import type {
   CodexAppServerProtocolMessage,
-  CodexAppServerRequestMethod,
-  CodexAppServerRequestResult,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
 import {
   type CodexAppServerClientRequest,
   parseCodexAppServerRequestResult,
 } from "../../ports/codex-app-server-protocol";
+import { acquirePendingResponse } from "./codex-app-server-pending-response";
+import { writeCodexAppServerRequestLine } from "./codex-app-server-request-writer";
 import {
   appendCapturedStderr,
   extractErrorMessage,
   isJsonRecord,
   parseStreamMessage,
   pushBoundedMessage,
-  resolveAfterQueuedMessages,
 } from "./codex-app-server-transport-messages";
 import type {
   CodexAppServerChildTransport,
@@ -45,22 +44,30 @@ export const createCodexAppServerTransport = (
   let closed = false;
   let fatalError: Error | null = null;
   const pending = new Map<number, PendingCodexAppServerRequest>();
+  const cancelledSentRequests = new Map<number, NodeJS.Timeout>();
   const notifications: CodexAppServerProtocolMessage[] = [];
   const serverRequests: CodexAppServerProtocolMessage[] = [];
   let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
 
+  const clearCancelledSentRequests = (): void => {
+    for (const timeout of cancelledSentRequests.values()) {
+      clearTimeout(timeout);
+    }
+    cancelledSentRequests.clear();
+  };
+
   const failFast = (error: Error): void => {
     if (!fatalError) {
       fatalError = error;
     }
     closed = true;
-    for (const [id, request] of pending) {
-      clearTimeout(request.timeout);
+    clearCancelledSentRequests();
+    for (const request of pending.values()) {
       request.reject(error);
-      pending.delete(id);
     }
+    pending.clear();
   };
 
   const ensureOpen = (): void => {
@@ -100,90 +107,40 @@ export const createCodexAppServerTransport = (
       );
     });
 
-  const waitForResponse = (id: number, method: CodexAppServerRequestMethod) => {
-    type ResponseEffect = Effect.Effect<
-      CodexAppServerRequestResult,
-      HostOperationError | HostResourceError | HostValidationError
-    >;
-    let resumeEffect: ((effect: ResponseEffect) => void) | null = null;
-    let settledEffect: ResponseEffect | null = null;
-    let abortSignal: AbortSignal | null = null;
-    let abortHandler: (() => void) | null = null;
+  const sendRequestMessage = (message: Record<string, unknown>, markWriteStarted: () => void) =>
+    Effect.gen(function* () {
+      yield* ensureOpenEffect();
+      yield* writeCodexAppServerRequestLine({
+        stdin: child.stdin,
+        payload: message,
+        runtimeId,
+        markWriteStarted,
+      });
+    });
 
-    const finish = (effect: ResponseEffect): void => {
-      if (abortSignal && abortHandler) {
-        abortSignal.removeEventListener("abort", abortHandler);
-        abortSignal = null;
-        abortHandler = null;
-      }
-      if (resumeEffect) {
-        resumeEffect(effect);
-        return;
-      }
-      settledEffect = effect;
-    };
+  const forgetCancelledSentRequest = (id: number): boolean => {
+    const timeout = cancelledSentRequests.get(id);
+    if (!timeout) {
+      return false;
+    }
+    clearTimeout(timeout);
+    cancelledSentRequests.delete(id);
+    return true;
+  };
 
+  const rememberCancelledSentRequest = (id: number): void => {
     const timeout = setTimeout(() => {
-      pending.delete(id);
-      finish(
-        Effect.fail(
-          new HostOperationError({
-            operation: `codexAppServerTransport.request.${method}`,
-            message: `Timed out waiting for Codex app-server request ${method} on runtime ${runtimeId} after ${requestTimeoutMs}ms`,
-            details: { runtimeId, method, requestTimeoutMs },
-          }),
-        ),
-      );
+      cancelledSentRequests.delete(id);
     }, requestTimeoutMs);
-
-    pending.set(id, {
-      method,
-      timeout,
-      resolve: (value) => {
-        resolveAfterQueuedMessages((resolvedValue) => finish(Effect.succeed(resolvedValue)), value);
-      },
-      reject: (error) => {
-        finish(
-          Effect.fail(
-            toHostOperationError(error, `codexAppServerTransport.request.${method}`, {
-              runtimeId,
-              method,
-            }),
-          ),
-        );
-      },
-    });
-
-    return Effect.async<
-      CodexAppServerRequestResult,
-      HostOperationError | HostResourceError | HostValidationError
-    >((resume, signal) => {
-      if (settledEffect) {
-        resume(settledEffect);
-        return;
-      }
-      resumeEffect = resume;
-      abortSignal = signal;
-      abortHandler = () => {
-        clearTimeout(timeout);
-        pending.delete(id);
-        finish(
-          Effect.fail(
-            new HostOperationError({
-              operation: `codexAppServerTransport.request.${method}`,
-              message: `Codex app-server request ${method} was interrupted for runtime ${runtimeId}.`,
-              details: { runtimeId, method },
-            }),
-          ),
-        );
-      };
-      signal.addEventListener("abort", abortHandler, { once: true });
-    });
+    cancelledSentRequests.set(id, timeout);
   };
 
   const resolveResponse = (id: number, message: Record<string, unknown>): void => {
     const request = pending.get(id);
     if (!request) {
+      if (forgetCancelledSentRequest(id)) {
+        return;
+      }
       failFast(
         new HostValidationError({
           message: `Received Codex app-server response with unexpected id ${id} for ${runtimeId}`,
@@ -193,8 +150,6 @@ export const createCodexAppServerTransport = (
       );
       return;
     }
-    pending.delete(id);
-    clearTimeout(request.timeout);
 
     if ("error" in message) {
       request.reject(
@@ -408,24 +363,31 @@ export const createCodexAppServerTransport = (
       return Effect.gen(function* () {
         yield* ensureOpenEffect();
         const id = nextRequestId++;
-        const response = waitForResponse(id, method);
-        const sendResult = yield* Effect.either(
-          sendMessage({
-            jsonrpc: "2.0",
+        return yield* Effect.acquireUseRelease(
+          acquirePendingResponse({
             id,
             method,
-            ...(params !== undefined ? { params } : {}),
+            pending,
+            rememberCancelledSentRequest,
+            requestTimeoutMs,
+            runtimeId,
           }),
+          ({ markWriteStarted, response }) =>
+            Effect.gen(function* () {
+              yield* sendRequestMessage(
+                {
+                  jsonrpc: "2.0",
+                  id,
+                  method,
+                  ...(params !== undefined ? { params } : {}),
+                },
+                markWriteStarted,
+              );
+              return yield* response;
+            }),
+          ({ release }, exit) =>
+            Effect.sync(() => release({ preserveLateResponse: Exit.isInterrupted(exit) })),
         );
-        if (sendResult._tag === "Left") {
-          const pendingRequest = pending.get(id);
-          if (pendingRequest) {
-            clearTimeout(pendingRequest.timeout);
-            pending.delete(id);
-          }
-          return yield* Effect.fail(sendResult.left);
-        }
-        return yield* response;
       });
     },
     notify(notification) {
@@ -478,8 +440,8 @@ export const createCodexAppServerTransport = (
         child.stdin.destroy();
         child.stdout.destroy();
         child.stderr.destroy();
+        clearCancelledSentRequests();
         for (const [id, request] of pending) {
-          clearTimeout(request.timeout);
           request.reject(
             new HostResourceError({
               resource: "codexAppServerTransport",
@@ -488,8 +450,8 @@ export const createCodexAppServerTransport = (
               details: { runtimeId, requestId: id },
             }),
           );
-          pending.delete(id);
         }
+        pending.clear();
       });
     },
   };
