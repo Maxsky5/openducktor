@@ -151,6 +151,8 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   sendDisabled: boolean;
   pendingInlineCommentCount: number;
 }): ReactElement {
+  const hasVariantOptions = variantOptions.length > 0;
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/80 px-2.5 py-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
@@ -201,25 +203,21 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           />
         </div>
 
-        <div className="relative">
-          <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Combobox
-            value={selectedModelSelection?.variant ?? ""}
-            options={variantOptions}
-            className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
-            placeholder={variantOptions.length > 0 ? "Variant" : "No variants"}
-            searchPlaceholder="Search variant..."
-            triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
-            disabled={
-              !taskId ||
-              variantOptions.length === 0 ||
-              isStarting ||
-              !isInteractionEnabled ||
-              isReadOnly
-            }
-            onValueChange={onSelectVariant}
-          />
-        </div>
+        {hasVariantOptions ? (
+          <div className="relative">
+            <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Combobox
+              value={selectedModelSelection?.variant ?? ""}
+              options={variantOptions}
+              className="w-[16rem] max-w-[min(90vw,22rem)] p-0"
+              placeholder="Variant"
+              searchPlaceholder="Search variant..."
+              triggerClassName="!h-7 !w-auto max-w-[12rem] !rounded-full !border-input !bg-card !pl-7 !pr-2 text-xs text-foreground shadow-none hover:!bg-muted"
+              disabled={!taskId || isStarting || !isInteractionEnabled || isReadOnly}
+              onValueChange={onSelectVariant}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">

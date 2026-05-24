@@ -100,6 +100,21 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("GPT-5.3 Codex");
   });
 
+  test("hides the variant selector when no variants are available", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          variantOptions: [],
+        },
+      }),
+    );
+
+    expect(html).toContain("GPT-5.3 Codex");
+    expect(html).not.toContain("No variants");
+    expect(html).not.toContain("Search variant...");
+  });
+
   test("stop button is enabled when session is working even when sends are otherwise disabled", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
