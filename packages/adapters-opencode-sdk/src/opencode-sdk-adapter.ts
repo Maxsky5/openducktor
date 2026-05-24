@@ -241,31 +241,31 @@ export class OpencodeSdkAdapter
           )
         : null;
 
-    return [...this.sessions.values()].flatMap((session) => {
+    const snapshots: LiveAgentSessionSnapshot[] = [];
+    for (const session of this.sessions.values()) {
       if (
         input.existingExternalSessionIds.has(session.externalSessionId) ||
         session.eventTransportKey !== input.runtimeEndpoint ||
         session.input.repoPath !== input.repoPath ||
         session.input.runtimeKind !== input.runtimeKind
       ) {
-        return [];
+        continue;
       }
 
       const workingDirectory = normalizeSessionDirectory(session.input.workingDirectory);
       if (!workingDirectory) {
-        return [];
+        continue;
       }
       if (requestedDirectorySet && !requestedDirectorySet.has(workingDirectory)) {
-        return [];
+        continue;
       }
 
-      return [
-        {
-          ...this.toLocallyAttachedPresenceSnapshot(session),
-          workingDirectory,
-        },
-      ];
-    });
+      snapshots.push({
+        ...this.toLocallyAttachedPresenceSnapshot(session),
+        workingDirectory,
+      });
+    }
+    return snapshots;
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -551,13 +551,13 @@ export class OpencodeSdkAdapter
       });
     }
 
+    const canonicalWorkingDirectory =
+      scannedSnapshot?.workingDirectory ?? localSessionWorkingDirectory ?? input.workingDirectory;
     return toAgentSessionPresenceSnapshotFromLiveSnapshot({
-      ref: scannedSnapshot
-        ? {
-            ...input,
-            workingDirectory: scannedSnapshot.workingDirectory,
-          }
-        : input,
+      ref: {
+        ...input,
+        workingDirectory: canonicalWorkingDirectory,
+      },
       runtimeId,
       snapshot: this.applyLocalActivityToPresenceSnapshot(
         runtimeClientInput.runtimeEndpoint,

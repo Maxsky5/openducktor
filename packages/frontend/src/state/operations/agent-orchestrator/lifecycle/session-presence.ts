@@ -95,6 +95,8 @@ export const applyAgentSessionPresenceSnapshotToSession = (
         status = "starting";
       }
     }
+    // Preserve outbound drafts while runtime presence is still running; idle presence,
+    // including pending input handoff, settles the outbound turn.
     const pendingOutboundSendFields =
       snapshot.agentSessionStatus === "idle" ? settlePendingOutboundSendFields() : {};
 

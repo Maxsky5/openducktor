@@ -280,6 +280,45 @@ describe("session-presence", () => {
     expect(applied.pendingQuestions).toEqual([]);
   });
 
+  test("keeps pending outbound sends when runtime presence is retrying", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      runtimeId: "runtime-1",
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "retry", attempt: 2, message: "try again", nextEpochMs: 1234 },
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({
+        status: "idle",
+        pendingUserMessageStartedAt: 123,
+        draftAssistantText: "partial assistant",
+        draftAssistantMessageId: "assistant-draft",
+        draftReasoningText: "partial reasoning",
+        draftReasoningMessageId: "reasoning-draft",
+      }),
+      snapshot,
+    );
+
+    if (snapshot.presence !== "runtime") {
+      throw new Error("Expected live snapshot.");
+    }
+    expect(snapshot.agentSessionStatus).toBe("running");
+    expect(applied.status).toBe("running");
+    expect(applied.pendingUserMessageStartedAt).toBe(123);
+    expect(applied.draftAssistantText).toBe("partial assistant");
+    expect(applied.draftAssistantMessageId).toBe("assistant-draft");
+    expect(applied.draftReasoningText).toBe("partial reasoning");
+    expect(applied.draftReasoningMessageId).toBe("reasoning-draft");
+  });
+
   test("treats pending input and non-idle runtime status as attachable", () => {
     const createPresence = (overrides: Partial<AgentSessionPresenceSnapshot> = {}) =>
       toAgentSessionPresenceSnapshotFromLiveSnapshot({

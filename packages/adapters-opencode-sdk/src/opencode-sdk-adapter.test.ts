@@ -841,6 +841,24 @@ describe("opencode-sdk-adapter", () => {
       ...mock.client,
       session: {
         ...mock.client.session,
+        list: async (input?: unknown) => {
+          mock.listCalls.push(input);
+          return {
+            data: [
+              {
+                id: "external-session-1",
+                projectID: "project-1",
+                directory: defaultWorkingDirectory,
+                title: "BUILD task-1",
+                time: {
+                  created: Date.parse("2026-02-22T12:00:00.000Z"),
+                  updated: Date.parse("2026-02-22T12:00:00.000Z"),
+                },
+              },
+            ],
+            error: undefined,
+          };
+        },
         status: async (input?: unknown) => {
           mock.statusCalls.push(input);
           return {
@@ -893,6 +911,8 @@ describe("opencode-sdk-adapter", () => {
       agentSessionStatus: "running",
       status: { type: "busy" },
     });
+    expect(mock.listCalls).toEqual([undefined]);
+    expect(mock.statusCalls).toEqual([{ directory: defaultWorkingDirectory }]);
   });
 
   test("sendUserMessage keeps presence active while resolving workflow tools", async () => {
