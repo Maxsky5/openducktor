@@ -219,6 +219,34 @@ describe("load-sessions-stages", () => {
     expect(session?.draftReasoningMessageId).toBe("reasoning-draft");
   });
 
+  test("clears stale todos when history hydration returns an empty todo list", async () => {
+    const stateHarness = createStateHarness({
+      "external-1": createSession({
+        todos: [{ id: "todo-1", content: "Old todo", status: "pending", priority: "medium" }],
+      }),
+    });
+
+    await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter({
+        loadSessionTodos: async () => [],
+      }),
+      setSessionsById: stateHarness.setSessionsById,
+      updateSession: stateHarness.updateSession,
+      isStaleRepoOperation: () => false,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["external-1"]),
+      runtimePlanner: createSuccessfulHydrationRuntimePlanner(),
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(stateHarness.getState()["external-1"]?.todos).toEqual([]);
+  });
+
   test("does not let history hydration settle pending outbound sends from runtime presence", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({

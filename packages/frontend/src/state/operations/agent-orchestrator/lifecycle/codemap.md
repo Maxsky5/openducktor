@@ -14,4 +14,4 @@ Persisted session records are loaded, hydrated from durable session/runtime iden
 
 ## Integration Points
 
-`load-sessions.ts`, `session-loaders.ts`, `hydration-runtime-resolution.ts`, `hydration-runtime-policy.ts`, `reattach-live-session.ts`, `session-presence-*`, `session-presence-source.ts`, `session-presence-cache.ts`, `repo-session-hydration-service.ts`, `repo-session-presence-preloads.ts`, `session-view-lifecycle.ts`, `ensure-ready.ts`, and `session-hydration-operations.ts`.
+`load-sessions.ts`, `session-loaders.ts`, `hydration-runtime-resolution.ts`, `hydration-runtime-policy.ts`, `reattach-live-session.ts`, `session-presence-source.ts`, `session-presence-cache.ts`, `repo-session-hydration-service.ts`, `repo-session-presence-preloads.ts`, `session-view-lifecycle.ts`, `ensure-ready.ts`, and `session-hydration-operations.ts`.

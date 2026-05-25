@@ -826,7 +826,7 @@ const applyHydratedRecordHistory = (
     promptOverrides,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: current.runtimeRecoveryState ?? "idle",
-    todos: todos.length > 0 ? todos : current.todos,
+    todos,
     subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
       current: current.subagentPendingApprovalsByExternalSessionId,
       scannedChildExternalSessionIds:

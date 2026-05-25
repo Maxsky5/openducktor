@@ -144,6 +144,50 @@ describe("reattach-live-session", () => {
     expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
   });
 
+  test("does not adopt runtime presence for an error session without pending input", async () => {
+    const originalSession = {
+      ...createSessionStateFixture(),
+      status: "error" as const,
+      pendingApprovals: [],
+      pendingQuestions: [],
+    };
+    const state: AgentSessionState = originalSession;
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => true,
+      },
+      repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
+      updateSession: () => {
+        throw new Error("should not update an error session without pending input");
+      },
+      attachSessionListener: () => {
+        throw new Error("should not attach an error session without pending input");
+      },
+      promptOverrides: {},
+      attachMissingLiveSession: async () => {
+        throw new Error("should not resume an error session without pending input");
+      },
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
+          externalSessionId: "external-1",
+          title: "Session",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+      isStaleRepoOperation: () => false,
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(state).toEqual(originalSession);
+  });
+
   test("reattaches an idle snapshot when pending input is still live", async () => {
     let state = createSessionStateFixture();
     let resumed = false;

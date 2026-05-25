@@ -91,13 +91,21 @@ export const createReattachLiveSession = ({
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!isAttachableAgentSessionPresenceSnapshot(sessionPresence)) {
       if (sessionPresence.presence === "runtime") {
+        const currentSession = getCurrentSession(record.externalSessionId);
+        if (!currentSession || !canAdoptRuntimePresence(currentSession) || isStaleRepoOperation()) {
+          return false;
+        }
         updateSession(
           record.externalSessionId,
-          (current) =>
-            applyRuntimeIdentityFromPresence(current, sessionPresence, {
+          (current) => {
+            if (!canAdoptRuntimePresence(current)) {
+              return current;
+            }
+            return applyRuntimeIdentityFromPresence(current, sessionPresence, {
               promptOverrides,
               selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
-            }),
+            });
+          },
           { persist: false },
         );
       }
