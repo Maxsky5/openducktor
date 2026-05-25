@@ -18,7 +18,6 @@ import {
   getSessionMessagesSlice,
 } from "../support/messages";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
-import { settlePendingOutboundSendFields } from "../support/pending-outbound-send";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
@@ -45,13 +44,8 @@ import {
   type ResolvedHydrationRuntime,
 } from "./hydration-runtime-resolution";
 import { createReattachLiveSession } from "./reattach-live-session";
-import {
-  type AgentSessionPresenceSnapshot,
-  applyAgentSessionPresenceSnapshotToSession,
-  createSessionPresenceReader,
-} from "./session-presence";
+import { type AgentSessionPresenceSnapshot, createSessionPresenceReader } from "./session-presence";
 import { createAgentSessionPresenceSnapshotSource } from "./session-presence-source";
-import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 export type UpdateSession = (
   externalSessionId: string,
@@ -116,7 +110,6 @@ export type RuntimeResolutionPlannerStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
-  agentSessionPresenceStore?: AgentSessionPresenceStore;
   recordsToHydrate: AgentSessionRecord[];
 };
 
@@ -141,6 +134,7 @@ export type LiveReconciliationStageInput = {
   intent: SessionLoadIntent;
   options?: AgentSessionLoadOptions;
   adapter: SessionLifecycleAdapter;
+  sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   updateSession: UpdateSession;
   attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   isStaleRepoOperation: () => boolean;
@@ -155,7 +149,6 @@ export type LiveReconciliationStageOutput = {
 };
 
 export type HistoryHydrationStageInput = {
-  loadMode?: AgentSessionLoadMode;
   repoPath: string;
   adapter: SessionLifecycleAdapter;
   setSessionsById: Dispatch<SetStateAction<Record<string, AgentSessionState>>>;
@@ -164,13 +157,13 @@ export type HistoryHydrationStageInput = {
   recordsToHydrate: AgentSessionRecord[];
   historyHydrationSessionIds: Set<string>;
   failOnRuntimeResolutionError?: boolean;
-  livePresenceMode?: LivePresenceHydrationMode;
+  subagentPendingInputMode?: SubagentPendingInputHydrationMode;
   runtimePlanner: HydrationRuntimePlanner;
   promptAssembler: HydrationPromptAssembler;
   getRepoPromptOverrides: () => Promise<RepoPromptOverrides>;
 };
 
-export type LivePresenceHydrationMode = "skip" | "apply";
+export type SubagentPendingInputHydrationMode = "skip" | "hydrate";
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const SESSION_HISTORY_HYDRATION_CONCURRENCY = 3;
@@ -501,7 +494,6 @@ export const createRuntimeResolutionPlannerStage = async ({
   intent,
   options,
   adapter,
-  agentSessionPresenceStore,
 }: RuntimeResolutionPlannerStageInput): Promise<HydrationRuntimePlanner> => {
   const preloadedSessionPresenceByKey =
     options?.preloadedSessionPresenceByKey ?? new Map<string, AgentSessionPresenceSnapshot[]>();
@@ -512,7 +504,6 @@ export const createRuntimeResolutionPlannerStage = async ({
   const sessionPresenceSource = createAgentSessionPresenceSnapshotSource({
     adapter,
     preloadedSessionPresenceByKey,
-    ...(agentSessionPresenceStore ? { agentSessionPresenceStore } : {}),
   });
   const readSessionPresence = createSessionPresenceReader({
     repoPath: intent.repoPath,
@@ -597,6 +588,7 @@ export const reconcileLiveSessionsStage = async ({
   intent,
   options,
   adapter,
+  sessionsRef,
   updateSession,
   attachSessionListener,
   isStaleRepoOperation,
@@ -611,6 +603,7 @@ export const reconcileLiveSessionsStage = async ({
   const maybeResumeLiveRecord = createReattachLiveSession({
     adapter,
     repoPath: intent.repoPath,
+    getCurrentSession: (externalSessionId) => sessionsRef.current[externalSessionId] ?? null,
     updateSession,
     ...(attachSessionListener ? { attachSessionListener } : {}),
     promptOverrides: EMPTY_PROMPT_OVERRIDES,
@@ -671,17 +664,7 @@ export const reconcileLiveSessionsStage = async ({
       for (const { record, reattached } of reattachResults) {
         if (reattached) {
           reattachedSessionIds.add(record.externalSessionId);
-          continue;
         }
-        updateSession(
-          record.externalSessionId,
-          (current) => ({
-            ...current,
-            pendingApprovals: [],
-            pendingQuestions: [],
-          }),
-          { persist: false },
-        );
       }
     }
     await processReattachBatch(offset + SESSION_HISTORY_HYDRATION_CONCURRENCY);
@@ -696,7 +679,6 @@ type SuccessfulHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: true }
 type FailedHydrationRuntime = Extract<ResolvedHydrationRuntime, { ok: false }>;
 
 type HydrateSessionRecordInput = {
-  loadMode: AgentSessionLoadMode;
   repoPath: string;
   adapter: SessionLifecycleAdapter;
   updateSession: UpdateSession;
@@ -707,22 +689,17 @@ type HydrateSessionRecordInput = {
   runtimePlanner: HydrationRuntimePlanner;
   promptAssembler: HydrationPromptAssembler;
   getRepoPromptOverrides: () => Promise<RepoPromptOverrides>;
-  livePresenceMode: LivePresenceHydrationMode;
+  subagentPendingInputMode: SubagentPendingInputHydrationMode;
 };
 
 type HydratedRecordHistoryState = {
-  loadMode: AgentSessionLoadMode;
   promptOverrides: RepoPromptOverrides;
   history: Awaited<ReturnType<SessionLifecycleAdapter["loadSessionHistory"]>>;
   todos: Awaited<ReturnType<AgentEnginePort["loadSessionTodos"]>>;
   runtimeResolution: SuccessfulHydrationRuntime;
-  sessionPresence: AgentSessionPresenceSnapshot | null;
   hydratedMessages: AgentSessionState["messages"];
   hydratedSubagentPendingInputByExternalSessionId: HydratedSubagentPendingInputOverlay;
 };
-
-const shouldPreserveStartingStatusFromIdlePresence = (loadMode: AgentSessionLoadMode): boolean =>
-  loadMode === "reconcile_live" || loadMode === "recover_runtime_attachment";
 
 const markHistoryHydrationFailed = (
   externalSessionId: string,
@@ -804,45 +781,17 @@ const applyMissingHydrationRuntime = ({
 };
 
 const hydrateRuntimeOnlyRecord = async ({
-  loadMode,
-  livePresenceMode,
   updateSession,
   isStaleRepoOperation,
   record,
   runtimeResolution,
-  runtimePlanner,
 }: {
-  loadMode: AgentSessionLoadMode;
-  livePresenceMode: LivePresenceHydrationMode;
   updateSession: UpdateSession;
   isStaleRepoOperation: () => boolean;
   record: AgentSessionRecord;
   runtimeResolution: SuccessfulHydrationRuntime;
-  runtimePlanner: HydrationRuntimePlanner;
 }): Promise<void> => {
-  const shouldReadSessionPresenceSnapshot =
-    livePresenceMode === "apply" ||
-    loadMode === "reconcile_live" ||
-    loadMode === "recover_runtime_attachment";
-  const sessionPresence = shouldReadSessionPresenceSnapshot
-    ? await readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
-    : null;
   if (isStaleRepoOperation()) {
-    return;
-  }
-  if (sessionPresence) {
-    const preserveStartingStatusForIdlePresence =
-      shouldPreserveStartingStatusFromIdlePresence(loadMode);
-    updateSession(
-      record.externalSessionId,
-      (current) =>
-        applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
-          promptOverrides: current.promptOverrides ?? EMPTY_PROMPT_OVERRIDES,
-          missingSessionRuntimeId: null,
-          preserveStartingStatusForIdlePresence,
-        }),
-      { persist: false },
-    );
     return;
   }
 
@@ -866,39 +815,18 @@ const applyHydratedRecordHistory = (
     history,
     todos,
     runtimeResolution,
-    sessionPresence,
     hydratedMessages,
     hydratedSubagentPendingInputByExternalSessionId,
-    loadMode,
   }: HydratedRecordHistoryState,
 ): AgentSessionState => {
-  const preserveStartingStatusForIdlePresence =
-    shouldPreserveStartingStatusFromIdlePresence(loadMode);
-  const sessionWithLivePresence = sessionPresence
-    ? applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
-        promptOverrides,
-        preserveStartingStatusForIdlePresence,
-      })
-    : current;
-  const liveSessionTitle =
-    sessionPresence?.presence === "runtime" ? sessionPresence.title : undefined;
-  const nextStatus: AgentSessionState["status"] = sessionWithLivePresence.status;
-  const pendingOutboundSendFields =
-    nextStatus === "running"
-      ? {
-          pendingUserMessageStartedAt: sessionWithLivePresence.pendingUserMessageStartedAt,
-        }
-      : settlePendingOutboundSendFields();
   const nextSession: AgentSessionState = {
-    ...sessionWithLivePresence,
-    status: nextStatus,
+    ...current,
     runtimeKind: runtimeResolution.runtimeRef.runtimeKind,
     workingDirectory: runtimeResolution.workingDirectory,
     promptOverrides,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: current.runtimeRecoveryState ?? "idle",
-    ...pendingOutboundSendFields,
-    todos: todos.length > 0 ? todos : sessionWithLivePresence.todos,
+    todos,
     subagentPendingApprovalsByExternalSessionId: mergeSubagentPendingApprovalOverlay({
       current: current.subagentPendingApprovalsByExternalSessionId,
       scannedChildExternalSessionIds:
@@ -917,18 +845,10 @@ const applyHydratedRecordHistory = (
     messages: mergeHydratedMessages(current.externalSessionId, hydratedMessages, current.messages),
   };
 
-  if (sessionPresence?.presence === "runtime") {
-    if (liveSessionTitle) {
-      nextSession.title = liveSessionTitle;
-    } else {
-      delete nextSession.title;
-    }
-  }
   return nextSession;
 };
 
 const hydrateRecordHistory = async ({
-  loadMode,
   repoPath,
   adapter,
   updateSession,
@@ -938,9 +858,8 @@ const hydrateRecordHistory = async ({
   runtimePlanner,
   promptAssembler,
   getRepoPromptOverrides,
-  livePresenceMode,
+  subagentPendingInputMode,
 }: {
-  loadMode: AgentSessionLoadMode;
   repoPath: string;
   adapter: SessionLifecycleAdapter;
   updateSession: UpdateSession;
@@ -950,11 +869,11 @@ const hydrateRecordHistory = async ({
   runtimePlanner: HydrationRuntimePlanner;
   promptAssembler: HydrationPromptAssembler;
   getRepoPromptOverrides: () => Promise<RepoPromptOverrides>;
-  livePresenceMode: LivePresenceHydrationMode;
+  subagentPendingInputMode: SubagentPendingInputHydrationMode;
 }): Promise<void> => {
-  const shouldApplyLivePresence = livePresenceMode === "apply";
+  const shouldHydrateSubagentPendingInput = subagentPendingInputMode === "hydrate";
   const { runtimeRef, workingDirectory } = runtimeResolution;
-  const [promptOverrides, history, todos, sessionPresence] = await Promise.all([
+  const [promptOverrides, history, todos] = await Promise.all([
     getRepoPromptOverrides(),
     adapter.loadSessionHistory({
       repoPath,
@@ -971,9 +890,6 @@ const hydrateRecordHistory = async ({
           externalSessionId: record.externalSessionId,
         })
       : Promise.resolve([]),
-    shouldApplyLivePresence
-      ? readPlannerAgentSessionPresenceSnapshot(runtimePlanner, record)
-      : Promise.resolve(null),
   ]);
   const preludeMessages = await promptAssembler.buildHydrationPreludeMessages({
     record,
@@ -993,7 +909,7 @@ const hydrateRecordHistory = async ({
       selectedModel,
     }),
   ]);
-  const hydratedSubagentPendingInputByExternalSessionId = shouldApplyLivePresence
+  const hydratedSubagentPendingInputByExternalSessionId = shouldHydrateSubagentPendingInput
     ? await loadHydratedSubagentPendingInputOverlay({
         record,
         messages: hydratedMessages,
@@ -1012,10 +928,8 @@ const hydrateRecordHistory = async ({
         history,
         todos,
         runtimeResolution,
-        sessionPresence,
         hydratedMessages,
         hydratedSubagentPendingInputByExternalSessionId,
-        loadMode,
       }),
     { persist: false },
   );
@@ -1026,7 +940,6 @@ const hydrateRecordHistory = async ({
 };
 
 const hydrateSessionRecord = async ({
-  loadMode,
   repoPath,
   adapter,
   updateSession,
@@ -1037,12 +950,8 @@ const hydrateSessionRecord = async ({
   runtimePlanner,
   promptAssembler,
   getRepoPromptOverrides,
-  livePresenceMode,
+  subagentPendingInputMode,
 }: HydrateSessionRecordInput): Promise<void> => {
-  if (isStaleRepoOperation()) {
-    return;
-  }
-
   if (isStaleRepoOperation()) {
     return;
   }
@@ -1061,19 +970,15 @@ const hydrateSessionRecord = async ({
 
     if (!shouldHydrateHistory) {
       await hydrateRuntimeOnlyRecord({
-        loadMode,
-        livePresenceMode,
         updateSession,
         isStaleRepoOperation,
         record,
         runtimeResolution,
-        runtimePlanner,
       });
       return;
     }
 
     await hydrateRecordHistory({
-      loadMode,
       repoPath,
       adapter,
       updateSession,
@@ -1083,13 +988,12 @@ const hydrateSessionRecord = async ({
       runtimePlanner,
       promptAssembler,
       getRepoPromptOverrides,
-      livePresenceMode,
+      subagentPendingInputMode,
     });
   }
 };
 
 export const hydrateSessionRecordsStage = async ({
-  loadMode = "bootstrap",
   repoPath,
   adapter,
   setSessionsById,
@@ -1098,7 +1002,7 @@ export const hydrateSessionRecordsStage = async ({
   recordsToHydrate,
   historyHydrationSessionIds,
   failOnRuntimeResolutionError = false,
-  livePresenceMode = "skip",
+  subagentPendingInputMode = "skip",
   runtimePlanner,
   promptAssembler,
   getRepoPromptOverrides,
@@ -1123,7 +1027,6 @@ export const hydrateSessionRecordsStage = async ({
     await Promise.all(
       batch.map((record) =>
         hydrateSessionRecord({
-          loadMode,
           repoPath,
           adapter,
           updateSession,
@@ -1134,7 +1037,7 @@ export const hydrateSessionRecordsStage = async ({
           runtimePlanner,
           promptAssembler,
           getRepoPromptOverrides,
-          livePresenceMode,
+          subagentPendingInputMode,
         }).catch((error) => {
           if (historyHydrationSessionIds.has(record.externalSessionId)) {
             markHistoryHydrationFailed(record.externalSessionId, updateSession, {

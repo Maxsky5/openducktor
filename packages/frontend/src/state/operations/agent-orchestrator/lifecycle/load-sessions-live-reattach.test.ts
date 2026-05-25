@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  type AgentSessionPresenceSnapshot,
-  AgentSessionPresenceStore,
   type AgentSessionState,
-  agentSessionPresenceLookupKey,
   createAdapter,
-  createAgentSessionPresenceSnapshotFixture,
   createDeferred,
   createLoadAgentSessions,
   createTaskFixture,
@@ -477,7 +473,7 @@ describe("agent-orchestrator live reattach hydration", () => {
     expect(state["external-1"]?.runtimeId).toBeUndefined();
   });
 
-  test("reuses the trusted live agent session store for requested session hydration", async () => {
+  test("does not let requested history hydration relaunch an already idle session", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-1": {
@@ -515,33 +511,6 @@ describe("agent-orchestrator live reattach hydration", () => {
       sessionsRef.current = state;
     };
 
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
-    agentSessionPresenceStore.replaceRepoPresence(
-      "/tmp/repo",
-      new Map([
-        [
-          agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
-          [
-            createAgentSessionPresenceSnapshotFixture({
-              ref: {
-                repoPath: "/tmp/repo",
-                runtimeKind: "opencode",
-                externalSessionId: "external-1",
-                workingDirectory: "/tmp/repo/worktree",
-              },
-              runtimeId: "runtime-1",
-              snapshot: {
-                title: "BUILD task-1",
-                status: { type: "busy" },
-                pendingApprovals: [],
-                pendingQuestions: [],
-              },
-            }),
-          ],
-        ],
-      ]) as Map<string, AgentSessionPresenceSnapshot[]>,
-    );
-
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
       activeWorkspace: {
@@ -551,7 +520,7 @@ describe("agent-orchestrator live reattach hydration", () => {
       },
       adapter: createAdapter({
         listSessionPresence: async () => {
-          throw new Error("should not reload live snapshots");
+          throw new Error("history hydration must not reload liveness for idle sessions");
         },
       }),
       repoEpochRef: { current: 2 },
@@ -570,7 +539,6 @@ describe("agent-orchestrator live reattach hydration", () => {
         }));
       },
       loadRepoPromptOverrides: async () => ({}),
-      agentSessionPresenceStore,
     });
 
     await loadAgentSessions("task-1", {
@@ -590,7 +558,112 @@ describe("agent-orchestrator live reattach hydration", () => {
       ],
     });
 
+    expect(state["external-1"]?.status).toBe("idle");
+  });
+
+  test("reattaches a requested stopped session when runtime reports it live", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-1": {
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          role: "build",
+          status: "stopped",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          runtimeId: null,
+          runId: null,
+          workingDirectory: "/tmp/repo",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          contextUsage: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          todos: [],
+          modelCatalog: null,
+          selectedModel: null,
+          isLoadingModelCatalog: false,
+          promptOverrides: {},
+        },
+      },
+    };
+    let state = sessionsRef.current;
+    let attachedSessionId: string | null = null;
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      queryClient,
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        hasSession: () => true,
+        listSessionPresence: async () => [
+          {
+            externalSessionId: "external-1",
+            title: "BUILD task-1",
+            workingDirectory: "/tmp/repo",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        ],
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [createTaskFixture()] },
+      updateSession: (externalSessionId, updater) => {
+        const currentSession = state[externalSessionId];
+        if (!currentSession) {
+          throw new Error(`Missing session '${externalSessionId}' in test state.`);
+        }
+        setSessionsById((current) => ({
+          ...current,
+          [externalSessionId]: updater(currentSession),
+        }));
+      },
+      attachSessionListener: (_repoPath, externalSessionId) => {
+        attachedSessionId = externalSessionId;
+      },
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetExternalSessionId: "external-1",
+      allowLiveSessionResume: true,
+      persistedRecords: [
+        persistedSessionRecord({
+          runtimeKind: "opencode",
+          externalSessionId: "external-1",
+          taskId: "task-1",
+          role: "build",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          updatedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo",
+        }),
+      ],
+    });
+
+    expect(attachedSessionId === "external-1").toBe(true);
     expect(state["external-1"]?.status).toBe("running");
+    expect(state["external-1"]?.runtimeId).toBe("runtime-1");
   });
 
   test("refreshes requested session history even when in-memory messages already exist", async () => {

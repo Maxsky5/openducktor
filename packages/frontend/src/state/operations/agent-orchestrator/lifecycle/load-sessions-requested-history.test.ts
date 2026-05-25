@@ -7,7 +7,6 @@ import {
   createAdapter,
   createDeferred,
   createLoadAgentSessions,
-  createPresence,
   createTaskFixture,
   createTestQueryClient,
   getSession,
@@ -161,7 +160,7 @@ describe("agent-orchestrator requested history hydration", () => {
     expect(state["external-child-1"]?.status).toBe("running");
   });
 
-  test("applies passive presence during requested-history hydration without attaching", async () => {
+  test("hydrates requested history without applying passive presence", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-codex-1": {
@@ -193,7 +192,6 @@ describe("agent-orchestrator requested history hydration", () => {
       },
     };
     let state: Record<string, AgentSessionState> = sessionsRef.current;
-    const presenceScans: string[][] = [];
     const attachCalls: string[] = [];
 
     const setSessionsById = (
@@ -238,28 +236,11 @@ describe("agent-orchestrator requested history hydration", () => {
             runtimeKind: input.runtimeKind,
           };
         },
-        listSessionPresence: async (input) => {
-          presenceScans.push(input.directories ?? []);
-          const presence = createPresence("external-codex-1", "/tmp/repo", {
-            status: { type: "idle" },
-          });
-          return [
-            {
-              ...presence,
-              ref: { ...presence.ref, runtimeKind: "codex" },
-              runtimeId: "runtime-codex",
-            },
-          ];
+        listSessionPresence: async () => {
+          throw new Error("history hydration must not read top-level liveness");
         },
-        readSessionPresence: async (input) => {
-          const presence = createPresence(input.externalSessionId, input.workingDirectory, {
-            status: { type: "idle" },
-          });
-          return {
-            ...presence,
-            ref: { ...presence.ref, runtimeKind: "codex" },
-            runtimeId: "runtime-codex",
-          };
+        readSessionPresence: async () => {
+          throw new Error("history hydration must not read direct top-level liveness");
         },
       }),
       repoEpochRef: { current: 2 },
@@ -311,12 +292,12 @@ describe("agent-orchestrator requested history hydration", () => {
       ],
     });
 
-    expect(presenceScans).toEqual([["/tmp/repo"]]);
     expect(attachCalls).toEqual([]);
-    expect(getSession(state, "external-codex-1").status).toBe("idle");
+    expect(getSession(state, "external-codex-1").status).toBe("running");
+    expect(getSession(state, "external-codex-1").historyHydrationState).toBe("hydrated");
   });
 
-  test("applies passive presence for already hydrated requested sessions without reloading history", async () => {
+  test("does not run a presence-only refresh for already hydrated requested sessions", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-codex-1": {
@@ -324,7 +305,7 @@ describe("agent-orchestrator requested history hydration", () => {
           taskId: "task-1",
           repoPath: "/tmp/repo",
           role: "build",
-          status: "running",
+          status: "idle",
           startedAt: "2026-02-22T08:00:00.000Z",
           runtimeKind: "codex",
           runtimeId: "runtime-codex",
@@ -389,20 +370,11 @@ describe("agent-orchestrator requested history hydration", () => {
       },
       adapter: createAdapter({
         loadSessionHistory: async () => {
-          throw new Error("history should not be reloaded for a presence-only refresh");
+          throw new Error("history should not be reloaded for an already hydrated session");
         },
         listSessionPresence: async () => {
           listPresenceCount += 1;
-          const presence = createPresence("external-codex-1", "/tmp/repo", {
-            status: { type: "idle" },
-          });
-          return [
-            {
-              ...presence,
-              ref: { ...presence.ref, runtimeKind: "codex" },
-              runtimeId: "runtime-codex",
-            },
-          ];
+          throw new Error("already hydrated history must not read top-level liveness");
         },
       }),
       repoEpochRef: { current: 2 },
@@ -454,7 +426,7 @@ describe("agent-orchestrator requested history hydration", () => {
       ],
     });
 
-    expect(listPresenceCount).toBe(1);
+    expect(listPresenceCount).toBe(0);
     expect(getSession(state, "external-codex-1").status).toBe("idle");
     expect(getSession(state, "external-codex-1").historyHydrationState).toBe("hydrated");
   });
@@ -647,7 +619,7 @@ describe("agent-orchestrator requested history hydration", () => {
     });
   });
 
-  test("uses the resolved working directory for requested-history live lookups and state updates", async () => {
+  test("uses the resolved working directory for requested-history state updates", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-1": {
@@ -756,7 +728,7 @@ describe("agent-orchestrator requested history hydration", () => {
       ],
     });
 
-    expect(observedSnapshotDirectories).toEqual(["/tmp/repo/resolved-worktree"]);
+    expect(observedSnapshotDirectories).toEqual([]);
     expect(state["external-1"]?.workingDirectory).toBe("/tmp/repo/resolved-worktree");
   });
 

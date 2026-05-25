@@ -2,7 +2,11 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionHistoryHydrationPolicy,
+  AgentSessionLoadOptions,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { TaskDocuments } from "../runtime/runtime";
 import { getSessionMessageCount } from "../support/messages";
@@ -16,7 +20,6 @@ import {
   type SessionLoadIntent,
   type UpdateSession,
 } from "./load-sessions-stages";
-import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -31,8 +34,44 @@ type CreateLoadAgentSessionsArgs = {
   attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
-  agentSessionPresenceStore?: AgentSessionPresenceStore;
   queryClient: QueryClient;
+};
+
+const REQUESTED_SESSION_LIVE_RECONCILE_STATUSES = new Set<AgentSessionState["status"]>([
+  "stopped",
+  "starting",
+  "running",
+]);
+
+const shouldReconcileRequestedSessionLiveness = (session: AgentSessionState | null): boolean => {
+  if (session === null) {
+    return true;
+  }
+  if (REQUESTED_SESSION_LIVE_RECONCILE_STATUSES.has(session.status)) {
+    return true;
+  }
+  return session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0;
+};
+
+const resolveHistoryPolicy = ({
+  explicitPolicy,
+  shouldHydrateRequestedSession,
+  shouldReconcileLiveSessions,
+}: {
+  explicitPolicy: AgentSessionLoadOptions["historyPolicy"] | undefined;
+  shouldHydrateRequestedSession: boolean;
+  shouldReconcileLiveSessions: boolean;
+}): AgentSessionHistoryHydrationPolicy => {
+  if (explicitPolicy) {
+    return explicitPolicy;
+  }
+  if (shouldHydrateRequestedSession) {
+    return "requested_only";
+  }
+  if (shouldReconcileLiveSessions) {
+    return "live_if_empty";
+  }
+  return "none";
 };
 
 export const createLoadAgentSessions = ({
@@ -48,7 +87,6 @@ export const createLoadAgentSessions = ({
   attachSessionListener,
   loadRepoPromptOverrides,
   loadTaskDocuments: _loadTaskDocuments,
-  agentSessionPresenceStore,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
@@ -90,12 +128,22 @@ export const createLoadAgentSessions = ({
       mode === "requested_history" && requestedSessionId !== null;
     const shouldRecoverRuntimeAttachment =
       mode === "recover_runtime_attachment" && requestedSessionId !== null;
+    const requestedSession = requestedSessionId
+      ? (sessionsRef.current[requestedSessionId] ?? null)
+      : null;
     const shouldReconcileRequestedLiveSession =
-      shouldHydrateRequestedSession && options?.allowLiveSessionResume === true;
+      shouldHydrateRequestedSession &&
+      options?.allowLiveSessionResume === true &&
+      shouldReconcileRequestedSessionLiveness(requestedSession);
     const shouldReconcileLiveSessions =
       mode === "reconcile_live" ||
       shouldRecoverRuntimeAttachment ||
       shouldReconcileRequestedLiveSession;
+    const historyPolicy = resolveHistoryPolicy({
+      explicitPolicy: options?.historyPolicy,
+      shouldHydrateRequestedSession,
+      shouldReconcileLiveSessions,
+    });
     return {
       repoPath,
       workspaceId: activeWorkspace?.workspaceId ?? "",
@@ -112,13 +160,7 @@ export const createLoadAgentSessions = ({
         : null,
       shouldHydrateRequestedSession,
       shouldReconcileLiveSessions,
-      historyPolicy:
-        options?.historyPolicy ??
-        (shouldHydrateRequestedSession
-          ? "requested_only"
-          : shouldReconcileLiveSessions
-            ? "live_if_empty"
-            : "none"),
+      historyPolicy,
     };
   };
 
@@ -193,7 +235,6 @@ export const createLoadAgentSessions = ({
         intent,
         ...(options ? { options } : {}),
         adapter,
-        ...(agentSessionPresenceStore ? { agentSessionPresenceStore } : {}),
         recordsToHydrate,
       });
       const promptAssembler = createHydrationPromptAssemblerStage({
@@ -206,6 +247,7 @@ export const createLoadAgentSessions = ({
         intent,
         ...(options ? { options } : {}),
         adapter,
+        sessionsRef,
         updateSession,
         ...(attachSessionListener ? { attachSessionListener } : {}),
         isStaleRepoOperation,
@@ -230,16 +272,8 @@ export const createLoadAgentSessions = ({
           }
         }
 
-        const currentRequestedSession = intent.requestedSessionId
-          ? (sessionsRef.current[intent.requestedSessionId] ?? null)
-          : null;
-        const shouldApplyLivePresenceDuringHydration =
-          intent.shouldReconcileLiveSessions ||
-          (intent.shouldHydrateRequestedSession &&
-            currentRequestedSession !== null &&
-            currentRequestedSession.runtimeId !== null);
+        const shouldHydrateSubagentPendingInput = intent.shouldReconcileLiveSessions;
         await hydrateSessionRecordsStage({
-          loadMode: intent.mode,
           repoPath: intent.repoPath,
           adapter,
           setSessionsById,
@@ -251,7 +285,7 @@ export const createLoadAgentSessions = ({
           runtimePlanner,
           promptAssembler,
           getRepoPromptOverrides,
-          livePresenceMode: shouldApplyLivePresenceDuringHydration ? "apply" : "skip",
+          subagentPendingInputMode: shouldHydrateSubagentPendingInput ? "hydrate" : "skip",
         });
       }
     };

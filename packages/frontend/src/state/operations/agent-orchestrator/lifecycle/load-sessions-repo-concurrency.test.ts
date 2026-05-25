@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  AgentSessionPresenceStore,
   type AgentSessionRecord,
   type AgentSessionState,
   createAdapter,
@@ -606,7 +605,6 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
         planMarkdown: "",
         qaMarkdown: "",
       }),
-      agentSessionPresenceStore: new AgentSessionPresenceStore(),
     });
 
     const hostModule = await import("../../shared/host");

@@ -144,6 +144,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
           [externalSessionId]: updater(current),
         };
       },
+      attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 

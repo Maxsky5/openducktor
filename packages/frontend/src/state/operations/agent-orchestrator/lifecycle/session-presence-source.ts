@@ -5,7 +5,6 @@ import {
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
 import { AgentSessionPresenceCache, agentSessionPresenceLookupKey } from "./session-presence-cache";
-import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 type AgentSessionPresenceSnapshotSourceAdapter = {
   listSessionPresence?: AgentEnginePort["listSessionPresence"];
@@ -22,11 +21,9 @@ type PreloadedPresenceLookup =
 
 export const createAgentSessionPresenceSnapshotSource = ({
   adapter,
-  agentSessionPresenceStore,
   preloadedSessionPresenceByKey,
 }: {
   adapter: AgentSessionPresenceSnapshotSourceAdapter;
-  agentSessionPresenceStore?: AgentSessionPresenceStore;
   preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
 }): AgentSessionPresenceSnapshotSource => {
   const preloadedPresenceByKey =
@@ -65,11 +62,6 @@ export const createAgentSessionPresenceSnapshotSource = ({
   };
 
   const read = async (ref: AgentSessionRef): Promise<AgentSessionPresenceSnapshot> => {
-    const storedPresence = agentSessionPresenceStore?.readPresence(ref);
-    if (storedPresence) {
-      return storedPresence;
-    }
-
     const preloadedPresence = readPreloadedPresence(ref);
     if (preloadedPresence.type === "hit") {
       return preloadedPresence.snapshot;

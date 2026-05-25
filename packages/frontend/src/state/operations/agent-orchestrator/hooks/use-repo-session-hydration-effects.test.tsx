@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import { AgentSessionPresenceStore } from "../lifecycle/session-presence-store";
 import { createTaskWithSession } from "./agent-session-hook-test-fixtures";
 import { useRepoSessionHydrationEffects } from "./use-repo-session-hydration-effects";
 
@@ -14,7 +13,6 @@ describe("useRepoSessionHydrationEffects", () => {
         workspaceRepoPath: repoPath,
         tasks: repoPath ? [createTaskWithSession()] : [],
         currentWorkspaceRepoPathRef: { current: repoPath },
-        agentSessionPresenceStore: new AgentSessionPresenceStore(),
         sessionHydration: {
           bootstrapTaskSessions: async (taskId) => {
             loadCalls.push({ taskId, mode: undefined });

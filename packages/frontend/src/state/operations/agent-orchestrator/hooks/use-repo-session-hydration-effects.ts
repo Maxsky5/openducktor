@@ -3,13 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRepoSessionHydrationService } from "../lifecycle/repo-session-hydration-service";
 import type { RepoSessionPresencePreloads } from "../lifecycle/repo-session-presence-preloads";
 import type { SessionHydrationOperations } from "../lifecycle/session-hydration-operations";
-import type { AgentSessionPresenceStore } from "../lifecycle/session-presence-store";
 
 type UseRepoSessionHydrationEffectsArgs = {
   workspaceRepoPath: string | null;
   tasks: TaskCard[];
   currentWorkspaceRepoPathRef: { current: string | null };
-  agentSessionPresenceStore: AgentSessionPresenceStore;
   sessionHydration: Pick<
     SessionHydrationOperations,
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
@@ -24,7 +22,6 @@ export const useRepoSessionHydrationEffects = ({
   workspaceRepoPath,
   tasks,
   currentWorkspaceRepoPathRef,
-  agentSessionPresenceStore,
   sessionHydration,
   prepareRepoSessionPresencePreloads,
 }: UseRepoSessionHydrationEffectsArgs) => {
@@ -34,13 +31,12 @@ export const useRepoSessionHydrationEffects = ({
     () =>
       createRepoSessionHydrationService({
         sessionHydration,
-        agentSessionPresenceStore,
         ...(prepareRepoSessionPresencePreloads ? { prepareRepoSessionPresencePreloads } : {}),
         onRetryRequested: () => {
           setSessionRetryTick((current) => current + 1);
         },
       }),
-    [agentSessionPresenceStore, prepareRepoSessionPresencePreloads, sessionHydration],
+    [prepareRepoSessionPresencePreloads, sessionHydration],
   );
 
   const isCurrentActiveRepo = useCallback(
@@ -63,6 +59,8 @@ export const useRepoSessionHydrationEffects = ({
     if (!workspaceRepoPath || tasks.length === 0) {
       return;
     }
+    // Retry requests intentionally re-run this effect even though the tick is not part of the
+    // reconciliation payload.
     void sessionRetryTick;
     let cancelled = false;
 
@@ -85,8 +83,4 @@ export const useRepoSessionHydrationEffects = ({
     sessionRetryTick,
     tasks,
   ]);
-
-  return {
-    agentSessionPresenceStore,
-  };
 };
