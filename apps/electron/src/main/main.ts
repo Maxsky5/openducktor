@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
-import type { BrowserWindow as ElectronBrowserWindow } from "electron";
+import type { BrowserWindow as ElectronBrowserWindow, Session as ElectronSession } from "electron";
 import electron from "electron";
 import {
   ELECTRON_HOST_EVENT_CHANNEL,
@@ -11,6 +11,7 @@ import {
   type ElectronHostEventEnvelope,
   type ElectronHostInvokeRequest,
 } from "../shared/electron-bridge-contract";
+import { configureElectronAppIdentity } from "./electron-app-identity";
 import { createElectronHostCommandRouter } from "./electron-host";
 import {
   createElectronLocalAttachmentPreviewUrl,
@@ -29,11 +30,13 @@ import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 
 const { app, BrowserWindow, ipcMain, net, protocol, session, shell } = electron;
 const APPLICATION_NAME = "OpenDucktor";
+const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 
+configureElectronAppIdentity(app, APPLICATION_NAME);
 disableElectronKeychainStorage(app.commandLine);
 configureElectronProcessEnvironment({
   env: process.env,
@@ -51,7 +54,6 @@ const hostCommandRouter = createElectronHostCommandRouter({
 let hostShutdownStarted = false;
 let hostShutdownComplete = false;
 
-app.setName(APPLICATION_NAME);
 protocol.registerSchemesAsPrivileged([
   {
     scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -83,7 +85,9 @@ const validateExternalUrl = (url: string): string => {
   return parsedUrl.href;
 };
 
-const createMainWindow = async (): Promise<ElectronBrowserWindow> => {
+const createMainWindow = async (
+  rendererSession: ElectronSession,
+): Promise<ElectronBrowserWindow> => {
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -96,6 +100,7 @@ const createMainWindow = async (): Promise<ElectronBrowserWindow> => {
       nodeIntegration: false,
       preload: getPreloadPath(),
       sandbox: true,
+      session: rendererSession,
     },
   });
   registerWindowContextMenu(window, { isDevelopment });
@@ -201,27 +206,28 @@ const hideWindowsForShutdown = (): void => {
 app
   .whenReady()
   .then(async () => {
+    const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);
     configureElectronLoopbackCorsPolicy(
-      session.defaultSession,
+      rendererSession,
       resolveElectronLoopbackCorsOrigin(rendererDevUrl),
     );
     registerElectronLocalAttachmentPreviewProtocol({
       net,
       resolveLocalAttachmentPath: resolveLocalAttachmentPathForPreview,
-      session: session.defaultSession,
+      session: rendererSession,
     });
     installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
     registerIpcHandlers();
     registerHostEventForwarding();
     await hostCommandRouter.initialize();
-    await createMainWindow();
+    await createMainWindow(rendererSession);
 
     app.on("activate", () => {
       if (hostShutdownStarted) {
         return;
       }
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createMainWindow();
+        void createMainWindow(rendererSession);
       }
     });
   })

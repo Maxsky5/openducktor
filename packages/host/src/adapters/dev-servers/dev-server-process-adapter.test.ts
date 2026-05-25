@@ -239,7 +239,7 @@ setInterval(() => {}, 1000);
     }
 
     const port = createDevServerProcessAdapter({
-      startGracePeriodMs: 20,
+      startGracePeriodMs: 1_000,
       stopTimeoutMs: 100,
     });
 
