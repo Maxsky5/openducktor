@@ -34,7 +34,7 @@ export const configureElectronAppIdentity = (
     createDirectory(profilePath);
   } catch (cause) {
     throw new Error(
-      `Failed to create OpenDucktor Electron profile directory at ${profilePath}: ${errorMessage(cause)}`,
+      `Failed to create ${appName} Electron profile directory at ${profilePath}: ${errorMessage(cause)}`,
       { cause },
     );
   }
