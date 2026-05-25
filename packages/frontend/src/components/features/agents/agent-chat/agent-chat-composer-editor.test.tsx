@@ -1516,7 +1516,7 @@ describe("AgentChatComposerEditor", () => {
     firstTextSegment.textContent = "before ";
     fireEvent.input(firstTextSegment);
 
-    await expectComposerText(rendered.container, "before $review");
+    await expectComposerText(rendered.container, "before review");
     expect(rendered.container.querySelector(".lucide-blocks")).toBeDefined();
   });
 
@@ -1888,6 +1888,59 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(() => {
       expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
         "main.ts",
+      );
+    });
+
+    const originalTrailingEditable =
+      rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(originalTrailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    const trailingSegmentId = originalTrailingEditable.dataset.textSegmentId;
+    originalTrailingEditable.textContent = " ";
+    const textNode = originalTrailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, 1);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
+        trailingSegmentId,
+      );
+      expect(updatedTrailingEditable?.textContent).toBe(" ");
+    });
+  });
+
+  test("preserves the trailing text segment id after typing after a skill chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check $");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /analyze/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "analyze",
       );
     });
 

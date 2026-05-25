@@ -294,6 +294,106 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
+  test("hydrates persisted Codex skill marker text into user display parts", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: ["thread-skill"], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [{ id: "thread-skill", cwd: "/repo", createdAt: 1, status: { type: "idle" } }],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method !== "thread/read") {
+          throw new Error(`Unexpected method '${request.method}'.`);
+        }
+        const includeTurns = (request.params as { includeTurns?: boolean }).includeTurns;
+        if (includeTurns === false) {
+          return { thread: { id: "thread-skill", cwd: "/repo", createdAt: 1 } } as Response;
+        }
+        return {
+          thread: {
+            id: "thread-skill",
+            cwd: "/repo",
+            createdAt: 1,
+            turns: [
+              {
+                id: "turn-skill",
+                startedAt: 1,
+                completedAt: 2,
+                status: "completed",
+                items: [
+                  {
+                    id: "skill-user-1",
+                    type: "userMessage",
+                    content: [
+                      {
+                        type: "text",
+                        text: "Tell me the purpose of $create-pr please",
+                        text_elements: [
+                          {
+                            byteRange: { start: 23, end: 33 },
+                            placeholder: "$create-pr",
+                          },
+                        ],
+                      },
+                      {
+                        type: "skill",
+                        name: "create-pr",
+                        path: "/repo/.codex/skills/create-pr/SKILL.md",
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        } as Response;
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-skill",
+    });
+
+    expect(calls.some((call) => call.method === "skills/list")).toBe(false);
+    expect(history).toEqual([
+      expect.objectContaining({
+        messageId: "skill-user-1",
+        role: "user",
+        text: "Tell me the purpose of $create-pr please",
+        displayParts: [
+          { kind: "text", text: "Tell me the purpose of " },
+          {
+            kind: "skill_mention",
+            skill: {
+              id: "/repo/.codex/skills/create-pr/SKILL.md",
+              name: "create-pr",
+              path: "/repo/.codex/skills/create-pr/SKILL.md",
+            },
+            sourceText: {
+              value: "$create-pr",
+              start: 23,
+              end: 33,
+            },
+          },
+          { kind: "text", text: " please" },
+        ],
+      }),
+    ]);
+  });
+
   test("hydrates loaded idle history from Codex token usage replay", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 

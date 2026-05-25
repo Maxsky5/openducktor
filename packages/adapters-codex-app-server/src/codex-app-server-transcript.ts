@@ -1,6 +1,7 @@
 import type { FileDiff } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
+  AgentSkillReference,
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
 } from "@openducktor/core";
@@ -34,7 +35,7 @@ import {
   codexTodoUpdateFromToolCall,
   todoMapper,
 } from "./event-mappers";
-import type { CodexUserInput } from "./types";
+import type { CodexTextElement, CodexUserInput } from "./types";
 
 export type CodexTokenUsageTotals = {
   totalTokens: number;
@@ -172,12 +173,46 @@ export const shouldReplaceCodexBufferedFinalAgentMessage = (
   return selectCodexFinalAgentMessage([current, next]) === next;
 };
 
+const codexTextElementFromUnknown = (entry: unknown): CodexTextElement | null => {
+  if (!isPlainObject(entry)) {
+    return null;
+  }
+  const byteRange = entry.byteRange ?? entry.byte_range;
+  if (!isPlainObject(byteRange)) {
+    return null;
+  }
+  const start = byteRange.start;
+  const end = byteRange.end;
+  if (
+    typeof start !== "number" ||
+    typeof end !== "number" ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end)
+  ) {
+    return null;
+  }
+  const placeholder = entry.placeholder;
+  return {
+    byteRange: { start, end },
+    placeholder: typeof placeholder === "string" ? placeholder : null,
+  };
+};
+
+const codexTextElementsFromUnknown = (value: unknown): CodexTextElement[] =>
+  arrayFromUnknown(value)
+    .map(codexTextElementFromUnknown)
+    .filter((entry): entry is CodexTextElement => Boolean(entry));
+
 export const codexUserInputFromUnknown = (entry: unknown): CodexUserInput | null => {
   if (!isPlainObject(entry)) {
     return null;
   }
   if (entry.type === "text" && typeof entry.text === "string") {
-    return { type: "text", text: entry.text };
+    return {
+      type: "text",
+      text: entry.text,
+      text_elements: codexTextElementsFromUnknown(entry.text_elements ?? entry.textElements ?? []),
+    };
   }
   if (
     entry.type === "mention" &&
@@ -185,6 +220,9 @@ export const codexUserInputFromUnknown = (entry: unknown): CodexUserInput | null
     typeof entry.path === "string"
   ) {
     return { type: "mention", name: entry.name, path: entry.path };
+  }
+  if (entry.type === "skill" && typeof entry.name === "string" && typeof entry.path === "string") {
+    return { type: "skill", name: entry.name, path: entry.path };
   }
   if (entry.type === "localImage" && typeof entry.path === "string") {
     return { type: "localImage", path: entry.path };
@@ -889,6 +927,28 @@ export const toCodexUserInputList = (parts: AgentUserMessagePart[]): CodexUserIn
   return parts.map(toCodexUserInput);
 };
 
+export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] => {
+  return parts.flatMap((part): CodexUserInput[] => {
+    if (part.kind !== "skill_mention") {
+      return [toCodexUserInput(part)];
+    }
+    const marker = `$${part.skill.name}`;
+    return [
+      {
+        type: "text",
+        text: marker,
+        text_elements: [
+          {
+            byteRange: { start: 0, end: marker.length },
+            placeholder: marker,
+          },
+        ],
+      },
+      toCodexUserInput(part),
+    ];
+  });
+};
+
 export const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart | null => {
   if (part.kind === "text") {
     return { kind: "text", text: part.text };
@@ -927,6 +987,8 @@ export const userInputText = (input: CodexUserInput): string => {
 type CodexUserInputDisplayContext = {
   index: number;
   messageId: string;
+  textOffset: number;
+  skillsByMarker: Map<string, AgentSkillReference>;
 };
 
 const stagedAttachmentUuidPrefixPattern =
@@ -958,15 +1020,204 @@ const codexUserInputToDisplayPart = (
       },
     };
   }
+  if (input.type === "skill") {
+    return {
+      kind: "skill_mention",
+      skill: {
+        id: input.path,
+        name: input.name,
+        path: input.path,
+      },
+    };
+  }
   return { kind: "text", text: userInputText(input), synthetic: true };
+};
+
+const skillReferenceFromMarker = (
+  marker: string,
+  skillsByMarker: Map<string, AgentSkillReference>,
+): AgentSkillReference | null => {
+  const skill = skillsByMarker.get(marker);
+  if (skill) {
+    return skill;
+  }
+  const name = marker.startsWith("$") ? marker.slice(1) : marker;
+  if (name.trim().length === 0) {
+    return null;
+  }
+  return { id: marker, name, path: marker };
+};
+
+const codexSkillReferenceFromInput = (
+  input: Extract<CodexUserInput, { type: "skill" }>,
+): AgentSkillReference => ({
+  id: input.path,
+  name: input.name,
+  path: input.path,
+});
+
+const codexSkillInputToDisplayPart = (
+  input: Extract<CodexUserInput, { type: "skill" }>,
+): AgentUserMessageDisplayPart => ({
+  kind: "skill_mention",
+  skill: codexSkillReferenceFromInput(input),
+});
+
+const codexTextInputToDisplayParts = (
+  input: Extract<CodexUserInput, { type: "text" }>,
+  context: CodexUserInputDisplayContext,
+): AgentUserMessageDisplayPart[] => {
+  const elements = [...(input.text_elements ?? [])].toSorted(
+    (left, right) => left.byteRange.start - right.byteRange.start,
+  );
+  if (elements.length === 0) {
+    return [{ kind: "text", text: input.text }];
+  }
+
+  const parts: AgentUserMessageDisplayPart[] = [];
+  let cursor = 0;
+  for (const element of elements) {
+    const start = element.byteRange.start;
+    const end = element.byteRange.end;
+    if (start < cursor || start < 0 || end <= start || end > input.text.length) {
+      continue;
+    }
+    const marker = element.placeholder ?? input.text.slice(start, end);
+    if (!marker.startsWith("$")) {
+      continue;
+    }
+    const skill = skillReferenceFromMarker(marker, context.skillsByMarker);
+    if (!skill) {
+      continue;
+    }
+    if (start > cursor) {
+      parts.push({ kind: "text", text: input.text.slice(cursor, start) });
+    }
+    parts.push({
+      kind: "skill_mention",
+      skill,
+      sourceText: {
+        value: input.text.slice(start, end),
+        start: context.textOffset + start,
+        end: context.textOffset + end,
+      },
+    });
+    cursor = end;
+  }
+  if (parts.length === 0) {
+    return [{ kind: "text", text: input.text }];
+  }
+  if (cursor < input.text.length) {
+    parts.push({ kind: "text", text: input.text.slice(cursor) });
+  }
+  return parts;
 };
 
 export const codexUserInputsToDisplayParts = (
   input: CodexUserInput[],
   messageId: string,
-): AgentUserMessageDisplayPart[] =>
-  input.map((part, index) => codexUserInputToDisplayPart(part, { index, messageId }));
+): AgentUserMessageDisplayPart[] => {
+  const parts: AgentUserMessageDisplayPart[] = [];
+  const skillsByMarker = new Map(
+    input
+      .filter(
+        (entry): entry is Extract<CodexUserInput, { type: "skill" }> => entry.type === "skill",
+      )
+      .map((entry) => [`$${entry.name}`, codexSkillReferenceFromInput(entry)]),
+  );
+  const renderedSkillMarkers = new Set<string>();
+  let textOffset = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    const current = input[index];
+    const next = input[index + 1];
+    if (!current) {
+      continue;
+    }
+    if (current.type === "text" && (current.text_elements?.length ?? 0) > 0) {
+      parts.push(
+        ...codexTextInputToDisplayParts(current, {
+          index,
+          messageId,
+          textOffset,
+          skillsByMarker,
+        }),
+      );
+      for (const element of current.text_elements ?? []) {
+        const marker =
+          element.placeholder ?? current.text.slice(element.byteRange.start, element.byteRange.end);
+        if (marker.startsWith("$") && skillReferenceFromMarker(marker, skillsByMarker)) {
+          renderedSkillMarkers.add(marker);
+        }
+      }
+      textOffset += current.text.length;
+      continue;
+    }
+    if (current.type === "skill" && renderedSkillMarkers.has(`$${current.name}`)) {
+      continue;
+    }
+    if (current.type === "text" && next?.type === "skill") {
+      const marker = `$${next.name}`;
+      if (current.text.endsWith(marker)) {
+        const prefix = current.text.slice(0, -marker.length);
+        if (prefix.length > 0) {
+          parts.push({ kind: "text", text: prefix });
+        }
+        parts.push(codexSkillInputToDisplayPart(next));
+        index += 1;
+        continue;
+      }
+    }
+    parts.push(
+      codexUserInputToDisplayPart(current, { index, messageId, textOffset, skillsByMarker }),
+    );
+    if (current.type === "text") {
+      textOffset += current.text.length;
+    }
+  }
+  return parts;
+};
+
+const appendUserInputText = (text: string, next: string): string => {
+  if (text.length === 0) {
+    return next;
+  }
+  if (next.length === 0) {
+    return text;
+  }
+  if (/\s$/u.test(text) || /^\s/u.test(next)) {
+    return `${text}${next}`;
+  }
+  return `${text} ${next}`;
+};
 
 export const codexUserInputListToText = (input: CodexUserInput[]): string => {
-  return input.map(userInputText).join(" ").trim();
+  const markedSkills = new Set<string>();
+  for (const entry of input) {
+    if (entry.type !== "text") {
+      continue;
+    }
+    for (const element of entry.text_elements ?? []) {
+      const marker =
+        element.placeholder ?? entry.text.slice(element.byteRange.start, element.byteRange.end);
+      if (marker.startsWith("$")) {
+        markedSkills.add(marker);
+      }
+    }
+  }
+  return input
+    .map((current, index) => {
+      if (current.type !== "skill") {
+        return userInputText(current);
+      }
+      if (markedSkills.has(`$${current.name}`)) {
+        return "";
+      }
+      const previous = input[index - 1];
+      if (previous?.type === "text" && previous.text.endsWith(`$${current.name}`)) {
+        return "";
+      }
+      return userInputText(current);
+    })
+    .reduce(appendUserInputText, "")
+    .trim();
 };

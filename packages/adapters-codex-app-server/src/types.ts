@@ -113,11 +113,19 @@ export type CodexModelSelectionPayload = {
   effort: string;
 };
 
+export type CodexTextElement = {
+  byteRange: {
+    start: number;
+    end: number;
+  };
+  placeholder: string | null;
+};
+
 export type CodexUserInput =
   | {
       type: "text";
       text: string;
-      textElements?: unknown[];
+      text_elements?: CodexTextElement[];
     }
   | {
       type: "mention";

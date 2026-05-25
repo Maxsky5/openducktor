@@ -30,7 +30,7 @@ import {
   AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME,
   AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME,
   getAgentChatSkillReferenceIconMarkup,
-} from "./agent-chat-skill-reference-chip";
+} from "./agent-chat-skill-reference-chip-markup";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
 const escapeHtml = (value: string): string => {
@@ -61,7 +61,7 @@ const buildComposerSkillReferenceChipMarkup = (
 ): string => {
   return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-skill-reference-name="${escapeHtml(skill.name)}" class="${escapeHtml(
     cn(AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME, "mx-0.5 mr-2 max-w-48 align-middle"),
-  )}"><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatSkillReferenceIconMarkup()}</span><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME)}">$${escapeHtml(skill.name)}</span></span>`;
+  )}"><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatSkillReferenceIconMarkup()}</span><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(skill.name)}</span></span>`;
 };
 
 const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
@@ -216,7 +216,7 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
         return (
           node.dataset.chipSegmentId === segment.id &&
           node.dataset.skillReferenceName === segment.skill.name &&
-          node.textContent === `$${segment.skill.name}`
+          node.textContent === segment.skill.name
         );
       }
 

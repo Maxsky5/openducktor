@@ -332,7 +332,8 @@ export class CodexAppServerAdapter
       runtimeId,
       input.externalSessionId,
     );
-    return codexTurnItemsFromThreadRead(response)
+    const threadItems = codexTurnItemsFromThreadRead(response);
+    return threadItems
       .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
         const turnModel =
           model ??
@@ -377,7 +378,10 @@ export class CodexAppServerAdapter
           turnTiming,
           finalTokenUsage,
         );
-        return message ? [message] : [];
+        if (!message) {
+          return [];
+        }
+        return [message];
       })
       .filter((message): message is import("@openducktor/core").AgentSessionHistoryMessage =>
         Boolean(message),

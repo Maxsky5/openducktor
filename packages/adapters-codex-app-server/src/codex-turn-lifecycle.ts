@@ -5,7 +5,7 @@ import {
   type CodexThreadStatusSnapshot,
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
-import { toCodexUserInputList } from "./codex-app-server-transcript";
+import { toCodexTurnInputList } from "./codex-app-server-transcript";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
@@ -75,7 +75,7 @@ const steerActiveTurn = async (
   activeTurn: ActiveCodexTurn,
   parts: AgentUserMessagePart[],
 ): Promise<boolean> => {
-  const input = toCodexUserInputList(parts);
+  const input = toCodexTurnInputList(parts);
   if (!activeTurn.turnId && !context.subscribeEvents) {
     await context.handlePendingServerRequests(activeTurn.session, activeTurn.handledRequestKeys);
   }
@@ -120,7 +120,7 @@ export const startCodexTurnForSession = async (
     throw new Error(`Unknown Codex session '${externalSessionId}'.`);
   }
   context.ensureRuntimeEventSubscription(session.runtimeId);
-  const input = toCodexUserInputList(parts);
+  const input = toCodexTurnInputList(parts);
 
   const existingActiveTurn = context.activeTurnsBySessionId.get(session.threadId);
   if (existingActiveTurn && !existingActiveTurn.isTurnSettled()) {

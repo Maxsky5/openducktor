@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexTurnItemsFromThreadRead,
+  codexUserInputListToText,
+  codexUserInputsFromItem,
+  toCodexTurnInputList,
   toCodexUserInput,
   toHistoryMessage,
   userInputText,
@@ -17,6 +20,175 @@ describe("Codex App Server transcript parsing", () => {
     const input = toCodexUserInput({ kind: "skill_mention", skill });
     expect(input).toEqual({ type: "skill", name: "review", path: "/skills/review/SKILL.md" });
     expect(userInputText(input)).toBe("$review");
+  });
+
+  test("keeps a text skill marker in Codex turn input for history hydration", () => {
+    const skill = {
+      id: "/skills/review/SKILL.md",
+      name: "review",
+      path: "/skills/review/SKILL.md",
+    };
+
+    expect(
+      toCodexTurnInputList([
+        { kind: "text", text: "Use " },
+        { kind: "skill_mention", skill },
+        { kind: "text", text: " please" },
+      ]),
+    ).toEqual([
+      { type: "text", text: "Use " },
+      {
+        type: "text",
+        text: "$review",
+        text_elements: [
+          {
+            byteRange: { start: 0, end: 7 },
+            placeholder: "$review",
+          },
+        ],
+      },
+      { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
+      { type: "text", text: " please" },
+    ]);
+  });
+
+  test("parses Codex skill echoes as structured skill display parts", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        { type: "text", text: "Tell me the purpose of " },
+        { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
+        { type: "text", text: " please" },
+      ],
+    });
+
+    expect(input).toEqual([
+      { type: "text", text: "Tell me the purpose of ", text_elements: [] },
+      { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
+      { type: "text", text: " please", text_elements: [] },
+    ]);
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Tell me the purpose of $review please",
+      displayParts: [
+        { kind: "text", text: "Tell me the purpose of " },
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/skills/review/SKILL.md",
+            name: "review",
+            path: "/skills/review/SKILL.md",
+          },
+        },
+        { kind: "text", text: " please" },
+      ],
+    });
+  });
+
+  test("collapses Codex persisted marker plus skill echoes", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "Tell me the purpose of $review",
+          text_elements: [
+            {
+              byteRange: { start: 23, end: 30 },
+              placeholder: "$review",
+            },
+          ],
+        },
+        { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
+        { type: "text", text: " please" },
+      ],
+    });
+
+    expect(codexUserInputListToText(input)).toBe("Tell me the purpose of $review please");
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Tell me the purpose of $review please",
+      displayParts: [
+        { kind: "text", text: "Tell me the purpose of " },
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/skills/review/SKILL.md",
+            name: "review",
+            path: "/skills/review/SKILL.md",
+          },
+        },
+        { kind: "text", text: " please" },
+      ],
+    });
+  });
+
+  test("hydrates Codex text element skill markers in persisted user text", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "Tell me the purpose of $review please",
+          text_elements: [
+            {
+              byteRange: { start: 23, end: 30 },
+              placeholder: "$review",
+            },
+          ],
+        },
+      ],
+    });
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message?.displayParts).toEqual([
+      { kind: "text", text: "Tell me the purpose of " },
+      {
+        kind: "skill_mention",
+        skill: {
+          id: "$review",
+          name: "review",
+          path: "$review",
+        },
+        sourceText: {
+          value: "$review",
+          start: 23,
+          end: 30,
+        },
+      },
+      { kind: "text", text: " please" },
+    ]);
   });
 
   test("preserves turn model and reasoning effort from thread reads", () => {

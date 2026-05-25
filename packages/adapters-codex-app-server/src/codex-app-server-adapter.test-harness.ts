@@ -112,6 +112,24 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       }
       case "turn/steer":
         return { turnId: "turn-steered" } as Response;
+      case "skills/list":
+        return {
+          data: [
+            {
+              cwd: "/repo",
+              skills: [
+                {
+                  name: "create-pr",
+                  description: "Create a pull request",
+                  path: "/repo/.codex/skills/create-pr/SKILL.md",
+                  scope: "repo",
+                  enabled: true,
+                },
+              ],
+              errors: [],
+            },
+          ],
+        } as Response;
       case "thread/read":
         return {
           thread: {

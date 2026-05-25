@@ -286,6 +286,8 @@ type UserMessageInlineReferenceRange = {
   end: number;
 };
 
+const USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME = "mx-1 max-w-full align-middle";
+
 const readVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
   let text = "";
   for (const part of parts) {
@@ -300,11 +302,99 @@ const readRenderableUserMessageText = (
   parts: AgentUserMessageDisplayPart[],
   fallbackText: string,
 ): string => {
+  if (
+    parts.some(
+      (part) =>
+        (part.kind === "file_reference" || part.kind === "skill_mention") && part.sourceText,
+    )
+  ) {
+    return fallbackText;
+  }
   const visibleText = readVisibleUserMessageText(parts);
   if (visibleText.length > 0) {
     return visibleText;
   }
   return fallbackText;
+};
+
+const userMessageTextContainsReferenceMarker = (
+  text: string,
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>,
+): boolean => {
+  if (part.kind === "skill_mention") {
+    return text.includes(`$${part.skill.name}`);
+  }
+  return text.includes(`@${part.file.path}`) || text.includes(`@${part.file.name}`);
+};
+
+const canRenderOrderedUserMessageParts = (parts: AgentUserMessageDisplayPart[]): boolean => {
+  const visibleText = readVisibleUserMessageText(parts);
+  if (visibleText.length === 0) {
+    return false;
+  }
+
+  let hasReference = false;
+  for (const part of parts) {
+    if (part.kind !== "file_reference" && part.kind !== "skill_mention") {
+      continue;
+    }
+    hasReference = true;
+    if (part.sourceText || userMessageTextContainsReferenceMarker(visibleText, part)) {
+      return false;
+    }
+  }
+  return hasReference;
+};
+
+const renderUserMessagePartSequence = (
+  parts: AgentUserMessageDisplayPart[],
+): ReactElement | null => {
+  if (!canRenderOrderedUserMessageParts(parts)) {
+    return null;
+  }
+
+  const nodes: ReactNode[] = [];
+  const keyOccurrences = new Map<string, number>();
+  const nextSequenceKey = (base: string): string => {
+    const occurrence = (keyOccurrences.get(base) ?? 0) + 1;
+    keyOccurrences.set(base, occurrence);
+    return `${base}-${occurrence}`;
+  };
+
+  for (const part of parts) {
+    if (part.kind === "text" && !part.synthetic) {
+      pushUserMessageTextNode(nodes, part.text, nextSequenceKey("text"));
+      continue;
+    }
+
+    if (part.kind === "file_reference") {
+      nodes.push(
+        <AgentChatFileReferenceChip
+          key={nextSequenceKey(`file-${part.file.id}`)}
+          file={part.file}
+          className="max-w-full align-middle"
+          tooltip
+        />,
+      );
+      continue;
+    }
+
+    if (part.kind === "skill_mention") {
+      nodes.push(
+        <AgentChatSkillReferenceChip
+          key={nextSequenceKey(`skill-${part.skill.id}`)}
+          skill={part.skill}
+          className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
+        />,
+      );
+    }
+  }
+
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  return <p className="whitespace-pre-wrap leading-6">{nodes}</p>;
 };
 
 const readInlineUserReferenceRanges = (
@@ -345,6 +435,11 @@ const renderUserMessageInlineContent = (
   rawText: string,
   parts: AgentUserMessageDisplayPart[],
 ): ReactElement | null => {
+  const orderedParts = renderUserMessagePartSequence(parts);
+  if (orderedParts) {
+    return orderedParts;
+  }
+
   const nodes: ReactNode[] = [];
   const inlineRanges = readInlineUserReferenceRanges(rawText, parts);
   const renderedInlineReferences = new Set<AgentUserMessageDisplayPart>();
@@ -374,7 +469,7 @@ const renderUserMessageInlineContent = (
           <AgentChatSkillReferenceChip
             key={`skill-${range.part.skill.id}-${range.start}`}
             skill={range.part.skill}
-            className="max-w-full align-middle"
+            className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
           />,
         );
       }
@@ -407,7 +502,7 @@ const renderUserMessageInlineContent = (
         <AgentChatSkillReferenceChip
           key={`skill-${part.skill.id}-unanchored`}
           skill={part.skill}
-          className="max-w-full align-middle"
+          className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
         />,
       );
     }

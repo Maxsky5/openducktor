@@ -875,6 +875,94 @@ describe("CodexAppServerAdapter streaming", () => {
     unsubscribe();
   });
 
+  test("does not duplicate streamed skill reference user message completions after synthetic echo", async () => {
+    const streamListeners: Array<
+      (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
+    > = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push(listener);
+      return () => {};
+    });
+    const { adapter } = createHarness({ subscribeEvents });
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    const events: unknown[] = [];
+    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
+      events.push(event),
+    );
+
+    await adapter.sendUserMessage({
+      externalSessionId: "thread/start-runtime-ensure",
+      parts: [
+        { kind: "text", text: "Tell me the purpose of " },
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/skills/address-pr-comments/SKILL.md",
+            name: "address-pr-comments",
+            path: "/skills/address-pr-comments/SKILL.md",
+          },
+        },
+      ],
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    streamListeners[0]?.({
+      runtimeId: "runtime-ensure",
+      kind: "notification",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turnId: "turn-1",
+          item: {
+            id: "codex-skill-user-confirmed",
+            type: "userMessage",
+            content: [
+              { type: "text", text: "Tell me the purpose of " },
+              { type: "text", text: "$address-pr-comments" },
+              {
+                type: "skill",
+                name: "address-pr-comments",
+                path: "/skills/address-pr-comments/SKILL.md",
+              },
+            ],
+          },
+        },
+      },
+    });
+    await Promise.resolve();
+
+    const userMessages = events.filter(
+      (event) => (event as { type?: string }).type === "user_message",
+    );
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]).toEqual(
+      expect.objectContaining({
+        message: "Tell me the purpose of $address-pr-comments",
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "skill_mention",
+            skill: expect.objectContaining({ name: "address-pr-comments" }),
+          }),
+        ]),
+      }),
+    );
+    expect(userMessages).not.toContainEqual(
+      expect.objectContaining({ messageId: "codex-skill-user-confirmed" }),
+    );
+    unsubscribe();
+  });
+
   test("emits sent image attachments with staged paths", async () => {
     const subscribeEvents = mock(() => () => {});
     const { adapter } = createHarness({ subscribeEvents });
