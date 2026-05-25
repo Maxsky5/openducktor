@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
-import type { BrowserWindow as ElectronBrowserWindow } from "electron";
+import type { BrowserWindow as ElectronBrowserWindow, Session as ElectronSession } from "electron";
 import electron from "electron";
 import {
   ELECTRON_HOST_EVENT_CHANNEL,
@@ -85,7 +85,9 @@ const validateExternalUrl = (url: string): string => {
   return parsedUrl.href;
 };
 
-const createMainWindow = async (): Promise<ElectronBrowserWindow> => {
+const createMainWindow = async (
+  rendererSession: ElectronSession,
+): Promise<ElectronBrowserWindow> => {
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -96,9 +98,9 @@ const createMainWindow = async (): Promise<ElectronBrowserWindow> => {
       contextIsolation: true,
       devTools: isDevelopment,
       nodeIntegration: false,
-      partition: ELECTRON_RENDERER_SESSION_PARTITION,
       preload: getPreloadPath(),
       sandbox: true,
+      session: rendererSession,
     },
   });
   registerWindowContextMenu(window, { isDevelopment });
@@ -218,14 +220,14 @@ app
     registerIpcHandlers();
     registerHostEventForwarding();
     await hostCommandRouter.initialize();
-    await createMainWindow();
+    await createMainWindow(rendererSession);
 
     app.on("activate", () => {
       if (hostShutdownStarted) {
         return;
       }
       if (BrowserWindow.getAllWindows().length === 0) {
-        void createMainWindow();
+        void createMainWindow(rendererSession);
       }
     });
   })
