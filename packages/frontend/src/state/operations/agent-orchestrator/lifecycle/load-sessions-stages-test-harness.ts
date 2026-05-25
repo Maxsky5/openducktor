@@ -21,13 +21,13 @@ import {
   createRuntimeResolutionPlannerStage,
   type HydrationRuntimePlanner,
   hydrateSessionRecordsStage,
-  mergeHydratedMessages,
   preparePersistedSessionMergeStage,
   reconcileLiveSessionsStage,
   type SessionLifecycleAdapter,
   type SessionLoadIntent,
   type UpdateSession,
 } from "./load-sessions-stages";
+import { createStateHarness } from "./load-sessions-state-test-harness";
 import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 
 export type SessionStateMap = Record<string, AgentSessionState>;
@@ -142,37 +142,6 @@ export const createStalePresence = (externalSessionId: string, workingDirectory:
     snapshot: null,
   });
 
-export const createStateHarness = (sessions: Record<string, AgentSessionState>) => {
-  let state = sessions;
-  const sessionsRef = { current: state };
-  return {
-    sessionsRef,
-    setSessionsById: (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
-      state = typeof updater === "function" ? updater(state) : updater;
-      sessionsRef.current = state;
-    },
-    updateSession: (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = state[externalSessionId];
-      if (!current) {
-        return;
-      }
-      state = {
-        ...state,
-        [externalSessionId]: updater(current),
-      };
-      sessionsRef.current = state;
-    },
-    getState: () => state,
-  };
-};
-
 export const createTaskFixture = (): TaskCard => ({
   id: "task-1",
   title: "Refactor loader",
@@ -245,9 +214,9 @@ export {
   agentSessionPresenceLookupKey,
   createHydrationPromptAssemblerStage,
   createRuntimeResolutionPlannerStage,
+  createStateHarness,
   getSessionMessageCount,
   hydrateSessionRecordsStage,
-  mergeHydratedMessages,
   preparePersistedSessionMergeStage,
   reconcileLiveSessionsStage,
   sessionMessageAt,

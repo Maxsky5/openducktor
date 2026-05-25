@@ -231,11 +231,10 @@ export const createLoadAgentSessions = ({
         return;
       }
 
-      const runtimePlanner = await createRuntimeResolutionPlannerStage({
+      const runtimePlanner = createRuntimeResolutionPlannerStage({
         intent,
         ...(options ? { options } : {}),
         adapter,
-        recordsToHydrate,
       });
       const promptAssembler = createHydrationPromptAssemblerStage({
         taskId,

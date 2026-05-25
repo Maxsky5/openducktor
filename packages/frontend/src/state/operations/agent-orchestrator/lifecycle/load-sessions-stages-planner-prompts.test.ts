@@ -34,7 +34,7 @@ describe("load-sessions-stages", () => {
       pendingQuestions: [],
     });
     let snapshotLoads = 0;
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "requested_history",
         requestedSessionId: "external-1",
@@ -83,7 +83,6 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
     });
 
     const snapshot = await planner.readSessionPresence(
@@ -98,7 +97,7 @@ describe("load-sessions-stages", () => {
     const workingDirectory = "/tmp/repo/worktree";
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
         requestedSessionId: "external-1",
@@ -132,7 +131,6 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
@@ -152,7 +150,7 @@ describe("load-sessions-stages", () => {
     ]);
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
         requestedSessionId: "external-1",
@@ -187,7 +185,6 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
@@ -204,7 +201,7 @@ describe("load-sessions-stages", () => {
     const workingDirectory = "/tmp/repo/worktree";
     const snapshotRequests: Array<{ directories?: string[] }> = [];
 
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent({
         mode: "recover_runtime_attachment",
         requestedSessionId: "external-1",
@@ -244,7 +241,6 @@ describe("load-sessions-stages", () => {
           return [];
         },
       },
-      recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
     const resolution = await planner.resolveHydrationRuntime(createRecord({ workingDirectory }));
@@ -267,7 +263,7 @@ describe("load-sessions-stages", () => {
       pendingQuestions: [],
     });
 
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent(),
       options: {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
@@ -306,7 +302,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
       },
-      recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
     const snapshot = await planner.readSessionPresence(createRecord({ workingDirectory }));
@@ -325,7 +320,7 @@ describe("load-sessions-stages", () => {
     });
     const readPresenceCalls: Array<{ externalSessionId: string; workingDirectory: string }> = [];
 
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent(),
       options: {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
@@ -360,7 +355,6 @@ describe("load-sessions-stages", () => {
           return sessionPresenceSnapshot;
         },
       },
-      recordsToHydrate: [createRecord({ workingDirectory })],
     });
 
     const snapshot = await planner.readSessionPresence(createRecord({ workingDirectory }));
@@ -408,7 +402,7 @@ describe("load-sessions-stages", () => {
 
   test("runtime planner uses preloaded snapshots to disambiguate same-directory stdio runtimes", async () => {
     const workingDirectory = "/tmp/repo/worktree";
-    const planner = await createRuntimeResolutionPlannerStage({
+    const planner = createRuntimeResolutionPlannerStage({
       intent: createIntent(),
       options: {
         preloadedRuntimeLists: new Map<RuntimeKind, RuntimeInstanceSummary[]>([
@@ -453,7 +447,6 @@ describe("load-sessions-stages", () => {
           runtimeKind: input.runtimeKind,
         }),
       },
-      recordsToHydrate: [createRecord({ role: "planner", workingDirectory })],
     });
 
     const result = await planner.resolveHydrationRuntime(

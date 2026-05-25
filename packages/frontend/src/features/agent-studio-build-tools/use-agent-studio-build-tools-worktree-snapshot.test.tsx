@@ -156,6 +156,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           workingDirectory: "/repo/.worktrees/task-24",
           hasActiveSession: true,
         },
+        worktreeRecoverySignal: 5,
       }),
     );
 
@@ -171,7 +172,9 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       });
       expect(harness.getLatest().openInTarget.path).toBe("/repo/.worktrees/task-24");
       expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        repoPath: "/repo",
         worktreePath: "/repo/.worktrees/task-24",
+        worktreeResolutionTaskId: null,
         shouldBlockDiffLoading: false,
       });
     } finally {

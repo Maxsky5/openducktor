@@ -272,6 +272,7 @@ export const waitForHistoryCallCount = async (
   await waitForHistoryCallCount(getHistoryCalls, expectedCalls, remainingAttempts - 1);
 };
 
+export { createStateHarness } from "./load-sessions-state-test-harness";
 export type {
   AgentSessionPresenceSnapshot,
   AgentSessionRecord,
