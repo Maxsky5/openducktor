@@ -45,7 +45,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
   test("hydrates runtime pending permissions and questions for a requested live session", async () => {
     const setSessionsByIdCalls: Array<Record<string, AgentSessionState>> = [];
     const stateHarness = createStateHarness({
-      "external-1": {
+      "external-session-1": {
         externalSessionId: "external-session-1",
         taskId: "task-1",
         repoPath: "/tmp/repo",
