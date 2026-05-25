@@ -45,7 +45,6 @@ type UseAgentStudioSelectionControllerArgs = {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: AgentStudioReadinessState;
-    recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   runtimeDefinitions: RuntimeDescriptor[];
   readSessionModelCatalog: (
@@ -425,7 +424,6 @@ export function useAgentStudioSelectionController({
     activeTaskId: viewTaskId,
     activeSession: viewSessionRuntimeData.session,
     repoReadinessState: agentStudioReadinessState,
-    allowLiveSessionResume: true,
     ensureSessionReadyForView,
   });
 

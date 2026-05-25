@@ -132,9 +132,7 @@ export const createLoadAgentSessions = ({
       ? (sessionsRef.current[requestedSessionId] ?? null)
       : null;
     const shouldReconcileRequestedLiveSession =
-      shouldHydrateRequestedSession &&
-      options?.allowLiveSessionResume === true &&
-      shouldReconcileRequestedSessionLiveness(requestedSession);
+      shouldHydrateRequestedSession && shouldReconcileRequestedSessionLiveness(requestedSession);
     const shouldReconcileLiveSessions =
       mode === "reconcile_live" ||
       shouldRecoverRuntimeAttachment ||

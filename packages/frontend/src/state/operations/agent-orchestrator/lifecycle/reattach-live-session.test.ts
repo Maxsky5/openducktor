@@ -97,7 +97,7 @@ const createSessionStateFixture = (): AgentSessionState => ({
 });
 
 describe("reattach-live-session", () => {
-  test("does not apply an idle snapshot during live reattach", async () => {
+  test("settles a stale running session when runtime presence is idle", async () => {
     let state: AgentSessionState = { ...createSessionStateFixture(), status: "running" };
     let resumed = false;
     let attachedSessionId: string | null = null;
@@ -139,9 +139,55 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(false);
     expect(resumed).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state.status).toBe("running");
+    expect(state.status).toBe("idle");
     expect(state.runtimeId).toBe("runtime-1");
-    expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
+    expect(state.pendingApprovals).toEqual([]);
+  });
+
+  test("does not settle idle runtime presence while a local send is pending", async () => {
+    let state: AgentSessionState = {
+      ...createSessionStateFixture(),
+      status: "running",
+      pendingUserMessageStartedAt: 123,
+    };
+
+    const reattachLiveSession = createReattachLiveSession({
+      adapter: {
+        hasSession: () => true,
+      },
+      repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
+      updateSession: (externalSessionId, updater) => {
+        if (externalSessionId !== "external-1") {
+          return;
+        }
+        state = updater(state);
+      },
+      attachSessionListener: () => {
+        throw new Error("should not attach idle session");
+      },
+      promptOverrides: {},
+      attachMissingLiveSession: async () => {
+        throw new Error("should not resume idle session");
+      },
+      readSessionPresence: async () =>
+        toSessionPresenceSnapshot({
+          externalSessionId: "external-1",
+          title: "Session",
+          startedAt: "2026-03-22T12:00:00.000Z",
+          status: { type: "idle" },
+          pendingApprovals: [],
+          pendingQuestions: [],
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+      isStaleRepoOperation: () => false,
+    });
+
+    const reattached = await reattachLiveSession(sessionRecordFixture);
+
+    expect(reattached).toBe(false);
+    expect(state.status).toBe("running");
+    expect(state.pendingUserMessageStartedAt).toBe(123);
   });
 
   test("does not adopt runtime presence for an error session without pending input", async () => {

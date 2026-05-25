@@ -60,9 +60,7 @@ type CreatePublicOperationsArgs = {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
-    recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
   reconcileLiveTaskSessions: (input: {

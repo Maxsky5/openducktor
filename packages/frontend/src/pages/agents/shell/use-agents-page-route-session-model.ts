@@ -37,7 +37,6 @@ type UseAgentsPageRouteSessionModelArgs = {
     repoReadinessState: Parameters<
       typeof useAgentStudioSelectionController
     >[0]["agentStudioReadinessState"];
-    recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
   readSessionModelCatalog: (
     repoPath: string,
