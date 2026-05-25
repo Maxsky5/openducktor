@@ -25,6 +25,10 @@ import {
 } from "./electron-loopback-cors-policy";
 import { electronMainLogger } from "./electron-main-logger";
 import { configureElectronProcessEnvironment } from "./electron-process-environment";
+import {
+  ELECTRON_RENDERER_SESSION_PARTITION,
+  resolveElectronRendererSession,
+} from "./electron-renderer-session";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 
@@ -95,6 +99,7 @@ const createMainWindow = async (): Promise<ElectronBrowserWindow> => {
       contextIsolation: true,
       devTools: isDevelopment,
       nodeIntegration: false,
+      partition: ELECTRON_RENDERER_SESSION_PARTITION,
       preload: getPreloadPath(),
       sandbox: true,
     },
@@ -202,14 +207,15 @@ const hideWindowsForShutdown = (): void => {
 app
   .whenReady()
   .then(async () => {
+    const rendererSession = resolveElectronRendererSession(session);
     configureElectronLoopbackCorsPolicy(
-      session.defaultSession,
+      rendererSession,
       resolveElectronLoopbackCorsOrigin(rendererDevUrl),
     );
     registerElectronLocalAttachmentPreviewProtocol({
       net,
       resolveLocalAttachmentPath: resolveLocalAttachmentPathForPreview,
-      session: session.defaultSession,
+      session: rendererSession,
     });
     installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
     registerIpcHandlers();
