@@ -22,19 +22,14 @@ import {
   listRunningScripts,
   markScriptProcessHandleMissing,
   stopScriptProcessHandle,
+  stopStartedScriptsAfterStartFailure,
 } from "./dev-server-runtime-scripts";
 import type {
   CreateDevServerServiceInput,
   DevServerService,
-  DevServerServiceError,
   DisposableDevServerService,
   StoppedDevServerScript,
 } from "./dev-server-service-types";
-import {
-  createDevServerStartFailureError,
-  type FailedDevServerScriptStart,
-  stopStartedScriptsAfterStartFailure,
-} from "./dev-server-start-failure";
 import {
   buildGroupState,
   DEV_SERVER_CLICOLOR_FORCE,
@@ -63,6 +58,12 @@ export type {
 
 const nowIso = (): string => new Date().toISOString();
 const groupKey = (repoPath: string, taskId: string): string => `${repoPath}::${taskId}`;
+type FailedDevServerScriptStart = {
+  command: string;
+  message: string;
+  name: string;
+  scriptId: string;
+};
 export const createDevServerService = ({
   eventBus,
   processPort,
@@ -98,16 +99,7 @@ export const createDevServerService = ({
       groups.set(key, runtime);
       return runtime;
     });
-  const resolveRuntime = (
-    repoPath: string,
-    taskId: string,
-  ): Effect.Effect<
-    {
-      repoConfig: RepoConfig;
-      runtime: DevServerGroupRuntime;
-    },
-    DevServerServiceError
-  > =>
+  const resolveRuntime = (repoPath: string, taskId: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const worktreePath = yield* getWorktreePath(repoPath, taskId);
@@ -277,10 +269,16 @@ export const createDevServerService = ({
         (candidate) => candidate.scriptId === scriptConfig.id,
       );
       if (script?.status !== "starting") {
+        const message = script?.lastError ?? "Dev server exited before startup completed.";
+        const stopResult = yield* Effect.either(handle.stop());
+        const cleanupMessage =
+          stopResult._tag === "Left"
+            ? `\nFailed stopping dev server ${scriptConfig.id} after startup failure: ${errorMessage(stopResult.left)}`
+            : "";
         return yield* Effect.fail(
           new HostOperationError({
             operation: "dev_server.start_script",
-            message: script?.lastError ?? "Dev server exited before startup completed.",
+            message: `${message}${cleanupMessage}`,
             details: { scriptId: scriptConfig.id },
           }),
         );
@@ -418,12 +416,20 @@ export const createDevServerService = ({
           );
           emitSnapshot(runtime);
           return yield* Effect.fail(
-            createDevServerStartFailureError({
-              cleanupErrors,
-              failedScript,
-              repoPath,
-              stoppedScripts,
-              taskId,
+            new HostOperationError({
+              operation: "dev_server.start",
+              message: [
+                "Failed to start all configured dev server scripts.",
+                `Failed starting dev server ${failedScript.scriptId}: ${failedScript.message}`,
+                ...cleanupErrors,
+              ].join("\n"),
+              details: {
+                cleanupErrors,
+                failedScripts: [failedScript],
+                repoPath,
+                stoppedScripts,
+                taskId,
+              },
             }),
           );
         }

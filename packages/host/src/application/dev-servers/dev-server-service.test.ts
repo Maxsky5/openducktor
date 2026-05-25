@@ -14,6 +14,7 @@ import { createDevServerService as createEffectDevServerService } from "./dev-se
 
 const createDevServerService = (input: Parameters<typeof createEffectDevServerService>[0]) =>
   createEffectDevServerService(input);
+type TestDevServerService = ReturnType<typeof createDevServerService>;
 const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
   workspaceName: "Repo",
@@ -95,6 +96,18 @@ const createProcessPort = () => {
     },
   };
   return { handles, processPort, starts, stoppedPids };
+};
+const expectStartFailure = async (service: TestDevServerService): Promise<HostOperationError> => {
+  const startResult = await Effect.runPromise(
+    Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
+  );
+  if (startResult._tag === "Right") {
+    throw new Error("Expected dev server start to fail.");
+  }
+  if (!(startResult.left instanceof HostOperationError)) {
+    throw new Error("Expected dev server start to fail with HostOperationError.");
+  }
+  return startResult.left;
 };
 describe("createDevServerService", () => {
   test("returns stopped state for configured dev server scripts", async () => {
@@ -282,17 +295,7 @@ describe("createDevServerService", () => {
         }),
       ),
     });
-    const startResult = await Effect.runPromise(
-      Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
-    );
-
-    if (startResult._tag === "Right") {
-      throw new Error("Expected dev server start to fail.");
-    }
-    const startError = startResult.left;
-    if (!(startError instanceof HostOperationError)) {
-      throw new Error("Expected dev server start to fail with HostOperationError.");
-    }
+    const startError = await expectStartFailure(service);
     expect(startError.message).toContain("Failed to start all configured dev server scripts.");
     expect(startError.details).toEqual({
       cleanupErrors: [],
@@ -367,17 +370,7 @@ describe("createDevServerService", () => {
         }),
       ),
     });
-    const startResult = await Effect.runPromise(
-      Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
-    );
-
-    if (startResult._tag === "Right") {
-      throw new Error("Expected dev server start to fail.");
-    }
-    const startError = startResult.left;
-    if (!(startError instanceof HostOperationError)) {
-      throw new Error("Expected dev server start to fail with HostOperationError.");
-    }
+    const startError = await expectStartFailure(service);
     expect(startError.message).toContain("Failed cleaning up dev server web: stop failed");
     expect(startError.details).toEqual({
       cleanupErrors: ["Failed cleaning up dev server web: stop failed"],
@@ -428,17 +421,7 @@ describe("createDevServerService", () => {
       taskWorktreeService: createTaskWorktreeService({ workingDirectory: "/worktrees/task-1" }),
       workspaceSettingsService: createWorkspaceSettingsService(repoConfig()),
     });
-    const startResult = await Effect.runPromise(
-      Effect.either(service.start({ repoPath: "/repo", taskId: "task-1" })),
-    );
-
-    if (startResult._tag === "Right") {
-      throw new Error("Expected dev server start to fail.");
-    }
-    const startError = startResult.left;
-    if (!(startError instanceof HostOperationError)) {
-      throw new Error("Expected dev server start to fail with HostOperationError.");
-    }
+    const startError = await expectStartFailure(service);
     expect(startError.details).toEqual({
       cleanupErrors: [],
       failedScripts: [

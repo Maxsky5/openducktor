@@ -24,9 +24,6 @@ export const stoppedScriptFromState = (
   taskId: runtime.state.taskId,
 });
 
-const missingProcessHandleMessage = (pid: number): string =>
-  `Dev server process handle missing for pid ${pid}.`;
-
 export const markScriptProcessHandleMissing = ({
   pid,
   runtime,
@@ -38,7 +35,7 @@ export const markScriptProcessHandleMissing = ({
   scriptId: string;
   updateScriptState: UpdateScriptState;
 }): string => {
-  const message = missingProcessHandleMessage(pid);
+  const message = `Dev server process handle missing for pid ${pid}.`;
   updateScriptState(runtime, scriptId, (state) => {
     state.status = "failed";
     state.pid = null;
@@ -83,6 +80,48 @@ export const stopScriptProcessHandle = ({
       script.lastError = message;
     });
     return message;
+  });
+
+export const stopStartedScriptsAfterStartFailure = (
+  runtime: DevServerGroupRuntime,
+  updateScriptState: UpdateScriptState,
+) =>
+  Effect.gen(function* () {
+    const cleanupErrors: string[] = [];
+    const stoppedScripts: StoppedDevServerScript[] = [];
+    for (const script of runtime.state.scripts) {
+      if (script.pid === null) {
+        continue;
+      }
+      const pid = script.pid;
+      const handle = runtime.processes.get(script.scriptId);
+      if (!handle) {
+        const message = markScriptProcessHandleMissing({
+          pid,
+          runtime,
+          scriptId: script.scriptId,
+          updateScriptState,
+        });
+        cleanupErrors.push(`Failed cleaning up dev server ${script.scriptId}: ${message}`);
+        continue;
+      }
+      updateScriptState(runtime, script.scriptId, (state) => {
+        state.status = "stopping";
+        state.lastError = null;
+      });
+      const stopError = yield* stopScriptProcessHandle({
+        handle,
+        runtime,
+        scriptId: script.scriptId,
+        updateScriptState,
+      });
+      if (stopError === null) {
+        stoppedScripts.push(stoppedScriptFromState(runtime, script, pid));
+      } else {
+        cleanupErrors.push(`Failed cleaning up dev server ${script.scriptId}: ${stopError}`);
+      }
+    }
+    return { cleanupErrors, stoppedScripts };
   });
 
 export const listRunningScripts = (runtime: DevServerGroupRuntime): StoppedDevServerScript[] =>

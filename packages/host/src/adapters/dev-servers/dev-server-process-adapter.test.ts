@@ -212,28 +212,7 @@ setInterval(() => {}, 1000);
     }
   });
 
-  test("rejects commands that exit during the start grace period", async () => {
-    const port = createDevServerProcessAdapter({
-      startGracePeriodMs: 1_000,
-      stopTimeoutMs: 100,
-    });
-    const command = [
-      quoteShellCommandArgForTest(process.execPath),
-      "-e",
-      quoteShellCommandArgForTest("process.exit(42);"),
-    ].join(" ");
-
-    await expect(
-      port.start({
-        command,
-        cwd: process.cwd(),
-        onExit: () => {},
-        onOutput: () => {},
-      }),
-    ).rejects.toThrow("Dev server exited with code 42.");
-  });
-
-  test("reports process exits that happen during the start grace period", async () => {
+  test("rejects and reports process exits that happen during the start grace period", async () => {
     const exits: unknown[] = [];
     const port = createDevServerProcessAdapter({
       startGracePeriodMs: 1_000,

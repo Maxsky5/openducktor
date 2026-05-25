@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::Read;
 #[cfg(unix)]
 use std::os::fd::FromRawFd;
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -100,14 +100,6 @@ impl AppService {
 
             let started_at = now_rfc3339();
 
-            self.update_script_state(group_key, script.id.as_str(), |state| {
-                state.status = DevServerScriptStatus::Starting;
-                state.pid = Some(pid);
-                state.started_at = Some(started_at.clone());
-                state.exit_code = None;
-                state.last_error = None;
-            })?;
-
             spawn_terminal_forwarder(
                 self.dev_server_groups.clone(),
                 group_key.to_string(),
@@ -117,26 +109,26 @@ impl AppService {
                 terminal_reader,
             );
 
-            if let Some(failure) = wait_for_immediate_dev_server_start_failure(
-                &mut child,
-                DEV_SERVER_START_GRACE_PERIOD,
-                || self.dev_server_start_failure_message(group_key, script.id.as_str()),
-            )? {
-                let message = match failure {
-                    ImmediateDevServerStartFailure::ProcessExited(status) => {
-                        let message = dev_server_exit_message(status.code());
-                        self.mark_dev_server_start_exit_failed(
-                            group_key,
-                            repo_path,
-                            task_id,
-                            script.id.as_str(),
-                            status.code(),
-                            message.as_str(),
-                        );
-                        message
-                    }
-                    ImmediateDevServerStartFailure::TerminalFailure(message) => message,
-                };
+            self.update_script_state(group_key, script.id.as_str(), |state| {
+                state.status = DevServerScriptStatus::Starting;
+                state.pid = Some(pid);
+                state.started_at = Some(started_at.clone());
+                state.exit_code = None;
+                state.last_error = None;
+            })?;
+
+            if let Some(status) =
+                wait_for_immediate_dev_server_exit(&mut child, DEV_SERVER_START_GRACE_PERIOD)?
+            {
+                let message = dev_server_exit_message(status.code());
+                self.mark_dev_server_start_exit_failed(
+                    group_key,
+                    repo_path,
+                    task_id,
+                    script.id.as_str(),
+                    status.code(),
+                    message.as_str(),
+                );
                 spawned_pid = None;
                 start_failure_already_recorded = true;
                 return Err(anyhow!(message));
@@ -204,26 +196,15 @@ pub(super) fn configure_dev_server_command_environment(
     Ok(())
 }
 
-enum ImmediateDevServerStartFailure {
-    ProcessExited(ExitStatus),
-    TerminalFailure(String),
-}
-
-fn wait_for_immediate_dev_server_start_failure(
+fn wait_for_immediate_dev_server_exit(
     child: &mut std::process::Child,
     timeout: Duration,
-    mut terminal_failure: impl FnMut() -> Result<Option<String>>,
-) -> Result<Option<ImmediateDevServerStartFailure>> {
+) -> Result<Option<std::process::ExitStatus>> {
     let poll_interval = Duration::from_millis(25);
     let mut waited = Duration::ZERO;
     loop {
-        if let Some(message) = terminal_failure()? {
-            return Ok(Some(ImmediateDevServerStartFailure::TerminalFailure(
-                message,
-            )));
-        }
         if let Some(status) = child.try_wait()? {
-            return Ok(Some(ImmediateDevServerStartFailure::ProcessExited(status)));
+            return Ok(Some(status));
         }
         if waited >= timeout {
             return Ok(None);

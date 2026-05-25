@@ -1,8 +1,5 @@
 use super::{AppService, DevServerGroupRuntime};
-use host_domain::{
-    now_rfc3339, DevServerEvent, DevServerScriptState, DevServerScriptStatus,
-    DevServerTerminalChunk,
-};
+use host_domain::{now_rfc3339, DevServerEvent, DevServerScriptState, DevServerTerminalChunk};
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
@@ -10,13 +7,6 @@ use std::sync::{Arc, Mutex};
 pub(super) const DEV_SERVER_TERMINAL_BUFFER_CHUNK_LIMIT: usize = 2_000;
 pub(super) const DEV_SERVER_TERMINAL_BUFFER_BYTE_LIMIT: usize = 512 * 1024;
 const DEV_SERVER_TERMINAL_CHUNK_READ_SIZE: usize = 4 * 1024;
-const NODE_FATAL_STARTUP_MARKERS: &[&str] = &[
-    "SyntaxError:",
-    "ReferenceError:",
-    "TypeError:",
-    "Error [ERR_",
-    "Error: Cannot find module",
-];
 
 pub(super) fn emit_group_snapshot(
     groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
@@ -49,7 +39,7 @@ pub(super) fn emit_terminal_chunk(
     }
 
     let timestamp = now_rfc3339();
-    let (emitter, terminal_chunk, failure_event, stop_target) = {
+    let (emitter, terminal_chunk) = {
         let Ok(mut groups) = groups.lock() else {
             return;
         };
@@ -65,36 +55,8 @@ pub(super) fn emit_terminal_chunk(
             return;
         };
         let terminal_chunk = push_terminal_chunk(script, data, timestamp);
-        let mut failure_event = None;
-        let mut stop_target = None;
-        if let Some(pid) = script.pid {
-            if matches!(
-                script.status,
-                DevServerScriptStatus::Starting | DevServerScriptStatus::Running
-            ) {
-                let terminal_output = script
-                    .buffered_terminal_chunks
-                    .iter()
-                    .map(|chunk| chunk.data.as_str())
-                    .collect::<String>();
-                if let Some(message) = detect_node_fatal_startup_failure(&terminal_output) {
-                    script.status = DevServerScriptStatus::Failed;
-                    script.pid = None;
-                    script.started_at = None;
-                    script.exit_code = None;
-                    script.last_error = Some(message.clone());
-                    stop_target = Some((pid, script.script_id.clone()));
-                    failure_event = Some(script.clone());
-                }
-            }
-        }
         runtime.state.updated_at = now_rfc3339();
-        (
-            runtime.emitter.clone(),
-            terminal_chunk,
-            failure_event.map(|script| (script, runtime.state.updated_at.clone())),
-            stop_target,
-        )
+        (runtime.emitter.clone(), terminal_chunk)
     };
 
     if let Some(emitter) = emitter {
@@ -103,56 +65,7 @@ pub(super) fn emit_terminal_chunk(
             task_id: task_id.to_string(),
             terminal_chunk,
         });
-        if let Some((script, updated_at)) = failure_event {
-            emitter(DevServerEvent::ScriptStatusChanged {
-                repo_path: repo_path.to_string(),
-                task_id: task_id.to_string(),
-                script,
-                updated_at,
-            });
-        }
     }
-
-    if let Some((pid, script_id)) = stop_target {
-        if let Err(error) =
-            super::processes::stop_process_group(pid, super::processes::DEV_SERVER_STOP_TIMEOUT)
-        {
-            tracing::warn!(
-                target: "openducktor.lifecycle",
-                "Failed stopping dev server script {script_id} after terminal startup failure (pid {pid}): {error:#}"
-            );
-        }
-    }
-}
-
-fn detect_node_fatal_startup_failure(output: &str) -> Option<String> {
-    let normalized = output.replace("\r\n", "\n").replace('\r', "\n");
-    if !normalized
-        .lines()
-        .any(|line| line.trim().starts_with("Node.js v"))
-    {
-        return None;
-    }
-
-    let error_line = normalized.lines().find_map(|line| {
-        let trimmed = line.trim();
-        NODE_FATAL_STARTUP_MARKERS
-            .iter()
-            .any(|marker| trimmed.starts_with(marker))
-            .then_some(trimmed)
-    })?;
-    let detail = truncate_terminal_error_line(error_line);
-    Some(format!("Dev server reported a startup failure: {detail}"))
-}
-
-fn truncate_terminal_error_line(line: &str) -> String {
-    const LIMIT: usize = 240;
-    if line.chars().count() <= LIMIT {
-        return line.to_string();
-    }
-    let mut truncated = line.chars().take(LIMIT).collect::<String>();
-    truncated.push_str("...");
-    truncated
 }
 
 pub(super) fn spawn_terminal_forwarder<R>(

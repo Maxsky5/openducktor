@@ -1,12 +1,10 @@
 use super::AppService;
-use super::DevServerGroupRuntime;
 use anyhow::{anyhow, Result};
 use host_domain::{
     now_rfc3339, DevServerEvent, DevServerGroupState, DevServerScriptState, DevServerScriptStatus,
 };
 use host_infra_system::{RepoConfig, RepoDevServerScript};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 pub(super) fn build_group_state(
     repo_path: &str,
@@ -79,48 +77,6 @@ pub(super) fn script_has_live_process(script: &DevServerScriptState) -> bool {
 
 pub(super) fn dev_server_group_key(repo_path: &str, task_id: &str) -> String {
     format!("{repo_path}::{task_id}")
-}
-
-pub(super) fn mark_started_dev_servers_stopping_after_start_failure(
-    groups: Arc<Mutex<HashMap<String, DevServerGroupRuntime>>>,
-    group_key: &str,
-) -> Result<Vec<(String, u32)>> {
-    let mut groups = groups
-        .lock()
-        .map_err(|_| anyhow!("Dev server state lock poisoned"))?;
-    let runtime = groups
-        .get_mut(group_key)
-        .ok_or_else(|| anyhow!("Dev server state missing for active task"))?;
-    let updated_at = now_rfc3339();
-    runtime.state.updated_at = updated_at.clone();
-    let mut targets = Vec::new();
-    let mut changed_scripts = Vec::new();
-    for script in &mut runtime.state.scripts {
-        let Some(pid) = script.pid else {
-            continue;
-        };
-        script.status = DevServerScriptStatus::Stopping;
-        script.last_error = None;
-        targets.push((script.script_id.clone(), pid));
-        changed_scripts.push(script.clone());
-    }
-    let emitter = runtime.emitter.clone();
-    let repo_path = runtime.state.repo_path.clone();
-    let task_id = runtime.state.task_id.clone();
-    drop(groups);
-
-    if let Some(emitter) = emitter {
-        for script in changed_scripts {
-            emitter(DevServerEvent::ScriptStatusChanged {
-                repo_path: repo_path.clone(),
-                task_id: task_id.clone(),
-                script,
-                updated_at: updated_at.clone(),
-            });
-        }
-    }
-
-    Ok(targets)
 }
 
 impl AppService {
@@ -241,34 +197,6 @@ impl AppService {
             state.last_error = Some(message.to_string());
         });
         self.append_terminal_system_message(group_key, repo_path, task_id, script_id, message);
-    }
-
-    pub(super) fn dev_server_start_failure_message(
-        &self,
-        group_key: &str,
-        script_id: &str,
-    ) -> Result<Option<String>> {
-        let groups = self
-            .dev_server_groups
-            .lock()
-            .map_err(|_| anyhow!("Dev server state lock poisoned"))?;
-        let Some(runtime) = groups.get(group_key) else {
-            return Ok(None);
-        };
-        let Some(script) = runtime
-            .state
-            .scripts
-            .iter()
-            .find(|script| script.script_id == script_id)
-        else {
-            return Ok(None);
-        };
-        if script.status == DevServerScriptStatus::Failed {
-            return Ok(Some(script.last_error.clone().unwrap_or_else(|| {
-                "Dev server failed during startup.".to_string()
-            })));
-        }
-        Ok(None)
     }
 
     pub(super) fn update_script_state<F>(
