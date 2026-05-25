@@ -1,10 +1,5 @@
 import type { FileDiff } from "@openducktor/contracts";
-import type {
-  AgentModelSelection,
-  AgentSkillReference,
-  AgentUserMessageDisplayPart,
-  AgentUserMessagePart,
-} from "@openducktor/core";
+import type { AgentModelSelection, AgentStreamPart, AgentUserMessagePart } from "@openducktor/core";
 import {
   arrayFromUnknown,
   codexToolErrorFromObject,
@@ -22,10 +17,15 @@ import {
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import {
   codexNamespacedToolName,
+  type NormalizedCodexToolInvocation,
   normalizeCodexToolInvocation,
   stableToolTitle,
   statusFromCodexStatus,
 } from "./codex-tool-normalizer";
+import {
+  codexUserInputListToText,
+  codexUserInputsToDisplayParts,
+} from "./codex-user-input-display";
 import {
   type CodexTodoUpdate,
   codexTodoItemsFromPayload,
@@ -675,202 +675,262 @@ const codexTokenUsagePayload = (
 export const syntheticToolPart = ({
   metadata,
   ...part
-}: Extract<import("@openducktor/core").AgentStreamPart, { kind: "tool" }>): Extract<
-  import("@openducktor/core").AgentStreamPart,
-  { kind: "tool" }
-> => ({
+}: Extract<AgentStreamPart, { kind: "tool" }>): Extract<AgentStreamPart, { kind: "tool" }> => ({
   ...part,
   metadata: { ...(isPlainObject(metadata) ? metadata : {}), syntheticCodexToolPart: true },
 });
+
+const normalizedCodexToolPart = (input: NormalizedCodexToolInvocation): AgentStreamPart[] => {
+  const part = normalizeCodexToolInvocation(input);
+  return part ? [part] : [];
+};
+
+const codexReasoningStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const text = [...arrayFromUnknown(value.summary), ...arrayFromUnknown(value.content)]
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .join("\n");
+  return text ? [{ kind: "reasoning", messageId, partId, text, completed: true }] : [];
+};
+
+const codexPlanStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const text = extractStringField(value, ["text"]);
+  if (!text) {
+    return [];
+  }
+
+  return [
+    syntheticToolPart({
+      kind: "tool",
+      messageId,
+      partId,
+      callId: partId,
+      tool: "plan",
+      toolType: "todo",
+      title: "Plan",
+      status: "completed",
+      preview: text,
+      metadata: { codexItem: value },
+    }),
+  ];
+};
+
+const codexCommandExecutionStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const command = codexCommandText(value.command) ?? "command";
+  const cwd = extractStringField(value, ["cwd"]);
+  const firstAction = firstPlainObject(value.commandActions ?? value.command_actions);
+  const tool = commandActionToolName(firstAction);
+  const input = commandActionInput(firstAction, command, cwd);
+  const output = codexToolResultText(value.aggregatedOutput ?? value.aggregated_output);
+  const explicitError = stringifyJsonValue(value.error);
+  const status = statusFromCodexStatus(value.status);
+  const error = explicitError ?? (status === "error" ? output : null);
+  const startedAtMs = extractOptionalFiniteNumberField(
+    value,
+    ["startedAtMs", "started_at_ms"],
+    "startedAtMs",
+  );
+  const durationMs = extractOptionalFiniteNumberField(
+    value,
+    ["durationMs", "duration_ms"],
+    "durationMs",
+  );
+  const endedAtMs =
+    typeof startedAtMs === "number" && typeof durationMs === "number"
+      ? startedAtMs + durationMs
+      : null;
+
+  return normalizedCodexToolPart({
+    messageId,
+    partId,
+    callId: partId,
+    rawToolName: tool,
+    title: stableToolTitle(tool),
+    status,
+    input,
+    output,
+    error,
+    ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
+    ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
+    metadata: { codexItem: value },
+  });
+};
+
+const codexFileChangeStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const changes = fileChangeEntries(value);
+  const diff = fileChangeDiff(changes);
+  const error = codexToolErrorFromObject(value);
+  return normalizedCodexToolPart({
+    messageId,
+    partId,
+    callId: partId,
+    rawToolName: "apply_patch",
+    title: "File changes",
+    status: error ? "error" : statusFromCodexStatus(value.status),
+    preview: `${changes.length} file change${changes.length === 1 ? "" : "s"}`,
+    ...(diff ? { input: { patch: diff } } : {}),
+    output: diff,
+    error,
+    metadata: { codexItem: value, changes, diffs: changes, ...(diff ? { diff } : {}) },
+  });
+};
+
+const codexMcpToolCallStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const server = extractStringField(value, ["server"]);
+  const tool = extractStringField(value, ["tool"]) ?? "mcp_tool";
+  const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
+  const error = codexToolErrorFromObject(value.result) ?? codexToolErrorFromObject(value);
+  const output = codexToolResultText(value.result);
+  return normalizedCodexToolPart({
+    messageId,
+    partId,
+    callId: partId,
+    rawToolName: codexNamespacedToolName(server, tool),
+    status: error ? "error" : statusFromCodexStatus(value.status),
+    ...(args ? { input: args } : {}),
+    output,
+    error,
+    metadata: { codexItem: value, ...(server ? { server } : {}) },
+  });
+};
+
+const codexCollabAgentToolCallStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const tool = extractStringField(value, ["tool"]) ?? "collab_agent";
+  const prompt = extractStringField(value, ["prompt"]);
+  const receivers = arrayFromUnknown(value.receiverThreadIds ?? value.receiver_thread_ids).filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+  return [
+    syntheticToolPart({
+      kind: "tool",
+      messageId,
+      partId,
+      callId: partId,
+      tool: `collab.${tool}`,
+      toolType: "generic",
+      title: `Collab ${tool}`,
+      status: statusFromCodexStatus(value.status),
+      ...(prompt ? { input: { prompt } } : {}),
+      ...(receivers.length > 0 ? { output: receivers.join("\n") } : {}),
+      metadata: { codexItem: value },
+    }),
+  ];
+};
+
+const codexDynamicToolCallStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const todoResult = todoMapper.fromThreadItemObject(value, {
+    source: "thread_read",
+    threadId: messageId,
+  });
+  if (todoResult.handled) {
+    return projectCodexCanonicalEvents(todoResult.events).flatMap((event) =>
+      event.type === "assistant_part" ? [event.part] : [],
+    );
+  }
+
+  const namespace = extractStringField(value, ["namespace"]);
+  const rawTool = codexNamespacedToolName(
+    namespace,
+    extractStringField(value, ["tool", "name"]) ?? "dynamic_tool",
+  );
+  const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
+  const parsedInput = parseObjectString(value.input);
+  const patch =
+    isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
+  const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
+  const output = codexToolResultText(value.contentItems ?? value.content_items ?? value.result);
+  const success = typeof value.success === "boolean" ? value.success : true;
+  return normalizedCodexToolPart({
+    messageId,
+    partId,
+    callId: partId,
+    rawToolName: rawTool,
+    status: success ? statusFromCodexStatus(value.status) : "error",
+    ...(input ? { input } : {}),
+    output: success ? (patch ?? output) : null,
+    error: success ? null : output,
+    metadata: { codexItem: value },
+  });
+};
+
+const codexWebSearchStreamParts = (
+  value: Record<string, unknown>,
+  messageId: string,
+  partId: string,
+): AgentStreamPart[] => {
+  const input = webSearchInput(value);
+  const output = stringifyJsonValue(
+    value.output ?? value.result ?? value.results ?? value.contentItems ?? value.content_items,
+  );
+  return normalizedCodexToolPart({
+    messageId,
+    partId,
+    callId: partId,
+    rawToolName: "webSearch",
+    status: "completed",
+    ...(input ? { input } : {}),
+    ...(output ? { output } : {}),
+    ...(input ? { preview: Object.values(input).join(" ") } : {}),
+    metadata: { codexItem: value },
+  });
+};
 
 export const toStreamPart = (
   value: Record<string, unknown>,
   messageId: string,
   fallbackPartId: string,
-): import("@openducktor/core").AgentStreamPart[] => {
+): AgentStreamPart[] => {
   const partId = codexItemId(value, fallbackPartId);
   if (codexItemTypeMatches(value, "reasoning")) {
-    const text = [...arrayFromUnknown(value.summary), ...arrayFromUnknown(value.content)]
-      .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
-      .join("\n");
-    return text ? [{ kind: "reasoning", messageId, partId, text, completed: true }] : [];
+    return codexReasoningStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "plan")) {
-    const text = extractStringField(value, ["text"]);
-    return text
-      ? [
-          syntheticToolPart({
-            kind: "tool",
-            messageId,
-            partId,
-            callId: partId,
-            tool: "plan",
-            toolType: "todo",
-            title: "Plan",
-            status: "completed",
-            preview: text,
-            metadata: { codexItem: value },
-          }),
-        ]
-      : [];
+    return codexPlanStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "commandExecution")) {
-    const command = codexCommandText(value.command) ?? "command";
-    const cwd = extractStringField(value, ["cwd"]);
-    const firstAction = firstPlainObject(value.commandActions ?? value.command_actions);
-    const tool = commandActionToolName(firstAction);
-    const input = commandActionInput(firstAction, command, cwd);
-    const output = codexToolResultText(value.aggregatedOutput ?? value.aggregated_output);
-    const explicitError = stringifyJsonValue(value.error);
-    const status = statusFromCodexStatus(value.status);
-    const error = explicitError ?? (status === "error" ? output : null);
-    const startedAtMs = extractOptionalFiniteNumberField(
-      value,
-      ["startedAtMs", "started_at_ms"],
-      "startedAtMs",
-    );
-    const durationMs = extractOptionalFiniteNumberField(
-      value,
-      ["durationMs", "duration_ms"],
-      "durationMs",
-    );
-    const endedAtMs =
-      typeof startedAtMs === "number" && typeof durationMs === "number"
-        ? startedAtMs + durationMs
-        : null;
-    return [
-      normalizeCodexToolInvocation({
-        messageId,
-        partId,
-        callId: partId,
-        rawToolName: tool,
-        title: stableToolTitle(tool),
-        status,
-        input,
-        output,
-        error,
-        ...(typeof startedAtMs === "number" ? { startedAtMs } : {}),
-        ...(typeof endedAtMs === "number" ? { endedAtMs } : {}),
-        metadata: { codexItem: value },
-      }),
-    ].filter((part): part is import("@openducktor/core").AgentStreamPart => Boolean(part));
+    return codexCommandExecutionStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "fileChange")) {
-    const changes = fileChangeEntries(value);
-    const diff = fileChangeDiff(changes);
-    const error = codexToolErrorFromObject(value);
-    return [
-      normalizeCodexToolInvocation({
-        messageId,
-        partId,
-        callId: partId,
-        rawToolName: "apply_patch",
-        title: "File changes",
-        status: error ? "error" : statusFromCodexStatus(value.status),
-        preview: `${changes.length} file change${changes.length === 1 ? "" : "s"}`,
-        ...(diff ? { input: { patch: diff } } : {}),
-        output: diff,
-        error,
-        metadata: { codexItem: value, changes, diffs: changes, ...(diff ? { diff } : {}) },
-      }),
-    ].filter((part): part is import("@openducktor/core").AgentStreamPart => Boolean(part));
+    return codexFileChangeStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "mcpToolCall")) {
-    const server = extractStringField(value, ["server"]);
-    const tool = extractStringField(value, ["tool"]) ?? "mcp_tool";
-    const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
-    const error = codexToolErrorFromObject(value.result) ?? codexToolErrorFromObject(value);
-    const output = codexToolResultText(value.result);
-    return [
-      normalizeCodexToolInvocation({
-        messageId,
-        partId,
-        callId: partId,
-        rawToolName: codexNamespacedToolName(server, tool),
-        status: error ? "error" : statusFromCodexStatus(value.status),
-        ...(args ? { input: args } : {}),
-        output,
-        error,
-        metadata: { codexItem: value, ...(server ? { server } : {}) },
-      }),
-    ].filter((part): part is import("@openducktor/core").AgentStreamPart => Boolean(part));
+    return codexMcpToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "collabAgentToolCall")) {
-    const tool = extractStringField(value, ["tool"]) ?? "collab_agent";
-    const prompt = extractStringField(value, ["prompt"]);
-    const receivers = arrayFromUnknown(value.receiverThreadIds ?? value.receiver_thread_ids).filter(
-      (entry): entry is string => typeof entry === "string",
-    );
-    return [
-      syntheticToolPart({
-        kind: "tool",
-        messageId,
-        partId,
-        callId: partId,
-        tool: `collab.${tool}`,
-        toolType: "generic",
-        title: `Collab ${tool}`,
-        status: statusFromCodexStatus(value.status),
-        ...(prompt ? { input: { prompt } } : {}),
-        ...(receivers.length > 0 ? { output: receivers.join("\n") } : {}),
-        metadata: { codexItem: value },
-      }),
-    ];
+    return codexCollabAgentToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "dynamicToolCall")) {
-    const todoResult = todoMapper.fromThreadItemObject(value, {
-      source: "thread_read",
-      threadId: messageId,
-    });
-    if (todoResult.handled) {
-      return projectCodexCanonicalEvents(todoResult.events).flatMap((event) =>
-        event.type === "assistant_part" ? [event.part] : [],
-      );
-    }
-    const namespace = extractStringField(value, ["namespace"]);
-    const rawTool = codexNamespacedToolName(
-      namespace,
-      extractStringField(value, ["tool", "name"]) ?? "dynamic_tool",
-    );
-    const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
-    const parsedInput = parseObjectString(value.input);
-    const patch =
-      isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
-    const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
-    const output = codexToolResultText(value.contentItems ?? value.content_items ?? value.result);
-    const success = typeof value.success === "boolean" ? value.success : true;
-    return [
-      normalizeCodexToolInvocation({
-        messageId,
-        partId,
-        callId: partId,
-        rawToolName: rawTool,
-        status: success ? statusFromCodexStatus(value.status) : "error",
-        ...(input ? { input } : {}),
-        output: success ? (patch ?? output) : null,
-        error: success ? null : output,
-        metadata: { codexItem: value },
-      }),
-    ].filter((part): part is import("@openducktor/core").AgentStreamPart => Boolean(part));
+    return codexDynamicToolCallStreamParts(value, messageId, partId);
   }
   if (codexItemTypeMatches(value, "webSearch")) {
-    const input = webSearchInput(value);
-    const output = stringifyJsonValue(
-      value.output ?? value.result ?? value.results ?? value.contentItems ?? value.content_items,
-    );
-    return [
-      normalizeCodexToolInvocation({
-        messageId,
-        partId,
-        callId: partId,
-        rawToolName: "webSearch",
-        status: "completed",
-        ...(input ? { input } : {}),
-        ...(output ? { output } : {}),
-        ...(input ? { preview: Object.values(input).join(" ") } : {}),
-        metadata: { codexItem: value },
-      }),
-    ].filter((part): part is import("@openducktor/core").AgentStreamPart => Boolean(part));
+    return codexWebSearchStreamParts(value, messageId, partId);
   }
   return [];
 };
@@ -947,277 +1007,4 @@ export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserIn
       toCodexUserInput(part),
     ];
   });
-};
-
-export const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart | null => {
-  if (part.kind === "text") {
-    return { kind: "text", text: part.text };
-  }
-  if (part.kind === "file_reference") {
-    return { kind: "file_reference", file: part.file };
-  }
-  if (part.kind === "skill_mention") {
-    return { kind: "skill_mention", skill: part.skill };
-  }
-  if (part.kind === "attachment") {
-    return { kind: "attachment", attachment: part.attachment };
-  }
-  return null;
-};
-
-export const toDisplayParts = (parts: AgentUserMessagePart[]): AgentUserMessageDisplayPart[] => {
-  return parts
-    .map(toDisplayPart)
-    .filter((part): part is AgentUserMessageDisplayPart => Boolean(part));
-};
-
-export const userInputText = (input: CodexUserInput): string => {
-  if (input.type === "text") {
-    return input.text;
-  }
-  if (input.type === "mention") {
-    return `@${input.name}`;
-  }
-  if (input.type === "skill") {
-    return `$${input.name}`;
-  }
-  return input.path;
-};
-
-type CodexUserInputDisplayContext = {
-  index: number;
-  messageId: string;
-  textOffset: number;
-  skillsByMarker: Map<string, AgentSkillReference>;
-};
-
-const stagedAttachmentUuidPrefixPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
-
-const codexLocalImageNameFromPath = (path: string): string => {
-  const fileName = path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
-  if (fileName.length <= 37 || !stagedAttachmentUuidPrefixPattern.test(fileName)) {
-    return fileName;
-  }
-  return fileName.slice(37);
-};
-
-const codexUserInputToDisplayPart = (
-  input: CodexUserInput,
-  context: CodexUserInputDisplayContext,
-): AgentUserMessageDisplayPart => {
-  if (input.type === "text") {
-    return { kind: "text", text: input.text };
-  }
-  if (input.type === "localImage") {
-    return {
-      kind: "attachment",
-      attachment: {
-        id: `codex-local-image:${context.messageId}:${context.index}`,
-        kind: "image",
-        name: codexLocalImageNameFromPath(input.path),
-        path: input.path,
-      },
-    };
-  }
-  if (input.type === "skill") {
-    return {
-      kind: "skill_mention",
-      skill: {
-        id: input.path,
-        name: input.name,
-        path: input.path,
-      },
-    };
-  }
-  return { kind: "text", text: userInputText(input), synthetic: true };
-};
-
-const skillReferenceFromMarker = (
-  marker: string,
-  skillsByMarker: Map<string, AgentSkillReference>,
-): AgentSkillReference | null => {
-  const skill = skillsByMarker.get(marker);
-  if (skill) {
-    return skill;
-  }
-  const name = marker.startsWith("$") ? marker.slice(1) : marker;
-  if (name.trim().length === 0) {
-    return null;
-  }
-  return { id: marker, name, path: marker };
-};
-
-const codexSkillReferenceFromInput = (
-  input: Extract<CodexUserInput, { type: "skill" }>,
-): AgentSkillReference => ({
-  id: input.path,
-  name: input.name,
-  path: input.path,
-});
-
-const codexSkillInputToDisplayPart = (
-  input: Extract<CodexUserInput, { type: "skill" }>,
-): AgentUserMessageDisplayPart => ({
-  kind: "skill_mention",
-  skill: codexSkillReferenceFromInput(input),
-});
-
-const codexTextInputToDisplayParts = (
-  input: Extract<CodexUserInput, { type: "text" }>,
-  context: CodexUserInputDisplayContext,
-): AgentUserMessageDisplayPart[] => {
-  const elements = [...(input.text_elements ?? [])].toSorted(
-    (left, right) => left.byteRange.start - right.byteRange.start,
-  );
-  if (elements.length === 0) {
-    return [{ kind: "text", text: input.text }];
-  }
-
-  const parts: AgentUserMessageDisplayPart[] = [];
-  let cursor = 0;
-  for (const element of elements) {
-    const start = element.byteRange.start;
-    const end = element.byteRange.end;
-    if (start < cursor || start < 0 || end <= start || end > input.text.length) {
-      continue;
-    }
-    const marker = element.placeholder ?? input.text.slice(start, end);
-    if (!marker.startsWith("$")) {
-      continue;
-    }
-    const skill = skillReferenceFromMarker(marker, context.skillsByMarker);
-    if (!skill) {
-      continue;
-    }
-    if (start > cursor) {
-      parts.push({ kind: "text", text: input.text.slice(cursor, start) });
-    }
-    parts.push({
-      kind: "skill_mention",
-      skill,
-      sourceText: {
-        value: input.text.slice(start, end),
-        start: context.textOffset + start,
-        end: context.textOffset + end,
-      },
-    });
-    cursor = end;
-  }
-  if (parts.length === 0) {
-    return [{ kind: "text", text: input.text }];
-  }
-  if (cursor < input.text.length) {
-    parts.push({ kind: "text", text: input.text.slice(cursor) });
-  }
-  return parts;
-};
-
-export const codexUserInputsToDisplayParts = (
-  input: CodexUserInput[],
-  messageId: string,
-): AgentUserMessageDisplayPart[] => {
-  const parts: AgentUserMessageDisplayPart[] = [];
-  const skillsByMarker = new Map(
-    input
-      .filter(
-        (entry): entry is Extract<CodexUserInput, { type: "skill" }> => entry.type === "skill",
-      )
-      .map((entry) => [`$${entry.name}`, codexSkillReferenceFromInput(entry)]),
-  );
-  const renderedSkillMarkers = new Set<string>();
-  let textOffset = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    const current = input[index];
-    const next = input[index + 1];
-    if (!current) {
-      continue;
-    }
-    if (current.type === "text" && (current.text_elements?.length ?? 0) > 0) {
-      parts.push(
-        ...codexTextInputToDisplayParts(current, {
-          index,
-          messageId,
-          textOffset,
-          skillsByMarker,
-        }),
-      );
-      for (const element of current.text_elements ?? []) {
-        const marker =
-          element.placeholder ?? current.text.slice(element.byteRange.start, element.byteRange.end);
-        if (marker.startsWith("$") && skillReferenceFromMarker(marker, skillsByMarker)) {
-          renderedSkillMarkers.add(marker);
-        }
-      }
-      textOffset += current.text.length;
-      continue;
-    }
-    if (current.type === "skill" && renderedSkillMarkers.has(`$${current.name}`)) {
-      continue;
-    }
-    if (current.type === "text" && next?.type === "skill") {
-      const marker = `$${next.name}`;
-      if (current.text.endsWith(marker)) {
-        const prefix = current.text.slice(0, -marker.length);
-        if (prefix.length > 0) {
-          parts.push({ kind: "text", text: prefix });
-        }
-        parts.push(codexSkillInputToDisplayPart(next));
-        index += 1;
-        continue;
-      }
-    }
-    parts.push(
-      codexUserInputToDisplayPart(current, { index, messageId, textOffset, skillsByMarker }),
-    );
-    if (current.type === "text") {
-      textOffset += current.text.length;
-    }
-  }
-  return parts;
-};
-
-const appendUserInputText = (text: string, next: string): string => {
-  if (text.length === 0) {
-    return next;
-  }
-  if (next.length === 0) {
-    return text;
-  }
-  if (/\s$/u.test(text) || /^\s/u.test(next)) {
-    return `${text}${next}`;
-  }
-  return `${text} ${next}`;
-};
-
-export const codexUserInputListToText = (input: CodexUserInput[]): string => {
-  const markedSkills = new Set<string>();
-  for (const entry of input) {
-    if (entry.type !== "text") {
-      continue;
-    }
-    for (const element of entry.text_elements ?? []) {
-      const marker =
-        element.placeholder ?? entry.text.slice(element.byteRange.start, element.byteRange.end);
-      if (marker.startsWith("$")) {
-        markedSkills.add(marker);
-      }
-    }
-  }
-  return input
-    .map((current, index) => {
-      if (current.type !== "skill") {
-        return userInputText(current);
-      }
-      if (markedSkills.has(`$${current.name}`)) {
-        return "";
-      }
-      const previous = input[index - 1];
-      if (previous?.type === "text" && previous.text.endsWith(`$${current.name}`)) {
-        return "";
-      }
-      return userInputText(current);
-    })
-    .reduce(appendUserInputText, "")
-    .trim();
 };

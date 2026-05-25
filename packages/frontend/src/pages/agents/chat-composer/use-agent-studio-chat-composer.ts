@@ -304,7 +304,6 @@ export function useAgentStudioChatComposer({
   });
   const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
     hasActiveSession,
-    activeExternalSessionId,
     activeSessionStatus,
     activeSessionRuntimeQueryInput,
     activeSessionRuntimeQueryError,

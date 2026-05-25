@@ -206,6 +206,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSelectionCatalogLoading: false,
     supportsSlashCommands: true,
     supportsFileSearch: true,
+    supportsSkillReferences: false,
     slashCommandCatalog: { commands: [] },
     slashCommands: [],
     slashCommandsError: null,

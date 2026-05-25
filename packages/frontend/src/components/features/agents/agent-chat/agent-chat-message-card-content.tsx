@@ -367,26 +367,8 @@ const renderUserMessagePartSequence = (
       continue;
     }
 
-    if (part.kind === "file_reference") {
-      nodes.push(
-        <AgentChatFileReferenceChip
-          key={nextSequenceKey(`file-${part.file.id}`)}
-          file={part.file}
-          className="max-w-full align-middle"
-          tooltip
-        />,
-      );
-      continue;
-    }
-
-    if (part.kind === "skill_mention") {
-      nodes.push(
-        <AgentChatSkillReferenceChip
-          key={nextSequenceKey(`skill-${part.skill.id}`)}
-          skill={part.skill}
-          className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
-        />,
-      );
+    if (part.kind === "file_reference" || part.kind === "skill_mention") {
+      nodes.push(renderUserMessageReferenceChip(part, nextSequenceKey(`reference-${part.kind}`)));
     }
   }
 
@@ -431,6 +413,30 @@ const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string):
   nodes.push(<Fragment key={key}>{text}</Fragment>);
 };
 
+function renderUserMessageReferenceChip(
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>,
+  key: string,
+): ReactElement {
+  if (part.kind === "skill_mention") {
+    return (
+      <AgentChatSkillReferenceChip
+        key={key}
+        skill={part.skill}
+        className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
+      />
+    );
+  }
+
+  return (
+    <AgentChatFileReferenceChip
+      key={key}
+      file={part.file}
+      className="max-w-full align-middle"
+      tooltip
+    />
+  );
+}
+
 const renderUserMessageInlineContent = (
   rawText: string,
   parts: AgentUserMessageDisplayPart[],
@@ -455,24 +461,7 @@ const renderUserMessageInlineContent = (
       }
 
       pushUserMessageTextNode(nodes, rawText.slice(cursor, range.start), `text-${cursor}`);
-      if (range.part.kind === "file_reference") {
-        nodes.push(
-          <AgentChatFileReferenceChip
-            key={`file-${range.part.file.id}-${range.start}`}
-            file={range.part.file}
-            className="max-w-full align-middle"
-            tooltip
-          />,
-        );
-      } else {
-        nodes.push(
-          <AgentChatSkillReferenceChip
-            key={`skill-${range.part.skill.id}-${range.start}`}
-            skill={range.part.skill}
-            className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
-          />,
-        );
-      }
+      nodes.push(renderUserMessageReferenceChip(range.part, `reference-${range.start}`));
       renderedInlineReferences.add(range.part);
       cursor = range.end;
     }
@@ -488,24 +477,7 @@ const renderUserMessageInlineContent = (
       continue;
     }
 
-    if (part.kind === "file_reference") {
-      nodes.push(
-        <AgentChatFileReferenceChip
-          key={`file-${part.file.id}-unanchored`}
-          file={part.file}
-          className="max-w-full align-middle"
-          tooltip
-        />,
-      );
-    } else {
-      nodes.push(
-        <AgentChatSkillReferenceChip
-          key={`skill-${part.skill.id}-unanchored`}
-          skill={part.skill}
-          className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
-        />,
-      );
-    }
+    nodes.push(renderUserMessageReferenceChip(part, `reference-${nodes.length}`));
   }
 
   if (nodes.length === 0) {

@@ -22,7 +22,6 @@ describe("useChatComposerSkills", () => {
       useChatComposerSkills,
       {
         hasActiveSession: true,
-        activeExternalSessionId: "external-1",
         activeSessionStatus: "idle",
         activeSessionRuntimeQueryInput: null,
         activeSessionRuntimeQueryError:
@@ -66,7 +65,6 @@ describe("useChatComposerSkills", () => {
       useChatComposerSkills,
       {
         hasActiveSession: true,
-        activeExternalSessionId: "external-1",
         activeSessionStatus: "idle",
         activeSessionRuntimeQueryInput: {
           repoPath: "/repo",

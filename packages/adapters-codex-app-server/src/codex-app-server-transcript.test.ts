@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   codexTurnItemsFromThreadRead,
-  codexUserInputListToText,
   codexUserInputsFromItem,
   toCodexTurnInputList,
   toCodexUserInput,
   toHistoryMessage,
-  userInputText,
 } from "./codex-app-server-transcript";
+import { codexUserInputListToText, userInputText } from "./codex-user-input-display";
 
 describe("Codex App Server transcript parsing", () => {
   test("maps skill message parts to structured Codex skill input", () => {

@@ -67,7 +67,7 @@ type AgentStudioModelSelectionContext = {
   supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
-  supportsSkillReferences?: boolean;
+  supportsSkillReferences: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
@@ -334,7 +334,7 @@ export function useAgentStudioPageModels({
       supportsProfiles: modelSelection.supportsProfiles ?? true,
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
-      supportsSkillReferences: modelSelection.supportsSkillReferences ?? false,
+      supportsSkillReferences: modelSelection.supportsSkillReferences,
       slashCommandCatalog: modelSelection.slashCommandCatalog,
       slashCommands: modelSelection.slashCommands,
       slashCommandsError: modelSelection.slashCommandsError,

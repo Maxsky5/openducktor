@@ -3,6 +3,7 @@ import type {
   AgentSkillReference,
   AgentSlashCommand,
 } from "@openducktor/core";
+import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentChatComposerDraft,
@@ -54,37 +55,20 @@ export const AUTOCOMPLETE_NAVIGATION_KEYS = new Set([
 
 const FILE_SEARCH_FAILED_MESSAGE = "Failed to search files.";
 
-const isSameFileMenuRequest = (
-  fileMenuState: FileMenuState | null,
+const isSameTextMenuRequest = (
+  menuState: { textSegmentId: string; query: string; rangeStart: number; rangeEnd: number } | null,
   segmentId: string,
-  match: AgentChatFileTriggerMatch,
+  match: AgentChatFileTriggerMatch | AgentChatSkillTriggerMatch,
 ): boolean => {
-  if (!fileMenuState) {
+  if (!menuState) {
     return false;
   }
 
   return (
-    fileMenuState.textSegmentId === segmentId &&
-    fileMenuState.query === match.query &&
-    fileMenuState.rangeStart === match.rangeStart &&
-    fileMenuState.rangeEnd === match.rangeEnd
-  );
-};
-
-const isSameSkillMenuRequest = (
-  skillMenuState: SkillMenuState | null,
-  segmentId: string,
-  match: AgentChatSkillTriggerMatch,
-): boolean => {
-  if (!skillMenuState) {
-    return false;
-  }
-
-  return (
-    skillMenuState.textSegmentId === segmentId &&
-    skillMenuState.query === match.query &&
-    skillMenuState.rangeStart === match.rangeStart &&
-    skillMenuState.rangeEnd === match.rangeEnd
+    menuState.textSegmentId === segmentId &&
+    menuState.query === match.query &&
+    menuState.rangeStart === match.rangeStart &&
+    menuState.rangeEnd === match.rangeEnd
   );
 };
 
@@ -113,6 +97,25 @@ const filterSkills = (skills: AgentSkillReference[], query: string): AgentSkillR
       .filter((value): value is string => Boolean(value))
       .some((value) => value.toLowerCase().includes(normalizedQuery)),
   );
+};
+
+const moveActiveIndex = (
+  itemCount: number,
+  direction: 1 | -1,
+  setIndex: Dispatch<SetStateAction<number>>,
+): boolean => {
+  if (itemCount === 0) {
+    return false;
+  }
+
+  setIndex((current) => {
+    if (direction > 0) {
+      return (current + 1) % itemCount;
+    }
+
+    return current === 0 ? itemCount - 1 : current - 1;
+  });
+  return true;
 };
 
 type UseAgentChatComposerEditorAutocompleteArgs = {
@@ -247,7 +250,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         return;
       }
 
-      if (isSameFileMenuRequest(fileMenuState, segmentId, match)) {
+      if (isSameTextMenuRequest(fileMenuState, segmentId, match)) {
         return;
       }
 
@@ -316,7 +319,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         return;
       }
 
-      if (isSameSkillMenuRequest(skillMenuState, segmentId, match)) {
+      if (isSameTextMenuRequest(skillMenuState, segmentId, match)) {
         return;
       }
 
@@ -365,54 +368,21 @@ export const useAgentChatComposerEditorAutocomplete = ({
 
   const moveActiveFileIndex = useCallback(
     (direction: 1 | -1) => {
-      if (!fileMenuState || fileMenuState.results.length === 0) {
-        return false;
-      }
-
-      setActiveFileIndex((current) => {
-        if (direction > 0) {
-          return (current + 1) % fileMenuState.results.length;
-        }
-
-        return current === 0 ? fileMenuState.results.length - 1 : current - 1;
-      });
-      return true;
+      return moveActiveIndex(fileMenuState?.results.length ?? 0, direction, setActiveFileIndex);
     },
     [fileMenuState],
   );
 
   const moveActiveSlashIndex = useCallback(
     (direction: 1 | -1) => {
-      if (filteredSlashCommands.length === 0) {
-        return false;
-      }
-
-      setActiveSlashIndex((current) => {
-        if (direction > 0) {
-          return (current + 1) % filteredSlashCommands.length;
-        }
-
-        return current === 0 ? filteredSlashCommands.length - 1 : current - 1;
-      });
-      return true;
+      return moveActiveIndex(filteredSlashCommands.length, direction, setActiveSlashIndex);
     },
     [filteredSlashCommands],
   );
 
   const moveActiveSkillIndex = useCallback(
     (direction: 1 | -1) => {
-      if (filteredSkills.length === 0) {
-        return false;
-      }
-
-      setActiveSkillIndex((current) => {
-        if (direction > 0) {
-          return (current + 1) % filteredSkills.length;
-        }
-
-        return current === 0 ? filteredSkills.length - 1 : current - 1;
-      });
-      return true;
+      return moveActiveIndex(filteredSkills.length, direction, setActiveSkillIndex);
     },
     [filteredSkills],
   );

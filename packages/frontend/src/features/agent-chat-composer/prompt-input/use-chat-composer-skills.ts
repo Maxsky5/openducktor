@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentSkillCatalog } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -8,32 +9,30 @@ const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
 type UseChatComposerSkillsArgs = {
   hasActiveSession: boolean;
-  activeExternalSessionId: string | null;
   activeSessionStatus: string | null;
   activeSessionRuntimeQueryInput: {
     repoPath: string;
-    runtimeKind: import("@openducktor/contracts").RuntimeKind;
+    runtimeKind: RuntimeKind;
     workingDirectory: string;
   } | null;
   activeSessionRuntimeQueryError: string | null;
   supportsSkillReferences: boolean;
   workspaceRepoPath: string | null;
-  selectedRuntimeKind: import("@openducktor/contracts").RuntimeKind | null;
+  selectedRuntimeKind: RuntimeKind | null;
   loadSkillsForRepo: (
     repoPath: string,
-    runtimeKind: import("@openducktor/contracts").RuntimeKind,
+    runtimeKind: RuntimeKind,
     workingDirectory: string,
   ) => Promise<AgentSkillCatalog>;
   readSessionSkills?: (
     repoPath: string,
-    runtimeKind: import("@openducktor/contracts").RuntimeKind,
+    runtimeKind: RuntimeKind,
     workingDirectory: string,
   ) => Promise<AgentSkillCatalog>;
 };
 
 export const useChatComposerSkills = ({
   hasActiveSession,
-  activeExternalSessionId,
   activeSessionStatus,
   activeSessionRuntimeQueryInput,
   activeSessionRuntimeQueryError,
@@ -65,7 +64,6 @@ export const useChatComposerSkills = ({
     enabled:
       supportsSkillReferences &&
       hasActiveSession &&
-      activeExternalSessionId !== null &&
       activeSessionStatus !== "starting" &&
       activeSessionRuntimeQueryInput !== null &&
       activeSessionRuntimeQueryError === null &&
