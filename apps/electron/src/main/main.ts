@@ -11,6 +11,7 @@ import {
   type ElectronHostEventEnvelope,
   type ElectronHostInvokeRequest,
 } from "../shared/electron-bridge-contract";
+import { configureElectronAppIdentity } from "./electron-app-identity";
 import { createElectronHostCommandRouter } from "./electron-host";
 import {
   createElectronLocalAttachmentPreviewUrl,
@@ -34,6 +35,7 @@ const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 
+configureElectronAppIdentity(app, APPLICATION_NAME);
 disableElectronKeychainStorage(app.commandLine);
 configureElectronProcessEnvironment({
   env: process.env,
@@ -51,7 +53,6 @@ const hostCommandRouter = createElectronHostCommandRouter({
 let hostShutdownStarted = false;
 let hostShutdownComplete = false;
 
-app.setName(APPLICATION_NAME);
 protocol.registerSchemesAsPrivileged([
   {
     scheme: ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
