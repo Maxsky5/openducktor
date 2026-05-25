@@ -208,7 +208,7 @@ export const preparePersistedSessionMergeStage = async ({
       return sessionIds;
     }
     if (
-      intent.requestedSessionId === null ||
+      intent.requestedSessionId !== null &&
       record.externalSessionId === intent.requestedSessionId
     ) {
       sessionIds.add(record.externalSessionId);

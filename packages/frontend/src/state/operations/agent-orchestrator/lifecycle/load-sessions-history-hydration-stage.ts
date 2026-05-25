@@ -249,6 +249,9 @@ export const hydrateSessionRecordsStage = async ({
   if (recordsToHydrate.length === 0) {
     return;
   }
+  if (isStaleRepoOperation()) {
+    return;
+  }
 
   markRequestedHistoryHydrationInProgress({
     historyHydrationSessionIds,

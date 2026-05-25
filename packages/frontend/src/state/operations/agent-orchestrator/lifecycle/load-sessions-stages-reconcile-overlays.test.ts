@@ -108,6 +108,51 @@ describe("load-sessions-stages", () => {
     expect(stateHarness.getState()["external-1"]).toBe(initialSession);
   });
 
+  test("does not mark requested-history hydration when the repo operation is already stale", async () => {
+    const initialSession = createSession({ historyHydrationState: "not_requested" });
+    const stateHarness = createStateHarness({ "external-1": initialSession });
+    let setSessionsCalls = 0;
+    let updateSessionCalls = 0;
+
+    await hydrateSessionRecordsStage({
+      repoPath: "/tmp/repo",
+      adapter: createLifecycleAdapter({
+        loadSessionHistory: async () => {
+          throw new Error("history should not load for stale operations");
+        },
+      }),
+      setSessionsById: (updater) => {
+        setSessionsCalls += 1;
+        stateHarness.setSessionsById(updater);
+      },
+      updateSession: (externalSessionId, updater) => {
+        updateSessionCalls += 1;
+        stateHarness.updateSession(externalSessionId, updater);
+      },
+      isStaleRepoOperation: () => true,
+      recordsToHydrate: [createRecord()],
+      historyHydrationSessionIds: new Set(["external-1"]),
+      runtimePlanner: {
+        repoPath: "/tmp/repo",
+        resolveHydrationRuntime: async () => {
+          throw new Error("runtime should not resolve for stale operations");
+        },
+        readSessionPresence: async () => {
+          throw new Error("presence should not load for stale operations");
+        },
+      },
+      promptAssembler: {
+        buildHydrationPreludeMessages: async () => [],
+        buildHydrationSystemPrompt: async () => "",
+      },
+      getRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(setSessionsCalls).toBe(0);
+    expect(updateSessionCalls).toBe(0);
+    expect(stateHarness.getState()["external-1"]).toBe(initialSession);
+  });
+
   test("marks requested-history hydration failed when runtime resolution fails", async () => {
     const stateHarness = createStateHarness({ "external-1": createSession() });
     let promptLoads = 0;

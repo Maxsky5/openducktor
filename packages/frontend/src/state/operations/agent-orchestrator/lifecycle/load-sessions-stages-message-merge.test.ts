@@ -967,6 +967,30 @@ describe("load-sessions-stages", () => {
     expect(output.historyHydrationSessionIds.has("external-1")).toBe(true);
   });
 
+  test("does not treat requested-only hydration without a target session as a wildcard", async () => {
+    const stateHarness = createStateHarness();
+
+    const output = await preparePersistedSessionMergeStage({
+      intent: createIntent({
+        historyPolicy: "requested_only",
+      }),
+      sessionsRef: stateHarness.sessionsRef,
+      setSessionsById: stateHarness.setSessionsById,
+      isStaleRepoOperation: () => false,
+      loadPersistedRecords: async () => [
+        createRecord({ externalSessionId: "external-1" }),
+        createRecord({ externalSessionId: "external-2" }),
+      ],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    expect(output.recordsToHydrate.map((record) => record.externalSessionId)).toEqual([
+      "external-1",
+      "external-2",
+    ]);
+    expect(output.historyHydrationSessionIds.size).toBe(0);
+  });
+
   test("merges persisted records while preserving in-memory pending input", async () => {
     const existingSession = createSession({
       pendingApprovals: [

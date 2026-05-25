@@ -44,33 +44,30 @@ describe("agent-orchestrator load-session runtime policy", () => {
 
   test("hydrates runtime pending permissions and questions for a requested live session", async () => {
     const setSessionsByIdCalls: Array<Record<string, AgentSessionState>> = [];
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-1": {
-          externalSessionId: "external-session-1",
-          taskId: "task-1",
-          repoPath: "/tmp/repo",
-          role: "build" as const,
-          status: "running" as const,
-          startedAt: "2026-02-22T08:00:00.000Z",
-          runtimeId: null,
-          runId: null,
-          runtimeKind: "opencode" as const,
-          workingDirectory: "/tmp/repo/worktree",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          todos: [],
-          modelCatalog: null,
-          selectedModel: null,
-          isLoadingModelCatalog: false,
-        },
+    const stateHarness = createStateHarness({
+      "external-1": {
+        externalSessionId: "external-session-1",
+        taskId: "task-1",
+        repoPath: "/tmp/repo",
+        role: "build" as const,
+        status: "running" as const,
+        startedAt: "2026-02-22T08:00:00.000Z",
+        runtimeId: null,
+        runtimeKind: "opencode" as const,
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        todos: [],
+        modelCatalog: null,
+        selectedModel: null,
+        isLoadingModelCatalog: false,
       },
-    };
+    });
 
     const adapter = createAdapter({
       loadSessionHistory: async () => [
@@ -131,26 +128,13 @@ describe("agent-orchestrator load-session runtime policy", () => {
       adapter,
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      sessionsRef: stateHarness.sessionsRef,
       setSessionsById: (updater) => {
-        if (typeof updater === "function") {
-          sessionsRef.current = updater(sessionsRef.current);
-        } else {
-          sessionsRef.current = updater;
-        }
-        setSessionsByIdCalls.push(sessionsRef.current);
+        stateHarness.setSessionsById(updater);
+        setSessionsByIdCalls.push(stateHarness.getState());
       },
       taskRef: { current: [createTaskFixture()] },
-      updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
-        if (!current) {
-          return;
-        }
-        sessionsRef.current = {
-          ...sessionsRef.current,
-          [externalSessionId]: updater(current),
-        };
-      },
+      updateSession: stateHarness.updateSession,
       attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
@@ -193,7 +177,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
     });
 
     expect(setSessionsByIdCalls.length).toBeGreaterThan(0);
-    expect(sessionsRef.current["external-session-1"]?.pendingApprovals).toEqual([
+    expect(stateHarness.getState()["external-session-1"]?.pendingApprovals).toEqual([
       {
         requestId: "perm-1",
         requestType: "permission_grant" as const,
@@ -209,7 +193,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
         ],
       },
     ]);
-    expect(sessionsRef.current["external-session-1"]?.pendingQuestions).toEqual([
+    expect(stateHarness.getState()["external-session-1"]?.pendingQuestions).toEqual([
       {
         requestId: "question-1",
         questions: [
@@ -274,20 +258,6 @@ describe("agent-orchestrator load-session runtime policy", () => {
 
   test("hydrates qa worktree sessions through the shared repo runtime", async () => {
     const stateHarness = createStateHarness();
-    let observedRuntimeEndpoint: string | null = null;
-
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = stateHarness.getState()[externalSessionId];
-      if (!current) {
-        return;
-      }
-      const next = updater(current);
-      observedRuntimeEndpoint = next.runtimeId;
-      stateHarness.updateSession(externalSessionId, () => next);
-    };
 
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
@@ -302,7 +272,7 @@ describe("agent-orchestrator load-session runtime policy", () => {
       sessionsRef: stateHarness.sessionsRef,
       setSessionsById: stateHarness.setSessionsById,
       taskRef: { current: [createTaskFixture()] },
-      updateSession,
+      updateSession: stateHarness.updateSession,
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -349,7 +319,6 @@ describe("agent-orchestrator load-session runtime policy", () => {
       hostModule.host.runtimeList = originalRuntimeList;
     }
 
-    expect(observedRuntimeEndpoint as string | null).toBeNull();
     expect(stateHarness.getState()["external-qa-1"]?.runtimeId).toBeNull();
     expect(stateHarness.getState()["external-qa-1"]?.workingDirectory).toBe("/tmp/repo/worktree");
     expect(
