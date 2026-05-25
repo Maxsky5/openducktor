@@ -25,15 +25,12 @@ import {
 } from "./electron-loopback-cors-policy";
 import { electronMainLogger } from "./electron-main-logger";
 import { configureElectronProcessEnvironment } from "./electron-process-environment";
-import {
-  ELECTRON_RENDERER_SESSION_PARTITION,
-  resolveElectronRendererSession,
-} from "./electron-renderer-session";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 
 const { app, BrowserWindow, ipcMain, net, protocol, session, shell } = electron;
 const APPLICATION_NAME = "OpenDucktor";
+const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
@@ -207,7 +204,7 @@ const hideWindowsForShutdown = (): void => {
 app
   .whenReady()
   .then(async () => {
-    const rendererSession = resolveElectronRendererSession(session);
+    const rendererSession = session.fromPartition(ELECTRON_RENDERER_SESSION_PARTITION);
     configureElectronLoopbackCorsPolicy(
       rendererSession,
       resolveElectronLoopbackCorsOrigin(rendererDevUrl),
