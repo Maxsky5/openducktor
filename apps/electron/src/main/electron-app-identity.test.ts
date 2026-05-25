@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { configureElectronAppIdentity, resolveElectronProfilePath } from "./electron-app-identity";
 
+const customAppName = "Custom App";
+const customAppDataPath = "/Users/alice/Library/Application Support";
+const customProfilePath = resolveElectronProfilePath(customAppDataPath, customAppName);
+
 describe("resolveElectronProfilePath", () => {
   test("joins app data paths and application names with platform path semantics", () => {
     expect(
@@ -18,7 +22,7 @@ describe("configureElectronAppIdentity", () => {
       {
         getPath(name) {
           expect(name).toBe("appData");
-          return "/Users/alice/Library/Application Support";
+          return customAppDataPath;
         },
         setName(name) {
           calls.push(["name", name]);
@@ -27,17 +31,17 @@ describe("configureElectronAppIdentity", () => {
           calls.push([name, value]);
         },
       },
-      "Custom App",
+      customAppName,
       (profilePath) => {
         calls.push(["mkdir", profilePath]);
       },
     );
 
     expect(calls).toEqual([
-      ["name", "Custom App"],
-      ["mkdir", "/Users/alice/Library/Application Support/Custom App"],
-      ["userData", "/Users/alice/Library/Application Support/Custom App"],
-      ["sessionData", "/Users/alice/Library/Application Support/Custom App"],
+      ["name", customAppName],
+      ["mkdir", customProfilePath],
+      ["userData", customProfilePath],
+      ["sessionData", customProfilePath],
     ]);
   });
 
@@ -46,20 +50,20 @@ describe("configureElectronAppIdentity", () => {
       configureElectronAppIdentity(
         {
           getPath() {
-            return "/Users/alice/Library/Application Support";
+            return customAppDataPath;
           },
           setName() {},
           setPath() {
             throw new Error("setPath should not run after mkdir failure");
           },
         },
-        "Custom App",
+        customAppName,
         () => {
           throw new Error("permission denied");
         },
       ),
     ).toThrow(
-      "Failed to create Custom App Electron profile directory at /Users/alice/Library/Application Support/Custom App: permission denied",
+      `Failed to create Custom App Electron profile directory at ${customProfilePath}: permission denied`,
     );
   });
 
@@ -68,20 +72,20 @@ describe("configureElectronAppIdentity", () => {
       configureElectronAppIdentity(
         {
           getPath() {
-            return "/Users/alice/Library/Application Support";
+            return customAppDataPath;
           },
           setName() {},
           setPath() {
             throw new Error("setPath should not run after mkdir failure");
           },
         },
-        "Custom App",
+        customAppName,
         () => {
           throw "permission denied";
         },
       ),
     ).toThrow(
-      "Failed to create Custom App Electron profile directory at /Users/alice/Library/Application Support/Custom App: permission denied",
+      `Failed to create Custom App Electron profile directory at ${customProfilePath}: permission denied`,
     );
   });
 });
