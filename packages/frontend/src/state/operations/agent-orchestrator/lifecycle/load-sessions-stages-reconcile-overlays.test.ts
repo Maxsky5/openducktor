@@ -142,7 +142,6 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
-      loadMode: "reconcile_live",
       repoPath: "/tmp/repo",
       adapter: createLifecycleAdapter(),
       setSessionsById: stateHarness.setSessionsById,
@@ -185,7 +184,6 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
-      loadMode: "reconcile_live",
       repoPath: "/tmp/repo",
       adapter: createLifecycleAdapter(),
       setSessionsById: stateHarness.setSessionsById,
@@ -221,7 +219,7 @@ describe("load-sessions-stages", () => {
     expect(session?.draftReasoningMessageId).toBe("reasoning-draft");
   });
 
-  test("settles pending outbound sends when adapter reports idle presence", async () => {
+  test("does not let history hydration settle pending outbound sends from runtime presence", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -234,7 +232,6 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
-      loadMode: "requested_history",
       repoPath: "/tmp/repo",
       adapter: createLifecycleAdapter({
         loadSessionHistory: async () => createCompletedAssistantHistory(),
@@ -250,16 +247,16 @@ describe("load-sessions-stages", () => {
         buildHydrationSystemPrompt: async () => "",
       },
       getRepoPromptOverrides: async () => ({}),
-      livePresenceMode: "apply",
+      subagentPendingInputMode: "hydrate",
     });
 
     const session = stateHarness.getState()["external-1"];
-    expect(session?.status).toBe("idle");
-    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
-    expect(session?.draftAssistantText).toBe("");
-    expect(session?.draftAssistantMessageId).toBeNull();
-    expect(session?.draftReasoningText).toBe("");
-    expect(session?.draftReasoningMessageId).toBeNull();
+    expect(session?.status).toBe("running");
+    expect(session?.pendingUserMessageStartedAt).toBe(pendingUserMessageStartedAt);
+    expect(session?.draftAssistantText).toBe("partial assistant");
+    expect(session?.draftAssistantMessageId).toBe("assistant-draft");
+    expect(session?.draftReasoningText).toBe("partial reasoning");
+    expect(session?.draftReasoningMessageId).toBe("reasoning-draft");
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 
@@ -272,7 +269,6 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
-      loadMode: "requested_history",
       repoPath: "/tmp/repo",
       adapter: createLifecycleAdapter({
         loadSessionHistory: async () => createCompletedAssistantHistory(),
@@ -299,7 +295,7 @@ describe("load-sessions-stages", () => {
         buildHydrationSystemPrompt: async () => "",
       },
       getRepoPromptOverrides: async () => ({}),
-      livePresenceMode: "apply",
+      subagentPendingInputMode: "hydrate",
     });
 
     const session = stateHarness.getState()["external-1"];
@@ -317,7 +313,6 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
-      loadMode: "requested_history",
       repoPath: "/tmp/repo",
       adapter: createLifecycleAdapter({
         loadSessionHistory: async () => createCompletedAssistantHistory(),
@@ -333,7 +328,7 @@ describe("load-sessions-stages", () => {
         buildHydrationSystemPrompt: async () => "",
       },
       getRepoPromptOverrides: async () => ({}),
-      livePresenceMode: "skip",
+      subagentPendingInputMode: "skip",
     });
 
     const session = stateHarness.getState()["external-1"];
@@ -342,7 +337,7 @@ describe("load-sessions-stages", () => {
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 
-  test("settles pending outbound sends from idle presence without a stop finish", async () => {
+  test("keeps pending outbound sends when hydrated history has an error finish", async () => {
     const stateHarness = createStateHarness({
       "external-1": createSession({
         status: "running",
@@ -351,7 +346,6 @@ describe("load-sessions-stages", () => {
     });
 
     await hydrateSessionRecordsStage({
-      loadMode: "requested_history",
       repoPath: "/tmp/repo",
       adapter: createLifecycleAdapter({
         loadSessionHistory: async () => createCompletedAssistantHistory("session_error"),
@@ -367,12 +361,12 @@ describe("load-sessions-stages", () => {
         buildHydrationSystemPrompt: async () => "",
       },
       getRepoPromptOverrides: async () => ({}),
-      livePresenceMode: "apply",
+      subagentPendingInputMode: "hydrate",
     });
 
     const session = stateHarness.getState()["external-1"];
-    expect(session?.status).toBe("idle");
-    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
+    expect(session?.status).toBe("running");
+    expect(session?.pendingUserMessageStartedAt).toBe(pendingUserMessageStartedAt);
     expect(session?.historyHydrationState).toBe("hydrated");
   });
 
@@ -473,7 +467,7 @@ describe("load-sessions-stages", () => {
       isStaleRepoOperation: () => stale,
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
-      livePresenceMode: "apply",
+      subagentPendingInputMode: "hydrate",
       runtimePlanner: {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => {
@@ -675,7 +669,7 @@ describe("load-sessions-stages", () => {
       isStaleRepoOperation: () => false,
       recordsToHydrate: [createRecord()],
       historyHydrationSessionIds: new Set(["external-1"]),
-      livePresenceMode: "apply",
+      subagentPendingInputMode: "hydrate",
       runtimePlanner: {
         repoPath: "/tmp/repo",
         resolveHydrationRuntime: async () => ({
@@ -967,7 +961,7 @@ describe("load-sessions-stages", () => {
         isStaleRepoOperation: () => false,
         recordsToHydrate: [createRecord()],
         historyHydrationSessionIds: new Set(["external-1"]),
-        livePresenceMode: "apply",
+        subagentPendingInputMode: "hydrate",
         runtimePlanner: {
           repoPath: "/tmp/repo",
           resolveHydrationRuntime: async () => ({

@@ -1,7 +1,6 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { RepoSessionPresencePreloads } from "./repo-session-presence-preloads";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
-import type { AgentSessionPresenceStore } from "./session-presence-store";
 
 type HydrationScope = "bootstrap" | "reconcile";
 
@@ -21,7 +20,6 @@ const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string 
 
 export const createRepoSessionHydrationService = ({
   sessionHydration,
-  agentSessionPresenceStore,
   prepareRepoSessionPresencePreloads,
   onRetryRequested,
 }: {
@@ -29,7 +27,6 @@ export const createRepoSessionHydrationService = ({
     SessionHydrationOperations,
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
   >;
-  agentSessionPresenceStore: AgentSessionPresenceStore;
   prepareRepoSessionPresencePreloads?: (input: {
     repoPath: string;
     records: AgentSessionRecord[];
@@ -89,7 +86,6 @@ export const createRepoSessionHydrationService = ({
 
   return {
     resetRepo(repoPath: string): void {
-      agentSessionPresenceStore.clearRepo(repoPath);
       getOrCreateRepoSet(bootstrappedTasksByRepo, repoPath).clear();
       getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath).clear();
       getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath).clear();
@@ -203,10 +199,6 @@ export const createRepoSessionHydrationService = ({
           if (isCancelled() || !isCurrentRepo(repoPath)) {
             return;
           }
-          agentSessionPresenceStore.replaceRepoPresence(
-            repoPath,
-            preloads.preloadedSessionPresenceByKey,
-          );
         }
 
         const results = await Promise.allSettled(

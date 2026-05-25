@@ -20,7 +20,6 @@ import { useRepoSessionHydrationEffects } from "./hooks/use-repo-session-hydrati
 import { useRuntimeTranscriptAttachment } from "./hooks/use-runtime-transcript-attachment";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { prepareRepoSessionPresencePreloads } from "./lifecycle/repo-session-presence-preloads";
-import { AgentSessionPresenceStore } from "./lifecycle/session-presence-store";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -79,7 +78,6 @@ export function useAgentOrchestratorOperations({
     tasks,
   });
   const { sessionsRef, unsubscribersRef } = refBridges;
-  const agentSessionPresenceStore = useMemo(() => new AgentSessionPresenceStore(), []);
   const sessionCacheEffects = useMemo(
     () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
     [workspaceRepoPath, queryClient, hostPort],
@@ -132,7 +130,6 @@ export function useAgentOrchestratorOperations({
         attachSessionListener,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadTaskDocuments,
-        agentSessionPresenceStore,
         queryClient,
       }),
     [
@@ -140,7 +137,6 @@ export function useAgentOrchestratorOperations({
       agentEngine,
       attachSessionListener,
       commitSessions,
-      agentSessionPresenceStore,
       queryBackedPromptOverrides,
       queryClient,
       refBridges,
@@ -166,7 +162,6 @@ export function useAgentOrchestratorOperations({
     workspaceRepoPath,
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-    agentSessionPresenceStore,
     sessionHydration,
     prepareRepoSessionPresencePreloads: prepareSessionPresencePreloads,
   });

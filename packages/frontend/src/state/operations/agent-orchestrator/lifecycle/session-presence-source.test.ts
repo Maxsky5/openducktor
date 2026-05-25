@@ -3,7 +3,6 @@ import type { AgentEnginePort } from "@openducktor/core";
 import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
 import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 import { createAgentSessionPresenceSnapshotSource } from "./session-presence-source";
-import { AgentSessionPresenceStore } from "./session-presence-store";
 
 type ListSessionPresenceInput = Parameters<AgentEnginePort["listSessionPresence"]>[0];
 type ReadSessionPresenceInput = Parameters<AgentEnginePort["readSessionPresence"]>[0];
@@ -12,41 +11,6 @@ const createPresence = (externalSessionId: string, title = `Session ${externalSe
   createAgentSessionPresenceSnapshotFixture({ ref: { externalSessionId }, snapshot: { title } });
 
 describe("session-presence-source", () => {
-  test("prefers stored snapshot before preloaded, scanned, or direct reads", async () => {
-    const storedPresence = createPresence("external-1", "Stored Session");
-    const preloadedPresence = createPresence("external-1", "Preloaded Session");
-    const scannedPresence = createPresence("external-1", "Scanned Session");
-    const directPresence = createPresence("external-1", "Direct Session");
-    const store = new AgentSessionPresenceStore();
-    store.replaceRepoPresence(
-      "/tmp/repo",
-      new Map([
-        [
-          agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
-          [storedPresence],
-        ],
-      ]),
-    );
-    const listSessionPresence = mock(async () => [scannedPresence]);
-    const readSessionPresence = mock(async () => directPresence);
-    const source = createAgentSessionPresenceSnapshotSource({
-      adapter: { listSessionPresence, readSessionPresence },
-      agentSessionPresenceStore: store,
-      preloadedSessionPresenceByKey: new Map([
-        [
-          agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
-          [preloadedPresence],
-        ],
-      ]),
-    });
-
-    const snapshot = await source.read(storedPresence.ref);
-
-    expect(snapshot).toBe(storedPresence);
-    expect(listSessionPresence).not.toHaveBeenCalled();
-    expect(readSessionPresence).not.toHaveBeenCalled();
-  });
-
   test("reads preloaded snapshot without requiring a scan adapter", async () => {
     const preloadedPresence = createPresence("external-1");
     const source = createAgentSessionPresenceSnapshotSource({

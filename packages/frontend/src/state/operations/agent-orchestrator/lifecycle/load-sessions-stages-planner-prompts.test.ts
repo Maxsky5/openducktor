@@ -378,6 +378,7 @@ describe("load-sessions-stages", () => {
     const result = await reconcileLiveSessionsStage({
       intent: createIntent({ shouldReconcileLiveSessions: true }),
       adapter,
+      sessionsRef: stateHarness.sessionsRef,
       updateSession: stateHarness.updateSession,
       attachSessionListener: () => {},
       isStaleRepoOperation: () => false,

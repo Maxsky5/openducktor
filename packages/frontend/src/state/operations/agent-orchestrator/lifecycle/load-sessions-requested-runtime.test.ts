@@ -183,6 +183,7 @@ describe("agent-orchestrator requested session runtime hydration", () => {
         };
         sessionsRef.current = state;
       },
+      attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -452,6 +453,7 @@ describe("agent-orchestrator requested session runtime hydration", () => {
         };
         sessionsRef.current = state;
       },
+      attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 

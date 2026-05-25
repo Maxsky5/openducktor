@@ -116,6 +116,7 @@ describe("agent-orchestrator live session reconciliation", () => {
         };
         sessionsRef.current = state;
       },
+      attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -245,6 +246,7 @@ describe("agent-orchestrator live session reconciliation", () => {
         };
         sessionsRef.current = state;
       },
+      attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -355,6 +357,7 @@ describe("agent-orchestrator live session reconciliation", () => {
         };
         sessionsRef.current = state;
       },
+      attachSessionListener: () => {},
       loadRepoPromptOverrides: async () => ({}),
     });
 

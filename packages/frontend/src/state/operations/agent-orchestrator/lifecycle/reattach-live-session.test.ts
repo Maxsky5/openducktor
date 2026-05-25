@@ -97,7 +97,7 @@ const createSessionStateFixture = (): AgentSessionState => ({
 });
 
 describe("reattach-live-session", () => {
-  test("applies an idle snapshot without resuming or attaching", async () => {
+  test("does not apply an idle snapshot during live reattach", async () => {
     let state: AgentSessionState = { ...createSessionStateFixture(), status: "running" };
     let resumed = false;
     let attachedSessionId: string | null = null;
@@ -107,6 +107,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
       updateSession: (externalSessionId, updater) => {
         if (externalSessionId !== "external-1") {
           return;
@@ -138,9 +139,9 @@ describe("reattach-live-session", () => {
     expect(reattached).toBe(false);
     expect(resumed).toBe(false);
     expect(attachedSessionId).toBeNull();
-    expect(state.status).toBe("idle");
+    expect(state.status).toBe("running");
     expect(state.runtimeId).toBe("runtime-1");
-    expect(state.pendingApprovals).toEqual([]);
+    expect(state.pendingApprovals).toEqual(createSessionStateFixture().pendingApprovals);
   });
 
   test("reattaches an idle snapshot when pending input is still live", async () => {
@@ -153,6 +154,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
       updateSession: (externalSessionId, updater) => {
         if (externalSessionId !== "external-1") {
           return;
@@ -227,6 +229,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
       updateSession: (externalSessionId, updater) => {
         if (externalSessionId !== "external-1") {
           return;
@@ -270,6 +273,7 @@ describe("reattach-live-session", () => {
         hasSession: () => true,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
       updateSession: (externalSessionId, updater) => {
         if (externalSessionId !== "external-1") {
           return;
@@ -300,6 +304,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
       updateSession: (externalSessionId, updater) => {
         if (externalSessionId !== "external-1") {
           return;
@@ -344,6 +349,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => createSessionStateFixture(),
       updateSession: () => {
         throw new Error("should not update stale session");
       },
@@ -384,6 +390,7 @@ describe("reattach-live-session", () => {
         hasSession: () => true,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => state,
       updateSession: (externalSessionId, updater) => {
         if (externalSessionId !== "external-1") {
           return;
@@ -429,6 +436,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => createSessionStateFixture(),
       updateSession: () => {
         throw new Error("should not update unsupported session");
       },
@@ -459,6 +467,7 @@ describe("reattach-live-session", () => {
         hasSession: () => false,
       },
       repoPath: "/tmp/repo",
+      getCurrentSession: () => createSessionStateFixture(),
       updateSession: () => {
         throw new Error("should not update failed session");
       },

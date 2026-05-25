@@ -317,7 +317,7 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
     expect(state["external-1"]?.pendingQuestions).toEqual([]);
   });
 
-  test("clears pending permissions when the live snapshot reports no pending input", async () => {
+  test("does not clear pending permissions during requested-history hydration", async () => {
     const existingSession: AgentSessionState = {
       externalSessionId: "external-1",
       taskId: "task-1",
@@ -472,6 +472,6 @@ describe("agent-orchestrator load-session guards and persisted records", () => {
       hostModule.host.agentSessionsList = originalList;
     }
 
-    expect(state["external-1"]?.pendingApprovals).toEqual([]);
+    expect(state["external-1"]?.pendingApprovals).toEqual(existingSession.pendingApprovals);
   });
 });

@@ -4,7 +4,6 @@ import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import { createAgentSessionPresenceSnapshotFixture } from "../test-utils";
 import { createRepoSessionHydrationService } from "./repo-session-hydration-service";
 import { agentSessionPresenceLookupKey } from "./session-presence-cache";
-import { AgentSessionPresenceStore } from "./session-presence-store";
 
 const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -65,7 +64,6 @@ describe("repo-session-hydration-service", () => {
     const deferred = createDeferred<void>();
     let bootstrapCalls = 0;
     let retryRequests = 0;
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
 
     const service = createRepoSessionHydrationService({
       sessionHydration: {
@@ -75,7 +73,6 @@ describe("repo-session-hydration-service", () => {
         },
         reconcileLiveTaskSessions: async () => {},
       },
-      agentSessionPresenceStore,
       onRetryRequested: () => {
         retryRequests += 1;
       },
@@ -105,7 +102,6 @@ describe("repo-session-hydration-service", () => {
 
   test("does not mark empty-session tasks as bootstrapped", async () => {
     const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const emptyTask = taskWithSession("task-1", "external-1");
     emptyTask.agentSessions = [];
     const taskWithLaterSession = taskWithSession("task-1", "external-1");
@@ -117,7 +113,6 @@ describe("repo-session-hydration-service", () => {
         },
         reconcileLiveTaskSessions: async () => {},
       },
-      agentSessionPresenceStore,
       onRetryRequested: () => {},
     });
 
@@ -141,7 +136,6 @@ describe("repo-session-hydration-service", () => {
   });
 
   test("reconciles pending tasks with a shared preloaded presence map", async () => {
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const presenceSnapshot = createAgentSessionPresenceSnapshotFixture({
       ref: { repoPath, runtimeKind: "opencode", workingDirectory: worktreePath },
     });
@@ -180,7 +174,6 @@ describe("repo-session-hydration-service", () => {
           });
         },
       },
-      agentSessionPresenceStore,
       prepareRepoSessionPresencePreloads,
       onRetryRequested: () => {},
     });
@@ -197,7 +190,6 @@ describe("repo-session-hydration-service", () => {
       ...taskOneRecords,
       ...taskTwoRecords,
     ]);
-    expect(agentSessionPresenceStore.readPresence(presenceSnapshot.ref)).toEqual(presenceSnapshot);
     expect(reconcileCalls).toEqual([
       {
         taskId: "task-1",
@@ -214,7 +206,6 @@ describe("repo-session-hydration-service", () => {
   });
 
   test("hydrates durable sessions when live presence preload fails", async () => {
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const task = taskWithSession("task-1", "external-1");
     const taskRecords = task.agentSessions ?? [];
     const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
@@ -232,7 +223,6 @@ describe("repo-session-hydration-service", () => {
           },
           reconcileLiveTaskSessions,
         },
-        agentSessionPresenceStore,
         prepareRepoSessionPresencePreloads,
         onRetryRequested: () => {},
       });
@@ -253,7 +243,6 @@ describe("repo-session-hydration-service", () => {
   });
 
   test("does not reconcile unchanged task records twice", async () => {
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
     const reconcileLiveTaskSessions = mock(async () => {});
     const prepareRepoSessionPresencePreloads = mock(async () => ({
       preloadedSessionPresenceByKey: new Map(),
@@ -264,7 +253,6 @@ describe("repo-session-hydration-service", () => {
         bootstrapTaskSessions: async () => {},
         reconcileLiveTaskSessions,
       },
-      agentSessionPresenceStore,
       prepareRepoSessionPresencePreloads,
       onRetryRequested: () => {},
     });

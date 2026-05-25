@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, RuntimeKind } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
 import {
@@ -14,13 +14,14 @@ type CreateReattachLiveSessionArgs = {
     hasSession?: (externalSessionId: string) => boolean;
   };
   repoPath: string;
+  getCurrentSession: (externalSessionId: string) => AgentSessionState | null;
   updateSession: (
     externalSessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
   attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
-  promptOverrides: import("@openducktor/contracts").RepoPromptOverrides;
+  promptOverrides: RepoPromptOverrides;
   readSessionPresence: (record: AgentSessionRecord) => Promise<AgentSessionPresenceSnapshot>;
   attachMissingLiveSession?: (input: {
     record: AgentSessionRecord;
@@ -31,9 +32,37 @@ type CreateReattachLiveSessionArgs = {
   isStaleRepoOperation: () => boolean;
 };
 
+const canAdoptRuntimePresence = (current: AgentSessionState): boolean => {
+  if (current.status === "idle" || current.status === "error") {
+    return current.pendingApprovals.length > 0 || current.pendingQuestions.length > 0;
+  }
+  return true;
+};
+
+const applyRuntimeIdentityFromPresence = (
+  current: AgentSessionState,
+  snapshot: Extract<AgentSessionPresenceSnapshot, { presence: "runtime" }>,
+  {
+    promptOverrides,
+    selectedModel,
+  }: {
+    promptOverrides: RepoPromptOverrides;
+    selectedModel: AgentSessionState["selectedModel"];
+  },
+): AgentSessionState => ({
+  ...current,
+  runtimeKind: snapshot.ref.runtimeKind,
+  runtimeId: snapshot.runtimeId,
+  workingDirectory: snapshot.ref.workingDirectory,
+  runtimeRecoveryState: "idle",
+  promptOverrides,
+  selectedModel,
+});
+
 export const createReattachLiveSession = ({
   adapter,
   repoPath,
+  getCurrentSession,
   updateSession,
   attachSessionListener,
   promptOverrides,
@@ -62,19 +91,20 @@ export const createReattachLiveSession = ({
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!isAttachableAgentSessionPresenceSnapshot(sessionPresence)) {
       if (sessionPresence.presence === "runtime") {
-        if (isStaleRepoOperation()) {
-          return false;
-        }
         updateSession(
           record.externalSessionId,
           (current) =>
-            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+            applyRuntimeIdentityFromPresence(current, sessionPresence, {
               promptOverrides,
               selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
             }),
           { persist: false },
         );
       }
+      return false;
+    }
+    const currentSession = getCurrentSession(record.externalSessionId);
+    if (!currentSession || !canAdoptRuntimePresence(currentSession)) {
       return false;
     }
 
@@ -102,16 +132,24 @@ export const createReattachLiveSession = ({
     if (isStaleRepoOperation()) {
       return false;
     }
-    attachSessionListener(repoPath, record.externalSessionId);
+    let adoptedRuntimePresence = false;
     updateSession(
       record.externalSessionId,
-      (current) =>
-        applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+      (current) => {
+        if (!canAdoptRuntimePresence(current)) {
+          return current;
+        }
+        adoptedRuntimePresence = true;
+        return applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
           promptOverrides,
           selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
-        }),
+        });
+      },
       { persist: false },
     );
-    return true;
+    if (adoptedRuntimePresence) {
+      attachSessionListener(repoPath, record.externalSessionId);
+    }
+    return adoptedRuntimePresence;
   };
 };

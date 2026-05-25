@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  type AgentSessionPresenceSnapshot,
-  AgentSessionPresenceStore,
   type AgentSessionState,
-  agentSessionPresenceLookupKey,
   createAdapter,
-  createAgentSessionPresenceSnapshotFixture,
   createDeferred,
   createLoadAgentSessions,
   createTaskFixture,
@@ -477,7 +473,7 @@ describe("agent-orchestrator live reattach hydration", () => {
     expect(state["external-1"]?.runtimeId).toBeUndefined();
   });
 
-  test("reuses the trusted live agent session store for requested session hydration", async () => {
+  test("does not let requested history hydration relaunch an already idle session", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-1": {
@@ -515,33 +511,6 @@ describe("agent-orchestrator live reattach hydration", () => {
       sessionsRef.current = state;
     };
 
-    const agentSessionPresenceStore = new AgentSessionPresenceStore();
-    agentSessionPresenceStore.replaceRepoPresence(
-      "/tmp/repo",
-      new Map([
-        [
-          agentSessionPresenceLookupKey("/tmp/repo", "opencode", "/tmp/repo/worktree"),
-          [
-            createAgentSessionPresenceSnapshotFixture({
-              ref: {
-                repoPath: "/tmp/repo",
-                runtimeKind: "opencode",
-                externalSessionId: "external-1",
-                workingDirectory: "/tmp/repo/worktree",
-              },
-              runtimeId: "runtime-1",
-              snapshot: {
-                title: "BUILD task-1",
-                status: { type: "busy" },
-                pendingApprovals: [],
-                pendingQuestions: [],
-              },
-            }),
-          ],
-        ],
-      ]) as Map<string, AgentSessionPresenceSnapshot[]>,
-    );
-
     const loadAgentSessions = createLoadAgentSessions({
       queryClient,
       activeWorkspace: {
@@ -551,7 +520,7 @@ describe("agent-orchestrator live reattach hydration", () => {
       },
       adapter: createAdapter({
         listSessionPresence: async () => {
-          throw new Error("should not reload live snapshots");
+          throw new Error("history hydration must not reload liveness for idle sessions");
         },
       }),
       repoEpochRef: { current: 2 },
@@ -570,7 +539,6 @@ describe("agent-orchestrator live reattach hydration", () => {
         }));
       },
       loadRepoPromptOverrides: async () => ({}),
-      agentSessionPresenceStore,
     });
 
     await loadAgentSessions("task-1", {
@@ -590,7 +558,7 @@ describe("agent-orchestrator live reattach hydration", () => {
       ],
     });
 
-    expect(state["external-1"]?.status).toBe("running");
+    expect(state["external-1"]?.status).toBe("idle");
   });
 
   test("refreshes requested session history even when in-memory messages already exist", async () => {
