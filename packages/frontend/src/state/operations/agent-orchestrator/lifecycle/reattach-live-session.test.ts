@@ -145,11 +145,16 @@ describe("reattach-live-session", () => {
   });
 
   test("does not settle idle runtime presence while a local send is pending", async () => {
-    let state: AgentSessionState = {
+    const originalSession: AgentSessionState = {
       ...createSessionStateFixture(),
       status: "running",
+      runtimeId: "runtime-current",
+      workingDirectory: "/tmp/repo/current-worktree",
+      runtimeRecoveryState: "recovering_runtime",
+      selectedModel: { providerId: "openai", modelId: "gpt-5" },
       pendingUserMessageStartedAt: 123,
     };
+    const state: AgentSessionState = originalSession;
 
     const reattachLiveSession = createReattachLiveSession({
       adapter: {
@@ -157,11 +162,8 @@ describe("reattach-live-session", () => {
       },
       repoPath: "/tmp/repo",
       getCurrentSession: () => state,
-      updateSession: (externalSessionId, updater) => {
-        if (externalSessionId !== "external-1") {
-          return;
-        }
-        state = updater(state);
+      updateSession: () => {
+        throw new Error("should not update session while local send is pending");
       },
       attachSessionListener: () => {
         throw new Error("should not attach idle session");
@@ -186,8 +188,7 @@ describe("reattach-live-session", () => {
     const reattached = await reattachLiveSession(sessionRecordFixture);
 
     expect(reattached).toBe(false);
-    expect(state.status).toBe("running");
-    expect(state.pendingUserMessageStartedAt).toBe(123);
+    expect(state).toEqual(originalSession);
   });
 
   test("does not adopt runtime presence for an error session without pending input", async () => {

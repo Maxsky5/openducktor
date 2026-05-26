@@ -67,6 +67,9 @@ const canApplyNonAttachablePresence = (
   current: AgentSessionState,
   snapshot: AgentSessionPresenceSnapshot,
 ): boolean => {
+  if (hasPendingOutboundSend(current)) {
+    return false;
+  }
   if (shouldSettleNonLivePresence(current)) {
     return true;
   }
