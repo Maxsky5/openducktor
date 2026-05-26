@@ -1,5 +1,5 @@
 import { type ReactElement, useCallback, useRef, useState } from "react";
-import { SessionStartModal } from "@/components/features/agents";
+import { SessionStartModal } from "@/components/features/agents/session-start-modal";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import {
   useChecksOperationsContext,

@@ -212,7 +212,8 @@ setInterval(() => {}, 1000);
     }
   });
 
-  test("rejects commands that exit during the start grace period", async () => {
+  test("rejects and reports process exits that happen during the start grace period", async () => {
+    const exits: unknown[] = [];
     const port = createDevServerProcessAdapter({
       startGracePeriodMs: 1_000,
       stopTimeoutMs: 100,
@@ -227,10 +228,18 @@ setInterval(() => {}, 1000);
       port.start({
         command,
         cwd: process.cwd(),
-        onExit: () => {},
+        onExit: (exit) => exits.push(exit),
         onOutput: () => {},
       }),
     ).rejects.toThrow("Dev server exited with code 42.");
+    expect(exits).toEqual([
+      {
+        pid: expect.any(Number),
+        exitCode: 42,
+        signal: null,
+        error: null,
+      },
+    ]);
   });
 
   test("rejects unmatched POSIX shell command quotes as shell exits", async () => {
