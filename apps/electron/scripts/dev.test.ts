@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { electronRuntimeEnv, resolveRendererDevPort, shouldRestartElectronForChange } from "./dev";
+import {
+  electronRuntimeEnv,
+  resolveMacosAppBundlePath,
+  resolveMacosDevExecutablePath,
+  resolveRendererDevPort,
+  shouldRestartElectronForChange,
+} from "./dev";
 
 describe("electron dev script", () => {
   test("uses the default renderer dev server port", () => {
@@ -28,6 +34,24 @@ describe("electron dev script", () => {
         PATH: "/usr/bin",
       }),
     ).toEqual({ PATH: "/usr/bin" });
+  });
+
+  test("resolves the macOS Electron app bundle from the executable path", () => {
+    expect(
+      resolveMacosAppBundlePath(
+        "/repo/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
+      ),
+    ).toBe("/repo/node_modules/electron/dist/Electron.app");
+    expect(resolveMacosAppBundlePath("/repo/node_modules/.bin/electron")).toBeNull();
+  });
+
+  test("resolves the OpenDucktor macOS dev executable inside the copied app bundle", () => {
+    expect(
+      resolveMacosDevExecutablePath(
+        "/repo/apps/electron/.electron-dev/OpenDucktor.app",
+        "Electron",
+      ),
+    ).toBe("/repo/apps/electron/.electron-dev/OpenDucktor.app/Contents/MacOS/Electron");
   });
 
   test("restarts Electron for main-process dependencies", () => {

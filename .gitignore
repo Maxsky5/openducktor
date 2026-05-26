@@ -19,6 +19,7 @@ apps/desktop/src-tauri/crates/*/target
 !apps/desktop/src-tauri/Cargo.lock
 apps/desktop/src-tauri/crates/*/Cargo.lock
 apps/electron/release/
+apps/electron/.electron-dev/
 
 .sisyphus/
 .desloppify/

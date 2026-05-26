@@ -1,3 +1,5 @@
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
@@ -8,7 +10,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = path.resolve(__dirname, "..");
 const workspaceRoot = path.resolve(packageRoot, "../..");
+const nodeRequire = createRequire(import.meta.url);
 
+const APPLICATION_NAME = "OpenDucktor";
+const MACOS_DEV_BUNDLE_IDENTIFIER = "com.openducktor.app.dev";
+const MACOS_DEV_ICON_FILE_NAME = "openducktor-dev-rounded.icns";
 const RENDERER_DEV_HOST = "127.0.0.1";
 const DEFAULT_RENDERER_DEV_PORT = 1430;
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
@@ -49,6 +55,37 @@ const runStep = async (label: string, command: string[]): Promise<void> => {
   }
 };
 
+const readFileIfExists = async (filePath: string): Promise<string | null> => {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+};
+
+const fileExists = async (filePath: string): Promise<boolean> => {
+  try {
+    await stat(filePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+};
+
+const fileSignature = async (filePath: string): Promise<{ mtimeMs: number; size: number }> => {
+  const metadata = await stat(filePath);
+  return {
+    mtimeMs: metadata.mtimeMs,
+    size: metadata.size,
+  };
+};
+
 const normalizePath = (filePath: string): string => path.resolve(filePath);
 
 const isWithinDirectory = (directory: string, candidate: string): boolean => {
@@ -84,6 +121,125 @@ export const shouldRestartElectronForChange = (
 ): boolean =>
   ELECTRON_RESTART_EXTENSIONS.has(path.extname(filePath)) &&
   watchRoots.some((root) => isWithinDirectory(root, filePath));
+
+export const resolveMacosAppBundlePath = (electronExecutablePath: string): string | null => {
+  const appBundleMarker = `${path.sep}Contents${path.sep}MacOS${path.sep}`;
+  const markerIndex = electronExecutablePath.lastIndexOf(appBundleMarker);
+  if (markerIndex === -1) {
+    return null;
+  }
+
+  const appBundlePath = electronExecutablePath.slice(0, markerIndex);
+  if (!appBundlePath.endsWith(".app")) {
+    return null;
+  }
+
+  return appBundlePath;
+};
+
+export const resolveMacosDevAppPath = (): string =>
+  path.join(packageRoot, ".electron-dev", `${APPLICATION_NAME}.app`);
+
+export const resolveMacosDevExecutablePath = (devAppPath: string, executableName: string): string =>
+  path.join(devAppPath, "Contents", "MacOS", executableName);
+
+const resolveElectronExecutablePath = (): string => String(nodeRequire("electron"));
+
+const replacePlistString = async (
+  infoPlistPath: string,
+  key: string,
+  value: string,
+): Promise<void> => {
+  await runStep(`Electron dev app ${key}`, [
+    "/usr/bin/plutil",
+    "-replace",
+    key,
+    "-string",
+    value,
+    infoPlistPath,
+  ]);
+};
+
+const buildMacosDevAppSignature = async ({
+  devAppPath,
+  iconPath,
+  sourceAppPath,
+  sourceExecutablePath,
+}: {
+  devAppPath: string;
+  iconPath: string;
+  sourceAppPath: string;
+  sourceExecutablePath: string;
+}): Promise<string> =>
+  `${JSON.stringify(
+    {
+      appName: APPLICATION_NAME,
+      bundleIdentifier: MACOS_DEV_BUNDLE_IDENTIFIER,
+      devAppPath,
+      icon: await fileSignature(iconPath),
+      iconFileName: MACOS_DEV_ICON_FILE_NAME,
+      sourceAppPath,
+      sourceExecutablePath,
+      sourceInfoPlist: await fileSignature(path.join(sourceAppPath, "Contents", "Info.plist")),
+    },
+    null,
+    2,
+  )}\n`;
+
+const prepareMacosDevElectronBundle = async (sourceExecutablePath: string): Promise<string> => {
+  const sourceAppPath = resolveMacosAppBundlePath(sourceExecutablePath);
+  if (!sourceAppPath) {
+    throw new Error(
+      `Electron macOS dev executable is not inside an app bundle: ${sourceExecutablePath}`,
+    );
+  }
+
+  const devRoot = path.join(packageRoot, ".electron-dev");
+  const devAppPath = resolveMacosDevAppPath();
+  const executableName = path.basename(sourceExecutablePath);
+  const devExecutablePath = resolveMacosDevExecutablePath(devAppPath, executableName);
+  const iconPath = path.join(packageRoot, "resources", "icon.icns");
+  const infoPlistPath = path.join(devAppPath, "Contents", "Info.plist");
+  const markerPath = path.join(devRoot, "app-source.json");
+  const signature = await buildMacosDevAppSignature({
+    devAppPath,
+    iconPath,
+    sourceAppPath,
+    sourceExecutablePath,
+  });
+  const existingSignature = await readFileIfExists(markerPath);
+  const shouldCopyBundle =
+    existingSignature !== signature || !(await fileExists(devExecutablePath));
+
+  await mkdir(devRoot, { recursive: true });
+  if (shouldCopyBundle) {
+    await rm(devAppPath, { force: true, recursive: true });
+    await runStep("Electron macOS dev app copy", ["/bin/cp", "-cR", sourceAppPath, devAppPath]);
+  }
+
+  await copyFile(
+    iconPath,
+    path.join(devAppPath, "Contents", "Resources", MACOS_DEV_ICON_FILE_NAME),
+  );
+  await copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "icon.icns"));
+  await copyFile(iconPath, path.join(devAppPath, "Contents", "Resources", "electron.icns"));
+  await replacePlistString(infoPlistPath, "CFBundleDisplayName", APPLICATION_NAME);
+  await replacePlistString(infoPlistPath, "CFBundleName", APPLICATION_NAME);
+  await replacePlistString(infoPlistPath, "CFBundleIdentifier", MACOS_DEV_BUNDLE_IDENTIFIER);
+  await replacePlistString(infoPlistPath, "CFBundleIconFile", MACOS_DEV_ICON_FILE_NAME);
+  await writeFile(markerPath, signature, "utf8");
+
+  return devExecutablePath;
+};
+
+const resolveElectronDevExecutablePath = async (): Promise<string> => {
+  const electronExecutablePath = resolveElectronExecutablePath();
+  if (process.platform !== "darwin") {
+    return electronExecutablePath;
+  }
+
+  return prepareMacosDevElectronBundle(electronExecutablePath);
+};
 
 const buildElectronBundles = async (): Promise<void> => {
   await runStep("Electron main build", ["bun", "run", "build:main"]);
@@ -124,8 +280,11 @@ export const electronRuntimeEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
   return runtimeEnv;
 };
 
-const startElectron = (rendererDevUrl: string): ManagedElectronProcess =>
-  Bun.spawn(["electron", "dist/main.js"], {
+const startElectron = (
+  rendererDevUrl: string,
+  electronExecutablePath: string,
+): ManagedElectronProcess =>
+  Bun.spawn([electronExecutablePath, "dist/main.js"], {
     cwd: packageRoot,
     detached: process.platform !== "win32",
     stdout: "inherit",
@@ -162,6 +321,7 @@ const closeRendererServer = async (server: ViteDevServer | null): Promise<void> 
 
 const main = async (): Promise<number> => {
   const rendererPort = resolveRendererDevPort(process.env.ELECTRON_RENDERER_DEV_PORT);
+  const electronExecutablePath = await resolveElectronDevExecutablePath();
   const rendererServer = await createRendererDevServer(rendererPort);
   const rendererDevUrl = resolveRendererDevUrl(rendererServer);
   let electron: ManagedElectronProcess | null = null;
@@ -190,7 +350,7 @@ const main = async (): Promise<number> => {
 
   const launchElectron = async (): Promise<void> => {
     await buildElectronBundles();
-    const nextElectron = startElectron(rendererDevUrl);
+    const nextElectron = startElectron(rendererDevUrl, electronExecutablePath);
     electron = nextElectron;
     void nextElectron.exited.then((exitCode) => {
       if (electron === nextElectron) {
