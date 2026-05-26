@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement, type ReactNode } from "react";
-import type { SessionStartModalModel } from "@/components/features/agents";
+import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
@@ -12,6 +12,17 @@ import {
 } from "../agent-studio-test-utils";
 
 enableReactActEnvironment();
+
+const actualAppStateProviderModule = await import("../../../state/app-state-provider");
+const actualSessionStartModalModule = await import(
+  "@/components/features/agents/session-start-modal"
+);
+const actualAgentStudioRightPanelModule = await import(
+  "@/components/features/agents/agent-studio-right-panel"
+);
+const actualTaskDetailsSheetControllerModule = await import(
+  "@/components/features/task-details/task-details-sheet-controller"
+);
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
@@ -279,7 +290,7 @@ let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const mockedModuleResets = [
   ["react-router-dom", () => import("react-router-dom")],
-  ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
+  ["@/state/app-state-provider", async () => actualAppStateProviderModule],
   ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
   ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
   [
@@ -300,10 +311,10 @@ const mockedModuleResets = [
     () => import("../use-agent-studio-rebase-conflict-resolution"),
   ],
   ["../use-agents-page-right-panel-model", () => import("../use-agents-page-right-panel-model")],
-  ["@/components/features/agents", () => import("@/components/features/agents")],
+  ["@/components/features/agents/session-start-modal", async () => actualSessionStartModalModule],
   [
     "@/components/features/agents/agent-studio-right-panel",
-    () => import("@/components/features/agents/agent-studio-right-panel"),
+    async () => actualAgentStudioRightPanelModule,
   ],
   ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
   ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
@@ -313,7 +324,7 @@ const mockedModuleResets = [
   ],
   [
     "@/components/features/task-details/task-details-sheet-controller",
-    () => import("@/components/features/task-details/task-details-sheet-controller"),
+    async () => actualTaskDetailsSheetControllerModule,
   ],
   [
     "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
@@ -399,7 +410,7 @@ const registerModuleMocks = (): void => {
     useAgentsPageRightPanelModel: () => rightPanelState,
   }));
 
-  mock.module("@/components/features/agents", () => ({
+  mock.module("@/components/features/agents/session-start-modal", () => ({
     SessionStartModal: (props: Record<string, unknown>): ReactElement =>
       createElement("mock-session-start-modal", props),
   }));

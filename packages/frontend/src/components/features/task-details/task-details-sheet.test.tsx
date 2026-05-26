@@ -13,6 +13,8 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 
 enableReactActEnvironment();
 
+const actualAppStateProviderModule = await import("../../../state/app-state-provider");
+
 const createWorkspaceStateValue = (): WorkspaceStateContextValue => ({
   isSwitchingWorkspace: false,
   isLoadingBranches: false,
@@ -59,7 +61,7 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
 describe("TaskDetailsSheet", () => {
   beforeEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("@/state/app-state-provider")],
+      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
     ]);
   });
 
