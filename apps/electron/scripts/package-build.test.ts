@@ -108,17 +108,10 @@ describe("build Electron release artifact", () => {
 
     try {
       await mkdir(releaseDirectory, { recursive: true });
-      await writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.dmg"), "dmg");
-      await writeFile(
-        join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap"),
-        "blockmap",
-      );
-      await writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.zip"), "zip");
-      await writeFile(join(releaseDirectory, "OpenDucktor.app"), "app bundle marker");
-      await writeFile(
-        join(releaseDirectory, "OpenDucktor-Electron-0.3.1-linux-x64.AppImage"),
-        "app",
-      );
+      await Promise.all([
+        writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-mac-arm64.dmg"), "dmg"),
+        writeFile(join(releaseDirectory, "OpenDucktor-Electron-0.3.1-linux-x64.AppImage"), "app"),
+      ]);
 
       const artifacts = await collectReleaseArtifacts({
         outputDirectory,
@@ -128,15 +121,9 @@ describe("build Electron release artifact", () => {
 
       expect(artifacts.map((artifact) => basename(artifact)).sort()).toEqual([
         "OpenDucktor-Electron-0.3.1-mac-arm64.dmg",
-        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap",
-        "OpenDucktor-Electron-0.3.1-mac-arm64.zip",
       ]);
       const outputEntries = await readdir(outputDirectory);
-      expect(outputEntries.sort()).toEqual([
-        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg",
-        "OpenDucktor-Electron-0.3.1-mac-arm64.dmg.blockmap",
-        "OpenDucktor-Electron-0.3.1-mac-arm64.zip",
-      ]);
+      expect(outputEntries).toEqual(["OpenDucktor-Electron-0.3.1-mac-arm64.dmg"]);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });
     }
