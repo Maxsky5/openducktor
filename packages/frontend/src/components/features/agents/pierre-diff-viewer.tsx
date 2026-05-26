@@ -17,6 +17,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useState,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -403,13 +404,19 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   enableHunkReset = false,
   isHunkResetDisabled = false,
   onResetHunk,
-  selectedLines = null,
+  selectedLines,
   onLineSelectionEnd,
   lineAnnotations = [],
   renderAnnotation,
   className,
 }: PierreDiffViewerProps): ReactElement {
   const { theme } = useTheme();
+  const isSelectionControlled = selectedLines !== undefined;
+  const shouldMirrorSelectionChanges =
+    isSelectionControlled && (enableLineSelection || enableGutterUtility);
+  const [transientSelectedLines, setTransientSelectedLines] = useState<
+    SelectedLineRange | null | undefined
+  >(undefined);
   const { fileDiff, fallbackPatch } = useMemo(
     () => getRenderableFileDiff(patch, filePath),
     [filePath, patch],
@@ -426,10 +433,29 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     () =>
       onLineSelectionEnd && fileDiff != null
         ? (range: SelectedLineRange | null) => {
+            setTransientSelectedLines(undefined);
             onLineSelectionEnd(buildPierreDiffSelection(fileDiff, range));
           }
         : undefined,
     [fileDiff, onLineSelectionEnd],
+  );
+  const handleLineSelectionChange = useMemo(
+    () =>
+      shouldMirrorSelectionChanges
+        ? (range: SelectedLineRange | null) => {
+            setTransientSelectedLines(range);
+          }
+        : undefined,
+    [shouldMirrorSelectionChanges],
+  );
+  const handleGutterUtilityClick = useMemo(
+    () =>
+      enableGutterUtility && handleLineSelectionEnd
+        ? (range: SelectedLineRange) => {
+            handleLineSelectionEnd(range);
+          }
+        : undefined,
+    [enableGutterUtility, handleLineSelectionEnd],
   );
   const options = useMemo(
     () => ({
@@ -442,20 +468,32 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       overflow: "wrap" as const,
       disableFileHeader: true,
       enableLineSelection,
-      enableGutterUtility,
+      enableGutterUtility: handleGutterUtilityClick != null,
+      ...(handleLineSelectionChange
+        ? {
+            onLineSelectionStart: handleLineSelectionChange,
+            onLineSelectionChange: handleLineSelectionChange,
+          }
+        : {}),
       ...(handleLineSelectionEnd ? { onLineSelectionEnd: handleLineSelectionEnd } : {}),
+      ...(handleGutterUtilityClick ? { onGutterUtilityClick: handleGutterUtilityClick } : {}),
       ...(enableHunkReset ? { unsafeCSS: HUNK_RESET_FLOATING_CSS } : {}),
     }),
     [
       diffStyle,
-      enableGutterUtility,
       enableHunkReset,
       enableLineSelection,
+      handleGutterUtilityClick,
+      handleLineSelectionChange,
       handleLineSelectionEnd,
       lineDiffType,
       theme,
     ],
   );
+  const renderedSelectedLines =
+    transientSelectedLines !== undefined ? transientSelectedLines : selectedLines;
+  const selectedLinesProps =
+    renderedSelectedLines !== undefined ? { selectedLines: renderedSelectedLines } : {};
   const handleRenderAnnotation = useCallback(
     (annotation: DiffLineAnnotation<unknown>) => {
       const metadata = annotation.metadata;
@@ -503,7 +541,7 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
       <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
         <PierreReactFileDiff
           fileDiff={fileDiff}
-          selectedLines={selectedLines}
+          {...selectedLinesProps}
           options={options}
           lineAnnotations={mergedLineAnnotations}
           renderAnnotation={handleRenderAnnotation}
