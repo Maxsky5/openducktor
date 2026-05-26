@@ -154,7 +154,7 @@ describe("reattach-live-session", () => {
       selectedModel: { providerId: "openai", modelId: "gpt-5" },
       pendingUserMessageStartedAt: 123,
     };
-    const state: AgentSessionState = originalSession;
+    const state: AgentSessionState = structuredClone(originalSession);
 
     const reattachLiveSession = createReattachLiveSession({
       adapter: {
@@ -192,13 +192,13 @@ describe("reattach-live-session", () => {
   });
 
   test("does not adopt runtime presence for an error session without pending input", async () => {
-    const originalSession = {
+    const originalSession: AgentSessionState = {
       ...createSessionStateFixture(),
       status: "error" as const,
       pendingApprovals: [],
       pendingQuestions: [],
     };
-    const state: AgentSessionState = originalSession;
+    const state: AgentSessionState = structuredClone(originalSession);
 
     const reattachLiveSession = createReattachLiveSession({
       adapter: {

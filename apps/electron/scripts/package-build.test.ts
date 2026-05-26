@@ -128,4 +128,25 @@ describe("build Electron release artifact", () => {
       await rm(baseDirectory, { force: true, recursive: true });
     }
   });
+
+  it("preserves release directory read errors that are not missing-directory failures", async () => {
+    const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-release-"));
+    const releaseDirectory = join(baseDirectory, "release");
+    const outputDirectory = join(baseDirectory, "release-publish");
+
+    try {
+      await writeFile(releaseDirectory, "not a directory");
+
+      const error = await collectReleaseArtifacts({
+        outputDirectory,
+        platform: "macos",
+        releaseDirectory,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).not.toContain("Electron release directory is missing");
+    } finally {
+      await rm(baseDirectory, { force: true, recursive: true });
+    }
+  });
 });

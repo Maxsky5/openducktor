@@ -117,8 +117,11 @@ export const isReleaseArtifact = (platform: ElectronReleasePlatform, fileName: s
 const readReleaseDirectoryEntries = async (releaseDirectory: string) => {
   try {
     return await readdir(releaseDirectory, { withFileTypes: true });
-  } catch {
-    throw new Error(`Electron release directory is missing: ${releaseDirectory}`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Electron release directory is missing: ${releaseDirectory}`);
+    }
+    throw error;
   }
 };
 
