@@ -38,6 +38,8 @@ type CreateLoadAgentSessionsArgs = {
 };
 
 const REQUESTED_SESSION_LIVE_RECONCILE_STATUSES = new Set<AgentSessionState["status"]>([
+  // A locally stopped session can still have a late runtime acknowledgement in flight.
+  // Reconcile once on requested-history loads so the runtime remains the source of liveness truth.
   "stopped",
   "starting",
   "running",
@@ -132,9 +134,7 @@ export const createLoadAgentSessions = ({
       ? (sessionsRef.current[requestedSessionId] ?? null)
       : null;
     const shouldReconcileRequestedLiveSession =
-      shouldHydrateRequestedSession &&
-      options?.allowLiveSessionResume === true &&
-      shouldReconcileRequestedSessionLiveness(requestedSession);
+      shouldHydrateRequestedSession && shouldReconcileRequestedSessionLiveness(requestedSession);
     const shouldReconcileLiveSessions =
       mode === "reconcile_live" ||
       shouldRecoverRuntimeAttachment ||

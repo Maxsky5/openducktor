@@ -15,7 +15,6 @@ type UseAgentStudioTaskHydrationParams = {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: AgentStudioReadinessState;
-    recoveryDedupKey?: string | null;
   }) => Promise<boolean>;
 };
 

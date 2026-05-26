@@ -1,6 +1,7 @@
 import type { AgentSessionRecord, RepoPromptOverrides, RuntimeKind } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeModelSelection, normalizePersistedSelection } from "../support/models";
+import { hasPendingOutboundSend } from "../support/pending-outbound-send";
 import {
   type AgentSessionPresenceSnapshot,
   applyAgentSessionPresenceSnapshotToSession,
@@ -39,6 +40,9 @@ const canAdoptRuntimePresence = (current: AgentSessionState): boolean => {
   return true;
 };
 
+const shouldSettleNonLivePresence = (current: AgentSessionState): boolean =>
+  current.status === "running" && !hasPendingOutboundSend(current);
+
 const applyRuntimeIdentityFromPresence = (
   current: AgentSessionState,
   snapshot: Extract<AgentSessionPresenceSnapshot, { presence: "runtime" }>,
@@ -58,6 +62,19 @@ const applyRuntimeIdentityFromPresence = (
   promptOverrides,
   selectedModel,
 });
+
+const canApplyNonAttachablePresence = (
+  current: AgentSessionState,
+  snapshot: AgentSessionPresenceSnapshot,
+): boolean => {
+  if (hasPendingOutboundSend(current)) {
+    return false;
+  }
+  if (shouldSettleNonLivePresence(current)) {
+    return true;
+  }
+  return snapshot.presence === "runtime" && canAdoptRuntimePresence(current);
+};
 
 export const createReattachLiveSession = ({
   adapter,
@@ -90,25 +107,37 @@ export const createReattachLiveSession = ({
     }
     const selectedModel = normalizePersistedSelection(record.selectedModel);
     if (!isAttachableAgentSessionPresenceSnapshot(sessionPresence)) {
-      if (sessionPresence.presence === "runtime") {
-        const currentSession = getCurrentSession(record.externalSessionId);
-        if (!currentSession || !canAdoptRuntimePresence(currentSession) || isStaleRepoOperation()) {
-          return false;
-        }
-        updateSession(
-          record.externalSessionId,
-          (current) => {
-            if (!canAdoptRuntimePresence(current)) {
-              return current;
-            }
+      const currentSession = getCurrentSession(record.externalSessionId);
+      if (
+        !currentSession ||
+        !canApplyNonAttachablePresence(currentSession, sessionPresence) ||
+        isStaleRepoOperation()
+      ) {
+        return false;
+      }
+      updateSession(
+        record.externalSessionId,
+        (current) => {
+          const mergedSelectedModel = mergeModelSelection(
+            current.selectedModel,
+            selectedModel ?? undefined,
+          );
+          if (shouldSettleNonLivePresence(current)) {
+            return applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
+              promptOverrides,
+              selectedModel: mergedSelectedModel,
+            });
+          }
+          if (sessionPresence.presence === "runtime" && canAdoptRuntimePresence(current)) {
             return applyRuntimeIdentityFromPresence(current, sessionPresence, {
               promptOverrides,
-              selectedModel: mergeModelSelection(current.selectedModel, selectedModel ?? undefined),
+              selectedModel: mergedSelectedModel,
             });
-          },
-          { persist: false },
-        );
-      }
+          }
+          return current;
+        },
+        { persist: false },
+      );
       return false;
     }
     const currentSession = getCurrentSession(record.externalSessionId);

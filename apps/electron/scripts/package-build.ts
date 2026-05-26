@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareMcpSidecar } from "./prepare-mcp-sidecar";
@@ -114,17 +114,15 @@ export const resolveElectronBuilderEnv = (
 export const isReleaseArtifact = (platform: ElectronReleasePlatform, fileName: string): boolean =>
   artifactExtensions[platform].has(extname(fileName));
 
-const assertDirectoryExists = async (path: string, label: string): Promise<void> => {
+const readReleaseDirectoryEntries = async (releaseDirectory: string) => {
   try {
-    const metadata = await stat(path);
-    if (metadata.isDirectory()) {
-      return;
+    return await readdir(releaseDirectory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Electron release directory is missing: ${releaseDirectory}`);
     }
-  } catch {
-    // Report a single actionable error below.
+    throw error;
   }
-
-  throw new Error(`${label} is missing: ${path}`);
 };
 
 const runCommand = ({ args, command, cwd, env = process.env }: RunCommandInput): Promise<void> =>
@@ -158,11 +156,10 @@ export const collectReleaseArtifacts = async ({
   platform: ElectronReleasePlatform;
   releaseDirectory: string;
 }): Promise<string[]> => {
-  await assertDirectoryExists(releaseDirectory, "Electron release directory");
+  const entries = await readReleaseDirectoryEntries(releaseDirectory);
   await rm(outputDirectory, { force: true, recursive: true });
   await mkdir(outputDirectory, { recursive: true });
 
-  const entries = await readdir(releaseDirectory, { withFileTypes: true });
   const artifactEntries = entries.filter(
     (entry) => entry.isFile() && isReleaseArtifact(platform, entry.name),
   );

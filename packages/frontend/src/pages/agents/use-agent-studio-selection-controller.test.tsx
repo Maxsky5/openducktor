@@ -235,7 +235,7 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("opts normal view hydration into live session resume", async () => {
+  test("prepares the selected view session without opting into live resume", async () => {
     const ensureSessionReadyForView = mock(async () => true);
     const session = createSession("task-1", "session-live", {
       historyHydrationState: "not_requested",
@@ -252,13 +252,11 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(ensureSessionReadyForView).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: "task-1",
-          externalSessionId: "session-live",
-          allowLiveSessionResume: true,
-        }),
-      );
+      expect(ensureSessionReadyForView).toHaveBeenCalledWith({
+        taskId: "task-1",
+        externalSessionId: "session-live",
+        repoReadinessState: "ready",
+      });
     } finally {
       await harness.unmount();
     }

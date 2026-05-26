@@ -4,6 +4,7 @@ import {
   requiresHydratedAgentSessionHistory,
 } from "../support/history-hydration";
 import { getSessionMessageCount } from "../support/messages";
+import { hasPendingOutboundSend } from "../support/pending-outbound-send";
 import { hasAttachedSessionRuntime } from "../support/session-runtime-attachment";
 
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
@@ -51,7 +52,10 @@ export const deriveAgentSessionViewLifecycle = ({
   const hasTranscript = getSessionMessageCount(session) > 0;
   const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
   const shouldRefreshRunningAttachedSession =
-    repoReadinessState === "ready" && hasRuntimeAttachment && session.status === "running";
+    repoReadinessState === "ready" &&
+    hasRuntimeAttachment &&
+    session.status === "running" &&
+    !hasPendingOutboundSend(session);
 
   if (repoReadinessState !== "ready" && sessionNeedsHydration && !hasTranscript) {
     return {

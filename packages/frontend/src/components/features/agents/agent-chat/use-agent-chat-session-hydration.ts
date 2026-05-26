@@ -12,16 +12,13 @@ type UseAgentChatSessionHydrationParams = {
   activeTaskId: string;
   activeSession: AgentSessionState | null;
   historyPreludeMode?: AgentSessionHistoryPreludeMode;
-  allowLiveSessionResume?: boolean;
   persistedRecords?: AgentSessionRecord[];
   repoReadinessState: SessionRepoReadinessState;
   ensureSessionReadyForView: (input: {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
-    recoveryDedupKey?: string | null;
     historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<boolean>;
 };
@@ -71,7 +68,6 @@ export function useAgentChatSessionHydration({
   activeTaskId,
   activeSession,
   historyPreludeMode,
-  allowLiveSessionResume,
   persistedRecords,
   repoReadinessState,
   ensureSessionReadyForView,
@@ -107,7 +103,6 @@ export function useAgentChatSessionHydration({
       externalSessionId: activeExternalSessionId,
       repoReadinessState,
       ...(historyPreludeMode ? { historyPreludeMode } : {}),
-      ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
       ...(persistedRecords ? { persistedRecords } : {}),
     })
       .then(() => {
@@ -124,7 +119,6 @@ export function useAgentChatSessionHydration({
     activeTaskId,
     ensureSessionReadyForView,
     historyPreludeMode,
-    allowLiveSessionResume,
     persistedRecords,
     repoReadinessState,
     shouldEnsureSessionReady,

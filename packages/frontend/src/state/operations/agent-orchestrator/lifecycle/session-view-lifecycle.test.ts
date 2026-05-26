@@ -98,4 +98,30 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
+
+  test("does not request view readiness while a local outbound send is pending", () => {
+    const lifecycle = deriveAgentSessionViewLifecycle({
+      session: createSession({
+        status: "running",
+        historyHydrationState: "hydrated",
+        runtimeId: "runtime-1",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        pendingUserMessageStartedAt: 123,
+        messages: [
+          {
+            id: "message-1",
+            role: "user",
+            content: "new turn",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("ready");
+    expect(lifecycle.canRenderHistory).toBe(true);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(false);
+  });
 });

@@ -109,14 +109,12 @@ export const useAgentSessionHydration = ({
       externalSessionId,
       repoReadinessState,
       historyPreludeMode,
-      allowLiveSessionResume,
       persistedRecords,
     }: {
       taskId: string;
       externalSessionId: string;
       repoReadinessState: SessionRepoReadinessState;
       historyPreludeMode?: AgentSessionHistoryPreludeMode;
-      allowLiveSessionResume?: boolean;
       persistedRecords?: AgentSessionRecord[];
     }): Promise<boolean> => {
       const session = sessionsRef.current[externalSessionId] ?? null;
@@ -131,7 +129,6 @@ export const useAgentSessionHydration = ({
         externalSessionId,
         historyPolicy: requiresHydratedAgentSessionHistory(session) ? "requested_only" : "none",
         ...(historyPreludeMode ? { historyPreludeMode } : {}),
-        ...(allowLiveSessionResume !== undefined ? { allowLiveSessionResume } : {}),
         ...(persistedRecords ? { persistedRecords } : {}),
       });
       return true;
