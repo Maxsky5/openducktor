@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement, type ReactElement, type ReactNode } from "react";
+import { createElement, type ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -14,15 +14,8 @@ import {
 enableReactActEnvironment();
 
 const actualAppStateProviderModule = await import("../../../state/app-state-provider");
-const actualSessionStartModalModule = await import(
-  "@/components/features/agents/session-start-modal"
-);
-const actualAgentStudioRightPanelModule = await import(
-  "@/components/features/agents/agent-studio-right-panel"
-);
-const actualTaskDetailsSheetControllerModule = await import(
-  "@/components/features/task-details/task-details-sheet-controller"
-);
+const actualReactRouterDomModule = await import("react-router-dom");
+const actualAppStateContextsModule = appStateContexts;
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
@@ -289,9 +282,9 @@ let rightPanelState: RightPanelState = {
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const mockedModuleResets = [
-  ["react-router-dom", () => import("react-router-dom")],
+  ["react-router-dom", async () => actualReactRouterDomModule],
   ["@/state/app-state-provider", async () => actualAppStateProviderModule],
-  ["@/state/app-state-contexts", () => import("@/state/app-state-contexts")],
+  ["@/state/app-state-contexts", async () => actualAppStateContextsModule],
   ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
   [
     "../use-agent-studio-selection-controller",
@@ -310,26 +303,7 @@ const mockedModuleResets = [
     "../use-agent-studio-rebase-conflict-resolution",
     () => import("../use-agent-studio-rebase-conflict-resolution"),
   ],
-  ["../use-agents-page-right-panel-model", () => import("../use-agents-page-right-panel-model")],
-  ["@/components/features/agents/session-start-modal", async () => actualSessionStartModalModule],
-  [
-    "@/components/features/agents/agent-studio-right-panel",
-    async () => actualAgentStudioRightPanelModule,
-  ],
-  ["@/contexts/DiffWorkerProvider", () => import("@/contexts/DiffWorkerProvider")],
-  ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
-  [
-    "@/features/human-review-feedback/human-review-feedback-modal",
-    () => import("@/features/human-review-feedback/human-review-feedback-modal"),
-  ],
-  [
-    "@/components/features/task-details/task-details-sheet-controller",
-    async () => actualTaskDetailsSheetControllerModule,
-  ],
-  [
-    "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
-    () => import("@/components/features/pull-requests/merged-pull-request-confirm-dialog"),
-  ],
+  ["./agents-page-right-panel-runtime", () => import("./agents-page-right-panel-runtime")],
 ] as const;
 
 const registerModuleMocks = (): void => {
@@ -406,51 +380,20 @@ const registerModuleMocks = (): void => {
     }),
   }));
 
-  mock.module("../use-agents-page-right-panel-model", () => ({
-    useAgentsPageRightPanelModel: () => rightPanelState,
-  }));
-
-  mock.module("@/components/features/agents/session-start-modal", () => ({
-    SessionStartModal: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-session-start-modal", props),
-  }));
-
-  mock.module("@/components/features/agents/agent-studio-right-panel", () => ({
-    MemoizedAgentStudioRightPanel: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-agent-studio-right-panel", props),
-  }));
-
-  mock.module("@/contexts/DiffWorkerProvider", () => ({
-    DiffWorkerProvider: ({ children }: { children: ReactNode }) => children,
-  }));
-
-  mock.module("@pierre/diffs/react", () => ({
-    FileDiff: () => createElement("div", { "data-testid": "mock-pierre-diff-viewer" }),
-    Virtualizer: ({ children }: { children: ReactNode }) =>
-      createElement("div", { "data-testid": "mock-pierre-virtualizer" }, children),
-    useWorkerPool: () => null,
-    WorkerPoolContextProvider: ({ children }: { children: ReactNode }) => children,
-  }));
-
-  mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
-    HumanReviewFeedbackModal: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-human-review-feedback-modal", props),
-  }));
-
-  mock.module("@/components/features/task-details/task-details-sheet-controller", () => ({
-    TaskDetailsSheetController: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-task-details-sheet-controller", props),
-  }));
-
-  mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
-    MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-merged-pr-dialog", props),
+  mock.module("./agents-page-right-panel-runtime", () => ({
+    AgentsPageBuildWorktreeRefreshRuntime: (): null => null,
+    AgentsPageRightPanelRuntime: (props: Record<string, unknown>): ReactElement =>
+      createElement("mock-agent-studio-right-panel", {
+        ...props,
+        model: rightPanelState.rightPanelModel,
+      }),
   }));
 };
 
 beforeEach(async () => {
   registerModuleMocks();
   ({ useAgentsPageShellModel } = await import("./use-agents-page-shell-model"));
+  await restoreMockedModules(mockedModuleResets);
   workspaceState = {
     activeWorkspace: {
       workspaceId: "workspace-repo",

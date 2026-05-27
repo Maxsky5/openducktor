@@ -9,6 +9,9 @@ import {
 } from "@/test-utils/app-state-provider-mock";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
+const actualAppStateProviderModule = await import("../../../state/app-state-provider");
+const actualBranchSelectorModule = await import("@/components/features/repository/branch-selector");
+
 let branchSyncDegraded = false;
 let isSwitchingWorkspace = false;
 let isSwitchingBranch = false;
@@ -85,6 +88,21 @@ const createDeferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
+const restoreBranchSwitcherMocks = async (): Promise<void> => {
+  await restoreMockedModules([
+    ["@/state/app-state-provider", async () => actualAppStateProviderModule],
+    ["@/components/features/repository/branch-selector", async () => actualBranchSelectorModule],
+  ]);
+};
+
+const importBranchSwitcher = async (): Promise<
+  typeof import("./branch-switcher").BranchSwitcher
+> => {
+  const { BranchSwitcher } = await import("./branch-switcher");
+  await restoreBranchSwitcherMocks();
+  return BranchSwitcher;
+};
+
 describe("BranchSwitcher", () => {
   beforeEach(() => {
     const stateModule = createAppStateProviderModuleMock({
@@ -154,26 +172,20 @@ describe("BranchSwitcher", () => {
   });
 
   afterEach(async () => {
-    await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
-      [
-        "@/components/features/repository/branch-selector",
-        () => import("@/components/features/repository/branch-selector"),
-      ],
-    ]);
+    await restoreBranchSwitcherMocks();
   });
 
   test("shows degraded sync status when branch probe failures are active", async () => {
     branchSyncDegraded = true;
     resetBranchState();
-    const { BranchSwitcher } = await import("./branch-switcher");
+    const BranchSwitcher = await importBranchSwitcher();
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
     expect(html).toContain("Branch sync degraded. Auto-refresh may be stale.");
   });
 
   test("hides degraded sync status when branch probe health is restored", async () => {
-    const { BranchSwitcher } = await import("./branch-switcher");
+    const BranchSwitcher = await importBranchSwitcher();
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
     expect(html).not.toContain("Branch sync degraded. Auto-refresh may be stale.");
@@ -182,7 +194,7 @@ describe("BranchSwitcher", () => {
   test("disables branch selection while switching repositories", async () => {
     isSwitchingWorkspace = true;
     resetBranchState();
-    const { BranchSwitcher } = await import("./branch-switcher");
+    const BranchSwitcher = await importBranchSwitcher();
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
     expect(html).toContain('data-disabled="true"');
@@ -191,7 +203,7 @@ describe("BranchSwitcher", () => {
   test("uses the active branch name on the first render", async () => {
     activeBranchName = "feature/desloppify";
     resetBranchState();
-    const { BranchSwitcher } = await import("./branch-switcher");
+    const BranchSwitcher = await importBranchSwitcher();
     const html = renderToStaticMarkup(createElement(BranchSwitcher));
 
     expect(html).toContain('data-branch-value="feature/desloppify"');
@@ -201,7 +213,7 @@ describe("BranchSwitcher", () => {
     const deferred = createDeferred<void>();
     switchBranch.mockImplementation(() => deferred.promise);
     resetBranchState();
-    const { BranchSwitcher } = await import("./branch-switcher");
+    const BranchSwitcher = await importBranchSwitcher();
 
     const renderBranchSwitcher = (): ReactElement => createElement(BranchSwitcher);
     const rendered = render(renderBranchSwitcher());

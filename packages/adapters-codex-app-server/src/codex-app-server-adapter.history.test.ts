@@ -294,7 +294,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates loaded idle history without resuming the Codex thread", async () => {
+  test("hydrates loaded idle history from Codex token usage replay", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     drainNotifications.mockImplementation(async () => [
@@ -321,7 +321,13 @@ describe("CodexAppServerAdapter history hydration", () => {
 
     expect(
       transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/resume"),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/read"),
+    ).toBe(true);
+    expect(
+      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/turns/list"),
+    ).toBe(true);
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({
         role: "assistant",
@@ -355,7 +361,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     );
   });
 
-  test("hydrates listed idle history without requiring the Codex thread to be loaded", async () => {
+  test("resumes listed idle history so restored context usage is replayed", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -369,20 +375,66 @@ describe("CodexAppServerAdapter history hydration", () => {
             nextCursor: null,
           } as Response;
         }
+        if (request.method === "thread/resume") {
+          return {
+            thread: {
+              id: "thread-unloaded",
+              cwd: "/repo",
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "turn-1",
+                  status: "completed",
+                  startedAt: 1,
+                  completedAt: 2,
+                  items: [
+                    {
+                      id: "msg-1",
+                      type: "agentMessage",
+                      phase: "final_answer",
+                      text: "Partial from resume",
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "thread-unloaded",
+              cwd: "/repo",
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "turn-1",
+                  status: "completed",
+                  items: [
+                    {
+                      id: "msg-1",
+                      type: "agentMessage",
+                      phase: "final_answer",
+                      text: "Partial from thread/read",
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
         if (request.method === "thread/turns/list") {
           return {
             data: [
               {
                 id: "turn-1",
                 status: "completed",
-                startedAt: 1,
-                completedAt: 2,
                 items: [
                   {
                     id: "msg-1",
                     type: "agentMessage",
                     phase: "final_answer",
-                    text: "Hydrated from turns",
+                    text: "Hydrated from paginated history",
                   },
                 ],
               },
@@ -406,11 +458,16 @@ describe("CodexAppServerAdapter history hydration", () => {
       expect.objectContaining({
         messageId: "msg-1",
         role: "assistant",
-        text: "Hydrated from turns",
+        text: "Hydrated from paginated history",
       }),
     );
-    expect(calls.some((call) => call.method === "thread/read")).toBe(false);
-    expect(calls.some((call) => call.method === "thread/resume")).toBe(false);
+    expect(calls.map((call) => call.method)).toEqual([
+      "thread/loaded/list",
+      "thread/list",
+      "thread/resume",
+      "thread/read",
+      "thread/turns/list",
+    ]);
   });
 
   test("hydrates documented thread-read tool item shapes", async () => {

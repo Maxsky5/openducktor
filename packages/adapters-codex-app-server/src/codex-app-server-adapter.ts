@@ -68,7 +68,12 @@ import {
   emitCodexUserMessage,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
-import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
+import {
+  type CodexThreadInventory,
+  type CodexThreadSnapshot,
+  type CodexThreadStatusSnapshot,
+  codexThreadStatusSnapshot,
+} from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
   codexTodosFromThreadRead,
@@ -110,8 +115,12 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
-const hasCodexThreadReadTurns = (value: unknown): boolean =>
-  isPlainObject(value) && isPlainObject(value.thread) && Array.isArray(value.thread.turns);
+const IDLE_CODEX_THREAD_STATUS = codexThreadStatusSnapshot("idle");
+
+type HistoryOnlyIdleThreadLoad = {
+  repoPath: string;
+  workingDirectory: string;
+};
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -139,6 +148,7 @@ export class CodexAppServerAdapter
   private readonly eventMapperPipeline = createCodexEventMapperPipeline();
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
+  private readonly historyOnlyIdleThreadLoadsById = new Map<string, HistoryOnlyIdleThreadLoad>();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
@@ -182,6 +192,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response);
     const { summary } = session;
+    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
@@ -206,6 +217,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const { summary } = session;
+    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
@@ -230,6 +242,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadFork(input, runtimeId, model, response);
     const { summary } = session;
+    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
@@ -284,16 +297,22 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
+    const historyAttachment = session
+      ? null
+      : await this.threadInventory.attachThreadForHistory(client, runtimeId, input);
     const threadResponse = session
       ? await this.threadInventory.readLoadedThread(client, runtimeId, input)
-      : await this.threadInventory.attachThreadForHistory(client, runtimeId, input);
+      : historyAttachment?.response;
     if (!threadResponse) {
       return [];
     }
-    const response =
-      !session && hasCodexThreadReadTurns(threadResponse)
-        ? threadResponse
-        : await this.threadInventory.readThreadWithTurns(client, input.externalSessionId);
+    if (historyAttachment) {
+      this.rememberHistoryOnlyIdleThreadLoad(input, historyAttachment.preResumeThread);
+    }
+    const response = await this.threadInventory.readThreadWithTurns(
+      client,
+      input.externalSessionId,
+    );
     const tokenUsageByTurnId = await this.drainThreadReadTokenUsage(
       runtimeId,
       input.externalSessionId,
@@ -460,6 +479,7 @@ export class CodexAppServerAdapter
     });
     const session = sessionStateFromThreadAttach(input, runtimeId, model, response);
     const { summary } = session;
+    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
     return summary;
@@ -483,6 +503,7 @@ export class CodexAppServerAdapter
       requireLive: true,
     });
     const inventory = await this.threadInventory.refresh(client, runtimeId);
+    this.clearUnloadedHistoryOnlyIdleLoads(inventory);
     if (inventory.loadedIds.size === 0) {
       return [];
     }
@@ -490,6 +511,7 @@ export class CodexAppServerAdapter
     return [...inventory.threadsById.values()]
       .filter((thread) => inventory.loadedIds.has(thread.id))
       .filter((thread) => directories.size === 0 || directories.has(thread.cwd))
+      .map((thread) => this.threadSnapshotForRemotePresence(thread, input.repoPath))
       .map((thread) => ({
         externalSessionId: thread.id,
         title: thread.title,
@@ -533,11 +555,18 @@ export class CodexAppServerAdapter
       },
     );
     const inventory = await this.threadInventory.refresh(client, runtimeId);
+    this.clearUnloadedHistoryOnlyIdleLoads(inventory);
     const remoteSnapshots = [...inventory.threadsById.values()]
       .filter((thread) => inventory.loadedIds.has(thread.id))
       .filter((thread) => !localThreadIds.has(thread.id))
       .filter((thread) => directories.size === 0 || directories.has(thread.cwd))
-      .map((thread) => toPresenceSnapshotFromThread(thread, input, runtimeId));
+      .map((thread) =>
+        toPresenceSnapshotFromThread(
+          this.threadSnapshotForRemotePresence(thread, input.repoPath),
+          input,
+          runtimeId,
+        ),
+      );
     return [...localSnapshots, ...remoteSnapshots];
   }
 
@@ -806,8 +835,10 @@ export class CodexAppServerAdapter
     event: { kind: "notification" | "server_request"; message: unknown },
   ): void {
     if (event.kind === "notification") {
+      const notification = parseNotificationRecord(event.message);
+      this.clearHistoryOnlyIdleThreadLoadForNotification(threadId, notification);
       const buffered = this.bufferedNotificationsByThreadId.get(threadId) ?? [];
-      buffered.push(parseNotificationRecord(event.message));
+      buffered.push(notification);
       if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
         buffered.splice(0, buffered.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
       }
@@ -815,6 +846,7 @@ export class CodexAppServerAdapter
       trimOldestMapKeys(this.bufferedNotificationsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
       return;
     }
+    this.clearHistoryOnlyIdleThreadLoad(threadId);
     const buffered = this.bufferedServerRequestsByThreadId.get(threadId) ?? [];
     buffered.push(parseServerRequestRecord(event.message));
     if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
@@ -822,6 +854,25 @@ export class CodexAppServerAdapter
     }
     this.bufferedServerRequestsByThreadId.set(threadId, buffered);
     trimOldestMapKeys(this.bufferedServerRequestsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
+  }
+
+  private clearHistoryOnlyIdleThreadLoadForNotification(
+    threadId: string,
+    notification: CodexNotificationRecord,
+  ): void {
+    if (!this.historyOnlyIdleThreadLoadsById.has(threadId)) {
+      return;
+    }
+    if (notification.method === "turn/started") {
+      this.clearHistoryOnlyIdleThreadLoad(threadId);
+      return;
+    }
+    if (notification.method !== "thread/status/changed" || !isPlainObject(notification.params)) {
+      return;
+    }
+    if (codexThreadStatusSnapshot(notification.params.status).classification !== "idle") {
+      this.clearHistoryOnlyIdleThreadLoad(threadId);
+    }
   }
 
   private emitUnroutableRuntimeServerRequest(runtimeId: string): void {
@@ -1010,6 +1061,60 @@ export class CodexAppServerAdapter
     };
   }
 
+  private rememberHistoryOnlyIdleThreadLoad(
+    input: LoadAgentSessionHistoryInput,
+    thread: CodexThreadSnapshot,
+  ): void {
+    if (thread.status.agentSessionStatus !== "idle") {
+      this.clearHistoryOnlyIdleThreadLoad(thread.id);
+      return;
+    }
+    this.historyOnlyIdleThreadLoadsById.set(thread.id, {
+      repoPath: input.repoPath,
+      workingDirectory: input.workingDirectory,
+    });
+  }
+
+  private clearHistoryOnlyIdleThreadLoad(threadId: string): void {
+    this.historyOnlyIdleThreadLoadsById.delete(threadId);
+  }
+
+  private clearUnloadedHistoryOnlyIdleLoads(inventory: CodexThreadInventory): void {
+    for (const threadId of this.historyOnlyIdleThreadLoadsById.keys()) {
+      if (!inventory.loadedIds.has(threadId)) {
+        this.clearHistoryOnlyIdleThreadLoad(threadId);
+      }
+    }
+  }
+
+  private threadSnapshotForRemotePresence(
+    thread: CodexThreadSnapshot,
+    repoPath: string,
+  ): CodexThreadSnapshot {
+    const historyOnlyLoad = this.historyOnlyIdleThreadLoadsById.get(thread.id);
+    if (
+      !historyOnlyLoad ||
+      historyOnlyLoad.repoPath !== repoPath ||
+      historyOnlyLoad.workingDirectory !== thread.cwd
+    ) {
+      return thread;
+    }
+    if (thread.status.classification !== "running") {
+      if (thread.status.classification !== "idle") {
+        this.clearHistoryOnlyIdleThreadLoad(thread.id);
+      }
+      return thread;
+    }
+    return {
+      ...thread,
+      status: {
+        classification: IDLE_CODEX_THREAD_STATUS.classification,
+        status: { ...IDLE_CODEX_THREAD_STATUS.status },
+        agentSessionStatus: IDLE_CODEX_THREAD_STATUS.agentSessionStatus,
+      },
+    };
+  }
+
   private pendingApprovalsForSession(
     externalSessionId: string,
   ): import("@openducktor/core").AgentPendingApprovalRequest[] {
@@ -1124,6 +1229,7 @@ export class CodexAppServerAdapter
       },
     );
     const inventory = await this.threadInventory.refresh(client, runtimeId);
+    this.clearUnloadedHistoryOnlyIdleLoads(inventory);
     if (!inventory.loadedIds.has(input.externalSessionId)) {
       return stalePresence(input, runtimeId);
     }
@@ -1131,7 +1237,11 @@ export class CodexAppServerAdapter
     if (!snapshot || snapshot.cwd !== input.workingDirectory) {
       return stalePresence(input, runtimeId);
     }
-    return toPresenceSnapshotFromThread(snapshot, input, runtimeId);
+    return toPresenceSnapshotFromThread(
+      this.threadSnapshotForRemotePresence(snapshot, input.repoPath),
+      input,
+      runtimeId,
+    );
   }
 
   private async handleServerRequest(

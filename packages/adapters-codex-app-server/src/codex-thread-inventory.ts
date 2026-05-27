@@ -13,6 +13,11 @@ import {
 } from "./codex-app-server-threads";
 import type { CodexAppServerClient } from "./types";
 
+export type CodexHistoryThreadAttachment = {
+  response: unknown;
+  preResumeThread: CodexThreadSnapshot;
+};
+
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
   private readonly pendingInventoryByRuntimeId = new Map<string, Promise<CodexThreadInventory>>();
@@ -99,31 +104,20 @@ export class CodexThreadInventoryReader {
     client: CodexAppServerClient,
     runtimeId: string,
     input: { externalSessionId: string; workingDirectory: string },
-  ): Promise<unknown | null> {
+  ): Promise<CodexHistoryThreadAttachment | null> {
     const inventory = await this.read(client, runtimeId);
     const thread = inventory.threadsById.get(input.externalSessionId) ?? null;
     if (!thread || thread.cwd !== input.workingDirectory) {
       return null;
     }
-    if (inventory.loadedIds.has(thread.id)) {
-      try {
-        return await this.readThreadWithTurns(client, thread.id);
-      } catch (error) {
-        if (!isCodexThreadNotLoadedError(error)) {
-          throw error;
-        }
-        this.clear(runtimeId);
-      }
-    }
-    const turns = await this.fetchThreadTurns(client, thread.id);
+    const response = await client.threadResume({
+      threadId: input.externalSessionId,
+      cwd: input.workingDirectory,
+    });
+    this.clear(runtimeId);
     return {
-      thread: {
-        id: thread.id,
-        cwd: thread.cwd,
-        createdAt: Date.parse(thread.startedAt) / 1000,
-        status: thread.status.status,
-        turns,
-      },
+      response,
+      preResumeThread: thread,
     };
   }
 

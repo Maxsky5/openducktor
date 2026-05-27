@@ -313,7 +313,15 @@ const defaultThreadResumeResponse = (request: CodexJsonRpcRequest) => {
 const withDefaultThreadResume = (transport: CodexJsonRpcTransport): CodexJsonRpcTransport => ({
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
     if (request.method === "thread/resume") {
-      return defaultThreadResumeResponse(request) as Response;
+      try {
+        return await transport.request<Response>(request);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.startsWith("Unexpected method 'thread/resume'")) {
+          throw error;
+        }
+        return defaultThreadResumeResponse(request) as Response;
+      }
     }
     return transport.request<Response>(request);
   },

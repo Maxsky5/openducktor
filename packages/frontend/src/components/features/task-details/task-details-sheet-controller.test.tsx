@@ -12,6 +12,8 @@ import type { TaskDetailsSheetControllerHandle } from "./task-details-sheet-cont
 
 enableReactActEnvironment();
 
+const actualTaskDetailsSheetModule = await import("./task-details-sheet");
+
 const taskDetailsSheetRenderMock = mock(
   (_props: {
     activeWorkspace?: { workspaceId: string; workspaceName: string; repoPath: string } | null;
@@ -38,7 +40,9 @@ describe("TaskDetailsSheetController", () => {
   });
 
   afterEach(async () => {
-    await restoreMockedModules([["./task-details-sheet", () => import("./task-details-sheet")]]);
+    await restoreMockedModules([
+      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
+    ]);
   });
 
   beforeEach(() => {
@@ -47,6 +51,9 @@ describe("TaskDetailsSheetController", () => {
 
   test("opens the details sheet without rerendering the parent component", async () => {
     const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
+    await restoreMockedModules([
+      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
+    ]);
 
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
@@ -112,6 +119,9 @@ describe("TaskDetailsSheetController", () => {
 
   test("forwards pull request detection props to the task details sheet", async () => {
     const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
+    await restoreMockedModules([
+      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
+    ]);
 
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1", status: "human_review" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();

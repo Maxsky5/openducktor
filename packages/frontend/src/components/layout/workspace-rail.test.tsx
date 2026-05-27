@@ -67,6 +67,9 @@ describe("WorkspaceRail", () => {
     );
 
     ({ WorkspaceRail } = await import("./workspace-rail"));
+    await restoreMockedModules([
+      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
+    ]);
   });
 
   afterEach(async () => {
