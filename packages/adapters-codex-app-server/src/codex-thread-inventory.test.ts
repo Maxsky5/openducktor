@@ -57,34 +57,90 @@ describe("CodexThreadInventoryReader", () => {
     expect(cached.threadsById.has("thread-stale")).toBe(false);
   });
 
-  test("loads history turns for listed threads without requiring a loaded runtime thread", async () => {
+  test("resumes listed threads for history so Codex can replay restored token usage", async () => {
     const reader = new CodexThreadInventoryReader();
-    let threadReadCalls = 0;
+    const calls: string[] = [];
     const client = {
-      threadLoadedList: async () => ({ data: [], nextCursor: null }),
-      threadList: async () => threadListResponse("thread-idle", "Idle inventory"),
-      threadTurnsList: async () => ({
-        data: [{ id: "turn-1", status: "completed", items: [] }],
-        nextCursor: null,
-      }),
+      threadLoadedList: async () => {
+        calls.push("thread/loaded/list");
+        return { data: [], nextCursor: null };
+      },
+      threadList: async () => {
+        calls.push("thread/list");
+        return threadListResponse("thread-idle", "Idle inventory");
+      },
+      threadResume: async () => {
+        calls.push("thread/resume");
+        return {
+          thread: {
+            id: "thread-idle",
+            cwd: "/repo",
+            status: { type: "idle" },
+            turns: [{ id: "turn-1", status: "completed", items: [] }],
+          },
+        };
+      },
       threadRead: async () => {
-        threadReadCalls += 1;
+        calls.push("thread/read");
         throw new Error("thread not loaded: thread-idle");
+      },
+      threadTurnsList: async () => {
+        calls.push("thread/turns/list");
+        return { data: [] };
       },
     } as unknown as CodexAppServerClient;
 
-    const response = await reader.attachThreadForHistory(client, "runtime-1", {
+    const attachment = await reader.attachThreadForHistory(client, "runtime-1", {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
-    expect(response).toEqual({
-      thread: expect.objectContaining({
-        id: "thread-idle",
-        cwd: "/repo",
-        turns: [expect.objectContaining({ id: "turn-1" })],
-      }),
+    expect(attachment).toEqual({
+      resumedThread: expect.objectContaining({ id: "thread-idle" }),
+      response: {
+        thread: expect.objectContaining({
+          id: "thread-idle",
+          cwd: "/repo",
+          turns: [expect.objectContaining({ id: "turn-1" })],
+        }),
+      },
     });
-    expect(threadReadCalls).toBe(0);
+    expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);
+  });
+
+  test("marks loaded idle history resumes as history-only attachments", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const client = {
+      threadLoadedList: async () => ({ data: ["thread-idle"], nextCursor: null }),
+      threadList: async () => threadListResponse("thread-idle", "Idle inventory"),
+      threadResume: async () => ({
+        thread: {
+          id: "thread-idle",
+          cwd: "/repo",
+          status: { type: "idle" },
+          turns: [{ id: "turn-1", status: "completed", items: [] }],
+        },
+      }),
+    } as unknown as CodexAppServerClient;
+
+    const attachment = await reader.attachThreadForHistory(client, "runtime-1", {
+      externalSessionId: "thread-idle",
+      workingDirectory: "/repo",
+    });
+
+    expect(attachment).toEqual({
+      resumedThread: expect.objectContaining({
+        id: "thread-idle",
+        status: expect.objectContaining({ agentSessionStatus: "idle" }),
+      }),
+      response: {
+        thread: expect.objectContaining({
+          id: "thread-idle",
+          cwd: "/repo",
+          status: { type: "idle" },
+          turns: [expect.objectContaining({ id: "turn-1" })],
+        }),
+      },
+    });
   });
 });
