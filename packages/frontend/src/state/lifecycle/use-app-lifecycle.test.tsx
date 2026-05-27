@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { BeadsCheck } from "@openducktor/contracts";
+import {
+  type BeadsCheck,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeInstanceSummary,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import { createHostClient } from "@openducktor/host-client";
 import { CancelledError } from "@tanstack/react-query";
 import { act } from "react";
@@ -68,6 +74,25 @@ const makeMissingAttachmentBeadsCheck = (): BeadsCheck =>
     },
   });
 
+const makeRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind): RuntimeInstanceSummary => {
+  const descriptor =
+    runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR;
+  return {
+    kind: runtimeKind,
+    runtimeId: `${runtimeKind}-runtime`,
+    repoPath,
+    taskId: null,
+    role: "workspace",
+    workingDirectory: repoPath,
+    runtimeRoute:
+      runtimeKind === "codex"
+        ? { type: "stdio", identity: `${runtimeKind}-runtime` }
+        : { type: "local_http", endpoint: "http://127.0.0.1:3030" },
+    startedAt: "2026-02-22T08:00:00.000Z",
+    descriptor,
+  };
+};
+
 const createActiveWorkspace = (
   repoPath: string,
   workspaceId = repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -81,12 +106,21 @@ type UseAppLifecycleArgs = Parameters<
   Awaited<typeof import("./use-app-lifecycle")>["useAppLifecycle"]
 >[0];
 
-type LegacyUseAppLifecycleArgs = Omit<UseAppLifecycleArgs, "activeWorkspace"> & {
-  activeWorkspace?: ActiveWorkspace | null;
-  activeRepo?: string | null;
-  setEvents?: unknown;
-  setRunCompletionSignal?: unknown;
-};
+type LegacyUseAppLifecycleArgs = Omit<
+  UseAppLifecycleArgs,
+  "activeWorkspace" | "runtimeDefinitions" | "refreshRepoRuntimeHealthForRepo" | "startRepoRuntime"
+> &
+  Partial<
+    Pick<
+      UseAppLifecycleArgs,
+      "runtimeDefinitions" | "refreshRepoRuntimeHealthForRepo" | "startRepoRuntime"
+    >
+  > & {
+    activeWorkspace?: ActiveWorkspace | null;
+    activeRepo?: string | null;
+    setEvents?: unknown;
+    setRunCompletionSignal?: unknown;
+  };
 
 const normalizeHookArgs = ({
   activeWorkspace,
@@ -94,6 +128,14 @@ const normalizeHookArgs = ({
   ...rest
 }: LegacyUseAppLifecycleArgs): UseAppLifecycleArgs => ({
   ...rest,
+  runtimeDefinitions: rest.runtimeDefinitions ?? [],
+  refreshRepoRuntimeHealthForRepo: rest.refreshRepoRuntimeHealthForRepo ?? mock(async () => ({})),
+  startRepoRuntime:
+    rest.startRepoRuntime ??
+    mock(
+      async (repoPath, runtimeKind): Promise<RuntimeInstanceSummary> =>
+        makeRuntimeSummary(repoPath, runtimeKind),
+    ),
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
 });
 beforeEach(() => {
@@ -167,6 +209,293 @@ afterEach(async () => {
 });
 
 describe("useAppLifecycle", () => {
+  test("starts configured repo runtimes in the lifecycle without waiting before loading repository data", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const runtimeDeferred = createDeferred<RuntimeInstanceSummary>();
+    const startRepoRuntime = mock(async (_repoPath: string, _runtimeKind: string) => {
+      return runtimeDeferred.promise;
+    });
+    const refreshRepoRuntimeHealthForRepo = mock(async () => ({}));
+    const refreshTaskData = mock(async () => {});
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
+        refreshRepoRuntimeHealthForRepo,
+        refreshTaskData,
+        startRepoRuntime,
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+    try {
+      await harness.waitFor(() => refreshTaskData.mock.calls.length > 0);
+
+      expect(startRepoRuntime).toHaveBeenCalledWith("/repo", "opencode");
+      expect(startRepoRuntime).toHaveBeenCalledWith("/repo", "codex");
+      expect(refreshTaskData).toHaveBeenCalledWith("/repo", undefined, {
+        forceFreshTaskList: false,
+      });
+      expect(refreshRepoRuntimeHealthForRepo).toHaveBeenCalledWith("/repo", true);
+    } finally {
+      runtimeDeferred.resolve(makeRuntimeSummary("/repo", "opencode"));
+      await harness.unmount();
+    }
+  });
+
+  test("refreshes runtime health as each runtime startup settles and reports every failure", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const opencodeStartup = createDeferred<RuntimeInstanceSummary>();
+    const codexStartup = createDeferred<RuntimeInstanceSummary>();
+    const startRepoRuntime = mock((_repoPath: string, runtimeKind: RuntimeKind) => {
+      return runtimeKind === "opencode" ? opencodeStartup.promise : codexStartup.promise;
+    });
+    const refreshRepoRuntimeHealthForRepo = mock(async () => ({}));
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
+        refreshRepoRuntimeHealthForRepo,
+        refreshTaskData: mock(async () => {}),
+        startRepoRuntime,
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+    try {
+      await harness.waitFor(() => refreshRepoRuntimeHealthForRepo.mock.calls.length === 1);
+      expect(refreshRepoRuntimeHealthForRepo).toHaveBeenLastCalledWith("/repo", true);
+
+      await harness.run(async () => {
+        opencodeStartup.reject(new Error("opencode unavailable"));
+      });
+      await harness.waitFor(() => refreshRepoRuntimeHealthForRepo.mock.calls.length === 2);
+      expect(refreshRepoRuntimeHealthForRepo).toHaveBeenLastCalledWith("/repo", true);
+
+      await harness.run(async () => {
+        codexStartup.reject(new Error("codex unavailable"));
+      });
+      await harness.waitFor(() => refreshRepoRuntimeHealthForRepo.mock.calls.length === 3);
+      expect(refreshRepoRuntimeHealthForRepo).toHaveBeenLastCalledWith("/repo", true);
+
+      expect(toastError).toHaveBeenCalledWith("Runtime startup failed for opencode", {
+        description: "opencode unavailable",
+      });
+      expect(toastError).toHaveBeenCalledWith("Runtime startup failed for codex", {
+        description: "codex unavailable",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not show runtime diagnostics unavailable when runtime health refresh is cancelled", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const startup = createDeferred<RuntimeInstanceSummary>();
+    const refreshRepoRuntimeHealthForRepo = mock(async () => {
+      throw new CancelledError();
+    });
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
+        refreshRepoRuntimeHealthForRepo,
+        refreshTaskData: mock(async () => {}),
+        startRepoRuntime: mock(async () => startup.promise),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+    try {
+      await harness.waitFor(() => refreshRepoRuntimeHealthForRepo.mock.calls.length === 1);
+
+      expect(
+        toastError.mock.calls.some(([title]) => title === "Runtime diagnostics unavailable"),
+      ).toBe(false);
+    } finally {
+      startup.resolve(makeRuntimeSummary("/repo", "opencode"));
+      await harness.unmount();
+    }
+  });
+
+  test("shows runtime diagnostics unavailable when runtime health refresh fails", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const startup = createDeferred<RuntimeInstanceSummary>();
+    const refreshRepoRuntimeHealthForRepo = mock(async () => {
+      throw new Error("diagnostics transport failed");
+    });
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, {
+      args: {
+        activeRepo: "/repo",
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        refreshWorkspaces: mock(async () => {}),
+        refreshBranches: mock(async () => {}),
+        refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+        refreshBeadsCheckForRepo: mock(async () =>
+          makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+        ),
+        refreshRepoRuntimeHealthForRepo,
+        refreshTaskData: mock(async () => {}),
+        startRepoRuntime: mock(async () => startup.promise),
+        clearBranchData: mock(() => {}),
+      } satisfies HookArgs,
+    });
+
+    await harness.mount();
+    try {
+      await harness.waitFor(() =>
+        toastError.mock.calls.some(([title]) => title === "Runtime diagnostics unavailable"),
+      );
+
+      expect(toastError).toHaveBeenCalledWith("Runtime diagnostics unavailable", {
+        description: "diagnostics transport failed",
+      });
+    } finally {
+      startup.resolve(makeRuntimeSummary("/repo", "opencode"));
+      await harness.unmount();
+    }
+  });
+
+  test("does not restart runtimes when runtime definitions are referentially new but semantically unchanged", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const startRepoRuntime = mock(async (repoPath: string, runtimeKind: RuntimeKind) =>
+      makeRuntimeSummary(repoPath, runtimeKind),
+    );
+    const baseArgs: HookArgs = {
+      activeRepo: "/repo",
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
+      refreshRepoRuntimeHealthForRepo: mock(async () => ({})),
+      refreshTaskData: mock(async () => {}),
+      startRepoRuntime,
+      clearBranchData: mock(() => {}),
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    await harness.mount();
+    try {
+      await harness.waitFor(() => startRepoRuntime.mock.calls.length === 2);
+
+      await harness.update({
+        args: {
+          ...baseArgs,
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        },
+      });
+
+      expect(startRepoRuntime).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("starts runtimes when runtime definitions load after the initial lifecycle render", async () => {
+    const { useAppLifecycle } = await import("./use-app-lifecycle");
+    type HookArgs = LegacyUseAppLifecycleArgs;
+
+    const startRepoRuntime = mock(async (repoPath: string, runtimeKind: RuntimeKind) =>
+      makeRuntimeSummary(repoPath, runtimeKind),
+    );
+    const refreshRepoRuntimeHealthForRepo = mock(async () => ({}));
+    const baseArgs: HookArgs = {
+      activeRepo: "/repo",
+      runtimeDefinitions: [],
+      refreshWorkspaces: mock(async () => {}),
+      refreshBranches: mock(async () => {}),
+      refreshRuntimeCheck: mock(async () => ({ runtimeOk: true })),
+      refreshBeadsCheckForRepo: mock(async () =>
+        makeBeadsCheck({ beadsOk: true, beadsPath: "/repo/.beads", beadsError: null }),
+      ),
+      refreshRepoRuntimeHealthForRepo,
+      refreshTaskData: mock(async () => {}),
+      startRepoRuntime,
+      clearBranchData: mock(() => {}),
+    };
+
+    const Harness = ({ args }: { args: HookArgs }) => {
+      useAppLifecycle(normalizeHookArgs(args));
+      return null;
+    };
+    const harness = createSharedHookHarness(Harness, { args: baseArgs });
+
+    await harness.mount();
+    try {
+      await harness.update({
+        args: {
+          ...baseArgs,
+          runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        },
+      });
+
+      await harness.waitFor(() => startRepoRuntime.mock.calls.length === 1);
+      expect(startRepoRuntime).toHaveBeenCalledWith("/repo", "opencode");
+      expect(refreshRepoRuntimeHealthForRepo).toHaveBeenCalledWith("/repo", true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("refreshes active repo task data when an external task event arrives", async () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;

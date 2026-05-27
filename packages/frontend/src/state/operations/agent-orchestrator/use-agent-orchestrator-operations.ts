@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
@@ -34,6 +34,7 @@ type UseAgentOrchestratorOperationsArgs = {
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
   agentEngine: AgentEnginePort;
+  isSessionRuntimeReady: (runtimeKind: RuntimeKind) => boolean;
   /**
    * Optional dependency seam for tests and specialized callers.
    * Pass a stable reference, such as a module-level object or a `useMemo` result;
@@ -65,6 +66,7 @@ export function useAgentOrchestratorOperations({
   tasks,
   refreshTaskData,
   agentEngine,
+  isSessionRuntimeReady,
   dependencies,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -164,6 +166,7 @@ export function useAgentOrchestratorOperations({
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
     sessionHydration,
     prepareRepoSessionPresencePreloads: prepareSessionPresencePreloads,
+    isSessionRuntimeReady,
   });
   const ensureRuntime = useMemo(
     () =>

@@ -1,4 +1,5 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
 import type { RepoSessionPresencePreloads } from "./repo-session-presence-preloads";
 import type { SessionHydrationOperations } from "./session-hydration-operations";
 
@@ -7,6 +8,13 @@ type HydrationScope = "bootstrap" | "reconcile";
 const nextSessionRetryDelayMs = (attempt: number): number => Math.min(5_000, 500 * 2 ** attempt);
 
 const getTaskRecords = (task: TaskCard): AgentSessionRecord[] => task.agentSessions ?? [];
+
+const areRecordRuntimesReady = (
+  records: AgentSessionRecord[],
+  isRuntimeReady: (runtimeKind: RuntimeKind) => boolean,
+): boolean => {
+  return records.every((record) => isRuntimeReady(readPersistedRuntimeKind(record)));
+};
 
 const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string => {
   const recordKeys = records
@@ -152,22 +160,37 @@ export const createRepoSessionHydrationService = ({
       tasks,
       isCancelled,
       isCurrentRepo,
+      isRuntimeReady,
     }: {
       repoPath: string;
       tasks: TaskCard[];
       isCancelled: () => boolean;
       isCurrentRepo: (repoPath: string) => boolean;
+      isRuntimeReady: (runtimeKind: RuntimeKind) => boolean;
     }): Promise<void> {
       const inFlight = getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath);
       const reconciledRecordKeys = getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath);
-      const pendingTaskEntries = tasks.flatMap((task) => {
+      const pendingTaskEntries: Array<{
+        task: TaskCard;
+        records: AgentSessionRecord[];
+        recordKey: string;
+      }> = [];
+      for (const task of tasks) {
         const records = getTaskRecords(task);
         const recordKey = toTaskRecordKey(task.id, records);
         if (records.length === 0 || inFlight.has(task.id) || reconciledRecordKeys.has(recordKey)) {
-          return [];
+          continue;
         }
-        return [{ task, records, recordKey }];
-      });
+        try {
+          if (!areRecordRuntimesReady(records, isRuntimeReady)) {
+            continue;
+          }
+        } catch (error) {
+          scheduleRetry("reconcile", repoPath, task.id, error);
+          continue;
+        }
+        pendingTaskEntries.push({ task, records, recordKey });
+      }
       for (const entry of pendingTaskEntries) {
         inFlight.add(entry.task.id);
       }

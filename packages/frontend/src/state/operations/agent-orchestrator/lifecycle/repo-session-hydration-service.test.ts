@@ -21,6 +21,7 @@ const createDeferred = <T>() => {
 
 const repoPath = "/tmp/repo";
 const worktreePath = "/tmp/repo/worktree";
+const runtimeReady = () => true;
 
 const taskWithSession = (taskId: string, externalSessionId: string): TaskCard => ({
   id: taskId,
@@ -97,6 +98,34 @@ describe("repo-session-hydration-service", () => {
 
     expect(bootstrapCalls).toBe(1);
     expect(retryRequests).toBe(0);
+    service.dispose();
+  });
+
+  test("does not bootstrap a task again after the first bootstrap succeeds", async () => {
+    const bootstrapTaskSessions = mock(async () => {});
+    const task = taskWithSession("task-1", "external-1");
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions,
+        reconcileLiveTaskSessions: async () => {},
+      },
+      onRetryRequested: () => {},
+    });
+
+    await service.bootstrapPendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.bootstrapPendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(bootstrapTaskSessions).toHaveBeenCalledTimes(1);
     service.dispose();
   });
 
@@ -183,6 +212,7 @@ describe("repo-session-hydration-service", () => {
       tasks: [taskOne, taskTwo],
       isCancelled: () => false,
       isCurrentRepo: () => true,
+      isRuntimeReady: runtimeReady,
     });
 
     expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
@@ -203,6 +233,88 @@ describe("repo-session-hydration-service", () => {
       },
     ]);
     service.dispose();
+  });
+
+  test("keeps pending records untouched until their runtime is ready", async () => {
+    const reconcileLiveTaskSessions = mock(async () => {});
+    const prepareRepoSessionPresencePreloads = mock(async () => ({
+      preloadedSessionPresenceByKey: new Map(),
+    }));
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions,
+      },
+      prepareRepoSessionPresencePreloads,
+      onRetryRequested: () => {},
+    });
+    const task = taskWithSession("task-1", "external-1");
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+      isRuntimeReady: () => false,
+    });
+
+    expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(0);
+    expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(0);
+
+    await service.reconcilePendingTasks({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+      isRuntimeReady: () => true,
+    });
+
+    expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
+    expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(1);
+    service.dispose();
+  });
+
+  test("isolates records with invalid runtime metadata instead of aborting the reconcile batch", async () => {
+    const invalidTask = taskWithSession("task-invalid", "external-invalid");
+    invalidTask.agentSessions = [
+      {
+        ...(invalidTask.agentSessions?.[0] as AgentSessionRecord),
+        // This deliberately simulates persisted data from an older/invalid schema.
+        runtimeKind: "legacy-runtime" as AgentSessionRecord["runtimeKind"],
+      },
+    ];
+    const validTask = taskWithSession("task-valid", "external-valid");
+    const reconcileCalls: string[] = [];
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async () => {},
+        reconcileLiveTaskSessions: async ({ taskId }) => {
+          reconcileCalls.push(taskId);
+        },
+      },
+      onRetryRequested: () => {},
+    });
+
+    try {
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [invalidTask, validTask],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+        isRuntimeReady: runtimeReady,
+      });
+
+      expect(reconcileCalls).toEqual(["task-valid"]);
+      expect(
+        consoleErrorSpy.mock.calls.some(([message]) =>
+          String(message).includes("Failed to reconcile agent sessions for task 'task-invalid'"),
+        ),
+      ).toBe(true);
+    } finally {
+      service.dispose();
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   test("hydrates durable sessions when live presence preload fails", async () => {
@@ -232,6 +344,7 @@ describe("repo-session-hydration-service", () => {
         tasks: [task],
         isCancelled: () => false,
         isCurrentRepo: () => true,
+        isRuntimeReady: runtimeReady,
       });
 
       expect(bootstrapCalls).toEqual([{ taskId: "task-1", records: taskRecords }]);
@@ -262,12 +375,14 @@ describe("repo-session-hydration-service", () => {
       tasks: [task],
       isCancelled: () => false,
       isCurrentRepo: () => true,
+      isRuntimeReady: runtimeReady,
     });
     await service.reconcilePendingTasks({
       repoPath,
       tasks: [task],
       isCancelled: () => false,
       isCurrentRepo: () => true,
+      isRuntimeReady: runtimeReady,
     });
 
     expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);

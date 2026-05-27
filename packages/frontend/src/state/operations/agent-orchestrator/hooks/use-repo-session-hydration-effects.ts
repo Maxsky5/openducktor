@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRepoSessionHydrationService } from "../lifecycle/repo-session-hydration-service";
 import type { RepoSessionPresencePreloads } from "../lifecycle/repo-session-presence-preloads";
@@ -16,6 +16,7 @@ type UseRepoSessionHydrationEffectsArgs = {
     repoPath: string;
     records: AgentSessionRecord[];
   }) => Promise<RepoSessionPresencePreloads>;
+  isSessionRuntimeReady: (runtimeKind: RuntimeKind) => boolean;
 };
 
 export const useRepoSessionHydrationEffects = ({
@@ -24,6 +25,7 @@ export const useRepoSessionHydrationEffects = ({
   currentWorkspaceRepoPathRef,
   sessionHydration,
   prepareRepoSessionPresencePreloads,
+  isSessionRuntimeReady,
 }: UseRepoSessionHydrationEffectsArgs) => {
   const [sessionRetryTick, setSessionRetryTick] = useState(0);
 
@@ -70,6 +72,7 @@ export const useRepoSessionHydrationEffects = ({
         tasks,
         isCancelled: () => cancelled,
         isCurrentRepo: isCurrentActiveRepo,
+        isRuntimeReady: isSessionRuntimeReady,
       });
     })();
 
@@ -79,6 +82,7 @@ export const useRepoSessionHydrationEffects = ({
   }, [
     workspaceRepoPath,
     isCurrentActiveRepo,
+    isSessionRuntimeReady,
     repoSessionHydrationService,
     sessionRetryTick,
     tasks,

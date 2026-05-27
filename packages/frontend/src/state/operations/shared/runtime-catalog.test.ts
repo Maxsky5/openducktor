@@ -4,6 +4,7 @@ import {
   type RepoRuntimeHealthCheck,
   type RepoRuntimeStartupStatus,
   type RuntimeInstanceSummary,
+  type RuntimeKind,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -112,7 +113,7 @@ const fileSearchResultsFixture: AgentFileSearchResult[] = [
 ];
 
 const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDependencies => ({
-  repoRuntimeHealth: async () => ({
+  repoRuntimeHealthStatus: async () => ({
     ...healthyRepoRuntimeHealthFixture,
     status: "checking",
     runtime: {
@@ -138,7 +139,7 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
       failureKind: "timeout",
     },
   }),
-  listRuntimesForRepo: async () => [runtimeFixture],
+  listRuntimesForRepo: async (_runtimeKind: RuntimeKind, _repoPath: string) => [runtimeFixture],
   listAvailableModels: async () => catalogFixture,
   listAvailableSlashCommands: async () => slashCommandCatalogFixture,
   searchFiles: async () => fileSearchResultsFixture,
@@ -251,13 +252,13 @@ describe("runtime-catalog", () => {
     });
   });
 
-  test("delegates repo runtime health to the active host readiness command", async () => {
-    const repoRuntimeHealth = mock(async () => healthyRepoRuntimeHealthFixture);
-    const operations = createRuntimeCatalogOperations(createDeps({ repoRuntimeHealth }));
+  test("delegates repo runtime health to the status-only host command", async () => {
+    const repoRuntimeHealthStatus = mock(async () => healthyRepoRuntimeHealthFixture);
+    const operations = createRuntimeCatalogOperations(createDeps({ repoRuntimeHealthStatus }));
 
     const result = await operations.checkRepoRuntimeHealth("/tmp/repo", "opencode");
 
-    expect(repoRuntimeHealth).toHaveBeenCalledWith("opencode", "/tmp/repo");
+    expect(repoRuntimeHealthStatus).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(result).toEqual(healthyRepoRuntimeHealthFixture);
   });
 });

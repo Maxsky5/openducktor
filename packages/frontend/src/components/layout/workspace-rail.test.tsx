@@ -29,6 +29,7 @@ const workspaceRecord = (
 
 let workspaceState: WorkspaceStateContextValue;
 let WorkspaceRail: typeof import("./workspace-rail").WorkspaceRail;
+const actualAppStateProviderModule = await import("../../state/app-state-provider");
 
 describe("WorkspaceRail", () => {
   beforeEach(async () => {
@@ -74,7 +75,7 @@ describe("WorkspaceRail", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
+      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
     ]);
   });
 

@@ -4,11 +4,13 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { useRuntimeDefinitionsContext } from "../app-state-contexts";
 import { host } from "../operations/host";
+import { settingsSnapshotQueryOptions } from "../queries/workspace";
 import { AppRuntimeProvider } from "./app-runtime-provider";
 
 const createSettingsSnapshot = (): SettingsSnapshot => ({
@@ -100,6 +102,56 @@ describe("AppRuntimeProvider", () => {
       expect(harness.getLatest().availableRuntimeDefinitions).toEqual([
         OPENCODE_RUNTIME_DESCRIPTOR,
       ]);
+    } finally {
+      await harness.unmount();
+      host.runtimeDefinitionsList = originalRuntimeDefinitionsList;
+      host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
+    }
+  });
+
+  test("keeps runtime availability stable when only the theme setting changes", async () => {
+    const originalRuntimeDefinitionsList = host.runtimeDefinitionsList;
+    const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
+    host.runtimeDefinitionsList = mock(async () => [OPENCODE_RUNTIME_DESCRIPTOR]) as never;
+    host.workspaceGetSettingsSnapshot = mock(async () => createSettingsSnapshot()) as never;
+
+    const harness = createHookHarness(
+      () => ({
+        queryClient: useQueryClient(),
+        runtimeDefinitions: useRuntimeDefinitionsContext(),
+      }),
+      undefined,
+      { wrapper: createWrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) => state.runtimeDefinitions.availableRuntimeDefinitions.length === 1,
+      );
+
+      const firstContext = harness.getLatest().runtimeDefinitions;
+      const firstAvailableRuntimeDefinitions = firstContext.availableRuntimeDefinitions;
+
+      await harness.run(({ queryClient }) => {
+        queryClient.setQueryData(
+          settingsSnapshotQueryOptions().queryKey,
+          (current: SettingsSnapshot | undefined) => {
+            if (!current) {
+              throw new Error("Expected settings snapshot to be cached");
+            }
+
+            return {
+              ...current,
+              theme: "dark" as const,
+            };
+          },
+        );
+      });
+
+      const nextContext = harness.getLatest().runtimeDefinitions;
+      expect(nextContext).toBe(firstContext);
+      expect(nextContext.availableRuntimeDefinitions).toBe(firstAvailableRuntimeDefinitions);
     } finally {
       await harness.unmount();
       host.runtimeDefinitionsList = originalRuntimeDefinitionsList;

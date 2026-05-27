@@ -36,18 +36,17 @@ import {
   useWorkspacePresenceContext,
   WorkspaceStateContext,
 } from "./app-state-contexts";
-import { createHostRuntimeCatalogOperations } from "./operations";
-import {
-  AgentStudioStateProvider,
-  AppLifecycleStateProvider,
-  AppRuntimeProvider,
-  AutopilotProvider,
-  ChecksStateProvider,
-  DelegationStateProvider,
-  SpecStateProvider,
-  TasksStateProvider,
-  WorkspaceStateProvider,
-} from "./providers";
+import { createHostRuntimeCatalogOperations } from "./operations/shared/runtime-catalog";
+import { ensureRuntimeAndInvalidateReadinessQueries } from "./operations/shared/runtime-readiness-publication";
+import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
+import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
+import { AppRuntimeProvider } from "./providers/app-runtime-provider";
+import { AutopilotProvider } from "./providers/autopilot-provider";
+import { ChecksStateProvider } from "./providers/checks-state-provider";
+import { DelegationStateProvider } from "./providers/delegation-state-provider";
+import { SpecStateProvider } from "./providers/spec-state-provider";
+import { TasksStateProvider } from "./providers/tasks-state-provider";
+import { WorkspaceStateProvider } from "./providers/workspace-state-provider";
 
 export function AppStateProvider({ children }: PropsWithChildren): ReactElement {
   const runtimeRegistry = useMemo(() => createAgentRuntimeRegistry(), []);
@@ -59,6 +58,19 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     (repoPath: string, runtimeKind: RuntimeKind) =>
       runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
     [runtimeCatalogOperations],
+  );
+  const startRepoRuntime = useCallback(
+    (repoPath: string, runtimeKind: RuntimeKind) =>
+      ensureRuntimeAndInvalidateReadinessQueries({
+        repoPath,
+        runtimeKind,
+        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
+          runtimeRegistry.startRepoRuntime({
+            repoPath: nextRepoPath,
+            runtimeKind: nextRuntimeKind,
+          }),
+      }),
+    [runtimeRegistry],
   );
 
   return (
@@ -73,7 +85,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
             <WorkspaceStateProvider>
               <DelegationStateProvider>
                 <AgentStudioStateProvider agentEngine={agentEngine}>
-                  <AppLifecycleStateProvider>
+                  <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
                     <AutopilotProvider>{children}</AutopilotProvider>
                   </AppLifecycleStateProvider>
                 </AgentStudioStateProvider>
