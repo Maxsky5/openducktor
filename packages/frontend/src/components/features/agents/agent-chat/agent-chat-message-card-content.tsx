@@ -402,7 +402,8 @@ const readInlineUserReferenceRanges = (
       }
     }
   }
-  return ranges.toSorted((left, right) => left.start - right.start);
+  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
+  return [...ranges].sort((left, right) => left.start - right.start);
 };
 
 const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string): void => {

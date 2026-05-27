@@ -25,6 +25,7 @@ import {
 import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
+  utf8ByteLength,
 } from "./codex-user-input-display";
 import {
   type CodexTodoUpdate,
@@ -999,7 +1000,7 @@ export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserIn
         text: marker,
         text_elements: [
           {
-            byteRange: { start: 0, end: marker.length },
+            byteRange: { start: 0, end: utf8ByteLength(marker) },
             placeholder: marker,
           },
         ],

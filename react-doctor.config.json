@@ -1,0 +1,10 @@
+{
+  "ignore": {
+    "overrides": [
+      {
+        "files": ["src/components/features/agents/agent-chat/agent-chat-composer-editor.tsx"],
+        "rules": ["react-doctor/prefer-tag-over-role", "jsx-a11y/prefer-tag-over-role"]
+      }
+    ]
+  }
+}

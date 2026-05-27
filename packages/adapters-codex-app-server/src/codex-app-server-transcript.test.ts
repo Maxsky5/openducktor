@@ -51,6 +51,28 @@ describe("Codex App Server transcript parsing", () => {
     ]);
   });
 
+  test("uses UTF-8 byte ranges for non-ASCII skill markers in Codex turn input", () => {
+    const skill = {
+      id: "/skills/review-ja/SKILL.md",
+      name: "レビュー",
+      path: "/skills/review-ja/SKILL.md",
+    };
+
+    expect(toCodexTurnInputList([{ kind: "skill_mention", skill }])).toEqual([
+      {
+        type: "text",
+        text: "$レビュー",
+        text_elements: [
+          {
+            byteRange: { start: 0, end: 13 },
+            placeholder: "$レビュー",
+          },
+        ],
+      },
+      { type: "skill", name: "レビュー", path: "/skills/review-ja/SKILL.md" },
+    ]);
+  });
+
   test("parses Codex skill echoes as structured skill display parts", () => {
     const input = codexUserInputsFromItem({
       id: "user-1",
@@ -188,6 +210,161 @@ describe("Codex App Server transcript parsing", () => {
       },
       { kind: "text", text: " please" },
     ]);
+  });
+
+  test("hydrates Codex text element offsets after inserted input separators", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        { type: "text", text: "Use" },
+        {
+          type: "text",
+          text: "$review now",
+          text_elements: [
+            {
+              byteRange: { start: 0, end: 7 },
+              placeholder: "$review",
+            },
+          ],
+        },
+        { type: "skill", name: "review", path: "/skills/review/SKILL.md" },
+      ],
+    });
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      text: "Use $review now",
+      displayParts: [
+        { kind: "text", text: "Use" },
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/skills/review/SKILL.md",
+            name: "review",
+            path: "/skills/review/SKILL.md",
+          },
+          sourceText: {
+            value: "$review",
+            start: 4,
+            end: 11,
+          },
+        },
+        { kind: "text", text: " now" },
+      ],
+    });
+  });
+
+  test("hydrates same-name Codex skill markers in input order", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "$review then $review",
+          text_elements: [
+            {
+              byteRange: { start: 0, end: 7 },
+              placeholder: "$review",
+            },
+            {
+              byteRange: { start: 13, end: 20 },
+              placeholder: "$review",
+            },
+          ],
+        },
+        { type: "skill", name: "review", path: "/global/review/SKILL.md" },
+        { type: "skill", name: "review", path: "/repo/review/SKILL.md" },
+      ],
+    });
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      text: "$review then $review",
+      displayParts: [
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/global/review/SKILL.md",
+            path: "/global/review/SKILL.md",
+          },
+        },
+        { kind: "text", text: " then " },
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/repo/review/SKILL.md",
+            path: "/repo/review/SKILL.md",
+          },
+        },
+      ],
+    });
+  });
+
+  test("hydrates non-ASCII Codex text element byte ranges", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "Use $レビュー please",
+          text_elements: [
+            {
+              byteRange: { start: 4, end: 17 },
+            },
+          ],
+        },
+        { type: "skill", name: "レビュー", path: "/skills/review-ja/SKILL.md" },
+      ],
+    });
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      text: "Use $レビュー please",
+      displayParts: [
+        { kind: "text", text: "Use " },
+        {
+          kind: "skill_mention",
+          skill: {
+            id: "/skills/review-ja/SKILL.md",
+            name: "レビュー",
+            path: "/skills/review-ja/SKILL.md",
+          },
+          sourceText: {
+            value: "$レビュー",
+            start: 4,
+            end: 9,
+          },
+        },
+        { kind: "text", text: " please" },
+      ],
+    });
   });
 
   test("preserves turn model and reasoning effort from thread reads", () => {

@@ -85,5 +85,5 @@ export const toCodexSkillCatalog = (response: unknown): AgentSkillCatalog => {
     });
   });
 
-  return skillCatalogSchema.parse({ skills: skills.toSorted(compareSkillsByName) });
+  return skillCatalogSchema.parse({ skills: [...skills].sort(compareSkillsByName) });
 };

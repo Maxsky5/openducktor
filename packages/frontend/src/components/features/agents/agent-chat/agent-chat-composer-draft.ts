@@ -69,11 +69,7 @@ export type AgentChatSkillTriggerMatch = {
   rangeStart: number;
   rangeEnd: number;
 };
-type AgentChatTriggerMatch = {
-  query: string;
-  rangeStart: number;
-  rangeEnd: number;
-};
+type AgentChatTriggerMatch = AgentChatSkillTriggerMatch;
 
 const hasExistingSlashCommandSegment = (draft: AgentChatComposerDraft): boolean => {
   return draft.segments.some((segment) => segment.kind === "slash_command");
