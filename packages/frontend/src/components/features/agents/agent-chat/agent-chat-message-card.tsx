@@ -29,7 +29,6 @@ type AgentChatMessageCardProps = {
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   isStreamingAssistantMessage = false,
-  sessionSelectedModel,
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
@@ -48,7 +47,6 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     : undefined;
   const vm = buildAgentChatMessageCardViewModel({
     message,
-    sessionSelectedModel: sessionSelectedModel ?? null,
     sessionAgentColors,
     sessionRuntimeKind: sessionRuntimeKind ?? null,
     workflowToolAliasesByCanonical,

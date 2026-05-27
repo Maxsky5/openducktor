@@ -1,9 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import {
-  type AgentModelSelection,
-  type AgentRole,
-  isOdtWorkflowMutationToolName,
-} from "@openducktor/core";
+import { type AgentRole, isOdtWorkflowMutationToolName } from "@openducktor/core";
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
@@ -25,7 +21,6 @@ const SESSION_NOTICE_TONE_CLASS_NAMES = {
 
 type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
-  sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors: Record<string, string> | undefined;
   sessionRuntimeKind: RuntimeKind | null;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
@@ -52,30 +47,13 @@ type AgentChatMessageCardViewModel = {
   articleStyle: CSSProperties | undefined;
 };
 
-const resolveAssistantAgentColor = (
-  message: AgentChatMessage,
+const resolveMessageAgentColor = (
+  profileId: string | null | undefined,
   sessionAgentColors: Record<string, string> | undefined,
   sessionRuntimeKind: RuntimeKind | null,
 ): string | undefined => {
-  if (message.role !== "assistant") {
-    return undefined;
-  }
-  const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
   return resolveAgentSessionAccentColor({
-    agentName: assistantMeta?.profileId,
-    agentColors: sessionAgentColors,
-    runtimeKind: sessionRuntimeKind,
-  });
-};
-
-const resolveUserAgentColor = (
-  message: AgentChatMessage,
-  sessionAgentColors: Record<string, string> | undefined,
-  sessionRuntimeKind: RuntimeKind | null,
-): string | undefined => {
-  const messageMeta = message.meta?.kind === "user" ? message.meta : null;
-  return resolveAgentSessionAccentColor({
-    agentName: messageMeta?.profileId,
+    agentName: profileId,
     agentColors: sessionAgentColors,
     runtimeKind: sessionRuntimeKind,
   });
@@ -137,7 +115,6 @@ const toArticleClassName = (
 
 export const buildAgentChatMessageCardViewModel = ({
   message,
-  sessionSelectedModel: _sessionSelectedModel,
   sessionAgentColors,
   sessionRuntimeKind,
   workflowToolAliasesByCanonical,
@@ -160,12 +137,14 @@ export const buildAgentChatMessageCardViewModel = ({
   const isRichCardMessage =
     isToolMessage || isSubagentMessage || isSessionNoticeMessage || isSystemPromptMessage;
   const assistantRole = assistantRoleFromMessage(message);
-  const assistantAccentColor = resolveAssistantAgentColor(
-    message,
-    sessionAgentColors,
-    sessionRuntimeKind,
-  );
-  const userAccentColor = resolveUserAgentColor(message, sessionAgentColors, sessionRuntimeKind);
+  const assistantMeta = meta?.kind === "assistant" ? meta : null;
+  const userMeta = meta?.kind === "user" ? meta : null;
+  const assistantAccentColor = isAssistantMessage
+    ? resolveMessageAgentColor(assistantMeta?.profileId, sessionAgentColors, sessionRuntimeKind)
+    : undefined;
+  const userAccentColor = isUserMessage
+    ? resolveMessageAgentColor(userMeta?.profileId, sessionAgentColors, sessionRuntimeKind)
+    : undefined;
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
