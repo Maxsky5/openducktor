@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
@@ -6,6 +7,28 @@ import {
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
+let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
+
+const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
+const mockedGutterSelection = {
+  start: 2,
+  end: 3,
+  side: "additions" as const,
+  endSide: "additions" as const,
+};
+const selectionPatch = [
+  "diff --git a/src/app.ts b/src/app.ts",
+  "--- a/src/app.ts",
+  "+++ b/src/app.ts",
+  "@@ -1,4 +1,5 @@",
+  " one",
+  "-two",
+  "+two updated",
+  "+two extra",
+  " three",
+  " four",
+  "",
+].join("\n");
 
 beforeEach(async () => {
   await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
@@ -13,12 +36,54 @@ beforeEach(async () => {
       ["debug", "error", "info", "log", "warn"],
       async (consoleCalls) => {
         mock.module("@pierre/diffs/react", () => ({
-          FileDiff: () => null,
+          FileDiff: (props: {
+            options?: {
+              onGutterUtilityClick?: (range: unknown) => void;
+              onLineSelectionChange?: (range: unknown) => void;
+              onLineSelectionStart?: (range: unknown) => void;
+            };
+            selectedLines?: unknown;
+          }) => {
+            const { options } = props;
+            const selectedLinesText = Object.hasOwn(props, "selectedLines")
+              ? JSON.stringify(props.selectedLines)
+              : OMITTED_SELECTED_LINES_LABEL;
+            return (
+              <div>
+                <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
+                <button
+                  type="button"
+                  data-testid="pierre-selection-start"
+                  onClick={() => options?.onLineSelectionStart?.(mockedGutterSelection)}
+                >
+                  Selection start
+                </button>
+                <button
+                  type="button"
+                  data-testid="pierre-selection-change"
+                  onClick={() => options?.onLineSelectionChange?.(mockedGutterSelection)}
+                >
+                  Selection change
+                </button>
+                <button
+                  type="button"
+                  data-testid="pierre-gutter-utility"
+                  onClick={() => options?.onGutterUtilityClick?.(mockedGutterSelection)}
+                >
+                  Gutter utility
+                </button>
+              </div>
+            );
+          },
           Virtualizer: ({ children }: { children: React.ReactNode }) => children,
           useWorkerPool: () => null,
         }));
+        mock.module("@/components/layout/theme-provider", () => ({
+          useTheme: () => ({ theme: "light", setTheme: () => undefined }),
+        }));
 
         pierreViewerModule = await import("./pierre-diff-viewer");
+        pierreViewerModelModule = await import("./pierre-diff-viewer-model");
 
         for (const calls of Object.values(consoleCalls)) {
           for (const call of calls) {
@@ -35,11 +100,19 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  cleanup();
+
   await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
     await withCapturedConsoleMethods(
       ["debug", "error", "info", "log", "warn"],
       async (consoleCalls) => {
-        await restoreMockedModules([["@pierre/diffs/react", () => import("@pierre/diffs/react")]]);
+        await restoreMockedModules([
+          ["@pierre/diffs/react", () => import("@pierre/diffs/react")],
+          [
+            "@/components/layout/theme-provider",
+            () => import("@/components/layout/theme-provider"),
+          ],
+        ]);
         for (const calls of Object.values(consoleCalls)) {
           for (const call of calls) {
             expect(call).toEqual([]);
@@ -54,8 +127,108 @@ afterEach(async () => {
   });
 });
 
+describe("PierreDiffViewer", () => {
+  test("keeps controlled selected lines in sync while dragging from the gutter utility", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    render(
+      <PierreDiffViewer
+        patch={selectionPatch}
+        filePath="src/app.ts"
+        enableLineSelection
+        enableGutterUtility
+        selectedLines={null}
+        onLineSelectionEnd={mock()}
+      />,
+    );
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe("null");
+
+    fireEvent.click(screen.getByTestId("pierre-selection-start"));
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe(
+      JSON.stringify(mockedGutterSelection),
+    );
+  });
+
+  test("leaves selected lines uncontrolled when the caller omits selectedLines", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    render(
+      <PierreDiffViewer
+        patch={selectionPatch}
+        filePath="src/app.ts"
+        enableLineSelection
+        onLineSelectionEnd={mock()}
+      />,
+    );
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe(
+      OMITTED_SELECTED_LINES_LABEL,
+    );
+
+    fireEvent.click(screen.getByTestId("pierre-selection-change"));
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe(
+      OMITTED_SELECTED_LINES_LABEL,
+    );
+  });
+
+  test("does not mirror controlled selected lines without a completion handler", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    render(
+      <PierreDiffViewer
+        patch={selectionPatch}
+        filePath="src/app.ts"
+        enableLineSelection
+        selectedLines={null}
+      />,
+    );
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe("null");
+
+    fireEvent.click(screen.getByTestId("pierre-selection-start"));
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe("null");
+  });
+
+  test("opens inline comment selection from the gutter utility", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+    const onLineSelectionEnd = mock();
+
+    render(
+      <PierreDiffViewer
+        patch={selectionPatch}
+        filePath="src/app.ts"
+        enableGutterUtility
+        onLineSelectionEnd={onLineSelectionEnd}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("pierre-gutter-utility"));
+
+    expect(onLineSelectionEnd).toHaveBeenCalledWith({
+      selectedLines: mockedGutterSelection,
+      side: "new",
+      startLine: 2,
+      endLine: 3,
+      codeContext: [
+        { lineNumber: 1, text: "one", isSelected: false },
+        { lineNumber: 2, text: "two updated", isSelected: true },
+        { lineNumber: 3, text: "two extra", isSelected: true },
+        { lineNumber: 4, text: "three", isSelected: false },
+        { lineNumber: 5, text: "four", isSelected: false },
+      ],
+      language: null,
+    });
+  });
+});
+
 const requireFileDiff = (
-  fileDiff: ReturnType<typeof import("./pierre-diff-viewer")["getRenderableFileDiff"]>["fileDiff"],
+  fileDiff: ReturnType<
+    typeof import("./pierre-diff-viewer-model")["getRenderableFileDiff"]
+  >["fileDiff"],
 ) => {
   expect(fileDiff).not.toBeNull();
   if (fileDiff == null) {
@@ -66,7 +239,7 @@ const requireFileDiff = (
 
 describe("getRenderableFileDiff", () => {
   test("parses valid git patches", async () => {
-    const { getRenderableFileDiff } = pierreViewerModule;
+    const { getRenderableFileDiff } = pierreViewerModelModule;
     const patch =
       "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
@@ -78,7 +251,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("normalizes hunk-only patches with the current file path", async () => {
-    const { getRenderableFileDiff } = pierreViewerModule;
+    const { getRenderableFileDiff } = pierreViewerModelModule;
     const result = getRenderableFileDiff("@@ -1 +1 @@\n-old\n+new\n", "src/hunk.ts");
 
     expect(result.normalizedPatch).toBe(
@@ -88,7 +261,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("keeps normalized raw diff text when parsing still fails", async () => {
-    const { getRenderableFileDiff } = pierreViewerModule;
+    const { getRenderableFileDiff } = pierreViewerModelModule;
     const result = await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
       return await withCapturedConsoleMethods(
         ["debug", "error", "info", "log", "warn"],
@@ -118,7 +291,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds hunk reset annotations for the first and subsequent hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -154,7 +327,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("falls back to deletion lines for delete-only hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -176,7 +349,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds an inline comment selection snapshot for additions with surrounding context", async () => {
-    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -221,7 +394,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds an inline comment selection snapshot for old-side ranges", async () => {
-    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -263,7 +436,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("rejects mixed-side selections for inline comments", async () => {
-    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
