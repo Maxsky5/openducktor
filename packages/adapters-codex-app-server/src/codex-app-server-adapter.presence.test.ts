@@ -43,6 +43,7 @@ class MutableThreadListTransport extends RecordingTransport {
 }
 
 class HistoryOnlyIdleTransport extends RecordingTransport {
+  includeThread = true;
   loaded = false;
   threadStatus: Record<string, unknown> = { type: "idle" };
 
@@ -57,15 +58,17 @@ class HistoryOnlyIdleTransport extends RecordingTransport {
     if (request.method === "thread/list") {
       this.calls.push(request);
       return {
-        data: [
-          {
-            id: "thread-idle",
-            cwd: "/repo",
-            createdAt: 1_778_112_010,
-            preview: "Saved idle session",
-            status: this.threadStatus,
-          },
-        ],
+        data: this.includeThread
+          ? [
+              {
+                id: "thread-idle",
+                cwd: "/repo",
+                createdAt: 1_778_112_010,
+                preview: "Saved idle session",
+                status: this.threadStatus,
+              },
+            ]
+          : [],
         nextCursor: null,
         backwardsCursor: null,
       } as Response;
@@ -224,6 +227,7 @@ describe("CodexAppServerAdapter presence", () => {
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
     });
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(true);
     transport.threadStatus = { type: "active", activeFlags: [] };
 
     await expect(
@@ -279,6 +283,7 @@ describe("CodexAppServerAdapter presence", () => {
       workingDirectory: "/repo",
       externalSessionId: "thread-idle",
     });
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(true);
     transport.threadStatus = { type: "active", activeFlags: ["waitingOnUserInput"] };
 
     await expect(
@@ -291,6 +296,49 @@ describe("CodexAppServerAdapter presence", () => {
     ).resolves.toMatchObject({
       presence: "runtime",
       classification: "waiting_for_question",
+      agentSessionStatus: "running",
+      status: { type: "busy" },
+    });
+  });
+
+  test("clears a history-only idle marker when the Codex thread disappears", async () => {
+    const transport = new HistoryOnlyIdleTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-idle",
+    });
+    expect(transport.calls.some((call) => call.method === "thread/resume")).toBe(true);
+
+    transport.loaded = false;
+    transport.includeThread = false;
+    await expect(
+      adapter.listLiveAgentSessions({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        directories: ["/repo"],
+      }),
+    ).resolves.toEqual([]);
+
+    transport.loaded = true;
+    transport.includeThread = true;
+    transport.threadStatus = { type: "active", activeFlags: [] };
+
+    await expect(
+      adapter.readSessionPresence({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-idle",
+      }),
+    ).resolves.toMatchObject({
+      presence: "runtime",
+      classification: "running",
       agentSessionStatus: "running",
       status: { type: "busy" },
     });

@@ -15,7 +15,7 @@ import type { CodexAppServerClient } from "./types";
 
 export type CodexHistoryThreadAttachment = {
   response: unknown;
-  resumedThread: CodexThreadSnapshot;
+  preResumeThread: CodexThreadSnapshot;
 };
 
 export class CodexThreadInventoryReader {
@@ -117,7 +117,7 @@ export class CodexThreadInventoryReader {
     this.clear(runtimeId);
     return {
       response,
-      resumedThread: thread,
+      preResumeThread: thread,
     };
   }
 

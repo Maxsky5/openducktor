@@ -322,6 +322,12 @@ describe("CodexAppServerAdapter history hydration", () => {
     expect(
       transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/resume"),
     ).toBe(true);
+    expect(
+      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/read"),
+    ).toBe(true);
+    expect(
+      transports.get("runtime-ensure")?.calls.some((call) => call.method === "thread/turns/list"),
+    ).toBe(true);
     expect(history.find((message) => message.messageId === "msg-1")).toEqual(
       expect.objectContaining({
         role: "assistant",
@@ -386,12 +392,54 @@ describe("CodexAppServerAdapter history hydration", () => {
                       id: "msg-1",
                       type: "agentMessage",
                       phase: "final_answer",
-                      text: "Hydrated from resume",
+                      text: "Partial from resume",
                     },
                   ],
                 },
               ],
             },
+          } as Response;
+        }
+        if (request.method === "thread/read") {
+          return {
+            thread: {
+              id: "thread-unloaded",
+              cwd: "/repo",
+              status: { type: "idle" },
+              turns: [
+                {
+                  id: "turn-1",
+                  status: "completed",
+                  items: [
+                    {
+                      id: "msg-1",
+                      type: "agentMessage",
+                      phase: "final_answer",
+                      text: "Partial from thread/read",
+                    },
+                  ],
+                },
+              ],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return {
+            data: [
+              {
+                id: "turn-1",
+                status: "completed",
+                items: [
+                  {
+                    id: "msg-1",
+                    type: "agentMessage",
+                    phase: "final_answer",
+                    text: "Hydrated from paginated history",
+                  },
+                ],
+              },
+            ],
+            nextCursor: null,
           } as Response;
         }
         throw new Error(`Unexpected method '${request.method}'.`);
@@ -410,12 +458,16 @@ describe("CodexAppServerAdapter history hydration", () => {
       expect.objectContaining({
         messageId: "msg-1",
         role: "assistant",
-        text: "Hydrated from resume",
+        text: "Hydrated from paginated history",
       }),
     );
-    expect(calls.some((call) => call.method === "thread/read")).toBe(false);
-    expect(calls.some((call) => call.method === "thread/turns/list")).toBe(false);
-    expect(calls.some((call) => call.method === "thread/resume")).toBe(true);
+    expect(calls.map((call) => call.method)).toEqual([
+      "thread/loaded/list",
+      "thread/list",
+      "thread/resume",
+      "thread/read",
+      "thread/turns/list",
+    ]);
   });
 
   test("hydrates documented thread-read tool item shapes", async () => {

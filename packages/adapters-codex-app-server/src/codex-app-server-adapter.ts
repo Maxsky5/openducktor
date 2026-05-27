@@ -115,12 +115,6 @@ import type {
 
 export { createCodexAppServerClient } from "./app-server-client";
 
-const hasCodexThreadReadTurns = (value: unknown): boolean =>
-  isPlainObject(value) &&
-  isPlainObject(value.thread) &&
-  Array.isArray(value.thread.turns) &&
-  value.thread.turns.length > 0;
-
 const IDLE_CODEX_THREAD_STATUS = codexThreadStatusSnapshot("idle");
 
 type HistoryOnlyIdleThreadLoad = {
@@ -313,12 +307,12 @@ export class CodexAppServerAdapter
       return [];
     }
     if (historyAttachment) {
-      this.rememberHistoryOnlyIdleThreadLoad(input, historyAttachment.resumedThread);
+      this.rememberHistoryOnlyIdleThreadLoad(input, historyAttachment.preResumeThread);
     }
-    const response =
-      !session && hasCodexThreadReadTurns(threadResponse)
-        ? threadResponse
-        : await this.threadInventory.readThreadWithTurns(client, input.externalSessionId);
+    const response = await this.threadInventory.readThreadWithTurns(
+      client,
+      input.externalSessionId,
+    );
     const tokenUsageByTurnId = await this.drainThreadReadTokenUsage(
       runtimeId,
       input.externalSessionId,
@@ -1087,7 +1081,7 @@ export class CodexAppServerAdapter
 
   private clearUnloadedHistoryOnlyIdleLoads(inventory: CodexThreadInventory): void {
     for (const threadId of this.historyOnlyIdleThreadLoadsById.keys()) {
-      if (inventory.threadsById.has(threadId) && !inventory.loadedIds.has(threadId)) {
+      if (!inventory.loadedIds.has(threadId)) {
         this.clearHistoryOnlyIdleThreadLoad(threadId);
       }
     }
