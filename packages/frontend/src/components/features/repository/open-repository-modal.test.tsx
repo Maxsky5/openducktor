@@ -29,6 +29,9 @@ const addWorkspaceMock = mock(
   }): Promise<void> => {},
 );
 const selectWorkspaceMock = mock(async (_repoPath: string): Promise<void> => {});
+const actualAppStateProviderModule = await import("../../../state/app-state-provider");
+const actualButtonModule = await import("@/components/ui/button");
+const actualDialogModule = await import("@/components/ui/dialog");
 
 function SeedFilesystemDirectory(): ReactNode {
   const queryClient = useQueryClient();
@@ -123,9 +126,9 @@ describe("OpenRepositoryModal", () => {
 
   afterEach(async () => {
     await restoreMockedModules([
-      ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
-      ["@/components/ui/button", () => import("@/components/ui/button")],
-      ["@/components/ui/dialog", () => import("@/components/ui/dialog")],
+      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
+      ["@/components/ui/button", async () => actualButtonModule],
+      ["@/components/ui/dialog", async () => actualDialogModule],
     ]);
   });
 

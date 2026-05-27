@@ -22,7 +22,7 @@ export type RuntimeCatalogAdapter = Pick<
 >;
 
 type RuntimeCatalogDependencies = {
-  repoRuntimeHealth: (
+  repoRuntimeHealthStatus: (
     runtimeKind: RuntimeKind,
     repoPath: string,
   ) => Promise<RepoRuntimeHealthCheck>;
@@ -102,7 +102,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<RepoRuntimeHealthCheck> => {
-    return deps.repoRuntimeHealth(runtimeKind, repoPath);
+    return deps.repoRuntimeHealthStatus(runtimeKind, repoPath);
   };
 
   return {
@@ -119,7 +119,8 @@ export const createHostRuntimeCatalogOperations = (
   getAdapter: (runtimeKind: RuntimeKind) => RuntimeCatalogAdapter,
 ): RuntimeCatalogOperations =>
   createRuntimeCatalogOperations({
-    repoRuntimeHealth: (runtimeKind, repoPath) => host.repoRuntimeHealth(repoPath, runtimeKind),
+    repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
+      host.repoRuntimeHealthStatus(repoPath, runtimeKind),
     listRuntimesForRepo: (runtimeKind, repoPath) =>
       ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     listAvailableModels: (input) =>

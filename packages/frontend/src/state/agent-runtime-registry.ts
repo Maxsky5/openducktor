@@ -32,6 +32,7 @@ type AgentRuntimeRegistry = {
   registeredRuntimeKinds: RuntimeKind[];
   getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter;
   getRuntimeDefinition: (runtimeKind: RuntimeKind) => AgentRuntimeDefinition;
+  startRepoRuntime: (ref: RepoRuntimeRef) => Promise<RuntimeInstanceSummary>;
   createAgentEngine: () => AgentEnginePort;
 };
 
@@ -160,6 +161,7 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
     registeredRuntimeKinds,
     getAdapter,
     getRuntimeDefinition,
+    startRepoRuntime: hostRepoRuntimeResolver.ensureRepoRuntime,
     createAgentEngine: () => new RuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds),
   };
 };

@@ -72,10 +72,13 @@ export function AppRuntimeProvider({
       ? `Failed to load runtime settings: ${errorMessage(settingsSnapshotError)}`
       : null;
   const agentRuntimes = settingsSnapshot?.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
+  const hasSettingsSnapshot = settingsSnapshot !== undefined;
   const availableRuntimeDefinitions = useMemo(
     () =>
-      settingsSnapshot ? getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }) : [],
-    [agentRuntimes, runtimeDefinitions, settingsSnapshot],
+      hasSettingsSnapshot
+        ? getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes })
+        : [],
+    [agentRuntimes, hasSettingsSnapshot, runtimeDefinitions],
   );
 
   const runtimeDefinitionsValue = useMemo<RuntimeDefinitionsContextValue>(

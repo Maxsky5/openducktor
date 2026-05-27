@@ -1,7 +1,7 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { useWorkspaceState } from "@/state";
+import { useWorkspaceState } from "@/state/app-state-provider";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 
 type TaskDeleteImpact = {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryProvider } from "@/lib/query-provider";
@@ -60,6 +60,16 @@ const IsolatedProviders = ({ children }: PropsWithChildren) => (
 
 describe("TaskDetailsSheet", () => {
   beforeEach(async () => {
+    await restoreMockedModules([
+      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
+    ]);
+    mock.module("@/state/app-state-provider", () => ({
+      ...actualAppStateProviderModule,
+      useWorkspaceState: () => createWorkspaceStateValue(),
+    }));
+  });
+
+  afterEach(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", async () => actualAppStateProviderModule],
     ]);
