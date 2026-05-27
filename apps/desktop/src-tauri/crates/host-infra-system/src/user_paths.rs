@@ -22,7 +22,7 @@ pub fn parse_user_path(raw: &str) -> Result<PathBuf> {
     if trimmed.is_empty() {
         return Err(anyhow!("Path is empty; provide a valid path"));
     }
-    let unquoted = strip_matching_quotes(trimmed);
+    let unquoted = strip_matching_quotes(trimmed).trim();
     if unquoted.is_empty() {
         return Err(anyhow!("Path is empty; provide a valid path"));
     }
@@ -94,6 +94,9 @@ mod tests {
     #[test]
     fn parse_user_path_rejects_empty_input() {
         let error = parse_user_path("   ").expect_err("empty path should fail");
+        assert!(error.to_string().contains("Path is empty"));
+
+        let error = parse_user_path("\"   \"").expect_err("quoted empty path should fail");
         assert!(error.to_string().contains("Path is empty"));
     }
 

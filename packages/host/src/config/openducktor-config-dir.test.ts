@@ -56,6 +56,7 @@ describe("OpenDucktor config directory resolution", () => {
   test("rejects paths that become empty after trimming and unquoting", () => {
     expect(() => resolveUserPath("   ")).toThrow("Path is empty");
     expect(() => resolveUserPath(`""`)).toThrow("Path is empty");
+    expect(() => resolveUserPath(`"   "`)).toThrow("Path is empty");
   });
 
   test("only strips matching wrapping quotes", () => {

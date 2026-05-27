@@ -41,7 +41,7 @@ export const resolveUserPath = (rawPath: string): string => {
     });
   }
 
-  const unquoted = stripMatchingQuotes(trimmed);
+  const unquoted = stripMatchingQuotes(trimmed).trim();
   if (!unquoted) {
     throw new HostValidationError({
       message: "Path is empty; provide a valid path",
