@@ -28,8 +28,11 @@ describe("useRepoSessionHydrationEffects", () => {
       { repoPath: "/tmp/repo" },
     );
     await harness.mount();
-    await harness.waitFor(() => loadCalls.length >= 1);
+    await harness.waitFor(() =>
+      loadCalls.some((call) => call.taskId === "task-1" && call.mode === "reconcile_live"),
+    );
 
+    expect(loadCalls).toContainEqual({ taskId: "task-1", mode: undefined });
     expect(loadCalls).toContainEqual({ taskId: "task-1", mode: "reconcile_live" });
 
     await harness.update({ repoPath: null });
@@ -39,7 +42,7 @@ describe("useRepoSessionHydrationEffects", () => {
     await harness.unmount();
   });
 
-  test("waits for persisted session runtime readiness before reconciling", async () => {
+  test("bootstraps persisted sessions before runtime readiness and waits to reconcile", async () => {
     const loadCalls: Array<{ taskId: string; mode: string | undefined }> = [];
     const preloadCalls: unknown[] = [];
     const Harness = ({
@@ -73,12 +76,15 @@ describe("useRepoSessionHydrationEffects", () => {
       ReturnType<typeof Harness>
     >(Harness, { repoPath: "/tmp/repo", runtimeReady: false });
     await harness.mount();
+    await harness.waitFor(() => loadCalls.length >= 1);
 
     expect(preloadCalls).toHaveLength(0);
-    expect(loadCalls).toHaveLength(0);
+    expect(loadCalls).toEqual([{ taskId: "task-1", mode: undefined }]);
 
     await harness.update({ repoPath: "/tmp/repo", runtimeReady: true });
-    await harness.waitFor(() => loadCalls.length >= 1);
+    await harness.waitFor(() =>
+      loadCalls.some((call) => call.taskId === "task-1" && call.mode === "reconcile_live"),
+    );
 
     expect(preloadCalls).toHaveLength(1);
     expect(loadCalls).toContainEqual({ taskId: "task-1", mode: "reconcile_live" });

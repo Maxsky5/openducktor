@@ -80,13 +80,13 @@ describe("repo-session-hydration-service", () => {
     });
 
     const tasks = [taskWithSession("task-1", "external-1")];
-    const first = service.bootstrapPendingTasks({
+    const first = service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks,
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
-    const second = service.bootstrapPendingTasks({
+    const second = service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks,
       isCancelled: () => false,
@@ -112,13 +112,13 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.bootstrapPendingTasks({
+    await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [task],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
-    await service.bootstrapPendingTasks({
+    await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [task],
       isCancelled: () => false,
@@ -126,6 +126,40 @@ describe("repo-session-hydration-service", () => {
     });
 
     expect(bootstrapTaskSessions).toHaveBeenCalledTimes(1);
+    service.dispose();
+  });
+
+  test("bootstraps persisted task sessions again when persisted session records change", async () => {
+    const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const task = taskWithSession("task-1", "external-1");
+    const updatedTask = taskWithSession("task-1", "external-2");
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async (taskId, records) => {
+          bootstrapCalls.push({ taskId, records: records ?? [] });
+        },
+        reconcileLiveTaskSessions: async () => {},
+      },
+      onRetryRequested: () => {},
+    });
+
+    await service.bootstrapPersistedTaskSessions({
+      repoPath,
+      tasks: [task],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+    await service.bootstrapPersistedTaskSessions({
+      repoPath,
+      tasks: [updatedTask],
+      isCancelled: () => false,
+      isCurrentRepo: () => true,
+    });
+
+    expect(bootstrapCalls).toEqual([
+      { taskId: "task-1", records: task.agentSessions ?? [] },
+      { taskId: "task-1", records: updatedTask.agentSessions ?? [] },
+    ]);
     service.dispose();
   });
 
@@ -145,13 +179,13 @@ describe("repo-session-hydration-service", () => {
       onRetryRequested: () => {},
     });
 
-    await service.bootstrapPendingTasks({
+    await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [emptyTask],
       isCancelled: () => false,
       isCurrentRepo: () => true,
     });
-    await service.bootstrapPendingTasks({
+    await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [taskWithLaterSession],
       isCancelled: () => false,
