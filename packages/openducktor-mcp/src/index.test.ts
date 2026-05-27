@@ -53,8 +53,8 @@ const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
   return JSON.parse(body);
 };
 
-const writeJson = (response: ServerResponse, payload: unknown): void => {
-  response.statusCode = 200;
+const writeJson = (response: ServerResponse, payload: unknown, statusCode = 200): void => {
+  response.statusCode = statusCode;
   response.setHeader("Content-Type", "application/json");
   response.end(JSON.stringify(payload));
 };
@@ -144,6 +144,19 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
         return;
       }
       writeJson(response, taskSummaryPayload);
+      return;
+    }
+
+    if (url === "/invoke/odt_build_blocked") {
+      requests.push({ url, body: await readJsonBody(request) });
+      writeJson(
+        response,
+        {
+          error: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          code: "TASK_TRANSITION_NOT_ALLOWED",
+        },
+        400,
+      );
       return;
     }
 
@@ -337,6 +350,33 @@ describe("MCP server tool results", () => {
 
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
       expect(error.message).toContain("Unexpected URL: /invoke/odt_set_plan");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("host bridge business errors keep their structured error code", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_build_blocked",
+        arguments: {
+          taskId: "task-1",
+          reason: "needs a product decision",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+      const error = expectStructuredError(contentResult);
+
+      expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+      expect(error.message).toBe(
+        "Transition not allowed for task-1 (bug): human_review -> blocked",
+      );
+      expect(error.details).toBeUndefined();
     } finally {
       await client.close();
     }

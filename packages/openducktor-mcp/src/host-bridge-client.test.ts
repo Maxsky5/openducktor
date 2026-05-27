@@ -97,6 +97,67 @@ describe("OdtHostBridgeClient", () => {
     }
   });
 
+  test("preserves coded host business errors without wrapping them as bridge errors", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      return jsonResponse(
+        {
+          error: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          code: "TASK_TRANSITION_NOT_ALLOWED",
+        },
+        { status: 400, statusText: "Bad Request" },
+      );
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    try {
+      await client.call("odt_build_blocked", "repo", {
+        taskId: "task-1",
+        reason: "needs a product decision",
+      });
+      throw new Error("Expected call() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OdtToolError);
+      expect((error as OdtToolError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+      expect((error as Error).message).toBe(
+        "Transition not allowed for task-1 (bug): human_review -> blocked",
+      );
+      expect((error as OdtToolError).details).toBeUndefined();
+    }
+  });
+
+  test("preserves uncoded host error details when wrapping bridge errors", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      return jsonResponse(
+        {
+          error: "Task not found: task-1",
+          details: { repoPath: "/repo", taskId: "task-1" },
+        },
+        { status: 400, statusText: "Bad Request" },
+      );
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    try {
+      await client.call("odt_build_blocked", "repo", {
+        taskId: "task-1",
+        reason: "needs a product decision",
+      });
+      throw new Error("Expected call() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OdtToolError);
+      expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect((error as Error).message).toBe("Task not found: task-1");
+      expect((error as OdtToolError).details).toEqual({
+        action: "host odt_build_blocked",
+        status: 400,
+        statusText: "Bad Request",
+        hostDetails: { repoPath: "/repo", taskId: "task-1" },
+      });
+    }
+  });
+
   test("wraps invalid host JSON responses as response errors", async () => {
     const fetchImpl: typeof fetch = async () => {
       return new Response("not json", {

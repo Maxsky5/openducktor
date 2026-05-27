@@ -11,12 +11,12 @@ import {
   canUseQaWorkflowFromStatus,
   deriveAgentWorkflows,
   deriveAvailableActions,
-  validateTransition,
 } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
+import { validateTaskTransitionEffect } from "./task-validation-effects";
 export const enrichTasks = (tasks: TaskCard[]): TaskCard[] =>
   tasks.map((task) => ({
     ...task,
@@ -173,14 +173,7 @@ export const recordQaOutcome = (
         }),
       );
     }
-    yield* Effect.try({
-      try: () => validateTransition(current, currentTasks, current.status, targetStatus),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
+    yield* validateTaskTransitionEffect(current, currentTasks, current.status, targetStatus);
     const updated = yield* taskStore.recordQaOutcome({
       repoPath,
       taskId,
@@ -232,14 +225,7 @@ export const blockBuildCompletionTask = (
   currentTasks: TaskCard[],
 ) =>
   Effect.gen(function* () {
-    yield* Effect.try({
-      try: () => validateTransition(current, currentTasks, current.status, "blocked"),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
+    yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
     yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
   }).pipe(
     Effect.mapError(

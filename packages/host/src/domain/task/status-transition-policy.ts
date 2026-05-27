@@ -136,7 +136,8 @@ export const validateTransition = (
   to: TaskStatus,
 ): void => {
   if (!allowsTransition(task, from, to)) {
-    throw new TaskPolicyError(
+    throw TaskPolicyError.withCode(
+      "TASK_TRANSITION_NOT_ALLOWED",
       `Transition not allowed for ${task.id} (${task.issueType}): ${from} -> ${to}`,
     );
   }

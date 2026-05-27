@@ -2,9 +2,9 @@ import { Effect } from "effect";
 import {
   validateParentRelationshipsForCreate,
   validateParentRelationshipsForUpdate,
-  validateTransition,
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -72,14 +72,7 @@ export const createTaskCrudUseCases = ({
           }),
         );
       }
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, status),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, status);
 
       if (current.status === status) {
         return enrichTask(current, currentTasks);

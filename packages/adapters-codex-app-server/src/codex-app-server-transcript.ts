@@ -808,7 +808,7 @@ const codexMcpToolCallStreamParts = (
     rawToolName: codexNamespacedToolName(server, tool),
     status: error ? "error" : statusFromCodexStatus(value.status),
     ...(args ? { input: args } : {}),
-    output,
+    output: error ? null : output,
     error,
     metadata: { codexItem: value, ...(server ? { server } : {}) },
   });
@@ -866,17 +866,20 @@ const codexDynamicToolCallStreamParts = (
   const patch =
     isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
   const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
-  const output = codexToolResultText(value.contentItems ?? value.content_items ?? value.result);
+  const resultPayload = value.contentItems ?? value.content_items ?? value.result;
+  const output = codexToolResultText(resultPayload);
+  const error = codexToolErrorFromObject(resultPayload) ?? codexToolErrorFromObject(value);
   const success = typeof value.success === "boolean" ? value.success : true;
+  const failed = !success || error !== null;
   return normalizedCodexToolPart({
     messageId,
     partId,
     callId: partId,
     rawToolName: rawTool,
-    status: success ? statusFromCodexStatus(value.status) : "error",
+    status: failed ? "error" : statusFromCodexStatus(value.status),
     ...(input ? { input } : {}),
-    output: success ? (patch ?? output) : null,
-    error: success ? null : output,
+    output: failed ? null : (patch ?? output),
+    error: error ?? (failed ? output : null),
     metadata: { codexItem: value },
   });
 };

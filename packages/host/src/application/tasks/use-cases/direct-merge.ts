@@ -4,12 +4,12 @@ import {
   canonicalTargetBranch,
   directMergeConflict,
   ensureCleanBuilderWorktree,
-  validateTransition,
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
 import { requireDirectMergeDependencies } from "../support/required-task-dependencies";
+import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -115,14 +115,12 @@ export const createTaskDirectMergeUseCase = ({
 
       if (approval.publishTarget !== undefined) {
         if (current.status === "ai_review") {
-          yield* Effect.try({
-            try: () => validateTransition(current, currentTasks, current.status, "human_review"),
-            catch: (cause) =>
-              new HostValidationError({
-                message: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-          });
+          yield* validateTaskTransitionEffect(
+            current,
+            currentTasks,
+            current.status,
+            "human_review",
+          );
           const task = yield* taskStore.transitionTask({
             repoPath: effectiveRepoPath,
             taskId,
@@ -141,14 +139,7 @@ export const createTaskDirectMergeUseCase = ({
         };
       }
 
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, "closed"),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
       const task = yield* taskStore.transitionTask({
         repoPath: effectiveRepoPath,
         taskId,

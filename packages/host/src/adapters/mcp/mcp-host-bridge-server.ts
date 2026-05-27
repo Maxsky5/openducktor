@@ -17,6 +17,7 @@ import {
   resolveMcpBridgeDiscoveryPath,
   writeMcpBridgeDiscoveryFile,
 } from "./mcp-bridge-discovery-file";
+import { bridgeErrorPayload } from "./mcp-host-bridge-errors";
 
 export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
 
@@ -296,9 +297,15 @@ const createBridgeRequestHandler =
         200,
         yield* bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),
       );
-    });
+    }).pipe(
+      Effect.catchAll((error) =>
+        Effect.sync(() => {
+          sendJson(response, 400, bridgeErrorPayload(error, errorMessage(error)));
+        }),
+      ),
+    );
     Effect.runPromise(handle).catch((error) => {
-      sendJson(response, 400, { error: errorMessage(error) });
+      sendJson(response, 400, bridgeErrorPayload(error, errorMessage(error)));
     });
   };
 

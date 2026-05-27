@@ -3,8 +3,10 @@ import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   type OdtHostBridgeReady,
+  type OdtToolErrorCode,
   type OdtToolName,
   odtHostBridgeReadySchema,
+  odtToolErrorCodeSchema,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
@@ -39,16 +41,42 @@ export type OdtHostBridgeClientDeps = {
 const DEFAULT_TIMEOUT_MS = 10_000;
 const READY_TOOL_NAME = "odt_mcp_ready";
 
-const toBridgeErrorMessage = async (response: Response, action: string): Promise<string> => {
+type BridgeErrorPayload = {
+  code?: OdtToolErrorCode;
+  details?: Record<string, unknown>;
+  message: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toBridgeErrorPayload = async (
+  response: Response,
+  action: string,
+): Promise<BridgeErrorPayload> => {
   const fallback = `${action} failed with HTTP ${response.status} ${response.statusText}`;
   try {
-    const body = (await response.json()) as { error?: unknown };
-    if (typeof body.error === "string" && body.error.trim().length > 0) {
-      return body.error;
+    const body = await response.json();
+    if (!isRecord(body)) {
+      return { message: fallback };
     }
-    return fallback;
+
+    const parsedCode = odtToolErrorCodeSchema.safeParse(body.code);
+    const details = isRecord(body.details) ? body.details : undefined;
+    if (typeof body.error === "string" && body.error.trim().length > 0) {
+      return {
+        message: body.error,
+        ...(parsedCode.success ? { code: parsedCode.data } : {}),
+        ...(details ? { details } : {}),
+      };
+    }
+
+    return {
+      message: fallback,
+      ...(details ? { details } : {}),
+    };
   } catch {
-    return fallback;
+    return { message: fallback };
   }
 };
 
@@ -99,10 +127,16 @@ const parseHostResponse = <Schema extends z.ZodType>(
 };
 
 const createBridgeHttpError = async (response: Response, action: string): Promise<OdtToolError> => {
-  return new OdtToolError("ODT_HOST_BRIDGE_ERROR", await toBridgeErrorMessage(response, action), {
+  const payload = await toBridgeErrorPayload(response, action);
+  if (payload.code) {
+    return new OdtToolError(payload.code, payload.message, payload.details);
+  }
+
+  return new OdtToolError("ODT_HOST_BRIDGE_ERROR", payload.message, {
     action,
     status: response.status,
     statusText: response.statusText,
+    ...(payload.details ? { hostDetails: payload.details } : {}),
   });
 };
 

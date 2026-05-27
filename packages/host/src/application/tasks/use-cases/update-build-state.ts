@@ -1,10 +1,10 @@
 import { Effect } from "effect";
-import { validateTransition } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import {
   requireBuildCompletedDependencies,
   requireDependencies,
 } from "../support/required-task-dependencies";
+import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import {
   blockBuildCompletionTask,
   buildCompletionWorktreePath,
@@ -45,14 +45,7 @@ export const createTaskBuildStateUseCases = ({
           }),
         );
       }
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, "blocked"),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
 
       if (current.status === "blocked") {
         return enrichTask(current, currentTasks);
@@ -69,14 +62,7 @@ export const createTaskBuildStateUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* Effect.try({
-        try: () => validateTransition(current, [current], current.status, "in_progress"),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, [current], current.status, "in_progress");
 
       if (current.status === "in_progress") {
         return enrichTask(current, [current]);
@@ -114,14 +100,7 @@ export const createTaskBuildStateUseCases = ({
         current.aiReviewEnabled && current.documentSummary.qaReport.verdict !== "approved"
           ? "ai_review"
           : "human_review";
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, nextStatus),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, nextStatus);
 
       const postCompleteHooks = repoConfig.hooks.postComplete
         .map((hook) => hook.trim())

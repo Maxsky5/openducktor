@@ -1,3 +1,4 @@
+import { odtToolErrorPayloadSchema } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { CodexSessionState, CodexTurnStartResult, CodexUserInput } from "./types";
 
@@ -124,16 +125,145 @@ export const stringifyJsonValue = (value: unknown): string | null => {
   }
 };
 
-export const codexToolErrorFromObject = (value: unknown): string | null => {
-  if (!isPlainObject(value)) {
+const parseJsonObjectString = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value !== "string") {
     return null;
   }
-  const explicitError = extractStringField(value, ["error", "stderr"]);
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return isPlainObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const trimmedString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const toolErrorMessageFromValue = (value: unknown): string | null => {
+  const stringValue = trimmedString(value);
+  if (stringValue) {
+    return stringValue;
+  }
+  return extractStringField(value, ["message"]);
+};
+
+const toolContentText = (value: unknown): string | null => {
+  let content: unknown[] = [];
+  if (Array.isArray(value)) {
+    content = value;
+  } else if (isPlainObject(value)) {
+    content = arrayFromUnknown(value.content ?? value.contentItems ?? value.content_items);
+  }
+
+  const text = content
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry.trim();
+      }
+      if (!isPlainObject(entry)) {
+        return "";
+      }
+      return extractStringField(entry, ["text", "inputText", "outputText", "content"]) ?? "";
+    })
+    .filter((entry) => entry.trim().length > 0)
+    .join("\n");
+  return text.length > 0 ? text : null;
+};
+
+const toolEnvelopeErrorMessage = (value: unknown): string | null => {
+  const record = isPlainObject(value) ? value : parseJsonObjectString(value);
+  if (!record || record.ok !== false) {
+    return null;
+  }
+
+  const parsedOdtError = odtToolErrorPayloadSchema.safeParse(record);
+  if (parsedOdtError.success) {
+    const message = parsedOdtError.data.error.message.trim();
+    return message.length > 0 ? message : "Tool failed";
+  }
+
+  return toolErrorMessageFromValue(record.error) ?? "Tool failed";
+};
+
+const mcpTransportErrorMessage = (value: unknown): string | null => {
+  const text = trimmedString(value);
+  return text && /^MCP error\s+-?\d+:/i.test(text) ? text : null;
+};
+
+const toolContentErrorMessage = (value: unknown): string | null => {
+  const text = toolContentText(value);
+  if (!text) {
+    return null;
+  }
+  return toolEnvelopeErrorMessage(text) ?? mcpTransportErrorMessage(text);
+};
+
+const objectField = (
+  value: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> | null => {
+  for (const key of keys) {
+    const candidate = value[key];
+    if (isPlainObject(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+export const codexToolErrorFromObject = (value: unknown): string | null => {
+  const contentError = toolContentErrorMessage(value);
+  const transportError = mcpTransportErrorMessage(value);
+  const record = isPlainObject(value) ? value : parseJsonObjectString(value);
+  if (!record) {
+    return contentError ?? transportError ?? toolEnvelopeErrorMessage(value);
+  }
+
+  const structuredContent = objectField(record, ["structuredContent", "structured_content"]);
+  const flattenedEnvelopeError = toolEnvelopeErrorMessage(record);
+  const structuredEnvelopeError = toolEnvelopeErrorMessage(structuredContent);
+  if (flattenedEnvelopeError) {
+    return flattenedEnvelopeError;
+  }
+  if (structuredEnvelopeError) {
+    return structuredEnvelopeError;
+  }
+  if (contentError || transportError) {
+    return contentError ?? transportError;
+  }
+
+  const explicitError =
+    toolErrorMessageFromValue(record.error) ?? extractStringField(record, ["stderr"]);
   if (explicitError) {
     return explicitError;
   }
-  if (value.isError === true || value.ok === false || value.success === false) {
-    return extractStringField(value, ["message"]) ?? stringifyJsonValue(value);
+
+  if (
+    record.isError === true ||
+    record.ok === false ||
+    record.success === false ||
+    structuredContent?.ok === false
+  ) {
+    const structuredError = structuredContent
+      ? toolErrorMessageFromValue(structuredContent.error)
+      : null;
+    return (
+      extractStringField(record, ["message"]) ??
+      structuredError ??
+      toolContentText(record) ??
+      stringifyJsonValue(record) ??
+      "Tool failed"
+    );
   }
   return null;
 };

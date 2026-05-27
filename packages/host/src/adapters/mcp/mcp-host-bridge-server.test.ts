@@ -10,6 +10,7 @@ import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import { createMcpHostBridgeServer } from "./mcp-host-bridge-server";
 
@@ -384,6 +385,50 @@ describe("createMcpHostBridgeServer", () => {
           input: { workspaceId: "repo", taskId: "task-1" },
         },
       ]);
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("preserves coded business errors from workspace-scoped commands", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      bridgeService: createBridgeService({
+        ready() {
+          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+        },
+        getWorkspaces() {
+          return Effect.succeed({ workspaces: [] });
+        },
+        invoke() {
+          return Effect.fail(
+            TaskPolicyError.withCode(
+              "TASK_TRANSITION_NOT_ALLOWED",
+              "Transition not allowed for task-1 (bug): human_review -> blocked",
+            ),
+          );
+        },
+      }),
+    });
+    try {
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_build_blocked`, {
+        method: "POST",
+        headers: {
+          "x-openducktor-app-token": "token-1",
+        },
+        body: { workspaceId: "repo", taskId: "task-1", reason: "needs a product decision" },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        error: "Transition not allowed for task-1 (bug): human_review -> blocked",
+        code: "TASK_TRANSITION_NOT_ALLOWED",
+      });
     } finally {
       await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });

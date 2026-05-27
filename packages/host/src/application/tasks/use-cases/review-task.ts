@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { validateTransition } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, recordQaOutcome, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -53,14 +53,7 @@ export const createTaskReviewUseCases = ({
       }
 
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* Effect.try({
-        try: () => validateTransition(current, [current], current.status, "in_progress"),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, [current], current.status, "in_progress");
 
       if (current.status === "in_progress") {
         return enrichTask(current, [current]);
@@ -75,14 +68,7 @@ export const createTaskReviewUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const { current, currentTasks } = yield* taskListWithCurrent(taskStore, repoPath, taskId);
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, "closed"),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
 
       if (current.status === "closed") {
         return enrichTask(current, currentTasks);

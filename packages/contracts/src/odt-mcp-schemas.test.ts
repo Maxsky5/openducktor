@@ -158,6 +158,18 @@ describe("odt mcp public task schemas", () => {
     expect(parsed.error.issues?.[0]?.path).toEqual(["workspaceId"]);
   });
 
+  test("ODT tool error payload schema accepts task transition policy errors", () => {
+    const parsed = odtToolErrorPayloadSchema.parse({
+      ok: false,
+      error: {
+        code: "TASK_TRANSITION_NOT_ALLOWED",
+        message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+      },
+    });
+
+    expect(parsed.error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+  });
+
   test("ODT tool error payload schema rejects success envelopes", () => {
     expect(() => {
       odtToolErrorPayloadSchema.parse({
