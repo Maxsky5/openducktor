@@ -36,7 +36,7 @@ const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
 
-configureElectronAppIdentity(app, APPLICATION_NAME);
+configureElectronAppIdentity(app, { appName: APPLICATION_NAME });
 disableElectronKeychainStorage(app.commandLine);
 configureElectronProcessEnvironment({
   env: process.env,
