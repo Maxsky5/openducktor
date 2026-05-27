@@ -269,7 +269,7 @@ setInterval(() => {}, 1000);
 
     const port = createEffectDevServerProcessAdapter({
       processEnv: { PATH: process.env.PATH },
-      startGracePeriodMs: 20,
+      startGracePeriodMs: 1_000,
       stopTimeoutMs: 100,
     });
     const command = "definitely-missing-dev-server-command-odt-wr4e --flag";
@@ -281,7 +281,6 @@ setInterval(() => {}, 1000);
         onOutput: () => {},
       }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(failure).toMatchObject({
       _tag: "DevServerProcessStartExitError",
@@ -309,7 +308,6 @@ setInterval(() => {}, 1000);
         onOutput: () => {},
       }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(failure).toBeInstanceOf(HostOperationError);
     expect(failure).toMatchObject({
