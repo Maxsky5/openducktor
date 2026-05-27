@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentModelSelection,
   type AgentRole,
@@ -7,7 +7,7 @@ import {
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import { resolveAgentAccentColor } from "../agent-accent-color";
+import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import {
   assistantRoleFromMessage,
   formatTime,
@@ -27,6 +27,7 @@ type AgentChatMessageCardViewModelInput = {
   message: AgentChatMessage;
   sessionSelectedModel: AgentModelSelection | null;
   sessionAgentColors: Record<string, string> | undefined;
+  sessionRuntimeKind: RuntimeKind | null;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
 };
 
@@ -54,28 +55,30 @@ type AgentChatMessageCardViewModel = {
 const resolveAssistantAgentColor = (
   message: AgentChatMessage,
   sessionAgentColors: Record<string, string> | undefined,
+  sessionRuntimeKind: RuntimeKind | null,
 ): string | undefined => {
   if (message.role !== "assistant") {
     return undefined;
   }
   const assistantMeta = message.meta?.kind === "assistant" ? message.meta : null;
-  const agentName = assistantMeta?.profileId;
-  if (!agentName) {
-    return undefined;
-  }
-  return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
+  return resolveAgentSessionAccentColor({
+    agentName: assistantMeta?.profileId,
+    agentColors: sessionAgentColors,
+    runtimeKind: sessionRuntimeKind,
+  });
 };
 
 const resolveUserAgentColor = (
   message: AgentChatMessage,
   sessionAgentColors: Record<string, string> | undefined,
+  sessionRuntimeKind: RuntimeKind | null,
 ): string | undefined => {
   const messageMeta = message.meta?.kind === "user" ? message.meta : null;
-  const agentName = messageMeta?.profileId;
-  if (!agentName) {
-    return undefined;
-  }
-  return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
+  return resolveAgentSessionAccentColor({
+    agentName: messageMeta?.profileId,
+    agentColors: sessionAgentColors,
+    runtimeKind: sessionRuntimeKind,
+  });
 };
 
 const toArticleClassName = (
@@ -136,6 +139,7 @@ export const buildAgentChatMessageCardViewModel = ({
   message,
   sessionSelectedModel: _sessionSelectedModel,
   sessionAgentColors,
+  sessionRuntimeKind,
   workflowToolAliasesByCanonical,
 }: AgentChatMessageCardViewModelInput): AgentChatMessageCardViewModel => {
   const timeLabel = formatTime(message.timestamp);
@@ -156,8 +160,12 @@ export const buildAgentChatMessageCardViewModel = ({
   const isRichCardMessage =
     isToolMessage || isSubagentMessage || isSessionNoticeMessage || isSystemPromptMessage;
   const assistantRole = assistantRoleFromMessage(message);
-  const assistantAccentColor = resolveAssistantAgentColor(message, sessionAgentColors);
-  const userAccentColor = resolveUserAgentColor(message, sessionAgentColors);
+  const assistantAccentColor = resolveAssistantAgentColor(
+    message,
+    sessionAgentColors,
+    sessionRuntimeKind,
+  );
+  const userAccentColor = resolveUserAgentColor(message, sessionAgentColors, sessionRuntimeKind);
   const systemPromptBody = isSystemPromptMessage
     ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";

@@ -952,6 +952,33 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("high");
   });
 
+  test("renders no-profile Codex assistant footer with the Codex session accent", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-codex-footer",
+          role: "assistant",
+          content: "Implemented the requested changes.",
+          timestamp: "2026-02-22T10:23:30.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: true,
+            providerId: "codex",
+            modelId: "gpt-5.4-mini",
+            variant: "high",
+          },
+        },
+        sessionRuntimeKind: "codex",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("codex/gpt-5.4-mini");
+    expect(html).toContain("background-color:var(--odt-runtime-accent-codex)");
+  });
+
   test("hides assistant header and left border in final assistant messages", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
@@ -1205,6 +1232,31 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).not.toContain("border-left-color:#f97316");
+  });
+
+  test("renders no-profile Codex user messages with the Codex session accent", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-codex",
+          role: "user",
+          content: "Use the Codex accent.",
+          timestamp: "2026-02-22T10:26:30.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+          },
+        },
+        sessionRuntimeKind: "codex",
+        sessionSelectedModel: null,
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
   });
 
   test("renders queued user messages with pending styling and label", () => {

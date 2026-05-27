@@ -50,6 +50,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     message,
     sessionSelectedModel: sessionSelectedModel ?? null,
     sessionAgentColors,
+    sessionRuntimeKind: sessionRuntimeKind ?? null,
     workflowToolAliasesByCanonical,
   });
   const resolvedSubagentPendingApprovalCount =
