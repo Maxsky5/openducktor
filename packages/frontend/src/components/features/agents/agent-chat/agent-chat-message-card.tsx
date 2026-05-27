@@ -1,5 +1,4 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
 import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -13,7 +12,6 @@ const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<strin
 type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
-  sessionSelectedModel?: AgentModelSelection | null;
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;

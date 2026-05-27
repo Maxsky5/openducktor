@@ -38,7 +38,6 @@ type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
@@ -57,7 +56,6 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
@@ -209,7 +207,6 @@ const AgentChatThreadMotionRow = memo(
     row,
     isStreamingAssistantMessage,
     sessionAgentColors,
-    sessionSelectedModel,
     sessionWorkingDirectory,
     sessionRuntimeKind,
     sessionRuntimeId,
@@ -224,7 +221,6 @@ const AgentChatThreadMotionRow = memo(
         <AgentChatThreadRow
           row={row}
           isStreamingAssistantMessage={isStreamingAssistantMessage}
-          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -239,7 +235,6 @@ const AgentChatThreadMotionRow = memo(
   },
   (previousProps, nextProps) => {
     return (
-      previousProps.sessionSelectedModel === nextProps.sessionSelectedModel &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionRuntimeId === nextProps.sessionRuntimeId &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
@@ -259,7 +254,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   activeStreamingAssistantMessageId,
   sessionAgentColors,
-  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
@@ -273,7 +267,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn: AgentChatRenderedTurn;
   activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
@@ -293,7 +286,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           isStreamingAssistantMessage={
             row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
           }
-          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -329,7 +321,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
-  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
@@ -422,7 +413,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 key={turn.key}
                 turn={turn}
                 activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-                sessionSelectedModel={sessionSelectedModel}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
@@ -755,7 +745,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         subagentPendingQuestionCountByExternalSessionId={
           subagentPendingQuestionCountByExternalSessionId
         }
-        sessionSelectedModel={sessionSelectedModel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
         sessionRuntimeId={sessionRuntimeId}
