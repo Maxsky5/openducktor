@@ -5,6 +5,13 @@ import { fileURLToPath } from "node:url";
 import { createServer, type ViteDevServer } from "vite";
 
 type ManagedElectronProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+type ForceCloseableHttpServer = {
+  closeAllConnections?: () => void;
+  closeIdleConnections?: () => void;
+};
+type ViteDevServerWithHttpConnections = ViteDevServer & {
+  httpServer?: ForceCloseableHttpServer | null;
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -313,9 +320,13 @@ const stopElectron = async (electron: ManagedElectronProcess | null): Promise<vo
   }
 };
 
-const closeRendererServer = async (server: ViteDevServer | null): Promise<void> => {
+export const closeRendererServer = async (server: ViteDevServer | null): Promise<void> => {
   if (server) {
-    await server.close();
+    const closePromise = server.close();
+    const httpServer = (server as ViteDevServerWithHttpConnections).httpServer;
+    httpServer?.closeIdleConnections?.();
+    httpServer?.closeAllConnections?.();
+    await closePromise;
   }
 };
 

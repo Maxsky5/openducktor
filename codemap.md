@@ -15,7 +15,7 @@ OpenDucktor is a Bun monorepo for a macOS-first Tauri v2 desktop app, additive E
 - `packages/core/src/index.ts`: public core domain/service/port surface.
 - `packages/host/src/index.ts`: TypeScript host command router and host-event port surface for Electron/web transports.
 - `packages/openducktor-mcp/src/index.ts`: MCP stdio server CLI entry point for `odt_*` workflow tools.
-- `scripts/browser-dev.ts`: compatibility launcher that starts the repo-local web runner in workspace mode.
+- `packages/openducktor-web/scripts/dev.ts`: package-local browser dev launcher used by the root `browser:dev` command.
 - `scripts/*.ts`: release, dependency audit, browser dev, frontend boundary, and Tauri command guard automation invoked from the root scripts.
 
 ## Architecture Summary

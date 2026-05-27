@@ -1,59 +1,115 @@
-import { dirname, resolve } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(scriptDirectory, "..");
-
-const WEB_DEV_SIGNAL_EXIT_CODES: Partial<Record<NodeJS.Signals, number>> = {
-  SIGINT: 130,
-  SIGTERM: 143,
+type ManagedWebProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+type KeepAliveTimer = ReturnType<typeof setInterval>;
+type ProcessKeepAliveDependencies = {
+  clearInterval: (timer: KeepAliveTimer) => void;
+  setInterval: (callback: () => void, durationMs: number) => KeepAliveTimer;
 };
 
-export const resolveForwardedSignalExitCode = (signal: NodeJS.Signals): number =>
-  WEB_DEV_SIGNAL_EXIT_CODES[signal] ?? 1;
+const scriptPath = fileURLToPath(import.meta.url);
+const packageRoot = path.resolve(path.dirname(scriptPath), "..");
+const WEB_STOP_TIMEOUT_MS = 30_000;
+const WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
-export const buildWebDevCommand = (args: readonly string[]): string[] => [
-  "bun",
-  "src/cli.ts",
-  ...args,
-];
+const sleep = (durationMs: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, durationMs));
 
-export const runWebDev = async (args: readonly string[] = process.argv.slice(2)): Promise<void> => {
-  const subprocess = Bun.spawn(buildWebDevCommand(args), {
+export const shouldDetachWebProcessGroup = (
+  platform: NodeJS.Platform = process.platform,
+): boolean => platform !== "win32";
+
+export const buildWebDevCommand = (
+  args: readonly string[],
+  bunExecutable = process.execPath,
+): string[] => [bunExecutable, "src/cli.ts", "--workspace", ...args];
+
+export const keepWebDevProcessAliveDuring = async <T>(
+  operation: Promise<T>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Promise<T> => {
+  const timer = dependencies.setInterval(() => {}, WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS);
+  try {
+    return await operation;
+  } finally {
+    dependencies.clearInterval(timer);
+  }
+};
+
+const startWebCli = (args: readonly string[]): ManagedWebProcess =>
+  Bun.spawn(buildWebDevCommand(args), {
     cwd: packageRoot,
-    env: { ...process.env, FORCE_COLOR: "1" },
-    stderr: "inherit",
-    stdin: "inherit",
+    detached: shouldDetachWebProcessGroup(),
     stdout: "inherit",
+    stderr: "inherit",
   });
 
-  let forwardedSignal: NodeJS.Signals | null = null;
-  const forwardSignal = (signal: NodeJS.Signals): void => {
-    forwardedSignal = signal;
-    subprocess.kill(signal);
+const stopWebCli = async (webCli: ManagedWebProcess | null): Promise<void> => {
+  if (!webCli) {
+    return;
+  }
+
+  let exited = false;
+  const exitedPromise = webCli.exited.then(() => {
+    exited = true;
+  });
+
+  webCli.kill();
+  await Promise.race([exitedPromise, sleep(WEB_STOP_TIMEOUT_MS)]);
+  if (!exited) {
+    webCli.kill(9);
+    await Promise.race([exitedPromise, sleep(WEB_STOP_TIMEOUT_MS)]);
+  }
+};
+
+export const runWebDev = async (
+  args: readonly string[] = process.argv.slice(2),
+): Promise<number> => {
+  const webCli = startWebCli(args);
+  let shutdownStarted = false;
+  let resolveExit: (exitCode: number) => void = () => {};
+  const exited = new Promise<number>((resolve) => {
+    resolveExit = resolve;
+  });
+
+  const shutdown = async (exitCode: number): Promise<void> => {
+    if (shutdownStarted) {
+      return;
+    }
+    shutdownStarted = true;
+    await keepWebDevProcessAliveDuring(stopWebCli(webCli));
+    resolveExit(exitCode);
   };
-  const forwardSigint = (): void => forwardSignal("SIGINT");
-  const forwardSigterm = (): void => forwardSignal("SIGTERM");
 
-  process.once("SIGINT", forwardSigint);
-  process.once("SIGTERM", forwardSigterm);
+  void webCli.exited.then((exitCode) => {
+    if (!shutdownStarted) {
+      void shutdown(exitCode);
+    }
+  });
 
-  const exitCode = await subprocess.exited;
-  process.off("SIGINT", forwardSigint);
-  process.off("SIGTERM", forwardSigterm);
+  process.on("SIGINT", () => {
+    void shutdown(130);
+  });
+  process.on("SIGTERM", () => {
+    void shutdown(143);
+  });
+  process.once("exit", () => {
+    if (!webCli.killed) {
+      webCli.kill();
+    }
+  });
 
-  if (exitCode === 0) {
-    return;
-  }
-
-  if (forwardedSignal) {
-    process.exitCode = resolveForwardedSignalExitCode(forwardedSignal);
-    return;
-  }
-
-  throw new Error(`Web dev launcher failed with exit code ${exitCode}.`);
+  return exited;
 };
 
 if (import.meta.main) {
-  await runWebDev();
+  const exitCode = await runWebDev().catch((error: unknown) => {
+    console.error(error);
+    return 1;
+  });
+  process.exit(exitCode);
 }

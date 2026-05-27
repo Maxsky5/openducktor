@@ -9,7 +9,7 @@ Repo-level operational scripts for release, dependency auditing, dev-server orch
 - CLI entrypoints use explicit flags and no fallback paths.
 
 ## Data & Control Flow
-`release-version.ts` synchronizes root/workspace manifests and Cargo metadata. `release-homebrew-cask.ts` renders release input into a cask file. `browser-dev.ts` routes browser mode through the web launcher, while audit and panic guards block unsafe release/lint flows.
+`release-version.ts` synchronizes root/workspace manifests and Cargo metadata. `release-homebrew-cask.ts` renders release input into a cask file. Browser mode is launched through the `@openducktor/web` package dev entrypoint, while audit and panic guards block unsafe release/lint flows.
 
 ## Integration Points
 - Root `package.json`

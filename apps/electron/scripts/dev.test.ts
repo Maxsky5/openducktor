@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import {
+  closeRendererServer,
   electronRuntimeEnv,
   resolveMacosAppBundlePath,
   resolveMacosDevExecutablePath,
@@ -107,5 +108,36 @@ describe("electron dev script", () => {
         "/repo/packages/host/src",
       ]),
     ).toBe(false);
+  });
+
+  test("forces open renderer connections while closing the Vite server", async () => {
+    let closeAllConnectionsCalls = 0;
+    let closeIdleConnectionsCalls = 0;
+    let closeCalls = 0;
+    let resolveClose: () => void = () => {};
+    const closePromise = new Promise<void>((resolve) => {
+      resolveClose = resolve;
+    });
+    const rendererServer = {
+      httpServer: {
+        closeAllConnections: () => {
+          closeAllConnectionsCalls += 1;
+          resolveClose();
+        },
+        closeIdleConnections: () => {
+          closeIdleConnectionsCalls += 1;
+        },
+      },
+      close: () => {
+        closeCalls += 1;
+        return closePromise;
+      },
+    };
+
+    await closeRendererServer(rendererServer as never);
+
+    expect(closeCalls).toBe(1);
+    expect(closeIdleConnectionsCalls).toBe(1);
+    expect(closeAllConnectionsCalls).toBe(1);
   });
 });
