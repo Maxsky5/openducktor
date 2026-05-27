@@ -17,7 +17,7 @@ const isFsErrorCode = (error: unknown, code: string): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === code;
 
 export const resolveMcpBridgeDiscoveryPath = (env: NodeJS.ProcessEnv = process.env): string => {
-  return path.join(resolveOpenDucktorBaseDir(env), DISCOVERY_RELATIVE_PATH);
+  return path.resolve(resolveOpenDucktorBaseDir(env), DISCOVERY_RELATIVE_PATH);
 };
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {

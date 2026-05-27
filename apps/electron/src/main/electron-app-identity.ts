@@ -31,7 +31,7 @@ const createProfileDirectory: CreateProfileDirectory = (profilePath) => {
 const ELECTRON_PROFILE_DIR_NAME = "electron-profile";
 
 export const resolveElectronProfilePath = (configDirectory: string): string =>
-  path.join(configDirectory, ELECTRON_PROFILE_DIR_NAME);
+  path.resolve(configDirectory, ELECTRON_PROFILE_DIR_NAME);
 
 export const configureElectronAppIdentity = (
   app: ElectronAppIdentity,
@@ -43,12 +43,14 @@ export const configureElectronAppIdentity = (
   }: ConfigureElectronAppIdentityOptions,
 ): void => {
   app.setName(appName);
-  const profilePath = resolveElectronProfilePath(resolveConfigDirectory(processEnv));
+  let profilePath = "";
   try {
+    profilePath = resolveElectronProfilePath(resolveConfigDirectory(processEnv));
     createDirectory(profilePath);
   } catch (cause) {
+    const pathContext = profilePath.length > 0 ? ` at ${profilePath}` : "";
     throw new Error(
-      `Failed to create ${appName} Electron profile directory at ${profilePath}: ${errorMessage(cause)}`,
+      `Failed to prepare ${appName} Electron profile directory${pathContext}: ${errorMessage(cause)}`,
       { cause },
     );
   }

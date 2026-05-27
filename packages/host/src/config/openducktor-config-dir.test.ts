@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
+import { HostValidationError } from "../effect/host-errors";
 import {
   DEFAULT_CONFIG_DIR_NAME,
   OPENDUCKTOR_CONFIG_DIR_ENV,
@@ -37,6 +38,19 @@ describe("OpenDucktor config directory resolution", () => {
     expect(() => resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: "" })).toThrow(
       "OPENDUCKTOR_CONFIG_DIR is set but empty",
     );
+  });
+
+  test("rejects a whitespace-only configured directory with the environment field", () => {
+    try {
+      resolveOpenDucktorBaseDir({ [OPENDUCKTOR_CONFIG_DIR_ENV]: "   " });
+      throw new Error("Expected whitespace-only config dir to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(HostValidationError);
+      expect((error as HostValidationError).field).toBe(OPENDUCKTOR_CONFIG_DIR_ENV);
+      expect((error as HostValidationError).message).toContain(
+        "OPENDUCKTOR_CONFIG_DIR is set but empty",
+      );
+    }
   });
 
   test("rejects paths that become empty after trimming and unquoting", () => {

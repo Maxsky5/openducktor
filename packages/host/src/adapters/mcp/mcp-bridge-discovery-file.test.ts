@@ -26,10 +26,22 @@ const discovery = (input: Partial<McpBridgeDiscoveryFile> = {}): McpBridgeDiscov
 });
 
 describe("MCP bridge discovery file", () => {
+  test("defaults discovery to the home OpenDucktor config root", () => {
+    expect(resolveMcpBridgeDiscoveryPath({})).toBe(
+      path.join(homedir(), ".openducktor", "runtime", "mcp-bridge.json"),
+    );
+  });
+
   test("resolves discovery under the same configured OpenDucktor config root", () => {
     expect(
       resolveMcpBridgeDiscoveryPath({ OPENDUCKTOR_CONFIG_DIR: ` "~/.openducktor-local" ` }),
     ).toBe(path.join(homedir(), ".openducktor-local", "runtime", "mcp-bridge.json"));
+  });
+
+  test("resolves relative configured roots to absolute discovery paths", () => {
+    expect(resolveMcpBridgeDiscoveryPath({ OPENDUCKTOR_CONFIG_DIR: "./.openducktor-local" })).toBe(
+      path.resolve("./.openducktor-local", "runtime/mcp-bridge.json"),
+    );
   });
 
   test("removes the discovery file only when it still belongs to the current bridge", async () => {

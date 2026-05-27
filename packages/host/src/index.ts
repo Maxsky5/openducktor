@@ -7,13 +7,7 @@ export {
   createNodeEffectHostCommandRouter,
   createNodeHostCommandRouter,
 } from "./composition/node/create-node-host-command-router";
-export {
-  DEFAULT_CONFIG_DIR_NAME,
-  OPENDUCKTOR_CONFIG_DIR_ENV,
-  resolveOpenDucktorBaseDir,
-  resolveUserPath,
-  stripMatchingQuotes,
-} from "./config/openducktor-config-dir";
+export { resolveOpenDucktorBaseDir } from "./config/openducktor-config-dir";
 export {
   createHostEventBus,
   HOST_EVENT_CHANNELS,

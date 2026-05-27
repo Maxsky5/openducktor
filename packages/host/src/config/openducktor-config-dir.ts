@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import { HostValidationError } from "../effect/host-errors";
+import { HostResourceError, HostValidationError } from "../effect/host-errors";
 
 export const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 export const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
@@ -25,9 +25,10 @@ export const resolveHomeDirectory = (): string => {
     return home;
   }
 
-  throw new HostValidationError({
+  throw new HostResourceError({
     message: "Unable to resolve user home directory",
-    field: "home",
+    resource: "user-home-directory",
+    operation: "openducktor.resolve-config-dir",
   });
 };
 
@@ -68,7 +69,7 @@ export const resolveUserPath = (rawPath: string): string => {
 export const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv = process.env): string => {
   const envDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
   if (envDir !== undefined) {
-    if (envDir.length === 0) {
+    if (envDir.trim().length === 0) {
       throw new HostValidationError({
         message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
         field: OPENDUCKTOR_CONFIG_DIR_ENV,

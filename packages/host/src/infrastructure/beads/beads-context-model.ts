@@ -3,14 +3,6 @@ import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { Effect, type Fiber } from "effect";
 import {
-  DEFAULT_CONFIG_DIR_NAME,
-  OPENDUCKTOR_CONFIG_DIR_ENV,
-  resolveHomeDirectory,
-  resolveOpenDucktorBaseDir,
-  resolveUserPath,
-  stripMatchingQuotes,
-} from "../../config/openducktor-config-dir";
-import {
   type HostOperationError,
   type HostPathAccessError,
   type HostPathNotFoundError,
@@ -25,7 +17,7 @@ export {
   resolveOpenDucktorBaseDir,
   resolveUserPath,
   stripMatchingQuotes,
-};
+} from "../../config/openducktor-config-dir";
 export const SHARED_DOLT_SERVER_HOST = "127.0.0.1";
 export const SHARED_DOLT_SERVER_USER = "root";
 export const SHARED_DOLT_PORT_RANGE_START = 36_000;
