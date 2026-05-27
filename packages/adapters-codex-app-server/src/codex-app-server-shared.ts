@@ -248,12 +248,7 @@ export const codexToolErrorFromObject = (value: unknown): string | null => {
     return explicitError;
   }
 
-  if (
-    record.isError === true ||
-    record.ok === false ||
-    record.success === false ||
-    structuredContent?.ok === false
-  ) {
+  if (record.isError === true || record.ok === false || record.success === false) {
     const structuredError = structuredContent
       ? toolErrorMessageFromValue(structuredContent.error)
       : null;

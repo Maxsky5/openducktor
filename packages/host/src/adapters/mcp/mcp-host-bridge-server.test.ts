@@ -409,6 +409,7 @@ describe("createMcpHostBridgeServer", () => {
             TaskPolicyError.withCode(
               "TASK_TRANSITION_NOT_ALLOWED",
               "Transition not allowed for task-1 (bug): human_review -> blocked",
+              { reason: "needs a product decision", taskId: "task-1" },
             ),
           );
         },
@@ -428,6 +429,7 @@ describe("createMcpHostBridgeServer", () => {
       expect(response.body).toEqual({
         error: "Transition not allowed for task-1 (bug): human_review -> blocked",
         code: "TASK_TRANSITION_NOT_ALLOWED",
+        details: { reason: "needs a product decision", taskId: "task-1" },
       });
     } finally {
       await Effect.runPromise(bridge.close());

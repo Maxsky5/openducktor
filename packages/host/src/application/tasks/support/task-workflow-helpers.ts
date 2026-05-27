@@ -11,6 +11,7 @@ import {
   canUseQaWorkflowFromStatus,
   deriveAgentWorkflows,
   deriveAvailableActions,
+  TaskPolicyError,
 } from "../../../domain/task";
 import { errorMessage, HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -228,13 +229,16 @@ export const blockBuildCompletionTask = (
     yield* validateTaskTransitionEffect(current, currentTasks, current.status, "blocked");
     yield* taskStore.transitionTask({ repoPath, taskId, status: "blocked" });
   }).pipe(
-    Effect.mapError(
-      (error) =>
-        new HostOperationError({
-          operation: "task.build_completed.block_task",
-          message: errorMessage(error),
-          cause: error,
-          details: { repoPath, taskId },
-        }),
-    ),
+    Effect.mapError((error) => {
+      if (error instanceof TaskPolicyError) {
+        return error;
+      }
+
+      return new HostOperationError({
+        operation: "task.build_completed.block_task",
+        message: errorMessage(error),
+        cause: error,
+        details: { repoPath, taskId },
+      });
+    }),
   );

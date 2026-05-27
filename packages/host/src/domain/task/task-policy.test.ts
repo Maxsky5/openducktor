@@ -73,9 +73,14 @@ describe("task domain policy", () => {
       status: "in_progress",
     });
 
-    expect(() => validateTransition(epic, [epic, subtask], "human_review", "closed")).toThrow(
-      "Epic cannot be completed",
-    );
+    try {
+      validateTransition(epic, [epic, subtask], "human_review", "closed");
+      throw new Error("Expected epic completion validation to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TaskPolicyError);
+      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      expect((error as Error).message).toContain("Epic cannot be completed");
+    }
   });
 
   test("derives role workflows from task type, status, and documents", () => {

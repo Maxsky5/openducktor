@@ -170,6 +170,18 @@ describe("odt mcp public task schemas", () => {
     expect(parsed.error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
   });
 
+  test("ODT tool error payload schema accepts generic task policy errors", () => {
+    const parsed = odtToolErrorPayloadSchema.parse({
+      ok: false,
+      error: {
+        code: "TASK_POLICY_ERROR",
+        message: "Pull request management is only available from active review statuses.",
+      },
+    });
+
+    expect(parsed.error.code).toBe("TASK_POLICY_ERROR");
+  });
+
   test("ODT tool error payload schema rejects success envelopes", () => {
     expect(() => {
       odtToolErrorPayloadSchema.parse({
