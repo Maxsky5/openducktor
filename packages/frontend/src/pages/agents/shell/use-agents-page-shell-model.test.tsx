@@ -14,20 +14,8 @@ import {
 enableReactActEnvironment();
 
 const actualAppStateProviderModule = await import("../../../state/app-state-provider");
-const actualSessionStartModalModule = await import(
-  "@/components/features/agents/session-start-modal"
-);
-const actualTaskDetailsSheetControllerModule = await import(
-  "@/components/features/task-details/task-details-sheet-controller"
-);
 const actualReactRouterDomModule = await import("react-router-dom");
 const actualAppStateContextsModule = appStateContexts;
-const actualHumanReviewFeedbackModalModule = await import(
-  "@/features/human-review-feedback/human-review-feedback-modal"
-);
-const actualMergedPullRequestConfirmDialogModule = await import(
-  "@/components/features/pull-requests/merged-pull-request-confirm-dialog"
-);
 
 const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
 const createSession = () =>
@@ -316,19 +304,6 @@ const mockedModuleResets = [
     () => import("../use-agent-studio-rebase-conflict-resolution"),
   ],
   ["./agents-page-right-panel-runtime", () => import("./agents-page-right-panel-runtime")],
-  ["@/components/features/agents/session-start-modal", async () => actualSessionStartModalModule],
-  [
-    "@/features/human-review-feedback/human-review-feedback-modal",
-    async () => actualHumanReviewFeedbackModalModule,
-  ],
-  [
-    "@/components/features/task-details/task-details-sheet-controller",
-    async () => actualTaskDetailsSheetControllerModule,
-  ],
-  [
-    "@/components/features/pull-requests/merged-pull-request-confirm-dialog",
-    async () => actualMergedPullRequestConfirmDialogModule,
-  ],
 ] as const;
 
 const registerModuleMocks = (): void => {
@@ -412,26 +387,6 @@ const registerModuleMocks = (): void => {
         ...props,
         model: rightPanelState.rightPanelModel,
       }),
-  }));
-
-  mock.module("@/components/features/agents/session-start-modal", () => ({
-    SessionStartModal: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-session-start-modal", props),
-  }));
-
-  mock.module("@/features/human-review-feedback/human-review-feedback-modal", () => ({
-    HumanReviewFeedbackModal: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-human-review-feedback-modal", props),
-  }));
-
-  mock.module("@/components/features/task-details/task-details-sheet-controller", () => ({
-    TaskDetailsSheetController: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-task-details-sheet-controller", props),
-  }));
-
-  mock.module("@/components/features/pull-requests/merged-pull-request-confirm-dialog", () => ({
-    MergedPullRequestConfirmDialog: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-merged-pr-dialog", props),
   }));
 };
 
