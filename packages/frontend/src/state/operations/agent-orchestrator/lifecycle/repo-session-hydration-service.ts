@@ -255,6 +255,8 @@ export const createRepoSessionHydrationService = ({
             if (isCancelled() || !isCurrentRepo(repoPath)) {
               return;
             }
+            // Preload failure can still materialize durable sessions, but live reconciliation must
+            // retry later; marking these record keys reconciled here would suppress that retry.
             await bootstrapTaskSessionRecords({
               repoPath,
               entries: pendingTaskEntries,
