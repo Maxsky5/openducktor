@@ -7,6 +7,7 @@ import {
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
+let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
 
 const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
 const mockedGutterSelection = {
@@ -82,6 +83,7 @@ beforeEach(async () => {
         }));
 
         pierreViewerModule = await import("./pierre-diff-viewer");
+        pierreViewerModelModule = await import("./pierre-diff-viewer-model");
 
         for (const calls of Object.values(consoleCalls)) {
           for (const call of calls) {
@@ -224,7 +226,9 @@ describe("PierreDiffViewer", () => {
 });
 
 const requireFileDiff = (
-  fileDiff: ReturnType<typeof import("./pierre-diff-viewer")["getRenderableFileDiff"]>["fileDiff"],
+  fileDiff: ReturnType<
+    typeof import("./pierre-diff-viewer-model")["getRenderableFileDiff"]
+  >["fileDiff"],
 ) => {
   expect(fileDiff).not.toBeNull();
   if (fileDiff == null) {
@@ -235,7 +239,7 @@ const requireFileDiff = (
 
 describe("getRenderableFileDiff", () => {
   test("parses valid git patches", async () => {
-    const { getRenderableFileDiff } = pierreViewerModule;
+    const { getRenderableFileDiff } = pierreViewerModelModule;
     const patch =
       "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n";
 
@@ -247,7 +251,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("normalizes hunk-only patches with the current file path", async () => {
-    const { getRenderableFileDiff } = pierreViewerModule;
+    const { getRenderableFileDiff } = pierreViewerModelModule;
     const result = getRenderableFileDiff("@@ -1 +1 @@\n-old\n+new\n", "src/hunk.ts");
 
     expect(result.normalizedPatch).toBe(
@@ -257,7 +261,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("keeps normalized raw diff text when parsing still fails", async () => {
-    const { getRenderableFileDiff } = pierreViewerModule;
+    const { getRenderableFileDiff } = pierreViewerModelModule;
     const result = await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
       return await withCapturedConsoleMethods(
         ["debug", "error", "info", "log", "warn"],
@@ -287,7 +291,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds hunk reset annotations for the first and subsequent hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -323,7 +327,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("falls back to deletion lines for delete-only hunks", async () => {
-    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModule;
+    const { getHunkResetAnnotations, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -345,7 +349,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds an inline comment selection snapshot for additions with surrounding context", async () => {
-    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -390,7 +394,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("builds an inline comment selection snapshot for old-side ranges", async () => {
-    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -432,7 +436,7 @@ describe("getRenderableFileDiff", () => {
   });
 
   test("rejects mixed-side selections for inline comments", async () => {
-    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModule;
+    const { buildPierreDiffSelection, getRenderableFileDiff } = pierreViewerModelModule;
     const patch = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
