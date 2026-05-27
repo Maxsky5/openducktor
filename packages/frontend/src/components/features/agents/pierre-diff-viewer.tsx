@@ -413,7 +413,9 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
   const { theme } = useTheme();
   const isSelectionControlled = selectedLines !== undefined;
   const shouldMirrorSelectionChanges =
-    isSelectionControlled && (enableLineSelection || enableGutterUtility);
+    isSelectionControlled &&
+    onLineSelectionEnd != null &&
+    (enableLineSelection || enableGutterUtility);
   const [transientSelectedLines, setTransientSelectedLines] = useState<
     SelectedLineRange | null | undefined
   >(undefined);

@@ -39,6 +39,7 @@ beforeEach(async () => {
             options?: {
               onGutterUtilityClick?: (range: unknown) => void;
               onLineSelectionChange?: (range: unknown) => void;
+              onLineSelectionStart?: (range: unknown) => void;
             };
             selectedLines?: unknown;
           }) => {
@@ -49,6 +50,13 @@ beforeEach(async () => {
             return (
               <div>
                 <output data-testid="pierre-selected-lines">{selectedLinesText}</output>
+                <button
+                  type="button"
+                  data-testid="pierre-selection-start"
+                  onClick={() => options?.onLineSelectionStart?.(mockedGutterSelection)}
+                >
+                  Selection start
+                </button>
                 <button
                   type="button"
                   data-testid="pierre-selection-change"
@@ -134,7 +142,7 @@ describe("PierreDiffViewer", () => {
 
     expect(screen.getByTestId("pierre-selected-lines").textContent).toBe("null");
 
-    fireEvent.click(screen.getByTestId("pierre-selection-change"));
+    fireEvent.click(screen.getByTestId("pierre-selection-start"));
 
     expect(screen.getByTestId("pierre-selected-lines").textContent).toBe(
       JSON.stringify(mockedGutterSelection),
@@ -162,6 +170,25 @@ describe("PierreDiffViewer", () => {
     expect(screen.getByTestId("pierre-selected-lines").textContent).toBe(
       OMITTED_SELECTED_LINES_LABEL,
     );
+  });
+
+  test("does not mirror controlled selected lines without a completion handler", () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    render(
+      <PierreDiffViewer
+        patch={selectionPatch}
+        filePath="src/app.ts"
+        enableLineSelection
+        selectedLines={null}
+      />,
+    );
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe("null");
+
+    fireEvent.click(screen.getByTestId("pierre-selection-start"));
+
+    expect(screen.getByTestId("pierre-selected-lines").textContent).toBe("null");
   });
 
   test("opens inline comment selection from the gutter utility", () => {
