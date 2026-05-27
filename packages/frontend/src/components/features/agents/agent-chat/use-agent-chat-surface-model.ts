@@ -1,4 +1,8 @@
-import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  RuntimeApprovalReplyOutcome,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -112,15 +116,18 @@ type AgentChatPendingApprovalActions = {
 
 type AgentChatComposerConfig = {
   taskId: string;
-  activeSession: Pick<
-    AgentSessionState,
-    | "externalSessionId"
-    | "runtimeKind"
-    | "selectedModel"
-    | "isLoadingModelCatalog"
-    | "pendingApprovals"
-    | "pendingQuestions"
-  > | null;
+  activeSession:
+    | (Pick<
+        AgentSessionState,
+        | "externalSessionId"
+        | "selectedModel"
+        | "isLoadingModelCatalog"
+        | "pendingApprovals"
+        | "pendingQuestions"
+      > & {
+        runtimeKind: RuntimeKind | null;
+      })
+    | null;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
