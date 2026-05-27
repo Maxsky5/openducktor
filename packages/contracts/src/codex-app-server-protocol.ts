@@ -286,12 +286,24 @@ export type CodexAppServerGitDiffToRemoteResponse = {
 
 export type CodexAppServerThreadTokenUsageUpdatedNotification = {
   threadId: string;
-  tokenUsage: {
-    last: CodexAppServerTokenUsageBreakdown;
-    modelContextWindow: number | null;
-    total: CodexAppServerTokenUsageBreakdown;
-  };
   turnId: string;
+} & (
+  | {
+      tokenUsage: CodexAppServerTokenUsagePayload;
+    }
+  | {
+      info: CodexAppServerTokenCountInfo;
+    }
+);
+export type CodexAppServerTokenUsagePayload = {
+  last: CodexAppServerTokenUsageBreakdown;
+  modelContextWindow: number | null;
+  total: CodexAppServerTokenUsageBreakdown;
+};
+export type CodexAppServerTokenCountInfo = {
+  last_token_usage: CodexAppServerSnakeTokenUsageBreakdown;
+  model_context_window: number | null;
+  total_token_usage: CodexAppServerSnakeTokenUsageBreakdown;
 };
 export type CodexAppServerTokenUsageBreakdown = {
   cachedInputTokens: number;
@@ -299,6 +311,13 @@ export type CodexAppServerTokenUsageBreakdown = {
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
+};
+export type CodexAppServerSnakeTokenUsageBreakdown = {
+  cached_input_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+  total_tokens: number;
 };
 export type CodexAppServerThreadStatusChangedNotification = {
   status: CodexAppServerThreadStatus;

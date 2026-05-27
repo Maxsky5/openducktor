@@ -74,10 +74,22 @@ describe("CodexAppServerAdapter streaming", () => {
           params: {
             threadId: "thread/start-runtime-ensure",
             turnId: "turn-1",
-            tokenUsage: {
-              total: { totalTokens: 42_000 },
-              last: { totalTokens: 1_000 },
-              modelContextWindow: 200_000,
+            info: {
+              total_token_usage: {
+                cached_input_tokens: 1_000,
+                input_tokens: 41_000,
+                output_tokens: 1_000,
+                reasoning_output_tokens: 200,
+                total_tokens: 42_000,
+              },
+              last_token_usage: {
+                cached_input_tokens: 500,
+                input_tokens: 800,
+                output_tokens: 200,
+                reasoning_output_tokens: 50,
+                total_tokens: 1_000,
+              },
+              model_context_window: 200_000,
             },
           },
         },

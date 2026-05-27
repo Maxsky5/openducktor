@@ -605,8 +605,10 @@ export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTo
     return null;
   }
   const last = firstPlainObject([usage.last, usage.lastTokenUsage, usage.last_token_usage]);
+  const total = firstPlainObject([usage.total, usage.totalTokenUsage, usage.total_token_usage]);
   const totalTokens =
     extractNumberField(last, ["totalTokens", "total_tokens"]) ??
+    extractNumberField(total, ["totalTokens", "total_tokens"]) ??
     extractNumberField(usage, ["totalTokens", "total_tokens"]);
   if (typeof totalTokens !== "number" || totalTokens <= 0) {
     return null;
@@ -629,6 +631,12 @@ const codexTokenUsagePayload = (
   const directUsage = params.tokenUsage ?? params.token_usage;
   if (isPlainObject(directUsage)) {
     return directUsage;
+  }
+  if (isPlainObject(params.info)) {
+    return params.info;
+  }
+  if (isPlainObject(params.last) || isPlainObject(params.last_token_usage)) {
+    return params;
   }
 
   return null;
