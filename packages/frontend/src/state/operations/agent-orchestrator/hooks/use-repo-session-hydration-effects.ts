@@ -70,7 +70,6 @@ export const useRepoSessionHydrationEffects = ({
       await repoSessionHydrationService.bootstrapPersistedTaskSessions({
         repoPath: workspaceRepoPath,
         tasks,
-        isCancelled: () => cancelled,
         isCurrentRepo: isCurrentActiveRepo,
       });
       await repoSessionHydrationService.reconcilePendingTasks({

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createTaskWithSession } from "./agent-session-hook-test-fixtures";
 import { useRepoSessionHydrationEffects } from "./use-repo-session-hydration-effects";
@@ -7,20 +8,34 @@ import { useRepoSessionHydrationEffects } from "./use-repo-session-hydration-eff
 
 describe("useRepoSessionHydrationEffects", () => {
   test("reconciles pending task sessions", async () => {
-    const loadCalls: Array<{ taskId: string; mode: string | undefined }> = [];
+    const task = createTaskWithSession();
+    const taskRecords = task.agentSessions ?? [];
+    const tasks = [task];
+    const loadCalls: Array<{
+      taskId: string;
+      mode: string | undefined;
+      records: AgentSessionRecord[];
+    }> = [];
+    const sessionHydration = {
+      bootstrapTaskSessions: async (taskId: string, records?: AgentSessionRecord[]) => {
+        loadCalls.push({ taskId, mode: undefined, records: records ?? [] });
+      },
+      reconcileLiveTaskSessions: async ({
+        taskId,
+        persistedRecords,
+      }: {
+        taskId: string;
+        persistedRecords?: AgentSessionRecord[];
+      }) => {
+        loadCalls.push({ taskId, mode: "reconcile_live", records: persistedRecords ?? [] });
+      },
+    };
     const Harness = ({ repoPath }: { repoPath: string | null }) =>
       useRepoSessionHydrationEffects({
         workspaceRepoPath: repoPath,
-        tasks: repoPath ? [createTaskWithSession()] : [],
+        tasks: repoPath ? tasks : [],
         currentWorkspaceRepoPathRef: { current: repoPath },
-        sessionHydration: {
-          bootstrapTaskSessions: async (taskId) => {
-            loadCalls.push({ taskId, mode: undefined });
-          },
-          reconcileLiveTaskSessions: async ({ taskId }) => {
-            loadCalls.push({ taskId, mode: "reconcile_live" });
-          },
-        },
+        sessionHydration,
         isSessionRuntimeReady: () => true,
       });
     const harness = createHookHarness<{ repoPath: string | null }, ReturnType<typeof Harness>>(
@@ -32,8 +47,10 @@ describe("useRepoSessionHydrationEffects", () => {
       loadCalls.some((call) => call.taskId === "task-1" && call.mode === "reconcile_live"),
     );
 
-    expect(loadCalls).toContainEqual({ taskId: "task-1", mode: undefined });
-    expect(loadCalls).toContainEqual({ taskId: "task-1", mode: "reconcile_live" });
+    expect(loadCalls).toEqual([
+      { taskId: "task-1", mode: undefined, records: taskRecords },
+      { taskId: "task-1", mode: "reconcile_live", records: taskRecords },
+    ]);
 
     await harness.update({ repoPath: null });
     const countAfterRepoReset = loadCalls.length;
@@ -43,8 +60,36 @@ describe("useRepoSessionHydrationEffects", () => {
   });
 
   test("bootstraps persisted sessions before runtime readiness and waits to reconcile", async () => {
-    const loadCalls: Array<{ taskId: string; mode: string | undefined }> = [];
-    const preloadCalls: unknown[] = [];
+    const task = createTaskWithSession();
+    const taskRecords = task.agentSessions ?? [];
+    const tasks = [task];
+    const loadCalls: Array<{
+      taskId: string;
+      mode: string | undefined;
+      records: AgentSessionRecord[];
+    }> = [];
+    const preloadCalls: Array<{ repoPath: string; records: AgentSessionRecord[] }> = [];
+    const sessionHydration = {
+      bootstrapTaskSessions: async (taskId: string, records?: AgentSessionRecord[]) => {
+        loadCalls.push({ taskId, mode: undefined, records: records ?? [] });
+      },
+      reconcileLiveTaskSessions: async ({
+        taskId,
+        persistedRecords,
+      }: {
+        taskId: string;
+        persistedRecords?: AgentSessionRecord[];
+      }) => {
+        loadCalls.push({ taskId, mode: "reconcile_live", records: persistedRecords ?? [] });
+      },
+    };
+    const prepareRepoSessionPresencePreloads = async (input: {
+      repoPath: string;
+      records: AgentSessionRecord[];
+    }) => {
+      preloadCalls.push(input);
+      return { preloadedSessionPresenceByKey: new Map() };
+    };
     const Harness = ({
       repoPath,
       runtimeReady,
@@ -54,20 +99,10 @@ describe("useRepoSessionHydrationEffects", () => {
     }) =>
       useRepoSessionHydrationEffects({
         workspaceRepoPath: repoPath,
-        tasks: repoPath ? [createTaskWithSession()] : [],
+        tasks: repoPath ? tasks : [],
         currentWorkspaceRepoPathRef: { current: repoPath },
-        sessionHydration: {
-          bootstrapTaskSessions: async (taskId) => {
-            loadCalls.push({ taskId, mode: undefined });
-          },
-          reconcileLiveTaskSessions: async ({ taskId }) => {
-            loadCalls.push({ taskId, mode: "reconcile_live" });
-          },
-        },
-        prepareRepoSessionPresencePreloads: async (input) => {
-          preloadCalls.push(input);
-          return { preloadedSessionPresenceByKey: new Map() };
-        },
+        sessionHydration,
+        prepareRepoSessionPresencePreloads,
         isSessionRuntimeReady: () => runtimeReady,
       });
 
@@ -79,15 +114,18 @@ describe("useRepoSessionHydrationEffects", () => {
     await harness.waitFor(() => loadCalls.length >= 1);
 
     expect(preloadCalls).toHaveLength(0);
-    expect(loadCalls).toEqual([{ taskId: "task-1", mode: undefined }]);
+    expect(loadCalls).toEqual([{ taskId: "task-1", mode: undefined, records: taskRecords }]);
 
     await harness.update({ repoPath: "/tmp/repo", runtimeReady: true });
     await harness.waitFor(() =>
       loadCalls.some((call) => call.taskId === "task-1" && call.mode === "reconcile_live"),
     );
 
-    expect(preloadCalls).toHaveLength(1);
-    expect(loadCalls).toContainEqual({ taskId: "task-1", mode: "reconcile_live" });
+    expect(preloadCalls).toEqual([{ repoPath: "/tmp/repo", records: taskRecords }]);
+    expect(loadCalls).toEqual([
+      { taskId: "task-1", mode: undefined, records: taskRecords },
+      { taskId: "task-1", mode: "reconcile_live", records: taskRecords },
+    ]);
     await harness.unmount();
   });
 });

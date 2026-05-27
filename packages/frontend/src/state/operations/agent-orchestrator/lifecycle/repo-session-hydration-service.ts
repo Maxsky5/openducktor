@@ -117,12 +117,10 @@ export const createRepoSessionHydrationService = ({
   const bootstrapTaskSessionRecords = async ({
     repoPath,
     entries,
-    isCancelled,
     isCurrentRepo,
   }: {
     repoPath: string;
     entries: TaskSessionRecordEntry[];
-    isCancelled: () => boolean;
     isCurrentRepo: (repoPath: string) => boolean;
   }): Promise<void> => {
     const bootstrappedSessionRecordKeys = getOrCreateRepoSet(
@@ -138,7 +136,7 @@ export const createRepoSessionHydrationService = ({
       pendingEntries.push(entry);
     }
 
-    if (isCancelled() || !isCurrentRepo(repoPath)) {
+    if (!isCurrentRepo(repoPath)) {
       for (const entry of pendingEntries) {
         bootstrappedSessionRecordKeys.delete(entry.recordKey);
       }
@@ -153,7 +151,7 @@ export const createRepoSessionHydrationService = ({
         return entry.task.id;
       }),
     );
-    if (isCancelled() || !isCurrentRepo(repoPath)) {
+    if (!isCurrentRepo(repoPath)) {
       for (const entry of pendingEntries) {
         bootstrappedSessionRecordKeys.delete(entry.recordKey);
       }
@@ -195,18 +193,15 @@ export const createRepoSessionHydrationService = ({
     async bootstrapPersistedTaskSessions({
       repoPath,
       tasks,
-      isCancelled,
       isCurrentRepo,
     }: {
       repoPath: string;
       tasks: TaskCard[];
-      isCancelled: () => boolean;
       isCurrentRepo: (repoPath: string) => boolean;
     }): Promise<void> {
       await bootstrapTaskSessionRecords({
         repoPath,
         entries: toTaskSessionRecordEntries(tasks),
-        isCancelled,
         isCurrentRepo,
       });
     },
@@ -229,7 +224,7 @@ export const createRepoSessionHydrationService = ({
       const pendingTaskEntries: TaskSessionRecordEntry[] = [];
       for (const entry of toTaskSessionRecordEntries(tasks)) {
         const { task, records, recordKey } = entry;
-        if (records.length === 0 || inFlight.has(task.id) || reconciledRecordKeys.has(recordKey)) {
+        if (inFlight.has(task.id) || reconciledRecordKeys.has(recordKey)) {
           continue;
         }
         try {
@@ -263,7 +258,6 @@ export const createRepoSessionHydrationService = ({
             await bootstrapTaskSessionRecords({
               repoPath,
               entries: pendingTaskEntries,
-              isCancelled,
               isCurrentRepo,
             });
             for (const entry of pendingTaskEntries) {

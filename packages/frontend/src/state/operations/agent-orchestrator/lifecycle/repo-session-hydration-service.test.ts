@@ -83,21 +83,64 @@ describe("repo-session-hydration-service", () => {
     const first = service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks,
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
     const second = service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks,
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
 
     deferred.resolve(undefined);
     await Promise.all([first, second]);
+    await service.bootstrapPersistedTaskSessions({
+      repoPath,
+      tasks,
+      isCurrentRepo: () => true,
+    });
 
     expect(bootstrapCalls).toBe(1);
     expect(retryRequests).toBe(0);
+    service.dispose();
+  });
+
+  test("clears in-flight bootstrap keys when the repository stops being current", async () => {
+    const deferred = createDeferred<void>();
+    let isCurrentRepo = true;
+    const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const task = taskWithSession("task-1", "external-1");
+
+    const service = createRepoSessionHydrationService({
+      sessionHydration: {
+        bootstrapTaskSessions: async (taskId, records) => {
+          bootstrapCalls.push({ taskId, records: records ?? [] });
+          await deferred.promise;
+        },
+        reconcileLiveTaskSessions: async () => {},
+      },
+      onRetryRequested: () => {},
+    });
+
+    const first = service.bootstrapPersistedTaskSessions({
+      repoPath,
+      tasks: [task],
+      isCurrentRepo: () => isCurrentRepo,
+    });
+    isCurrentRepo = false;
+    deferred.resolve(undefined);
+    await first;
+
+    isCurrentRepo = true;
+    await service.bootstrapPersistedTaskSessions({
+      repoPath,
+      tasks: [task],
+      isCurrentRepo: () => isCurrentRepo,
+    });
+
+    expect(bootstrapCalls).toEqual([
+      { taskId: "task-1", records: task.agentSessions ?? [] },
+      { taskId: "task-1", records: task.agentSessions ?? [] },
+    ]);
     service.dispose();
   });
 
@@ -115,13 +158,11 @@ describe("repo-session-hydration-service", () => {
     await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [task],
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
     await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [task],
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
 
@@ -146,13 +187,11 @@ describe("repo-session-hydration-service", () => {
     await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [task],
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
     await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [updatedTask],
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
 
@@ -182,13 +221,11 @@ describe("repo-session-hydration-service", () => {
     await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [emptyTask],
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
     await service.bootstrapPersistedTaskSessions({
       repoPath,
       tasks: [taskWithLaterSession],
-      isCancelled: () => false,
       isCurrentRepo: () => true,
     });
 
@@ -382,6 +419,50 @@ describe("repo-session-hydration-service", () => {
       });
 
       expect(bootstrapCalls).toEqual([{ taskId: "task-1", records: taskRecords }]);
+      expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(0);
+      service.dispose();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  test("keeps durable sessions bootstrapped when live presence preload later fails", async () => {
+    const task = taskWithSession("task-1", "external-1");
+    const taskRecords = task.agentSessions ?? [];
+    const bootstrapCalls: Array<{ taskId: string; records: AgentSessionRecord[] }> = [];
+    const reconcileLiveTaskSessions = mock(async () => {});
+    const prepareRepoSessionPresencePreloads = mock(async () => {
+      throw new Error("presence scan failed");
+    });
+    const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const service = createRepoSessionHydrationService({
+        sessionHydration: {
+          bootstrapTaskSessions: async (taskId, records) => {
+            bootstrapCalls.push({ taskId, records: records ?? [] });
+          },
+          reconcileLiveTaskSessions,
+        },
+        prepareRepoSessionPresencePreloads,
+        onRetryRequested: () => {},
+      });
+
+      await service.bootstrapPersistedTaskSessions({
+        repoPath,
+        tasks: [task],
+        isCurrentRepo: () => true,
+      });
+      await service.reconcilePendingTasks({
+        repoPath,
+        tasks: [task],
+        isCancelled: () => false,
+        isCurrentRepo: () => true,
+        isRuntimeReady: runtimeReady,
+      });
+
+      expect(bootstrapCalls).toEqual([{ taskId: "task-1", records: taskRecords }]);
+      expect(prepareRepoSessionPresencePreloads).toHaveBeenCalledTimes(1);
       expect(reconcileLiveTaskSessions).toHaveBeenCalledTimes(0);
       service.dispose();
     } finally {
