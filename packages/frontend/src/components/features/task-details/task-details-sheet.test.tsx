@@ -144,6 +144,10 @@ describe("TaskDetailsSheet", () => {
   });
 
   test("renders without the top-right close control", async () => {
+    mock.module("@/state/app-state-provider", () => ({
+      ...actualAppStateProviderModule,
+      useWorkspaceState: () => createWorkspaceStateValue(),
+    }));
     const { TaskDetailsSheet } = await import("./task-details-sheet");
 
     const task = createTaskCardFixture({
@@ -156,23 +160,30 @@ describe("TaskDetailsSheet", () => {
       },
     });
 
-    const html = renderToStaticMarkup(
-      createElement(
-        IsolatedProviders,
-        null,
-        createElement(TaskDetailsSheet, {
-          activeWorkspace: {
-            workspaceId: "workspace-a",
-            workspaceName: "Workspace A",
-            repoPath: "/repo-a",
-          },
-          task,
-          allTasks: [task],
-          open: true,
-          onOpenChange: () => {},
-        }),
-      ),
-    );
+    let html = "";
+    try {
+      html = renderToStaticMarkup(
+        createElement(
+          IsolatedProviders,
+          null,
+          createElement(TaskDetailsSheet, {
+            activeWorkspace: {
+              workspaceId: "workspace-a",
+              workspaceName: "Workspace A",
+              repoPath: "/repo-a",
+            },
+            task,
+            allTasks: [task],
+            open: true,
+            onOpenChange: () => {},
+          }),
+        ),
+      );
+    } finally {
+      await restoreMockedModules([
+        ["@/state/app-state-provider", async () => actualAppStateProviderModule],
+      ]);
+    }
 
     expect(html).not.toContain('<span class="sr-only">Close</span>');
   });
