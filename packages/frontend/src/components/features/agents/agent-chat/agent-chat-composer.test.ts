@@ -20,7 +20,6 @@ const buildModel = () => ({
   isWaitingInput: false,
   waitingInputPlaceholder: null,
   isModelSelectionPending: false,
-  runtimeKind: "opencode" as const,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
   supportsSlashCommands: true,
@@ -42,9 +41,7 @@ const buildModel = () => ({
   onSelectAgent: () => {},
   onSelectModel: () => {},
   onSelectVariant: () => {},
-  sessionAgentColors: {
-    "Hephaestus (Deep Agent)": "#d97706",
-  },
+  accentColor: "#d97706",
   contextUsage: {
     totalTokens: 45_000,
     contextWindow: 200_000,
@@ -218,10 +215,9 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          runtimeKind: "codex",
           selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
           supportsProfiles: false,
-          sessionAgentColors: {},
+          accentColor: "var(--odt-runtime-accent-codex)",
         },
       }),
     );
@@ -250,10 +246,9 @@ describe("AgentChatComposer", () => {
       createElement(AgentChatComposer, {
         model: {
           ...buildModel(),
-          runtimeKind: "codex",
           selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
           supportsProfiles: false,
-          sessionAgentColors: {},
+          accentColor: "var(--odt-runtime-accent-codex)",
           isSessionWorking: true,
         },
       }),

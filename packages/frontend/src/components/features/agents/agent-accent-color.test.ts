@@ -9,8 +9,8 @@ describe("agent accent colors", () => {
   test("preserves explicit colors before runtime defaults", () => {
     expect(
       resolveAgentSessionAccentColor({
-        agentName: undefined,
-        explicitColor: "#d97706",
+        agentName: "Hephaestus (Deep Agent)",
+        agentColors: { "Hephaestus (Deep Agent)": "#d97706" },
         runtimeKind: "codex",
       }),
     ).toBe("#d97706");
@@ -21,6 +21,7 @@ describe("agent accent colors", () => {
     expect(
       resolveAgentSessionAccentColor({
         agentName: "Hephaestus (Deep Agent)",
+        agentColors: {},
         runtimeKind: "opencode",
       }),
     ).toBe(directProfileColor);

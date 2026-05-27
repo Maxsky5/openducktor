@@ -375,7 +375,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const composer = harness.getLatest().agentChatModel.composer;
-    expect(composer.runtimeKind).toBe("codex");
+    expect(composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
 
     const html = renderToStaticMarkup(createElement(AgentChatComposer, { model: composer }));
     expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");

@@ -617,7 +617,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     const profileId = sessionSelectedModel?.profileId;
     return resolveAgentSessionAccentColor({
       agentName: profileId,
-      explicitColor: profileId ? sessionAgentColors[profileId] : undefined,
+      agentColors: sessionAgentColors,
       runtimeKind: sessionRuntimeKind,
     });
   }, [sessionAgentColors, sessionRuntimeKind, sessionSelectedModel?.profileId]);

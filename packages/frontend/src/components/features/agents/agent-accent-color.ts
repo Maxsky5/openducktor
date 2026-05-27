@@ -54,16 +54,15 @@ export const resolveAgentAccentColor = (
 
 export const resolveAgentSessionAccentColor = ({
   agentName,
-  explicitColor,
+  agentColors,
   runtimeKind,
 }: {
   agentName: string | undefined;
-  explicitColor?: string | undefined;
+  agentColors?: Record<string, string> | undefined;
   runtimeKind?: RuntimeKind | null;
 }): string | undefined => {
-  const profileColor = resolveAgentAccentColor(agentName, explicitColor);
-  if (profileColor) {
-    return profileColor;
+  if (agentName) {
+    return resolveAgentAccentColor(agentName, agentColors?.[agentName]);
   }
   if (runtimeKind === "codex") {
     return CODEX_SESSION_ACCENT_COLOR;

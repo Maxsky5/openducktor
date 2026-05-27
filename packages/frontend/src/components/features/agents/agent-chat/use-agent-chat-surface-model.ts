@@ -14,7 +14,7 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentAccentColor } from "../agent-accent-color";
+import { resolveAgentAccentColor, resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type {
   AgentChatComposerModel,
   AgentChatEmptyStateModel,
@@ -352,6 +352,15 @@ export function useAgentChatSurfaceModel({
   const composerSelectedModelSelection = composer?.selectedModelSelection ?? null;
   const composerRuntimeKind =
     composer?.activeSession?.runtimeKind ?? composerSelectedModelSelection?.runtimeKind ?? null;
+  const composerAccentColor = useMemo(
+    () =>
+      resolveAgentSessionAccentColor({
+        agentName: composerSelectedModelSelection?.profileId,
+        agentColors: resolvedSessionAgentColors,
+        runtimeKind: composerRuntimeKind,
+      }),
+    [composerRuntimeKind, composerSelectedModelSelection?.profileId, resolvedSessionAgentColors],
+  );
   const composerSelectedModelDescriptor = composer?.selectedModelDescriptor;
   const composerIsSelectionCatalogLoading = composer?.isSelectionCatalogLoading ?? false;
   const composerSupportsProfiles = composer?.supportsProfiles ?? true;
@@ -469,7 +478,6 @@ export function useAgentChatSurfaceModel({
       isWaitingInput: composerIsWaitingInput,
       waitingInputPlaceholder,
       isModelSelectionPending,
-      runtimeKind: composerRuntimeKind,
       selectedModelSelection: composerSelectedModelSelection,
       ...(composerSelectedModelDescriptor !== undefined
         ? { selectedModelDescriptor: composerSelectedModelDescriptor }
@@ -490,7 +498,7 @@ export function useAgentChatSurfaceModel({
       onSelectAgent: composerOnSelectAgent,
       onSelectModel: composerOnSelectModel,
       onSelectVariant: composerOnSelectVariant,
-      sessionAgentColors: resolvedSessionAgentColors,
+      accentColor: composerAccentColor,
       contextUsage: composerContextUsage,
       canStopSession: composerCanStopSession,
       onStopSession: handleStopSession,
@@ -516,7 +524,7 @@ export function useAgentChatSurfaceModel({
     composerIsSlashCommandsLoading,
     composerIsStarting,
     composerIsWaitingInput,
-    composerRuntimeKind,
+    composerAccentColor,
     composerModelGroups,
     composerModelOptions,
     composerOnSelectAgent,
@@ -543,7 +551,6 @@ export function useAgentChatSurfaceModel({
     mode,
     pendingInlineCommentCount,
     resizeComposerEditor,
-    resolvedSessionAgentColors,
     waitingInputPlaceholder,
   ]);
 
