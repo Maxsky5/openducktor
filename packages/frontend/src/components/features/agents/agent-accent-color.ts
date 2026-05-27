@@ -5,6 +5,12 @@ const FALLBACK_LIGHTNESS = 46;
 
 export const CODEX_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-codex)";
 
+type AgentSessionAccentColorInput = {
+  agentName?: string | null | undefined;
+  agentColors?: Readonly<Record<string, string>> | undefined;
+  runtimeKind?: RuntimeKind | null;
+};
+
 const hashString = (value: string): number => {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -56,13 +62,10 @@ export const resolveAgentSessionAccentColor = ({
   agentName,
   agentColors,
   runtimeKind,
-}: {
-  agentName: string | undefined;
-  agentColors?: Record<string, string> | undefined;
-  runtimeKind?: RuntimeKind | null;
-}): string | undefined => {
-  if (agentName) {
-    return resolveAgentAccentColor(agentName, agentColors?.[agentName]);
+}: AgentSessionAccentColorInput): string | undefined => {
+  const normalizedAgentName = agentName?.trim();
+  if (normalizedAgentName) {
+    return resolveAgentAccentColor(normalizedAgentName, agentColors?.[normalizedAgentName]);
   }
   if (runtimeKind === "codex") {
     return CODEX_SESSION_ACCENT_COLOR;
