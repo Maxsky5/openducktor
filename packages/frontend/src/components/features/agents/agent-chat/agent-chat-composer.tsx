@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { BorderRay } from "@/components/ui/border-ray";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { resolveAgentAccentColor } from "../agent-accent-color";
+import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import {
@@ -525,6 +525,7 @@ export function AgentChatComposer({
     isWaitingInput,
     waitingInputPlaceholder,
     isModelSelectionPending,
+    runtimeKind,
     selectedModelSelection,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
@@ -676,11 +677,12 @@ export function AgentChatComposer({
 
   const composerAccentColor = useMemo(() => {
     const agentName = selectedModelSelection?.profileId;
-    if (!agentName) {
-      return undefined;
-    }
-    return resolveAgentAccentColor(agentName, sessionAgentColors?.[agentName]);
-  }, [selectedModelSelection?.profileId, sessionAgentColors]);
+    return resolveAgentSessionAccentColor({
+      agentName,
+      explicitColor: agentName ? sessionAgentColors?.[agentName] : undefined,
+      runtimeKind,
+    });
+  }, [runtimeKind, selectedModelSelection?.profileId, sessionAgentColors]);
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,

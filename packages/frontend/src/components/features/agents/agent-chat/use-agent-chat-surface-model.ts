@@ -115,6 +115,7 @@ type AgentChatComposerConfig = {
   activeSession: Pick<
     AgentSessionState,
     | "externalSessionId"
+    | "runtimeKind"
     | "selectedModel"
     | "isLoadingModelCatalog"
     | "pendingApprovals"
@@ -342,6 +343,8 @@ export function useAgentChatSurfaceModel({
   const composerIsSessionWorking = composer?.isSessionWorking ?? false;
   const composerIsWaitingInput = composer?.isWaitingInput ?? false;
   const composerSelectedModelSelection = composer?.selectedModelSelection ?? null;
+  const composerRuntimeKind =
+    composer?.activeSession?.runtimeKind ?? composerSelectedModelSelection?.runtimeKind ?? null;
   const composerSelectedModelDescriptor = composer?.selectedModelDescriptor;
   const composerIsSelectionCatalogLoading = composer?.isSelectionCatalogLoading ?? false;
   const composerSupportsProfiles = composer?.supportsProfiles ?? true;
@@ -459,6 +462,7 @@ export function useAgentChatSurfaceModel({
       isWaitingInput: composerIsWaitingInput,
       waitingInputPlaceholder,
       isModelSelectionPending,
+      runtimeKind: composerRuntimeKind,
       selectedModelSelection: composerSelectedModelSelection,
       ...(composerSelectedModelDescriptor !== undefined
         ? { selectedModelDescriptor: composerSelectedModelDescriptor }
@@ -505,6 +509,7 @@ export function useAgentChatSurfaceModel({
     composerIsSlashCommandsLoading,
     composerIsStarting,
     composerIsWaitingInput,
+    composerRuntimeKind,
     composerModelGroups,
     composerModelOptions,
     composerOnSelectAgent,

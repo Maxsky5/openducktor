@@ -1,5 +1,9 @@
+import type { RuntimeKind } from "@openducktor/contracts";
+
 const FALLBACK_SATURATION = 74;
 const FALLBACK_LIGHTNESS = 46;
+
+export const CODEX_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-codex)";
 
 const hashString = (value: string): number => {
   let hash = 0;
@@ -46,4 +50,23 @@ export const resolveAgentAccentColor = (
   const hash = hashString(agentName.trim().toLowerCase());
   const hue = hash % 360;
   return `hsl(${hue} ${FALLBACK_SATURATION}% ${FALLBACK_LIGHTNESS}%)`;
+};
+
+export const resolveAgentSessionAccentColor = ({
+  agentName,
+  explicitColor,
+  runtimeKind,
+}: {
+  agentName: string | undefined;
+  explicitColor?: string | undefined;
+  runtimeKind?: RuntimeKind | null;
+}): string | undefined => {
+  const profileColor = resolveAgentAccentColor(agentName, explicitColor);
+  if (profileColor) {
+    return profileColor;
+  }
+  if (runtimeKind === "codex") {
+    return CODEX_SESSION_ACCENT_COLOR;
+  }
+  return undefined;
 };

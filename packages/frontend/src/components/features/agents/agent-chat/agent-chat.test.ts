@@ -56,6 +56,7 @@ const buildModel = () => ({
     isSessionWorking: false,
     isWaitingInput: false,
     isModelSelectionPending: false,
+    runtimeKind: "opencode" as const,
     selectedModelSelection: buildModelSelection(),
     isSelectionCatalogLoading: false,
     supportsSlashCommands: true,

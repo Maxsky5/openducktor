@@ -1,4 +1,4 @@
-import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -80,6 +80,7 @@ export type AgentChatComposerModel = {
   isWaitingInput: boolean;
   waitingInputPlaceholder?: string | null;
   isModelSelectionPending: boolean;
+  runtimeKind: RuntimeKind | null;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;

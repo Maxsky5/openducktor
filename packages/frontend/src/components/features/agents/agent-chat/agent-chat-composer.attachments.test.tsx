@@ -29,6 +29,7 @@ const buildModel = () => ({
   isWaitingInput: false,
   waitingInputPlaceholder: null,
   isModelSelectionPending: false,
+  runtimeKind: "opencode" as const,
   selectedModelSelection: buildModelSelection(),
   selectedModelDescriptor: null,
   isSelectionCatalogLoading: false,

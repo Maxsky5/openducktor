@@ -20,6 +20,7 @@ const buildModel = () => ({
   isWaitingInput: false,
   waitingInputPlaceholder: null,
   isModelSelectionPending: false,
+  runtimeKind: "opencode" as const,
   selectedModelSelection: buildModelSelection(),
   isSelectionCatalogLoading: false,
   supportsSlashCommands: true,
@@ -57,6 +58,11 @@ const buildModel = () => ({
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
+
+const buildCodexModelSelectionWithoutProfile = () => {
+  const { profileId: _profileId, ...selection } = buildModelSelection({ runtimeKind: "codex" });
+  return selection;
+};
 
 describe("AgentChatComposer", () => {
   test("renders input, selectors, and send action", () => {
@@ -207,6 +213,23 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("border-left-color:#d97706");
   });
 
+  test("uses the Codex runtime accent when no profile is selected", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          runtimeKind: "codex",
+          selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
+          supportsProfiles: false,
+          sessionAgentColors: {},
+        },
+      }),
+    );
+
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
+  });
+
   test("renders a colored border ray while the session is working", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
@@ -220,6 +243,25 @@ describe("AgentChatComposer", () => {
     expect(html).toContain('class="odt-border-ray"');
     expect(html).toContain("--odt-border-ray-color:#d97706");
     expect(html).toContain("--odt-border-ray-stroke-width:2.6");
+  });
+
+  test("renders a Codex-colored border ray while a no-profile Codex session is working", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          runtimeKind: "codex",
+          selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
+          supportsProfiles: false,
+          sessionAgentColors: {},
+          isSessionWorking: true,
+        },
+      }),
+    );
+
+    expect(html).toContain('class="odt-border-ray"');
+    expect(html).toContain("--odt-border-ray-color:var(--odt-runtime-accent-codex)");
+    expect(html).not.toContain("--odt-border-ray-color:rgba(56, 189, 248, 1)");
   });
 
   test("uses the waiting-input shell and suppresses the border ray while input is pending", () => {

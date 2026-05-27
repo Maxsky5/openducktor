@@ -107,6 +107,7 @@
   /* agent studio chrome */
   --studio-chrome: oklch(0.446 0.043 257.281); /* ~slate-600 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
+  --odt-runtime-accent-codex: #10a37f;
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
@@ -216,6 +217,7 @@
 
   --studio-chrome: oklch(0.332 0.038 260.912); /* ~slate-700 */
   --studio-chrome-foreground: oklch(0.968 0.007 247.896); /* ~slate-50 */
+  --odt-runtime-accent-codex: #22c55e;
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
