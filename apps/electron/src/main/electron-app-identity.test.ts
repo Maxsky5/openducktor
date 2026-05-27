@@ -1,29 +1,35 @@
 import { describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
 import path from "node:path";
 import { configureElectronAppIdentity, resolveElectronProfilePath } from "./electron-app-identity";
 
 const customAppName = "Custom App";
-const customAppDataPath = "/Users/alice/Library/Application Support";
-const customProfilePath = resolveElectronProfilePath(customAppDataPath, customAppName);
+const customConfigPath = "/Users/alice/.openducktor-local";
+const customProfilePath = resolveElectronProfilePath(customConfigPath);
 
 describe("resolveElectronProfilePath", () => {
-  test("joins app data paths and application names with platform path semantics", () => {
-    expect(
-      resolveElectronProfilePath("/Users/alice/Library/Application Support/", "Custom App"),
-    ).toBe(path.join("/Users/alice/Library/Application Support/", "Custom App"));
+  test("stores Electron profile data under the OpenDucktor config directory", () => {
+    expect(resolveElectronProfilePath("/Users/alice/.openducktor/")).toBe(
+      path.join("/Users/alice/.openducktor/", "electron-profile"),
+    );
+  });
+
+  test("keeps default and local config directories on separate profiles", () => {
+    expect(resolveElectronProfilePath("/Users/alice/.openducktor")).toBe(
+      path.join("/Users/alice/.openducktor", "electron-profile"),
+    );
+    expect(resolveElectronProfilePath("/Users/alice/.openducktor-local")).toBe(
+      path.join("/Users/alice/.openducktor-local", "electron-profile"),
+    );
   });
 });
 
 describe("configureElectronAppIdentity", () => {
-  test("pins Chromium storage paths to the provided app profile", () => {
+  test("pins Chromium storage paths to the resolved OpenDucktor config profile", () => {
     const calls: Array<[string, string]> = [];
 
     configureElectronAppIdentity(
       {
-        getPath(name) {
-          expect(name).toBe("appData");
-          return customAppDataPath;
-        },
         setName(name) {
           calls.push(["name", name]);
         },
@@ -31,9 +37,12 @@ describe("configureElectronAppIdentity", () => {
           calls.push([name, value]);
         },
       },
-      customAppName,
-      (profilePath) => {
-        calls.push(["mkdir", profilePath]);
+      {
+        appName: customAppName,
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+        createDirectory(profilePath) {
+          calls.push(["mkdir", profilePath]);
+        },
       },
     );
 
@@ -45,21 +54,51 @@ describe("configureElectronAppIdentity", () => {
     ]);
   });
 
+  test("expands quoted home-relative config directories before selecting the profile", () => {
+    const calls: Array<[string, string]> = [];
+    const expectedProfilePath = path.join(homedir(), ".openducktor-local", "electron-profile");
+
+    configureElectronAppIdentity(
+      {
+        setName(name) {
+          calls.push(["name", name]);
+        },
+        setPath(name, value) {
+          calls.push([name, value]);
+        },
+      },
+      {
+        appName: customAppName,
+        processEnv: { OPENDUCKTOR_CONFIG_DIR: ` "~/.openducktor-local" ` },
+        createDirectory(profilePath) {
+          calls.push(["mkdir", profilePath]);
+        },
+      },
+    );
+
+    expect(calls).toEqual([
+      ["name", customAppName],
+      ["mkdir", expectedProfilePath],
+      ["userData", expectedProfilePath],
+      ["sessionData", expectedProfilePath],
+    ]);
+  });
+
   test("surfaces profile directory creation failures with the app name and profile path", () => {
     expect(() =>
       configureElectronAppIdentity(
         {
-          getPath() {
-            return customAppDataPath;
-          },
           setName() {},
           setPath() {
             throw new Error("setPath should not run after mkdir failure");
           },
         },
-        customAppName,
-        () => {
-          throw new Error("permission denied");
+        {
+          appName: customAppName,
+          processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+          createDirectory() {
+            throw new Error("permission denied");
+          },
         },
       ),
     ).toThrow(
@@ -71,17 +110,17 @@ describe("configureElectronAppIdentity", () => {
     expect(() =>
       configureElectronAppIdentity(
         {
-          getPath() {
-            return customAppDataPath;
-          },
           setName() {},
           setPath() {
             throw new Error("setPath should not run after mkdir failure");
           },
         },
-        customAppName,
-        () => {
-          throw "permission denied";
+        {
+          appName: customAppName,
+          processEnv: { OPENDUCKTOR_CONFIG_DIR: customConfigPath },
+          createDirectory() {
+            throw "permission denied";
+          },
         },
       ),
     ).toThrow(

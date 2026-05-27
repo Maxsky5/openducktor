@@ -1,18 +1,31 @@
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import { Effect, type Fiber } from "effect";
+import {
+  DEFAULT_CONFIG_DIR_NAME,
+  OPENDUCKTOR_CONFIG_DIR_ENV,
+  resolveHomeDirectory,
+  resolveOpenDucktorBaseDir,
+  resolveUserPath,
+  stripMatchingQuotes,
+} from "../../config/openducktor-config-dir";
 import {
   type HostOperationError,
   type HostPathAccessError,
   type HostPathNotFoundError,
-  HostResourceError,
+  type HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
 
-export const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-export const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
+export {
+  DEFAULT_CONFIG_DIR_NAME,
+  OPENDUCKTOR_CONFIG_DIR_ENV,
+  resolveHomeDirectory,
+  resolveOpenDucktorBaseDir,
+  resolveUserPath,
+  stripMatchingQuotes,
+};
 export const SHARED_DOLT_SERVER_HOST = "127.0.0.1";
 export const SHARED_DOLT_SERVER_USER = "root";
 export const SHARED_DOLT_PORT_RANGE_START = 36_000;
@@ -112,83 +125,6 @@ export type BeadsReadiness =
   | { type: "missing_attachment" }
   | { type: "missing_shared_database" }
   | { type: "attachment_verification_failed"; reason: string };
-
-export const stripMatchingQuotes = (value: string): string => {
-  if (value.length < 2) {
-    return value;
-  }
-
-  const first = value.at(0);
-  const last = value.at(-1);
-  if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
-    return value.slice(1, -1);
-  }
-
-  return value;
-};
-
-export const resolveHomeDirectory = (): string => {
-  const home = homedir();
-  if (home.trim().length > 0) {
-    return home;
-  }
-
-  throw new HostResourceError({
-    message: "Unable to resolve user home directory",
-    resource: "user-home-directory",
-    operation: "beads.resolve-context",
-  });
-};
-
-export const resolveUserPath = (rawPath: string): string => {
-  const trimmed = rawPath.trim();
-  if (!trimmed) {
-    throw new HostValidationError({
-      message: "Path is empty; provide a valid path",
-      field: "path",
-    });
-  }
-
-  const unquoted = stripMatchingQuotes(trimmed);
-  if (!unquoted) {
-    throw new HostValidationError({
-      message: "Path is empty; provide a valid path",
-      field: "path",
-    });
-  }
-
-  if (unquoted === "~") {
-    return resolveHomeDirectory();
-  }
-
-  const homeRelativePrefix = unquoted.startsWith("~/")
-    ? "~/"
-    : unquoted.startsWith("~\\")
-      ? "~\\"
-      : null;
-
-  if (!homeRelativePrefix) {
-    return unquoted;
-  }
-
-  return path.join(resolveHomeDirectory(), unquoted.slice(homeRelativePrefix.length));
-};
-
-export const resolveOpenDucktorBaseDir = (env: NodeJS.ProcessEnv = process.env): string => {
-  const envDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
-  if (envDir !== undefined) {
-    if (envDir.length === 0) {
-      throw new HostValidationError({
-        message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
-        field: OPENDUCKTOR_CONFIG_DIR_ENV,
-      });
-    }
-
-    return resolveUserPath(envDir);
-  }
-
-  return path.join(resolveHomeDirectory(), DEFAULT_CONFIG_DIR_NAME);
-};
 
 export const sanitizeSlug = (input: string): string => {
   let slug = "";

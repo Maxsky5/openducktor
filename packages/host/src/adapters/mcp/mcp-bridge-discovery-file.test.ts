@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import {
   type McpBridgeDiscoveryFile,
   readMcpBridgeDiscoveryFile,
   removeMcpBridgeDiscoveryFile,
+  resolveMcpBridgeDiscoveryPath,
   writeMcpBridgeDiscoveryFile,
 } from "./mcp-bridge-discovery-file";
 
@@ -25,6 +26,12 @@ const discovery = (input: Partial<McpBridgeDiscoveryFile> = {}): McpBridgeDiscov
 });
 
 describe("MCP bridge discovery file", () => {
+  test("resolves discovery under the same configured OpenDucktor config root", () => {
+    expect(
+      resolveMcpBridgeDiscoveryPath({ OPENDUCKTOR_CONFIG_DIR: ` "~/.openducktor-local" ` }),
+    ).toBe(path.join(homedir(), ".openducktor-local", "runtime", "mcp-bridge.json"));
+  });
+
   test("removes the discovery file only when it still belongs to the current bridge", async () => {
     const { discoveryPath, tempDir } = await createTempDiscoveryPath();
     const current = discovery();

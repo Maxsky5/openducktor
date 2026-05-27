@@ -1,12 +1,10 @@
 import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { HostValidationError } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 
-const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
 const DISCOVERY_RELATIVE_PATH = "runtime/mcp-bridge.json";
 
 export type McpBridgeDiscoveryFile = {
@@ -15,58 +13,11 @@ export type McpBridgeDiscoveryFile = {
   pid: number;
 };
 
-const stripMatchingQuotes = (value: string): string => {
-  if (value.length < 2) {
-    return value;
-  }
-
-  const first = value.at(0);
-  const last = value.at(-1);
-  if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
-    return value.slice(1, -1);
-  }
-
-  return value;
-};
-
 const isFsErrorCode = (error: unknown, code: string): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === code;
 
-const resolveHomeDirectory = (): string => {
-  const home = homedir();
-  if (home.trim().length === 0) {
-    throw new HostValidationError({
-      message: "Unable to resolve user home directory",
-      field: "home",
-    });
-  }
-  return home;
-};
-
-const resolveUserPath = (rawPath: string): string => {
-  const unquoted = stripMatchingQuotes(rawPath.trim());
-  if (unquoted.length === 0) {
-    throw new HostValidationError({
-      message: "Path is empty; provide a valid path",
-      field: "path",
-    });
-  }
-  if (unquoted === "~") {
-    return resolveHomeDirectory();
-  }
-  if (unquoted.startsWith("~/") || unquoted.startsWith("~\\")) {
-    return path.join(resolveHomeDirectory(), unquoted.slice(2));
-  }
-  return path.resolve(unquoted);
-};
-
 export const resolveMcpBridgeDiscoveryPath = (env: NodeJS.ProcessEnv = process.env): string => {
-  const configuredDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
-  const baseDir =
-    configuredDir === undefined
-      ? path.join(resolveHomeDirectory(), DEFAULT_CONFIG_DIR_NAME)
-      : resolveUserPath(configuredDir);
-  return path.join(baseDir, DISCOVERY_RELATIVE_PATH);
+  return path.join(resolveOpenDucktorBaseDir(env), DISCOVERY_RELATIVE_PATH);
 };
 
 const parseDiscoveryFile = (payload: string, discoveryPath: string): McpBridgeDiscoveryFile => {

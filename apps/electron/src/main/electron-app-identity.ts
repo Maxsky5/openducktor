@@ -1,13 +1,21 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { resolveOpenDucktorBaseDir } from "@openducktor/host";
 
 type ElectronAppIdentity = {
-  getPath(name: "appData"): string;
   setName(name: string): void;
   setPath(name: "userData" | "sessionData", value: string): void;
 };
 
 type CreateProfileDirectory = (profilePath: string) => void;
+type ResolveConfigDirectory = (env?: NodeJS.ProcessEnv) => string;
+
+type ConfigureElectronAppIdentityOptions = {
+  appName: string;
+  createDirectory?: CreateProfileDirectory;
+  processEnv?: NodeJS.ProcessEnv;
+  resolveConfigDirectory?: ResolveConfigDirectory;
+};
 
 const errorMessage = (cause: unknown): string => {
   if (cause instanceof Error) {
@@ -20,16 +28,22 @@ const createProfileDirectory: CreateProfileDirectory = (profilePath) => {
   mkdirSync(profilePath, { recursive: true });
 };
 
-export const resolveElectronProfilePath = (appDataPath: string, appName: string): string =>
-  path.join(appDataPath, appName);
+const ELECTRON_PROFILE_DIR_NAME = "electron-profile";
+
+export const resolveElectronProfilePath = (configDirectory: string): string =>
+  path.join(configDirectory, ELECTRON_PROFILE_DIR_NAME);
 
 export const configureElectronAppIdentity = (
   app: ElectronAppIdentity,
-  appName: string,
-  createDirectory: CreateProfileDirectory = createProfileDirectory,
+  {
+    appName,
+    createDirectory = createProfileDirectory,
+    processEnv = process.env,
+    resolveConfigDirectory = resolveOpenDucktorBaseDir,
+  }: ConfigureElectronAppIdentityOptions,
 ): void => {
   app.setName(appName);
-  const profilePath = resolveElectronProfilePath(app.getPath("appData"), appName);
+  const profilePath = resolveElectronProfilePath(resolveConfigDirectory(processEnv));
   try {
     createDirectory(profilePath);
   } catch (cause) {

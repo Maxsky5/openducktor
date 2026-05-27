@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 import type { GlobalConfig } from "@openducktor/contracts";
 import { Clock, Effect, Layer } from "effect";
 import { parsePersistedGlobalConfig } from "../../config/global-config";
+import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
   HostOperationError,
   HostValidationError,
@@ -14,75 +14,7 @@ import {
 import { parseJson } from "../../effect/json";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 
-const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
 const USER_SETTINGS_FILENAME = "config.json";
-
-const stripMatchingQuotes = (value: string): string => {
-  if (value.length < 2) {
-    return value;
-  }
-
-  const first = value.at(0);
-  const last = value.at(-1);
-  if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
-    return value.slice(1, -1);
-  }
-
-  return value;
-};
-
-const resolveHomeDirectory = (): string => {
-  const home = homedir();
-  if (home.trim().length > 0) {
-    return home;
-  }
-
-  throw new HostValidationError({ message: "Unable to resolve user home directory" });
-};
-
-const resolveUserPath = (rawPath: string): string => {
-  const trimmed = rawPath.trim();
-  if (!trimmed) {
-    throw new HostValidationError({ message: "Path is empty; provide a valid path" });
-  }
-
-  const unquoted = stripMatchingQuotes(trimmed);
-  if (!unquoted) {
-    throw new HostValidationError({ message: "Path is empty; provide a valid path" });
-  }
-
-  if (unquoted === "~") {
-    return resolveHomeDirectory();
-  }
-
-  const homeRelativePrefix = unquoted.startsWith("~/")
-    ? "~/"
-    : unquoted.startsWith("~\\")
-      ? "~\\"
-      : null;
-
-  if (!homeRelativePrefix) {
-    return unquoted;
-  }
-
-  return path.join(resolveHomeDirectory(), unquoted.slice(homeRelativePrefix.length));
-};
-
-const resolveOpenDucktorBaseDir = (): string => {
-  const envDir = process.env[OPENDUCKTOR_CONFIG_DIR_ENV];
-  if (envDir !== undefined) {
-    if (envDir.length === 0) {
-      throw new HostValidationError({
-        message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
-      });
-    }
-
-    return resolveUserPath(envDir);
-  }
-
-  return path.join(resolveHomeDirectory(), DEFAULT_CONFIG_DIR_NAME);
-};
 
 const sanitizeRepoSlug = (input: string): string => {
   let slug = "";
