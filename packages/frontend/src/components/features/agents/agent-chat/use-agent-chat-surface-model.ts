@@ -352,14 +352,17 @@ export function useAgentChatSurfaceModel({
   const composerSelectedModelSelection = composer?.selectedModelSelection ?? null;
   const composerRuntimeKind =
     composer?.activeSession?.runtimeKind ?? composerSelectedModelSelection?.runtimeKind ?? null;
+  const composerAccentAgentName = composer?.activeSession
+    ? composerActiveSessionSelectedModel?.profileId
+    : composerSelectedModelSelection?.profileId;
   const composerAccentColor = useMemo(
     () =>
       resolveAgentSessionAccentColor({
-        agentName: composerSelectedModelSelection?.profileId,
+        agentName: composerAccentAgentName,
         agentColors: resolvedSessionAgentColors,
         runtimeKind: composerRuntimeKind,
       }),
-    [composerRuntimeKind, composerSelectedModelSelection?.profileId, resolvedSessionAgentColors],
+    [composerAccentAgentName, composerRuntimeKind, resolvedSessionAgentColors],
   );
   const composerSelectedModelDescriptor = composer?.selectedModelDescriptor;
   const composerIsSelectionCatalogLoading = composer?.isSelectionCatalogLoading ?? false;

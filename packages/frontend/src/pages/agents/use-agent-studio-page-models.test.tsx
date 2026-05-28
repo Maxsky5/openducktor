@@ -366,7 +366,15 @@ describe("useAgentStudioPageModels", () => {
           runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         },
         modelSelection: {
-          selectedModelSelection: null,
+          selectedModelSelection: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+            profileId: "Ares (Legacy Agent)",
+          },
+          activeSessionAgentColors: {
+            "Ares (Legacy Agent)": "#f97316",
+          },
           supportsProfiles: false,
         },
       }),

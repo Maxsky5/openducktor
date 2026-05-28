@@ -35,6 +35,12 @@ describe("agent accent colors", () => {
         runtimeKind: "codex",
       }),
     ).toBe(CODEX_SESSION_ACCENT_COLOR);
+    expect(
+      resolveAgentSessionAccentColor({
+        agentName: "   ",
+        runtimeKind: "codex",
+      }),
+    ).toBe(CODEX_SESSION_ACCENT_COLOR);
   });
 
   test("does not guess a runtime accent without Codex identity", () => {
@@ -47,5 +53,6 @@ describe("agent accent colors", () => {
     expect(
       resolveAgentSessionAccentColor({ agentName: undefined, runtimeKind: null }),
     ).toBeUndefined();
+    expect(resolveAgentSessionAccentColor({ agentName: "   ", runtimeKind: null })).toBeUndefined();
   });
 });
