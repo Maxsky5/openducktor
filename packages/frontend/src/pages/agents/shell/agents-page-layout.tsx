@@ -1,10 +1,20 @@
-import { type ComponentProps, memo, type ReactElement, type ReactNode } from "react";
+import { type ComponentProps, memo, type ReactElement, type ReactNode, useMemo } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
+import { SessionStartModal } from "@/components/features/agents/session-start-modal";
+import { MergedPullRequestConfirmDialog } from "@/components/features/pull-requests/merged-pull-request-confirm-dialog";
+import { TaskDetailsSheetController } from "@/components/features/task-details/task-details-sheet-controller";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentsPageShell } from "./agents-page-shell";
+import type { AgentStudioPullRequestModalModel } from "./use-agent-studio-pull-request-modal-model";
+import {
+  AgentStudioRightPanelBridge,
+  type AgentStudioRightPanelBridgeModel,
+} from "./use-agent-studio-right-panel-bridge";
+import type { AgentStudioTaskDetailsLauncherModel } from "./use-agent-studio-task-details-launcher";
 
 const PANEL_CONTAINMENT_STYLE = {
   contain: "layout paint",
@@ -65,24 +75,29 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
 });
 
 type AgentsPageModalContentProps = {
-  mergedPullRequestModal: ReactNode;
-  humanReviewFeedbackModal: ReactNode;
-  sessionStartModal: ReactNode;
-  taskDetailsSheet: ReactElement;
+  mergedPullRequestModal: AgentStudioPullRequestModalModel | null;
+  humanReviewFeedbackModal: ComponentProps<typeof HumanReviewFeedbackModal>["model"];
+  sessionStartModal: ComponentProps<typeof SessionStartModal>["model"] | null;
+  taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
 };
 
 function AgentsPageModalContent({
   mergedPullRequestModal,
   humanReviewFeedbackModal,
   sessionStartModal,
-  taskDetailsSheet,
+  taskDetailsLauncher,
 }: AgentsPageModalContentProps): ReactElement {
   return (
     <>
-      {mergedPullRequestModal}
-      {humanReviewFeedbackModal}
-      {sessionStartModal}
-      {taskDetailsSheet}
+      {mergedPullRequestModal ? (
+        <MergedPullRequestConfirmDialog {...mergedPullRequestModal} />
+      ) : null}
+      <HumanReviewFeedbackModal model={humanReviewFeedbackModal} />
+      {sessionStartModal ? <SessionStartModal model={sessionStartModal} /> : null}
+      <TaskDetailsSheetController
+        ref={taskDetailsLauncher.taskDetailsSheetRef}
+        {...taskDetailsLauncher.taskDetailsSheetProps}
+      />
     </>
   );
 }
@@ -101,11 +116,11 @@ type AgentsPageLayoutProps = {
   chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
   chatModel: ComponentProps<typeof AgentChatSurface>["model"];
   isRightPanelVisible: boolean;
-  rightPanelContent: ReactNode;
-  mergedPullRequestModal: ReactNode;
-  humanReviewFeedbackModal: ReactNode;
-  sessionStartModal: ReactNode;
-  taskDetailsSheet: ReactElement;
+  rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
+  mergedPullRequestModal: AgentStudioPullRequestModalModel | null;
+  humanReviewFeedbackModal: ComponentProps<typeof HumanReviewFeedbackModal>["model"];
+  sessionStartModal: ComponentProps<typeof SessionStartModal>["model"] | null;
+  taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
 };
 
 export function AgentsPageLayout({
@@ -122,12 +137,52 @@ export function AgentsPageLayout({
   chatHeaderModel,
   chatModel,
   isRightPanelVisible,
-  rightPanelContent,
+  rightPanelBridge,
   mergedPullRequestModal,
   humanReviewFeedbackModal,
   sessionStartModal,
-  taskDetailsSheet,
+  taskDetailsLauncher,
 }: AgentsPageLayoutProps): ReactElement {
+  const taskTabs = useMemo(
+    () => (
+      <AgentStudioTaskTabs
+        model={taskTabsModel}
+        {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
+      />
+    ),
+    [rightPanelToggleModel, taskTabsModel],
+  );
+  const chatContent = useMemo(
+    () => <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />,
+    [chatHeaderModel, chatModel],
+  );
+  const rightPanelContent = useMemo(
+    () => <AgentStudioRightPanelBridge model={rightPanelBridge} />,
+    [rightPanelBridge],
+  );
+  const workspace = useMemo(
+    () => (
+      <AgentsPageWorkspace
+        hasSelectedTask={hasSelectedTask}
+        chatContent={chatContent}
+        isRightPanelVisible={isRightPanelVisible}
+        rightPanelContent={rightPanelContent}
+      />
+    ),
+    [chatContent, hasSelectedTask, isRightPanelVisible, rightPanelContent],
+  );
+  const modalContent = useMemo(
+    () => (
+      <AgentsPageModalContent
+        mergedPullRequestModal={mergedPullRequestModal}
+        humanReviewFeedbackModal={humanReviewFeedbackModal}
+        sessionStartModal={sessionStartModal}
+        taskDetailsLauncher={taskDetailsLauncher}
+      />
+    ),
+    [humanReviewFeedbackModal, mergedPullRequestModal, sessionStartModal, taskDetailsLauncher],
+  );
+
   return (
     <AgentsPageShell
       activeWorkspace={activeWorkspace}
@@ -137,30 +192,9 @@ export function AgentsPageLayout({
       onRetryNavigationPersistence={onRetryNavigationPersistence}
       onRetryChatSettingsLoad={onRetryChatSettingsLoad}
       onTabValueChange={onTabValueChange}
-      taskTabs={
-        <AgentStudioTaskTabs
-          model={taskTabsModel}
-          {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
-        />
-      }
-      workspace={
-        <AgentsPageWorkspace
-          hasSelectedTask={hasSelectedTask}
-          chatContent={
-            <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />
-          }
-          isRightPanelVisible={isRightPanelVisible}
-          rightPanelContent={rightPanelContent}
-        />
-      }
-      modalContent={
-        <AgentsPageModalContent
-          mergedPullRequestModal={mergedPullRequestModal}
-          humanReviewFeedbackModal={humanReviewFeedbackModal}
-          sessionStartModal={sessionStartModal}
-          taskDetailsSheet={taskDetailsSheet}
-        />
-      }
+      taskTabs={taskTabs}
+      workspace={workspace}
+      modalContent={modalContent}
     />
   );
 }

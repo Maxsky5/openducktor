@@ -1,6 +1,4 @@
-import { type ReactElement, useCallback, useRef, useState } from "react";
-import { SessionStartModal } from "@/components/features/agents/session-start-modal";
-import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
+import { useCallback, useRef, useState } from "react";
 import {
   useChecksOperationsContext,
   useRuntimeAvailabilityContext,
@@ -15,10 +13,20 @@ import {
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
 import { gitConflictQuickActionContextsEqual } from "./git-conflict-quick-action-context";
+import {
+  type AgentStudioPullRequestModalModel,
+  useAgentStudioPullRequestModalModel,
+} from "./use-agent-studio-pull-request-modal-model";
+import {
+  type AgentStudioRightPanelBridgeModel,
+  useAgentStudioRightPanelBridge,
+} from "./use-agent-studio-right-panel-bridge";
+import {
+  type AgentStudioTaskDetailsLauncherModel,
+  useAgentStudioTaskDetailsLauncher,
+} from "./use-agent-studio-task-details-launcher";
 import { useAgentsPageOrchestrationShellModel } from "./use-agents-page-orchestration-shell-model";
-import { useAgentsPageRightPanelShellModel } from "./use-agents-page-right-panel-shell-model";
 import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
-import { useAgentsPageShellOverlays } from "./use-agents-page-shell-overlays";
 
 type AgentsPageShellModel = {
   activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
@@ -40,11 +48,13 @@ type AgentsPageShellModel = {
   >["agentStudioHeaderModel"];
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
   isRightPanelVisible: boolean;
-  rightPanelContent: ReactElement | null;
-  mergedPullRequestModal: ReactElement | null;
-  humanReviewFeedbackModal: ReactElement;
-  sessionStartModal: ReactElement | null;
-  taskDetailsSheet: ReactElement;
+  rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
+  mergedPullRequestModal: AgentStudioPullRequestModalModel | null;
+  humanReviewFeedbackModal: ReturnType<
+    typeof useAgentStudioOrchestrationController
+  >["humanReviewFeedbackModal"];
+  sessionStartModal: ReturnType<typeof useAgentStudioOrchestrationController>["sessionStartModal"];
+  taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -154,16 +164,19 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     cancelLinkMergedPullRequest();
   }, [cancelLinkMergedPullRequest]);
 
-  const { openTaskDetails, mergedPullRequestModal, taskDetailsSheet } = useAgentsPageShellOverlays({
+  const taskDetailsLauncher = useAgentStudioTaskDetailsLauncher({
     activeWorkspace,
     tasks,
     selectedTaskId: selection.viewSelectedTask?.id ?? null,
-    pendingMergedPullRequest,
-    linkingMergedPullRequestTaskId,
     detectingPullRequestTaskId,
     unlinkingPullRequestTaskId,
     onDetectPullRequest: handleDetectPullRequest,
     onUnlinkPullRequest: handleUnlinkPullRequest,
+  });
+
+  const mergedPullRequestModal = useAgentStudioPullRequestModalModel({
+    pendingMergedPullRequest,
+    linkingMergedPullRequestTaskId,
     onLinkMergedPullRequest: handleLinkMergedPullRequest,
     onCancelLinkMergedPullRequest: handleCancelLinkMergedPullRequest,
   });
@@ -182,7 +195,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasActiveGitConflict: gitConflictQuickActionContext !== null,
     gitConflictQuickActionContext,
     gitConflictQuickActionContextRef,
-    openTaskDetails,
+    openTaskDetails: taskDetailsLauncher.openTaskDetails,
     agentOperations: {
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
@@ -201,9 +214,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     setTaskTargetBranch,
   });
 
-  const { isRightPanelVisible, rightPanelContent } = useAgentsPageRightPanelShellModel({
+  const { isRightPanelVisible, rightPanelBridge } = useAgentStudioRightPanelBridge({
     activeWorkspace,
-    branches,
+    branches: branches ?? [],
     activeBranch,
     selection: orchestrationSelection,
     orchestration,
@@ -214,14 +227,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onResolveGitConflict: handleResolveRebaseConflict,
     onGitConflictQuickActionContextChange: handleGitConflictQuickActionContextChange,
   });
-
-  const sessionStartModal = orchestration.sessionStartModal ? (
-    <SessionStartModal model={orchestration.sessionStartModal} />
-  ) : null;
-
-  const humanReviewFeedbackModal = (
-    <HumanReviewFeedbackModal model={orchestration.humanReviewFeedbackModal} />
-  );
 
   return {
     activeWorkspace,
@@ -237,10 +242,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,
-    rightPanelContent,
+    rightPanelBridge,
     mergedPullRequestModal,
-    humanReviewFeedbackModal,
-    sessionStartModal,
-    taskDetailsSheet,
+    humanReviewFeedbackModal: orchestration.humanReviewFeedbackModal,
+    sessionStartModal: orchestration.sessionStartModal,
+    taskDetailsLauncher,
   };
 }

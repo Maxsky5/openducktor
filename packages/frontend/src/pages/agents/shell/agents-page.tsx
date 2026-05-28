@@ -20,11 +20,11 @@ export function AgentsPage(): ReactElement {
       chatHeaderModel={shell.chatHeaderModel}
       chatModel={shell.chatModel}
       isRightPanelVisible={shell.isRightPanelVisible}
-      rightPanelContent={shell.rightPanelContent}
+      rightPanelBridge={shell.rightPanelBridge}
       mergedPullRequestModal={shell.mergedPullRequestModal}
       humanReviewFeedbackModal={shell.humanReviewFeedbackModal}
       sessionStartModal={shell.sessionStartModal}
-      taskDetailsSheet={shell.taskDetailsSheet}
+      taskDetailsLauncher={shell.taskDetailsLauncher}
     />
   );
 }
