@@ -218,6 +218,7 @@ const buildMacosDevAppSignature = async ({
       iconFileName: MACOS_DEV_ICON_FILE_NAME,
       sourceAppPath,
       sourceExecutablePath,
+      sourceExecutable: await fileSignature(sourceExecutablePath),
       sourceInfoPlist: await fileSignature(path.join(sourceAppPath, "Contents", "Info.plist")),
     },
     null,
