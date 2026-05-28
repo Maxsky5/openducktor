@@ -88,15 +88,19 @@ const verifyBackendReadiness = async (
   }
 };
 
+const forceCloseFrontendConnections = (server: FrontendServer): void => {
+  const httpServer = (server as FrontendServerWithHttpConnections).httpServer;
+  httpServer?.closeIdleConnections?.();
+  httpServer?.closeAllConnections?.();
+};
+
 const closeFrontendServer = async (server: FrontendServer | null): Promise<void> => {
   if (!server) {
     return;
   }
 
   const closePromise = server.close();
-  const httpServer = (server as FrontendServerWithHttpConnections).httpServer;
-  httpServer?.closeIdleConnections?.();
-  httpServer?.closeAllConnections?.();
+  forceCloseFrontendConnections(server);
   await closePromise;
 };
 
@@ -367,7 +371,6 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     appToken,
   });
   let frontendServer: FrontendServer | null = null;
-  let stopping = false;
   let stopPromise: Promise<void> | null = null;
   let terminationStarted = false;
   let duplicateTerminationNoticeLogged = false;
@@ -376,7 +379,6 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     if (stopPromise) {
       return stopPromise;
     }
-    stopping = true;
 
     stopPromise = (async () => {
       logInfo("Stopping OpenDucktor frontend server...");
@@ -423,7 +425,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     logFrontendAvailability(options.frontendPort);
 
     const exitCode = await hostBackend.exited;
-    if (stopping) {
+    if (stopPromise) {
       await stop();
     } else {
       await closeFrontendServer(frontendServer);

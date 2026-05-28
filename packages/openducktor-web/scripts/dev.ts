@@ -16,6 +16,20 @@ const WEB_SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
 
+const waitForProcessExit = async (
+  subprocess: Pick<ManagedWebProcess, "exited">,
+  timeoutMs: number,
+): Promise<boolean> => {
+  let exited = false;
+  await Promise.race([
+    subprocess.exited.then(() => {
+      exited = true;
+    }),
+    sleep(timeoutMs),
+  ]);
+  return exited;
+};
+
 export const shouldDetachWebProcessGroup = (
   platform: NodeJS.Platform = process.platform,
 ): boolean => platform !== "win32";
@@ -53,17 +67,13 @@ const stopWebCli = async (webCli: ManagedWebProcess | null): Promise<void> => {
     return;
   }
 
-  let exited = false;
-  const exitedPromise = webCli.exited.then(() => {
-    exited = true;
-  });
-
   webCli.kill();
-  await Promise.race([exitedPromise, sleep(WEB_STOP_TIMEOUT_MS)]);
-  if (!exited) {
-    webCli.kill(9);
-    await Promise.race([exitedPromise, sleep(WEB_STOP_TIMEOUT_MS)]);
+  if (await waitForProcessExit(webCli, WEB_STOP_TIMEOUT_MS)) {
+    return;
   }
+
+  webCli.kill(9);
+  await waitForProcessExit(webCli, WEB_STOP_TIMEOUT_MS);
 };
 
 export const runWebDev = async (

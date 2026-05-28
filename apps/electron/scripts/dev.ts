@@ -50,6 +50,20 @@ const ELECTRON_RESTART_EXTENSIONS = new Set([
 const sleep = (durationMs: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, durationMs));
 
+const waitForProcessExit = async (
+  subprocess: Pick<ManagedElectronProcess, "exited">,
+  timeoutMs: number,
+): Promise<boolean> => {
+  let exited = false;
+  await Promise.race([
+    subprocess.exited.then(() => {
+      exited = true;
+    }),
+    sleep(timeoutMs),
+  ]);
+  return exited;
+};
+
 const runStep = async (label: string, command: string[]): Promise<void> => {
   const process = Bun.spawn(command, {
     cwd: packageRoot,
@@ -302,30 +316,30 @@ const startElectron = (
     },
   });
 
+const forceCloseRendererConnections = (server: ViteDevServer): void => {
+  const httpServer = (server as ViteDevServerWithHttpConnections).httpServer;
+  httpServer?.closeIdleConnections?.();
+  httpServer?.closeAllConnections?.();
+};
+
 const stopElectron = async (electron: ManagedElectronProcess | null): Promise<void> => {
   if (!electron) {
     return;
   }
 
-  let exited = false;
-  const exitedPromise = electron.exited.then(() => {
-    exited = true;
-  });
-
   electron.kill();
-  await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
-  if (!exited) {
-    electron.kill(9);
-    await Promise.race([exitedPromise, sleep(ELECTRON_STOP_TIMEOUT_MS)]);
+  if (await waitForProcessExit(electron, ELECTRON_STOP_TIMEOUT_MS)) {
+    return;
   }
+
+  electron.kill(9);
+  await waitForProcessExit(electron, ELECTRON_STOP_TIMEOUT_MS);
 };
 
 export const closeRendererServer = async (server: ViteDevServer | null): Promise<void> => {
   if (server) {
     const closePromise = server.close();
-    const httpServer = (server as ViteDevServerWithHttpConnections).httpServer;
-    httpServer?.closeIdleConnections?.();
-    httpServer?.closeAllConnections?.();
+    forceCloseRendererConnections(server);
     await closePromise;
   }
 };
