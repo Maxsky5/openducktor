@@ -1,4 +1,8 @@
-import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentSkillReference,
+  AgentSlashCommand,
+} from "@openducktor/core";
 import { type ReactElement, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge";
@@ -12,6 +16,7 @@ import {
   readEditableTextContent,
   renderEditableTextContent,
 } from "./agent-chat-composer-selection";
+import { AgentChatComposerSkillMenu } from "./agent-chat-composer-skill-menu";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
 import {
   AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME,
@@ -20,6 +25,12 @@ import {
   type AgentChatFileReferenceChipFile,
 } from "./agent-chat-file-reference-chip";
 import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
+import {
+  AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME,
+  AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME,
+  AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME,
+  getAgentChatSkillReferenceIconMarkup,
+} from "./agent-chat-skill-reference-chip-markup";
 import { useAgentChatComposerEditor } from "./use-agent-chat-composer-editor";
 
 const escapeHtml = (value: string): string => {
@@ -44,13 +55,21 @@ const buildComposerFileReferenceChipMarkup = (
   )}</span></span>`;
 };
 
+const buildComposerSkillReferenceChipMarkup = (
+  skill: AgentSkillReference,
+  segmentId: string,
+): string => {
+  return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segmentId)}" data-segment-id="${escapeHtml(segmentId)}" data-skill-reference-name="${escapeHtml(skill.name)}" class="${escapeHtml(
+    cn(AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME, "mx-0.5 mr-2 max-w-48 align-middle"),
+  )}"><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatSkillReferenceIconMarkup()}</span><span class="${escapeHtml(AGENT_CHAT_SKILL_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(skill.name)}</span></span>`;
+};
+
 const COMPOSER_FILE_REFERENCE_TOOLTIP_OFFSET = 8;
 const COMPOSER_FILE_REFERENCE_TOOLTIP_TOP_MINIMUM = 40;
 const COMPOSER_TEXT_SEGMENT_BASE_CLASS_NAME =
   "whitespace-pre-wrap break-words align-middle leading-6 outline-none";
 const COMPOSER_TEXT_SEGMENT_TRAILING_LINE_CLASS_NAME =
   "after:inline-block after:h-6 after:w-px after:align-bottom after:content-['']";
-
 type ComposerFileReferenceTooltipState = {
   path: string;
   left: number;
@@ -93,10 +112,12 @@ const readComposerFileReferenceTooltipState = (
 const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
   return draft.segments
     .map((segment, index) => {
-      const nextSegment = draft.segments[index + 1];
-
       if (segment.kind === "file_reference") {
         return buildComposerFileReferenceChipMarkup(segment.file, segment.id);
+      }
+
+      if (segment.kind === "skill_mention") {
+        return buildComposerSkillReferenceChipMarkup(segment.skill, segment.id);
       }
 
       if (segment.kind === "slash_command") {
@@ -106,13 +127,6 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
             "mx-0.5 mr-2 inline-flex h-6 bg-yellow-300 dark:bg-yellow-600 items-center rounded-full px-2.5 text-xs font-medium align-middle",
           ),
         )}">/${escapeHtml(segment.command.trigger)}</span>`;
-      }
-
-      const segmentText = segment.text.trim();
-      const isLeadingEmptyChipHost =
-        segmentText.length === 0 && nextSegment != null && nextSegment.kind !== "text";
-      if (isLeadingEmptyChipHost) {
-        return "";
       }
 
       const className = readExpectedTextSegmentClassName(draft, index);
@@ -130,8 +144,7 @@ const shouldRenderTextSegment = (draft: AgentChatComposerDraft, index: number): 
     return false;
   }
 
-  const nextSegment = draft.segments[index + 1];
-  return !(segment.text.trim().length === 0 && nextSegment != null && nextSegment.kind !== "text");
+  return true;
 };
 
 const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: number): string => {
@@ -142,11 +155,13 @@ const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: 
 
   const segmentText = segment.text.trim();
   const hasTrailingBlankLine = segment.text.endsWith("\n");
-  const isEmptyAfterChip =
-    segmentText.length === 0 && !hasTrailingBlankLine && draft.segments[index - 1]?.kind !== "text";
+  const isEmptyAdjacentToChip =
+    segmentText.length === 0 &&
+    !hasTrailingBlankLine &&
+    (draft.segments[index - 1]?.kind !== "text" || draft.segments[index + 1]?.kind !== "text");
   return cn(
     COMPOSER_TEXT_SEGMENT_BASE_CLASS_NAME,
-    isEmptyAfterChip ? "inline-block min-w-[1px]" : "inline",
+    isEmptyAdjacentToChip ? "inline-block min-w-[1px]" : "inline",
     hasTrailingBlankLine && COMPOSER_TEXT_SEGMENT_TRAILING_LINE_CLASS_NAME,
   );
 };
@@ -195,6 +210,14 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
         );
       }
 
+      if (segment.kind === "skill_mention") {
+        return (
+          node.dataset.chipSegmentId === segment.id &&
+          node.dataset.skillReferenceName === segment.skill.name &&
+          node.textContent === segment.skill.name
+        );
+      }
+
       return (
         node.dataset.chipSegmentId === segment.id &&
         node.dataset.fileReferencePath === segment.file.path &&
@@ -238,9 +261,13 @@ type AgentChatComposerEditorProps = {
   onSend: () => void;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  skills: AgentSkillReference[];
+  skillsError: string | null;
+  isSkillsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
@@ -255,9 +282,13 @@ export function AgentChatComposerEditor({
   onSend,
   supportsSlashCommands,
   supportsFileSearch,
+  supportsSkillReferences,
   slashCommands,
   slashCommandsError,
   isSlashCommandsLoading,
+  skills,
+  skillsError,
+  isSkillsLoading,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
   const [composerFileReferenceTooltip, setComposerFileReferenceTooltip] =
@@ -265,7 +296,10 @@ export function AgentChatComposerEditor({
   const {
     filteredSlashCommands,
     activeSlashIndex,
+    filteredSkills,
+    activeSkillIndex,
     showSlashMenu,
+    showSkillMenu,
     fileSearchResults,
     activeFileIndex,
     showFileMenu,
@@ -273,6 +307,7 @@ export function AgentChatComposerEditor({
     isFileSearchLoading,
     focusLastTextSegment,
     selectSlashCommand,
+    selectSkillReference,
     selectFileSearchResult,
     handleEditorInput,
     handleEditorBeforeInput,
@@ -291,7 +326,9 @@ export function AgentChatComposerEditor({
     onSend,
     supportsSlashCommands,
     supportsFileSearch,
+    supportsSkillReferences,
     slashCommands,
+    skills,
     searchFiles,
   });
   const composerContentMarkup = buildComposerContentMarkup(draft);
@@ -366,6 +403,15 @@ export function AgentChatComposerEditor({
           slashCommandsError={slashCommandsError}
           isSlashCommandsLoading={isSlashCommandsLoading}
           onSelectCommand={selectSlashCommand}
+        />
+      ) : null}
+      {showSkillMenu ? (
+        <AgentChatComposerSkillMenu
+          skills={filteredSkills}
+          activeIndex={activeSkillIndex}
+          skillsError={skillsError}
+          isSkillsLoading={isSkillsLoading}
+          onSelectSkill={selectSkillReference}
         />
       ) : null}
       {/* biome-ignore lint/a11y/useSemanticElements: the contenteditable root supports inline chips and file references. */}

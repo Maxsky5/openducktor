@@ -65,10 +65,15 @@ type AgentStudioModelSelectionContext = {
   supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
   slashCommandCatalog: AgentChatModel["composer"]["slashCommandCatalog"];
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  skillCatalog: AgentChatModel["composer"]["skillCatalog"];
+  skills: AgentChatModel["composer"]["skills"];
+  skillsError: string | null;
+  isSkillsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -327,10 +332,15 @@ export function useAgentStudioPageModels({
       supportsProfiles: modelSelection.supportsProfiles ?? true,
       supportsSlashCommands: modelSelection.supportsSlashCommands,
       supportsFileSearch: modelSelection.supportsFileSearch,
+      supportsSkillReferences: modelSelection.supportsSkillReferences,
       slashCommandCatalog: modelSelection.slashCommandCatalog,
       slashCommands: modelSelection.slashCommands,
       slashCommandsError: modelSelection.slashCommandsError,
       isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
+      skillCatalog: modelSelection.skillCatalog,
+      skills: modelSelection.skills,
+      skillsError: modelSelection.skillsError,
+      isSkillsLoading: modelSelection.isSkillsLoading,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
       modelOptions: modelSelection.modelOptions,
@@ -345,6 +355,7 @@ export function useAgentStudioPageModels({
       modelSelection.agentOptions,
       modelSelection.isSelectionCatalogLoading,
       modelSelection.isSlashCommandsLoading,
+      modelSelection.isSkillsLoading,
       modelSelection.modelGroups,
       modelSelection.modelOptions,
       modelSelection.onSelectAgent,
@@ -356,7 +367,11 @@ export function useAgentStudioPageModels({
       modelSelection.slashCommandCatalog,
       modelSelection.slashCommands,
       modelSelection.slashCommandsError,
+      modelSelection.skillCatalog,
+      modelSelection.skills,
+      modelSelection.skillsError,
       modelSelection.supportsFileSearch,
+      modelSelection.supportsSkillReferences,
       modelSelection.supportsProfiles,
       modelSelection.supportsSlashCommands,
       modelSelection.variantOptions,

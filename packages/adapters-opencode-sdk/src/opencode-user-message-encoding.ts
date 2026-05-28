@@ -16,6 +16,9 @@ const encodeOpenCodePartToText = (part: AgentUserMessagePart): string | null => 
   if (part.kind === "file_reference") {
     return `@${part.file.path}`;
   }
+  if (part.kind === "skill_mention") {
+    throw new Error("OpenCode does not support skill reference user message parts.");
+  }
   return null;
 };
 

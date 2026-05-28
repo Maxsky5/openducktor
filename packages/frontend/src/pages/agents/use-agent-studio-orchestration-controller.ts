@@ -64,6 +64,7 @@ type AgentStudioOrchestrationActionsContext = {
   updateAgentSessionModel: AgentStateContextValue["updateAgentSessionModel"];
   readSessionFileSearch: AgentStateContextValue["readSessionFileSearch"];
   readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
+  readSessionSkills: AgentStateContextValue["readSessionSkills"];
   bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
   hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -128,10 +129,15 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "supportsProfiles"
   | "supportsSlashCommands"
   | "supportsFileSearch"
+  | "supportsSkillReferences"
   | "slashCommandCatalog"
   | "slashCommands"
   | "slashCommandsError"
   | "isSlashCommandsLoading"
+  | "skillCatalog"
+  | "skills"
+  | "skillsError"
+  | "isSkillsLoading"
   | "searchFiles"
   | "agentProfileOptions"
   | "modelOptions"
@@ -266,6 +272,7 @@ export function useAgentStudioOrchestrationController({
     updateAgentSessionModel,
     readSessionFileSearch,
     readSessionSlashCommands,
+    readSessionSkills,
     humanRequestChangesTask,
     setTaskTargetBranch,
     replyAgentApproval,
@@ -294,10 +301,15 @@ export function useAgentStudioOrchestrationController({
     supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
+    supportsSkillReferences,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    skillCatalog,
+    skills,
+    skillsError,
+    isSkillsLoading,
     searchFiles,
     agentProfileOptions,
     modelOptions,
@@ -318,6 +330,7 @@ export function useAgentStudioOrchestrationController({
     updateAgentSessionModel,
     readSessionFileSearch,
     readSessionSlashCommands,
+    ...(readSessionSkills ? { readSessionSkills } : {}),
   });
 
   const {
@@ -491,10 +504,15 @@ export function useAgentStudioOrchestrationController({
       supportsProfiles: supportsProfiles ?? true,
       supportsSlashCommands,
       supportsFileSearch,
+      supportsSkillReferences,
       slashCommandCatalog,
       slashCommands,
       slashCommandsError,
       isSlashCommandsLoading,
+      skillCatalog,
+      skills,
+      skillsError,
+      isSkillsLoading,
       searchFiles,
       agentProfileOptions,
       modelOptions,

@@ -21,19 +21,44 @@ export type SessionRuntimeQueryState = {
 export const resolveAttachedSessionRuntimeQueryState = (
   session: SessionRuntimeAccessState | null | undefined,
 ): SessionRuntimeQueryState => {
+  if (!session) {
+    return {
+      runtimeQueryInput: null,
+      runtimeQueryError: null,
+    };
+  }
+
   const runtimeKind = session?.runtimeKind ?? null;
   const repoPath = session?.repoPath?.trim() ?? "";
   const workingDirectory = session?.workingDirectory?.trim() ?? "";
 
+  if (!repoPath) {
+    return {
+      runtimeQueryInput: null,
+      runtimeQueryError: "Active session runtime context is missing repo path.",
+    };
+  }
+
+  if (!runtimeKind) {
+    return {
+      runtimeQueryInput: null,
+      runtimeQueryError: "Active session runtime context is missing runtime kind.",
+    };
+  }
+
+  if (!workingDirectory) {
+    return {
+      runtimeQueryInput: null,
+      runtimeQueryError: "Active session runtime context is missing working directory.",
+    };
+  }
+
   return {
-    runtimeQueryInput:
-      runtimeKind && repoPath && workingDirectory
-        ? {
-            repoPath,
-            runtimeKind,
-            workingDirectory,
-          }
-        : null,
+    runtimeQueryInput: {
+      repoPath,
+      runtimeKind,
+      workingDirectory,
+    },
     runtimeQueryError: null,
   };
 };

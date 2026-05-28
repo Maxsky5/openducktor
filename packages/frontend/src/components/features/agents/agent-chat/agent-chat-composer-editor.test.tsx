@@ -7,6 +7,7 @@ import {
   type AgentChatComposerDraft,
   createComposerAttachment,
   createFileReferenceSegment,
+  createSkillReferenceSegment,
   createTextSegment,
 } from "./agent-chat-composer-draft";
 import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fixtures";
@@ -113,10 +114,30 @@ const COMMANDS = [
   },
 ];
 
+const SKILL_REVIEW = {
+  id: "/skills/review/SKILL.md",
+  name: "review",
+  path: "/skills/review/SKILL.md",
+  description: "Review code",
+};
+
+const SKILL_ANALYZE = {
+  id: "/skills/analyze/SKILL.md",
+  name: "analyze",
+  path: "/skills/analyze/SKILL.md",
+  description: "Analyze code",
+};
+
+const SKILLS = [SKILL_REVIEW, SKILL_ANALYZE];
+
 const EditorHarness = ({
   slashCommandsError,
   slashCommands,
   supportsFileSearch = true,
+  supportsSkillReferences = false,
+  skills = [],
+  skillsError = null,
+  isSkillsLoading = false,
   searchFiles = async () => [],
   onSend,
   initialDraft = createComposerDraft(""),
@@ -126,6 +147,10 @@ const EditorHarness = ({
   slashCommandsError: string | null;
   slashCommands: typeof COMMANDS;
   supportsFileSearch?: boolean;
+  supportsSkillReferences?: boolean;
+  skills?: typeof SKILLS;
+  skillsError?: string | null;
+  isSkillsLoading?: boolean;
   searchFiles?: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>;
   onSend?: () => void;
   initialDraft?: AgentChatComposerDraft;
@@ -154,6 +179,10 @@ const EditorHarness = ({
         slashCommandsError={slashCommandsError}
         isSlashCommandsLoading={false}
         searchFiles={searchFiles}
+        supportsSkillReferences={supportsSkillReferences}
+        skills={skills}
+        skillsError={skillsError}
+        isSkillsLoading={isSkillsLoading}
         onAddFiles={onAddFiles ?? (() => {})}
       />
       <output data-testid="draft-state">{JSON.stringify(draft)}</output>
@@ -371,6 +400,76 @@ describe("AgentChatComposerEditor", () => {
       expect(screen.getByText("/compact")).toBeDefined();
     });
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  test("shows the skill menu after typing a dollar trigger", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "$");
+
+    await waitFor(() => {
+      expect(screen.getByText("review")).toBeDefined();
+    });
+  });
+
+  test("shows skill menu entries alphabetically with the Blocks icon", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={[SKILL_REVIEW, SKILL_ANALYZE]}
+      />,
+    );
+
+    typeIntoEditor(rendered.container, "$");
+
+    await waitFor(() => {
+      expect(screen.getByText("$analyze")).toBeDefined();
+    });
+    const skillButtons = screen
+      .getAllByRole("button")
+      .filter((button) => button.textContent?.startsWith("$"));
+    expect(
+      skillButtons.map((button) => button.querySelector(".text-foreground")?.textContent),
+    ).toEqual(["$analyze", "$review"]);
+    expect(skillButtons[0]?.querySelector(".lucide-blocks")).toBeDefined();
+  });
+
+  test("shows the skill menu when the editable sentinel precedes the dollar trigger", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    const editable = getLastTextSegment(rendered.container);
+    editable.textContent = "\u200B$";
+    const textNode = editable.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected text node in composer text segment");
+    }
+    const range = document.createRange();
+    range.setStart(textNode, 2);
+    range.collapse(true);
+    const selection = globalThis.getSelection?.();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.input(editable);
+
+    await waitFor(() => {
+      expect(screen.getByText("review")).toBeDefined();
+    });
   });
 
   test("selects a slash command from pointer down without submitting the message", async () => {
@@ -1222,8 +1321,8 @@ describe("AgentChatComposerEditor", () => {
       () => {
         expect(rendered.container.querySelector("[data-chip-segment-id]")).toBeTruthy();
         const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
-        expect(editables).toHaveLength(1);
-        const trailingEditable = editables[0];
+        expect(editables).toHaveLength(2);
+        const trailingEditable = editables.at(-1);
         expect(trailingEditable?.className).toContain("inline-block");
         expect(trailingEditable?.className).toContain("min-w-[1px]");
       },
@@ -1252,8 +1351,7 @@ describe("AgentChatComposerEditor", () => {
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    const originalTrailingEditable =
-      rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    const originalTrailingEditable = getLastTextSegment(rendered.container);
     if (!(originalTrailingEditable instanceof HTMLElement)) {
       throw new Error("Expected trailing editable text segment");
     }
@@ -1273,8 +1371,7 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        const updatedTrailingEditable =
-          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBe(originalTrailingEditable);
         expect(updatedTrailingEditable?.textContent).toBe(" after");
       },
@@ -1304,7 +1401,7 @@ describe("AgentChatComposerEditor", () => {
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    const trailingEditable = getLastTextSegment(rendered.container);
     if (!(trailingEditable instanceof HTMLElement)) {
       throw new Error("Expected trailing editable text segment");
     }
@@ -1357,13 +1454,70 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(
       () => {
         const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
-        expect(editables).toHaveLength(1);
-        const trailingEditable = editables[0];
+        expect(editables).toHaveLength(2);
+        const trailingEditable = editables.at(-1);
         expect(trailingEditable?.className).toContain("inline-block");
         expect(trailingEditable?.className).toContain("min-w-[1px]");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
+  });
+
+  test("renders an editable leading text segment before a file chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment("", "before-file"),
+            createFileReferenceSegment(buildFileSearchResult(), "file-1"),
+            createTextSegment("", "after-file"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const firstTextSegment = getTextSegments(rendered.container)[0];
+    if (!(firstTextSegment instanceof HTMLElement)) {
+      throw new Error("Expected leading text segment");
+    }
+
+    firstTextSegment.textContent = "before ";
+    fireEvent.input(firstTextSegment);
+
+    await expectComposerText(rendered.container, "before main.ts");
+  });
+
+  test("renders an editable leading text segment before a skill chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+        initialDraft={{
+          segments: [
+            createTextSegment("", "before-skill"),
+            createSkillReferenceSegment(SKILL_REVIEW, "skill-1"),
+            createTextSegment("", "after-skill"),
+          ],
+          attachments: [],
+        }}
+      />,
+    );
+
+    const firstTextSegment = getTextSegments(rendered.container)[0];
+    if (!(firstTextSegment instanceof HTMLElement)) {
+      throw new Error("Expected leading text segment");
+    }
+
+    firstTextSegment.textContent = "before ";
+    fireEvent.input(firstTextSegment);
+
+    await expectComposerText(rendered.container, "before review");
+    expect(rendered.container.querySelector(".lucide-blocks")).toBeDefined();
   });
 
   test("keeps shift-enter newlines after file chips in normal inline flow", async () => {
@@ -1394,7 +1548,7 @@ describe("AgentChatComposerEditor", () => {
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    const trailingEditable = getLastTextSegment(rendered.container);
     if (!(trailingEditable instanceof HTMLElement)) {
       throw new Error("Expected trailing editable text segment");
     }
@@ -1403,8 +1557,7 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        const updatedTrailingEditable =
-          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
         expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
         const classNames = (updatedTrailingEditable as HTMLElement).className.split(/\s+/);
@@ -1445,7 +1598,7 @@ describe("AgentChatComposerEditor", () => {
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    const trailingEditable = getLastTextSegment(rendered.container);
     if (!(trailingEditable instanceof HTMLElement)) {
       throw new Error("Expected trailing editable text segment");
     }
@@ -1453,14 +1606,13 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.keyDown(trailingEditable, { key: "Enter", shiftKey: true });
     await waitFor(
       () => {
-        const updatedTrailingEditable =
-          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
 
-    const lineBreakEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    const lineBreakEditable = getLastTextSegment(rendered.container);
     if (!(lineBreakEditable instanceof HTMLElement)) {
       throw new Error("Expected trailing editable text segment after line break");
     }
@@ -1469,8 +1621,7 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        const updatedTrailingEditable =
-          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
         expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\u200B");
         expect((updatedTrailingEditable as HTMLElement).className).toContain("inline-block");
@@ -1513,8 +1664,7 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        const updatedTrailingEditable =
-          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
         expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
         expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
@@ -1589,8 +1739,7 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(
       () => {
-        const updatedTrailingEditable =
-          rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
         expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\n\u200B");
         expect((updatedTrailingEditable as HTMLElement).className).toContain("after:w-px");
@@ -1644,11 +1793,11 @@ describe("AgentChatComposerEditor", () => {
 
     await waitFor(() => {
       const editables = Array.from(rendered.container.querySelectorAll("[data-text-segment-id]"));
-      expect(editables).toHaveLength(1);
-      expect(editables[0]?.className).toContain("inline-block");
+      expect(editables).toHaveLength(2);
+      expect(editables.at(-1)?.className).toContain("inline-block");
     });
 
-    const trailingEditable = rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+    const trailingEditable = getLastTextSegment(rendered.container);
     if (!(trailingEditable instanceof HTMLElement)) {
       throw new Error("Expected trailing editable text segment");
     }
@@ -1666,8 +1815,7 @@ describe("AgentChatComposerEditor", () => {
     fireEvent.input(trailingEditable.closest('[contenteditable="true"]') as HTMLElement);
 
     await waitFor(() => {
-      const updatedTrailingEditable =
-        rendered.container.querySelectorAll("[data-text-segment-id]")[0];
+      const updatedTrailingEditable = getLastTextSegment(rendered.container);
       expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
       expect((updatedTrailingEditable as HTMLElement).className).toContain("inline");
       expect((updatedTrailingEditable as HTMLElement).className).not.toContain("inline-block");
@@ -1740,6 +1888,59 @@ describe("AgentChatComposerEditor", () => {
     await waitFor(() => {
       expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
         "main.ts",
+      );
+    });
+
+    const originalTrailingEditable =
+      rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+    if (!(originalTrailingEditable instanceof HTMLElement)) {
+      throw new Error("Expected trailing editable text segment");
+    }
+
+    const trailingSegmentId = originalTrailingEditable.dataset.textSegmentId;
+    originalTrailingEditable.textContent = " ";
+    const textNode = originalTrailingEditable.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, 1);
+      range.collapse(true);
+      const selection = globalThis.getSelection?.();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    fireEvent.input(originalTrailingEditable.closest('[contenteditable="true"]') as HTMLElement);
+
+    await waitFor(() => {
+      const updatedTrailingEditable =
+        rendered.container.querySelectorAll("[data-text-segment-id]")[1];
+      expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
+      expect((updatedTrailingEditable as HTMLElement).dataset.textSegmentId).toBe(
+        trailingSegmentId,
+      );
+      expect(updatedTrailingEditable?.textContent).toBe(" ");
+    });
+  });
+
+  test("preserves the trailing text segment id after typing after a skill chip", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        supportsSkillReferences={true}
+        skills={SKILLS}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "check $");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /analyze/i })).toBeDefined();
+    });
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+        "analyze",
       );
     });
 

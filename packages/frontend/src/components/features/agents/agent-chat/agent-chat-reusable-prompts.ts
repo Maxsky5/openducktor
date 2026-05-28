@@ -86,6 +86,9 @@ export const resolveReusablePromptDraftToUserMessageParts = (
     if (segment.kind === "file_reference") {
       throw new Error("Remove file references before sending a reusable prompt slash command.");
     }
+    if (segment.kind === "skill_mention") {
+      throw new Error("Remove skill references before sending a reusable prompt slash command.");
+    }
     if (segment.kind === "slash_command") {
       throw new Error("Reusable prompt messages must contain exactly one slash command.");
     }

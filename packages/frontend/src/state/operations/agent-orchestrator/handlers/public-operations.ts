@@ -12,6 +12,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
 } from "@openducktor/core";
@@ -91,6 +92,11 @@ type CreatePublicOperationsArgs = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionSkills?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>;
   readSessionFileSearch: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -127,6 +133,7 @@ export const createOrchestratorPublicOperations = ({
   attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
+  readSessionSkills,
   removeAgentSession,
   removeAgentSessions,
   sessionActions,
@@ -151,6 +158,7 @@ export const createOrchestratorPublicOperations = ({
   attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
+  ...(readSessionSkills ? { readSessionSkills } : {}),
   removeAgentSession,
   removeAgentSessions: (input) => removeAgentSessions(input),
   startAgentSession: (input: StartAgentSessionInput): Promise<string> =>

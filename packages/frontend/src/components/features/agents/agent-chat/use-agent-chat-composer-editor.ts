@@ -1,4 +1,8 @@
-import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentSkillReference,
+  AgentSlashCommand,
+} from "@openducktor/core";
 import {
   type ClipboardEvent as ReactClipboardEvent,
   type FocusEvent as ReactFocusEvent,
@@ -33,14 +37,19 @@ type UseAgentChatComposerEditorArgs = {
   onSend: () => void;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
   slashCommands: AgentSlashCommand[];
+  skills: AgentSkillReference[];
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
 type UseAgentChatComposerEditorResult = {
   filteredSlashCommands: AgentSlashCommand[];
+  filteredSkills: AgentSkillReference[];
   activeSlashIndex: number;
+  activeSkillIndex: number;
   showSlashMenu: boolean;
+  showSkillMenu: boolean;
   fileSearchResults: AgentFileSearchResult[];
   activeFileIndex: number;
   showFileMenu: boolean;
@@ -48,6 +57,7 @@ type UseAgentChatComposerEditorResult = {
   isFileSearchLoading: boolean;
   focusLastTextSegment: () => void;
   selectSlashCommand: (command: AgentSlashCommand) => void;
+  selectSkillReference: (skill: AgentSkillReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
   handleEditorInput: (root: HTMLDivElement) => void;
   handleEditorBeforeInput: (event: ReactFormEvent<HTMLDivElement>) => void;
@@ -68,7 +78,9 @@ export const useAgentChatComposerEditor = ({
   onSend,
   supportsSlashCommands,
   supportsFileSearch,
+  supportsSkillReferences,
   slashCommands,
+  skills,
   searchFiles,
 }: UseAgentChatComposerEditorArgs): UseAgentChatComposerEditorResult => {
   const latestDraftRef = useRef(draft);
@@ -88,25 +100,33 @@ export const useAgentChatComposerEditor = ({
     disabled,
     supportsSlashCommands,
     supportsFileSearch,
+    supportsSkillReferences,
     slashCommands,
+    skills,
     searchFiles,
   });
   const {
     slashMenuState,
     fileMenuState,
+    skillMenuState,
     filteredSlashCommands,
+    filteredSkills,
     activeSlashIndex,
+    activeSkillIndex,
     activeFileIndex,
     showSlashMenu,
+    showSkillMenu,
     fileSearchResults,
     showFileMenu,
     fileSearchError,
     isFileSearchLoading,
     closeSlashMenu,
     closeFileMenu,
+    closeSkillMenu,
     syncMenusForSelectionTarget,
     moveActiveFileIndex,
     moveActiveSlashIndex,
+    moveActiveSkillIndex,
   } = autocomplete;
 
   const applyEditResult = useCallback(
@@ -242,6 +262,28 @@ export const useAgentChatComposerEditor = ({
     [applyEditResult, closeFileMenu, fileMenuState],
   );
 
+  const selectSkillReference = useCallback(
+    (skill: AgentSkillReference) => {
+      if (!skillMenuState) {
+        return;
+      }
+
+      const didApply = applyEditResult(
+        applyComposerDraftEdit(latestDraftRef.current, {
+          type: "insert_skill_reference",
+          textSegmentId: skillMenuState.textSegmentId,
+          rangeStart: skillMenuState.rangeStart,
+          rangeEnd: skillMenuState.rangeEnd,
+          skill,
+        }),
+      );
+      if (didApply) {
+        closeSkillMenu();
+      }
+    },
+    [applyEditResult, closeSkillMenu, skillMenuState],
+  );
+
   const {
     handleEditorInput,
     handleEditorBeforeInput,
@@ -260,18 +302,24 @@ export const useAgentChatComposerEditor = ({
     selection,
     slashMenuState,
     fileMenuState,
+    skillMenuState,
     filteredSlashCommands,
+    filteredSkills,
     activeSlashIndex,
+    activeSkillIndex,
     activeFileIndex,
     closeSlashMenu,
     closeFileMenu,
+    closeSkillMenu,
     syncMenusForSelectionTarget,
     moveActiveFileIndex,
     moveActiveSlashIndex,
+    moveActiveSkillIndex,
     applyEditResult,
     clearComposerContents,
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
+    selectSkillReference,
     selectFileSearchResult,
   });
 
@@ -281,8 +329,11 @@ export const useAgentChatComposerEditor = ({
 
   return {
     filteredSlashCommands,
+    filteredSkills,
     activeSlashIndex,
+    activeSkillIndex,
     showSlashMenu,
+    showSkillMenu,
     fileSearchResults,
     activeFileIndex,
     showFileMenu,
@@ -290,6 +341,7 @@ export const useAgentChatComposerEditor = ({
     isFileSearchLoading,
     focusLastTextSegment,
     selectSlashCommand,
+    selectSkillReference,
     selectFileSearchResult,
     handleEditorInput,
     handleEditorBeforeInput,

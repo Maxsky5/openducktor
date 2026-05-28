@@ -1273,6 +1273,222 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
   });
 
+  test("renders user skill references as inline chips inside the user message text", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-skill-ref",
+          role: "user",
+          content: "use $review please",
+          timestamp: "2026-02-22T10:28:30.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "text",
+                text: "use $review please",
+              },
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/review/SKILL.md",
+                  path: "/skills/review/SKILL.md",
+                  name: "review",
+                  title: "Review",
+                },
+                sourceText: {
+                  value: "$review",
+                  start: 4,
+                  end: 11,
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain("use ");
+    expect(html).toContain(">review<");
+    expect(html).not.toContain(">$review<");
+    expect(html).toContain("bg-purple-100");
+    expect(html).toContain("mx-1");
+    expect(html).toContain("lucide-blocks");
+    expect(html).toContain("please");
+  });
+
+  test("renders ordered user skill reference parts at their transcript position", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "ordered-user-skill-ref",
+          role: "user",
+          content: "Tell me the purpose of $create-pr please",
+          timestamp: "2026-02-22T10:28:45.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "text",
+                text: "Tell me the purpose of ",
+              },
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/create-pr/SKILL.md",
+                  path: "/skills/create-pr/SKILL.md",
+                  name: "create-pr",
+                  title: "Create PR",
+                },
+              },
+              {
+                kind: "text",
+                text: " please",
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    const leadingTextIndex = html.indexOf("Tell me the purpose of");
+    const chipTextIndex = html.indexOf(">create-pr<");
+    const trailingTextIndex = html.indexOf(" please");
+
+    expect(leadingTextIndex).toBeGreaterThanOrEqual(0);
+    expect(chipTextIndex).toBeGreaterThan(leadingTextIndex);
+    expect(trailingTextIndex).toBeGreaterThan(chipTextIndex);
+    expect(html).not.toContain("Tell me the purpose of please");
+    expect(html).not.toContain(">$create-pr<");
+    expect(html).toContain("mx-1");
+  });
+
+  test("renders hydrated skill source text against the raw message content", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "hydrated-user-skill-ref",
+          role: "user",
+          content: "Tell me the purpose of $create-pr please skill-hydration-smoke",
+          timestamp: "2026-02-22T10:28:50.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "text",
+                text: "Tell me the purpose of ",
+              },
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/create-pr/SKILL.md",
+                  path: "/skills/create-pr/SKILL.md",
+                  name: "create-pr",
+                  title: "Create PR",
+                },
+                sourceText: {
+                  value: "$create-pr",
+                  start: 23,
+                  end: 33,
+                },
+              },
+              {
+                kind: "text",
+                text: " please skill-hydration-smoke",
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    const leadingTextIndex = html.indexOf("Tell me the purpose of");
+    const chipTextIndex = html.indexOf(">create-pr<");
+    const trailingTextIndex = html.indexOf(" please skill-hydration-smoke");
+
+    expect(leadingTextIndex).toBeGreaterThanOrEqual(0);
+    expect(chipTextIndex).toBeGreaterThan(leadingTextIndex);
+    expect(trailingTextIndex).toBeGreaterThan(chipTextIndex);
+    expect(html).not.toContain("create-prill-hydration-smoke");
+    expect(html).not.toContain(">$create-pr<");
+  });
+
+  test("renders a skill chip when the raw user message contains the marker without source text", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "raw-marker-user-skill-ref",
+          role: "user",
+          content: "$thermo-nuclear-code-quality-review",
+          timestamp: "2026-02-22T10:28:52.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/thermo-nuclear-code-quality-review/SKILL.md",
+                  path: "/skills/thermo-nuclear-code-quality-review/SKILL.md",
+                  name: "thermo-nuclear-code-quality-review",
+                  title: "Thermo Nuclear Code Quality Review",
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain(">thermo-nuclear-code-quality-review<");
+    expect(html).toContain("lucide-blocks");
+    expect(html).not.toContain("$thermo-nuclear-code-quality-review");
+  });
+
+  test("renders fallback user skill chips only when the raw marker is absent", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "fallback-user-skill-ref",
+          role: "user",
+          content: "use a skill",
+          timestamp: "2026-02-22T10:28:55.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/review/SKILL.md",
+                  path: "/skills/review/SKILL.md",
+                  name: "review",
+                  title: "Review",
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain("use a skill");
+    expect(html).toContain(">review<");
+  });
+
   test("renders fallback user file reference text as an inline chip", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

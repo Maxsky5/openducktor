@@ -128,6 +128,7 @@ fn capabilities_with_scopes(scopes: Vec<RuntimeSupportedScope>) -> RuntimeCapabi
             ],
             supports_slash_commands: true,
             supports_file_search: true,
+            supports_skill_references: false,
         },
         optional_surfaces: RuntimeOptionalSurfaceCapabilities {
             supports_profiles: true,
@@ -347,7 +348,17 @@ fn builtin_codex_runtime_exposes_codex_identity_and_defaults_are_unchanged() {
             .capabilities
             .prompt_input
             .supported_parts,
-        vec![RuntimePromptInputPartType::Text]
+        vec![
+            RuntimePromptInputPartType::Text,
+            RuntimePromptInputPartType::SkillMention,
+        ]
+    );
+    assert!(
+        definition
+            .descriptor()
+            .capabilities
+            .prompt_input
+            .supports_skill_references
     );
     assert!(
         definition

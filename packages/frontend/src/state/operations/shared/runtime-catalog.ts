@@ -3,6 +3,7 @@ import type {
   AgentEnginePort,
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { appQueryClient } from "@/lib/query-client";
@@ -18,7 +19,7 @@ type ListCatalogInput = {
 
 export type RuntimeCatalogAdapter = Pick<
   AgentEnginePort,
-  "listAvailableModels" | "listAvailableSlashCommands" | "searchFiles"
+  "listAvailableModels" | "listAvailableSlashCommands" | "listAvailableSkills" | "searchFiles"
 >;
 
 type RuntimeCatalogDependencies = {
@@ -32,6 +33,9 @@ type RuntimeCatalogDependencies = {
   ) => Promise<RuntimeInstanceSummary[]>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
   listAvailableSlashCommands: (input: ListCatalogInput) => Promise<AgentSlashCommandCatalog>;
+  listAvailableSkills?: (
+    input: ListCatalogInput & { workingDirectory: string },
+  ) => Promise<AgentSkillCatalog>;
   searchFiles: (input: ListCatalogInput & { query: string }) => Promise<AgentFileSearchResult[]>;
 };
 
@@ -87,6 +91,20 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     return deps.listAvailableSlashCommands(await resolveCatalogInput(repoPath, runtimeKind));
   };
 
+  const loadRepoRuntimeSkills = async (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ): Promise<AgentSkillCatalog> => {
+    if (!deps.listAvailableSkills) {
+      throw new Error("Runtime skill catalog loading is unavailable.");
+    }
+    return deps.listAvailableSkills({
+      ...(await resolveCatalogInput(repoPath, runtimeKind)),
+      workingDirectory,
+    });
+  };
+
   const loadRepoRuntimeFileSearch = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -108,6 +126,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
   return {
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands,
+    loadRepoRuntimeSkills,
     loadRepoRuntimeFileSearch,
     checkRepoRuntimeHealth,
   };
@@ -132,6 +151,12 @@ export const createHostRuntimeCatalogOperations = (
       getAdapter(input.runtimeKind).listAvailableSlashCommands({
         repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
+      }),
+    listAvailableSkills: (input) =>
+      getAdapter(input.runtimeKind).listAvailableSkills({
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+        workingDirectory: input.workingDirectory,
       }),
     searchFiles: (input) =>
       getAdapter(input.runtimeKind).searchFiles({

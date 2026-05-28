@@ -24,10 +24,15 @@ const buildModel = () => ({
   isSelectionCatalogLoading: false,
   supportsSlashCommands: true,
   supportsFileSearch: true,
+  supportsSkillReferences: false,
   slashCommandCatalog: { commands: [] },
   slashCommands: [],
   slashCommandsError: null,
   isSlashCommandsLoading: false,
+  skillCatalog: null,
+  skills: [],
+  skillsError: null,
+  isSkillsLoading: false,
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
   modelOptions: [{ value: "openai/gpt-5.3-codex", label: "GPT-5.3 Codex" }],
@@ -74,6 +79,19 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("22.5%");
     expect(html).toContain("lucide-brain-cog");
     expect(html).toContain("high");
+  });
+
+  test("includes skill references in the composer placeholder when supported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsSkillReferences: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("@ for files; / for commands; $ for skills");
   });
 
   test("hides stop and context widgets when not available", () => {

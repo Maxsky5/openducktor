@@ -550,7 +550,7 @@ describe("message-execution", () => {
         tools: {},
       }),
     ).rejects.toThrow(
-      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments or file references.",
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, or skill references.",
     );
   });
 
@@ -570,7 +570,34 @@ describe("message-execution", () => {
         tools: {},
       }),
     ).rejects.toThrow(
-      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments or file references.",
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, or skill references.",
+    );
+  });
+
+  test("fails explicitly when a slash command message also contains a skill reference", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          externalSessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            {
+              kind: "skill_mention",
+              skill: {
+                id: "/skills/review/SKILL.md",
+                name: "review",
+                path: "/skills/review/SKILL.md",
+              },
+            },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow(
+      "OpenCode request failed: run slash command: OpenCode slash commands do not support structured attachments, file references, or skill references.",
     );
   });
 

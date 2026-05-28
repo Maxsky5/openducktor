@@ -195,6 +195,8 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.promptInput.supportsSlashCommands;
     case "promptInput.supportsFileSearch":
       return runtimeDescriptor.capabilities.promptInput.supportsFileSearch;
+    case "promptInput.supportsSkillReferences":
+      return runtimeDescriptor.capabilities.promptInput.supportsSkillReferences;
     case "optionalSurfaces.supportsProfiles":
       return runtimeDescriptor.capabilities.optionalSurfaces.supportsProfiles;
     case "optionalSurfaces.supportsVariants":

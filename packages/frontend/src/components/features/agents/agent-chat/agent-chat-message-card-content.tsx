@@ -35,6 +35,7 @@ import {
   RegularToolMessage,
   WorkflowToolMessage,
 } from "./agent-chat-message-card-tool-presenters";
+import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { formatAgentDuration } from "./format-agent-duration";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
@@ -279,11 +280,13 @@ const AssistantMessage = ({
   );
 };
 
-type UserMessageInlineFileReferenceRange = {
-  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
+type UserMessageInlineReferenceRange = {
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>;
   start: number;
   end: number;
 };
+
+const USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME = "mx-1 max-w-full align-middle";
 
 const readVisibleUserMessageText = (parts: AgentUserMessageDisplayPart[]): string => {
   let text = "";
@@ -299,6 +302,14 @@ const readRenderableUserMessageText = (
   parts: AgentUserMessageDisplayPart[],
   fallbackText: string,
 ): string => {
+  if (
+    parts.some(
+      (part) =>
+        (part.kind === "file_reference" || part.kind === "skill_mention") && part.sourceText,
+    )
+  ) {
+    return fallbackText;
+  }
   const visibleText = readVisibleUserMessageText(parts);
   if (visibleText.length > 0) {
     return visibleText;
@@ -306,25 +317,97 @@ const readRenderableUserMessageText = (
   return fallbackText;
 };
 
-const readInlineUserFileReferenceRanges = (
-  rawText: string,
-  parts: AgentUserMessageDisplayPart[],
-): UserMessageInlineFileReferenceRange[] => {
-  const ranges: UserMessageInlineFileReferenceRange[] = [];
+const userMessageTextContainsReferenceMarker = (
+  text: string,
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>,
+): boolean => {
+  if (part.kind === "skill_mention") {
+    return text.includes(`$${part.skill.name}`);
+  }
+  return text.includes(`@${part.file.path}`) || text.includes(`@${part.file.name}`);
+};
+
+const canRenderOrderedUserMessageParts = (parts: AgentUserMessageDisplayPart[]): boolean => {
+  const visibleText = readVisibleUserMessageText(parts);
+  if (visibleText.length === 0) {
+    return false;
+  }
+
+  let hasReference = false;
   for (const part of parts) {
-    if (part.kind !== "file_reference" || !part.sourceText) {
+    if (part.kind !== "file_reference" && part.kind !== "skill_mention") {
       continue;
     }
-    const range = {
-      part,
-      start: part.sourceText.start,
-      end: part.sourceText.end,
-    } satisfies UserMessageInlineFileReferenceRange;
+    hasReference = true;
+    if (part.sourceText || userMessageTextContainsReferenceMarker(visibleText, part)) {
+      return false;
+    }
+  }
+  return hasReference;
+};
+
+const renderUserMessagePartSequence = (
+  parts: AgentUserMessageDisplayPart[],
+): ReactElement | null => {
+  if (!canRenderOrderedUserMessageParts(parts)) {
+    return null;
+  }
+
+  const nodes: ReactNode[] = [];
+  const keyOccurrences = new Map<string, number>();
+  const nextSequenceKey = (base: string): string => {
+    const occurrence = (keyOccurrences.get(base) ?? 0) + 1;
+    keyOccurrences.set(base, occurrence);
+    return `${base}-${occurrence}`;
+  };
+
+  for (const part of parts) {
+    if (part.kind === "text" && !part.synthetic) {
+      pushUserMessageTextNode(nodes, part.text, nextSequenceKey("text"));
+      continue;
+    }
+
+    if (part.kind === "file_reference" || part.kind === "skill_mention") {
+      nodes.push(renderUserMessageReferenceChip(part, nextSequenceKey(`reference-${part.kind}`)));
+    }
+  }
+
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  return <p className="whitespace-pre-wrap leading-6">{nodes}</p>;
+};
+
+const readInlineUserReferenceRanges = (
+  rawText: string,
+  parts: AgentUserMessageDisplayPart[],
+): UserMessageInlineReferenceRange[] => {
+  const ranges: UserMessageInlineReferenceRange[] = [];
+  for (const part of parts) {
+    if (part.kind !== "file_reference" && part.kind !== "skill_mention") {
+      continue;
+    }
+    const sourceText = part.sourceText;
+    if (!sourceText) {
+      if (part.kind === "skill_mention") {
+        const marker = `$${part.skill.name}`;
+        const start = rawText.indexOf(marker);
+        if (start >= 0) {
+          ranges.push({ part, start, end: start + marker.length });
+        }
+      }
+      continue;
+    }
+    const start = sourceText.start;
+    const end = sourceText.end;
+    const range = { part, start, end } satisfies UserMessageInlineReferenceRange;
     if (range.start >= 0 && range.end >= range.start && range.end <= rawText.length) {
       ranges.push(range);
     }
   }
-  return ranges.toSorted((left, right) => left.start - right.start);
+  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
+  return [...ranges].sort((left, right) => left.start - right.start);
 };
 
 const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string): void => {
@@ -335,13 +418,42 @@ const pushUserMessageTextNode = (nodes: ReactNode[], text: string, key: string):
   nodes.push(<Fragment key={key}>{text}</Fragment>);
 };
 
+function renderUserMessageReferenceChip(
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" | "skill_mention" }>,
+  key: string,
+): ReactElement {
+  if (part.kind === "skill_mention") {
+    return (
+      <AgentChatSkillReferenceChip
+        key={key}
+        skill={part.skill}
+        className={USER_MESSAGE_SKILL_REFERENCE_CHIP_CLASS_NAME}
+      />
+    );
+  }
+
+  return (
+    <AgentChatFileReferenceChip
+      key={key}
+      file={part.file}
+      className="max-w-full align-middle"
+      tooltip
+    />
+  );
+}
+
 const renderUserMessageInlineContent = (
   rawText: string,
   parts: AgentUserMessageDisplayPart[],
 ): ReactElement | null => {
+  const orderedParts = renderUserMessagePartSequence(parts);
+  if (orderedParts) {
+    return orderedParts;
+  }
+
   const nodes: ReactNode[] = [];
-  const inlineRanges = readInlineUserFileReferenceRanges(rawText, parts);
-  const renderedInlineFileReferences = new Set<AgentUserMessageDisplayPart>();
+  const inlineRanges = readInlineUserReferenceRanges(rawText, parts);
+  const renderedInlineReferences = new Set<AgentUserMessageDisplayPart>();
 
   if (inlineRanges.length === 0) {
     pushUserMessageTextNode(nodes, rawText, "text");
@@ -354,15 +466,8 @@ const renderUserMessageInlineContent = (
       }
 
       pushUserMessageTextNode(nodes, rawText.slice(cursor, range.start), `text-${cursor}`);
-      nodes.push(
-        <AgentChatFileReferenceChip
-          key={`file-${range.part.file.id}-${range.start}`}
-          file={range.part.file}
-          className="max-w-full align-middle"
-          tooltip
-        />,
-      );
-      renderedInlineFileReferences.add(range.part);
+      nodes.push(renderUserMessageReferenceChip(range.part, `reference-${range.start}`));
+      renderedInlineReferences.add(range.part);
       cursor = range.end;
     }
 
@@ -370,18 +475,17 @@ const renderUserMessageInlineContent = (
   }
 
   for (const part of parts) {
-    if (part.kind !== "file_reference" || renderedInlineFileReferences.has(part)) {
+    if (
+      (part.kind !== "file_reference" && part.kind !== "skill_mention") ||
+      renderedInlineReferences.has(part) ||
+      (part.kind === "skill_mention" &&
+        !part.sourceText &&
+        userMessageTextContainsReferenceMarker(rawText, part))
+    ) {
       continue;
     }
 
-    nodes.push(
-      <AgentChatFileReferenceChip
-        key={`file-${part.file.id}-unanchored`}
-        file={part.file}
-        className="max-w-full align-middle"
-        tooltip
-      />,
-    );
+    nodes.push(renderUserMessageReferenceChip(part, `reference-${nodes.length}`));
   }
 
   if (nodes.length === 0) {

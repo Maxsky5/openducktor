@@ -671,6 +671,12 @@ export class OpencodeSdkAdapter
     );
   }
 
+  async listAvailableSkills(
+    _: import("@openducktor/core").ListAgentSkillsInput,
+  ): Promise<import("@openducktor/core").AgentSkillCatalog> {
+    throw new Error("OpenCode does not support skill reference catalogs.");
+  }
+
   async searchFiles(
     input: import("@openducktor/core").SearchAgentFilesInput,
   ): Promise<import("@openducktor/core").AgentFileSearchResult[]> {

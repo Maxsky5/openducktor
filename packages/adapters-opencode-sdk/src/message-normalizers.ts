@@ -281,7 +281,11 @@ export const readVisibleUserTextFromDisplayParts = (
       return [];
     }
 
-    return [{ kind: "file_reference", file: part.file }];
+    if (part.kind === "file_reference") {
+      return [{ kind: "file_reference", file: part.file }];
+    }
+
+    return [];
   });
 
   return buildOpenCodeVisibleText(userMessageParts);

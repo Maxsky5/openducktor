@@ -28,6 +28,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     | "hydrateRequestedTaskSessionHistory"
     | "readSessionFileSearch"
     | "readSessionSlashCommands"
+    | "readSessionSkills"
     | "startAgentSession"
     | "settleStartedAgentSession"
     | "sendAgentMessage"
@@ -117,6 +118,7 @@ export function useAgentsPageOrchestrationShellModel({
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,
       readSessionFileSearch: agentOperations.readSessionFileSearch,
       readSessionSlashCommands: agentOperations.readSessionSlashCommands,
+      readSessionSkills: agentOperations.readSessionSkills,
       bootstrapTaskSessions: agentOperations.bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory: agentOperations.hydrateRequestedTaskSessionHistory,
       humanRequestChangesTask,

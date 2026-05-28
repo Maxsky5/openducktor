@@ -94,9 +94,13 @@ pub(super) fn codex_runtime_definition() -> RuntimeDefinition {
                     pending_visibility: vec![RuntimePendingInputVisibility::LiveSnapshot],
                 },
                 prompt_input: RuntimePromptInputCapabilities {
-                    supported_parts: vec![RuntimePromptInputPartType::Text],
+                    supported_parts: vec![
+                        RuntimePromptInputPartType::Text,
+                        RuntimePromptInputPartType::SkillMention,
+                    ],
                     supports_slash_commands: false,
                     supports_file_search: false,
+                    supports_skill_references: true,
                 },
                 optional_surfaces: RuntimeOptionalSurfaceCapabilities {
                     supports_profiles: false,

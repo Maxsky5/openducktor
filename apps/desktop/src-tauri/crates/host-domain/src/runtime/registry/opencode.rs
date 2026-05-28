@@ -122,6 +122,7 @@ pub(super) fn opencode_runtime_definition() -> RuntimeDefinition {
                     ],
                     supports_slash_commands: true,
                     supports_file_search: true,
+                    supports_skill_references: false,
                 },
                 optional_surfaces: RuntimeOptionalSurfaceCapabilities {
                     supports_profiles: true,

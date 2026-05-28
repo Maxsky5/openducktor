@@ -16,6 +16,7 @@ export * from "./run-schemas";
 export * from "./runtime-descriptors";
 export * from "./session-schemas";
 export * from "./session-todo-parsing";
+export * from "./skill-schemas";
 export * from "./slash-command-schemas";
 export * from "./spec-template";
 export * from "./system-open-schemas";

@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentSessionHistoryMessage,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { queryOptions } from "@tanstack/react-query";
@@ -11,11 +12,12 @@ import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
+export const SESSION_SKILLS_STALE_TIME_MS = 5 * 60_000;
 export const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
 export const SESSION_HISTORY_STALE_TIME_MS = 0;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
-const agentSessionRuntimeQueryKeys = {
+export const agentSessionRuntimeQueryKeys = {
   all: ["agent-session-runtime"] as const,
   modelCatalog: (repoPath: string, runtimeKind: RuntimeKind) =>
     [
@@ -30,6 +32,14 @@ const agentSessionRuntimeQueryKeys = {
       "slash-commands",
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
+    ] as const,
+  skills: (repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string) =>
+    [
+      ...agentSessionRuntimeQueryKeys.all,
+      "skills",
+      normalizeWorkingDirectory(repoPath),
+      runtimeKind,
+      normalizeWorkingDirectory(workingDirectory),
     ] as const,
   fileSearch: (
     repoPath: string,
@@ -102,6 +112,23 @@ export const sessionSlashCommandsQueryOptions = (
     queryFn: (): Promise<AgentSlashCommandCatalog> =>
       readSessionSlashCommands(repoPath, runtimeKind),
     staleTime: SESSION_SLASH_COMMANDS_STALE_TIME_MS,
+  });
+
+export const sessionSkillsQueryOptions = (
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+  workingDirectory: string,
+  readSessionSkills: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>,
+) =>
+  queryOptions({
+    queryKey: agentSessionRuntimeQueryKeys.skills(repoPath, runtimeKind, workingDirectory),
+    queryFn: (): Promise<AgentSkillCatalog> =>
+      readSessionSkills(repoPath, runtimeKind, workingDirectory),
+    staleTime: SESSION_SKILLS_STALE_TIME_MS,
   });
 
 export const sessionFileSearchQueryOptions = (

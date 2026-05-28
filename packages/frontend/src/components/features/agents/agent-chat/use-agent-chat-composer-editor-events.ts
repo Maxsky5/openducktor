@@ -1,4 +1,8 @@
-import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentSkillReference,
+  AgentSlashCommand,
+} from "@openducktor/core";
 import {
   type MutableRefObject,
   type ClipboardEvent as ReactClipboardEvent,
@@ -18,6 +22,7 @@ import {
 import {
   AUTOCOMPLETE_NAVIGATION_KEYS,
   type FileMenuState,
+  type SkillMenuState,
   type SlashMenuState,
 } from "./use-agent-chat-composer-editor-autocomplete";
 import {
@@ -130,21 +135,27 @@ type UseAgentChatComposerEditorEventsArgs = {
   >;
   slashMenuState: SlashMenuState | null;
   fileMenuState: FileMenuState | null;
+  skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
+  filteredSkills: AgentSkillReference[];
   activeSlashIndex: number;
+  activeSkillIndex: number;
   activeFileIndex: number;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
   syncMenusForSelectionTarget: (
     sourceDraft: AgentChatComposerDraft,
     selectionTarget: TextSelectionTarget | null,
   ) => void;
   moveActiveFileIndex: (direction: 1 | -1) => boolean;
   moveActiveSlashIndex: (direction: 1 | -1) => boolean;
+  moveActiveSkillIndex: (direction: 1 | -1) => boolean;
   applyEditResult: ApplyEditResult;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
+  selectSkillReference: (skill: AgentSkillReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
 };
 
@@ -158,18 +169,24 @@ export const useAgentChatComposerEditorEvents = ({
   selection,
   slashMenuState,
   fileMenuState,
+  skillMenuState,
   filteredSlashCommands,
+  filteredSkills,
   activeSlashIndex,
+  activeSkillIndex,
   activeFileIndex,
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
   syncMenusForSelectionTarget,
   moveActiveFileIndex,
   moveActiveSlashIndex,
+  moveActiveSkillIndex,
   applyEditResult,
   clearComposerContents,
   insertNewlineAtSelectionTarget,
   selectSlashCommand,
+  selectSkillReference,
   selectFileSearchResult,
 }: UseAgentChatComposerEditorEventsArgs) => {
   const handleEditorInput = useCallback(
@@ -400,17 +417,23 @@ export const useAgentChatComposerEditorEvents = ({
         isComposerContentFullySelected,
         fileMenuState,
         slashMenuState,
+        skillMenuState,
         filteredSlashCommands,
+        filteredSkills,
         activeSlashIndex,
+        activeSkillIndex,
         activeFileIndex,
         moveActiveFileIndex,
         moveActiveSlashIndex,
+        moveActiveSkillIndex,
         closeSlashMenu,
         closeFileMenu,
+        closeSkillMenu,
         onSend,
         clearComposerContents,
         insertNewlineAtSelectionTarget,
         selectSlashCommand,
+        selectSkillReference,
         selectFileSearchResult,
         applyEditResult,
       });
@@ -418,21 +441,27 @@ export const useAgentChatComposerEditorEvents = ({
     [
       activeFileIndex,
       activeSlashIndex,
+      activeSkillIndex,
       applyEditResult,
       clearComposerContents,
       closeFileMenu,
       closeSlashMenu,
+      closeSkillMenu,
       disabled,
       fileMenuState,
       filteredSlashCommands,
+      filteredSkills,
       insertNewlineAtSelectionTarget,
       latestDraftRef,
       moveActiveFileIndex,
       moveActiveSlashIndex,
+      moveActiveSkillIndex,
       onSend,
       selectFileSearchResult,
       selectSlashCommand,
+      selectSkillReference,
       selection,
+      skillMenuState,
       slashMenuState,
     ],
   );

@@ -6,15 +6,17 @@ import {
 import {
   codexItemId,
   codexItemTypeMatches,
-  codexUserInputListToText,
   codexUserInputsFromItem,
-  codexUserInputsToDisplayParts,
   terminalHistoryPart,
 } from "../codex-app-server-transcript";
 import type { CodexMappingResult } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
+import {
+  codexUserInputListToText,
+  codexUserInputsToDisplayParts,
+} from "../codex-user-input-display";
 
 export const userMessageMapper: CodexEventMapper = {
   name: "user_message",

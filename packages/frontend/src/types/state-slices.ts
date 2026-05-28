@@ -27,6 +27,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
 } from "@openducktor/core";
@@ -218,6 +219,11 @@ export type AgentStateContextValue = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionSkills?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>;
   readSessionFileSearch: (
     repoPath: string,
     runtimeKind: RuntimeKind,

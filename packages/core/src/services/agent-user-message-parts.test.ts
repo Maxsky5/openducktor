@@ -19,6 +19,13 @@ const createFileReference = () => ({
   kind: "code" as const,
 });
 
+const createSkillReference = () => ({
+  id: "/skills/review/SKILL.md",
+  name: "review",
+  path: "/skills/review/SKILL.md",
+  title: "Review",
+});
+
 const createAttachment = () => ({
   id: "attachment-1",
   path: "/tmp/diagram.png",
@@ -150,6 +157,30 @@ describe("agent-user-message-parts", () => {
     ).toBe(
       "And now tell me if @apps/api/src/routes/members.ts and @apps/web/src/routes/_authenticated/account.tsx are consistents?",
     );
+  });
+
+  test("preserves skill references and serializes them as skill markers", () => {
+    const skill = createSkillReference();
+
+    expect(
+      normalizeAgentUserMessageParts([
+        { kind: "text", text: "  use " },
+        { kind: "skill_mention", skill },
+        { kind: "text", text: " here  " },
+      ]),
+    ).toEqual([
+      { kind: "text", text: "use " },
+      { kind: "skill_mention", skill },
+      { kind: "text", text: " here" },
+    ]);
+
+    expect(
+      serializeAgentUserMessagePartsToText([
+        { kind: "text", text: "  use " },
+        { kind: "skill_mention", skill },
+        { kind: "text", text: " now  " },
+      ]),
+    ).toBe("use $review now");
   });
 
   test("does not synthesize spaces before punctuation after file references", () => {

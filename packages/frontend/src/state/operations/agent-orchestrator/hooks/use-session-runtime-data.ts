@@ -6,6 +6,7 @@ import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-ru
 import {
   type AgentSessionViewLifecyclePhase,
   deriveAgentSessionViewLifecycle,
+  type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
@@ -15,12 +16,11 @@ import {
   sessionTodosQueryOptions,
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 
-type UseAgentStudioActiveSessionRuntimeDataArgs = {
+type UseSessionRuntimeDataArgs = {
   session: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  agentStudioReadinessState: AgentStudioReadinessState;
+  repoReadinessState: SessionRepoReadinessState;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -33,19 +33,19 @@ type UseAgentStudioActiveSessionRuntimeDataArgs = {
   ) => Promise<AgentSessionTodoItem[]>;
 };
 
-export type AgentStudioSessionRuntimeDataState = {
+export type SessionRuntimeDataState = {
   session: AgentSessionState | null;
   runtimeDataError: string | null;
   sessionViewLifecyclePhase: AgentSessionViewLifecyclePhase;
 };
 
-export const useAgentStudioActiveSessionRuntimeData = ({
+export const useSessionRuntimeData = ({
   session,
   runtimeDefinitions,
-  agentStudioReadinessState,
+  repoReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
-}: UseAgentStudioActiveSessionRuntimeDataArgs): AgentStudioSessionRuntimeDataState => {
+}: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
   const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
     () => resolveAttachedSessionRuntimeQueryState(session),
     [session],
@@ -54,9 +54,9 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     () =>
       deriveAgentSessionViewLifecycle({
         session,
-        repoReadinessState: agentStudioReadinessState,
+        repoReadinessState,
       }),
-    [agentStudioReadinessState, session],
+    [repoReadinessState, session],
   );
   const shouldHydrateRuntimeData =
     sessionViewLifecycle.canReadRuntimeData &&
@@ -71,6 +71,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     : false;
   const shouldHydrateTodos =
     shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
+
   const catalogQuery = useQuery({
     queryKey:
       shouldHydrateRuntimeData && runtimeQueryInput
@@ -89,6 +90,7 @@ export const useAgentStudioActiveSessionRuntimeData = ({
     enabled: shouldHydrateRuntimeData,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
   });
+
   const todosQuery = useQuery({
     queryKey:
       shouldHydrateTodos && runtimeQueryInput && session

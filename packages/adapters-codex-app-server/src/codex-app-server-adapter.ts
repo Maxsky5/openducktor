@@ -9,12 +9,14 @@ import type {
   AgentSessionPresenceSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
+  AgentSkillCatalog,
   AgentUserMessagePart,
   AgentWorkspaceInspectionPort,
   AttachAgentSessionInput,
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
+  ListAgentSkillsInput,
   ListAgentSlashCommandsInput,
   ListLiveAgentSessionsInput,
   ListSessionPresenceInput,
@@ -106,6 +108,7 @@ import {
   toCatalog,
   toTransportModelSelection,
 } from "./model-catalog";
+import { toCodexSkillCatalog } from "./skill-catalog";
 import type {
   CodexAppServerAdapterOptions,
   CodexNotificationRecord,
@@ -281,6 +284,18 @@ export class CodexAppServerAdapter
     return unsupported("listAvailableSlashCommands");
   }
 
+  async listAvailableSkills(input: ListAgentSkillsInput): Promise<AgentSkillCatalog> {
+    const { client } = await this.runtimeClients.resolve(input, "list available skills", {
+      requireLive: true,
+    });
+    return toCodexSkillCatalog(
+      await client.skillsList({
+        cwd: input.workingDirectory,
+        forceReload: false,
+      }),
+    );
+  }
+
   async searchFiles(
     _: import("@openducktor/core").SearchAgentFilesInput,
   ): Promise<AgentFileSearchResult[]> {
@@ -317,7 +332,8 @@ export class CodexAppServerAdapter
       runtimeId,
       input.externalSessionId,
     );
-    return codexTurnItemsFromThreadRead(response)
+    const threadItems = codexTurnItemsFromThreadRead(response);
+    return threadItems
       .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
         const turnModel =
           model ??
@@ -362,7 +378,10 @@ export class CodexAppServerAdapter
           turnTiming,
           finalTokenUsage,
         );
-        return message ? [message] : [];
+        if (!message) {
+          return [];
+        }
+        return [message];
       })
       .filter((message): message is import("@openducktor/core").AgentSessionHistoryMessage =>
         Boolean(message),

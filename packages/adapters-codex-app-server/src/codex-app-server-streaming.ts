@@ -25,14 +25,11 @@ import {
   type CodexTokenUsageTotals,
   codexItemId,
   codexItemTypeMatches,
-  codexUserInputListToText,
   codexUserInputsFromItem,
-  codexUserInputsToDisplayParts,
   extractCodexTokenUsageTotals,
   shouldReplaceCodexBufferedFinalAgentMessage,
   timestampFromCodexParams,
   toCodexUserInputList,
-  toDisplayParts,
   toStreamPart,
 } from "./codex-app-server-transcript";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
@@ -41,6 +38,11 @@ import {
   projectCodexCanonicalEvents,
 } from "./codex-canonical-projector";
 import type { CodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
+import {
+  codexUserInputListToText,
+  codexUserInputsToDisplayParts,
+  toDisplayParts,
+} from "./codex-user-input-display";
 import type { CodexNotificationRecord, CodexSessionState } from "./types";
 
 export type CompletedAgentMessage = {

@@ -290,9 +290,13 @@ function AgentChatComposerFormView({
     supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
+    supportsSkillReferences,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    skills,
+    skillsError,
+    isSkillsLoading,
     searchFiles,
     agentOptions,
     modelOptions,
@@ -387,9 +391,13 @@ function AgentChatComposerFormView({
             onSend={onSend}
             supportsSlashCommands={supportsSlashCommands}
             supportsFileSearch={supportsFileSearch}
+            supportsSkillReferences={supportsSkillReferences}
             slashCommands={slashCommands}
             slashCommandsError={slashCommandsError}
             isSlashCommandsLoading={isSlashCommandsLoading}
+            skills={skills}
+            skillsError={skillsError}
+            isSkillsLoading={isSkillsLoading}
             searchFiles={searchFiles}
           />
 
@@ -526,6 +534,7 @@ export function AgentChatComposer({
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsSkillReferences,
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
@@ -722,7 +731,9 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
-  let composerPlaceholder = "@ for files; / for commands";
+  let composerPlaceholder = supportsSkillReferences
+    ? "@ for files; / for commands; $ for skills"
+    : "@ for files; / for commands";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }

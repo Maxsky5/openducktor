@@ -60,6 +60,13 @@ describe("createCodexAppServerCommandHandlers", () => {
       }),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "skills/list",
+        params: { cwd: "/repo", forceReload: false },
+      }),
+    ).resolves.toEqual({ data: [], nextCursor: null });
+    await expect(
       router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
     ).resolves.toEqual([codexStatusNotification]);
     await expect(
@@ -83,6 +90,14 @@ describe("createCodexAppServerCommandHandlers", () => {
           runtimeId: "runtime-1",
           method: "turn/interrupt",
           params: { threadId: "thread-1", turnId: "turn-1" },
+        },
+      },
+      {
+        method: "request",
+        input: {
+          runtimeId: "runtime-1",
+          method: "skills/list",
+          params: { cwd: "/repo", forceReload: false },
         },
       },
       {

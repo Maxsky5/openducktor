@@ -1,11 +1,19 @@
-import type { AgentFileSearchResult, AgentSlashCommand } from "@openducktor/core";
+import type {
+  AgentFileSearchResult,
+  AgentSkillReference,
+  AgentSlashCommand,
+} from "@openducktor/core";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   type AgentChatComposerDraft,
   applyComposerDraftEdit,
   draftHasMeaningfulContent,
 } from "./agent-chat-composer-draft";
-import type { FileMenuState, SlashMenuState } from "./use-agent-chat-composer-editor-autocomplete";
+import type {
+  FileMenuState,
+  SkillMenuState,
+  SlashMenuState,
+} from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
   ActiveTextSelectionRange,
@@ -32,17 +40,23 @@ type HandleComposerEditorKeyDownArgs = {
   isComposerContentFullySelected: (root: HTMLDivElement) => boolean;
   fileMenuState: FileMenuState | null;
   slashMenuState: SlashMenuState | null;
+  skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
+  filteredSkills: AgentSkillReference[];
   activeSlashIndex: number;
+  activeSkillIndex: number;
   activeFileIndex: number;
   moveActiveFileIndex: (direction: 1 | -1) => boolean;
   moveActiveSlashIndex: (direction: 1 | -1) => boolean;
+  moveActiveSkillIndex: (direction: 1 | -1) => boolean;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
   onSend: () => void;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
+  selectSkillReference: (skill: AgentSkillReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
 };
@@ -54,12 +68,15 @@ const isSelectAllShortcut = (event: ReactKeyboardEvent<HTMLDivElement>): boolean
 const closeAutocompleteMenus = ({
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
 }: {
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
 }): void => {
   closeSlashMenu();
   closeFileMenu();
+  closeSkillMenu();
 };
 
 const handleFileMenuKeyDown = ({
@@ -142,6 +159,59 @@ const handleSlashMenuKeyDown = ({
   return false;
 };
 
+const handleSkillMenuKeyDown = ({
+  event,
+  skillMenuState,
+  filteredSkills,
+  activeSkillIndex,
+  moveActiveSkillIndex,
+  selectSkillReference,
+}: {
+  event: ReactKeyboardEvent<HTMLDivElement>;
+  skillMenuState: SkillMenuState | null;
+  filteredSkills: AgentSkillReference[];
+  activeSkillIndex: number;
+  moveActiveSkillIndex: (direction: 1 | -1) => boolean;
+  selectSkillReference: (skill: AgentSkillReference) => void;
+}): boolean => {
+  if (!skillMenuState) {
+    return false;
+  }
+
+  if (event.key === "ArrowDown" && moveActiveSkillIndex(1)) {
+    event.preventDefault();
+    return true;
+  }
+
+  if (event.key === "ArrowUp" && moveActiveSkillIndex(-1)) {
+    event.preventDefault();
+    return true;
+  }
+
+  if ((event.key === "Enter" || event.key === "Tab") && !event.shiftKey) {
+    event.preventDefault();
+    const skill = filteredSkills[activeSkillIndex] ?? filteredSkills[0];
+    if (skill) {
+      selectSkillReference(skill);
+    }
+    return true;
+  }
+
+  return false;
+};
+
+const removeChipEditType = (
+  kind: "slash_command" | "file_reference" | "skill_mention",
+): "remove_slash_command" | "remove_file_reference" | "remove_skill_reference" => {
+  if (kind === "slash_command") {
+    return "remove_slash_command";
+  }
+  if (kind === "file_reference") {
+    return "remove_file_reference";
+  }
+  return "remove_skill_reference";
+};
+
 const removeAdjacentChip = ({
   event,
   sourceDraft,
@@ -149,6 +219,7 @@ const removeAdjacentChip = ({
   applyEditResult,
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
 }: {
   event: ReactKeyboardEvent<HTMLDivElement>;
   sourceDraft: AgentChatComposerDraft;
@@ -156,6 +227,7 @@ const removeAdjacentChip = ({
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
 }): boolean => {
   if (event.key !== "Backspace" || repairedSelection.caretOffset !== 0) {
     return false;
@@ -165,20 +237,23 @@ const removeAdjacentChip = ({
     (segment) => segment.id === repairedSelection.segmentId,
   );
   const previousSegment = currentIndex > 0 ? sourceDraft.segments[currentIndex - 1] : null;
-  if (previousSegment?.kind !== "slash_command" && previousSegment?.kind !== "file_reference") {
+  if (
+    previousSegment?.kind !== "slash_command" &&
+    previousSegment?.kind !== "file_reference" &&
+    previousSegment?.kind !== "skill_mention"
+  ) {
     return false;
   }
 
   event.preventDefault();
   const didApply = applyEditResult(
     applyComposerDraftEdit(sourceDraft, {
-      type:
-        previousSegment.kind === "slash_command" ? "remove_slash_command" : "remove_file_reference",
+      type: removeChipEditType(previousSegment.kind),
       segmentId: previousSegment.id,
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -190,6 +265,7 @@ const removeTrailingLineBreak = ({
   applyEditResult,
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
 }: {
   event: ReactKeyboardEvent<HTMLDivElement>;
   sourceDraft: AgentChatComposerDraft;
@@ -197,6 +273,7 @@ const removeTrailingLineBreak = ({
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
 }): boolean => {
   if (
     event.key !== "Backspace" ||
@@ -218,7 +295,7 @@ const removeTrailingLineBreak = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -274,6 +351,7 @@ const removeCurrentLineText = ({
   applyEditResult,
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
 }: {
   event: ReactKeyboardEvent<HTMLDivElement>;
   sourceDraft: AgentChatComposerDraft;
@@ -281,6 +359,7 @@ const removeCurrentLineText = ({
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
 }): boolean => {
   if (event.key !== "Backspace" || !event.metaKey || repairedSelection.caretOffset === null) {
     return false;
@@ -309,7 +388,7 @@ const removeCurrentLineText = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -321,6 +400,7 @@ const removeSelectedTextRange = ({
   applyEditResult,
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
 }: {
   event: ReactKeyboardEvent<HTMLDivElement>;
   sourceDraft: AgentChatComposerDraft;
@@ -328,6 +408,7 @@ const removeSelectedTextRange = ({
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
+  closeSkillMenu: () => void;
 }): boolean => {
   if (
     !selectedRange ||
@@ -349,7 +430,7 @@ const removeSelectedTextRange = ({
     }),
   );
   if (didApply) {
-    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu });
+    closeAutocompleteMenus({ closeSlashMenu, closeFileMenu, closeSkillMenu });
   }
   return true;
 };
@@ -365,17 +446,23 @@ export const handleComposerEditorKeyDown = ({
   isComposerContentFullySelected,
   fileMenuState,
   slashMenuState,
+  skillMenuState,
   filteredSlashCommands,
+  filteredSkills,
   activeSlashIndex,
+  activeSkillIndex,
   activeFileIndex,
   moveActiveFileIndex,
   moveActiveSlashIndex,
+  moveActiveSkillIndex,
   closeSlashMenu,
   closeFileMenu,
+  closeSkillMenu,
   onSend,
   clearComposerContents,
   insertNewlineAtSelectionTarget,
   selectSlashCommand,
+  selectSkillReference,
   selectFileSearchResult,
   applyEditResult,
 }: HandleComposerEditorKeyDownArgs): boolean => {
@@ -420,6 +507,19 @@ export const handleComposerEditorKeyDown = ({
     return true;
   }
 
+  if (
+    handleSkillMenuKeyDown({
+      event,
+      skillMenuState,
+      filteredSkills,
+      activeSkillIndex,
+      moveActiveSkillIndex,
+      selectSkillReference,
+    })
+  ) {
+    return true;
+  }
+
   if (event.key === "Escape" && fileMenuState) {
     event.preventDefault();
     closeFileMenu();
@@ -429,6 +529,12 @@ export const handleComposerEditorKeyDown = ({
   if (event.key === "Escape" && slashMenuState) {
     event.preventDefault();
     closeSlashMenu();
+    return true;
+  }
+
+  if (event.key === "Escape" && skillMenuState) {
+    event.preventDefault();
+    closeSkillMenu();
     return true;
   }
 
@@ -456,6 +562,7 @@ export const handleComposerEditorKeyDown = ({
       applyEditResult,
       closeSlashMenu,
       closeFileMenu,
+      closeSkillMenu,
     })
   ) {
     return true;
@@ -485,6 +592,7 @@ export const handleComposerEditorKeyDown = ({
       applyEditResult,
       closeSlashMenu,
       closeFileMenu,
+      closeSkillMenu,
     })
   ) {
     return true;
@@ -498,6 +606,7 @@ export const handleComposerEditorKeyDown = ({
       applyEditResult,
       closeSlashMenu,
       closeFileMenu,
+      closeSkillMenu,
     })
   ) {
     return true;
@@ -510,5 +619,6 @@ export const handleComposerEditorKeyDown = ({
     applyEditResult,
     closeSlashMenu,
     closeFileMenu,
+    closeSkillMenu,
   });
 };

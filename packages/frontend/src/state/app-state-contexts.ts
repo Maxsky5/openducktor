@@ -9,6 +9,7 @@ import type {
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import {
@@ -65,6 +66,11 @@ export type RuntimeDefinitionsContextValue = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  loadRepoRuntimeSkills?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>;
   loadRepoRuntimeFileSearch: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -162,6 +168,9 @@ export const useRuntimeAvailabilityContext = (): RuntimeAvailabilityContextValue
       refreshRuntimeDefinitions: runtimeContext.refreshRuntimeDefinitions,
       loadRepoRuntimeCatalog: runtimeContext.loadRepoRuntimeCatalog,
       loadRepoRuntimeSlashCommands: runtimeContext.loadRepoRuntimeSlashCommands,
+      ...(runtimeContext.loadRepoRuntimeSkills
+        ? { loadRepoRuntimeSkills: runtimeContext.loadRepoRuntimeSkills }
+        : {}),
       loadRepoRuntimeFileSearch: runtimeContext.loadRepoRuntimeFileSearch,
     }),
     [runtimeContext],

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSlashCommand } from "@openducktor/core";
+import type { AgentSkillReference, AgentSlashCommand } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createFileReferenceSegment,
@@ -8,7 +8,7 @@ import {
 } from "./agent-chat-composer-draft";
 import { handleComposerEditorKeyDown } from "./agent-chat-composer-editor-keydown";
 import { buildFileSearchResult } from "./agent-chat-test-fixtures";
-import type { FileMenuState } from "./use-agent-chat-composer-editor-autocomplete";
+import type { FileMenuState, SkillMenuState } from "./use-agent-chat-composer-editor-autocomplete";
 import type {
   ActiveTextSelection,
   ActiveTextSelectionRange,
@@ -19,6 +19,7 @@ type KeyDownTestSetupOverrides = {
   sourceDraft?: AgentChatComposerDraft;
   activeSelection?: ActiveTextSelection | null;
   fileMenuState?: FileMenuState | null;
+  skillMenuState?: SkillMenuState | null;
   slashMenuState?: {
     query: string;
     textSegmentId: string;
@@ -26,7 +27,9 @@ type KeyDownTestSetupOverrides = {
     rangeEnd: number;
   } | null;
   filteredSlashCommands?: AgentSlashCommand[];
+  filteredSkills?: AgentSkillReference[];
   activeSlashIndex?: number;
+  activeSkillIndex?: number;
   activeFileIndex?: number;
   disabled?: boolean;
   key?: string;
@@ -111,12 +114,15 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
   );
   const moveActiveFileIndex = mock(() => false);
   const moveActiveSlashIndex = mock(() => false);
+  const moveActiveSkillIndex = mock(() => false);
   const closeSlashMenu = mock(() => {});
   const closeFileMenu = mock(() => {});
+  const closeSkillMenu = mock(() => {});
   const onSend = mock(() => {});
   const clearComposerContents = mock(() => true);
   const insertNewlineAtSelectionTarget = mock(() => true);
   const selectSlashCommand = mock(() => {});
+  const selectSkillReference = mock(() => {});
   const selectFileSearchResult = mock(() => {});
   const applyEditResult = mock(() => overrides.applyEditResult ?? true);
 
@@ -125,12 +131,15 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
     selection,
     moveActiveFileIndex,
     moveActiveSlashIndex,
+    moveActiveSkillIndex,
     closeSlashMenu,
     closeFileMenu,
+    closeSkillMenu,
     onSend,
     clearComposerContents,
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
+    selectSkillReference,
     selectFileSearchResult,
     applyEditResult,
     selectComposerContents,
@@ -147,17 +156,23 @@ const createKeyDownTestSetup = (overrides: KeyDownTestSetupOverrides = {}) => {
         isComposerContentFullySelected,
         fileMenuState: overrides.fileMenuState ?? null,
         slashMenuState: overrides.slashMenuState ?? null,
+        skillMenuState: overrides.skillMenuState ?? null,
         filteredSlashCommands: overrides.filteredSlashCommands ?? [slashCommand],
+        filteredSkills: overrides.filteredSkills ?? [],
         activeSlashIndex: overrides.activeSlashIndex ?? 0,
+        activeSkillIndex: overrides.activeSkillIndex ?? 0,
         activeFileIndex: overrides.activeFileIndex ?? 0,
         moveActiveFileIndex,
         moveActiveSlashIndex,
+        moveActiveSkillIndex,
         closeSlashMenu,
         closeFileMenu,
+        closeSkillMenu,
         onSend,
         clearComposerContents,
         insertNewlineAtSelectionTarget,
         selectSlashCommand,
+        selectSkillReference,
         selectFileSearchResult,
         applyEditResult,
       }),

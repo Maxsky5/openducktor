@@ -28,6 +28,17 @@ const ATTACHMENT = {
 };
 
 describe("opencode-user-message-encoding", () => {
+  test("rejects skill references explicitly", () => {
+    expect(() =>
+      buildOpenCodeVisibleText([
+        {
+          kind: "skill_mention",
+          skill: { id: "/skills/review/SKILL.md", name: "review", path: "/skills/review/SKILL.md" },
+        },
+      ]),
+    ).toThrow("OpenCode does not support skill reference user message parts.");
+  });
+
   test("does not leave doubled synthetic spaces when skipped attachments sit between file references", () => {
     const parts = [
       { kind: "file_reference" as const, file: FIRST_FILE },

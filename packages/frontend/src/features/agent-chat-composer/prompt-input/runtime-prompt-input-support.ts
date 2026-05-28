@@ -3,7 +3,7 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 const runtimeSupportsPromptInput = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeKind: RuntimeKind | null,
-  capability: "supportsSlashCommands" | "supportsFileSearch",
+  capability: "supportsSlashCommands" | "supportsFileSearch" | "supportsSkillReferences",
 ): boolean => {
   if (!runtimeKind) {
     return false;
@@ -16,14 +16,20 @@ const runtimeSupportsPromptInput = (
 
 export const resolveRuntimePromptInputSupport = ({
   runtimeDefinitions,
-  readyActiveSessionRuntimeKind,
+  hasActiveSession,
+  activeSessionRuntimeKind,
   selectedRuntimeKind,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
-  readyActiveSessionRuntimeKind: RuntimeKind | null;
+  hasActiveSession: boolean;
+  activeSessionRuntimeKind: RuntimeKind | null;
   selectedRuntimeKind: RuntimeKind | null;
-}): { runtimeSupportsSlashCommands: boolean; supportsFileSearch: boolean } => {
-  const runtimeKind = readyActiveSessionRuntimeKind ?? selectedRuntimeKind;
+}): {
+  runtimeSupportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
+} => {
+  const runtimeKind = hasActiveSession ? activeSessionRuntimeKind : selectedRuntimeKind;
   return {
     runtimeSupportsSlashCommands: runtimeSupportsPromptInput(
       runtimeDefinitions,
@@ -34,6 +40,11 @@ export const resolveRuntimePromptInputSupport = ({
       runtimeDefinitions,
       runtimeKind,
       "supportsFileSearch",
+    ),
+    supportsSkillReferences: runtimeSupportsPromptInput(
+      runtimeDefinitions,
+      runtimeKind,
+      "supportsSkillReferences",
     ),
   };
 };

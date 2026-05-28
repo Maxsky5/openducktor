@@ -38,6 +38,11 @@ export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
       agentEngine.listAvailableSlashCommands({ repoPath, runtimeKind }),
     [agentEngine],
   );
+  const readSessionSkills = useCallback(
+    (repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string) =>
+      agentEngine.listAvailableSkills({ repoPath, runtimeKind, workingDirectory }),
+    [agentEngine],
+  );
   const readSessionFileSearch = useCallback(
     (repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string, query: string) =>
       agentEngine.searchFiles({ repoPath, runtimeKind, workingDirectory, query }),
@@ -49,6 +54,7 @@ export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
       readSessionTodos,
       readSessionHistory,
       readSessionSlashCommands,
+      readSessionSkills,
       readSessionFileSearch,
     }),
     [
@@ -56,6 +62,7 @@ export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
       readSessionHistory,
       readSessionModelCatalog,
       readSessionSlashCommands,
+      readSessionSkills,
       readSessionTodos,
     ],
   );

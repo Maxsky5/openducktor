@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,6 +26,7 @@ import { useAgentStudioDraftModelSelectionState } from "@/features/agent-chat-co
 import { useModelSelectionActions } from "@/features/agent-chat-composer/model-selection/use-model-selection-actions";
 import { createChatComposerFileSearch } from "@/features/agent-chat-composer/prompt-input/create-chat-composer-file-search";
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
+import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
 import { resolveActiveSessionChatComposerContext } from "@/features/agent-chat-composer/session-context/active-session-chat-composer-context";
 import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
@@ -52,6 +54,11 @@ type UseAgentStudioChatComposerArgs = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  loadSkills?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>;
   loadFileSearch?: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -61,6 +68,11 @@ type UseAgentStudioChatComposerArgs = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentSlashCommandCatalog>;
+  readSessionSkills?: (
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+    workingDirectory: string,
+  ) => Promise<AgentSkillCatalog>;
   readSessionFileSearch?: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -77,10 +89,15 @@ type AgentStudioChatComposerState = {
   supportsProfiles?: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
   slashCommandCatalog: AgentSlashCommandCatalog;
   slashCommands: AgentSlashCommandCatalog["commands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
+  skillCatalog: AgentSkillCatalog;
+  skills: AgentSkillCatalog["skills"];
+  skillsError: string | null;
+  isSkillsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -103,8 +120,10 @@ export function useAgentStudioChatComposer({
   updateAgentSessionModel,
   loadCatalog,
   loadSlashCommands,
+  loadSkills,
   loadFileSearch,
   readSessionSlashCommands,
+  readSessionSkills,
   readSessionFileSearch,
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
@@ -113,11 +132,18 @@ export function useAgentStudioChatComposer({
     allRuntimeDefinitions,
     loadRepoRuntimeCatalog,
     loadRepoRuntimeSlashCommands,
+    loadRepoRuntimeSkills,
     loadRepoRuntimeFileSearch,
   } = useRuntimeAvailabilityContext();
   const queryClient = useQueryClient();
   const loadCatalogForRepo = loadCatalog ?? loadRepoRuntimeCatalog;
   const loadSlashCommandsForRepo = loadSlashCommands ?? loadRepoRuntimeSlashCommands;
+  const loadSkillsForRepo =
+    loadSkills ??
+    loadRepoRuntimeSkills ??
+    (async (): Promise<AgentSkillCatalog> => {
+      throw new Error("Runtime skill catalog loading is unavailable.");
+    });
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
   const activeSessionChatComposerContext = useMemo(
     () => resolveActiveSessionChatComposerContext(activeSession, activeSessionSummary),
@@ -197,15 +223,16 @@ export function useAgentStudioChatComposer({
   );
   const activeSessionRuntimeQueryInput = activeSessionRuntimeQueryState.runtimeQueryInput;
   const activeSessionRuntimeQueryError = activeSessionRuntimeQueryState.runtimeQueryError;
-  const { runtimeSupportsSlashCommands, supportsFileSearch } = useMemo(
+  const { runtimeSupportsSlashCommands, supportsFileSearch, supportsSkillReferences } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: hasActiveSession ? allRuntimeDefinitions : availableRuntimeDefinitions,
-        readyActiveSessionRuntimeKind: activeSessionRuntimeQueryInput?.runtimeKind ?? null,
+        hasActiveSession,
+        activeSessionRuntimeKind: activeSessionRuntimeKind ?? null,
         selectedRuntimeKind,
       }),
     [
-      activeSessionRuntimeQueryInput?.runtimeKind,
+      activeSessionRuntimeKind,
       allRuntimeDefinitions,
       availableRuntimeDefinitions,
       hasActiveSession,
@@ -274,6 +301,17 @@ export function useAgentStudioChatComposer({
     reusablePrompts,
     loadSlashCommandsForRepo,
     ...(readSessionSlashCommands ? { readSessionSlashCommands } : {}),
+  });
+  const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
+    hasActiveSession,
+    activeSessionStatus,
+    activeSessionRuntimeQueryInput,
+    activeSessionRuntimeQueryError,
+    supportsSkillReferences,
+    workspaceRepoPath,
+    selectedRuntimeKind,
+    loadSkillsForRepo,
+    ...(readSessionSkills ? { readSessionSkills } : {}),
   });
   useEffect(() => {
     repairDraftSelection({
@@ -407,10 +445,15 @@ export function useAgentStudioChatComposer({
     supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
+    supportsSkillReferences,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,
     isSlashCommandsLoading,
+    skillCatalog,
+    skills,
+    skillsError,
+    isSkillsLoading,
     searchFiles,
     agentProfileOptions,
     modelOptions,

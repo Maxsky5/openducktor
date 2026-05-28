@@ -6,6 +6,7 @@ import {
   type RuntimeKind,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
+import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
   configureShellBridge,
   createUnavailableShellBridge,
@@ -13,6 +14,8 @@ import {
 } from "@/lib/shell-bridge";
 import { createAgentRuntimeRegistry, DEFAULT_RUNTIME_KIND } from "./agent-runtime-registry";
 import { host } from "./operations/shared/host";
+import { agentSessionRuntimeQueryKeys } from "./queries/agent-session-runtime";
+import { runtimeCatalogQueryKeys } from "./queries/runtime-catalog";
 
 const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -165,6 +168,7 @@ describe("agent-runtime-registry", () => {
   });
 
   test("codex adapter receives live app-server events from the shell bridge", async () => {
+    await clearAppQueryClient();
     const originalRuntimeList = host.runtimeList;
     const originalCodexAppServerRequest = host.codexAppServerRequest;
     const codexEventBridge: { listener?: (payload: unknown) => void } = {};
@@ -251,6 +255,11 @@ describe("agent-runtime-registry", () => {
       if (!emitCodexEvent) {
         throw new Error("Codex app-server event listener was not registered.");
       }
+      const runtimeSkillKey = runtimeCatalogQueryKeys.repoSkills("/repo", "codex", "/repo");
+      const sessionSkillKey = agentSessionRuntimeQueryKeys.skills("/repo", "codex", "/repo");
+      appQueryClient.setQueryData(runtimeSkillKey, { skills: [] });
+      appQueryClient.setQueryData(sessionSkillKey, { skills: [] });
+
       emitCodexEvent({
         runtimeId: "runtime-codex-live",
         kind: "notification",
@@ -265,10 +274,23 @@ describe("agent-runtime-registry", () => {
 
       await waitForSessionIdleEvent(events);
       expect(events.some((event) => event.type === "session_idle")).toBe(true);
+
+      emitCodexEvent({
+        runtimeId: "runtime-codex-live",
+        kind: "notification",
+        message: {
+          method: "skills/changed",
+          params: { cwd: "/repo" },
+        },
+      });
+
+      expect(appQueryClient.getQueryState(runtimeSkillKey)?.isInvalidated).toBe(true);
+      expect(appQueryClient.getQueryState(sessionSkillKey)?.isInvalidated).toBe(true);
       unsubscribe();
     } finally {
       host.runtimeList = originalRuntimeList;
       host.codexAppServerRequest = originalCodexAppServerRequest;
+      await clearAppQueryClient();
       configureShellBridge(createUnavailableShellBridge());
     }
   });
