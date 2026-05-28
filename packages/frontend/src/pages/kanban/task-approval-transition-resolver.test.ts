@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskAction, TaskApprovalContext, TaskCard, TaskStatus } from "@openducktor/contracts";
+import type { TaskAction, TaskApprovalContext, TaskCard } from "@openducktor/contracts";
 import type { TaskApprovalFlowState } from "./task-approval-flow-state";
 import {
   resolveTaskApprovalOpenMode,
@@ -7,39 +7,12 @@ import {
   resolveTaskApprovalWorkflowTransition,
 } from "./task-approval-transition-resolver";
 
-type TaskFixtureOverrides = Pick<TaskCard, "status" | "availableActions"> & Partial<TaskCard>;
+type TransitionTask = Pick<TaskCard, "availableActions" | "pullRequest" | "status">;
+type TransitionTaskOverrides = Pick<TransitionTask, "availableActions" | "status"> &
+  Partial<Pick<TransitionTask, "pullRequest">>;
 
-const task = ({ status, availableActions, ...overrides }: TaskFixtureOverrides): TaskCard => ({
-  id: "TASK-1",
-  title: "Task",
-  description: "",
-  notes: "",
-  status,
-  priority: 2,
-  issueType: "task",
-  aiReviewEnabled: true,
-  availableActions,
-  labels: [],
-  assignee: undefined,
-  parentId: undefined,
-  subtaskIds: [],
-  agentSessions: [],
-  targetBranch: undefined,
-  targetBranchError: undefined,
+const task = (overrides: TransitionTaskOverrides): TransitionTask => ({
   pullRequest: undefined,
-  documentSummary: {
-    spec: { has: false },
-    plan: { has: false },
-    qaReport: { has: false, verdict: "not_reviewed" },
-  },
-  agentWorkflows: {
-    spec: { required: false, canSkip: true, available: true, completed: false },
-    planner: { required: false, canSkip: true, available: true, completed: false },
-    builder: { required: true, canSkip: false, available: true, completed: false },
-    qa: { required: false, canSkip: true, available: false, completed: false },
-  },
-  updatedAt: "2026-05-28T12:00:00.000Z",
-  createdAt: "2026-05-28T11:00:00.000Z",
   ...overrides,
 });
 
@@ -167,7 +140,7 @@ describe("resolveTaskApprovalWorkflowTransition", () => {
     expect(
       resolveTaskApprovalWorkflowTransition(
         task({
-          status: status satisfies TaskStatus,
+          status,
           availableActions,
           pullRequest,
         }),
@@ -250,62 +223,68 @@ describe("resolveTaskApprovalSubmissionRoute", () => {
       name: "ignores closed state",
       state: { kind: "closed" } satisfies TaskApprovalFlowState,
       repoPath: "/repo",
-      expectedKind: "ignore",
     },
     {
       name: "ignores a loading approval state",
       state: openState({ phase: "loading" }),
       repoPath: "/repo",
-      expectedKind: "ignore",
     },
     {
       name: "ignores a submitting approval state",
       state: openState({ phase: "submitting" }),
       repoPath: "/repo",
-      expectedKind: "ignore",
-    },
-    {
-      name: "routes missing builder worktree completion without requiring a repo path",
-      state: openState({
-        stage: "missing_builder_worktree",
-        approvalContext: null,
-      }),
-      repoPath: null,
-      expectedKind: "complete_missing_builder_worktree",
     },
     {
       name: "ignores approval submission when the workspace repo path is missing",
       state: openState(),
       repoPath: null,
-      expectedKind: "ignore",
     },
     {
       name: "ignores approval submission when approval context is missing",
       state: openState({ approvalContext: null }),
       repoPath: "/repo",
-      expectedKind: "ignore",
     },
-    {
-      name: "routes direct merge submissions with the repo path",
-      state: openState({ mode: "direct_merge" }),
-      repoPath: "/repo",
-      expectedKind: "submit_direct_merge",
-    },
-    {
-      name: "routes pull request submissions with the repo path",
-      state: openState({ mode: "pull_request" }),
-      repoPath: "/repo",
-      expectedKind: "submit_pull_request",
-    },
-  ])("$name", ({ expectedKind, repoPath, state }) => {
-    const route = resolveTaskApprovalSubmissionRoute(state, repoPath);
+  ])("$name", ({ repoPath, state }) => {
+    expect(resolveTaskApprovalSubmissionRoute(state, repoPath)).toEqual({ kind: "ignore" });
+  });
 
-    expect(route.kind).toBe(expectedKind);
-    if (route.kind !== "ignore") {
-      expect(Object.is(route.approval, state)).toBe(true);
+  test("routes missing builder worktree completion without requiring a repo path", () => {
+    const state = openState({
+      stage: "missing_builder_worktree",
+      approvalContext: null,
+    });
+    const route = resolveTaskApprovalSubmissionRoute(state, null);
+
+    expect(route.kind).toBe("complete_missing_builder_worktree");
+    if (route.kind !== "complete_missing_builder_worktree") {
+      throw new Error(`Expected missing-builder route, received ${route.kind}`);
     }
-    if (route.kind === "submit_direct_merge" || route.kind === "submit_pull_request") {
-      expect(route.repoPath).toBe("/repo");
+
+    expect(route.approval.stage).toBe("missing_builder_worktree");
+    expect(route.approval.taskId).toBe(state.taskId);
+  });
+
+  test("routes direct merge submissions with the repo path", () => {
+    const route = resolveTaskApprovalSubmissionRoute(openState({ mode: "direct_merge" }), "/repo");
+
+    expect(route.kind).toBe("submit_direct_merge");
+    if (route.kind !== "submit_direct_merge") {
+      throw new Error(`Expected direct-merge route, received ${route.kind}`);
     }
+
+    expect(route.repoPath).toBe("/repo");
+    expect(route.approval.mode).toBe("direct_merge");
+  });
+
+  test("routes pull request submissions with the repo path", () => {
+    const route = resolveTaskApprovalSubmissionRoute(openState({ mode: "pull_request" }), "/repo");
+
+    expect(route.kind).toBe("submit_pull_request");
+    if (route.kind !== "submit_pull_request") {
+      throw new Error(`Expected pull-request route, received ${route.kind}`);
+    }
+
+    expect(route.repoPath).toBe("/repo");
+    expect(route.approval.mode).toBe("pull_request");
   });
 });

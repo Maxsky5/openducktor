@@ -1,4 +1,4 @@
-import type { TaskAction, TaskCard, TaskStatus } from "@openducktor/contracts";
+import type { TaskAction, TaskApprovalContext, TaskCard, TaskStatus } from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./kanban-page-model-types";
 import {
   determineDefaultTaskApprovalMode,
@@ -101,7 +101,7 @@ export const resolveTaskApprovalWorkflowTransition = (
 };
 
 export const resolveTaskApprovalOpenMode = (args: {
-  cachedContext: Parameters<typeof determineDefaultTaskApprovalMode>[0];
+  cachedContext: TaskApprovalContext | undefined;
   requestedMode: TaskApprovalMode | undefined;
   task: Pick<TaskCard, "availableActions" | "pullRequest" | "status"> | undefined;
 }): TaskApprovalMode => {
