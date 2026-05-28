@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -60,8 +61,11 @@ let useAgentStudioDiffData: UseAgentStudioDiffDataHook;
 
 export type HookArgs = Parameters<UseAgentStudioDiffDataHook>[0];
 
-export const createHookHarness = (initialProps: HookArgs) => {
-  return createSharedHookHarness(useAgentStudioDiffData, initialProps);
+export const createHookHarness = (
+  initialProps: HookArgs,
+  options?: { queryClient?: QueryClient },
+) => {
+  return createSharedHookHarness(useAgentStudioDiffData, initialProps, options);
 };
 
 export const createDeferred = <T>() => {

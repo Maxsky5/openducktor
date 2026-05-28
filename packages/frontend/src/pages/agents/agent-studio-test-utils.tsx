@@ -4,6 +4,7 @@ import {
   type RuntimeDescriptor,
   type TaskCard,
 } from "@openducktor/contracts";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   type ComponentProps,
   createElement,
@@ -167,6 +168,7 @@ export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,
   initialProps: Props,
   options?: {
+    queryClient?: QueryClient;
     runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
     runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
   },
@@ -178,13 +180,16 @@ export const createHookHarness = <Props, State>(
     current: options?.runtimeDefinitionsContext ?? createRuntimeDefinitionsContextValue(),
   };
 
+  const queryProvider = (children: ReactElement): ReactElement =>
+    options?.queryClient
+      ? createElement(QueryClientProvider, { client: options.queryClient }, children)
+      : createElement(QueryProvider, { useIsolatedClient: true }, children);
+
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
       { value: checksOperationsContext },
-      createElement(
-        QueryProvider,
-        { useIsolatedClient: true },
+      queryProvider(
         createElement(
           RuntimeDefinitionsContext.Provider,
           { value: runtimeDefinitionsContextRef.current },
