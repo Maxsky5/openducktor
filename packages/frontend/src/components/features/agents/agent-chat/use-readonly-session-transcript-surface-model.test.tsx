@@ -439,6 +439,47 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("does not keep live transcript loading after an attach failure", async () => {
+    const liveTranscriptSource = makeLiveTranscriptSource();
+    attachRuntimeTranscriptSession.mockImplementationOnce(async () => {
+      throw new Error("attach unavailable");
+    });
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: liveTranscriptSource,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => {
+        return Boolean(
+          harness.getLatest().model.thread.emptyState?.title.includes("attach unavailable"),
+        );
+      });
+
+      expect(attachRuntimeTranscriptSession).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(false);
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Failed to load conversation: attach unavailable",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not keep the live transcript loading after the session is visible", async () => {
     const liveTranscriptSource = makeLiveTranscriptSource();
     const pendingApproval = makePendingApproval();

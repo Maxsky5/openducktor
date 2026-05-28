@@ -1,7 +1,8 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
+import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -163,24 +164,13 @@ export function useAgentsPageRouteSessionModel({
     isForegroundLoadingTasks,
   });
 
-  useEffect(() => {
-    if (!workspaceRepoPath || runtimeDefinitions.length === 0 || isLoadingChecks) {
-      return;
-    }
-
-    const runtimeKinds = runtimeDefinitions.map((definition) => definition.kind);
-    if (hasCachedRepoRuntimeHealth(workspaceRepoPath, runtimeKinds)) {
-      return;
-    }
-
-    void refreshRepoRuntimeHealthForRepo(workspaceRepoPath, false);
-  }, [
+  useRepoRuntimeHealthWarmup({
     workspaceRepoPath,
-    hasCachedRepoRuntimeHealth,
-    isLoadingChecks,
-    refreshRepoRuntimeHealthForRepo,
     runtimeDefinitions,
-  ]);
+    isLoadingChecks,
+    hasCachedRepoRuntimeHealth,
+    refreshRepoRuntimeHealthForRepo,
+  });
 
   useAgentStudioQuerySessionSync({
     isRepoNavigationBoundaryPending,
