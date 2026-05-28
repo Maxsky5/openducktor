@@ -8,12 +8,10 @@ import { TaskDetailsSheetController } from "@/components/features/task-details/t
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { AgentStudioRightPanelBridge } from "./agent-studio-right-panel-bridge";
 import { AgentsPageShell } from "./agents-page-shell";
 import type { AgentStudioPullRequestModalModel } from "./use-agent-studio-pull-request-modal-model";
-import {
-  AgentStudioRightPanelBridge,
-  type AgentStudioRightPanelBridgeModel,
-} from "./use-agent-studio-right-panel-bridge";
+import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 import type { AgentStudioTaskDetailsLauncherModel } from "./use-agent-studio-task-details-launcher";
 
 const PANEL_CONTAINMENT_STYLE = {
@@ -102,7 +100,7 @@ function AgentsPageModalContent({
   );
 }
 
-type AgentsPageLayoutProps = {
+export type AgentsPageLayoutModel = {
   activeWorkspace: ActiveWorkspace | null;
   navigationPersistenceError: Error | null;
   chatSettingsLoadError: Error | null;
@@ -123,26 +121,32 @@ type AgentsPageLayoutProps = {
   taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
 };
 
-export function AgentsPageLayout({
-  activeWorkspace,
-  navigationPersistenceError,
-  chatSettingsLoadError,
-  activeTabValue,
-  onRetryNavigationPersistence,
-  onRetryChatSettingsLoad,
-  onTabValueChange,
-  taskTabsModel,
-  rightPanelToggleModel,
-  hasSelectedTask,
-  chatHeaderModel,
-  chatModel,
-  isRightPanelVisible,
-  rightPanelBridge,
-  mergedPullRequestModal,
-  humanReviewFeedbackModal,
-  sessionStartModal,
-  taskDetailsLauncher,
-}: AgentsPageLayoutProps): ReactElement {
+type AgentsPageLayoutProps = {
+  model: AgentsPageLayoutModel;
+};
+
+export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement {
+  const {
+    activeWorkspace,
+    navigationPersistenceError,
+    chatSettingsLoadError,
+    activeTabValue,
+    onRetryNavigationPersistence,
+    onRetryChatSettingsLoad,
+    onTabValueChange,
+    taskTabsModel,
+    rightPanelToggleModel,
+    hasSelectedTask,
+    chatHeaderModel,
+    chatModel,
+    isRightPanelVisible,
+    rightPanelBridge,
+    mergedPullRequestModal,
+    humanReviewFeedbackModal,
+    sessionStartModal,
+    taskDetailsLauncher,
+  } = model;
+
   const taskTabs = useMemo(
     () => (
       <AgentStudioTaskTabs

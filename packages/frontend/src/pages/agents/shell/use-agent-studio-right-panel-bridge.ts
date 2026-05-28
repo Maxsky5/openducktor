@@ -1,6 +1,5 @@
-import { type ReactElement, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
-import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import type {
   AgentStudioOrchestrationSelectionContext,
   useAgentStudioOrchestrationController,
@@ -9,17 +8,32 @@ import type {
   AgentStudioGitConflictQuickActionContext,
   UseAgentsPageRightPanelModelArgs,
 } from "../use-agents-page-right-panel-model";
-import {
-  AgentsPageBuildWorktreeRefreshRuntime,
-  AgentsPageRightPanelRuntime,
-} from "./agents-page-right-panel-runtime";
+
+type AgentStudioRightPanelBridgeSelection = Pick<
+  AgentStudioOrchestrationSelectionContext,
+  | "viewActiveSession"
+  | "viewRole"
+  | "viewTaskId"
+  | "viewSelectedTask"
+  | "isViewSessionHistoryHydrating"
+>;
+
+type AgentStudioRightPanelBridgeOrchestration = Pick<
+  ReturnType<typeof useAgentStudioOrchestrationController>,
+  "agentStudioWorkspaceSidebarModel" | "repoSettings"
+> & {
+  rightPanel: Pick<
+    ReturnType<typeof useAgentStudioOrchestrationController>["rightPanel"],
+    "panelKind" | "isPanelOpen"
+  >;
+};
 
 type UseAgentStudioRightPanelBridgeArgs = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   branches: NonNullable<UseAgentsPageRightPanelModelArgs["branches"]>;
   activeBranch: UseAgentsPageRightPanelModelArgs["activeBranch"];
-  selection: AgentStudioOrchestrationSelectionContext;
-  orchestration: ReturnType<typeof useAgentStudioOrchestrationController>;
+  selection: AgentStudioRightPanelBridgeSelection;
+  orchestration: AgentStudioRightPanelBridgeOrchestration;
   worktreeRecoverySignal: number;
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
@@ -126,35 +140,4 @@ export function useAgentStudioRightPanelBridge({
     isRightPanelVisible,
     rightPanelBridge,
   };
-}
-
-export function AgentStudioRightPanelBridge({
-  model,
-}: {
-  model: AgentStudioRightPanelBridgeModel | null;
-}): ReactElement | null {
-  const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
-
-  if (!model) {
-    return null;
-  }
-
-  const { activeSession, ...rightPanelRuntimeModel } = model;
-
-  return (
-    <>
-      <AgentsPageBuildWorktreeRefreshRuntime
-        panelKind={model.panelKind}
-        isPanelOpen={model.isPanelOpen}
-        viewRole={model.viewRole}
-        activeSession={activeSession}
-        isSessionHistoryHydrating={model.isViewSessionHistoryHydrating}
-        refreshWorktreeRef={rightPanelRefreshWorktreeRef}
-      />
-      <AgentsPageRightPanelRuntime
-        {...rightPanelRuntimeModel}
-        refreshWorktreeRef={rightPanelRefreshWorktreeRef}
-      />
-    </>
-  );
 }
