@@ -6,6 +6,10 @@ import type {
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import {
+  mergeRuntimePendingApprovals,
+  mergeRuntimePendingQuestions,
+} from "./runtime-transcript-pending-requests";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import type { RuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
 
@@ -82,32 +86,20 @@ export function useRuntimeTranscriptInteractions({
   }, [transcriptIdentityKey]);
 
   const visiblePendingApprovals = useMemo(() => {
-    const byRequestId = new Map<string, AgentApprovalRequest>();
-    for (const request of source?.pendingApprovals ?? []) {
-      byRequestId.set(request.requestId, request);
-    }
-    for (const request of session?.pendingApprovals ?? []) {
-      byRequestId.set(request.requestId, request);
-    }
-    for (const requestId of repliedRuntimeApprovalRequestIds) {
-      byRequestId.delete(requestId);
-    }
-    return Array.from(byRequestId.values());
-  }, [repliedRuntimeApprovalRequestIds, session?.pendingApprovals, source?.pendingApprovals]);
+    return mergeRuntimePendingApprovals({
+      source,
+      session,
+      repliedRequestIds: repliedRuntimeApprovalRequestIds,
+    });
+  }, [repliedRuntimeApprovalRequestIds, session, source]);
 
   const visiblePendingQuestions = useMemo(() => {
-    const byRequestId = new Map<string, AgentQuestionRequest>();
-    for (const request of source?.pendingQuestions ?? []) {
-      byRequestId.set(request.requestId, request);
-    }
-    for (const request of session?.pendingQuestions ?? []) {
-      byRequestId.set(request.requestId, request);
-    }
-    for (const requestId of repliedRuntimeQuestionRequestIds) {
-      byRequestId.delete(requestId);
-    }
-    return Array.from(byRequestId.values());
-  }, [repliedRuntimeQuestionRequestIds, session?.pendingQuestions, source?.pendingQuestions]);
+    return mergeRuntimePendingQuestions({
+      source,
+      session,
+      repliedRequestIds: repliedRuntimeQuestionRequestIds,
+    });
+  }, [repliedRuntimeQuestionRequestIds, session, source]);
 
   const sessionWithPendingRequests = useMemo(() => {
     if (!session) {
