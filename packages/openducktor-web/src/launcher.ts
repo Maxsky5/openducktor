@@ -48,6 +48,7 @@ type ProcessKeepAliveDependencies = {
 
 const LOCALHOST = "127.0.0.1";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
+const FRONTEND_CLOSE_TIMEOUT_MS = 3_000;
 const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
 const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
@@ -94,14 +95,21 @@ const forceCloseFrontendConnections = (server: FrontendServer): void => {
   httpServer?.closeAllConnections?.();
 };
 
-const closeFrontendServer = async (server: FrontendServer | null): Promise<void> => {
+const closeFrontendServer = async (
+  server: FrontendServer | null,
+  sleep: SleepFunction = Bun.sleep,
+): Promise<void> => {
   if (!server) {
     return;
   }
 
-  const closePromise = server.close();
-  forceCloseFrontendConnections(server);
-  await closePromise;
+  let closePromise: Promise<void>;
+  try {
+    closePromise = server.close();
+  } finally {
+    forceCloseFrontendConnections(server);
+  }
+  await Promise.race([closePromise, sleep(FRONTEND_CLOSE_TIMEOUT_MS)]);
 };
 
 const waitForBackend = async (

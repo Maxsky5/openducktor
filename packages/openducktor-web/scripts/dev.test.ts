@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildWebDevCommand,
+  buildWebDevProcessEnvironment,
   keepWebDevProcessAliveDuring,
   shouldDetachWebProcessGroup,
 } from "./dev";
@@ -24,6 +25,11 @@ describe("web dev script", () => {
     expect(shouldDetachWebProcessGroup("darwin")).toBe(true);
     expect(shouldDetachWebProcessGroup("linux")).toBe(true);
     expect(shouldDetachWebProcessGroup("win32")).toBe(false);
+  });
+
+  test("defaults child process color output while preserving explicit overrides", () => {
+    expect(buildWebDevProcessEnvironment({}).FORCE_COLOR).toBe("1");
+    expect(buildWebDevProcessEnvironment({ FORCE_COLOR: "0" }).FORCE_COLOR).toBe("0");
   });
 
   test("keeps the supervisor alive while waiting for the child CLI to stop", async () => {
@@ -57,5 +63,11 @@ describe("web dev script", () => {
     const source = Bun.file(new URL("./dev.ts", import.meta.url)).text();
 
     return expect(source).resolves.toContain('process.on("SIGTERM"');
+  });
+
+  test("tracks child exit state instead of reading a subprocess killed flag", () => {
+    const source = Bun.file(new URL("./dev.ts", import.meta.url)).text();
+
+    return expect(source).resolves.not.toContain("webCli.killed");
   });
 });

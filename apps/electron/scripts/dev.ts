@@ -25,6 +25,7 @@ const MACOS_DEV_ICON_FILE_NAME = "openducktor-dev-rounded.icns";
 const RENDERER_DEV_HOST = "127.0.0.1";
 const DEFAULT_RENDERER_DEV_PORT = 1430;
 const ELECTRON_RESTART_DEBOUNCE_MS = 100;
+const RENDERER_CLOSE_TIMEOUT_MS = 3_000;
 const ELECTRON_STOP_TIMEOUT_MS = 30_000;
 
 export const ELECTRON_RESTART_WATCH_ROOTS = [
@@ -96,6 +97,22 @@ const fileExists = async (filePath: string): Promise<boolean> => {
       return false;
     }
     throw error;
+  }
+};
+
+const assertFileExists = async (filePath: string, label: string): Promise<void> => {
+  let metadata: Awaited<ReturnType<typeof stat>>;
+  try {
+    metadata = await stat(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`${label} was not found: ${filePath}`);
+    }
+    throw error;
+  }
+
+  if (!metadata.isFile()) {
+    throw new Error(`${label} must be a file: ${filePath}`);
   }
 };
 
@@ -222,6 +239,7 @@ const prepareMacosDevElectronBundle = async (sourceExecutablePath: string): Prom
   const iconPath = path.join(packageRoot, "resources", "icon.icns");
   const infoPlistPath = path.join(devAppPath, "Contents", "Info.plist");
   const markerPath = path.join(devRoot, "app-source.json");
+  await assertFileExists(iconPath, "Electron macOS dev icon");
   const signature = await buildMacosDevAppSignature({
     devAppPath,
     iconPath,
@@ -234,6 +252,7 @@ const prepareMacosDevElectronBundle = async (sourceExecutablePath: string): Prom
 
   await mkdir(devRoot, { recursive: true });
   if (shouldCopyBundle) {
+    await rm(markerPath, { force: true });
     await rm(devAppPath, { force: true, recursive: true });
     await runStep("Electron macOS dev app copy", ["/bin/cp", "-cR", sourceAppPath, devAppPath]);
   }
@@ -336,11 +355,18 @@ const stopElectron = async (electron: ManagedElectronProcess | null): Promise<vo
   await waitForProcessExit(electron, ELECTRON_STOP_TIMEOUT_MS);
 };
 
-export const closeRendererServer = async (server: ViteDevServer | null): Promise<void> => {
+export const closeRendererServer = async (
+  server: ViteDevServer | null,
+  closeSleep: (durationMs: number) => Promise<unknown> = sleep,
+): Promise<void> => {
   if (server) {
-    const closePromise = server.close();
-    forceCloseRendererConnections(server);
-    await closePromise;
+    let closePromise: Promise<void>;
+    try {
+      closePromise = server.close();
+    } finally {
+      forceCloseRendererConnections(server);
+    }
+    await Promise.race([closePromise, closeSleep(RENDERER_CLOSE_TIMEOUT_MS)]);
   }
 };
 
@@ -446,7 +472,7 @@ const main = async (): Promise<number> => {
       void shutdown(143);
     });
     process.once("exit", () => {
-      if (electron && !electron.killed) {
+      if (electron) {
         electron.kill();
       }
     });

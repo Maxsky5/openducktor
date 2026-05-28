@@ -140,4 +140,41 @@ describe("electron dev script", () => {
     expect(closeIdleConnectionsCalls).toBe(1);
     expect(closeAllConnectionsCalls).toBe(1);
   });
+
+  test("forces open renderer connections even when close throws synchronously", async () => {
+    let closeAllConnectionsCalls = 0;
+    let closeIdleConnectionsCalls = 0;
+    const rendererServer = {
+      httpServer: {
+        closeAllConnections: () => {
+          closeAllConnectionsCalls += 1;
+        },
+        closeIdleConnections: () => {
+          closeIdleConnectionsCalls += 1;
+        },
+      },
+      close: () => {
+        throw new Error("renderer close failed");
+      },
+    };
+
+    await expect(closeRendererServer(rendererServer as never)).rejects.toThrow(
+      "renderer close failed",
+    );
+    expect(closeIdleConnectionsCalls).toBe(1);
+    expect(closeAllConnectionsCalls).toBe(1);
+  });
+
+  test("keeps renderer shutdown bounded when close never resolves", async () => {
+    let timeoutMs = 0;
+    const rendererServer = {
+      close: () => new Promise<void>(() => {}),
+    };
+
+    await closeRendererServer(rendererServer as never, async (durationMs) => {
+      timeoutMs = durationMs;
+    });
+
+    expect(timeoutMs).toBe(3_000);
+  });
 });

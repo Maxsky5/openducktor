@@ -39,6 +39,13 @@ export const buildWebDevCommand = (
   bunExecutable = process.execPath,
 ): string[] => [bunExecutable, "src/cli.ts", "--workspace", ...args];
 
+export const buildWebDevProcessEnvironment = (
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv => ({
+  ...env,
+  FORCE_COLOR: env.FORCE_COLOR ?? "1",
+});
+
 export const keepWebDevProcessAliveDuring = async <T>(
   operation: Promise<T>,
   dependencies: ProcessKeepAliveDependencies = {
@@ -60,6 +67,7 @@ const startWebCli = (args: readonly string[]): ManagedWebProcess =>
     detached: shouldDetachWebProcessGroup(),
     stdout: "inherit",
     stderr: "inherit",
+    env: buildWebDevProcessEnvironment(),
   });
 
 const stopWebCli = async (webCli: ManagedWebProcess | null): Promise<void> => {
@@ -80,6 +88,7 @@ export const runWebDev = async (
   args: readonly string[] = process.argv.slice(2),
 ): Promise<number> => {
   const webCli = startWebCli(args);
+  let webCliExited = false;
   let shutdownStarted = false;
   let resolveExit: (exitCode: number) => void = () => {};
   const exited = new Promise<number>((resolve) => {
@@ -96,6 +105,7 @@ export const runWebDev = async (
   };
 
   void webCli.exited.then((exitCode) => {
+    webCliExited = true;
     if (!shutdownStarted) {
       void shutdown(exitCode);
     }
@@ -108,7 +118,7 @@ export const runWebDev = async (
     void shutdown(143);
   });
   process.once("exit", () => {
-    if (!webCli.killed) {
+    if (!webCliExited) {
       webCli.kill();
     }
   });

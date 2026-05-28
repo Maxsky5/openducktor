@@ -63,9 +63,9 @@ describe("parsePathFromLoginShellOutput", () => {
 
 describe("buildLoginShellPathProbeArgs", () => {
   test("does not request an interactive shell that can take terminal job control", () => {
-    expect(buildLoginShellPathProbeArgs()).toEqual([
-      "-c",
-      "printf '__OPENDUCKTOR_ENV_START__\\0'; /usr/bin/env -0",
-    ]);
+    const args = buildLoginShellPathProbeArgs();
+
+    expect(args).toEqual(["-c", "printf '__OPENDUCKTOR_ENV_START__\\0'; /usr/bin/env -0"]);
+    expect(args).not.toContain("-i");
   });
 });

@@ -142,6 +142,43 @@ describe("launcher internals", () => {
     expect(closeAllConnectionsCalls).toBe(1);
   });
 
+  test("forces open frontend connections even when close throws synchronously", async () => {
+    let closeAllConnectionsCalls = 0;
+    let closeIdleConnectionsCalls = 0;
+    const frontendServer = {
+      httpServer: {
+        closeAllConnections: () => {
+          closeAllConnectionsCalls += 1;
+        },
+        closeIdleConnections: () => {
+          closeIdleConnectionsCalls += 1;
+        },
+      },
+      close: () => {
+        throw new Error("close failed");
+      },
+    };
+
+    await expect(__launcherTestInternals.closeFrontendServer(frontendServer)).rejects.toThrow(
+      "close failed",
+    );
+    expect(closeIdleConnectionsCalls).toBe(1);
+    expect(closeAllConnectionsCalls).toBe(1);
+  });
+
+  test("keeps frontend shutdown bounded when close never resolves", async () => {
+    let timeoutMs = 0;
+    const frontendServer = {
+      close: () => new Promise<void>(() => {}),
+    };
+
+    await __launcherTestInternals.closeFrontendServer(frontendServer, async (durationMs) => {
+      timeoutMs = durationMs;
+    });
+
+    expect(timeoutMs).toBe(3_000);
+  });
+
   test("keeps the process alive while shutdown work is pending", async () => {
     let intervalCallback: (() => void) | null = null;
     const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;

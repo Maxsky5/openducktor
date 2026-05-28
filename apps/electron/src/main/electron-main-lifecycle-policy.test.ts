@@ -31,7 +31,8 @@ describe("Electron main lifecycle policy", () => {
 
     expect(source).toContain('window.on("close"');
     expect(source).toContain("event.preventDefault();");
-    expect(source).toContain("window.destroy();");
+    expect(source).toContain("hideWindowsForShutdown();");
+    expect(source).not.toContain("window.destroy();");
     expect(source).toContain('app.on("window-all-closed"');
     expect(source).toContain('void shutdownHostAndQuit({ reason: "window-all-closed" });');
     expect(source).toContain("if (hostShutdownStarted)");

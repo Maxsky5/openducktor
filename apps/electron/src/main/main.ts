@@ -143,8 +143,11 @@ const createMainWindow = async (
       return;
     }
     event.preventDefault();
+    hideWindowsForShutdown();
+    if (hostShutdownStarted) {
+      return;
+    }
     void shutdownHostAndQuit({ reason: "window-close" });
-    window.destroy();
   });
 
   if (rendererDevUrl) {
