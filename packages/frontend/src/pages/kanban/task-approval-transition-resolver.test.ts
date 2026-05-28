@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskAction, TaskCard, TaskStatus } from "@openducktor/contracts";
-import { resolveTaskApprovalWorkflowTransition } from "./task-approval-transition-resolver";
+import type { TaskAction, TaskApprovalContext, TaskCard, TaskStatus } from "@openducktor/contracts";
+import type { TaskApprovalFlowState } from "./task-approval-flow-state";
+import {
+  resolveTaskApprovalOpenMode,
+  resolveTaskApprovalSubmissionRoute,
+  resolveTaskApprovalWorkflowTransition,
+} from "./task-approval-transition-resolver";
 
 type TaskFixtureOverrides = Pick<TaskCard, "status" | "availableActions"> & Partial<TaskCard>;
 
@@ -37,6 +42,41 @@ const task = ({ status, availableActions, ...overrides }: TaskFixtureOverrides):
   createdAt: "2026-05-28T11:00:00.000Z",
   ...overrides,
 });
+
+const approvalContext = (overrides: Partial<TaskApprovalContext> = {}): TaskApprovalContext => ({
+  taskId: "TASK-1",
+  taskStatus: "human_review",
+  workingDirectory: "/repo/.worktrees/TASK-1",
+  sourceBranch: "odt/TASK-1",
+  targetBranch: { remote: "origin", branch: "main" },
+  publishTarget: { remote: "origin", branch: "main" },
+  defaultMergeMethod: "merge_commit",
+  hasUncommittedChanges: false,
+  uncommittedFileCount: 0,
+  pullRequest: undefined,
+  directMerge: undefined,
+  suggestedSquashCommitMessage: undefined,
+  providers: [],
+  ...overrides,
+});
+
+const openState = (overrides: Partial<Extract<TaskApprovalFlowState, { kind: "open" }>> = {}) =>
+  ({
+    kind: "open",
+    phase: "ready",
+    stage: "approval",
+    taskId: "TASK-1",
+    mode: "direct_merge",
+    mergeMethod: "merge_commit",
+    pullRequestDraftMode: "manual",
+    title: "Task",
+    body: "",
+    squashCommitMessage: "",
+    squashCommitMessageTouched: false,
+    errorMessage: null,
+    approvalContext: approvalContext(),
+    ...overrides,
+  }) satisfies TaskApprovalFlowState;
 
 describe("resolveTaskApprovalWorkflowTransition", () => {
   test.each([
@@ -134,5 +174,138 @@ describe("resolveTaskApprovalWorkflowTransition", () => {
         command,
       ),
     ).toEqual(expected);
+  });
+});
+
+describe("resolveTaskApprovalOpenMode", () => {
+  test.each([
+    {
+      name: "keeps an explicit requested mode",
+      requestedMode: "direct_merge" as const,
+      cachedContext: approvalContext({
+        providers: [{ providerId: "github", enabled: true, available: true }],
+      }),
+      task: task({
+        status: "human_review",
+        availableActions: ["human_approve"],
+        pullRequest: {
+          providerId: "github",
+          number: 42,
+          url: "https://github.com/openai/openducktor/pull/42",
+          state: "open",
+          createdAt: "2026-05-28T12:00:00.000Z",
+          updatedAt: "2026-05-28T12:00:00.000Z",
+        },
+      }),
+      expected: "direct_merge" as const,
+    },
+    {
+      name: "defaults PR-linked approval to pull request mode",
+      requestedMode: undefined,
+      cachedContext: undefined,
+      task: task({
+        status: "human_review",
+        availableActions: ["human_approve"],
+        pullRequest: {
+          providerId: "github",
+          number: 42,
+          url: "https://github.com/openai/openducktor/pull/42",
+          state: "open",
+          createdAt: "2026-05-28T12:00:00.000Z",
+          updatedAt: "2026-05-28T12:00:00.000Z",
+        },
+      }),
+      expected: "pull_request" as const,
+    },
+    {
+      name: "uses cached provider availability when there is no PR-linked approval",
+      requestedMode: undefined,
+      cachedContext: approvalContext({
+        providers: [{ providerId: "github", enabled: true, available: true }],
+      }),
+      task: task({ status: "human_review", availableActions: ["human_approve"] }),
+      expected: "pull_request" as const,
+    },
+    {
+      name: "falls back to direct merge without a cached GitHub provider",
+      requestedMode: undefined,
+      cachedContext: approvalContext(),
+      task: task({ status: "blocked", availableActions: ["open_builder"] }),
+      expected: "direct_merge" as const,
+    },
+  ])("$name", ({ cachedContext, expected, requestedMode, task: taskFixture }) => {
+    expect(
+      resolveTaskApprovalOpenMode({
+        cachedContext,
+        requestedMode,
+        task: taskFixture,
+      }),
+    ).toBe(expected);
+  });
+});
+
+describe("resolveTaskApprovalSubmissionRoute", () => {
+  test.each([
+    {
+      name: "ignores closed state",
+      state: { kind: "closed" } satisfies TaskApprovalFlowState,
+      repoPath: "/repo",
+      expectedKind: "ignore",
+    },
+    {
+      name: "ignores a loading approval state",
+      state: openState({ phase: "loading" }),
+      repoPath: "/repo",
+      expectedKind: "ignore",
+    },
+    {
+      name: "ignores a submitting approval state",
+      state: openState({ phase: "submitting" }),
+      repoPath: "/repo",
+      expectedKind: "ignore",
+    },
+    {
+      name: "routes missing builder worktree completion without requiring a repo path",
+      state: openState({
+        stage: "missing_builder_worktree",
+        approvalContext: null,
+      }),
+      repoPath: null,
+      expectedKind: "complete_missing_builder_worktree",
+    },
+    {
+      name: "ignores approval submission when the workspace repo path is missing",
+      state: openState(),
+      repoPath: null,
+      expectedKind: "ignore",
+    },
+    {
+      name: "ignores approval submission when approval context is missing",
+      state: openState({ approvalContext: null }),
+      repoPath: "/repo",
+      expectedKind: "ignore",
+    },
+    {
+      name: "routes direct merge submissions with the repo path",
+      state: openState({ mode: "direct_merge" }),
+      repoPath: "/repo",
+      expectedKind: "submit_direct_merge",
+    },
+    {
+      name: "routes pull request submissions with the repo path",
+      state: openState({ mode: "pull_request" }),
+      repoPath: "/repo",
+      expectedKind: "submit_pull_request",
+    },
+  ])("$name", ({ expectedKind, repoPath, state }) => {
+    const route = resolveTaskApprovalSubmissionRoute(state, repoPath);
+
+    expect(route.kind).toBe(expectedKind);
+    if (route.kind !== "ignore") {
+      expect(Object.is(route.approval, state)).toBe(true);
+    }
+    if (route.kind === "submit_direct_merge" || route.kind === "submit_pull_request") {
+      expect(route.repoPath).toBe("/repo");
+    }
   });
 });

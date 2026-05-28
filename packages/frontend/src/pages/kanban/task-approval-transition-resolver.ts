@@ -2,6 +2,7 @@ import type { TaskAction, TaskCard, TaskStatus } from "@openducktor/contracts";
 import type { TaskApprovalMode } from "./kanban-page-model-types";
 import {
   determineDefaultTaskApprovalMode,
+  isTaskApprovalReady,
   type TaskApprovalFlowOpenState,
   type TaskApprovalFlowReadyState,
   type TaskApprovalFlowState,
@@ -51,6 +52,11 @@ const isReviewStatus = (status: TaskStatus): status is ReviewStatus => REVIEW_ST
 
 const hasTaskAction = (task: Pick<TaskCard, "availableActions">, action: TaskAction): boolean =>
   task.availableActions.includes(action);
+
+const isMissingBuilderWorktreeApprovalState = (
+  state: TaskApprovalFlowState,
+): state is MissingBuilderWorktreeApprovalState =>
+  state.kind === "open" && state.phase === "ready" && state.stage === "missing_builder_worktree";
 
 export const resolveTaskApprovalWorkflowTransition = (
   task: Pick<TaskCard, "availableActions" | "pullRequest" | "status">,
@@ -117,32 +123,28 @@ export const resolveTaskApprovalSubmissionRoute = (
   state: TaskApprovalFlowState,
   repoPath: string | null,
 ): TaskApprovalSubmissionRoute => {
-  if (state.kind !== "open" || state.phase !== "ready") {
-    return { kind: "ignore" };
-  }
-
-  if (state.stage === "missing_builder_worktree") {
+  if (isMissingBuilderWorktreeApprovalState(state)) {
     return {
       kind: "complete_missing_builder_worktree",
-      approval: state as MissingBuilderWorktreeApprovalState,
+      approval: state,
     };
   }
 
-  if (!repoPath || state.approvalContext === null) {
+  if (!repoPath || !isTaskApprovalReady(state)) {
     return { kind: "ignore" };
   }
 
   if (state.mode === "direct_merge") {
     return {
       kind: "submit_direct_merge",
-      approval: state as TaskApprovalFlowReadyState,
+      approval: state,
       repoPath,
     };
   }
 
   return {
     kind: "submit_pull_request",
-    approval: state as TaskApprovalFlowReadyState,
+    approval: state,
     repoPath,
   };
 };
