@@ -81,6 +81,19 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("high");
   });
 
+  test("includes skill references in the composer placeholder when supported", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: {
+          ...buildModel(),
+          supportsSkillReferences: true,
+        },
+      }),
+    );
+
+    expect(html).toContain("@ for files; / for commands; $ for skills");
+  });
+
   test("hides stop and context widgets when not available", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {

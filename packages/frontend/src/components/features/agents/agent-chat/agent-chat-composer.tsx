@@ -534,6 +534,7 @@ export function AgentChatComposer({
     isModelSelectionPending,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    supportsSkillReferences,
     accentColor: composerAccentColor,
     composerEditorRef,
     onComposerEditorInput,
@@ -730,7 +731,9 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit();
   }, [handleSubmit]);
-  let composerPlaceholder = "@ for files; / for commands";
+  let composerPlaceholder = supportsSkillReferences
+    ? "@ for files; / for commands; $ for skills"
+    : "@ for files; / for commands";
   if (isReadOnly && readOnlyReason) {
     composerPlaceholder = readOnlyReason;
   }

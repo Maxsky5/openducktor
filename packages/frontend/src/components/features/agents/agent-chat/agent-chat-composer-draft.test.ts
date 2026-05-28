@@ -215,6 +215,32 @@ describe("applyComposerDraftEdit", () => {
     });
   });
 
+  test("rejects invalid text replacement ranges", () => {
+    const draft: AgentChatComposerDraft = {
+      segments: [createTextSegment("use $review", "text-1")],
+      attachments: [],
+    };
+
+    expect(
+      applyComposerDraftEdit(draft, {
+        type: "insert_skill_reference",
+        textSegmentId: "text-1",
+        rangeStart: 11,
+        rangeEnd: 4,
+        skill: SKILL,
+      }),
+    ).toBeNull();
+    expect(
+      applyComposerDraftEdit(draft, {
+        type: "insert_skill_reference",
+        textSegmentId: "text-1",
+        rangeStart: 4,
+        rangeEnd: 50,
+        skill: SKILL,
+      }),
+    ).toBeNull();
+  });
+
   test("removes a file reference and merges adjacent text segments", () => {
     const draft: AgentChatComposerDraft = {
       segments: [

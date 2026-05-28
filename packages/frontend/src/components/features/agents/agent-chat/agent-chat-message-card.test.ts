@@ -1422,6 +1422,39 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">$create-pr<");
   });
 
+  test("renders fallback user skill chips only when the raw marker is absent", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "fallback-user-skill-ref",
+          role: "user",
+          content: "use a skill",
+          timestamp: "2026-02-22T10:28:55.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/review/SKILL.md",
+                  path: "/skills/review/SKILL.md",
+                  name: "review",
+                  title: "Review",
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain("use a skill");
+    expect(html).toContain(">review<");
+  });
+
   test("renders fallback user file reference text as an inline chip", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

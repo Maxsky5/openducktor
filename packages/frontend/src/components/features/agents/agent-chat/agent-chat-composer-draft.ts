@@ -419,6 +419,9 @@ const replaceTextRangeWithSegment = (
   if (index < 0 || !segment || segment.kind !== "text") {
     return null;
   }
+  if (rangeStart < 0 || rangeEnd < rangeStart || rangeEnd > segment.text.length) {
+    return null;
+  }
 
   const afterSegment = createTextSegment(segment.text.slice(rangeEnd));
   const segments = draft.segments.slice();

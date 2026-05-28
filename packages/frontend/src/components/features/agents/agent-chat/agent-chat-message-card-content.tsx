@@ -471,7 +471,9 @@ const renderUserMessageInlineContent = (
     if (
       (part.kind !== "file_reference" && part.kind !== "skill_mention") ||
       renderedInlineReferences.has(part) ||
-      (part.kind === "skill_mention" && !part.sourceText)
+      (part.kind === "skill_mention" &&
+        !part.sourceText &&
+        userMessageTextContainsReferenceMarker(rawText, part))
     ) {
       continue;
     }
