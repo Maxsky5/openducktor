@@ -13,6 +13,12 @@ files:
 extraResources:
   - from: build/sidecars
     to: bin
+  - from: resources/icon.ico
+    to: icon.ico
+  - from: resources/icon.icns
+    to: icon.icns
+  - from: resources/icon.png
+    to: icon.png
 
 extraMetadata:
   main: dist/main.js
@@ -20,6 +26,7 @@ extraMetadata:
 
 mac:
   artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
+  icon: resources/icon.icns
   binaries:
     - Contents/Resources/bin/openducktor-mcp
   category: public.app-category.developer-tools
@@ -32,6 +39,7 @@ mac:
 
 win:
   artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
+  icon: resources/icon.ico
   target:
     - nsis
     - zip
@@ -39,6 +47,7 @@ win:
 linux:
   category: Development
   artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
+  icon: resources/icon.png
   target:
     - AppImage
     - deb

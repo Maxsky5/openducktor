@@ -25,24 +25,31 @@ type BackendReadinessDependencies = {
 type FrontendServer = {
   close(): Promise<void>;
 };
+type ForceCloseableHttpServer = {
+  closeAllConnections?: () => void;
+  closeIdleConnections?: () => void;
+};
+type FrontendServerWithHttpConnections = FrontendServer & {
+  httpServer?: ForceCloseableHttpServer | null;
+};
 type StopLauncherServicesInput = {
-  backendUrl: string;
-  controlToken: string;
   frontendServer: FrontendServer | null;
   hostBackend: TypescriptHostBackend;
 };
 type LauncherShutdownDependencies = {
-  requestShutdown: (backendUrl: string, controlToken: string) => Promise<void>;
   closeServer: (server: FrontendServer | null) => Promise<void>;
-  waitForGracefulExitCode: (child: ManagedHost) => Promise<number | null>;
+  stopHost: (hostBackend: TypescriptHostBackend) => Promise<void>;
+};
+type KeepAliveTimer = ReturnType<typeof setInterval>;
+type ProcessKeepAliveDependencies = {
+  clearInterval: (timer: KeepAliveTimer) => void;
+  setInterval: (callback: () => void, durationMs: number) => KeepAliveTimer;
 };
 
 const LOCALHOST = "127.0.0.1";
-const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
-const VITE_CLOSE_TIMEOUT_MS = 3_000;
-const HOST_GRACEFUL_EXIT_TIMEOUT_MS = 2_000;
-const FORCE_EXIT_SIGNAL_GRACE_MS = 1_500;
+const FRONTEND_CLOSE_TIMEOUT_MS = 3_000;
+const SHUTDOWN_KEEP_ALIVE_INTERVAL_MS = 1_000;
 
 const buildFrontendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
 const buildBackendUrl = (port: number): string => `http://${LOCALHOST}:${port}`;
@@ -56,29 +63,6 @@ const logFrontendAvailability = (port: number): void => {
   logSuccess("OpenDucktor web is ready:");
   for (const url of buildFrontendDisplayUrls(port)) {
     logSuccess(`  ➜  Local:   ${url}`);
-  }
-};
-
-const requestHostShutdown = async (
-  backendUrl: string,
-  controlToken: string,
-  fetchImpl: FetchFunction = fetch,
-): Promise<void> => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3_000);
-  try {
-    const response = await fetchImpl(`${backendUrl}/shutdown`, {
-      method: "POST",
-      headers: {
-        [CONTROL_TOKEN_HEADER]: controlToken,
-      },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`OpenDucktor web host shutdown failed with status ${response.status}.`);
-    }
-  } finally {
-    clearTimeout(timeout);
   }
 };
 
@@ -105,22 +89,27 @@ const verifyBackendReadiness = async (
   }
 };
 
-const waitForGracefulHostExitCode = async (
-  child: ManagedHost,
-  sleep: SleepFunction = Bun.sleep,
-): Promise<number | null> => {
-  return Promise.race([
-    child.exited.then((exitCode) => exitCode),
-    sleep(HOST_GRACEFUL_EXIT_TIMEOUT_MS).then(() => null),
-  ]);
+const forceCloseFrontendConnections = (server: FrontendServer): void => {
+  const httpServer = (server as FrontendServerWithHttpConnections).httpServer;
+  httpServer?.closeIdleConnections?.();
+  httpServer?.closeAllConnections?.();
 };
 
-const closeFrontendServer = async (server: FrontendServer | null): Promise<void> => {
+const closeFrontendServer = async (
+  server: FrontendServer | null,
+  sleep: SleepFunction = Bun.sleep,
+): Promise<void> => {
   if (!server) {
     return;
   }
 
-  await Promise.race([server.close(), Bun.sleep(VITE_CLOSE_TIMEOUT_MS)]);
+  let closePromise: Promise<void>;
+  try {
+    closePromise = server.close();
+  } finally {
+    forceCloseFrontendConnections(server);
+  }
+  await Promise.race([closePromise, sleep(FRONTEND_CLOSE_TIMEOUT_MS)]);
 };
 
 const waitForBackend = async (
@@ -207,12 +196,6 @@ const resolveStaticAssetPath = (staticRoot: string, requestPath: string): string
   return path.join(staticRoot, normalized);
 };
 
-const shouldForceExitForRepeatedSignal = (
-  firstSignalReceivedAt: number,
-  now: number,
-  graceMs = FORCE_EXIT_SIGNAL_GRACE_MS,
-): boolean => now - firstSignalReceivedAt >= graceMs;
-
 const throwLauncherShutdownFailures = (failures: unknown[]): void => {
   if (failures.length === 0) {
     return;
@@ -224,44 +207,30 @@ const throwLauncherShutdownFailures = (failures: unknown[]): void => {
 };
 
 const defaultLauncherShutdownDependencies: LauncherShutdownDependencies = {
-  requestShutdown: requestHostShutdown,
   closeServer: closeFrontendServer,
-  waitForGracefulExitCode: waitForGracefulHostExitCode,
+  stopHost: (hostBackend) => hostBackend.stop(),
 };
 
 const stopLauncherServices = async (
-  { backendUrl, controlToken, frontendServer, hostBackend }: StopLauncherServicesInput,
-  {
-    requestShutdown,
-    closeServer,
-    waitForGracefulExitCode,
-  }: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
+  { frontendServer, hostBackend }: StopLauncherServicesInput,
+  { closeServer, stopHost }: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
 ): Promise<void> => {
-  const shutdownResults = await Promise.allSettled([
-    requestShutdown(backendUrl, controlToken),
+  const [frontendCloseResult, hostStopResult] = await Promise.allSettled([
     closeServer(frontendServer),
+    stopHost(hostBackend),
   ]);
-  const shutdownFailures = shutdownResults
+  const shutdownFailures = [frontendCloseResult, hostStopResult]
     .filter((result): result is PromiseRejectedResult => result.status === "rejected")
     .map((result) => result.reason);
   for (const failure of shutdownFailures) {
     logError(failure instanceof Error ? failure.message : failure);
   }
-
-  let hostExitCode: number | null;
-  try {
-    hostExitCode = await waitForGracefulExitCode(hostBackend);
-    if (hostExitCode === null) {
-      logInfo("Ensuring OpenDucktor TypeScript host has stopped...");
-      await hostBackend.stop();
-      hostExitCode = await hostBackend.exited;
-    }
-  } catch (error) {
-    shutdownFailures.push(error);
+  if (hostStopResult.status === "rejected") {
     throwLauncherShutdownFailures(shutdownFailures);
     return;
   }
 
+  const hostExitCode = await hostBackend.exited;
   if (hostExitCode !== 0) {
     shutdownFailures.push(
       new Error(`OpenDucktor TypeScript host shutdown failed with exit code ${hostExitCode}.`),
@@ -271,16 +240,30 @@ const stopLauncherServices = async (
   throwLauncherShutdownFailures(shutdownFailures);
 };
 
+const keepProcessAliveDuring = async <T>(
+  operation: Promise<T>,
+  dependencies: ProcessKeepAliveDependencies = {
+    clearInterval,
+    setInterval,
+  },
+): Promise<T> => {
+  const timer = dependencies.setInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS);
+  try {
+    return await operation;
+  } finally {
+    dependencies.clearInterval(timer);
+  }
+};
+
 export const __launcherTestInternals = {
   buildFrontendDisplayUrls,
   buildBrowserRuntimeConfigJson,
+  closeFrontendServer,
+  keepProcessAliveDuring,
   resolveStaticAssetPath,
-  requestHostShutdown,
-  shouldForceExitForRepeatedSignal,
   stopLauncherServices,
   verifyBackendReadiness,
   waitForBackend,
-  waitForGracefulHostExitCode,
 };
 
 const startViteServer = async (
@@ -396,55 +379,50 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     appToken,
   });
   let frontendServer: FrontendServer | null = null;
-  let stopping = false;
   let stopPromise: Promise<void> | null = null;
-  let firstShutdownSignalReceivedAt: number | null = null;
-  let duplicateSignalNoticeLogged = false;
+  let terminationStarted = false;
+  let duplicateTerminationNoticeLogged = false;
 
   const stop = async (): Promise<void> => {
     if (stopPromise) {
       return stopPromise;
     }
-    stopping = true;
 
     stopPromise = (async () => {
       logInfo("Stopping OpenDucktor frontend server...");
       logInfo("Stopping OpenDucktor TypeScript host services...");
 
-      await stopLauncherServices({ backendUrl, controlToken, frontendServer, hostBackend });
+      await stopLauncherServices({ frontendServer, hostBackend });
       logSuccess("OpenDucktor web stopped.");
     })();
 
     return stopPromise;
   };
 
-  const handleShutdownSignal = (signal: NodeJS.Signals, exitCode: number): void => {
-    const now = Date.now();
-    if (firstShutdownSignalReceivedAt !== null) {
-      if (!shouldForceExitForRepeatedSignal(firstShutdownSignalReceivedAt, now)) {
-        if (!duplicateSignalNoticeLogged) {
-          duplicateSignalNoticeLogged = true;
-          logInfo(
-            `Received duplicate ${signal} while graceful shutdown is starting; continuing shutdown. Press Ctrl+C again if it hangs.`,
-          );
-        }
-        return;
+  const handleTerminationSignal = (signal: NodeJS.Signals, exitCode: number): void => {
+    if (terminationStarted) {
+      if (!duplicateTerminationNoticeLogged) {
+        duplicateTerminationNoticeLogged = true;
+        logInfo("OpenDucktor web shutdown is already in progress; waiting for cleanup to finish.");
       }
-
-      logError(`OpenDucktor web shutdown is already in progress after ${signal}; forcing exit.`);
-      process.exit(exitCode);
+      return;
     }
-
-    firstShutdownSignalReceivedAt = now;
+    terminationStarted = true;
     logInfo(`Stopping OpenDucktor web after ${signal}...`);
 
-    void stop().finally(() => {
-      process.exit(exitCode);
-    });
+    void keepProcessAliveDuring(stop()).then(
+      () => {
+        process.exit(exitCode);
+      },
+      (error: unknown) => {
+        logError(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      },
+    );
   };
 
-  process.on("SIGINT", () => handleShutdownSignal("SIGINT", 130));
-  process.on("SIGTERM", () => handleShutdownSignal("SIGTERM", 143));
+  process.on("SIGINT", () => handleTerminationSignal("SIGINT", 130));
+  process.on("SIGTERM", () => handleTerminationSignal("SIGTERM", 143));
 
   try {
     logInfo("Starting OpenDucktor TypeScript host...");
@@ -455,7 +433,7 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     logFrontendAvailability(options.frontendPort);
 
     const exitCode = await hostBackend.exited;
-    if (stopping) {
+    if (stopPromise) {
       await stop();
     } else {
       await closeFrontendServer(frontendServer);

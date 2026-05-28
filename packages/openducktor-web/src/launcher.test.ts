@@ -71,59 +71,19 @@ describe("launcher internals", () => {
     ).rejects.toThrow("OpenDucktor web host exited before startup completed with code 9.");
   });
 
-  test("sends the launcher control token when shutting down the fake host", async () => {
-    const requests: Array<{ url: string; token: string | null; method: string | undefined }> = [];
-    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      requests.push({
-        url: String(url),
-        method: init?.method,
-        token: headers.get("x-openducktor-control-token"),
-      });
-      return new Response(null, { status: 202 });
-    };
-
-    await __launcherTestInternals.requestHostShutdown(
-      "http://127.0.0.1:14327",
-      "control-token",
-      fetchImpl,
-    );
-
-    expect(requests).toEqual([
-      {
-        url: "http://127.0.0.1:14327/shutdown",
-        method: "POST",
-        token: "control-token",
-      },
-    ]);
-  });
-
-  test("detects the host exit code during the graceful shutdown wait", async () => {
-    const hostExitCode = await __launcherTestInternals.waitForGracefulHostExitCode(
-      createHostProcess(Promise.resolve(0)),
-      async () => new Promise(() => {}),
-    );
-
-    expect(hostExitCode).toBe(0);
-  });
-
-  test("detects when the host needs force termination after graceful shutdown wait", async () => {
-    const hostExitCode = await __launcherTestInternals.waitForGracefulHostExitCode(
-      createHostProcess(new Promise<number>(() => {})),
-      async () => {},
-    );
-
-    expect(hostExitCode).toBeNull();
-  });
-
-  test("still stops host services after shutdown request failures", async () => {
+  test("stops frontend and host services directly", async () => {
     let stopCalls = 0;
     let frontendCloseCalls = 0;
+    let resolveExited: (exitCode: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExited = resolve;
+    });
     const hostBackend = {
-      exited: Promise.resolve(0),
+      exited,
       port: 14327,
       stop: async () => {
         stopCalls += 1;
+        resolveExited(0);
       },
     };
     const frontendServer = {
@@ -132,28 +92,149 @@ describe("launcher internals", () => {
       },
     };
 
-    await expect(
-      __launcherTestInternals.stopLauncherServices(
-        {
-          backendUrl: "http://127.0.0.1:14327",
-          controlToken: "control-token",
-          frontendServer,
-          hostBackend,
+    await __launcherTestInternals.stopLauncherServices(
+      {
+        frontendServer,
+        hostBackend,
+      },
+      {
+        closeServer: async (server) => {
+          await server?.close();
         },
-        {
-          requestShutdown: async () => {
-            throw new Error("shutdown request failed");
-          },
-          closeServer: async (server) => {
-            await server?.close();
-          },
-          waitForGracefulExitCode: async () => null,
+        stopHost: async (backend) => {
+          await backend.stop();
         },
-      ),
-    ).rejects.toThrow("shutdown request failed");
+      },
+    );
 
     expect(frontendCloseCalls).toBe(1);
     expect(stopCalls).toBe(1);
+  });
+
+  test("forces open frontend server connections during Vite shutdown", async () => {
+    let closeAllConnectionsCalls = 0;
+    let closeIdleConnectionsCalls = 0;
+    let closeCalls = 0;
+    let resolveClose: () => void = () => {};
+    const closePromise = new Promise<void>((resolve) => {
+      resolveClose = resolve;
+    });
+    const frontendServer = {
+      httpServer: {
+        closeAllConnections: () => {
+          closeAllConnectionsCalls += 1;
+          resolveClose();
+        },
+        closeIdleConnections: () => {
+          closeIdleConnectionsCalls += 1;
+        },
+      },
+      close: () => {
+        closeCalls += 1;
+        return closePromise;
+      },
+    };
+
+    await __launcherTestInternals.closeFrontendServer(frontendServer);
+
+    expect(closeCalls).toBe(1);
+    expect(closeIdleConnectionsCalls).toBe(1);
+    expect(closeAllConnectionsCalls).toBe(1);
+  });
+
+  test("forces open frontend connections even when close throws synchronously", async () => {
+    let closeAllConnectionsCalls = 0;
+    let closeIdleConnectionsCalls = 0;
+    const frontendServer = {
+      httpServer: {
+        closeAllConnections: () => {
+          closeAllConnectionsCalls += 1;
+        },
+        closeIdleConnections: () => {
+          closeIdleConnectionsCalls += 1;
+        },
+      },
+      close: () => {
+        throw new Error("close failed");
+      },
+    };
+
+    await expect(__launcherTestInternals.closeFrontendServer(frontendServer)).rejects.toThrow(
+      "close failed",
+    );
+    expect(closeIdleConnectionsCalls).toBe(1);
+    expect(closeAllConnectionsCalls).toBe(1);
+  });
+
+  test("keeps frontend shutdown bounded when close never resolves", async () => {
+    let timeoutMs = 0;
+    const frontendServer = {
+      close: () => new Promise<void>(() => {}),
+    };
+
+    await __launcherTestInternals.closeFrontendServer(frontendServer, async (durationMs) => {
+      timeoutMs = durationMs;
+    });
+
+    expect(timeoutMs).toBe(3_000);
+  });
+
+  test("keeps the process alive while shutdown work is pending", async () => {
+    let intervalCallback: (() => void) | null = null;
+    const timer = Symbol("timer") as unknown as ReturnType<typeof setInterval>;
+    const clearedTimers: Array<ReturnType<typeof setInterval>> = [];
+    let finishOperation: () => void = () => {};
+    const operation = new Promise<void>((resolve) => {
+      finishOperation = resolve;
+    });
+
+    const keepAlivePromise = __launcherTestInternals.keepProcessAliveDuring(operation, {
+      clearInterval: (nextTimer) => {
+        clearedTimers.push(nextTimer);
+      },
+      setInterval: (callback) => {
+        intervalCallback = callback;
+        return timer;
+      },
+    });
+
+    expect(intervalCallback).not.toBeNull();
+    expect(clearedTimers).toEqual([]);
+
+    finishOperation();
+    await keepAlivePromise;
+    expect(clearedTimers).toEqual([timer]);
+  });
+
+  test("keeps signal handlers registered while shutdown is pending", async () => {
+    const source = await Bun.file(new URL("./launcher.ts", import.meta.url)).text();
+
+    expect(source).toContain('process.on("SIGINT"');
+    expect(source).toContain('process.on("SIGTERM"');
+    expect(source).toContain("OpenDucktor web shutdown is already in progress");
+  });
+
+  test("does not wait for the host exit code when host stop fails", async () => {
+    const hostBackend = {
+      exited: new Promise<number>(() => {}),
+      port: 14327,
+      stop: async () => {},
+    };
+
+    await expect(
+      __launcherTestInternals.stopLauncherServices(
+        {
+          frontendServer: null,
+          hostBackend,
+        },
+        {
+          closeServer: async () => {},
+          stopHost: async () => {
+            throw new Error("host stop failed");
+          },
+        },
+      ),
+    ).rejects.toThrow("host stop failed");
   });
 
   test("builds runtime config JSON for the browser shell", () => {
@@ -167,11 +248,6 @@ describe("launcher internals", () => {
       "http://localhost:1420/",
       "http://127.0.0.1:1420/",
     ]);
-  });
-
-  test("keeps graceful shutdown alive for immediate duplicate signals", () => {
-    expect(__launcherTestInternals.shouldForceExitForRepeatedSignal(1_000, 2_000)).toBe(false);
-    expect(__launcherTestInternals.shouldForceExitForRepeatedSignal(1_000, 2_500)).toBe(true);
   });
 
   test("rejects static asset paths that escape the web shell root", () => {

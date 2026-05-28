@@ -12,7 +12,7 @@
     "electron:dev": "cd apps/electron && bun run dev",
     "electron:build": "bun run --filter @openducktor/electron build",
     "electron:package": "bun run --filter @openducktor/electron package",
-    "browser:dev": "bun run --filter @openducktor/web dev",
+    "browser:dev": "cd packages/openducktor-web && bun run dev",
     "hooks:install": "husky",
     "prepare": "bun run hooks:install",
     "release:version:set": "bun run scripts/release-version.ts set",

@@ -8,12 +8,31 @@ const readRepoFile = (relativePath: string): string =>
   readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
 
 describe("Electron main lifecycle policy", () => {
+  test("main window uses the tracked application icon", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("resolveElectronWindowIcon()");
+    expect(source).toContain("nativeImage.createFromPath(iconPath)");
+    expect(source).toContain("throw new Error(");
+    expect(source).toContain("icon is missing or invalid:");
+    expect(source).toContain("icon: resolveElectronWindowIcon()");
+  });
+
+  test("macOS dock uses the tracked application icon", () => {
+    const source = readRepoFile("apps/electron/src/main/main.ts");
+
+    expect(source).toContain("configureElectronDockIcon()");
+    expect(source).toContain('path.join(resolveElectronIconDirectory(), "icon.png")');
+    expect(source).toContain("app.dock.setIcon(");
+  });
+
   test("window close quits through host shutdown instead of keeping macOS app alive", () => {
     const source = readRepoFile("apps/electron/src/main/main.ts");
 
     expect(source).toContain('window.on("close"');
     expect(source).toContain("event.preventDefault();");
-    expect(source).toContain("window.destroy();");
+    expect(source).toContain("hideWindowsForShutdown();");
+    expect(source).not.toContain("window.destroy();");
     expect(source).toContain('app.on("window-all-closed"');
     expect(source).toContain('void shutdownHostAndQuit({ reason: "window-all-closed" });');
     expect(source).toContain("if (hostShutdownStarted)");

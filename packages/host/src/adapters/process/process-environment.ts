@@ -64,6 +64,11 @@ const minimalLoginShellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.Pro
   USER: env.USER,
 });
 
+export const buildLoginShellPathProbeArgs = (): string[] => [
+  "-c",
+  `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`,
+];
+
 export const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
   const marker = Buffer.from(LOGIN_SHELL_ENV_MARKER);
   const markerIndex = stdout.indexOf(marker);
@@ -95,17 +100,13 @@ export const readCurrentUserLoginShellPath = (
     return null;
   }
 
-  const result = spawnSync(
-    shell,
-    ["-i", "-c", `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`],
-    {
-      argv0: `-${basename(shell)}`,
-      env: minimalLoginShellEnv(env, shell),
-      maxBuffer: 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: LOGIN_SHELL_TIMEOUT_MS,
-    },
-  );
+  const result = spawnSync(shell, buildLoginShellPathProbeArgs(), {
+    argv0: `-${basename(shell)}`,
+    env: minimalLoginShellEnv(env, shell),
+    maxBuffer: 1024 * 1024,
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: LOGIN_SHELL_TIMEOUT_MS,
+  });
 
   if (result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
     return null;

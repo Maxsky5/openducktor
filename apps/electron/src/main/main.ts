@@ -1,7 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHostEventBus, HOST_EVENT_CHANNELS } from "@openducktor/host";
-import type { BrowserWindow as ElectronBrowserWindow, Session as ElectronSession } from "electron";
+import type {
+  BrowserWindow as ElectronBrowserWindow,
+  NativeImage as ElectronNativeImage,
+  Session as ElectronSession,
+} from "electron";
 import electron from "electron";
 import {
   ELECTRON_HOST_EVENT_CHANNEL,
@@ -28,7 +32,7 @@ import { configureElectronProcessEnvironment } from "./electron-process-environm
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 
-const { app, BrowserWindow, ipcMain, net, protocol, session, shell } = electron;
+const { app, BrowserWindow, ipcMain, nativeImage, net, protocol, session, shell } = electron;
 const APPLICATION_NAME = "OpenDucktor";
 const ELECTRON_RENDERER_SESSION_PARTITION = "persist:openducktor";
 const ELECTRON_RENDERER_START_PATH = "/kanban";
@@ -70,6 +74,35 @@ const getPreloadPath = (): string => path.join(distDirectory, "preload.cjs");
 
 const getRendererIndexPath = (): string => path.join(distDirectory, "renderer", "index.html");
 
+const resolveElectronIconDirectory = (): string =>
+  app.isPackaged ? process.resourcesPath : path.resolve(distDirectory, "..", "resources");
+
+const resolveElectronWindowIconPath = (): string => {
+  const iconFileName = process.platform === "win32" ? "icon.ico" : "icon.png";
+  return path.join(resolveElectronIconDirectory(), iconFileName);
+};
+
+const createElectronIconImage = (iconPath: string, label: string): ElectronNativeImage => {
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    throw new Error(`Electron ${label} icon is missing or invalid: ${iconPath}`);
+  }
+  return icon;
+};
+
+const resolveElectronWindowIcon = (): ElectronNativeImage =>
+  createElectronIconImage(resolveElectronWindowIconPath(), "window");
+
+const configureElectronDockIcon = (): void => {
+  if (!app.dock) {
+    return;
+  }
+
+  app.dock.setIcon(
+    createElectronIconImage(path.join(resolveElectronIconDirectory(), "icon.png"), "dock"),
+  );
+};
+
 const validateExternalUrl = (url: string): string => {
   let parsedUrl: URL;
   try {
@@ -94,6 +127,7 @@ const createMainWindow = async (
     minWidth: 1024,
     minHeight: 720,
     title: "OpenDucktor",
+    icon: resolveElectronWindowIcon(),
     webPreferences: {
       contextIsolation: true,
       devTools: isDevelopment,
@@ -109,8 +143,11 @@ const createMainWindow = async (
       return;
     }
     event.preventDefault();
+    hideWindowsForShutdown();
+    if (hostShutdownStarted) {
+      return;
+    }
     void shutdownHostAndQuit({ reason: "window-close" });
-    window.destroy();
   });
 
   if (rendererDevUrl) {
@@ -219,6 +256,7 @@ app
     installApplicationMenu({ isDevelopment, appName: app.name || APPLICATION_NAME });
     registerIpcHandlers();
     registerHostEventForwarding();
+    configureElectronDockIcon();
     await hostCommandRouter.initialize();
     await createMainWindow(rendererSession);
 

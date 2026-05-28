@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildLoginShellPathProbeArgs,
   createProcessEnvironment,
   mergePathValues,
   parsePathFromLoginShellOutput,
@@ -57,5 +58,14 @@ describe("parsePathFromLoginShellOutput", () => {
     );
 
     expect(parsePathFromLoginShellOutput(output)).toBe("/opt/bin:/usr/bin");
+  });
+});
+
+describe("buildLoginShellPathProbeArgs", () => {
+  test("does not request an interactive shell that can take terminal job control", () => {
+    const args = buildLoginShellPathProbeArgs();
+
+    expect(args).toEqual(["-c", "printf '__OPENDUCKTOR_ENV_START__\\0'; /usr/bin/env -0"]);
+    expect(args).not.toContain("-i");
   });
 });

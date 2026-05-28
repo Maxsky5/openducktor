@@ -30,6 +30,14 @@ type BufferedEvent = {
   id: number;
   payload: string;
 };
+type RequestTimeoutController = {
+  timeout(request: Request, seconds: number): void;
+};
+type StopTypescriptHostBackendServicesInput = {
+  disposeHost: () => Effect.Effect<void, unknown>;
+  resolveExited: (exitCode: number) => void;
+  stopServer: () => void;
+};
 
 const LOCALHOST = "127.0.0.1";
 const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
@@ -133,12 +141,17 @@ class BufferedHostEventBus implements HostEventBusPort {
   }
 }
 
+const jsonResponseBody = (payload: unknown): string => {
+  const serialized = JSON.stringify(payload);
+  return serialized === undefined ? "null" : serialized;
+};
+
 const jsonResponse = (
   payload: unknown,
   init: ResponseInit = {},
   corsHeaders?: HeadersInit,
 ): Response =>
-  new Response(JSON.stringify(payload), {
+  new Response(jsonResponseBody(payload), {
     ...init,
     headers: {
       ...JSON_HEADERS,
@@ -489,6 +502,7 @@ const routeCorsRequest = ({
   hostCommandRouter,
   localAttachments,
   request,
+  requestTimeouts,
   shutdownStarted,
   stop,
 }: {
@@ -499,6 +513,7 @@ const routeCorsRequest = ({
   hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   request: Request;
+  requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
   stop: () => Promise<void>;
 }): Effect.Effect<Response, WebHostRequestRejection> =>
@@ -549,6 +564,7 @@ const routeCorsRequest = ({
           503,
         );
       }
+      requestTimeouts?.timeout(request, 0);
       return createSseResponse(
         eventBus.streamFor(streamChannel),
         yield* parseLastEventId(request),
@@ -604,6 +620,7 @@ const handleTypescriptHostBackendRequest = ({
   hostCommandRouter,
   localAttachments,
   request,
+  requestTimeouts,
   shutdownStarted,
   stop,
 }: {
@@ -614,6 +631,7 @@ const handleTypescriptHostBackendRequest = ({
   hostCommandRouter: EffectHostCommandRouter;
   localAttachments: ReturnType<typeof createLocalAttachmentAdapter>;
   request: Request;
+  requestTimeouts?: RequestTimeoutController | undefined;
   shutdownStarted: boolean;
   stop: () => Promise<void>;
 }): Effect.Effect<Response> =>
@@ -635,6 +653,7 @@ const handleTypescriptHostBackendRequest = ({
       hostCommandRouter,
       localAttachments,
       request,
+      requestTimeouts,
       shutdownStarted,
       stop,
     }).pipe(
@@ -644,6 +663,24 @@ const handleTypescriptHostBackendRequest = ({
 
 const toWebHostStartupError = (message: string, cause?: unknown): WebHostStartupError =>
   new WebHostStartupError(cause === undefined ? { message } : { cause, message });
+
+const stopTypescriptHostBackendServices = ({
+  disposeHost,
+  resolveExited,
+  stopServer,
+}: StopTypescriptHostBackendServicesInput): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let exitCode = 0;
+      const disposeExit = yield* Effect.exit(disposeHost());
+      if (disposeExit._tag === "Failure") {
+        exitCode = 1;
+        logError(Cause.pretty(disposeExit.cause));
+      }
+      yield* Effect.sync(stopServer);
+      resolveExited(exitCode);
+    }),
+  );
 
 export const startTypescriptHostBackendEffect = ({
   port,
@@ -679,25 +716,18 @@ export const startTypescriptHostBackendEffect = ({
         return stopPromise;
       }
       shutdownStarted = true;
-      stopPromise = Effect.runPromise(
-        Effect.gen(function* () {
-          let exitCode = 0;
-          yield* Effect.sync(() => server.stop(true));
-          const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
-          if (disposeExit._tag === "Failure") {
-            exitCode = 1;
-            logError(Cause.pretty(disposeExit.cause));
-          }
-          resolveExited(exitCode);
-        }),
-      );
+      stopPromise = stopTypescriptHostBackendServices({
+        disposeHost: () => hostCommandRouter.dispose(),
+        resolveExited,
+        stopServer: () => server.stop(true),
+      });
       return stopPromise;
     };
 
     const server = Bun.serve({
       hostname: LOCALHOST,
       port,
-      fetch(request) {
+      fetch(request, server) {
         return Effect.runPromise(
           handleTypescriptHostBackendRequest({
             allowedOrigins,
@@ -707,6 +737,7 @@ export const startTypescriptHostBackendEffect = ({
             hostCommandRouter,
             localAttachments,
             request,
+            requestTimeouts: server,
             shutdownStarted,
             stop,
           }),
@@ -723,8 +754,8 @@ export const startTypescriptHostBackendEffect = ({
 
     const initializeExit = yield* Effect.exit(hostCommandRouter.initialize());
     if (initializeExit._tag === "Failure") {
-      yield* Effect.sync(() => server.stop(true));
       const disposeExit = yield* Effect.exit(hostCommandRouter.dispose());
+      yield* Effect.sync(() => server.stop(true));
       if (disposeExit._tag === "Failure") {
         logError(
           `Failed to dispose local OpenDucktor host after startup failure: ${Cause.pretty(
@@ -755,5 +786,6 @@ export const startTypescriptHostBackend = (
 
 export const __typescriptHostBackendTestInternals = {
   BufferedHostEventBus,
+  stopTypescriptHostBackendServices,
   validateWebFrontendOrigin,
 };
