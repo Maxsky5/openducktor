@@ -28,6 +28,7 @@ type UseAgentStudioPageModelsHook =
 enableReactActEnvironment();
 
 type HookArgs = Parameters<UseAgentStudioPageModelsHook>[0];
+const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
 
 type SelectedSessionTestCore = Omit<
   AgentStudioSelectedSessionContextInput,
@@ -211,6 +212,10 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     slashCommands: [],
     slashCommandsError: null,
     isSlashCommandsLoading: false,
+    skillCatalog: null,
+    skills: DEFAULT_SKILLS,
+    skillsError: null,
+    isSkillsLoading: false,
     searchFiles: async () => [],
     agentOptions: [{ value: "spec", label: "Spec" }],
     modelOptions: [],

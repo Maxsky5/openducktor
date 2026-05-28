@@ -70,8 +70,6 @@ const COMPOSER_TEXT_SEGMENT_BASE_CLASS_NAME =
   "whitespace-pre-wrap break-words align-middle leading-6 outline-none";
 const COMPOSER_TEXT_SEGMENT_TRAILING_LINE_CLASS_NAME =
   "after:inline-block after:h-6 after:w-px after:align-bottom after:content-['']";
-const EMPTY_SKILLS: AgentSkillReference[] = [];
-
 type ComposerFileReferenceTooltipState = {
   path: string;
   left: number;
@@ -263,13 +261,13 @@ type AgentChatComposerEditorProps = {
   onSend: () => void;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
-  supportsSkillReferences?: boolean;
+  supportsSkillReferences: boolean;
   slashCommands: AgentSlashCommand[];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
-  skills?: AgentSkillReference[];
-  skillsError?: string | null;
-  isSkillsLoading?: boolean;
+  skills: AgentSkillReference[];
+  skillsError: string | null;
+  isSkillsLoading: boolean;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
@@ -284,13 +282,13 @@ export function AgentChatComposerEditor({
   onSend,
   supportsSlashCommands,
   supportsFileSearch,
-  supportsSkillReferences = false,
+  supportsSkillReferences,
   slashCommands,
   slashCommandsError,
   isSlashCommandsLoading,
-  skills = EMPTY_SKILLS,
-  skillsError = null,
-  isSkillsLoading = false,
+  skills,
+  skillsError,
+  isSkillsLoading,
   searchFiles,
 }: AgentChatComposerEditorProps): ReactElement {
   const [composerFileReferenceTooltip, setComposerFileReferenceTooltip] =

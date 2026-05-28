@@ -384,22 +384,19 @@ const readInlineUserReferenceRanges = (
   parts: AgentUserMessageDisplayPart[],
 ): UserMessageInlineReferenceRange[] => {
   const ranges: UserMessageInlineReferenceRange[] = [];
-  let inferredSkillCursor = 0;
   for (const part of parts) {
     if (part.kind !== "file_reference" && part.kind !== "skill_mention") {
       continue;
     }
     const sourceText = part.sourceText;
-    const marker = part.kind === "skill_mention" ? `$${part.skill.name}` : null;
-    const start =
-      sourceText?.start ?? (marker !== null ? rawText.indexOf(marker, inferredSkillCursor) : -1);
-    const end = sourceText?.end ?? (marker !== null && start >= 0 ? start + marker.length : -1);
+    if (!sourceText) {
+      continue;
+    }
+    const start = sourceText.start;
+    const end = sourceText.end;
     const range = { part, start, end } satisfies UserMessageInlineReferenceRange;
     if (range.start >= 0 && range.end >= range.start && range.end <= rawText.length) {
       ranges.push(range);
-      if (part.kind === "skill_mention") {
-        inferredSkillCursor = range.end;
-      }
     }
   }
   // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
@@ -473,7 +470,8 @@ const renderUserMessageInlineContent = (
   for (const part of parts) {
     if (
       (part.kind !== "file_reference" && part.kind !== "skill_mention") ||
-      renderedInlineReferences.has(part)
+      renderedInlineReferences.has(part) ||
+      (part.kind === "skill_mention" && !part.sourceText)
     ) {
       continue;
     }

@@ -100,13 +100,16 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
   const onSend = mock(() => {});
   const closeSlashMenu = mock(() => {});
   const closeFileMenu = mock(() => {});
+  const closeSkillMenu = mock(() => {});
   const syncMenusForSelectionTarget = mock(() => {});
   const moveActiveFileIndex = mock(() => false);
   const moveActiveSlashIndex = mock(() => false);
+  const moveActiveSkillIndex = mock(() => false);
   const applyEditResult = mock(() => true);
   const clearComposerContents = mock(() => true);
   const insertNewlineAtSelectionTarget = mock(() => true);
   const selectSlashCommand = mock(() => {});
+  const selectSkillReference = mock(() => {});
   const selectFileSearchResult = mock(() => {});
 
   const args: EventsHookArgs = {
@@ -119,18 +122,24 @@ const createEventsTestSetup = (overrides: EventsTestSetupOverrides = {}) => {
     selection,
     slashMenuState: null,
     fileMenuState: null,
+    skillMenuState: null,
     filteredSlashCommands: [],
+    filteredSkills: [],
     activeSlashIndex: 0,
+    activeSkillIndex: 0,
     activeFileIndex: 0,
     closeSlashMenu,
     closeFileMenu,
+    closeSkillMenu,
     syncMenusForSelectionTarget,
     moveActiveFileIndex,
     moveActiveSlashIndex,
+    moveActiveSkillIndex,
     applyEditResult,
     clearComposerContents,
     insertNewlineAtSelectionTarget,
     selectSlashCommand,
+    selectSkillReference,
     selectFileSearchResult,
   };
 

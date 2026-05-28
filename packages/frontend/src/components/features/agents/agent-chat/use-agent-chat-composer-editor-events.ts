@@ -135,27 +135,27 @@ type UseAgentChatComposerEditorEventsArgs = {
   >;
   slashMenuState: SlashMenuState | null;
   fileMenuState: FileMenuState | null;
-  skillMenuState?: SkillMenuState | null;
+  skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
-  filteredSkills?: AgentSkillReference[];
+  filteredSkills: AgentSkillReference[];
   activeSlashIndex: number;
-  activeSkillIndex?: number;
+  activeSkillIndex: number;
   activeFileIndex: number;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
-  closeSkillMenu?: () => void;
+  closeSkillMenu: () => void;
   syncMenusForSelectionTarget: (
     sourceDraft: AgentChatComposerDraft,
     selectionTarget: TextSelectionTarget | null,
   ) => void;
   moveActiveFileIndex: (direction: 1 | -1) => boolean;
   moveActiveSlashIndex: (direction: 1 | -1) => boolean;
-  moveActiveSkillIndex?: (direction: 1 | -1) => boolean;
+  moveActiveSkillIndex: (direction: 1 | -1) => boolean;
   applyEditResult: ApplyEditResult;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
-  selectSkillReference?: (skill: AgentSkillReference) => void;
+  selectSkillReference: (skill: AgentSkillReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
 };
 
@@ -169,24 +169,24 @@ export const useAgentChatComposerEditorEvents = ({
   selection,
   slashMenuState,
   fileMenuState,
-  skillMenuState = null,
+  skillMenuState,
   filteredSlashCommands,
-  filteredSkills = [],
+  filteredSkills,
   activeSlashIndex,
-  activeSkillIndex = 0,
+  activeSkillIndex,
   activeFileIndex,
   closeSlashMenu,
   closeFileMenu,
-  closeSkillMenu = () => {},
+  closeSkillMenu,
   syncMenusForSelectionTarget,
   moveActiveFileIndex,
   moveActiveSlashIndex,
-  moveActiveSkillIndex = () => false,
+  moveActiveSkillIndex,
   applyEditResult,
   clearComposerContents,
   insertNewlineAtSelectionTarget,
   selectSlashCommand,
-  selectSkillReference = () => {},
+  selectSkillReference,
   selectFileSearchResult,
 }: UseAgentChatComposerEditorEventsArgs) => {
   const handleEditorInput = useCallback(

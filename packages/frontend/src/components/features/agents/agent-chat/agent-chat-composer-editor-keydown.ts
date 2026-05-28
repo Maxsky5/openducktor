@@ -40,23 +40,23 @@ type HandleComposerEditorKeyDownArgs = {
   isComposerContentFullySelected: (root: HTMLDivElement) => boolean;
   fileMenuState: FileMenuState | null;
   slashMenuState: SlashMenuState | null;
-  skillMenuState?: SkillMenuState | null;
+  skillMenuState: SkillMenuState | null;
   filteredSlashCommands: AgentSlashCommand[];
-  filteredSkills?: AgentSkillReference[];
+  filteredSkills: AgentSkillReference[];
   activeSlashIndex: number;
-  activeSkillIndex?: number;
+  activeSkillIndex: number;
   activeFileIndex: number;
   moveActiveFileIndex: (direction: 1 | -1) => boolean;
   moveActiveSlashIndex: (direction: 1 | -1) => boolean;
-  moveActiveSkillIndex?: (direction: 1 | -1) => boolean;
+  moveActiveSkillIndex: (direction: 1 | -1) => boolean;
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
-  closeSkillMenu?: () => void;
+  closeSkillMenu: () => void;
   onSend: () => void;
   clearComposerContents: () => boolean;
   insertNewlineAtSelectionTarget: (selectionTarget: TextSelectionTarget | null) => boolean;
   selectSlashCommand: (command: AgentSlashCommand) => void;
-  selectSkillReference?: (skill: AgentSkillReference) => void;
+  selectSkillReference: (skill: AgentSkillReference) => void;
   selectFileSearchResult: (result: AgentFileSearchResult) => void;
   applyEditResult: (result: ReturnType<typeof applyComposerDraftEdit>) => boolean;
 };
@@ -68,7 +68,7 @@ const isSelectAllShortcut = (event: ReactKeyboardEvent<HTMLDivElement>): boolean
 const closeAutocompleteMenus = ({
   closeSlashMenu,
   closeFileMenu,
-  closeSkillMenu = () => {},
+  closeSkillMenu,
 }: {
   closeSlashMenu: () => void;
   closeFileMenu: () => void;
@@ -200,6 +200,18 @@ const handleSkillMenuKeyDown = ({
   return false;
 };
 
+const removeChipEditType = (
+  kind: "slash_command" | "file_reference" | "skill_mention",
+): "remove_slash_command" | "remove_file_reference" | "remove_skill_reference" => {
+  if (kind === "slash_command") {
+    return "remove_slash_command";
+  }
+  if (kind === "file_reference") {
+    return "remove_file_reference";
+  }
+  return "remove_skill_reference";
+};
+
 const removeAdjacentChip = ({
   event,
   sourceDraft,
@@ -236,12 +248,7 @@ const removeAdjacentChip = ({
   event.preventDefault();
   const didApply = applyEditResult(
     applyComposerDraftEdit(sourceDraft, {
-      type:
-        previousSegment.kind === "slash_command"
-          ? "remove_slash_command"
-          : previousSegment.kind === "file_reference"
-            ? "remove_file_reference"
-            : "remove_skill_reference",
+      type: removeChipEditType(previousSegment.kind),
       segmentId: previousSegment.id,
     }),
   );
@@ -439,23 +446,23 @@ export const handleComposerEditorKeyDown = ({
   isComposerContentFullySelected,
   fileMenuState,
   slashMenuState,
-  skillMenuState = null,
+  skillMenuState,
   filteredSlashCommands,
-  filteredSkills = [],
+  filteredSkills,
   activeSlashIndex,
-  activeSkillIndex = 0,
+  activeSkillIndex,
   activeFileIndex,
   moveActiveFileIndex,
   moveActiveSlashIndex,
-  moveActiveSkillIndex = () => false,
+  moveActiveSkillIndex,
   closeSlashMenu,
   closeFileMenu,
-  closeSkillMenu = () => {},
+  closeSkillMenu,
   onSend,
   clearComposerContents,
   insertNewlineAtSelectionTarget,
   selectSlashCommand,
-  selectSkillReference = () => {},
+  selectSkillReference,
   selectFileSearchResult,
   applyEditResult,
 }: HandleComposerEditorKeyDownArgs): boolean => {

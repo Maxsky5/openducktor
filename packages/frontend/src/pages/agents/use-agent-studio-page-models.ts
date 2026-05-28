@@ -16,8 +16,6 @@ import type { AgentStudioSelectedSessionContext } from "./selected-session/selec
 import { keepStablePendingInputCounts } from "./selected-session/selected-session-context";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
 
-const EMPTY_SKILLS: AgentChatModel["composer"]["skills"] = [];
-
 const useStablePendingInputCounts = (
   nextCounts: Record<string, number>,
 ): Record<string, number> => {
@@ -72,10 +70,10 @@ type AgentStudioModelSelectionContext = {
   slashCommands: AgentChatModel["composer"]["slashCommands"];
   slashCommandsError: string | null;
   isSlashCommandsLoading: boolean;
-  skillCatalog?: AgentChatModel["composer"]["skillCatalog"];
-  skills?: AgentChatModel["composer"]["skills"];
-  skillsError?: string | null;
-  isSkillsLoading?: boolean;
+  skillCatalog: AgentChatModel["composer"]["skillCatalog"];
+  skills: AgentChatModel["composer"]["skills"];
+  skillsError: string | null;
+  isSkillsLoading: boolean;
   searchFiles: AgentChatModel["composer"]["searchFiles"];
   agentOptions: ComboboxOption[];
   modelOptions: ComboboxOption[];
@@ -339,10 +337,10 @@ export function useAgentStudioPageModels({
       slashCommands: modelSelection.slashCommands,
       slashCommandsError: modelSelection.slashCommandsError,
       isSlashCommandsLoading: modelSelection.isSlashCommandsLoading,
-      skillCatalog: modelSelection.skillCatalog ?? null,
-      skills: modelSelection.skills ?? EMPTY_SKILLS,
-      skillsError: modelSelection.skillsError ?? null,
-      isSkillsLoading: modelSelection.isSkillsLoading ?? false,
+      skillCatalog: modelSelection.skillCatalog,
+      skills: modelSelection.skills,
+      skillsError: modelSelection.skillsError,
+      isSkillsLoading: modelSelection.isSkillsLoading,
       searchFiles: modelSelection.searchFiles,
       agentOptions: modelSelection.agentOptions,
       modelOptions: modelSelection.modelOptions,

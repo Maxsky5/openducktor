@@ -98,7 +98,7 @@ const stringRangeFromUtf8ByteRange = (
   return { start: rangeStart, end: rangeEnd };
 };
 
-const skillReferenceFromMarker = (
+const consumeSkillReferenceForMarker = (
   marker: string,
   skillsByMarker: Map<string, AgentSkillReference[]>,
 ): AgentSkillReference | null => {
@@ -195,23 +195,19 @@ const plainTextDisplayParts = (text: string): CodexTextDisplayParts => ({
 const codexSkillMentionFromTextElement = (
   input: CodexTextInput,
   element: CodexTextElement,
+  range: { start: number; end: number },
   textOffset: number,
   skillsByMarker: Map<string, AgentSkillReference[]>,
 ): {
   marker: string;
   part: Extract<AgentUserMessageDisplayPart, { kind: "skill_mention" }>;
 } | null => {
-  const range = codexTextElementRange(input, element);
-  if (!range) {
-    return null;
-  }
-
   const marker = codexTextElementMarker(input, element, range);
   if (!marker.startsWith("$")) {
     return null;
   }
 
-  const skill = skillReferenceFromMarker(marker, skillsByMarker);
+  const skill = consumeSkillReferenceForMarker(marker, skillsByMarker);
   if (!skill) {
     return null;
   }
@@ -259,6 +255,7 @@ const codexTextInputToDisplayParts = (
     const skillMention = codexSkillMentionFromTextElement(
       input,
       element,
+      range,
       textOffset,
       skillsByMarker,
     );
@@ -388,10 +385,7 @@ export const codexUserInputsToDisplayParts = (
       accumulatedText = appendUserInputText(accumulatedText, partText);
       continue;
     }
-    if (
-      current.type === "skill" &&
-      renderedSkillIds.has(codexSkillReferenceFromInput(current).id)
-    ) {
+    if (current.type === "skill" && renderedSkillIds.has(current.path)) {
       accumulatedText = appendUserInputText(accumulatedText, partText);
       continue;
     }

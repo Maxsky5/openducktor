@@ -84,28 +84,27 @@ export const useChatComposerSkills = ({
       selectedRuntimeKind !== null,
   });
 
-  const catalog = hasActiveSession
-    ? (activeSessionSkillsQuery.data ?? EMPTY_SKILL_CATALOG)
-    : (repoSkillsQuery.data ?? EMPTY_SKILL_CATALOG);
-  const error = supportsSkillReferences
-    ? hasActiveSession
-      ? (activeSessionRuntimeQueryError ??
-        (activeSessionSkillsQuery.error instanceof Error
-          ? activeSessionSkillsQuery.error.message
-          : null))
-      : repoSkillsQuery.error instanceof Error
-        ? repoSkillsQuery.error.message
-        : null
-    : null;
+  let catalog = EMPTY_SKILL_CATALOG;
+  let error: string | null = null;
+  let isLoading = false;
+  if (supportsSkillReferences && hasActiveSession) {
+    catalog = activeSessionSkillsQuery.data ?? EMPTY_SKILL_CATALOG;
+    error =
+      activeSessionRuntimeQueryError ??
+      (activeSessionSkillsQuery.error instanceof Error
+        ? activeSessionSkillsQuery.error.message
+        : null);
+    isLoading = activeSessionSkillsQuery.isLoading;
+  } else if (supportsSkillReferences) {
+    catalog = repoSkillsQuery.data ?? EMPTY_SKILL_CATALOG;
+    error = repoSkillsQuery.error instanceof Error ? repoSkillsQuery.error.message : null;
+    isLoading = repoSkillsQuery.isLoading;
+  }
 
   return {
     skillCatalog: catalog,
     skills: supportsSkillReferences ? catalog.skills : [],
     skillsError: error,
-    isSkillsLoading: supportsSkillReferences
-      ? hasActiveSession
-        ? activeSessionSkillsQuery.isLoading
-        : repoSkillsQuery.isLoading
-      : false,
+    isSkillsLoading: isLoading,
   };
 };

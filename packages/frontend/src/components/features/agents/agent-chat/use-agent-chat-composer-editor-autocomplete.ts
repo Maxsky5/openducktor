@@ -122,9 +122,9 @@ type UseAgentChatComposerEditorAutocompleteArgs = {
   disabled: boolean;
   supportsSlashCommands: boolean;
   supportsFileSearch: boolean;
-  supportsSkillReferences?: boolean;
+  supportsSkillReferences: boolean;
   slashCommands: AgentSlashCommand[];
-  skills?: AgentSkillReference[];
+  skills: AgentSkillReference[];
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
 };
 
@@ -159,9 +159,9 @@ export const useAgentChatComposerEditorAutocomplete = ({
   disabled,
   supportsSlashCommands,
   supportsFileSearch,
-  supportsSkillReferences = false,
+  supportsSkillReferences,
   slashCommands,
-  skills = [],
+  skills,
   searchFiles,
 }: UseAgentChatComposerEditorAutocompleteArgs): UseAgentChatComposerEditorAutocompleteResult => {
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);

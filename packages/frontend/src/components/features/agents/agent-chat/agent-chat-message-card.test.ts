@@ -1297,6 +1297,11 @@ describe("AgentChatMessageCard tool duration", () => {
                   name: "review",
                   title: "Review",
                 },
+                sourceText: {
+                  value: "$review",
+                  start: 4,
+                  end: 11,
+                },
               },
             ],
           },
