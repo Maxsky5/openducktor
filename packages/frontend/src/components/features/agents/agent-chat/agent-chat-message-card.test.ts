@@ -1422,6 +1422,40 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain(">$create-pr<");
   });
 
+  test("renders a skill chip when the raw user message contains the marker without source text", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "raw-marker-user-skill-ref",
+          role: "user",
+          content: "$thermo-nuclear-code-quality-review",
+          timestamp: "2026-02-22T10:28:52.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [
+              {
+                kind: "skill_mention",
+                skill: {
+                  id: "/skills/thermo-nuclear-code-quality-review/SKILL.md",
+                  path: "/skills/thermo-nuclear-code-quality-review/SKILL.md",
+                  name: "thermo-nuclear-code-quality-review",
+                  title: "Thermo Nuclear Code Quality Review",
+                },
+              },
+            ],
+          },
+        },
+        sessionAgentColors: {},
+        sessionWorkingDirectory: "/repo",
+      }),
+    );
+
+    expect(html).toContain(">thermo-nuclear-code-quality-review<");
+    expect(html).toContain("lucide-blocks");
+    expect(html).not.toContain("$thermo-nuclear-code-quality-review");
+  });
+
   test("renders fallback user skill chips only when the raw marker is absent", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {

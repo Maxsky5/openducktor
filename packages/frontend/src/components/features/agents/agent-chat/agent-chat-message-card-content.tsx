@@ -390,6 +390,13 @@ const readInlineUserReferenceRanges = (
     }
     const sourceText = part.sourceText;
     if (!sourceText) {
+      if (part.kind === "skill_mention") {
+        const marker = `$${part.skill.name}`;
+        const start = rawText.indexOf(marker);
+        if (start >= 0) {
+          ranges.push({ part, start, end: start + marker.length });
+        }
+      }
       continue;
     }
     const start = sourceText.start;
