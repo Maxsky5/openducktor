@@ -1,5 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { appQueryClient } from "@/lib/query-client";
 import {
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
@@ -33,6 +33,7 @@ export const useAgentStudioDiffLoadRunner = ({
   markScopeInvalidated,
   shouldApplyResult,
 }: UseDiffLoadRunnerArgs): DiffLoadRunner => {
+  const queryClient = useQueryClient();
   const hasLoadContextChanged = useCallback(
     (path: string, nextTargetBranch: string, nextWorkingDir: string | null): boolean =>
       repoPathRef.current !== path ||
@@ -58,7 +59,7 @@ export const useAgentStudioDiffLoadRunner = ({
       }
 
       const summary = await loadWorktreeStatusSummaryFromQuery(
-        appQueryClient,
+        queryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
@@ -83,7 +84,13 @@ export const useAgentStudioDiffLoadRunner = ({
         });
       }
     },
-    [applySummaryResult, hasLoadContextChanged, markScopeInvalidated, shouldApplyResult],
+    [
+      applySummaryResult,
+      hasLoadContextChanged,
+      markScopeInvalidated,
+      queryClient,
+      shouldApplyResult,
+    ],
   );
 
   const runFullLoad = useCallback(
@@ -104,7 +111,7 @@ export const useAgentStudioDiffLoadRunner = ({
       }
 
       const snapshot = await loadWorktreeStatusFromQuery(
-        appQueryClient,
+        queryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
@@ -124,7 +131,13 @@ export const useAgentStudioDiffLoadRunner = ({
         });
       }
     },
-    [applyFullResult, clearScopeInvalidation, hasLoadContextChanged, shouldApplyResult],
+    [
+      applyFullResult,
+      clearScopeInvalidation,
+      hasLoadContextChanged,
+      queryClient,
+      shouldApplyResult,
+    ],
   );
 
   return useMemo(

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
-import { clearAppQueryClient } from "@/lib/query-client";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -204,7 +203,6 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
     }));
 
     ({ useAgentStudioDiffData } = await import("../use-agent-studio-diff-data"));
-    await clearAppQueryClient();
     taskWorktreeEntriesMock.mockClear();
     taskWorktreeGetMock.mockClear();
     gitFetchRemoteMock.mockClear();
