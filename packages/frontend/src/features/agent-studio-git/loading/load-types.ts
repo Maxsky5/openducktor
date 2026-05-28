@@ -14,6 +14,7 @@ export type LoadDataContext = {
   scope: DiffScope;
   mode?: LoadDataMode;
   force?: boolean;
+  hydrateCachedFullLoad?: boolean;
   replayIfInFlight?: boolean;
 };
 
@@ -41,6 +42,7 @@ export type DiffLoadRefs = {
 
 export type UseAgentStudioDiffLoaderArgs = DiffLoadRefs & {
   shouldBlockDiffLoading: boolean;
+  applyCachedFullResult: DiffBatchStateController["applyCachedFullResult"];
   applyFullResult: DiffBatchStateController["applyFullResult"];
   applyScopeLoadError: DiffBatchStateController["applyScopeLoadError"];
   applySummaryResult: DiffBatchStateController["applySummaryResult"];
@@ -64,6 +66,7 @@ export type DiffLoadRunner = {
     nextTargetBranch: string,
     nextWorkingDir: string | null,
   ) => boolean;
+  hydrateCachedFullLoad: (context: LoadRequestContext) => boolean;
   runFullLoad: (context: InFlightRequestContext & { force?: boolean }) => Promise<void>;
   runSummaryLoad: (context: InFlightRequestContext) => Promise<void>;
 };

@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { RepoSettingsInput } from "@/types/state-slices";
+import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
 const actualHostClientModule = await import("@/lib/host-client");
 
@@ -1539,7 +1540,6 @@ describe("useAgentStudioDevServerPanel", () => {
   test("clears stale task state when switching to another task while enabled", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
 
     const taskOneState = buildState({
       repoPath: "/repo-a",
@@ -1562,64 +1562,41 @@ describe("useAgentStudioDevServerPanel", () => {
       return taskTwoFetch.promise;
     };
 
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
     let currentArgs: HookArgs = {
       repoPath: "/repo-a",
       taskId: "task-1",
       repoSettings,
       enabled: true,
     };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness args={currentArgs} />
-      </QueryProvider>,
-    );
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, currentArgs);
 
     try {
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.pid).toBe(1111);
+        expect(harness.getLatest().scripts[0]?.pid).toBe(1111);
       });
 
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness args={currentArgs} />
-        </QueryProvider>,
-      );
+      harness.update(currentArgs);
 
       await waitFor(() => {
-        expect(getLatest().mode).toBe("loading");
+        expect(harness.getLatest().mode).toBe("loading");
       });
-      expect(getLatest().scripts).toHaveLength(0);
+      expect(harness.getLatest().scripts).toHaveLength(0);
 
       taskTwoFetch.resolve(taskTwoState);
 
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.scriptId).toBe("backend");
+        expect(harness.getLatest().scripts[0]?.scriptId).toBe("backend");
       });
-      expect(getLatest().worktreePath).toBe("/tmp/worktree/task-2");
+      expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-2");
     } finally {
-      view.unmount();
+      harness.unmount();
     }
   });
 
   test("shows cached dev-server state while refetching after task switch", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
 
     const queryClient = createQueryClient();
     const taskOneState = buildState({
@@ -1671,57 +1648,37 @@ describe("useAgentStudioDevServerPanel", () => {
       return taskTwoFetch.promise;
     };
 
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
     let currentArgs: HookArgs = {
       repoPath: "/repo-a",
       taskId: "task-1",
       repoSettings,
       enabled: true,
     };
-
-    const view = render(
-      <QueryClientProvider client={queryClient}>
-        <Harness args={currentArgs} />
-      </QueryClientProvider>,
-    );
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, currentArgs, {
+      queryClient,
+    });
 
     try {
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.pid).toBe(1111);
+        expect(harness.getLatest().scripts[0]?.pid).toBe(1111);
       });
 
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
-      view.rerender(
-        <QueryClientProvider client={queryClient}>
-          <Harness args={currentArgs} />
-        </QueryClientProvider>,
-      );
+      harness.update(currentArgs);
 
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.pid).toBe(2221);
+        expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
       });
-      expect(getLatest().mode).toBe("active");
-      expect(getLatest().isLoading).toBe(false);
+      expect(harness.getLatest().mode).toBe("active");
+      expect(harness.getLatest().isLoading).toBe(false);
       expect(didStartTaskTwoFetch).toBe(true);
 
       taskTwoFetch.resolve(freshTaskTwoState);
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.pid).toBe(2222);
+        expect(harness.getLatest().scripts[0]?.pid).toBe(2222);
       });
     } finally {
-      view.unmount();
+      harness.unmount();
       queryClient.clear();
     }
   });

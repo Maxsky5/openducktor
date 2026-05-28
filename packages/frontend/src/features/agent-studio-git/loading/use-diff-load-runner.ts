@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
+  getCachedWorktreeStatusFromQuery,
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
 } from "@/state/queries/git";
@@ -10,12 +11,14 @@ import type {
   InFlightRequestContext,
   UseAgentStudioDiffLoaderArgs,
 } from "./load-types";
+import type { LoadRequestContext } from "./use-diff-batch-state";
 
 type UseDiffLoadRunnerArgs = Pick<
   UseAgentStudioDiffLoaderArgs,
   | "repoPathRef"
   | "targetBranchRef"
   | "workingDirRef"
+  | "applyCachedFullResult"
   | "applyFullResult"
   | "applySummaryResult"
   | "clearScopeInvalidation"
@@ -27,6 +30,7 @@ export const useAgentStudioDiffLoadRunner = ({
   repoPathRef,
   targetBranchRef,
   workingDirRef,
+  applyCachedFullResult,
   applyFullResult,
   applySummaryResult,
   clearScopeInvalidation,
@@ -40,6 +44,34 @@ export const useAgentStudioDiffLoadRunner = ({
       targetBranchRef.current !== nextTargetBranch ||
       (workingDirRef.current ?? null) !== nextWorkingDir,
     [repoPathRef, targetBranchRef, workingDirRef],
+  );
+
+  const hydrateCachedFullLoad = useCallback(
+    ({ repoPath, scope, targetBranch, workingDir }: LoadRequestContext): boolean => {
+      // Worktree contexts are task-keyed; repository-mode branch identity is tracked outside this query key.
+      if (workingDir === null) {
+        return false;
+      }
+
+      const cachedStatus = getCachedWorktreeStatusFromQuery(
+        queryClient,
+        repoPath,
+        targetBranch,
+        scope,
+        workingDir,
+      );
+      if (cachedStatus === undefined) {
+        return false;
+      }
+
+      applyCachedFullResult({
+        clearScopeInvalidation,
+        scope,
+        snapshot: toScopeSnapshot(cachedStatus),
+      });
+      return true;
+    },
+    [applyCachedFullResult, clearScopeInvalidation, queryClient],
   );
 
   const runSummaryLoad = useCallback(
@@ -143,9 +175,10 @@ export const useAgentStudioDiffLoadRunner = ({
   return useMemo(
     () => ({
       hasLoadContextChanged,
+      hydrateCachedFullLoad,
       runFullLoad,
       runSummaryLoad,
     }),
-    [hasLoadContextChanged, runFullLoad, runSummaryLoad],
+    [hasLoadContextChanged, hydrateCachedFullLoad, runFullLoad, runSummaryLoad],
   );
 };

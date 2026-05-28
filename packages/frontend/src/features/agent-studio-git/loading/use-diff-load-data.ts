@@ -49,6 +49,11 @@ export const useAgentStudioDiffLoadData = ({
       const mode = context?.mode ?? "full";
       const force = context?.force === true;
       const replayIfInFlight = context?.replayIfInFlight === true;
+      const didHydrateCachedFullLoad =
+        showLoading && mode === "full" && context?.hydrateCachedFullLoad === true
+          ? runner.hydrateCachedFullLoad(loadContext)
+          : false;
+      const shouldShowLoading = showLoading && !didHydrateCachedFullLoad;
       const requestKey = `${loadContext.repoPath}::${loadContext.targetBranch}::${
         loadContext.workingDir ?? ""
       }`;
@@ -57,7 +62,7 @@ export const useAgentStudioDiffLoadData = ({
         scope: loadContext.scope,
         mode,
         requestKey,
-        showLoading,
+        showLoading: shouldShowLoading,
         replayIfInFlight,
         force,
       });
@@ -66,7 +71,7 @@ export const useAgentStudioDiffLoadData = ({
       }
 
       const { requestSequence, version } = beginRequestResult;
-      if (showLoading) {
+      if (shouldShowLoading) {
         setBatchLoading(true);
       }
 
@@ -109,7 +114,7 @@ export const useAgentStudioDiffLoadData = ({
           mode,
           requestKey,
           requestSequence,
-          showLoading,
+          showLoading: shouldShowLoading,
         });
 
         if (clearLoading) {
