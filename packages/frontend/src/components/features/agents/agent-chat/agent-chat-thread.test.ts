@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildApprovalRequest,
   buildMessage,
+  buildModelSelection,
   buildQuestionRequest,
   buildSession,
   buildTodoItem,
@@ -569,6 +570,62 @@ describe("AgentChatThread", () => {
     );
 
     rendered.unmount();
+  });
+
+  test("uses the Codex runtime accent for no-profile session todos", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            runtimeKind: "codex",
+            selectedModel: {
+              runtimeKind: "codex",
+              providerId: "openai",
+              modelId: "gpt-5.3-codex",
+              variant: "high",
+            },
+            status: "idle",
+            todos: [
+              buildTodoItem({
+                id: "todo-1",
+                content: "Keep Codex todo accented",
+                status: "in_progress",
+              }),
+            ],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Keep Codex todo accented");
+    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
+  });
+
+  test("keeps explicit profile color ahead of runtime defaults for todos", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          sessionAgentColors: { "Hephaestus (Deep Agent)": "#123456" },
+          session: buildSession({
+            runtimeKind: "opencode",
+            selectedModel: buildModelSelection({ profileId: "Hephaestus (Deep Agent)" }),
+            status: "idle",
+            todos: [
+              buildTodoItem({
+                id: "todo-1",
+                content: "Keep explicit todo accented",
+                status: "in_progress",
+              }),
+            ],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Keep explicit todo accented");
+    expect(html).toContain("border-left-color:#123456");
   });
 
   test("stages a large attachment transcript on session switch", async () => {

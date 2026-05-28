@@ -51,7 +51,7 @@ const buildModel = () => ({
   onSelectAgent: SHARED_CALLBACKS.onSelectAgent,
   onSelectModel: SHARED_CALLBACKS.onSelectModel,
   onSelectVariant: SHARED_CALLBACKS.onSelectVariant,
-  sessionAgentColors: {},
+  accentColor: undefined,
   contextUsage: null,
   canStopSession: false,
   onStopSession: SHARED_CALLBACKS.onStopSession,

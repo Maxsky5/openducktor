@@ -99,7 +99,7 @@ const buildModel = () => ({
     onComposerEditorInput: () => {},
     scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
     syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
-    sessionAgentColors: {},
+    accentColor: undefined,
   },
 });
 

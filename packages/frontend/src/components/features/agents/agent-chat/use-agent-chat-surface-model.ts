@@ -1,4 +1,8 @@
-import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  RuntimeApprovalReplyOutcome,
+  RuntimeDescriptor,
+  RuntimeKind,
+} from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -10,7 +14,7 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentAccentColor } from "../agent-accent-color";
+import { resolveAgentAccentColor, resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type {
   AgentChatComposerModel,
   AgentChatEmptyStateModel,
@@ -112,14 +116,18 @@ type AgentChatPendingApprovalActions = {
 
 type AgentChatComposerConfig = {
   taskId: string;
-  activeSession: Pick<
-    AgentSessionState,
-    | "externalSessionId"
-    | "selectedModel"
-    | "isLoadingModelCatalog"
-    | "pendingApprovals"
-    | "pendingQuestions"
-  > | null;
+  activeSession:
+    | (Pick<
+        AgentSessionState,
+        | "externalSessionId"
+        | "selectedModel"
+        | "isLoadingModelCatalog"
+        | "pendingApprovals"
+        | "pendingQuestions"
+      > & {
+        runtimeKind: RuntimeKind | null;
+      })
+    | null;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
@@ -342,6 +350,20 @@ export function useAgentChatSurfaceModel({
   const composerIsSessionWorking = composer?.isSessionWorking ?? false;
   const composerIsWaitingInput = composer?.isWaitingInput ?? false;
   const composerSelectedModelSelection = composer?.selectedModelSelection ?? null;
+  const composerRuntimeKind =
+    composer?.activeSession?.runtimeKind ?? composerSelectedModelSelection?.runtimeKind ?? null;
+  const composerAccentAgentName = composer?.activeSession
+    ? composerActiveSessionSelectedModel?.profileId
+    : composerSelectedModelSelection?.profileId;
+  const composerAccentColor = useMemo(
+    () =>
+      resolveAgentSessionAccentColor({
+        agentName: composerAccentAgentName,
+        agentColors: resolvedSessionAgentColors,
+        runtimeKind: composerRuntimeKind,
+      }),
+    [composerAccentAgentName, composerRuntimeKind, resolvedSessionAgentColors],
+  );
   const composerSelectedModelDescriptor = composer?.selectedModelDescriptor;
   const composerIsSelectionCatalogLoading = composer?.isSelectionCatalogLoading ?? false;
   const composerSupportsProfiles = composer?.supportsProfiles ?? true;
@@ -479,7 +501,7 @@ export function useAgentChatSurfaceModel({
       onSelectAgent: composerOnSelectAgent,
       onSelectModel: composerOnSelectModel,
       onSelectVariant: composerOnSelectVariant,
-      sessionAgentColors: resolvedSessionAgentColors,
+      accentColor: composerAccentColor,
       contextUsage: composerContextUsage,
       canStopSession: composerCanStopSession,
       onStopSession: handleStopSession,
@@ -505,6 +527,7 @@ export function useAgentChatSurfaceModel({
     composerIsSlashCommandsLoading,
     composerIsStarting,
     composerIsWaitingInput,
+    composerAccentColor,
     composerModelGroups,
     composerModelOptions,
     composerOnSelectAgent,
@@ -531,7 +554,6 @@ export function useAgentChatSurfaceModel({
     mode,
     pendingInlineCommentCount,
     resizeComposerEditor,
-    resolvedSessionAgentColors,
     waitingInputPlaceholder,
   ]);
 

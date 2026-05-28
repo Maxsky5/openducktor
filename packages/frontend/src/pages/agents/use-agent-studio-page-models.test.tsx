@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
@@ -346,6 +347,46 @@ describe("useAgentStudioPageModels", () => {
     expect(onRefreshChecks).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStopSession).toHaveBeenCalledTimes(1);
+
+    await harness.unmount();
+  });
+
+  test("preserves active Codex runtime identity for composer accent while catalog loads", async () => {
+    const codexSession = createSession("session-codex", {
+      runtimeKind: "codex",
+      runtimeId: "codex-runtime",
+      selectedModel: null,
+      isLoadingModelCatalog: true,
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          activeSession: codexSession,
+          sessionsForTask: [toAgentSessionSummary(codexSession)],
+          runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+        },
+        modelSelection: {
+          selectedModelSelection: {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+            profileId: "Ares (Legacy Agent)",
+          },
+          activeSessionAgentColors: {
+            "Ares (Legacy Agent)": "#f97316",
+          },
+          supportsProfiles: false,
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const composer = harness.getLatest().agentChatModel.composer;
+    expect(composer.accentColor).toBe("var(--odt-runtime-accent-codex)");
+
+    const html = renderToStaticMarkup(createElement(AgentChatComposer, { model: composer }));
+    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
 
     await harness.unmount();
   });

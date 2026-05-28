@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentAccentColor } from "../agent-accent-color";
+import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
@@ -38,7 +38,6 @@ type AgentChatThreadMotionRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
@@ -57,7 +56,6 @@ type AgentChatTranscriptProps = {
   isSending: boolean;
   isInteractionEnabled: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
@@ -109,6 +107,8 @@ type AgentChatRenderedTurn = {
   rows: AgentChatWindowRow[];
   isActive: boolean;
 };
+
+const EMPTY_RENDERED_TURNS: AgentChatRenderedTurn[] = [];
 
 type AgentChatBottomStackProps = {
   externalSessionId: string;
@@ -207,7 +207,6 @@ const AgentChatThreadMotionRow = memo(
     row,
     isStreamingAssistantMessage,
     sessionAgentColors,
-    sessionSelectedModel,
     sessionWorkingDirectory,
     sessionRuntimeKind,
     sessionRuntimeId,
@@ -222,7 +221,6 @@ const AgentChatThreadMotionRow = memo(
         <AgentChatThreadRow
           row={row}
           isStreamingAssistantMessage={isStreamingAssistantMessage}
-          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -237,7 +235,6 @@ const AgentChatThreadMotionRow = memo(
   },
   (previousProps, nextProps) => {
     return (
-      previousProps.sessionSelectedModel === nextProps.sessionSelectedModel &&
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionRuntimeId === nextProps.sessionRuntimeId &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
@@ -257,7 +254,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn,
   activeStreamingAssistantMessageId,
   sessionAgentColors,
-  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
@@ -271,7 +267,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   turn: AgentChatRenderedTurn;
   activeStreamingAssistantMessageId: string | null;
   sessionAgentColors: Record<string, string>;
-  sessionSelectedModel: AgentSessionState["selectedModel"] | null;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
@@ -291,7 +286,6 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           isStreamingAssistantMessage={
             row.kind === "message" && row.message.id === activeStreamingAssistantMessageId
           }
-          sessionSelectedModel={sessionSelectedModel}
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
@@ -327,7 +321,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   isSending,
   isInteractionEnabled,
   sessionAgentColors,
-  sessionSelectedModel,
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
@@ -420,7 +413,6 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 key={turn.key}
                 turn={turn}
                 activeStreamingAssistantMessageId={activeStreamingAssistantMessageId}
-                sessionSelectedModel={sessionSelectedModel}
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
@@ -613,12 +605,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const sessionSelectedModel = session?.selectedModel ?? null;
   const sessionAccentColor = useMemo(() => {
     const profileId = sessionSelectedModel?.profileId;
-    if (!profileId) {
-      return undefined;
-    }
-
-    return resolveAgentAccentColor(profileId, sessionAgentColors[profileId]);
-  }, [sessionAgentColors, sessionSelectedModel?.profileId]);
+    return resolveAgentSessionAccentColor({
+      agentName: profileId,
+      agentColors: sessionAgentColors,
+      runtimeKind: sessionRuntimeKind,
+    });
+  }, [sessionAgentColors, sessionRuntimeKind, sessionSelectedModel?.profileId]);
   const sessionWorkingDirectory = session?.workingDirectory ?? null;
   // Attachment-bearing sessions keep containment disabled because intrinsic-size estimates can
   // under-measure rich attachment rows and break bottom pinning. Row/turn staging still applies so
@@ -753,13 +745,14 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         subagentPendingQuestionCountByExternalSessionId={
           subagentPendingQuestionCountByExternalSessionId
         }
-        sessionSelectedModel={sessionSelectedModel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
         sessionRuntimeId={sessionRuntimeId}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
-        renderedTurns={rows.length > 0 && !hideTranscriptWhileDeferred ? renderedTurns : []}
+        renderedTurns={
+          rows.length > 0 && !hideTranscriptWhileDeferred ? renderedTurns : EMPTY_RENDERED_TURNS
+        }
         allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
         statusOverlay={statusOverlay}

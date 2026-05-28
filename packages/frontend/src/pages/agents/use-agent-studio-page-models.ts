@@ -191,6 +191,7 @@ export function useAgentStudioPageModels({
 
   const selectedActiveComposerSession = selectedSession.chat.activeComposerSession;
   const activeComposerExternalSessionId = selectedActiveComposerSession?.externalSessionId ?? null;
+  const activeComposerRuntimeKind = selectedActiveComposerSession?.runtimeKind ?? null;
   const activeComposerSelectedModel = selectedActiveComposerSession?.selectedModel ?? null;
   const activeComposerIsLoadingModelCatalog =
     selectedActiveComposerSession?.isLoadingModelCatalog ?? false;
@@ -201,6 +202,7 @@ export function useAgentStudioPageModels({
       activeComposerExternalSessionId
         ? {
             externalSessionId: activeComposerExternalSessionId,
+            runtimeKind: activeComposerRuntimeKind,
             selectedModel: activeComposerSelectedModel,
             isLoadingModelCatalog: activeComposerIsLoadingModelCatalog,
             pendingApprovals: activeComposerPendingApprovals,
@@ -212,6 +214,7 @@ export function useAgentStudioPageModels({
       activeComposerIsLoadingModelCatalog,
       activeComposerPendingApprovals,
       activeComposerPendingQuestions,
+      activeComposerRuntimeKind,
       activeComposerSelectedModel,
     ],
   );

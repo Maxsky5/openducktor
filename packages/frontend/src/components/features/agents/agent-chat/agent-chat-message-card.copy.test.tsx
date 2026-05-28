@@ -40,7 +40,6 @@ describe("AgentChatMessageCard assistant copy", () => {
               agentRole: "planner",
             },
           },
-          sessionSelectedModel: null,
           sessionAgentColors: {},
         }),
       );
@@ -77,7 +76,6 @@ describe("AgentChatMessageCard assistant copy", () => {
             },
           },
           isStreamingAssistantMessage: false,
-          sessionSelectedModel: null,
           sessionAgentColors: {},
         }),
       );
@@ -112,7 +110,6 @@ describe("AgentChatMessageCard assistant copy", () => {
               isFinal: true,
             },
           },
-          sessionSelectedModel: null,
           sessionAgentColors: {},
         }),
       );
@@ -152,7 +149,6 @@ describe("AgentChatMessageCard assistant copy", () => {
               isFinal: true,
             },
           },
-          sessionSelectedModel: null,
           sessionAgentColors: {},
         }),
       );

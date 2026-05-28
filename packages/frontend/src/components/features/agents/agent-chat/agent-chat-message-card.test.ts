@@ -65,7 +65,6 @@ describe("AgentChatMessageCard tool duration", () => {
             observedEndedAtMs: Date.parse("2026-02-20T19:01:00.000Z"),
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -95,7 +94,6 @@ describe("AgentChatMessageCard tool duration", () => {
             endedAtMs: 2_500,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -124,7 +122,6 @@ describe("AgentChatMessageCard tool duration", () => {
             endedAtMs: 2_500,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -156,7 +153,6 @@ describe("AgentChatMessageCard tool duration", () => {
             error: "Task already has a spec",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -184,7 +180,6 @@ describe("AgentChatMessageCard tool duration", () => {
             error: "command not found",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -212,7 +207,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: '{"task":{"id":"fairnest-97f","title":"Add Facebook login"}}',
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -286,7 +280,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -315,7 +308,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "Plan updated",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -344,7 +336,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "contents",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -374,7 +365,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "file contents",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         sessionWorkingDirectory: "/repo",
       }),
@@ -407,7 +397,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "Updated 2 files",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -442,7 +431,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -473,7 +461,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -511,7 +498,6 @@ describe("AgentChatMessageCard tool duration", () => {
             error: validationError,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -545,7 +531,6 @@ describe("AgentChatMessageCard tool duration", () => {
               "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -574,7 +559,6 @@ describe("AgentChatMessageCard tool duration", () => {
             output: "",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -598,7 +582,6 @@ describe("AgentChatMessageCard tool duration", () => {
             title: "Stopped",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -626,7 +609,6 @@ describe("AgentChatMessageCard tool duration", () => {
             title: "Error",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -654,7 +636,6 @@ describe("AgentChatMessageCard tool duration", () => {
             title: "Compacted",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -686,7 +667,6 @@ describe("AgentChatMessageCard tool duration", () => {
             compactionStatus: "running",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -706,7 +686,6 @@ describe("AgentChatMessageCard tool duration", () => {
           content: "System prompt:\n\nAlways validate tool inputs before execution.",
           timestamp: "2026-02-22T10:22:00.000Z",
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -733,7 +712,6 @@ describe("AgentChatMessageCard tool duration", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -761,7 +739,6 @@ describe("AgentChatMessageCard tool duration", () => {
             startedAtMs: 1_000,
           },
         }),
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -789,7 +766,6 @@ describe("AgentChatMessageCard tool duration", () => {
             startedAtMs: 1_000,
           },
         }),
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         subagentPendingApprovalCountByExternalSessionId: {
           "session-child-waiting": 1,
@@ -819,7 +795,6 @@ describe("AgentChatMessageCard tool duration", () => {
             startedAtMs: 1_000,
           },
         }),
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         subagentPendingQuestionCountByExternalSessionId: {
           "session-child-question": 1,
@@ -850,7 +825,6 @@ describe("AgentChatMessageCard tool duration", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         subagentPendingApprovalCountByExternalSessionId: {
           "session-child-completed": 1,
@@ -881,7 +855,6 @@ describe("AgentChatMessageCard tool duration", () => {
             endedAtMs: 120_000,
           },
         }),
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -905,7 +878,6 @@ describe("AgentChatMessageCard tool duration", () => {
             completed: true,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -941,7 +913,6 @@ describe("AgentChatMessageCard tool duration", () => {
             variant: "high",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -950,6 +921,32 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("openai/gpt-5.3-codex");
     expect(html).toContain("gpt-5.3-codex");
     expect(html).toContain("high");
+  });
+
+  test("renders no-profile Codex assistant footer with the Codex session accent", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "assistant-codex-footer",
+          role: "assistant",
+          content: "Implemented the requested changes.",
+          timestamp: "2026-02-22T10:23:30.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "planner",
+            isFinal: true,
+            providerId: "codex",
+            modelId: "gpt-5.4-mini",
+            variant: "high",
+          },
+        },
+        sessionRuntimeKind: "codex",
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("codex/gpt-5.4-mini");
+    expect(html).toContain("background-color:var(--odt-runtime-accent-codex)");
   });
 
   test("hides assistant header and left border in final assistant messages", () => {
@@ -966,7 +963,6 @@ describe("AgentChatMessageCard tool duration", () => {
             profileId: "planner-main",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -975,7 +971,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).not.toContain("border-l-2");
   });
 
-  test("renders assistant footer color from message agent metadata instead of session selection", () => {
+  test("renders assistant footer color from message agent metadata", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -990,12 +986,6 @@ describe("AgentChatMessageCard tool duration", () => {
             profileId: "Hephaestus (Deep Agent)",
             modelId: "gpt-5.3-codex",
           },
-        },
-        sessionSelectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5.3-codex",
-          profileId: "Ares (Legacy Agent)",
         },
         sessionAgentColors: {
           "Hephaestus (Deep Agent)": "#2f6fed",
@@ -1022,7 +1012,6 @@ describe("AgentChatMessageCard tool duration", () => {
             isFinal: true,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1047,7 +1036,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         isStreamingAssistantMessage: false,
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1071,7 +1059,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         isStreamingAssistantMessage: true,
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1094,7 +1081,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         isStreamingAssistantMessage: true,
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1118,7 +1104,6 @@ describe("AgentChatMessageCard tool duration", () => {
             isFinal: true,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1140,7 +1125,6 @@ describe("AgentChatMessageCard tool duration", () => {
             completed: true,
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1164,12 +1148,6 @@ describe("AgentChatMessageCard tool duration", () => {
             profileId: "Hephaestus (Deep Agent)",
           },
         },
-        sessionSelectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5.3-codex",
-          profileId: "Ares (Legacy Agent)",
-        },
         sessionAgentColors: {
           "Hephaestus (Deep Agent)": "#2f6fed",
           "Ares (Legacy Agent)": "#f97316",
@@ -1183,7 +1161,7 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("border-left-color:#2f6fed");
   });
 
-  test("does not color legacy user messages from the current session selection", () => {
+  test("does not color legacy user messages without send-time metadata", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatMessageCard, {
         message: {
@@ -1192,12 +1170,6 @@ describe("AgentChatMessageCard tool duration", () => {
           content: "Use the fallback color.",
           timestamp: "2026-02-22T10:26:00.000Z",
         },
-        sessionSelectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5.3-codex",
-          profileId: "Ares (Legacy Agent)",
-        },
         sessionAgentColors: {
           "Ares (Legacy Agent)": "#f97316",
         },
@@ -1205,6 +1177,30 @@ describe("AgentChatMessageCard tool duration", () => {
     );
 
     expect(html).not.toContain("border-left-color:#f97316");
+  });
+
+  test("renders no-profile Codex user messages with the Codex session accent", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: {
+          id: "user-codex",
+          role: "user",
+          content: "Use the Codex accent.",
+          timestamp: "2026-02-22T10:26:30.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            providerId: "openai",
+            modelId: "gpt-5.3-codex",
+          },
+        },
+        sessionRuntimeKind: "codex",
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("border-l-4");
+    expect(html).toContain("border-left-color:var(--odt-runtime-accent-codex)");
   });
 
   test("renders queued user messages with pending styling and label", () => {
@@ -1220,7 +1216,6 @@ describe("AgentChatMessageCard tool duration", () => {
             state: "queued",
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1264,7 +1259,6 @@ describe("AgentChatMessageCard tool duration", () => {
             ],
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         sessionWorkingDirectory: "/repo",
       }),
@@ -1308,7 +1302,6 @@ describe("AgentChatMessageCard tool duration", () => {
             ],
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         sessionWorkingDirectory: "/repo",
       }),
@@ -1353,7 +1346,6 @@ describe("AgentChatMessageCard tool duration", () => {
             ],
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
         sessionWorkingDirectory: "/repo",
       }),
@@ -1397,7 +1389,6 @@ describe("AgentChatMessageCard tool duration", () => {
             ],
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
@@ -1437,7 +1428,6 @@ describe("AgentChatMessageCard tool duration", () => {
             ],
           },
         },
-        sessionSelectedModel: null,
         sessionAgentColors: {},
       }),
     );
