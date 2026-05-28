@@ -1,6 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getCachedWorktreeStatusFromQuery } from "@/state/queries/git";
 import type { DiffScope } from "../contracts";
 import type { DiffBatchState, ScopeSnapshot } from "../model/diff-data-model";
+import { toScopeSnapshot } from "../model/normalization";
 import { useAgentStudioDiffBatchState } from "./use-diff-batch-state";
 import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-diff-loader";
 import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
@@ -34,6 +37,7 @@ export function useAgentStudioDiffController({
   requestContextKey,
   shouldBlockDiffLoading,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
+  const queryClient = useQueryClient();
   const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
   const requestContextKeyRef = useRef<string | null>(null);
   const {
@@ -84,6 +88,35 @@ export function useAgentStudioDiffController({
     setDiffScope("uncommitted");
   }, []);
 
+  const hydrateCachedWorktreeStatus = useCallback(
+    (scope: DiffScope): boolean => {
+      // Worktree contexts are task-keyed; repository-mode branch identity is tracked outside this query key.
+      if (!repoPath || workingDir === null) {
+        return false;
+      }
+
+      const cachedStatus = getCachedWorktreeStatusFromQuery(
+        queryClient,
+        repoPath,
+        targetBranch,
+        scope,
+        workingDir,
+      );
+      if (cachedStatus === undefined) {
+        return false;
+      }
+
+      applyFullResult({
+        clearScopeInvalidation,
+        requestSequence: 0,
+        scope,
+        snapshot: toScopeSnapshot(cachedStatus),
+      });
+      return true;
+    },
+    [applyFullResult, clearScopeInvalidation, queryClient, repoPath, targetBranch, workingDir],
+  );
+
   const { loadData, refreshActiveScope, refreshActiveScopeSummary } = useAgentStudioDiffLoader({
     repoPathRef,
     targetBranchRef,
@@ -131,21 +164,28 @@ export function useAgentStudioDiffController({
       return;
     }
 
+    const scope = hasContextChanged ? "uncommitted" : diffScopeRef.current;
+    const shouldHydrateFromCache = previousContextKey === null || hasContextChanged;
+
     if (hasContextChanged) {
       resetToDefaultScope();
       resetControllerState();
     }
 
+    const didHydrateFromCache =
+      !shouldBlockDiffLoading && shouldHydrateFromCache && hydrateCachedWorktreeStatus(scope);
+
     if (!shouldBlockDiffLoading) {
-      void loadData(true, {
+      void loadData(!didHydrateFromCache, {
         repoPath,
         targetBranch,
         workingDir,
-        scope: hasContextChanged ? "uncommitted" : diffScopeRef.current,
+        scope,
         force: hasContextChanged,
       });
     }
   }, [
+    hydrateCachedWorktreeStatus,
     loadData,
     repoPath,
     requestContextKey,

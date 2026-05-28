@@ -161,10 +161,8 @@ export function useAgentStudioDevServerPanel({
     taskId,
   ]);
 
-  const hasFreshQueryData =
-    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationState.since;
   const shouldUseQueryData =
-    queryEnabled && hasFreshQueryData && queryActivationState.enabled === queryEnabled;
+    queryEnabled && stateQuery.data !== undefined && queryActivationState.enabled === queryEnabled;
   const currentLiveState = queryEnabled ? liveState : null;
   const effectiveState =
     currentLiveState ?? (shouldUseQueryData ? (stateQuery.data ?? null) : null);
@@ -251,11 +249,7 @@ export function useAgentStudioDevServerPanel({
       return;
     }
 
-    if (
-      queryActivationState.enabled === queryEnabled &&
-      stateQuery.data &&
-      stateQuery.dataUpdatedAt >= queryActivationState.since
-    ) {
+    if (queryActivationState.enabled === queryEnabled && stateQuery.data) {
       hydrateTerminalBuffersFromState(
         stateQuery.data,
         selectedScriptIdRef.current,
@@ -268,12 +262,10 @@ export function useAgentStudioDevServerPanel({
     clearTerminalBuffers,
     hydrateTerminalBuffersFromState,
     queryActivationState.enabled,
-    queryActivationState.since,
     queryEnabled,
     resetSelectedScript,
     selectedScriptIdRef,
     stateQuery.data,
-    stateQuery.dataUpdatedAt,
     taskMemoryKey,
   ]);
 
