@@ -161,7 +161,7 @@ export const shouldRestartElectronForChange = (
   watchRoots.some((root) => isWithinDirectory(root, filePath));
 
 export const resolveMacosAppBundlePath = (electronExecutablePath: string): string | null => {
-  const appBundleMarker = `${path.sep}Contents${path.sep}MacOS${path.sep}`;
+  const appBundleMarker = "/Contents/MacOS/";
   const markerIndex = electronExecutablePath.lastIndexOf(appBundleMarker);
   if (markerIndex === -1) {
     return null;
@@ -179,7 +179,7 @@ export const resolveMacosDevAppPath = (): string =>
   path.join(packageRoot, ".electron-dev", `${APPLICATION_NAME}.app`);
 
 export const resolveMacosDevExecutablePath = (devAppPath: string, executableName: string): string =>
-  path.join(devAppPath, "Contents", "MacOS", executableName);
+  path.posix.join(devAppPath, "Contents", "MacOS", executableName);
 
 const resolveElectronExecutablePath = (): string => String(nodeRequire("electron"));
 
