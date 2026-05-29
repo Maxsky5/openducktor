@@ -9,19 +9,24 @@ import {
   toHostPathStatError,
 } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { HostRuntimeDistribution } from "./runtime-distribution";
 
-const BUNDLED_BIN_DIR_ENV = "OPENDUCKTOR_BUNDLED_BIN_DIR";
-
-export type RuntimeBinaryResolutionOptions = {
+export type RuntimeBinaryPathOptions = {
   platform?: NodeJS.Platform;
   homeDir?: string;
-  resourcesPath?: string | null;
+};
+
+export type CodexBinaryResolutionOptions = RuntimeBinaryPathOptions & {
+  runtimeDistribution: HostRuntimeDistribution;
 };
 
 type RuntimeBinaryResolutionContext = {
   platform: NodeJS.Platform;
   homeDir: string;
-  resourcesPath: string | null | undefined;
+};
+
+type CodexBinaryResolutionContext = RuntimeBinaryResolutionContext & {
+  runtimeDistribution: HostRuntimeDistribution;
 };
 
 const stripMatchingQuotes = (value: string): string => {
@@ -81,63 +86,23 @@ const joinRuntimePath = (platform: NodeJS.Platform, ...segments: string[]): stri
   return posix.join(...segments);
 };
 
-const processResourcesPath = (configuredResourcesPath?: string | null): string | null => {
-  if (configuredResourcesPath !== undefined) {
-    return typeof configuredResourcesPath === "string" && configuredResourcesPath.trim().length > 0
-      ? configuredResourcesPath
-      : null;
-  }
-  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
-  return typeof resourcesPath === "string" && resourcesPath.trim().length > 0
-    ? resourcesPath
-    : null;
-};
-
-const resolveBundledCommand = (
-  command: string,
-  env: NodeJS.ProcessEnv,
-  options: RuntimeBinaryResolutionContext,
-) =>
+const resolveBundledCommand = (command: string, options: CodexBinaryResolutionContext) =>
   Effect.gen(function* () {
-    const configuredBinDir = env[BUNDLED_BIN_DIR_ENV];
-    if (configuredBinDir !== undefined && configuredBinDir.trim().length === 0) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: BUNDLED_BIN_DIR_ENV,
-          message: `Configured bundled binary directory ${BUNDLED_BIN_DIR_ENV} is empty`,
-        }),
-      );
+    if (options.runtimeDistribution.mode !== "artifact") {
+      return null;
+    }
+    const bundledBinDir = options.runtimeDistribution.bundledBinDir;
+    if (bundledBinDir === undefined) {
+      return null;
     }
 
-    const resourcesPath = processResourcesPath(options.resourcesPath);
-    const candidateDirs: Array<{ directory: string; joinPlatform: NodeJS.Platform }> = [
-      ...(configuredBinDir && configuredBinDir.trim().length > 0
-        ? [
-            {
-              directory: resolveUserPath(configuredBinDir, options.homeDir),
-              joinPlatform: process.platform,
-            },
-          ]
-        : []),
-      ...(resourcesPath
-        ? [
-            {
-              directory: joinRuntimePath(options.platform, resourcesPath, "bin"),
-              joinPlatform: options.platform,
-            },
-          ]
-        : []),
-    ];
-
-    for (const { directory, joinPlatform } of candidateDirs) {
-      const candidate = joinRuntimePath(
-        joinPlatform,
-        directory,
-        executableName(command, options.platform),
-      );
-      if (yield* isExecutableFile(candidate, options.platform)) {
-        return candidate;
-      }
+    const candidate = joinRuntimePath(
+      options.platform,
+      resolveUserPath(bundledBinDir, options.homeDir),
+      executableName(command, options.platform),
+    );
+    if (yield* isExecutableFile(candidate, options.platform)) {
+      return candidate;
     }
 
     return null;
@@ -158,17 +123,16 @@ const resolvePathCommand = (
   });
 
 const runtimeBinaryResolutionContext = (
-  options: RuntimeBinaryResolutionOptions,
+  options: RuntimeBinaryPathOptions,
 ): RuntimeBinaryResolutionContext => ({
   platform: options.platform ?? process.platform,
   homeDir: options.homeDir ?? homedir(),
-  resourcesPath: options.resourcesPath,
 });
 
 export const resolveOpencodeBinary = (
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv = process.env,
-  options: RuntimeBinaryResolutionOptions = {},
+  options: RuntimeBinaryPathOptions = {},
 ) =>
   Effect.gen(function* () {
     const { platform, homeDir } = runtimeBinaryResolutionContext(options);
@@ -223,10 +187,13 @@ export const resolveOpencodeBinary = (
 export const resolveCodexBinary = (
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv = process.env,
-  options: RuntimeBinaryResolutionOptions = {},
+  options: CodexBinaryResolutionOptions,
 ) =>
   Effect.gen(function* () {
-    const context = runtimeBinaryResolutionContext(options);
+    const context: CodexBinaryResolutionContext = {
+      ...runtimeBinaryResolutionContext(options),
+      runtimeDistribution: options.runtimeDistribution,
+    };
     const { platform, homeDir } = context;
     const overrideBinary = env.OPENDUCKTOR_CODEX_BINARY;
     if (overrideBinary !== undefined) {
@@ -251,7 +218,7 @@ export const resolveCodexBinary = (
       );
     }
 
-    const bundled = yield* resolveBundledCommand("codex", env, context);
+    const bundled = yield* resolveBundledCommand("codex", context);
     if (bundled !== null) {
       return bundled;
     }
@@ -261,18 +228,20 @@ export const resolveCodexBinary = (
       return pathCommand;
     }
 
-    const resourcesPath = processResourcesPath(context.resourcesPath);
-    const bundledLocations = [
-      `${BUNDLED_BIN_DIR_ENV}`,
-      ...(resourcesPath
-        ? [joinRuntimePath(platform, resourcesPath, "bin", executableName("codex", platform))]
-        : []),
-    ].join(", ");
+    const bundledLocation =
+      context.runtimeDistribution.mode === "artifact" &&
+      context.runtimeDistribution.bundledBinDir !== undefined
+        ? joinRuntimePath(
+            platform,
+            resolveUserPath(context.runtimeDistribution.bundledBinDir, homeDir),
+            executableName("codex", platform),
+          )
+        : "none configured";
     return yield* Effect.fail(
       new HostDependencyError({
         dependency: "codex",
         operation: "runtimeBinaries.resolveCodexBinary",
-        message: `codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (${bundledLocations}), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.`,
+        message: `codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled location (${bundledLocation}), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.`,
       }),
     );
   });

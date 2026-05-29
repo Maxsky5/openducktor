@@ -9,15 +9,30 @@ import type { SystemCommandPort } from "../../ports/system-command-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { terminateProcessTree } from "../process/process-tree";
+import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import {
   buildOpenCodeConfigContent,
   createOpenCodeWorkspaceRuntimeStarter as createEffectOpenCodeWorkspaceRuntimeStarter,
 } from "./opencode-workspace-runtime-starter";
 
+type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
+  typeof createEffectOpenCodeWorkspaceRuntimeStarter
+>[0];
+const testRuntimeDistribution = createArtifactRuntimeDistribution({
+  mcpLauncher: {
+    kind: "executable",
+    executablePath: process.execPath,
+  },
+});
 const createOpenCodeWorkspaceRuntimeStarter = (
-  ...args: Parameters<typeof createEffectOpenCodeWorkspaceRuntimeStarter>
-) => createEffectOpenCodeWorkspaceRuntimeStarter(...args);
+  input: Omit<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
+    Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
+) =>
+  createEffectOpenCodeWorkspaceRuntimeStarter({
+    runtimeDistribution: testRuntimeDistribution,
+    ...input,
+  });
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
     return Effect.succeed(command);

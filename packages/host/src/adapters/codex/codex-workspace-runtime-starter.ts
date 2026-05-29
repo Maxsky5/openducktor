@@ -15,7 +15,7 @@ import {
 } from "../../effect/host-errors";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -24,6 +24,7 @@ import {
   waitForChildProcessClose,
 } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
+import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
@@ -45,6 +46,7 @@ export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
 export type CreateCodexWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
   codexAppServer: CodexAppServerTransportRegistry;
+  runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
   mcpCommand?: string[];
@@ -70,10 +72,7 @@ const CODEX_MCP_ENV_VARS = [
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const resolveConfiguredMcpCommand = (
-  env: NodeJS.ProcessEnv,
-  configuredCommand?: string[],
-): string[] | null => {
+const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
@@ -83,11 +82,6 @@ const resolveConfiguredMcpCommand = (
       });
     }
     return command;
-  }
-
-  const rawCommand = env.OPENDUCKTOR_MCP_COMMAND_JSON;
-  if (rawCommand !== undefined) {
-    return parseMcpCommandJson(rawCommand);
   }
 
   return null;
@@ -183,6 +177,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
   systemCommands,
   codexAppServer,
   resolveMcpBridgeConnection,
+  runtimeDistribution,
   processEnv = process.env,
   mcpCommand,
   codexBinary,
@@ -223,7 +218,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         ),
       );
       const configuredMcpCommand = yield* Effect.try({
-        try: () => resolveConfiguredMcpCommand(processEnv, mcpCommand),
+        try: () => resolveConfiguredMcpCommand(mcpCommand),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -233,8 +228,15 @@ export const createCodexWorkspaceRuntimeStarter = ({
       });
       const resolvedMcpCommand =
         configuredMcpCommand ??
-        (yield* resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
-      const binary = codexBinary ?? (yield* resolveCodexBinary(systemCommands, processEnv));
+        (yield* resolveOpenDucktorMcpCommand({
+          systemCommands,
+          runtimeDistribution,
+        }));
+      const binary =
+        codexBinary ??
+        (yield* resolveCodexBinary(systemCommands, processEnv, {
+          runtimeDistribution,
+        }));
       const command = yield* Effect.try({
         try: () =>
           createSystemCommandLaunch(

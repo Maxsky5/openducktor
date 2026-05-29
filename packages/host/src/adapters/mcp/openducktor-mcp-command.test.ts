@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
+import {
+  createArtifactRuntimeDistribution,
+  createSourceRuntimeDistribution,
+} from "../runtimes/runtime-distribution";
+import { resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
 
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 
@@ -30,38 +34,25 @@ const createWorkspaceRoot = async (): Promise<string> => {
   await writeFile(join(root, "packages", "openducktor-mcp", "src", "index.ts"), "");
   return root;
 };
-const expectExplicitSidecarRejected = async (sidecar: string): Promise<void> => {
+const expectArtifactMcpCommandRejected = async (sidecar: string): Promise<void> => {
   await expect(
     Effect.runPromise(
       resolveOpenDucktorMcpCommand({
         systemCommands: createSystemCommands(),
-        env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
-        startPath: "/missing",
+        runtimeDistribution: createArtifactRuntimeDistribution({
+          mcpLauncher: {
+            kind: "executable",
+            executablePath: sidecar,
+          },
+        }),
       }),
     ),
-  ).rejects.toThrow("points to a missing or non-executable file");
+  ).rejects.toThrow(
+    "Runtime artifact distribution MCP launcher points to a missing or non-executable file",
+  );
 };
 describe("resolveOpenDucktorMcpCommand", () => {
-  test("parses explicit command JSON", () => {
-    expect(parseMcpCommandJson('["  mcp-bin  "," --stdio "]')).toEqual(["mcp-bin", "--stdio"]);
-    expect(() => parseMcpCommandJson('["mcp-bin",""]')).toThrow(
-      "OPENDUCKTOR_MCP_COMMAND_JSON must contain only non-empty strings.",
-    );
-  });
-  test("uses explicit command JSON before other resolution", async () => {
-    await expect(
-      Effect.runPromise(
-        resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
-          env: {
-            OPENDUCKTOR_MCP_COMMAND_JSON: '["mcp-bin","--stdio"]',
-          },
-          startPath: "/missing",
-        }),
-      ),
-    ).resolves.toEqual(["mcp-bin", "--stdio"]);
-  });
-  test("uses an explicit executable MCP sidecar path", async () => {
+  test("uses an executable MCP artifact launcher from the runtime distribution", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-sidecar-"));
     const sidecar = join(root, "openducktor-mcp");
     await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
@@ -70,61 +61,116 @@ describe("resolveOpenDucktorMcpCommand", () => {
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
           systemCommands: createSystemCommands(false),
-          env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: sidecar },
-          startPath: "/missing",
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "executable",
+              executablePath: sidecar,
+            },
+          }),
         }),
       ),
     ).resolves.toEqual([sidecar]);
   });
-  test("fails fast when the explicit MCP sidecar path is empty", async () => {
-    await expect(
-      Effect.runPromise(
-        resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(),
-          env: { OPENDUCKTOR_OPENDUCKTOR_MCP_PATH: "   " },
-          startPath: "/missing",
-        }),
-      ),
-    ).rejects.toThrow("OPENDUCKTOR_OPENDUCKTOR_MCP_PATH is set but empty.");
-  });
-  test("fails fast when the explicit MCP sidecar path is missing", async () => {
+  test("fails fast when the artifact MCP command is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-sidecar-"));
     const sidecar = join(root, "openducktor-mcp");
 
-    await expectExplicitSidecarRejected(sidecar);
+    await expectArtifactMcpCommandRejected(sidecar);
+  });
+  test("fails fast when an artifact MCP command dependency is missing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-required-file-"));
+    const bun = join(root, "bun");
+    const mcpEntrypoint = join(root, "openducktor-mcp.js");
+    await writeFile(bun, "#!/bin/sh\nexit 0\n");
+    await chmod(bun, 0o755);
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          systemCommands: createSystemCommands(false),
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "bunScript",
+              bunExecutablePath: bun,
+              scriptPath: mcpEntrypoint,
+            },
+          }),
+        }),
+      ),
+    ).rejects.toThrow("Runtime artifact distribution MCP launcher requires a missing file");
+  });
+  test("uses a Bun script MCP artifact launcher from the runtime distribution", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-bun-script-"));
+    const bun = join(root, "bun");
+    const mcpEntrypoint = join(root, "openducktor-mcp.js");
+    await writeFile(bun, "#!/bin/sh\nexit 0\n");
+    await chmod(bun, 0o755);
+    await writeFile(mcpEntrypoint, "#!/usr/bin/env bun\n");
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          systemCommands: createSystemCommands(false),
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "bunScript",
+              bunExecutablePath: bun,
+              scriptPath: mcpEntrypoint,
+            },
+          }),
+        }),
+      ),
+    ).resolves.toEqual([bun, mcpEntrypoint]);
   });
   testIfUnixModeIsAvailable(
-    "fails fast when the explicit MCP sidecar path is not executable",
+    "fails fast when the artifact MCP command is not executable",
     async () => {
       const root = await mkdtemp(join(tmpdir(), "odt-mcp-non-executable-sidecar-"));
       const sidecar = join(root, "openducktor-mcp");
       await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
       await chmod(sidecar, 0o644);
 
-      await expectExplicitSidecarRejected(sidecar);
+      await expectArtifactMcpCommandRejected(sidecar);
     },
   );
-  test("fails fast when the explicit MCP sidecar path is a directory", async () => {
+  test("fails fast when the artifact MCP command is a directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-sidecar-"));
     const sidecar = join(root, "openducktor-mcp");
     await mkdir(sidecar);
     await chmod(sidecar, 0o755);
 
-    await expectExplicitSidecarRejected(sidecar);
+    await expectArtifactMcpCommandRejected(sidecar);
   });
-  test("resolves the workspace MCP entrypoint from an ancestor directory", async () => {
+  test("resolves the workspace MCP entrypoint from a source runtime distribution", async () => {
     const root = await createWorkspaceRoot();
-    const nested = join(root, "apps", "electron");
-    await mkdir(nested, { recursive: true });
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
           systemCommands: createSystemCommands(),
-          env: {},
-          startPath: nested,
+          runtimeDistribution: createSourceRuntimeDistribution(root),
         }),
       ),
     ).resolves.toEqual(["bun", join(root, "packages", "openducktor-mcp", "src", "index.ts")]);
+  });
+  test("uses the artifact distribution as the MCP command source of truth", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-artifact-mode-"));
+    const sidecar = join(root, "openducktor-mcp");
+    await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
+    await chmod(sidecar, 0o755);
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          systemCommands: createSystemCommands(false),
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "executable",
+              executablePath: sidecar,
+            },
+          }),
+        }),
+      ),
+    ).resolves.toEqual([sidecar]);
   });
   test("fails fast when workspace execution is selected but bun is unavailable", async () => {
     const root = await createWorkspaceRoot();
@@ -132,8 +178,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
           systemCommands: createSystemCommands(false),
-          env: { OPENDUCKTOR_WORKSPACE_ROOT: root },
-          startPath: "/missing",
+          runtimeDistribution: createSourceRuntimeDistribution(root),
         }),
       ),
     ).rejects.toThrow("OpenDucktor MCP workspace execution requires bun on PATH.");

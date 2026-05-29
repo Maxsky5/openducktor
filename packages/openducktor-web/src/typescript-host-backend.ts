@@ -9,6 +9,7 @@ import {
   type HostEventChannel,
   type HostEventListener,
   type HostEventUnsubscribe,
+  type HostRuntimeDistribution,
 } from "@openducktor/host";
 import { Cause, Data, Effect } from "effect";
 import { logError, logInfo } from "./logger";
@@ -18,6 +19,7 @@ export type TypescriptHostBackendOptions = {
   frontendOrigin: string;
   controlToken: string;
   appToken: string;
+  runtimeDistribution: HostRuntimeDistribution;
 };
 
 export type TypescriptHostBackend = {
@@ -687,6 +689,7 @@ export const startTypescriptHostBackendEffect = ({
   frontendOrigin,
   controlToken,
   appToken,
+  runtimeDistribution,
 }: TypescriptHostBackendOptions): Effect.Effect<TypescriptHostBackend, WebHostStartupError> =>
   Effect.gen(function* () {
     const validatedFrontendOrigin = yield* Effect.try({
@@ -703,6 +706,7 @@ export const startTypescriptHostBackendEffect = ({
         info: logInfo,
       },
       localAttachments,
+      runtimeDistribution,
     });
     let shutdownStarted = false;
     let stopPromise: Promise<void> | null = null;

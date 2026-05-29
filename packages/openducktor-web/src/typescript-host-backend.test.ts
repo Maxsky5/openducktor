@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createSourceRuntimeDistribution } from "@openducktor/host";
 import { Effect } from "effect";
 
 const nativeResponse = await Bun.fetch("data:,");
@@ -15,6 +16,9 @@ const { __typescriptHostBackendTestInternals, startTypescriptHostBackend } = awa
 const APP_TOKEN = "app-token";
 const CONTROL_TOKEN = "control-token";
 const FRONTEND_ORIGIN = "http://127.0.0.1:1420";
+const SOURCE_RUNTIME_DISTRIBUTION = createSourceRuntimeDistribution(
+  path.resolve(import.meta.dir, "../../.."),
+);
 
 describe("TypeScript web host backend", () => {
   test("serves health, session, invoke, and shutdown through the browser HTTP contract", async () => {
@@ -29,6 +33,7 @@ describe("TypeScript web host backend", () => {
         frontendOrigin: FRONTEND_ORIGIN,
         controlToken: CONTROL_TOKEN,
         appToken: APP_TOKEN,
+        runtimeDistribution: SOURCE_RUNTIME_DISTRIBUTION,
       });
       const backendUrl = `http://127.0.0.1:${backend.port}`;
 

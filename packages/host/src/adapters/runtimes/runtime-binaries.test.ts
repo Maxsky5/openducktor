@@ -5,6 +5,10 @@ import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { isExecutableFile, resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
+import {
+  createArtifactRuntimeDistribution,
+  createSourceRuntimeDistribution,
+} from "./runtime-distribution";
 
 const createSystemCommands = ({
   available = [],
@@ -40,6 +44,7 @@ const writeExecutable = async (path: string): Promise<void> => {
   await writeFile(path, "");
   await chmod(path, 0o755);
 };
+const testRuntimeDistribution = createSourceRuntimeDistribution("/test/openducktor");
 
 describe("isExecutableFile", () => {
   test("rejects executable directories on POSIX platforms", async () => {
@@ -192,7 +197,7 @@ describe("resolveOpencodeBinary", () => {
 });
 
 describe("resolveCodexBinary", () => {
-  test("uses an explicit Codex override before bundled locations and PATH", async () => {
+  test("uses an explicit Codex override before distribution bundled binaries and PATH", async () => {
     await withTempDir(async (root) => {
       const override = join(root, "codex");
       await writeExecutable(override);
@@ -202,16 +207,27 @@ describe("resolveCodexBinary", () => {
 
       await expect(
         Effect.runPromise(
-          resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {
-            OPENDUCKTOR_CODEX_BINARY: override,
-            OPENDUCKTOR_BUNDLED_BIN_DIR: binDir,
-          }),
+          resolveCodexBinary(
+            createSystemCommands({ available: ["codex"] }),
+            {
+              OPENDUCKTOR_CODEX_BINARY: override,
+            },
+            {
+              runtimeDistribution: createArtifactRuntimeDistribution({
+                bundledBinDir: binDir,
+                mcpLauncher: {
+                  kind: "executable",
+                  executablePath: override,
+                },
+              }),
+            },
+          ),
         ),
       ).resolves.toBe(override);
     });
   });
 
-  test("resolves a bundled Codex binary before PATH", async () => {
+  test("resolves a distribution bundled Codex binary before PATH", async () => {
     await withTempDir(async (root) => {
       const binDir = join(root, "bin");
       await mkdir(binDir);
@@ -220,27 +236,18 @@ describe("resolveCodexBinary", () => {
 
       await expect(
         Effect.runPromise(
-          resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {
-            OPENDUCKTOR_BUNDLED_BIN_DIR: binDir,
-          }),
-        ),
-      ).resolves.toBe(codex);
-    });
-  });
-
-  test("resolves Codex from Electron resources before PATH", async () => {
-    await withTempDir(async (root) => {
-      const binDir = join(root, "resources", "bin");
-      await mkdir(binDir, { recursive: true });
-      const codex = join(binDir, "codex.exe");
-      await writeFile(codex, "");
-
-      await expect(
-        Effect.runPromise(
           resolveCodexBinary(
             createSystemCommands({ available: ["codex"] }),
             {},
-            { platform: "win32", resourcesPath: join(root, "resources") },
+            {
+              runtimeDistribution: createArtifactRuntimeDistribution({
+                bundledBinDir: binDir,
+                mcpLauncher: {
+                  kind: "executable",
+                  executablePath: codex,
+                },
+              }),
+            },
           ),
         ),
       ).resolves.toBe(codex);
@@ -250,9 +257,13 @@ describe("resolveCodexBinary", () => {
   test("fails when an explicit Codex override is empty", async () => {
     await expect(
       Effect.runPromise(
-        resolveCodexBinary(createSystemCommands(), {
-          OPENDUCKTOR_CODEX_BINARY: "",
-        }),
+        resolveCodexBinary(
+          createSystemCommands(),
+          {
+            OPENDUCKTOR_CODEX_BINARY: "",
+          },
+          { runtimeDistribution: testRuntimeDistribution },
+        ),
       ),
     ).rejects.toThrow("Configured Codex override OPENDUCKTOR_CODEX_BINARY is empty");
   });
@@ -260,28 +271,30 @@ describe("resolveCodexBinary", () => {
   test("fails when an explicit Codex override is not executable", async () => {
     await expect(
       Effect.runPromise(
-        resolveCodexBinary(createSystemCommands(), {
-          OPENDUCKTOR_CODEX_BINARY: "/missing/codex",
-        }),
+        resolveCodexBinary(
+          createSystemCommands(),
+          {
+            OPENDUCKTOR_CODEX_BINARY: "/missing/codex",
+          },
+          { runtimeDistribution: testRuntimeDistribution },
+        ),
       ),
     ).rejects.toThrow(
       "Configured Codex override OPENDUCKTOR_CODEX_BINARY points to a missing or non-executable file: /missing/codex",
     );
   });
 
-  test("fails when the bundled bin directory env var is empty", async () => {
-    await expect(
-      Effect.runPromise(
-        resolveCodexBinary(createSystemCommands(), {
-          OPENDUCKTOR_BUNDLED_BIN_DIR: " ",
-        }),
-      ),
-    ).rejects.toThrow("Configured bundled binary directory OPENDUCKTOR_BUNDLED_BIN_DIR is empty");
-  });
-
   test("uses PATH fallback after Codex override and bundled locations", async () => {
     await expect(
-      Effect.runPromise(resolveCodexBinary(createSystemCommands({ available: ["codex"] }), {})),
+      Effect.runPromise(
+        resolveCodexBinary(
+          createSystemCommands({ available: ["codex"] }),
+          {},
+          {
+            runtimeDistribution: testRuntimeDistribution,
+          },
+        ),
+      ),
     ).resolves.toBe("codex");
   });
 
@@ -299,7 +312,7 @@ describe("resolveCodexBinary", () => {
           resolveCodexBinary(
             systemCommands,
             { PATH: root, PATHEXT: ".bat" },
-            { platform: "win32" },
+            { platform: "win32", runtimeDistribution: testRuntimeDistribution },
           ),
         ),
       ).resolves.toBe(codex);
@@ -312,11 +325,20 @@ describe("resolveCodexBinary", () => {
         resolveCodexBinary(
           createSystemCommands(),
           {},
-          { platform: "linux", resourcesPath: "/opt/OpenDucktor/resources" },
+          {
+            platform: "linux",
+            runtimeDistribution: createArtifactRuntimeDistribution({
+              bundledBinDir: "/opt/OpenDucktor/resources/bin",
+              mcpLauncher: {
+                kind: "executable",
+                executablePath: "/opt/OpenDucktor/resources/bin/openducktor-mcp",
+              },
+            }),
+          },
         ),
       ),
     ).rejects.toThrow(
-      "codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled locations (OPENDUCKTOR_BUNDLED_BIN_DIR, /opt/OpenDucktor/resources/bin/codex), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
+      "codex not found. Checked OPENDUCKTOR_CODEX_BINARY, bundled location (/opt/OpenDucktor/resources/bin/codex), and PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
     );
   });
 });

@@ -1,5 +1,15 @@
 export { Effect } from "effect";
 export { createLocalAttachmentAdapter } from "./adapters/attachments/local-attachment-adapter";
+export {
+  type ArtifactMcpLauncher,
+  type ArtifactRuntimeDistribution,
+  type BunScriptMcpLauncher,
+  createArtifactRuntimeDistribution,
+  createSourceRuntimeDistribution,
+  type ExecutableMcpLauncher,
+  type HostRuntimeDistribution,
+  type SourceRuntimeDistribution,
+} from "./adapters/runtimes/runtime-distribution";
 export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
 export {

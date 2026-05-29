@@ -1,9 +1,10 @@
 import type { RuntimeHealth, RuntimeKind } from "@openducktor/contracts";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
-import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
-import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
+import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
+import type { SystemCommandPort } from "../../ports/system-command-port";
 import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
+import type { HostRuntimeDistribution } from "./runtime-distribution";
 
 const OPENCODE_VERSION_ENV = {
   OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
@@ -22,6 +23,7 @@ const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): Runt
 
 export const createRuntimeHealthProbe = (
   systemCommands: SystemCommandPort,
+  runtimeDistribution: HostRuntimeDistribution,
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeHealthPort => ({
   getRuntimeHealth(kind) {
@@ -52,7 +54,9 @@ export const createRuntimeHealthProbe = (
       if (kind === "codex") {
         const health = yield* Effect.either(
           Effect.gen(function* () {
-            const binary = yield* resolveCodexBinary(systemCommands, env);
+            const binary = yield* resolveCodexBinary(systemCommands, env, {
+              runtimeDistribution,
+            });
             const version = yield* systemCommands.versionCommand(binary, ["--version"], {
               timeoutMs: 2_000,
             });
@@ -76,8 +80,3 @@ export const createRuntimeHealthProbe = (
     });
   },
 });
-
-export const RuntimeHealthPortLive = Layer.effect(
-  RuntimeHealthPortTag,
-  Effect.map(SystemCommandPortTag, (systemCommands) => createRuntimeHealthProbe(systemCommands)),
-);

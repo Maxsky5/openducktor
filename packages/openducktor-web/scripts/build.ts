@@ -17,6 +17,11 @@ export const buildWebPackage = async (): Promise<void> => {
     cwd: packageRoot,
     label: "Web CLI build",
   });
+  await runCommand({
+    command: ["bun", "run", "build:mcp"],
+    cwd: packageRoot,
+    label: "Web MCP entrypoint build",
+  });
 };
 
 if (import.meta.main) {

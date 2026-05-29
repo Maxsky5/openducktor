@@ -1,47 +1,18 @@
 import { stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Effect } from "effect";
 import {
   HostDependencyError,
   HostValidationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
-import { parseJson } from "../../effect/json";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { isExecutableFile, resolveUserPath } from "../runtimes/runtime-binaries";
+import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 
-const MCP_COMMAND_JSON_ENV = "OPENDUCKTOR_MCP_COMMAND_JSON";
-const MCP_SIDECAR_PATH_ENV = "OPENDUCKTOR_OPENDUCKTOR_MCP_PATH";
-const WORKSPACE_ROOT_ENV = "OPENDUCKTOR_WORKSPACE_ROOT";
 export type ResolveOpenDucktorMcpCommandInput = {
   systemCommands: SystemCommandPort;
-  env?: NodeJS.ProcessEnv;
-  startPath?: string;
-};
-export const parseMcpCommandJson = (raw: string): string[] => {
-  const parsed = parseJson(raw);
-  if (!Array.isArray(parsed)) {
-    throw new HostValidationError({
-      field: MCP_COMMAND_JSON_ENV,
-      message: `${MCP_COMMAND_JSON_ENV} must be a JSON string array.`,
-    });
-  }
-  const command = parsed.map((entry) => {
-    if (typeof entry !== "string" || entry.trim().length === 0) {
-      throw new HostValidationError({
-        field: MCP_COMMAND_JSON_ENV,
-        message: `${MCP_COMMAND_JSON_ENV} must contain only non-empty strings.`,
-      });
-    }
-    return entry.trim();
-  });
-  if (command.length === 0) {
-    throw new HostValidationError({
-      field: MCP_COMMAND_JSON_ENV,
-      message: `${MCP_COMMAND_JSON_ENV} cannot be empty.`,
-    });
-  }
-  return command;
+  runtimeDistribution: HostRuntimeDistribution;
 };
 const isFile = (path: string) =>
   Effect.tryPromise({
@@ -68,105 +39,104 @@ const isWorkspaceRootCandidate = (path: string) =>
       (yield* isDirectory(join(path, "packages")))
     );
   });
-const parentPath = (path: string): string | null => {
-  const parent = dirname(path);
-  return parent === path ? null : parent;
-};
-const findWorkspaceRoot = (startPath: string) =>
+const resolveWorkspaceRoot = (runtimeDistribution: HostRuntimeDistribution) =>
   Effect.gen(function* () {
-    let current: string | null = resolve(resolveUserPath(startPath));
-    while (current) {
-      if (yield* isWorkspaceRootCandidate(current)) {
-        return current;
-      }
-      current = parentPath(current);
-    }
-    return null;
-  });
-const resolveWorkspaceRoot = (env: NodeJS.ProcessEnv, startPath: string) =>
-  Effect.gen(function* () {
-    const override = env[WORKSPACE_ROOT_ENV];
-    if (override !== undefined) {
-      if (override.trim().length === 0) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: WORKSPACE_ROOT_ENV,
-            message: `${WORKSPACE_ROOT_ENV} is set but empty.`,
-          }),
-        );
-      }
-      const workspaceRoot = resolve(resolveUserPath(override));
-      if (!(yield* isWorkspaceRootCandidate(workspaceRoot))) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: WORKSPACE_ROOT_ENV,
-            message: `${WORKSPACE_ROOT_ENV} does not point to an OpenDucktor workspace root.`,
-            details: { workspaceRoot },
-          }),
-        );
-      }
-      return workspaceRoot;
-    }
-    return yield* findWorkspaceRoot(startPath);
-  });
-const resolveExplicitSidecarCommand = (env: NodeJS.ProcessEnv) =>
-  Effect.gen(function* () {
-    const sidecarPath = env[MCP_SIDECAR_PATH_ENV];
-    if (sidecarPath === undefined) {
+    if (runtimeDistribution.mode !== "source") {
       return null;
     }
-    if (sidecarPath.trim().length === 0) {
+
+    const workspaceRoot = resolve(resolveUserPath(runtimeDistribution.workspaceRoot));
+    if (!(yield* isWorkspaceRootCandidate(workspaceRoot))) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: MCP_SIDECAR_PATH_ENV,
-          message: `${MCP_SIDECAR_PATH_ENV} is set but empty.`,
+          field: "runtimeDistribution.workspaceRoot",
+          message: "Runtime source distribution does not point to an OpenDucktor workspace root.",
+          details: { workspaceRoot },
         }),
       );
     }
-    const resolved = resolve(resolveUserPath(sidecarPath));
-    if (!(yield* isExecutableFile(resolved))) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: MCP_SIDECAR_PATH_ENV,
-          message: `${MCP_SIDECAR_PATH_ENV} points to a missing or non-executable file: ${resolved}`,
-          details: { resolved },
-        }),
-      );
-    }
-    return [resolved];
+    return workspaceRoot;
   });
+
+const resolveExecutablePath = (path: string, field: string) =>
+  Effect.gen(function* () {
+    const resolvedPath = resolve(resolveUserPath(path));
+    if (!(yield* isExecutableFile(resolvedPath))) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field,
+          message: `Runtime artifact distribution MCP launcher points to a missing or non-executable file: ${resolvedPath}`,
+          details: { resolvedPath },
+        }),
+      );
+    }
+    return resolvedPath;
+  });
+
+const resolveRequiredFile = (path: string, field: string) =>
+  Effect.gen(function* () {
+    const resolvedPath = resolve(resolveUserPath(path));
+    if (!(yield* isFile(resolvedPath))) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field,
+          message: `Runtime artifact distribution MCP launcher requires a missing file: ${resolvedPath}`,
+          details: { resolvedPath },
+        }),
+      );
+    }
+    return resolvedPath;
+  });
+
+const resolveArtifactCommand = (runtimeDistribution: HostRuntimeDistribution) =>
+  Effect.gen(function* () {
+    if (runtimeDistribution.mode !== "artifact") {
+      return null;
+    }
+
+    const { mcpLauncher } = runtimeDistribution;
+    switch (mcpLauncher.kind) {
+      case "executable":
+        return [
+          yield* resolveExecutablePath(
+            mcpLauncher.executablePath,
+            "runtimeDistribution.mcpLauncher.executablePath",
+          ),
+        ];
+      case "bunScript": {
+        const bunExecutable = yield* resolveExecutablePath(
+          mcpLauncher.bunExecutablePath,
+          "runtimeDistribution.mcpLauncher.bunExecutablePath",
+        );
+        const scriptPath = yield* resolveRequiredFile(
+          mcpLauncher.scriptPath,
+          "runtimeDistribution.mcpLauncher.scriptPath",
+        );
+        return [bunExecutable, scriptPath];
+      }
+    }
+
+    const exhaustive: never = mcpLauncher;
+    return exhaustive;
+  });
+
 export const resolveOpenDucktorMcpCommand = ({
   systemCommands,
-  env = process.env,
-  startPath = process.cwd(),
+  runtimeDistribution,
 }: ResolveOpenDucktorMcpCommandInput) =>
   Effect.gen(function* () {
-    const rawCommand = env[MCP_COMMAND_JSON_ENV];
-    if (rawCommand !== undefined) {
-      return yield* Effect.try({
-        try: () => parseMcpCommandJson(rawCommand),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: {
-              env: MCP_COMMAND_JSON_ENV,
-            },
-          }),
-      });
+    const artifactCommand = yield* resolveArtifactCommand(runtimeDistribution);
+    if (artifactCommand !== null) {
+      return artifactCommand;
     }
-    const sidecarCommand = yield* resolveExplicitSidecarCommand(env);
-    if (sidecarCommand) {
-      return sidecarCommand;
-    }
-    const workspaceRoot = yield* resolveWorkspaceRoot(env, startPath);
+    const workspaceRoot = yield* resolveWorkspaceRoot(runtimeDistribution);
     if (!workspaceRoot) {
       return yield* Effect.fail(
         new HostDependencyError({
           dependency: "openducktor-workspace-root",
           operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
-          message: `Unable to resolve an OpenDucktor workspace root for MCP execution. Set ${WORKSPACE_ROOT_ENV} or ${MCP_SIDECAR_PATH_ENV}.`,
-          details: { startPath },
+          message:
+            "Unable to resolve an OpenDucktor workspace root for MCP execution. Provide a source runtime distribution.",
         }),
       );
     }

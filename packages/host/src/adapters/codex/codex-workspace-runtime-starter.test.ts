@@ -8,6 +8,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
@@ -15,9 +16,23 @@ import {
   createCodexWorkspaceRuntimeStarter as createEffectCodexWorkspaceRuntimeStarter,
 } from "./codex-workspace-runtime-starter";
 
+type CodexWorkspaceRuntimeStarterInput = Parameters<
+  typeof createEffectCodexWorkspaceRuntimeStarter
+>[0];
+const testRuntimeDistribution = createArtifactRuntimeDistribution({
+  mcpLauncher: {
+    kind: "executable",
+    executablePath: process.execPath,
+  },
+});
 const createCodexWorkspaceRuntimeStarter = (
-  ...args: Parameters<typeof createEffectCodexWorkspaceRuntimeStarter>
-) => createEffectCodexWorkspaceRuntimeStarter(...args);
+  input: Omit<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
+    Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
+) =>
+  createEffectCodexWorkspaceRuntimeStarter({
+    runtimeDistribution: testRuntimeDistribution,
+    ...input,
+  });
 const createCodexAppServerTransportRegistry = (
   ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
 ) => createEffectCodexAppServerTransportRegistry(...args);

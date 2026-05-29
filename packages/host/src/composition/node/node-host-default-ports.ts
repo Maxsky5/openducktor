@@ -10,6 +10,7 @@ import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-fi
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
 import { createProcessEnvironment } from "../../adapters/process/process-environment";
+import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
@@ -39,13 +40,16 @@ export type NodeHostDefaultPorts = {
   localAttachments: LocalAttachmentPort;
   openInTools: OpenInToolsPort;
   processEnv: NodeJS.ProcessEnv;
+  runtimeDistribution: HostRuntimeDistribution;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
   worktreeFiles: WorktreeFilePort;
 };
 
-export type CreateNodeHostDefaultPortsInput = Partial<{
+export type CreateNodeHostDefaultPortsInput = {
+  runtimeDistribution: HostRuntimeDistribution;
+} & Partial<{
   codexAppServer: CodexAppServerPort;
   codexAppServerTransportRegistry: CodexAppServerTransportRegistry;
   devServerProcesses: DevServerProcessPort;
@@ -93,7 +97,8 @@ const makeNodeHostDefaultPorts = (
     const processEnv = input.processEnv ?? createProcessEnvironment();
     const systemCommands = input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
     const runtimeHealth =
-      input.runtimeHealth ?? createRuntimeHealthProbe(systemCommands, processEnv);
+      input.runtimeHealth ??
+      createRuntimeHealthProbe(systemCommands, input.runtimeDistribution, processEnv);
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
     const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
     const codexTransportRegistry =
@@ -109,6 +114,7 @@ const makeNodeHostDefaultPorts = (
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,
+      runtimeDistribution: input.runtimeDistribution,
       runtimeHealth,
       settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
       systemCommands,
@@ -138,7 +144,7 @@ const makeNodeHostDefaultPortContext = (
   );
 
 export const createNodeHostDefaultPortsLayer = (
-  input: CreateNodeHostDefaultPortsInput = {},
+  input: CreateNodeHostDefaultPortsInput,
 ): Layer.Layer<NodeHostDefaultPortServices> =>
   Layer.effectContext(makeNodeHostDefaultPortContext(input));
 
@@ -151,7 +157,7 @@ export const createNodeHostDefaultPortsEffect: Effect.Effect<
 });
 
 export const createNodeHostDefaultPorts = (
-  input: CreateNodeHostDefaultPortsInput = {},
+  input: CreateNodeHostDefaultPortsInput,
 ): NodeHostDefaultPorts =>
   Effect.runSync(
     createNodeHostDefaultPortsEffect.pipe(Effect.provide(createNodeHostDefaultPortsLayer(input))),

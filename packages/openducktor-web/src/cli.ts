@@ -71,13 +71,12 @@ export const parseCliArgs = (args: string[]): CliOptions => {
 const runCli = async (): Promise<void> => {
   const __filename = fileURLToPath(import.meta.url);
   const packageRoot = path.resolve(path.dirname(__filename), "..");
-  const workspaceRoot = path.resolve(packageRoot, "../..");
 
   try {
     const cliOptions = parseCliArgs(process.argv.slice(2));
     const launcherOptions = {
       packageRoot,
-      workspaceRoot,
+      ...(cliOptions.workspaceMode ? { workspaceRoot: path.resolve(packageRoot, "../..") } : {}),
       workspaceMode: cliOptions.workspaceMode,
       frontendPort: cliOptions.frontendPort,
       backendPort: cliOptions.backendPort,
