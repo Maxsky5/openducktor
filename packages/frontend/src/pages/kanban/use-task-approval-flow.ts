@@ -94,7 +94,7 @@ export function useTaskApprovalFlow({
       });
       const title = task?.title ?? "";
       const body = task?.description ?? "";
-      const pullRequestDraftMode = options?.pullRequestDraftMode ?? "manual";
+      const pullRequestDraftMode = options?.pullRequestDraftMode ?? "generate_ai";
       const openErrorMessage = options?.errorMessage ?? null;
 
       dispatch({
