@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
@@ -177,6 +177,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
             ODT_HOST_URL: "http://127.0.0.1:14327",
             ODT_HOST_TOKEN: "token-1",
             ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+            ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
           },
         },
       },

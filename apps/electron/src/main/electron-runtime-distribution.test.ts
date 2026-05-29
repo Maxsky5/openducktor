@@ -7,6 +7,12 @@ import {
 } from "./electron-runtime-distribution";
 
 describe("resolveElectronRuntimeDistribution", () => {
+  test("resolves the packaged Electron bundled binary directory", () => {
+    const resourcesPath = "/Applications/OpenDucktor.app/Contents/Resources";
+
+    expect(resolveElectronBundledBinDir(resourcesPath)).toBe(join(resourcesPath, "bin"));
+  });
+
   test("uses the workspace source distribution in Electron dev mode", () => {
     expect(
       resolveElectronRuntimeDistribution({
@@ -15,7 +21,7 @@ describe("resolveElectronRuntimeDistribution", () => {
         resourcesPath: "/repo/apps/electron",
         workspaceRoot: "/repo",
       }),
-    ).toEqual({
+    ).toMatchObject({
       mode: "source",
       workspaceRoot: "/repo",
     });
@@ -31,7 +37,7 @@ describe("resolveElectronRuntimeDistribution", () => {
         resourcesPath,
         workspaceRoot: "/repo",
       }),
-    ).toEqual({
+    ).toMatchObject({
       mode: "artifact",
       bundledBinDir: join(resourcesPath, "bin"),
       mcpLauncher: {
@@ -39,10 +45,29 @@ describe("resolveElectronRuntimeDistribution", () => {
         executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
       },
     });
-    expect(resolveElectronBundledBinDir(resourcesPath)).toBe(join(resourcesPath, "bin"));
     expect(resolveElectronMcpSidecarPath({ platform: "darwin", resourcesPath })).toBe(
       join(resourcesPath, "bin", "openducktor-mcp"),
     );
+  });
+
+  test("uses the Linux MCP executable name for packaged Electron artifacts", () => {
+    const resourcesPath = "/opt/OpenDucktor/resources";
+
+    expect(
+      resolveElectronRuntimeDistribution({
+        platform: "linux",
+        isPackaged: true,
+        resourcesPath,
+        workspaceRoot: "/repo",
+      }),
+    ).toMatchObject({
+      mode: "artifact",
+      bundledBinDir: join(resourcesPath, "bin"),
+      mcpLauncher: {
+        kind: "executable",
+        executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
+      },
+    });
   });
 
   test("uses the Windows MCP executable name for packaged Electron artifacts", () => {

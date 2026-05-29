@@ -39,9 +39,9 @@ export const createRuntimeHealthProbe = (
             return {
               kind,
               enabled: true,
-              ok: true,
-              version: version ? `${version} (${binary})` : `installed (${binary})`,
-              error: null,
+              ok: version !== null,
+              version: version === null ? null : `${version} (${binary})`,
+              error: version === null ? `Failed reading opencode --version from ${binary}` : null,
             } satisfies RuntimeHealth;
           }),
         );

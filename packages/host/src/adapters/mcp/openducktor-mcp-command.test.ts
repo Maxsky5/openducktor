@@ -34,7 +34,10 @@ const createWorkspaceRoot = async (): Promise<string> => {
   await writeFile(join(root, "packages", "openducktor-mcp", "src", "index.ts"), "");
   return root;
 };
-const expectArtifactMcpCommandRejected = async (sidecar: string): Promise<void> => {
+const expectArtifactMcpCommandRejected = async (
+  sidecar: string,
+  expectedMessage: string,
+): Promise<void> => {
   await expect(
     Effect.runPromise(
       resolveOpenDucktorMcpCommand({
@@ -47,9 +50,7 @@ const expectArtifactMcpCommandRejected = async (sidecar: string): Promise<void> 
         }),
       }),
     ),
-  ).rejects.toThrow(
-    "Runtime artifact distribution MCP launcher points to a missing or non-executable file",
-  );
+  ).rejects.toThrow(expectedMessage);
 };
 describe("resolveOpenDucktorMcpCommand", () => {
   test("uses an executable MCP artifact launcher from the runtime distribution", async () => {
@@ -75,7 +76,10 @@ describe("resolveOpenDucktorMcpCommand", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-sidecar-"));
     const sidecar = join(root, "openducktor-mcp");
 
-    await expectArtifactMcpCommandRejected(sidecar);
+    await expectArtifactMcpCommandRejected(
+      sidecar,
+      "Runtime artifact distribution MCP launcher points to a missing file",
+    );
   });
   test("fails fast when an artifact MCP command dependency is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-required-file-"));
@@ -98,6 +102,31 @@ describe("resolveOpenDucktorMcpCommand", () => {
         }),
       ),
     ).rejects.toThrow("Runtime artifact distribution MCP launcher requires a missing file");
+  });
+  test("fails fast when an artifact MCP command dependency is a directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-required-file-"));
+    const bun = join(root, "bun");
+    const mcpEntrypoint = join(root, "openducktor-mcp.js");
+    await writeFile(bun, "#!/bin/sh\nexit 0\n");
+    await chmod(bun, 0o755);
+    await mkdir(mcpEntrypoint);
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          systemCommands: createSystemCommands(false),
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "bunScript",
+              bunExecutablePath: bun,
+              scriptPath: mcpEntrypoint,
+            },
+          }),
+        }),
+      ),
+    ).rejects.toThrow(
+      "Runtime artifact distribution MCP launcher requires a regular file but received a directory",
+    );
   });
   test("uses a Bun script MCP artifact launcher from the runtime distribution", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-bun-script-"));
@@ -130,7 +159,10 @@ describe("resolveOpenDucktorMcpCommand", () => {
       await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
       await chmod(sidecar, 0o644);
 
-      await expectArtifactMcpCommandRejected(sidecar);
+      await expectArtifactMcpCommandRejected(
+        sidecar,
+        "Runtime artifact distribution MCP launcher points to a non-executable file",
+      );
     },
   );
   test("fails fast when the artifact MCP command is a directory", async () => {
@@ -139,7 +171,10 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await mkdir(sidecar);
     await chmod(sidecar, 0o755);
 
-    await expectArtifactMcpCommandRejected(sidecar);
+    await expectArtifactMcpCommandRejected(
+      sidecar,
+      "Runtime artifact distribution MCP launcher points to a directory, not an executable file",
+    );
   });
   test("resolves the workspace MCP entrypoint from a source runtime distribution", async () => {
     const root = await createWorkspaceRoot();
@@ -151,26 +186,6 @@ describe("resolveOpenDucktorMcpCommand", () => {
         }),
       ),
     ).resolves.toEqual(["bun", join(root, "packages", "openducktor-mcp", "src", "index.ts")]);
-  });
-  test("uses the artifact distribution as the MCP command source of truth", async () => {
-    const root = await mkdtemp(join(tmpdir(), "odt-mcp-artifact-mode-"));
-    const sidecar = join(root, "openducktor-mcp");
-    await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
-    await chmod(sidecar, 0o755);
-
-    await expect(
-      Effect.runPromise(
-        resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
-          runtimeDistribution: createArtifactRuntimeDistribution({
-            mcpLauncher: {
-              kind: "executable",
-              executablePath: sidecar,
-            },
-          }),
-        }),
-      ),
-    ).resolves.toEqual([sidecar]);
   });
   test("fails fast when workspace execution is selected but bun is unavailable", async () => {
     const root = await createWorkspaceRoot();

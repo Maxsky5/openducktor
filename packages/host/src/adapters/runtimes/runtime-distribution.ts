@@ -1,4 +1,12 @@
-export type SourceRuntimeDistribution = {
+import { HostValidationError } from "../../effect/host-errors";
+
+declare const hostRuntimeDistributionBrand: unique symbol;
+
+type HostRuntimeDistributionBrand = {
+  readonly [hostRuntimeDistributionBrand]: true;
+};
+
+export type SourceRuntimeDistribution = HostRuntimeDistributionBrand & {
   mode: "source";
   workspaceRoot: string;
 };
@@ -16,7 +24,7 @@ export type BunScriptMcpLauncher = {
 
 export type ArtifactMcpLauncher = ExecutableMcpLauncher | BunScriptMcpLauncher;
 
-export type ArtifactRuntimeDistribution = {
+export type ArtifactRuntimeDistribution = HostRuntimeDistributionBrand & {
   mode: "artifact";
   mcpLauncher: ArtifactMcpLauncher;
   bundledBinDir?: string;
@@ -27,17 +35,27 @@ export type HostRuntimeDistribution = SourceRuntimeDistribution | ArtifactRuntim
 const assertNonEmpty = (value: string, field: string): string => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error(`${field} cannot be empty.`);
+    throw new HostValidationError({
+      field,
+      message: `${field} cannot be empty.`,
+    });
   }
   return trimmed;
 };
 
-export const createSourceRuntimeDistribution = (
-  workspaceRoot: string,
-): SourceRuntimeDistribution => ({
-  mode: "source",
-  workspaceRoot: assertNonEmpty(workspaceRoot, "workspaceRoot"),
-});
+export const createSourceRuntimeDistribution = (workspaceRoot: string): SourceRuntimeDistribution =>
+  ({
+    mode: "source",
+    workspaceRoot: assertNonEmpty(workspaceRoot, "workspaceRoot"),
+  }) as SourceRuntimeDistribution;
+
+const unsupportedArtifactMcpLauncher = (launcher: never): never => {
+  const kind = (launcher as { kind?: unknown }).kind;
+  throw new HostValidationError({
+    field: "mcpLauncher.kind",
+    message: `Unsupported MCP launcher kind: ${String(kind)}`,
+  });
+};
 
 const createArtifactMcpLauncher = (launcher: ArtifactMcpLauncher): ArtifactMcpLauncher => {
   switch (launcher.kind) {
@@ -57,8 +75,7 @@ const createArtifactMcpLauncher = (launcher: ArtifactMcpLauncher): ArtifactMcpLa
       };
   }
 
-  const exhaustive: never = launcher;
-  return exhaustive;
+  return unsupportedArtifactMcpLauncher(launcher);
 };
 
 export const createArtifactRuntimeDistribution = ({
@@ -74,5 +91,5 @@ export const createArtifactRuntimeDistribution = ({
     ...(bundledBinDir === undefined
       ? {}
       : { bundledBinDir: assertNonEmpty(bundledBinDir, "bundledBinDir") }),
-  };
+  } as ArtifactRuntimeDistribution;
 };

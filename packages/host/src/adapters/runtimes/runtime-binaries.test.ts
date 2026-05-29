@@ -44,9 +44,18 @@ const writeExecutable = async (path: string): Promise<void> => {
   await writeFile(path, "");
   await chmod(path, 0o755);
 };
+const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 const testRuntimeDistribution = createSourceRuntimeDistribution("/test/openducktor");
 
 describe("isExecutableFile", () => {
+  test("rejects missing paths", async () => {
+    await withTempDir(async (root) => {
+      await expect(
+        Effect.runPromise(isExecutableFile(join(root, "missing"), "linux")),
+      ).resolves.toBe(false);
+    });
+  });
+
   test("rejects executable directories on POSIX platforms", async () => {
     await withTempDir(async (root) => {
       const directory = join(root, "bin");
@@ -54,6 +63,26 @@ describe("isExecutableFile", () => {
       await chmod(directory, 0o755);
 
       await expect(Effect.runPromise(isExecutableFile(directory, "linux"))).resolves.toBe(false);
+    });
+  });
+
+  testIfUnixModeIsAvailable("rejects non-executable regular files on POSIX platforms", async () => {
+    await withTempDir(async (root) => {
+      const binary = join(root, "openducktor");
+      await writeFile(binary, "");
+      await chmod(binary, 0o644);
+
+      await expect(Effect.runPromise(isExecutableFile(binary, "linux"))).resolves.toBe(false);
+    });
+  });
+
+  test("accepts regular files on Windows without POSIX execute bits", async () => {
+    await withTempDir(async (root) => {
+      const binary = join(root, "openducktor.exe");
+      await writeFile(binary, "");
+      await chmod(binary, 0o644);
+
+      await expect(Effect.runPromise(isExecutableFile(binary, "win32"))).resolves.toBe(true);
     });
   });
 });

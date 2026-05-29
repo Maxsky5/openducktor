@@ -50,12 +50,21 @@ export const createCodexAppServerTransport = (
   let stderrOutput = "";
   let stdoutClosed = false;
   let stderrClosed = false;
+  let unexpectedStdoutCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
   const clearCancelledSentRequests = (): void => {
     for (const timeout of cancelledSentRequests.values()) {
       clearTimeout(timeout);
     }
     cancelledSentRequests.clear();
+  };
+
+  const clearUnexpectedStdoutCloseTimer = (): void => {
+    if (unexpectedStdoutCloseTimer === null) {
+      return;
+    }
+    clearTimeout(unexpectedStdoutCloseTimer);
+    unexpectedStdoutCloseTimer = null;
   };
 
   const failFast = (error: Error): void => {
@@ -331,9 +340,12 @@ export const createCodexAppServerTransport = (
   });
   lines.on("close", () => {
     stdoutClosed = true;
-    if (!closed) {
-      failFast(processClosedError("stdout closed unexpectedly"));
-    }
+    unexpectedStdoutCloseTimer = setTimeout(() => {
+      unexpectedStdoutCloseTimer = null;
+      if (!closed && !fatalError) {
+        failFast(processClosedError("stdout closed unexpectedly"));
+      }
+    }, 25);
   });
   const stderrLines = createInterface({ input: child.stderr });
   stderrLines.on("line", (line) => {
@@ -347,6 +359,7 @@ export const createCodexAppServerTransport = (
   child.stderr.on("error", (error) => failFast(error));
   child.once("error", (error) => failFast(error));
   child.once("close", (exitCode, signal) => {
+    clearUnexpectedStdoutCloseTimer();
     if (!closed) {
       const detail =
         signal === null
@@ -430,6 +443,7 @@ export const createCodexAppServerTransport = (
     },
     close() {
       return Effect.sync(() => {
+        clearUnexpectedStdoutCloseTimer();
         closed = true;
         if (!stdoutClosed) {
           lines.close();

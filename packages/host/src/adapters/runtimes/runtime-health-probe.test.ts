@@ -32,6 +32,32 @@ describe("createRuntimeHealthProbe", () => {
     expect(health.error).toContain("Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.");
   });
 
+  test("reports unhealthy OpenCode status when version probing fails", async () => {
+    const probe = createRuntimeHealthProbe(
+      {
+        ...missingSystemCommands,
+        resolveCommandPath(command) {
+          return Effect.succeed(command === "opencode" ? "/usr/local/bin/opencode" : null);
+        },
+        requiredCommandError() {
+          return Effect.succeed(null);
+        },
+      },
+      testRuntimeDistribution,
+      {},
+    );
+
+    const health = await Effect.runPromise(probe.getRuntimeHealth("opencode"));
+
+    expect(health).toEqual({
+      kind: "opencode",
+      enabled: true,
+      ok: false,
+      version: null,
+      error: "Failed reading opencode --version from /usr/local/bin/opencode",
+    });
+  });
+
   test("reports actionable missing Codex diagnostics", async () => {
     const probe = createRuntimeHealthProbe(missingSystemCommands, testRuntimeDistribution, {});
 

@@ -14,8 +14,16 @@ export type ResolveWebRuntimeDistributionInput = {
 
 export const WEB_PACKAGE_MCP_ENTRYPOINT = "openducktor-mcp.js";
 
+const currentBunExecutable = (): string => {
+  const executable = Bun.argv[0];
+  if (!executable) {
+    throw new Error("OpenDucktor web package mode requires the current Bun executable path.");
+  }
+  return executable;
+};
+
 export const resolveWebRuntimeDistribution = ({
-  bunExecutable = process.execPath,
+  bunExecutable = currentBunExecutable(),
   packageRoot,
   workspaceMode,
   workspaceRoot,

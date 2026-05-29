@@ -1,3 +1,4 @@
+import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
@@ -8,7 +9,11 @@ import {
 } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { isExecutableFile, resolveUserPath } from "../runtimes/runtime-binaries";
-import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
+import type {
+  ArtifactRuntimeDistribution,
+  HostRuntimeDistribution,
+  SourceRuntimeDistribution,
+} from "../runtimes/runtime-distribution";
 
 export type ResolveOpenDucktorMcpCommandInput = {
   systemCommands: SystemCommandPort;
@@ -39,12 +44,17 @@ const isWorkspaceRootCandidate = (path: string) =>
       (yield* isDirectory(join(path, "packages")))
     );
   });
-const resolveWorkspaceRoot = (runtimeDistribution: HostRuntimeDistribution) =>
-  Effect.gen(function* () {
-    if (runtimeDistribution.mode !== "source") {
-      return null;
-    }
+const statPath = (path: string, operation: string) =>
+  Effect.tryPromise({
+    try: () => stat(path),
+    catch: (cause) => toHostPathStatError(cause, operation, path),
+  });
 
+const nonFileDescription = (stats: Stats): string =>
+  stats.isDirectory() ? "directory" : "non-file path";
+
+const resolveWorkspaceRoot = (runtimeDistribution: SourceRuntimeDistribution) =>
+  Effect.gen(function* () {
     const workspaceRoot = resolve(resolveUserPath(runtimeDistribution.workspaceRoot));
     if (!(yield* isWorkspaceRootCandidate(workspaceRoot))) {
       return yield* Effect.fail(
@@ -61,11 +71,33 @@ const resolveWorkspaceRoot = (runtimeDistribution: HostRuntimeDistribution) =>
 const resolveExecutablePath = (path: string, field: string) =>
   Effect.gen(function* () {
     const resolvedPath = resolve(resolveUserPath(path));
+    const stats = yield* statPath(resolvedPath, "openducktorMcpCommand.statExecutable").pipe(
+      Effect.catchTag("HostPathNotFoundError", () =>
+        Effect.fail(
+          new HostValidationError({
+            field,
+            message: `Runtime artifact distribution MCP launcher points to a missing file: ${resolvedPath}`,
+            details: { resolvedPath },
+          }),
+        ),
+      ),
+    );
+    if (!stats.isFile()) {
+      return yield* Effect.fail(
+        new HostValidationError({
+          field,
+          message: `Runtime artifact distribution MCP launcher points to a ${nonFileDescription(
+            stats,
+          )}, not an executable file: ${resolvedPath}`,
+          details: { resolvedPath },
+        }),
+      );
+    }
     if (!(yield* isExecutableFile(resolvedPath))) {
       return yield* Effect.fail(
         new HostValidationError({
           field,
-          message: `Runtime artifact distribution MCP launcher points to a missing or non-executable file: ${resolvedPath}`,
+          message: `Runtime artifact distribution MCP launcher points to a non-executable file: ${resolvedPath}`,
           details: { resolvedPath },
         }),
       );
@@ -76,11 +108,24 @@ const resolveExecutablePath = (path: string, field: string) =>
 const resolveRequiredFile = (path: string, field: string) =>
   Effect.gen(function* () {
     const resolvedPath = resolve(resolveUserPath(path));
-    if (!(yield* isFile(resolvedPath))) {
+    const stats = yield* statPath(resolvedPath, "openducktorMcpCommand.statRequiredFile").pipe(
+      Effect.catchTag("HostPathNotFoundError", () =>
+        Effect.fail(
+          new HostValidationError({
+            field,
+            message: `Runtime artifact distribution MCP launcher requires a missing file: ${resolvedPath}`,
+            details: { resolvedPath },
+          }),
+        ),
+      ),
+    );
+    if (!stats.isFile()) {
       return yield* Effect.fail(
         new HostValidationError({
           field,
-          message: `Runtime artifact distribution MCP launcher requires a missing file: ${resolvedPath}`,
+          message: `Runtime artifact distribution MCP launcher requires a regular file but received a ${nonFileDescription(
+            stats,
+          )}: ${resolvedPath}`,
           details: { resolvedPath },
         }),
       );
@@ -88,12 +133,18 @@ const resolveRequiredFile = (path: string, field: string) =>
     return resolvedPath;
   });
 
-const resolveArtifactCommand = (runtimeDistribution: HostRuntimeDistribution) =>
-  Effect.gen(function* () {
-    if (runtimeDistribution.mode !== "artifact") {
-      return null;
-    }
+const unsupportedArtifactMcpLauncher = (launcher: never) =>
+  Effect.fail(
+    new HostValidationError({
+      field: "runtimeDistribution.mcpLauncher.kind",
+      message: `Unsupported runtime artifact MCP launcher kind: ${String(
+        (launcher as { kind?: unknown }).kind,
+      )}`,
+    }),
+  );
 
+const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution) =>
+  Effect.gen(function* () {
     const { mcpLauncher } = runtimeDistribution;
     switch (mcpLauncher.kind) {
       case "executable":
@@ -116,8 +167,7 @@ const resolveArtifactCommand = (runtimeDistribution: HostRuntimeDistribution) =>
       }
     }
 
-    const exhaustive: never = mcpLauncher;
-    return exhaustive;
+    return yield* unsupportedArtifactMcpLauncher(mcpLauncher);
   });
 
 export const resolveOpenDucktorMcpCommand = ({
@@ -125,21 +175,10 @@ export const resolveOpenDucktorMcpCommand = ({
   runtimeDistribution,
 }: ResolveOpenDucktorMcpCommandInput) =>
   Effect.gen(function* () {
-    const artifactCommand = yield* resolveArtifactCommand(runtimeDistribution);
-    if (artifactCommand !== null) {
-      return artifactCommand;
+    if (runtimeDistribution.mode === "artifact") {
+      return yield* resolveArtifactCommand(runtimeDistribution);
     }
     const workspaceRoot = yield* resolveWorkspaceRoot(runtimeDistribution);
-    if (!workspaceRoot) {
-      return yield* Effect.fail(
-        new HostDependencyError({
-          dependency: "openducktor-workspace-root",
-          operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
-          message:
-            "Unable to resolve an OpenDucktor workspace root for MCP execution. Provide a source runtime distribution.",
-        }),
-      );
-    }
     const entrypoint = join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts");
     if (!(yield* isFile(entrypoint))) {
       return yield* Effect.fail(
