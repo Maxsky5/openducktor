@@ -1,9 +1,8 @@
 import type { TaskApprovalContextLoadResult, TaskCard } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useReducer, useRef, useState } from "react";
+import { useCallback, useReducer, useRef } from "react";
 import { toast } from "sonner";
-import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
-import { getGitConflictCopy } from "@/features/git-conflict-resolution";
+import type { GitConflict } from "@/features/agent-studio-git";
 import { errorMessage } from "@/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import {
@@ -12,28 +11,28 @@ import {
 } from "@/state/queries/task-approval";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type {
-  TaskApprovalApprovalModalModel,
-  TaskApprovalCompletionModalModel,
-  TaskApprovalMissingBuilderWorktreeModalModel,
+  KanbanPageModels,
   TaskApprovalModalModel,
+  TaskApprovalOpenOptions,
 } from "./kanban-page-model-types";
 import {
   completeDirectMergeApproval,
   submitDirectMergeApproval,
 } from "./task-approval-flow-direct-merge";
-import {
-  abortTaskApprovalGitConflict,
-  askBuilderToResolveTaskApprovalGitConflict,
-} from "./task-approval-flow-git-conflict";
 import { submitPullRequestApproval } from "./task-approval-flow-pull-request";
 import {
   CLOSED_TASK_APPROVAL_STATE,
-  determineDefaultTaskApprovalMode,
   isTaskApprovalInteractive,
   isTaskApprovalOpen,
   isTaskApprovalReady,
   taskApprovalFlowReducer,
 } from "./task-approval-flow-state";
+import { buildTaskApprovalModalModel } from "./task-approval-modal-model";
+import {
+  resolveTaskApprovalOpenMode,
+  resolveTaskApprovalSubmissionRoute,
+} from "./task-approval-transition-resolver";
+import { useTaskApprovalGitConflictFlow } from "./use-task-approval-git-conflict-flow";
 
 type UseTaskApprovalFlowArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -45,18 +44,10 @@ type UseTaskApprovalFlowArgs = {
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
 };
 
-const INITIAL_GIT_CONFLICT_STATE: {
-  open: boolean;
-  taskId: string | null;
-  conflict: GitConflict | null;
-  isHandlingConflict: boolean;
-  conflictAction: GitConflictAction;
-} = {
-  open: false,
-  taskId: null,
-  conflict: null,
-  isHandlingConflict: false,
-  conflictAction: null,
+type UseTaskApprovalFlowResult = {
+  taskApprovalModal: TaskApprovalModalModel | null;
+  taskGitConflictDialog: KanbanPageModels["taskGitConflictDialog"];
+  openTaskApproval: (taskId: string, options?: TaskApprovalOpenOptions) => void;
 };
 
 export function useTaskApprovalFlow({
@@ -71,30 +62,10 @@ export function useTaskApprovalFlow({
       "onResolveGitConflict handler is required to use the Ask Builder conflict-resolution path.",
     );
   },
-}: UseTaskApprovalFlowArgs): {
-  taskApprovalModal: TaskApprovalModalModel | null;
-  taskGitConflictDialog: {
-    open: boolean;
-    conflict: GitConflict | null;
-    isHandlingConflict: boolean;
-    conflictAction: GitConflictAction;
-    onOpenChange: (open: boolean) => void;
-    onAbort: () => void;
-    onAskBuilder: () => void;
-  } | null;
-  openTaskApproval: (
-    taskId: string,
-    options?: {
-      mode?: "direct_merge" | "pull_request";
-      pullRequestDraftMode?: "manual" | "generate_ai";
-      errorMessage?: string | null;
-    },
-  ) => void;
-} {
+}: UseTaskApprovalFlowArgs): UseTaskApprovalFlowResult {
   const queryClient = useQueryClient();
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [state, dispatch] = useReducer(taskApprovalFlowReducer, CLOSED_TASK_APPROVAL_STATE);
-  const [gitConflictState, setGitConflictState] = useState(INITIAL_GIT_CONFLICT_STATE);
   const approvalRequestVersionRef = useRef(0);
 
   const reset = useCallback(() => {
@@ -102,19 +73,8 @@ export function useTaskApprovalFlow({
     dispatch({ type: "close" });
   }, []);
 
-  const closeGitConflict = useCallback(() => {
-    setGitConflictState(INITIAL_GIT_CONFLICT_STATE);
-  }, []);
-
   const openTaskApproval = useCallback(
-    (
-      taskId: string,
-      options?: {
-        mode?: "direct_merge" | "pull_request";
-        pullRequestDraftMode?: "manual" | "generate_ai";
-        errorMessage?: string | null;
-      },
-    ): void => {
+    (taskId: string, options?: TaskApprovalOpenOptions): void => {
       if (!workspaceRepoPath) {
         return;
       }
@@ -127,11 +87,14 @@ export function useTaskApprovalFlow({
       ) as TaskApprovalContextLoadResult | undefined;
       const cachedApprovalContext =
         cachedContext?.outcome === "ready" ? cachedContext.approvalContext : undefined;
-      const effectiveMode =
-        options?.mode ?? determineDefaultTaskApprovalMode(cachedApprovalContext);
+      const effectiveMode = resolveTaskApprovalOpenMode({
+        cachedContext: cachedApprovalContext,
+        requestedMode: options?.mode,
+        task,
+      });
       const title = task?.title ?? "";
       const body = task?.description ?? "";
-      const pullRequestDraftMode = options?.pullRequestDraftMode ?? "manual";
+      const pullRequestDraftMode = options?.pullRequestDraftMode ?? "generate_ai";
       const openErrorMessage = options?.errorMessage ?? null;
 
       dispatch({
@@ -168,8 +131,11 @@ export function useTaskApprovalFlow({
           }
 
           const approvalContext = approvalContextResult.approvalContext;
-          const updatedEffectiveMode =
-            options?.mode ?? determineDefaultTaskApprovalMode(approvalContext);
+          const updatedEffectiveMode = resolveTaskApprovalOpenMode({
+            cachedContext: approvalContext,
+            requestedMode: options?.mode,
+            task,
+          });
           dispatch({
             type: "load_succeeded",
             taskId,
@@ -193,14 +159,21 @@ export function useTaskApprovalFlow({
     },
     [workspaceRepoPath, queryClient, reset, tasks],
   );
+  const { taskGitConflictDialog, openGitConflictDialog } = useTaskApprovalGitConflictFlow({
+    onResolveGitConflict,
+    openTaskApproval,
+    reset,
+    workspaceRepoPath,
+  });
 
   const confirm = useCallback((): void => {
-    if (!isTaskApprovalInteractive(state)) {
+    const submissionRoute = resolveTaskApprovalSubmissionRoute(state, workspaceRepoPath);
+    if (submissionRoute.kind === "ignore") {
       return;
     }
-    const approvalState = state;
 
-    if (approvalState.stage === "missing_builder_worktree") {
+    if (submissionRoute.kind === "complete_missing_builder_worktree") {
+      const approvalState = submissionRoute.approval;
       void (async () => {
         dispatch({ type: "clear_error" });
         dispatch({ type: "start_submitting" });
@@ -218,29 +191,21 @@ export function useTaskApprovalFlow({
       return;
     }
 
-    if (!workspaceRepoPath || !isTaskApprovalReady(approvalState)) {
-      return;
-    }
-
+    const approvalState = submissionRoute.approval;
+    const repoPath = submissionRoute.repoPath;
     void (async () => {
       dispatch({ type: "start_submitting" });
       try {
-        if (approvalState.mode === "direct_merge") {
+        if (submissionRoute.kind === "submit_direct_merge") {
           const directMergeResult = await submitDirectMergeApproval({
             approval: approvalState,
             queryClient,
-            repoPath: workspaceRepoPath,
+            repoPath,
             refreshTasks,
           });
           if (directMergeResult.outcome === "conflicts") {
             reset();
-            setGitConflictState({
-              open: true,
-              taskId: approvalState.taskId,
-              conflict: directMergeResult.conflict,
-              isHandlingConflict: false,
-              conflictAction: null,
-            });
+            openGitConflictDialog(approvalState.taskId, directMergeResult.conflict);
             return;
           }
 
@@ -261,7 +226,7 @@ export function useTaskApprovalFlow({
 
         const pullRequestResult = await submitPullRequestApproval({
           approval: approvalState,
-          repoPath: workspaceRepoPath,
+          repoPath,
           requestPullRequestGeneration,
           refreshTasks,
         });
@@ -300,6 +265,7 @@ export function useTaskApprovalFlow({
     workspaceRepoPath,
     humanApproveTask,
     queryClient,
+    openGitConflictDialog,
     refreshTasks,
     requestPullRequestGeneration,
     reset,
@@ -315,89 +281,6 @@ export function useTaskApprovalFlow({
       reset();
     }
   }, [openResetImplementation, reset, state]);
-
-  const abortGitConflict = useCallback((): void => {
-    if (!workspaceRepoPath || !gitConflictState.conflict || gitConflictState.isHandlingConflict) {
-      return;
-    }
-
-    const conflict = gitConflictState.conflict;
-    const taskId = gitConflictState.taskId;
-    void (async () => {
-      setGitConflictState((current) => ({
-        ...current,
-        isHandlingConflict: true,
-        conflictAction: "abort",
-      }));
-      try {
-        await abortTaskApprovalGitConflict(workspaceRepoPath, conflict);
-        toast.success(getGitConflictCopy(conflict.operation).abortedToastTitle);
-        closeGitConflict();
-        if (taskId) {
-          openTaskApproval(taskId, {
-            mode: "direct_merge",
-          });
-        }
-      } catch (error) {
-        const description = errorMessage(error);
-        toast.error(getGitConflictCopy(conflict.operation).abortFailureTitle, {
-          description,
-        });
-        setGitConflictState((current) => ({
-          ...current,
-          isHandlingConflict: false,
-          conflictAction: null,
-        }));
-      }
-    })();
-  }, [workspaceRepoPath, closeGitConflict, gitConflictState, openTaskApproval]);
-
-  const askBuilderToResolveGitConflict = useCallback((): void => {
-    if (
-      !gitConflictState.conflict ||
-      !gitConflictState.taskId ||
-      gitConflictState.isHandlingConflict
-    ) {
-      return;
-    }
-
-    const conflict = gitConflictState.conflict;
-    const taskId = gitConflictState.taskId;
-    void (async () => {
-      setGitConflictState((current) => ({
-        ...current,
-        isHandlingConflict: true,
-        conflictAction: "ask_builder",
-      }));
-      try {
-        const wasHandled = await askBuilderToResolveTaskApprovalGitConflict(
-          conflict,
-          taskId,
-          onResolveGitConflict,
-        );
-        if (!wasHandled) {
-          setGitConflictState((current) => ({
-            ...current,
-            isHandlingConflict: false,
-            conflictAction: null,
-          }));
-          return;
-        }
-        closeGitConflict();
-        reset();
-      } catch (error) {
-        const description = errorMessage(error);
-        toast.error("Failed to contact Builder", {
-          description,
-        });
-        setGitConflictState((current) => ({
-          ...current,
-          isHandlingConflict: false,
-          conflictAction: null,
-        }));
-      }
-    })();
-  }, [closeGitConflict, gitConflictState, onResolveGitConflict, reset]);
 
   const completeDirectMerge = useCallback((): void => {
     if (!workspaceRepoPath || !isTaskApprovalReady(state)) {
@@ -428,22 +311,6 @@ export function useTaskApprovalFlow({
     })();
   }, [workspaceRepoPath, refreshTasks, reset, state]);
 
-  const taskGitConflictDialog = gitConflictState.conflict
-    ? {
-        open: gitConflictState.open,
-        conflict: gitConflictState.conflict,
-        isHandlingConflict: gitConflictState.isHandlingConflict,
-        conflictAction: gitConflictState.conflictAction,
-        onOpenChange: (open: boolean) => {
-          if (!open && !gitConflictState.isHandlingConflict) {
-            closeGitConflict();
-          }
-        },
-        onAbort: abortGitConflict,
-        onAskBuilder: askBuilderToResolveGitConflict,
-      }
-    : null;
-
   if (!isTaskApprovalOpen(state)) {
     return {
       taskApprovalModal: null,
@@ -452,67 +319,14 @@ export function useTaskApprovalFlow({
     };
   }
 
-  const approvalContext = state.approvalContext;
-  const githubProvider = approvalContext?.providers.find((entry) => entry.providerId === "github");
-  const baseModal = {
-    open: true,
-    taskId: state.taskId,
-    isSubmitting: state.phase === "submitting",
-    errorMessage: state.errorMessage,
-    onOpenChange: (open: boolean) => {
-      if (!open) {
-        reset();
-      }
-    },
-  };
-
-  let taskApprovalModal: TaskApprovalModalModel;
-  if (state.stage === "missing_builder_worktree") {
-    taskApprovalModal = {
-      ...baseModal,
-      stage: "missing_builder_worktree",
-      onCompleteMissingBuilderWorktree: confirm,
-      onResetMissingBuilderWorktree: resetMissingBuilderWorktree,
-    } satisfies TaskApprovalMissingBuilderWorktreeModalModel;
-  } else if (state.stage === "complete_direct_merge") {
-    taskApprovalModal = {
-      ...baseModal,
-      stage: "complete_direct_merge",
-      targetBranch: approvalContext?.targetBranch ?? null,
-      publishTarget: approvalContext?.publishTarget ?? null,
-      onSkipDirectMergeCompletion: reset,
-      onCompleteDirectMerge: completeDirectMerge,
-    } satisfies TaskApprovalCompletionModalModel;
-  } else {
-    taskApprovalModal = {
-      ...baseModal,
-      stage: "approval",
-      isLoading: state.phase === "loading",
-      mode: state.mode,
-      mergeMethod: state.mergeMethod,
-      pullRequestDraftMode: state.pullRequestDraftMode,
-      pullRequestAvailable: githubProvider?.available ?? false,
-      pullRequestUnavailableReason: githubProvider?.reason ?? null,
-      hasUncommittedChanges: approvalContext?.hasUncommittedChanges ?? false,
-      uncommittedFileCount: approvalContext?.uncommittedFileCount ?? 0,
-      pullRequestUrl: approvalContext?.pullRequest?.url ?? null,
-      title: state.title,
-      body: state.body,
-      squashCommitMessage: state.squashCommitMessage,
-      squashCommitMessageTouched: state.squashCommitMessageTouched,
-      hasSuggestedSquashCommitMessage: approvalContext?.suggestedSquashCommitMessage != null,
-      targetBranch: approvalContext?.targetBranch ?? null,
-      onModeChange: (mode) => dispatch({ type: "set_mode", mode }),
-      onMergeMethodChange: (mergeMethod) => dispatch({ type: "set_merge_method", mergeMethod }),
-      onPullRequestDraftModeChange: (pullRequestDraftMode) =>
-        dispatch({ type: "set_pull_request_draft_mode", pullRequestDraftMode }),
-      onTitleChange: (title) => dispatch({ type: "set_title", title }),
-      onBodyChange: (body) => dispatch({ type: "set_body", body }),
-      onSquashCommitMessageChange: (squashCommitMessage) =>
-        dispatch({ type: "set_squash_commit_message", squashCommitMessage }),
-      onConfirm: confirm,
-    } satisfies TaskApprovalApprovalModalModel;
-  }
+  const taskApprovalModal = buildTaskApprovalModalModel({
+    completeDirectMerge,
+    confirm,
+    dispatch,
+    reset,
+    resetMissingBuilderWorktree,
+    state,
+  });
 
   return {
     taskApprovalModal,

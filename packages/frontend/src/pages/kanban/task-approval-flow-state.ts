@@ -43,7 +43,7 @@ type TaskApprovalFlowOpenPayload = {
   errorMessage: string | null;
 };
 
-type TaskApprovalFlowAction =
+export type TaskApprovalFlowAction =
   | ({ type: "open_loading" } & TaskApprovalFlowOpenPayload)
   | ({
       type: "load_succeeded";

@@ -454,6 +454,7 @@ describe("useTaskApprovalFlow", () => {
 
     expect(expectApprovalModal().isLoading).toBe(false);
     expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestDraftMode).toBe("generate_ai");
     expect(expectApprovalModal().pullRequestAvailable).toBe(true);
 
     await act(async () => {
@@ -1322,7 +1323,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskGitConflictDialog?.isHandlingConflict).toBe(false);
     expect(latestHarnessValue?.taskGitConflictDialog?.conflictAction).toBeNull();
     expect(toastErrorMock).toHaveBeenCalledWith(
-      "Failed to contact Builder",
+      "Failed to contact Builder for git conflict resolution.",
       expect.objectContaining({ description: "Builder unavailable" }),
     );
 
@@ -1375,6 +1376,14 @@ describe("useTaskApprovalFlow", () => {
       await Promise.resolve();
     });
     await waitForTaskApprovalModalLoaded();
+
+    await act(async () => {
+      expectApprovalModal().onPullRequestDraftModeChange("manual");
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(expectApprovalModal().pullRequestDraftMode).toBe("manual");
+    });
 
     await act(async () => {
       expectApprovalModal().onConfirm();
@@ -1443,11 +1452,8 @@ describe("useTaskApprovalFlow", () => {
     });
     await waitForTaskApprovalModalLoaded();
 
-    await act(async () => {
-      expectApprovalModal().onModeChange("pull_request");
-      expectApprovalModal().onPullRequestDraftModeChange("generate_ai");
-      await Promise.resolve();
-    });
+    expect(expectApprovalModal().mode).toBe("pull_request");
+    expect(expectApprovalModal().pullRequestDraftMode).toBe("generate_ai");
 
     await act(async () => {
       expectApprovalModal().onConfirm();
