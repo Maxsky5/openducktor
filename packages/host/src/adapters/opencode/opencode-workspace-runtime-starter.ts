@@ -14,7 +14,8 @@ import type {
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -23,6 +24,7 @@ import {
   waitForChildProcessClose,
 } from "../process/process-tree";
 import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
+import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { canConnect, pickFreePort } from "./opencode-local-port";
 
@@ -45,6 +47,7 @@ type LocalPortProbe = (
 
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
+  runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
   mcpCommand?: string[];
@@ -69,10 +72,7 @@ const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
 
 type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
-const resolveConfiguredMcpCommand = (
-  env: NodeJS.ProcessEnv,
-  configuredCommand?: string[],
-): string[] | null => {
+const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
@@ -84,23 +84,7 @@ const resolveConfiguredMcpCommand = (
     return command;
   }
 
-  const rawCommand = env.OPENDUCKTOR_MCP_COMMAND_JSON;
-  if (rawCommand !== undefined) {
-    return parseMcpCommandJson(rawCommand);
-  }
-
   return null;
-};
-
-const requireBridgeValue = (value: string, label: keyof OpenCodeMcpBridgeConnection): string => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new HostValidationError({
-      message: `OpenCode MCP bridge ${label} is required.`,
-      field: label,
-    });
-  }
-  return trimmed;
 };
 
 export const buildOpenCodeConfigContent = (
@@ -114,12 +98,7 @@ export const buildOpenCodeConfigContent = (
         type: "local",
         enabled: true,
         command: mcpCommand,
-        environment: {
-          ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId"),
-          ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl"),
-          ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken"),
-          ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-        },
+        environment: buildOpenDucktorMcpBridgeEnvironment(bridge, "OpenCode"),
       },
     },
   });
@@ -150,6 +129,7 @@ const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
 export const createOpenCodeWorkspaceRuntimeStarter = ({
   systemCommands,
   resolveMcpBridgeConnection,
+  runtimeDistribution,
   processEnv = process.env,
   mcpCommand,
   opencodeBinary,
@@ -203,7 +183,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
         ),
       );
       const configuredMcpCommand = yield* Effect.try({
-        try: () => resolveConfiguredMcpCommand(processEnv, mcpCommand),
+        try: () => resolveConfiguredMcpCommand(mcpCommand),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -213,7 +193,10 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       });
       const resolvedMcpCommand =
         configuredMcpCommand ??
-        (yield* resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
+        (yield* resolveOpenDucktorMcpCommand({
+          systemCommands,
+          runtimeDistribution,
+        }));
       const configContent = yield* Effect.try({
         try: () => buildOpenCodeConfigContent(bridge, resolvedMcpCommand),
         catch: (cause) =>
@@ -296,14 +279,20 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           stopTimeoutMs,
         }).pipe(Effect.mapError((cause) => toHostOperationError(cause, operation)));
       let released = false;
-      const closeRuntime = Effect.gen(function* () {
-        if (released) {
-          return;
-        }
-        released = true;
-        yield* stopRuntimeProcess("opencodeWorkspaceRuntime.stop");
-      });
-      yield* Scope.addFinalizer(runtimeScope, closeRuntime.pipe(Effect.ignore));
+      const closeRuntime = (operation = "opencodeWorkspaceRuntime.stop") =>
+        Effect.gen(function* () {
+          if (released) {
+            return;
+          }
+          released = true;
+          yield* stopRuntimeProcess(operation);
+        });
+      yield* Scope.addFinalizer(runtimeScope, closeRuntime().pipe(Effect.ignore));
+
+      const closeRuntimeAfterStartupTimeout = closeRuntime(
+        "opencodeWorkspaceRuntime.stopTimedOutProcess",
+      );
+      const stopRuntime = closeRuntime();
 
       const startupProbeDriver = yield* Schedule.driver(
         startupProbeSchedule(startupTimeoutMs, retryDelayMs),
@@ -367,7 +356,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           return {
             runtime,
             stop() {
-              return closeRuntime.pipe(
+              return stopRuntime.pipe(
                 Effect.zipRight(
                   Scope.close(runtimeScope, Exit.succeed(undefined)).pipe(Effect.ignore),
                 ),
@@ -386,13 +375,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       }
 
       const timeoutMessage = `Timed out waiting for OpenCode runtime on 127.0.0.1:${port}.`;
-      const cleanupExit = yield* Effect.either(
-        closeRuntime.pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(cause, "opencodeWorkspaceRuntime.stopTimedOutProcess"),
-          ),
-        ),
-      );
+      const cleanupExit = yield* Effect.either(closeRuntimeAfterStartupTimeout);
       if (cleanupExit._tag === "Left") {
         return yield* Effect.fail(
           new HostOperationError({

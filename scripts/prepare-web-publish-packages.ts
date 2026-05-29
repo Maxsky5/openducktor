@@ -7,11 +7,18 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
 };
 
-const expectedPackageFiles = ["dist/cli.js", "dist/web-shell/index.html"] as const;
+const expectedPackageFiles = [
+  "dist/cli.js",
+  "dist/openducktor-mcp.js",
+  "dist/web-shell/index.html",
+] as const;
 
 const version = process.argv[2]?.trim();
 
-if (!version || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$/.test(version)) {
+if (
+  !version ||
+  !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$/.test(version)
+) {
   throw new Error("Usage: bun run scripts/prepare-web-publish-packages.ts <semver-version>");
 }
 
@@ -24,10 +31,14 @@ if (manifest.name !== "@openducktor/web") {
   throw new Error(`Expected ${manifestPath} to describe @openducktor/web.`);
 }
 if (manifest.version !== version) {
-  throw new Error(`@openducktor/web version ${manifest.version} does not match release version ${version}.`);
+  throw new Error(
+    `@openducktor/web version ${manifest.version} does not match release version ${version}.`,
+  );
 }
 if (manifest.dependencies && Object.keys(manifest.dependencies).length > 0) {
-  throw new Error("@openducktor/web must be self-contained at runtime and publish without dependencies.");
+  throw new Error(
+    "@openducktor/web must be self-contained at runtime and publish without dependencies.",
+  );
 }
 
 const assertFile = (filePath: string): void => {

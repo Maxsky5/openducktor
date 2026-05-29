@@ -28,7 +28,7 @@ import {
   resolveElectronLoopbackCorsOrigin,
 } from "./electron-loopback-cors-policy";
 import { electronMainLogger } from "./electron-main-logger";
-import { configureElectronProcessEnvironment } from "./electron-process-environment";
+import { resolveElectronRuntimeDistribution } from "./electron-runtime-distribution";
 import { disableElectronKeychainStorage } from "./electron-storage-policy";
 import { installApplicationMenu, registerWindowContextMenu } from "./main-menu";
 
@@ -39,14 +39,15 @@ const ELECTRON_RENDERER_START_PATH = "/kanban";
 const rendererDevUrl = process.env.VITE_DEV_SERVER_URL;
 const isDevelopment = Boolean(rendererDevUrl);
 const distDirectory = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.resolve(distDirectory, "../../..");
 
 configureElectronAppIdentity(app, { appName: APPLICATION_NAME });
 disableElectronKeychainStorage(app.commandLine);
-configureElectronProcessEnvironment({
-  env: process.env,
+const runtimeDistribution = resolveElectronRuntimeDistribution({
   platform: process.platform,
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
+  workspaceRoot,
 });
 
 const hostEventBus = createHostEventBus();
@@ -54,6 +55,7 @@ const hostCommandRouter = createElectronHostCommandRouter({
   clientVersion: app.getVersion(),
   eventBus: hostEventBus,
   lifecycleLogger: electronMainLogger,
+  runtimeDistribution,
 });
 let hostShutdownStarted = false;
 let hostShutdownComplete = false;

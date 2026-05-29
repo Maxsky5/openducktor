@@ -1,11 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
-import {
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  type RuntimeInstanceSummary,
-  runtimeInstanceSummarySchema,
-} from "@openducktor/contracts";
+import { type RuntimeInstanceSummary, runtimeInstanceSummarySchema } from "@openducktor/contracts";
 import { Effect, Exit, Scope } from "effect";
 import {
   HostOperationError,
@@ -15,7 +11,11 @@ import {
 } from "../../effect/host-errors";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import { parseMcpCommandJson, resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import {
+  buildOpenDucktorMcpBridgeEnvironment,
+  OPENDUCKTOR_MCP_ENV_VAR_NAMES,
+} from "../mcp/openducktor-mcp-environment";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -24,6 +24,7 @@ import {
   waitForChildProcessClose,
 } from "../process/process-tree";
 import { resolveCodexBinary } from "../runtimes/runtime-binaries";
+import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
@@ -45,6 +46,7 @@ export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
 export type CreateCodexWorkspaceRuntimeStarterInput = {
   systemCommands: SystemCommandPort;
   codexAppServer: CodexAppServerTransportRegistry;
+  runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
   mcpCommand?: string[];
@@ -59,21 +61,10 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   processTreeTerminator?: ProcessTreeTerminator;
 };
 
-const CODEX_MCP_ENV_VARS = [
-  "ODT_WORKSPACE_ID",
-  "ODT_HOST_URL",
-  "ODT_HOST_TOKEN",
-  "ODT_FORBID_WORKSPACE_ID_INPUT",
-  "ODT_ALLOWED_TOOLS",
-];
-
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const resolveConfiguredMcpCommand = (
-  env: NodeJS.ProcessEnv,
-  configuredCommand?: string[],
-): string[] | null => {
+const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
   if (configuredCommand) {
     const command = configuredCommand.map((entry) => entry.trim());
     if (command.length === 0 || command.some((entry) => entry.length === 0)) {
@@ -85,17 +76,12 @@ const resolveConfiguredMcpCommand = (
     return command;
   }
 
-  const rawCommand = env.OPENDUCKTOR_MCP_COMMAND_JSON;
-  if (rawCommand !== undefined) {
-    return parseMcpCommandJson(rawCommand);
-  }
-
   return null;
 };
 
 const tomlString = (value: string): string => JSON.stringify(value);
 
-const tomlStringArray = (values: string[]): string =>
+const tomlStringArray = (values: readonly string[]): string =>
   `[${values.map((value) => tomlString(value)).join(", ")}]`;
 
 export const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
@@ -110,20 +96,9 @@ export const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
   return [
     `mcp_servers.openducktor.command=${tomlString(mcpBinary)}`,
     `mcp_servers.openducktor.args=${tomlStringArray(mcpArgs)}`,
-    `mcp_servers.openducktor.env_vars=${tomlStringArray(CODEX_MCP_ENV_VARS)}`,
+    `mcp_servers.openducktor.env_vars=${tomlStringArray(OPENDUCKTOR_MCP_ENV_VAR_NAMES)}`,
     "mcp_servers.openducktor.enabled=true",
   ].flatMap((config) => ["--config", config]);
-};
-
-const requireBridgeValue = (value: string, label: keyof CodexMcpBridgeConnection): string => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new HostValidationError({
-      message: `Codex MCP bridge ${label} is required.`,
-      field: label,
-    });
-  }
-  return trimmed;
 };
 
 const cleanupCodexRuntime = ({
@@ -183,6 +158,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
   systemCommands,
   codexAppServer,
   resolveMcpBridgeConnection,
+  runtimeDistribution,
   processEnv = process.env,
   mcpCommand,
   codexBinary,
@@ -223,7 +199,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
         ),
       );
       const configuredMcpCommand = yield* Effect.try({
-        try: () => resolveConfiguredMcpCommand(processEnv, mcpCommand),
+        try: () => resolveConfiguredMcpCommand(mcpCommand),
         catch: (cause) =>
           new HostValidationError({
             message: cause instanceof Error ? cause.message : String(cause),
@@ -233,8 +209,15 @@ export const createCodexWorkspaceRuntimeStarter = ({
       });
       const resolvedMcpCommand =
         configuredMcpCommand ??
-        (yield* resolveOpenDucktorMcpCommand({ systemCommands, env: processEnv }));
-      const binary = codexBinary ?? (yield* resolveCodexBinary(systemCommands, processEnv));
+        (yield* resolveOpenDucktorMcpCommand({
+          systemCommands,
+          runtimeDistribution,
+        }));
+      const binary =
+        codexBinary ??
+        (yield* resolveCodexBinary(systemCommands, processEnv, {
+          runtimeDistribution,
+        }));
       const command = yield* Effect.try({
         try: () =>
           createSystemCommandLaunch(
@@ -260,11 +243,7 @@ export const createCodexWorkspaceRuntimeStarter = ({
             detached: shouldStartDetachedProcessGroup(platform),
             env: {
               ...processEnv,
-              ODT_WORKSPACE_ID: requireBridgeValue(bridge.workspaceId, "workspaceId"),
-              ODT_HOST_URL: requireBridgeValue(bridge.hostUrl, "hostUrl"),
-              ODT_HOST_TOKEN: requireBridgeValue(bridge.hostToken, "hostToken"),
-              ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-              ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
+              ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),
             },
             stdio: ["pipe", "pipe", "pipe"],
             windowsVerbatimArguments: command.windowsVerbatimArguments === true,

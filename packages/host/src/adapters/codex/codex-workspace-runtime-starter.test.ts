@@ -8,6 +8,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
@@ -15,9 +16,23 @@ import {
   createCodexWorkspaceRuntimeStarter as createEffectCodexWorkspaceRuntimeStarter,
 } from "./codex-workspace-runtime-starter";
 
+type CodexWorkspaceRuntimeStarterInput = Parameters<
+  typeof createEffectCodexWorkspaceRuntimeStarter
+>[0];
+const testRuntimeDistribution = createArtifactRuntimeDistribution({
+  mcpLauncher: {
+    kind: "executable",
+    executablePath: process.execPath,
+  },
+});
 const createCodexWorkspaceRuntimeStarter = (
-  ...args: Parameters<typeof createEffectCodexWorkspaceRuntimeStarter>
-) => createEffectCodexWorkspaceRuntimeStarter(...args);
+  input: Omit<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
+    Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
+) =>
+  createEffectCodexWorkspaceRuntimeStarter({
+    runtimeDistribution: testRuntimeDistribution,
+    ...input,
+  });
 const createCodexAppServerTransportRegistry = (
   ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
 ) => createEffectCodexAppServerTransportRegistry(...args);
@@ -40,7 +55,12 @@ const createFakeCodex = async (
   {
     childPidPath,
     emitStreamEvents = false,
-  }: { childPidPath?: string; emitStreamEvents?: boolean } = {},
+    exitBeforeInitialize,
+  }: {
+    childPidPath?: string;
+    emitStreamEvents?: boolean;
+    exitBeforeInitialize?: { code: number; stderr: string };
+  } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
   await writeFile(
@@ -52,6 +72,7 @@ import { writeFileSync } from "node:fs";
 const capturePath = process.env.CODEX_CAPTURE_PATH;
 const childPidPath = ${JSON.stringify(childPidPath ?? null)};
 const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
+const exitBeforeInitialize = ${JSON.stringify(exitBeforeInitialize ?? null)};
 const capture = {
   args: process.argv.slice(2),
   env: {
@@ -70,6 +91,10 @@ if (capturePath) {
 if (!process.argv.includes("app-server")) {
   console.error("expected app-server command");
   process.exit(2);
+}
+if (exitBeforeInitialize) {
+  console.error(exitBeforeInitialize.stderr);
+  process.exit(exitBeforeInitialize.code);
 }
 if (childPidPath) {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
@@ -335,6 +360,47 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       if (childPid !== null && processIsAlive(childPid)) {
         process.kill(childPid, "SIGKILL");
       }
+      await removeTestDirectory(root);
+    }
+  });
+
+  test("reports Codex process exit details during startup initialization", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-codex-startup-exit-"));
+    try {
+      const repo = join(root, "repo");
+      await mkdir(repo);
+      const codexBinary = await createFakeCodex(root, {
+        exitBeforeInitialize: { code: 42, stderr: "codex exploded before initialize" },
+      });
+      const codexAppServer = createCodexAppServerTransportRegistry();
+      const starter = createCodexWorkspaceRuntimeStarter({
+        systemCommands: createSystemCommands(),
+        codexAppServer,
+        codexBinary,
+        mcpCommand: ["mcp-bin", "--stdio"],
+        resolveMcpBridgeConnection: () =>
+          Effect.succeed({
+            workspaceId: "repo",
+            hostUrl: "http://127.0.0.1:14327",
+            hostToken: "token-1",
+          }),
+        requestTimeoutMs: 4_000,
+        runtimeId: () => "runtime-startup-exit",
+      });
+
+      await expect(
+        Effect.runPromise(
+          starter.startWorkspaceRuntime({
+            runtimeKind: "codex",
+            repoPath: repo,
+            workingDirectory: repo,
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+          }),
+        ),
+      ).rejects.toThrow(
+        /Codex app-server closed: process exited with code 42 for runtime runtime-startup-exit: codex exploded before initialize/s,
+      );
+    } finally {
       await removeTestDirectory(root);
     }
   });

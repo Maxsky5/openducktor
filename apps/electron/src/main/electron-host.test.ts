@@ -1,6 +1,7 @@
 import type { GlobalConfig, RepoConfig, RuntimeInstanceSummary } from "@openducktor/contracts";
 import {
   type CodexAppServerPort,
+  createArtifactRuntimeDistribution,
   createRuntimeDefinitionsService,
   createRuntimeRegistry,
   type DevServerProcessPort,
@@ -21,12 +22,21 @@ import {
 import { createElectronHostCommandRouter as createProductionElectronHostCommandRouter } from "./electron-host";
 
 type RuntimeRegistryEntry = RuntimeInstanceSummary;
+type ElectronHostCommandRouterInput = Parameters<
+  typeof createProductionElectronHostCommandRouter
+>[0];
 
-const createElectronHostCommandRouter = (
-  input: Parameters<typeof createProductionElectronHostCommandRouter>[0] = {},
-) =>
+const testRuntimeDistribution = createArtifactRuntimeDistribution({
+  mcpLauncher: {
+    kind: "executable",
+    executablePath: process.execPath,
+  },
+});
+
+const createElectronHostCommandRouter = (input: Partial<ElectronHostCommandRouterInput> = {}) =>
   createProductionElectronHostCommandRouter({
     processEnv: { PATH: "/usr/bin:/bin" },
+    runtimeDistribution: testRuntimeDistribution,
     ...input,
   });
 

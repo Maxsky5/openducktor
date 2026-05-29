@@ -2,22 +2,37 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { terminateProcessTree } from "../process/process-tree";
+import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import {
   buildOpenCodeConfigContent,
   createOpenCodeWorkspaceRuntimeStarter as createEffectOpenCodeWorkspaceRuntimeStarter,
 } from "./opencode-workspace-runtime-starter";
 
+type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
+  typeof createEffectOpenCodeWorkspaceRuntimeStarter
+>[0];
+const testRuntimeDistribution = createArtifactRuntimeDistribution({
+  mcpLauncher: {
+    kind: "executable",
+    executablePath: process.execPath,
+  },
+});
 const createOpenCodeWorkspaceRuntimeStarter = (
-  ...args: Parameters<typeof createEffectOpenCodeWorkspaceRuntimeStarter>
-) => createEffectOpenCodeWorkspaceRuntimeStarter(...args);
+  input: Omit<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
+    Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
+) =>
+  createEffectOpenCodeWorkspaceRuntimeStarter({
+    runtimeDistribution: testRuntimeDistribution,
+    ...input,
+  });
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
     return Effect.succeed(command);
@@ -162,6 +177,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
             ODT_HOST_URL: "http://127.0.0.1:14327",
             ODT_HOST_TOKEN: "token-1",
             ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+            ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
           },
         },
       },

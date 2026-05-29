@@ -82,7 +82,7 @@ export type CreateNodeHostCommandRouterInput = CreateNodeHostDefaultPortsInput &
 };
 
 export const createNodeEffectHostCommandRouter = (
-  input: CreateNodeHostCommandRouterInput = {},
+  input: CreateNodeHostCommandRouterInput,
 ): EffectHostCommandRouter => {
   const {
     clientVersion,
@@ -101,6 +101,7 @@ export const createNodeEffectHostCommandRouter = (
     localAttachments,
     openInTools,
     processEnv,
+    runtimeDistribution,
     runtimeHealth,
     settingsConfig,
     systemCommands,
@@ -144,6 +145,7 @@ export const createNodeEffectHostCommandRouter = (
           systemCommands,
           codexAppServer: effectiveCodexTransportRegistry,
           processEnv,
+          runtimeDistribution,
           ...(clientVersion ? { clientVersion } : {}),
           ...(eventBus
             ? {
@@ -176,6 +178,7 @@ export const createNodeEffectHostCommandRouter = (
       return createOpenCodeWorkspaceRuntimeStarter({
         systemCommands,
         processEnv,
+        runtimeDistribution,
         resolveMcpBridgeConnection: (runtimeInput) =>
           resolvedMcpHostBridge
             ? resolvedMcpHostBridge.ensureConnection({ repoPath: runtimeInput.repoPath }).pipe(
@@ -322,5 +325,5 @@ export const createNodeEffectHostCommandRouter = (
 };
 
 export const createNodeHostCommandRouter = (
-  input: CreateNodeHostCommandRouterInput = {},
+  input: CreateNodeHostCommandRouterInput,
 ): HostCommandRouter => toPromiseHostCommandRouter(createNodeEffectHostCommandRouter(input));
