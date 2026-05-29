@@ -2,6 +2,7 @@ import { afterEach, beforeEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import { clearAppQueryClient } from "@/lib/query-client";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -213,6 +214,7 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
     retryWorktreeResolutionMock.mockClear();
     gitGetWorktreeStatusMock.mockClear();
     gitGetWorktreeStatusSummaryMock.mockClear();
+    await clearAppQueryClient();
     gitFetchRemoteMock.mockResolvedValue({ outcome: "fetched", output: "From origin" });
     gitGetWorktreeStatusMock.mockImplementation(
       async (

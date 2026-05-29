@@ -31,6 +31,7 @@ export function useAgentStudioDevServerStateQuery({
     ...queryOptions,
     enabled: queryEnabled,
   });
+  const { data, dataUpdatedAt, error, isFetching, isPending, refetch } = stateQuery;
 
   useEffect(() => {
     setActivationState((current) => {
@@ -50,30 +51,22 @@ export function useAgentStudioDevServerStateQuery({
       return;
     }
 
-    if (stateQuery.isFetching || stateQuery.dataUpdatedAt >= activationState.since) {
+    if (isFetching || dataUpdatedAt >= activationState.since) {
       return;
     }
 
-    void stateQuery.refetch();
-  }, [
-    activationState.since,
-    queryEnabled,
-    repoPath,
-    stateQuery,
-    stateQuery.dataUpdatedAt,
-    stateQuery.isFetching,
-    taskId,
-  ]);
+    void refetch();
+  }, [activationState.since, dataUpdatedAt, isFetching, queryEnabled, refetch, repoPath, taskId]);
 
   const queryData =
-    queryEnabled && activationState.enabled === queryEnabled ? (stateQuery.data ?? null) : null;
+    queryEnabled && activationState.enabled === queryEnabled ? (data ?? null) : null;
   const currentLiveState = queryEnabled ? liveState : null;
   const effectiveState = currentLiveState ?? queryData;
   const isAwaitingFreshState =
     queryEnabled &&
     effectiveState == null &&
-    !stateQuery.error &&
-    (stateQuery.isPending || stateQuery.isFetching || stateQuery.data !== undefined);
+    !error &&
+    (isPending || isFetching || data !== undefined);
 
   return {
     effectiveState,

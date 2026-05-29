@@ -50,7 +50,7 @@ export const useAgentStudioDiffLoadData = ({
       const force = context?.force === true;
       const replayIfInFlight = context?.replayIfInFlight === true;
       const didHydrateCachedFullLoad =
-        showLoading && mode === "full" && context?.hydrateCachedFullLoad === true
+        mode === "full" && context?.hydrateCachedFullLoad === true
           ? runner.hydrateCachedFullLoad(loadContext)
           : false;
       const shouldShowLoading = showLoading && !didHydrateCachedFullLoad;

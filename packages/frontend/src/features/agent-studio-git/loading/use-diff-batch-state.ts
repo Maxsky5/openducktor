@@ -216,13 +216,6 @@ export function useAgentStudioDiffBatchState({
     [commitControllerState],
   );
 
-  const applyFullResult = useCallback(
-    (args: ApplyFullResultArgs): void => {
-      applyFullSnapshotResult(args);
-    },
-    [applyFullSnapshotResult],
-  );
-
   const applyCachedFullResult = useCallback(
     ({ clearScopeInvalidation, scope, snapshot }: ApplyCachedFullResultArgs): void => {
       applyFullSnapshotResult({
@@ -287,7 +280,7 @@ export function useAgentStudioDiffBatchState({
     state: controllerState.batchState,
     statusSnapshotKey,
     applyCachedFullResult,
-    applyFullResult,
+    applyFullResult: applyFullSnapshotResult,
     applyScopeLoadError,
     applySummaryResult,
     consumePendingFullReload,
