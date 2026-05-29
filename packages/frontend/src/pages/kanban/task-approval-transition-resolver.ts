@@ -130,6 +130,10 @@ export const resolveTaskApprovalSubmissionRoute = (
     };
   }
 
+  if (state.kind === "open" && state.stage === "complete_direct_merge") {
+    return { kind: "ignore" };
+  }
+
   if (!repoPath || !isTaskApprovalReady(state)) {
     return { kind: "ignore" };
   }

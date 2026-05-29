@@ -79,6 +79,18 @@ describe("resolveTaskApprovalWorkflowTransition", () => {
       },
     },
     {
+      name: "rejects AI review output back into the build loop",
+      command: "request_changes" as const,
+      status: "ai_review" as const,
+      availableActions: ["human_approve", "human_request_changes"] satisfies TaskAction[],
+      expected: {
+        kind: "changes_requested",
+        action: "human_request_changes",
+        fromStatus: "ai_review",
+        toStatus: "in_progress",
+      },
+    },
+    {
       name: "does not approve blocked builder work",
       command: "approve" as const,
       status: "blocked" as const,
@@ -91,6 +103,18 @@ describe("resolveTaskApprovalWorkflowTransition", () => {
       },
     },
     {
+      name: "does not request changes for blocked builder work",
+      command: "request_changes" as const,
+      status: "blocked" as const,
+      availableActions: ["open_builder", "reset_implementation"] satisfies TaskAction[],
+      expected: {
+        kind: "unavailable",
+        status: "blocked",
+        reason: "not_reviewable_status",
+        requiredAction: "human_request_changes",
+      },
+    },
+    {
       name: "does not approve resumed rework that is back in progress",
       command: "approve" as const,
       status: "in_progress" as const,
@@ -99,6 +123,18 @@ describe("resolveTaskApprovalWorkflowTransition", () => {
         kind: "unavailable",
         status: "in_progress",
         reason: "not_reviewable_status",
+        requiredAction: "human_approve",
+      },
+    },
+    {
+      name: "does not approve review tasks when the required action is unavailable",
+      command: "approve" as const,
+      status: "human_review" as const,
+      availableActions: ["human_request_changes"] satisfies TaskAction[],
+      expected: {
+        kind: "unavailable",
+        status: "human_review",
+        reason: "action_unavailable",
         requiredAction: "human_approve",
       },
     },
@@ -200,6 +236,33 @@ describe("resolveTaskApprovalOpenMode", () => {
       expected: "pull_request" as const,
     },
     {
+      name: "uses cached provider availability when approval transition is unavailable",
+      requestedMode: undefined,
+      cachedContext: approvalContext({
+        providers: [{ providerId: "github", enabled: true, available: true }],
+      }),
+      task: task({
+        status: "blocked",
+        availableActions: ["open_builder"],
+        pullRequest: {
+          providerId: "github",
+          number: 42,
+          url: "https://github.com/openai/openducktor/pull/42",
+          state: "open",
+          createdAt: "2026-05-28T12:00:00.000Z",
+          updatedAt: "2026-05-28T12:00:00.000Z",
+        },
+      }),
+      expected: "pull_request" as const,
+    },
+    {
+      name: "falls back to direct merge when task data is unavailable",
+      requestedMode: undefined,
+      cachedContext: undefined,
+      task: undefined,
+      expected: "direct_merge" as const,
+    },
+    {
       name: "falls back to direct merge without a cached GitHub provider",
       requestedMode: undefined,
       cachedContext: approvalContext(),
@@ -242,6 +305,11 @@ describe("resolveTaskApprovalSubmissionRoute", () => {
     {
       name: "ignores approval submission when approval context is missing",
       state: openState({ approvalContext: null }),
+      repoPath: "/repo",
+    },
+    {
+      name: "ignores direct merge completion state",
+      state: openState({ stage: "complete_direct_merge" }),
       repoPath: "/repo",
     },
   ])("$name", ({ repoPath, state }) => {

@@ -15,6 +15,11 @@ export type KanbanSessionStartIntent = SessionStartFlowRequest;
 
 export type TaskApprovalMode = "direct_merge" | "pull_request";
 export type PullRequestDraftMode = "manual" | "generate_ai";
+export type TaskApprovalOpenOptions = {
+  mode?: TaskApprovalMode;
+  pullRequestDraftMode?: PullRequestDraftMode;
+  errorMessage?: string | null;
+};
 
 type TaskApprovalModalBase = {
   open: boolean;

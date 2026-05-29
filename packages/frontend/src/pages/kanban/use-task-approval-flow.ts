@@ -10,7 +10,11 @@ import {
   taskApprovalQueryKeys,
 } from "@/state/queries/task-approval";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { KanbanPageModels, TaskApprovalModalModel } from "./kanban-page-model-types";
+import type {
+  KanbanPageModels,
+  TaskApprovalModalModel,
+  TaskApprovalOpenOptions,
+} from "./kanban-page-model-types";
 import {
   completeDirectMergeApproval,
   submitDirectMergeApproval,
@@ -38,12 +42,6 @@ type UseTaskApprovalFlowArgs = {
   humanApproveTask: (taskId: string) => Promise<void>;
   openResetImplementation: (taskId: string) => boolean;
   onResolveGitConflict?: (conflict: GitConflict, taskId: string) => Promise<boolean>;
-};
-
-type TaskApprovalOpenOptions = {
-  mode?: "direct_merge" | "pull_request";
-  pullRequestDraftMode?: "manual" | "generate_ai";
-  errorMessage?: string | null;
 };
 
 type UseTaskApprovalFlowResult = {

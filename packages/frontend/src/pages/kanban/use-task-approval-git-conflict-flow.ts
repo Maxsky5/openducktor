@@ -3,20 +3,13 @@ import { toast } from "sonner";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "@/features/git-conflict-resolution";
 import { errorMessage } from "@/lib/errors";
-import type { KanbanPageModels } from "./kanban-page-model-types";
+import type { KanbanPageModels, TaskApprovalOpenOptions } from "./kanban-page-model-types";
 import {
   abortTaskApprovalGitConflict,
   askBuilderToResolveTaskApprovalGitConflict,
 } from "./task-approval-flow-git-conflict";
 
-type OpenTaskApproval = (
-  taskId: string,
-  options?: {
-    mode?: "direct_merge" | "pull_request";
-    pullRequestDraftMode?: "manual" | "generate_ai";
-    errorMessage?: string | null;
-  },
-) => void;
+type OpenTaskApproval = (taskId: string, options?: TaskApprovalOpenOptions) => void;
 
 type UseTaskApprovalGitConflictFlowArgs = {
   onResolveGitConflict: (conflict: GitConflict, taskId: string) => Promise<boolean>;
