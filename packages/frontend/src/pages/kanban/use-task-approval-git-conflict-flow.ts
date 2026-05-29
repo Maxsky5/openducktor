@@ -128,7 +128,7 @@ export function useTaskApprovalGitConflictFlow({
         reset();
       } catch (error) {
         const description = errorMessage(error);
-        toast.error("Failed to contact Builder", {
+        toast.error(getGitConflictCopy(conflict.operation).builderFailureMessage, {
           description,
         });
         setGitConflictState((current) => ({

@@ -1322,7 +1322,7 @@ describe("useTaskApprovalFlow", () => {
     expect(latestHarnessValue?.taskGitConflictDialog?.isHandlingConflict).toBe(false);
     expect(latestHarnessValue?.taskGitConflictDialog?.conflictAction).toBeNull();
     expect(toastErrorMock).toHaveBeenCalledWith(
-      "Failed to contact Builder",
+      "Failed to contact Builder for git conflict resolution.",
       expect.objectContaining({ description: "Builder unavailable" }),
     );
 
