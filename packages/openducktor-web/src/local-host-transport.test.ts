@@ -61,6 +61,18 @@ const originalAuthToken = process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
 
 const loadLocalHostTransport = () => import("./local-host-transport");
 
+const waitForEventSourceInstance = async (index = 0): Promise<FakeEventSource> => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const instance = FakeEventSource.instances[index];
+    if (instance) {
+      return instance;
+    }
+    await Promise.resolve();
+  }
+
+  throw new Error(`Expected EventSource instance ${index} to be created.`);
+};
+
 beforeEach(async () => {
   FakeEventSource.reset();
   process.env.VITE_ODT_BROWSER_BACKEND_URL = "http://127.0.0.1:14327";
@@ -248,23 +260,29 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
-  test("emits connected and reconnect control payloads for dev-server event subscribers", async () => {
+  test("resolves dev-server subscriptions on initial open and emits reconnect control payloads afterward", async () => {
     const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
     ) as unknown as typeof globalThis.fetch;
     const listener = mock(() => {});
 
-    const unsubscribe = await subscribeLocalHostDevServerEvents(listener);
-
-    FakeEventSource.instances[0]?.emit("open", "");
-    FakeEventSource.instances[0]?.emit("open", "");
-
-    expect(listener).toHaveBeenNthCalledWith(1, {
-      __openducktorBrowserLive: true,
-      kind: "connected",
+    const subscription = subscribeLocalHostDevServerEvents(listener);
+    const eventSource = await waitForEventSourceInstance();
+    let didResolve = false;
+    void subscription.then(() => {
+      didResolve = true;
     });
-    expect(listener).toHaveBeenNthCalledWith(2, {
+
+    await Promise.resolve();
+    expect(didResolve).toBe(false);
+
+    eventSource.emit("open", "");
+    const unsubscribe = await subscription;
+    expect(listener).not.toHaveBeenCalled();
+
+    eventSource.emit("open", "");
+    expect(listener).toHaveBeenNthCalledWith(1, {
       __openducktorBrowserLive: true,
       kind: "reconnected",
     });

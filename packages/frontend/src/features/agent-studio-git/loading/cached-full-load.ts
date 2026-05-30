@@ -1,8 +1,19 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { getCachedWorktreeStatusFromQuery } from "@/state/queries/git";
-import type { ScopeSnapshot } from "../model/diff-data-model";
+import type { DiffScope } from "../contracts";
+import {
+  createInitialDiffBatchState,
+  type DiffBatchState,
+  type ScopeSnapshot,
+} from "../model/diff-data-model";
 import { toScopeSnapshot } from "../model/normalization";
 import type { LoadRequestContext } from "./use-diff-batch-state";
+
+type CreateCachedFullLoadVisibleStateArgs = {
+  scope: DiffScope;
+  snapshot: ScopeSnapshot | null;
+  isLoadingWhenMissing: boolean;
+};
 
 export const readCachedFullLoadSnapshot = (
   queryClient: QueryClient,
@@ -22,4 +33,31 @@ export const readCachedFullLoadSnapshot = (
   );
 
   return cachedStatus === undefined ? null : toScopeSnapshot(cachedStatus);
+};
+
+export const createVisibleDiffBatchStateFromCachedFullLoad = ({
+  isLoadingWhenMissing,
+  scope,
+  snapshot,
+}: CreateCachedFullLoadVisibleStateArgs): DiffBatchState => {
+  const state = createInitialDiffBatchState();
+  if (snapshot === null) {
+    return {
+      ...state,
+      isLoading: isLoadingWhenMissing,
+    };
+  }
+
+  return {
+    ...state,
+    byScope: {
+      ...state.byScope,
+      [scope]: snapshot,
+    },
+    loadedByScope: {
+      ...state.loadedByScope,
+      [scope]: true,
+    },
+    isLoading: false,
+  };
 };

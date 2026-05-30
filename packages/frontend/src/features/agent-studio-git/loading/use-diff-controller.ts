@@ -2,12 +2,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffScope } from "../contracts";
 import {
-  createInitialDiffBatchState,
   type DiffBatchState,
   type ScopeSnapshot,
   toStatusSnapshotKey,
 } from "../model/diff-data-model";
-import { readCachedFullLoadSnapshot } from "./cached-full-load";
+import {
+  createVisibleDiffBatchStateFromCachedFullLoad,
+  readCachedFullLoadSnapshot,
+} from "./cached-full-load";
 import { useAgentStudioDiffBatchState } from "./use-diff-batch-state";
 import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-diff-loader";
 import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
@@ -199,47 +201,34 @@ export function useAgentStudioDiffController({
 
   const isRenderContextStale = requestContextKeyRef.current !== requestContextKey;
   const visibleDiffScope = isRenderContextStale ? "uncommitted" : diffScope;
-  const cachedRenderSnapshot =
-    isRenderContextStale && repoPath !== null
-      ? readCachedFullLoadSnapshot(queryClient, {
-          repoPath,
-          targetBranch,
-          workingDir,
-          scope: visibleDiffScope,
-        })
-      : null;
   const visibleState = useMemo<DiffBatchState>(() => {
     if (!isRenderContextStale) {
       return state;
     }
 
-    const nextState = createInitialDiffBatchState();
-    if (cachedRenderSnapshot === null) {
-      return {
-        ...nextState,
-        isLoading: repoPath !== null && !shouldBlockDiffLoading,
-      };
-    }
-
-    return {
-      ...nextState,
-      byScope: {
-        ...nextState.byScope,
-        [visibleDiffScope]: cachedRenderSnapshot,
-      },
-      loadedByScope: {
-        ...nextState.loadedByScope,
-        [visibleDiffScope]: true,
-      },
-      isLoading: false,
-    };
+    const cachedRenderSnapshot =
+      repoPath === null
+        ? null
+        : readCachedFullLoadSnapshot(queryClient, {
+            repoPath,
+            targetBranch,
+            workingDir,
+            scope: visibleDiffScope,
+          });
+    return createVisibleDiffBatchStateFromCachedFullLoad({
+      scope: visibleDiffScope,
+      snapshot: cachedRenderSnapshot,
+      isLoadingWhenMissing: repoPath !== null && !shouldBlockDiffLoading,
+    });
   }, [
-    cachedRenderSnapshot,
     isRenderContextStale,
+    queryClient,
     repoPath,
     shouldBlockDiffLoading,
     state,
+    targetBranch,
     visibleDiffScope,
+    workingDir,
   ]);
   const visibleActiveScopeState = visibleState.byScope[visibleDiffScope];
   const visibleStatusSnapshotKey = useMemo(
