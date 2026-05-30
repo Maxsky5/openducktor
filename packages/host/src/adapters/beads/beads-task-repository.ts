@@ -58,7 +58,7 @@ export const createBeadsTaskRepository = ({
   resolveWorkspaceIdForRepoPath,
   stopSharedDoltServer = stopOwnedSharedDoltServer,
   toolDiscovery,
-}: CreateBeadsTaskRepositoryInput = {}): BeadsTaskRepository => {
+}: CreateBeadsTaskRepositoryInput): BeadsTaskRepository => {
   const ownedSharedDoltServers = new Map<string, BeadsCliContext["sharedServer"]>();
   const cliContextFlights = new Set<BeadsCliContextFlight>();
   const readyCliContexts = new Map<string, BeadsCliContextFlight>();
@@ -103,9 +103,10 @@ export const createBeadsTaskRepository = ({
   const resolveEffectiveCliContext: ResolveBeadsCliContext = (repoPath, options = {}) =>
     Effect.gen(function* () {
       const request = yield* resolveContextRequest(repoPath, options);
-      if (options.requireSharedServer !== true) {
+      if (request.options.requireSharedServer !== true) {
         return yield* trackCliContextResolution(resolveCliContext(repoPath, request.options));
       }
+      const sharedServerOptions = request.options;
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const reservation = yield* Effect.sync(() => {
@@ -131,7 +132,7 @@ export const createBeadsTaskRepository = ({
               flight: reservation.flight,
               releaseReservation: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
               rememberOwnedContext: trackOwnedSharedServer,
-              resolveContext: resolveCliContext(repoPath, request.options),
+              resolveContext: resolveCliContext(repoPath, sharedServerOptions),
             }),
           );
           return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
@@ -147,15 +148,11 @@ export const createBeadsTaskRepository = ({
     );
   const effectiveRunBd = runBd ?? defaultRunBd(resolveEffectiveCliContext);
   const effectiveRunBdJson = runBdJson ?? defaultRunBdJson(resolveEffectiveCliContext);
-  const requireBdCommand = () => resolveBeadsToolPaths();
-  const requireSharedDoltCommand = () => resolveSharedDoltToolPaths();
   const runBdJsonForRepo = (repoPath: string) =>
     Effect.gen(function* () {
       if (runBdJson) {
         return effectiveRunBdJson;
       }
-      yield* requireBdCommand();
-      yield* requireSharedDoltCommand();
       const context = yield* resolveEffectiveCliContext(repoPath, { requireSharedServer: true });
       return (commandRepoPath: string, args: string[]) =>
         effectiveRunBdJson(commandRepoPath, args, context);
@@ -165,8 +162,6 @@ export const createBeadsTaskRepository = ({
       if (runBd) {
         return effectiveRunBd;
       }
-      yield* requireBdCommand();
-      yield* requireSharedDoltCommand();
       const context = yield* resolveEffectiveCliContext(repoPath, { requireSharedServer: true });
       return (commandRepoPath: string, args: string[]) =>
         effectiveRunBd(commandRepoPath, args, context);
@@ -246,10 +241,6 @@ export const createBeadsTaskRepository = ({
     },
     diagnoseRepoStore({ repoPath, prepare = false }) {
       return Effect.gen(function* () {
-        yield* requireBdCommand();
-        if (prepare) {
-          yield* requireSharedDoltCommand();
-        }
         return yield* diagnoseRepoStoreWithBd(
           effectiveRunBdJson,
           repoPath,

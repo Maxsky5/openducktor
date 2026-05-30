@@ -1205,6 +1205,14 @@ describe("createTaskService pull requests", () => {
         ]),
       }),
     );
+    const requiredGhChecks = calls.filter(
+      (call) =>
+        typeof call === "object" &&
+        call !== null &&
+        (call as { type?: unknown }).type === "requiredCommand" &&
+        (call as { command?: unknown }).command === "gh",
+    );
+    expect(requiredGhChecks).toHaveLength(1);
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {

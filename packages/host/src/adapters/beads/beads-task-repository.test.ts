@@ -75,7 +75,10 @@ const createExistingBeadsCliContext = async (): Promise<BeadsSharedServerContext
   await mkdir(beadsDir);
   return createBeadsCliContext(beadsDir);
 };
-const createTestBeadsTaskRepository = (input: Parameters<typeof createBeadsTaskRepository>[0]) =>
+const createTestBeadsTaskRepository = (
+  input: Omit<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery"> &
+    Partial<Pick<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery">>,
+) =>
   createBeadsTaskRepository({
     toolDiscovery: createToolDiscoveryPort(),
     ...input,
@@ -157,8 +160,8 @@ describe("createBeadsTaskRepository", () => {
     const contextRequested = new Promise<void>((resolve) => {
       resolveContextRequested = resolve;
     });
-    let resolveContext: (context: BeadsCliContext) => void = () => {};
-    const contextResolution = new Promise<BeadsCliContext>((resolve) => {
+    let resolveContext: (context: BeadsSharedServerContext) => void = () => {};
+    const contextResolution = new Promise<BeadsSharedServerContext>((resolve) => {
       resolveContext = resolve;
     });
     const port = createTestBeadsTaskRepository({
@@ -224,8 +227,8 @@ describe("createBeadsTaskRepository", () => {
     const contextRequested = new Promise<void>((resolve) => {
       resolveContextRequested = resolve;
     });
-    let resolveContext: (context: BeadsCliContext) => void = () => {};
-    const contextResolution = new Promise<BeadsCliContext>((resolve) => {
+    let resolveContext: (context: BeadsSharedServerContext) => void = () => {};
+    const contextResolution = new Promise<BeadsSharedServerContext>((resolve) => {
       resolveContext = resolve;
     });
     let contextResolutionAttempts = 0;
@@ -624,7 +627,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(cached[0]?.title).toBe("Task 1");
     expect(refreshed[0]?.title).toBe("Task 2");
   });
-  test("preflights Dolt before task commands that require the shared server", async () => {
+  test("resolves Dolt before context resolution for task commands that require the shared server", async () => {
     const port = createTestBeadsTaskRepository({
       toolDiscovery: createToolDiscoveryPort(["dolt"]),
       resolveCliContext() {

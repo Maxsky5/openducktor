@@ -44,6 +44,7 @@ export type {
   EnsureBeadsAttachment,
   EnsureSharedDoltServer,
   ResolveBeadsCliContextOptions,
+  ResolveBeadsCliContextRequestOptions,
   ResolveBeadsOptionalServerContextOptions,
   ResolveBeadsSharedServerContextOptions,
   SharedDoltToolPaths,
@@ -88,10 +89,6 @@ export function resolveBeadsCliContext(
 export function resolveBeadsCliContext(
   repoPath: string,
   options?: ResolveBeadsOptionalServerContextOptions,
-): Effect.Effect<BeadsCliContext, BeadsCliContextResolutionError>;
-export function resolveBeadsCliContext(
-  repoPath: string,
-  options?: ResolveBeadsCliContextOptions,
 ): Effect.Effect<BeadsCliContext, BeadsCliContextResolutionError>;
 export function resolveBeadsCliContext(
   repoPath: string,

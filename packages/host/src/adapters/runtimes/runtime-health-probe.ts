@@ -9,9 +9,6 @@ const OPENCODE_VERSION_ENV = {
   OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
 };
 
-const parseCommandMissingError = (command: string): string =>
-  `Required command \`${command}\` not found.`;
-
 const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): RuntimeHealth => ({
   kind,
   enabled: true,
@@ -71,8 +68,11 @@ export const createRuntimeHealthProbe = (
         return runtimeHealthForMissingCommand(kind, errorMessage(health.left));
       }
 
-      const missing = parseCommandMissingError(kind);
-      return runtimeHealthForMissingCommand(kind, missing);
+      const unsupportedRuntime: never = kind;
+      return runtimeHealthForMissingCommand(
+        unsupportedRuntime,
+        `Runtime ${unsupportedRuntime} is not supported by runtime health checks.`,
+      );
     });
   },
 });

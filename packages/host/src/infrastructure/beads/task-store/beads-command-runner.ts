@@ -1,10 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { Effect } from "effect";
-import {
-  type BeadsCliContext,
-  resolveBeadsCliContext,
-} from "../../../adapters/beads/beads-cli-context";
+import type { BeadsCliContext } from "../../../adapters/beads/beads-cli-context";
 import {
   HostOperationError,
   HostValidationError,
@@ -38,8 +35,8 @@ export const spawnBd = (
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => string,
-  context?: BeadsCliContext,
-  resolveCliContext: ResolveBeadsCliContext = resolveBeadsCliContext,
+  context: BeadsCliContext | undefined,
+  resolveCliContext: ResolveBeadsCliContext,
 ): Effect.Effect<string, TaskStoreError> =>
   spawnBdWithParser(repoPath, args, onSuccess, context, resolveCliContext);
 
@@ -47,8 +44,8 @@ export const spawnBdJson = (
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => BeadsCommandJsonOutput,
-  context?: BeadsCliContext,
-  resolveCliContext: ResolveBeadsCliContext = resolveBeadsCliContext,
+  context: BeadsCliContext | undefined,
+  resolveCliContext: ResolveBeadsCliContext,
 ): Effect.Effect<BeadsCommandJsonOutput, TaskStoreError> =>
   spawnBdWithParser(repoPath, args, onSuccess, context, resolveCliContext);
 
@@ -186,8 +183,8 @@ const spawnBdWithParser = <A>(
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => A,
-  context?: BeadsCliContext,
-  resolveCliContext: ResolveBeadsCliContext = resolveBeadsCliContext,
+  context: BeadsCliContext | undefined,
+  resolveCliContext: ResolveBeadsCliContext,
 ): Effect.Effect<A, TaskStoreError> =>
   Effect.gen(function* () {
     const cliContext = yield* resolveCliContextForBd(repoPath, context, resolveCliContext);

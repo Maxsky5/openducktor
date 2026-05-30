@@ -117,7 +117,7 @@ const createSystemCommandPort = ({
           ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
           : null,
       ),
-    versionCommand: (command) =>
+    versionCommand: (command, _args, _options) =>
       Effect.succeed(
         missing.has(command) ? null : (versionForCommand?.(command) ?? `${command} version 1.0.0`),
       ),

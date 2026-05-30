@@ -9,11 +9,14 @@ import {
   upsertGithubPullRequest,
 } from "../support/github-pull-requests";
 import {
+  requireDependencies,
   requirePullRequestLinkDependencies,
   requirePullRequestUpsertDependencies,
 } from "../support/required-task-dependencies";
 import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
+
+type Cases = Pick<TaskService, "linkPullRequest" | "upsertPullRequest" | "unlinkPullRequest">;
 
 export const createTaskPullRequestManagementUseCases = ({
   gitPort,
@@ -23,10 +26,7 @@ export const createTaskPullRequestManagementUseCases = ({
   toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<
-  TaskService,
-  "linkPullRequest" | "upsertPullRequest" | "unlinkPullRequest"
-> => ({
+}: CreateTaskServiceInput): Cases => ({
   linkPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, providerId, number } = input;
@@ -39,12 +39,14 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-      const dependencies = requirePullRequestLinkDependencies({
-        gitPort,
-        systemCommands,
-        toolDiscovery,
-        workspaceSettingsService,
-      });
+      const dependencies = yield* requireDependencies(() =>
+        requirePullRequestLinkDependencies({
+          gitPort,
+          systemCommands,
+          toolDiscovery,
+          workspaceSettingsService,
+        }),
+      );
       const current = yield* taskStore.getTask({ repoPath, taskId });
       yield* validatePullRequestManagementStatusEffect(current.status);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
@@ -85,22 +87,22 @@ export const createTaskPullRequestManagementUseCases = ({
         taskId,
         pullRequest: pullRequest.record,
       });
-
       return pullRequest.record;
     });
   },
-
   upsertPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, content } = input;
-      const dependencies = requirePullRequestUpsertDependencies({
-        gitPort,
-        settingsConfig,
-        systemCommands,
-        toolDiscovery,
-        taskWorktreeService,
-        workspaceSettingsService,
-      });
+      const dependencies = yield* requireDependencies(() =>
+        requirePullRequestUpsertDependencies({
+          gitPort,
+          settingsConfig,
+          systemCommands,
+          toolDiscovery,
+          taskWorktreeService,
+          workspaceSettingsService,
+        }),
+      );
       const current = yield* taskStore.getTask({ repoPath, taskId });
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
@@ -139,7 +141,6 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-
       const githubContext = yield* requireGithubPullRequestContext(
         dependencies,
         effectiveRepoPath,
@@ -172,11 +173,9 @@ export const createTaskPullRequestManagementUseCases = ({
         content.body,
       );
       yield* taskStore.setPullRequest({ repoPath: effectiveRepoPath, taskId, pullRequest });
-
       return pullRequest;
     });
   },
-
   unlinkPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;

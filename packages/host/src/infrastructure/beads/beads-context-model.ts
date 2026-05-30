@@ -103,22 +103,32 @@ export type BeadsCommandRunner = (input: {
   env?: NodeJS.ProcessEnv;
 }) => Effect.Effect<{ ok: boolean; stdout: string; stderr: string }, BeadsInfrastructureError>;
 
-export type ResolveBeadsCliContextOptions = {
-  requireSharedServer?: boolean;
+type ResolveBeadsCliContextBaseOptions = {
   ensureSharedServer?: EnsureSharedDoltServer;
   ensureAttachment?: EnsureBeadsAttachment;
   processEnv?: NodeJS.ProcessEnv;
-  sharedDoltTools?: SharedDoltToolPaths;
   tools?: BeadsToolPaths;
   workspaceId?: string | null;
 };
 
-export type ResolveBeadsSharedServerContextOptions = ResolveBeadsCliContextOptions & {
-  requireSharedServer: true;
+export type ResolveBeadsOptionalServerContextOptions = ResolveBeadsCliContextBaseOptions & {
+  requireSharedServer?: false | undefined;
 };
 
-export type ResolveBeadsOptionalServerContextOptions = ResolveBeadsCliContextOptions & {
-  requireSharedServer?: false | undefined;
+export type ResolveBeadsSharedServerContextOptions = ResolveBeadsCliContextBaseOptions & {
+  requireSharedServer: true;
+  sharedDoltTools: SharedDoltToolPaths;
+};
+
+export type ResolveBeadsCliContextOptions =
+  | ResolveBeadsOptionalServerContextOptions
+  | ResolveBeadsSharedServerContextOptions;
+
+export type ResolveBeadsCliContextRequestOptions = Omit<
+  ResolveBeadsCliContextBaseOptions,
+  "processEnv" | "sharedDoltTools" | "tools"
+> & {
+  requireSharedServer?: boolean;
 };
 
 export type BeadsAttachmentMetadata = {

@@ -11,9 +11,10 @@ import type { DevServerService } from "../../dev-servers/dev-server-service";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
-import type {
-  GithubCommandDependencies,
-  GithubRepositoryDependencies,
+import {
+  createGithubCommandDependencies,
+  type GithubCommandDependencies,
+  type GithubRepositoryDependencies,
 } from "./github-pull-requests";
 
 const missingTaskDependency = (message: string): HostDependencyError =>
@@ -50,10 +51,10 @@ const requireGithubCommandDependencies = (
   if (!input.toolDiscovery) {
     throw missingTaskDependency(`Tool discovery port is required for ${operation}.`);
   }
-  return {
+  return createGithubCommandDependencies({
     systemCommands: input.systemCommands,
     toolDiscovery: input.toolDiscovery,
-  };
+  });
 };
 const requireGithubRepositoryDependencies = (
   input: GithubRepositoryDependencyInput,

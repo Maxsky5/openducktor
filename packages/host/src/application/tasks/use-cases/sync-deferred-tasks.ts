@@ -8,6 +8,7 @@ import {
   pullRequestRecordsMatch,
 } from "../support/github-pull-requests";
 import {
+  requireDependencies,
   requirePullRequestMergeCleanupDependencies,
   requirePullRequestSyncDependencies,
 } from "../support/required-task-dependencies";
@@ -31,11 +32,13 @@ export const createTaskSyncDeferUseCases = ({
   const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) =>
     Effect.gen(function* () {
       const { repoPath } = input;
-      const dependencies = requirePullRequestSyncDependencies({
-        systemCommands,
-        toolDiscovery,
-        workspaceSettingsService,
-      });
+      const dependencies = yield* requireDependencies(() =>
+        requirePullRequestSyncDependencies({
+          systemCommands,
+          toolDiscovery,
+          workspaceSettingsService,
+        }),
+      );
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
@@ -65,11 +68,13 @@ export const createTaskSyncDeferUseCases = ({
         }
 
         if (updated.record.state === "merged" && task.status !== "closed") {
-          const cleanupDependencies = requirePullRequestMergeCleanupDependencies(
-            devServerService,
-            gitPort,
-            settingsConfig,
-            taskWorktreeService,
+          const cleanupDependencies = yield* requireDependencies(() =>
+            requirePullRequestMergeCleanupDependencies(
+              devServerService,
+              gitPort,
+              settingsConfig,
+              taskWorktreeService,
+            ),
           );
           yield* taskStore.setPullRequest({
             repoPath: effectiveRepoPath,
@@ -117,9 +122,7 @@ export const createTaskSyncDeferUseCases = ({
         return { ok: result.ran };
       });
     },
-
     repoPullRequestSyncDetailed,
-
     deferTask(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
@@ -160,7 +163,6 @@ export const createTaskSyncDeferUseCases = ({
         return enrichTask(updated, nextTasks);
       });
     },
-
     resumeDeferredTask(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;

@@ -7,7 +7,10 @@ import {
 import type { Effect } from "effect";
 import type {
   BeadsCliContext,
-  ResolveBeadsCliContextOptions,
+  BeadsSharedServerContext,
+  ResolveBeadsCliContextRequestOptions,
+  ResolveBeadsOptionalServerContextOptions,
+  ResolveBeadsSharedServerContextOptions,
   StopSharedDoltServer,
 } from "../../../adapters/beads/beads-cli-context";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -63,8 +66,18 @@ export type RunBd = (
 ) => Effect.Effect<string, TaskStoreError>;
 export type ResolveBeadsCliContext = (
   repoPath: string,
-  options?: ResolveBeadsCliContextOptions,
+  options?: ResolveBeadsCliContextRequestOptions,
 ) => Effect.Effect<BeadsCliContext, TaskStoreError>;
+export interface ResolveRawBeadsCliContext {
+  (
+    repoPath: string,
+    options: ResolveBeadsSharedServerContextOptions,
+  ): Effect.Effect<BeadsSharedServerContext, TaskStoreError>;
+  (
+    repoPath: string,
+    options?: ResolveBeadsOptionalServerContextOptions,
+  ): Effect.Effect<BeadsCliContext, TaskStoreError>;
+}
 export type ResolveWorkspaceIdForRepoPath = (
   repoPath: string,
 ) => Effect.Effect<string | null | undefined, TaskStoreError>;
@@ -77,10 +90,10 @@ export type CreateBeadsTaskRepositoryInput = {
   processEnv?: NodeJS.ProcessEnv;
   runBd?: RunBd;
   runBdJson?: RunBdJson;
-  resolveCliContext?: ResolveBeadsCliContext;
+  resolveCliContext?: ResolveRawBeadsCliContext;
   resolveWorkspaceIdForRepoPath?: ResolveWorkspaceIdForRepoPath;
   stopSharedDoltServer?: StopSharedDoltServer;
-  toolDiscovery?: ToolDiscoveryPort;
+  toolDiscovery: ToolDiscoveryPort;
 };
 export type BeadsTaskRepositoryShutdownResult = {
   stoppedSharedDoltServers: number;
