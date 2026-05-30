@@ -243,7 +243,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   const shouldBlockDiffLoading =
     gitPanelContextMode === "worktree" &&
     shouldQueryTaskWorktree &&
-    (isWorktreeResolving || worktreeError != null || worktreePath == null);
+    (worktreeError != null || worktreePath == null);
 
   const diffData = dependencies.useDiffData({
     repoPath,
