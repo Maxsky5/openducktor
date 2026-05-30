@@ -1,6 +1,6 @@
 import { HostValidationError } from "../../effect/host-errors";
 
-const WINDOWS_BATCH_ESCAPE_PATTERN = /[\^%!"]/gu;
+const WINDOWS_BATCH_ESCAPE_PATTERN = /[\^"]/gu;
 const WINDOWS_BATCH_NEWLINE_PATTERN = /[\r\n]/u;
 
 const assertNoWindowsBatchNewlines = (value: string, field: "argument" | "command"): void => {
@@ -16,10 +16,6 @@ const escapeWindowsBatchCharacter = (character: string): string => {
   switch (character) {
     case "^":
       return "^^";
-    case "%":
-      return "^%";
-    case "!":
-      return "!";
     case `"`:
       return `^"`;
     default:
