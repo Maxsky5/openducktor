@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { canonicalTargetBranch } from "@/lib/target-branch";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ import type {
   TaskApprovalModalModel,
   TaskApprovalMode,
 } from "./kanban-page-model-types";
+import { getTaskApprovalModalHeader } from "./task-approval-modal-header";
 
 const APPROVAL_ACTION_OPTIONS: Array<{
   value: TaskApprovalMode;
@@ -88,34 +90,23 @@ function SegmentedTabs<TValue extends string>({
   onChange: (value: TValue) => void;
 }): ReactElement {
   return (
-    <div
-      className="inline-flex min-h-11 w-full items-center gap-2 rounded-xl bg-muted/70 p-1"
-      role="tablist"
-      aria-label={ariaLabel}
-    >
+    <SegmentedControlRoot size="lg" className="w-full" role="tablist" aria-label={ariaLabel}>
       {options.map((option) => {
         const isActive = option.value === value;
         return (
-          <button
+          <SegmentedControlItem
             key={option.value}
-            type="button"
+            active={isActive}
+            size="lg"
             role="tab"
-            aria-selected={isActive}
             disabled={disabled || option.disabled}
-            className={cn(
-              "inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-lg px-3 text-sm font-medium transition-colors",
-              isActive
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-background hover:text-foreground",
-              (disabled || option.disabled) && "pointer-events-none opacity-50",
-            )}
             onClick={() => onChange(option.value)}
           >
             {option.label}
-          </button>
+          </SegmentedControlItem>
         );
       })}
-    </div>
+    </SegmentedControlRoot>
   );
 }
 
@@ -166,41 +157,6 @@ function OptionCard<TValue extends string>({
       <span className="text-sm text-muted-foreground">{description}</span>
     </button>
   );
-}
-
-export function getTaskApprovalModalHeader(model: TaskApprovalModalModel): {
-  title: string;
-  description: string;
-} {
-  if (model.stage === "missing_builder_worktree") {
-    return {
-      title: "Builder Worktree Missing",
-      description:
-        "The builder worktree for this task is no longer available. You can still complete the task or reset the implementation from here.",
-    };
-  }
-
-  if (model.stage === "complete_direct_merge" && model.publishTarget !== null) {
-    const publishTargetLabel = canonicalTargetBranch(model.publishTarget);
-    return {
-      title: "Publish And Mark Done",
-      description: `The local merge is already applied. Push ${publishTargetLabel} to publish it, then move the task to Done.`,
-    };
-  }
-
-  if (model.stage === "complete_direct_merge") {
-    return {
-      title: "Complete Direct Merge",
-      description:
-        "The local merge is already applied. Finish the direct merge workflow to move the task to Done and clean up the builder workspace.",
-    };
-  }
-
-  return {
-    title: "Approve Task",
-    description:
-      "Choose how to finish this task: merge it locally now, or create and update a pull request.",
-  };
 }
 
 export function TaskApprovalModalPanel({
@@ -314,7 +270,7 @@ function TaskApprovalApprovalStage({
       <div className="space-y-6 px-6 py-6 sm:px-8">
         <div className="flex min-h-56 items-center justify-center rounded-2xl border border-border bg-muted/30 px-6">
           <div className="flex flex-col items-center gap-3 text-center">
-            <LoaderCircle className="size-6 animate-spin text-primary" />
+            <LoaderCircle className="size-6 animate-spin text-status-running" />
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">Preparing approval options</p>
               <p className="text-sm text-muted-foreground">

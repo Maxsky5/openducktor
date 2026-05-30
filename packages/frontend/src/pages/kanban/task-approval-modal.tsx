@@ -7,7 +7,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { TaskApprovalModalModel } from "./kanban-page-model-types";
-import { getTaskApprovalModalHeader, TaskApprovalModalPanel } from "./task-approval-modal-panel";
+import { getTaskApprovalModalHeader } from "./task-approval-modal-header";
+import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
 export { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 

@@ -21,6 +21,13 @@
   /* primary = brand indigo */
   --primary: oklch(0.5 0.31 277.49); /* #5100FF */
   --primary-foreground: oklch(1 0 0); /* white */
+  --status-running: oklch(0.685 0.169 237.323); /* ~sky-500 */
+  --selected-surface: oklch(0.588 0.158 241.966 / 0.16); /* ~sky-600/16 */
+  --selected-accent: oklch(0.588 0.158 241.966); /* ~sky-600 */
+  --selected-control: oklch(0.55 0.158 241.966); /* vivid selected blue */
+  --selected-control-foreground: oklch(1 0 0); /* white */
+  --switch-checked: oklch(0.5 0.31 277.49); /* #5100FF */
+  --switch-thumb: oklch(1 0 0); /* white */
 
   /* secondary */
   --secondary: oklch(0.929 0.013 255.508); /* ~slate-200 */
@@ -91,7 +98,7 @@
   /* chrome */
   --border: oklch(0.929 0.013 255.508); /* ~slate-200 */
   --input: oklch(0.869 0.022 252.894); /* ~slate-300 */
-  --ring: oklch(0.5 0.31 277.49); /* matches primary */
+  --ring: oklch(0.588 0.158 241.966); /* focus blue */
 
   /* sidebar */
   --sidebar: oklch(1 0 0);
@@ -144,6 +151,13 @@
   /* primary = brand indigo */
   --primary: oklch(0.5 0.31 277.49); /* #5100FF */
   --primary-foreground: oklch(1 0 0); /* white */
+  --status-running: oklch(0.746 0.16 232.661); /* ~sky-400 */
+  --selected-surface: oklch(0.631 0.158 241.966 / 0.22); /* ~sky-500/22 */
+  --selected-accent: oklch(0.631 0.158 241.966); /* ~sky-500 */
+  --selected-control: oklch(0.54 0.17 245); /* deep vivid blue */
+  --selected-control-foreground: oklch(1 0 0); /* white */
+  --switch-checked: oklch(0.55 0.32 277.49); /* saturated brand indigo for dark controls */
+  --switch-thumb: oklch(0.869 0.022 252.894); /* ~slate-300 */
 
   --secondary: oklch(0.279 0.041 260.031); /* ~slate-800 */
   --secondary-foreground: oklch(0.968 0.007 247.896);
@@ -204,7 +218,7 @@
 
   --border: oklch(0.332 0.038 260.912); /* ~slate-700 */
   --input: oklch(0.332 0.038 260.912);
-  --ring: oklch(0.5 0.31 277.49);
+  --ring: oklch(0.631 0.158 241.966); /* focus blue */
 
   --sidebar: oklch(0.175 0.03 265.755); /* slightly lighter than bg */
   --sidebar-foreground: oklch(0.869 0.022 252.894);
@@ -251,6 +265,13 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-status-running: var(--status-running);
+  --color-selected-surface: var(--selected-surface);
+  --color-selected-accent: var(--selected-accent);
+  --color-selected-control: var(--selected-control);
+  --color-selected-control-foreground: var(--selected-control-foreground);
+  --color-switch-checked: var(--switch-checked);
+  --color-switch-thumb: var(--switch-thumb);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -418,9 +439,82 @@ pre {
   }
 }
 
+@keyframes odt-task-tab-status-glow {
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: scale(0.94);
+  }
+  45% {
+    opacity: 0.58;
+    transform: scale(1.12);
+  }
+  72% {
+    opacity: 0.18;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes odt-task-tab-status-ring {
+  0% {
+    opacity: 0.56;
+    transform: scale(0.92);
+  }
+  72%,
+  100% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+}
+
 .agent-chat-row-motion {
   transform-origin: center bottom;
   will-change: transform, opacity;
+}
+
+.agent-studio-task-status-running-dot {
+  position: relative;
+  display: inline-flex;
+  width: 0.875rem;
+  height: 0.875rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.agent-studio-task-status-running-dot::before,
+.agent-studio-task-status-running-dot::after {
+  position: absolute;
+  border-radius: 9999px;
+  content: "";
+  pointer-events: none;
+}
+
+.agent-studio-task-status-running-dot::before {
+  inset: -0.1875rem;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklch, var(--status-running) 28%, transparent) 0 44%,
+    color-mix(in oklch, var(--status-running) 14%, transparent) 45% 66%,
+    transparent 74%
+  );
+  box-shadow:
+    0 0 5px color-mix(in oklch, var(--status-running) 32%, transparent),
+    0 0 10px color-mix(in oklch, var(--status-running) 20%, transparent);
+  animation: odt-task-tab-status-glow 1350ms ease-in-out infinite;
+}
+
+.agent-studio-task-status-running-dot::after {
+  inset: -0.125rem;
+  border: 1px solid color-mix(in oklch, var(--status-running) 48%, transparent);
+  animation: odt-task-tab-status-ring 1350ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.agent-studio-task-status-running-dot svg {
+  position: relative;
+  z-index: 1;
 }
 
 .kanban-active-session-card {
@@ -447,7 +541,7 @@ pre {
   --odt-border-ray-perimeter: 1000px;
   --odt-border-ray-length: 190px;
   --odt-border-ray-stroke-width: 4.4;
-  --odt-border-ray-color: rgba(56, 189, 248, 1);
+  --odt-border-ray-color: var(--status-running);
 }
 
 .odt-border-ray-segment {
@@ -473,6 +567,8 @@ pre {
 
 @media (prefers-reduced-motion: reduce) {
   .agent-chat-row-motion,
+  .agent-studio-task-status-running-dot::before,
+  .agent-studio-task-status-running-dot::after,
   .odt-border-ray-segment {
     animation: none;
   }

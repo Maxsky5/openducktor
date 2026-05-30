@@ -101,6 +101,11 @@ describe("AgentSessionTodoPanel", () => {
     });
 
     expect(container.querySelector(".lucide-circle-dot-dashed")).not.toBeNull();
+    expect(
+      container
+        .querySelector(".lucide-circle-dot-dashed")
+        ?.classList.contains("text-status-running"),
+    ).toBe(true);
     expect(container.querySelector(".lucide-loader-circle")).toBeNull();
   });
 
@@ -111,7 +116,9 @@ describe("AgentSessionTodoPanel", () => {
       todos: [buildTodoItem({ status: "in_progress" })],
     });
 
-    expect(container.querySelector(".lucide-loader-circle")).not.toBeNull();
+    const loader = container.querySelector(".lucide-loader-circle");
+    expect(loader).not.toBeNull();
+    expect(loader?.classList.contains("text-status-running")).toBe(true);
     expect(container.querySelector(".lucide-circle-dot-dashed")).toBeNull();
   });
 

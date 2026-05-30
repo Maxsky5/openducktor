@@ -62,6 +62,7 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).toContain("kanban-active-session-ray");
     expect(html).toContain("Builder");
     expect(html).toContain("Running");
+    expect(html).toContain("text-status-running");
     expect(html).toContain("lucide-circle-play");
     expect(html).toContain('data-slot="popover-trigger"');
     expect(html.split("kanban-active-session-ray")).toHaveLength(2);

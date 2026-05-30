@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { humanDate } from "@/lib/task-display";
@@ -160,29 +161,29 @@ export function TaskDocumentEditor({
             <p className="text-sm font-semibold text-foreground">{title}</p>
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
-          <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+          <SegmentedControlRoot
+            size="sm"
+            className="h-auto rounded-lg border border-border bg-card"
+          >
             {VIEW_OPTIONS.map((option) => {
               const Icon = option.icon;
               const isActive = option.id === view;
               return (
-                <button
+                <SegmentedControlItem
                   key={option.id}
-                  type="button"
-                  className={cn(
-                    "inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-                    isActive
-                      ? "bg-primary text-white shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
+                  active={isActive}
+                  grow="hug"
+                  size="sm"
+                  className="gap-1 px-2 py-1"
+                  inactiveClassName="hover:bg-muted"
                   onClick={() => onViewChange(option.id)}
-                  aria-pressed={isActive}
                 >
                   <Icon className="size-3.5" />
                   {option.label}
-                </button>
+                </SegmentedControlItem>
               );
             })}
-          </div>
+          </SegmentedControlRoot>
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

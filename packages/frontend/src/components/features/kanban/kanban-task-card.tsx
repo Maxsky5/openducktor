@@ -84,6 +84,20 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   areTaskAgentSessionsEqual(left.agentSessions, right.agentSessions) &&
   areStringArraysEqual(left.availableActions, right.availableActions);
 
+const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
+  "set_spec",
+  "set_plan",
+  "open_spec",
+  "open_planner",
+  "qa_start",
+  "build_start",
+  "open_builder",
+  "open_qa",
+  "human_approve",
+  "human_request_changes",
+  "reset_implementation",
+];
+
 const areTaskAgentSessionsEqual = (
   left: TaskCard["agentSessions"] | undefined,
   right: TaskCard["agentSessions"] | undefined,
@@ -195,7 +209,7 @@ const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
     return "text-warning-surface-foreground";
   }
 
-  return "text-primary/90";
+  return "text-status-running";
 };
 
 const getCardActivityClassName = ({
@@ -337,22 +351,9 @@ function TaskActions({
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
 }): ReactElement | null {
-  const includeActions: readonly TaskWorkflowAction[] = [
-    "set_spec",
-    "set_plan",
-    "open_spec",
-    "open_planner",
-    "qa_start",
-    "build_start",
-    "open_builder",
-    "open_qa",
-    "human_approve",
-    "human_request_changes",
-    "reset_implementation",
-  ];
   const historicalSessionRoles = resolveHistoricalSessionRoles(task);
   const workflowActions = resolveTaskCardActions(task, {
-    include: includeActions,
+    include: TASK_CARD_WORKFLOW_ACTIONS,
     hasActiveSession,
     ...(activeSessionRole ? { activeSessionRole } : {}),
     historicalSessionRoles,
@@ -433,7 +434,7 @@ function TaskActions({
     <div className="mt-2 cursor-default border-t border-border pt-2.5">
       <TaskWorkflowActionGroup
         task={task}
-        includeActions={includeActions}
+        includeActions={TASK_CARD_WORKFLOW_ACTIONS}
         hasActiveSession={hasActiveSession}
         {...(activeSessionRole ? { activeSessionRole } : {})}
         historicalSessionRoles={historicalSessionRoles}
@@ -500,43 +501,40 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   return (
     <article
       className={cn(
-        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm transition duration-150 hover:border-info-border hover:shadow-md",
+        "group min-w-0 rounded-xl border border-border/90 bg-card/95 shadow-sm hover:border-info-border hover:shadow-md",
         cardActivityClassName,
       )}
     >
       {hasActiveSessionValue && !isWaitingInput ? (
-        <BorderRay turnDurationMs={2500} strokeWidth={4.4} className="kanban-active-session-ray" />
+        <BorderRay turnDurationMs={2000} strokeWidth={4} className="kanban-active-session-ray" />
       ) : null}
 
       <div className="kanban-active-session-content flex min-w-0 flex-col gap-y-1 p-3.5">
-        {/* biome-ignore lint/a11y/useSemanticElements: TaskIdBadge contains a button element */}
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label={`Open details for ${task.title}`}
-          className="flex w-full min-w-0 cursor-pointer items-start justify-between gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          onClick={() => onOpenDetails(task.id)}
-          onKeyDown={(e) => {
-            if (e.target !== e.currentTarget) return;
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onOpenDetails(task.id);
-            }
-          }}
-        >
+        <div className="flex w-full min-w-0 items-start justify-between gap-1.5">
           <div className="min-w-0 flex-1 mb-1">
-            <p
-              className="line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground mb-1"
-              title={task.title}
+            <button
+              type="button"
+              aria-label={`Open details for ${task.title}`}
+              className="block w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              onClick={() => onOpenDetails(task.id)}
             >
-              {task.title}
-            </p>
+              <span
+                className="mb-1 line-clamp-2 break-words text-sm font-semibold leading-tight text-foreground"
+                title={task.title}
+              >
+                {task.title}
+              </span>
+            </button>
             <div className="flex justify-between items-center gap-1.5">
               <TaskIdBadge taskId={task.id} />
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground">
+              <button
+                type="button"
+                className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-[11px] text-muted-foreground transition group-hover:border-border group-hover:bg-muted group-hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                onClick={() => onOpenDetails(task.id)}
+              >
                 <ExternalLink className="size-3" />
                 Open
-              </span>
+              </button>
             </div>
           </div>
         </div>

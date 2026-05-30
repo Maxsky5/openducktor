@@ -137,6 +137,18 @@ describe("TaskApprovalModal", () => {
     expect(html).toContain("animate-spin");
   });
 
+  test("uses running status color while approval options load", () => {
+    const html = renderToStaticMarkup(
+      createElement(TaskApprovalModalPanel, {
+        model: createApprovalModel({ isLoading: true }),
+      }),
+    );
+
+    expect(html).toContain("Preparing approval options");
+    expect(html).toContain("animate-spin");
+    expect(html).toContain("text-status-running");
+  });
+
   test("renders the squash commit message editor when squash is selected", () => {
     const html = renderToStaticMarkup(
       createElement(TaskApprovalModalPanel, {

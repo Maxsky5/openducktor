@@ -4,6 +4,7 @@ import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -25,8 +26,9 @@ export function PromptRoleTabs({
   disabled,
 }: PromptRoleTabsProps): ReactElement {
   return (
-    <div
-      className="inline-flex h-9 w-full items-center bg-muted p-1"
+    <SegmentedControlRoot
+      size="sm"
+      className="w-full rounded-none"
       role="tablist"
       aria-label="Prompt role tabs"
     >
@@ -35,18 +37,12 @@ export function PromptRoleTabs({
         const isActive = value === entry.id;
 
         return (
-          <button
+          <SegmentedControlItem
             key={entry.id}
-            type="button"
+            active={isActive}
+            size="sm"
             role="tab"
-            aria-selected={isActive}
-            className={cn(
-              "inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded-sm px-3 text-xs transition-colors",
-              isActive
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-              disabled && "pointer-events-none opacity-50",
-            )}
+            inactiveClassName="hover:bg-background/80"
             onClick={() => onChange(entry.id)}
             disabled={disabled}
             title={
@@ -61,7 +57,7 @@ export function PromptRoleTabs({
                 <CircleAlert
                   className={cn(
                     "size-3.5 shrink-0",
-                    isActive ? "text-primary-foreground" : "text-destructive-muted",
+                    isActive ? "text-selected-control-foreground" : "text-destructive-muted",
                   )}
                   aria-hidden="true"
                 />
@@ -72,10 +68,10 @@ export function PromptRoleTabs({
                 {tabErrorCount} prompt placeholder error{tabErrorCount > 1 ? "s" : ""}
               </span>
             ) : null}
-          </button>
+          </SegmentedControlItem>
         );
       })}
-    </div>
+    </SegmentedControlRoot>
   );
 }
 

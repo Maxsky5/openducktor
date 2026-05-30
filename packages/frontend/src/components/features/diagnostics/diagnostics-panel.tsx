@@ -37,7 +37,11 @@ export function DiagnosticsPanel(): ReactElement {
     isLoadingChecks,
   } = useChecksState();
   const [isOpen, setOpen] = useState(false);
-  const autoOpenedByRepoRef = useRef<Set<string>>(new Set());
+  const autoOpenedByRepoRef = useRef<Set<string> | null>(null);
+  if (autoOpenedByRepoRef.current === null) {
+    autoOpenedByRepoRef.current = new Set();
+  }
+  const autoOpenedByRepo = autoOpenedByRepoRef.current;
 
   const model = useMemo(
     () =>
@@ -100,12 +104,12 @@ export function DiagnosticsPanel(): ReactElement {
     if (!workspaceRepoPath || model.criticalReasons.length === 0) {
       return;
     }
-    if (autoOpenedByRepoRef.current.has(workspaceRepoPath)) {
+    if (autoOpenedByRepo.has(workspaceRepoPath)) {
       return;
     }
-    autoOpenedByRepoRef.current.add(workspaceRepoPath);
+    autoOpenedByRepo.add(workspaceRepoPath);
     handleOpenChange(true);
-  }, [handleOpenChange, workspaceRepoPath, model.criticalReasons.length]);
+  }, [autoOpenedByRepo, handleOpenChange, workspaceRepoPath, model.criticalReasons.length]);
 
   return (
     <>
@@ -152,7 +156,7 @@ export function DiagnosticsPanel(): ReactElement {
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
                 <SheetTitle className="flex items-center gap-2">
-                  <ShieldCheck className="size-4 text-primary" />
+                  <ShieldCheck className="size-4 text-selected-accent" />
                   Diagnostics
                 </SheetTitle>
                 <SheetDescription>

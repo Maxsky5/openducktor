@@ -20,7 +20,7 @@ const COMMANDS = [
 ];
 
 describe("AgentChatComposerSlashMenu", () => {
-  test("renders command rows with pointer cursor affordance", () => {
+  test("renders active command with selected-surface styling and pointer cursor", () => {
     render(
       <AgentChatComposerSlashMenu
         commands={COMMANDS}
@@ -31,9 +31,11 @@ describe("AgentChatComposerSlashMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /first command/i }).className).toContain(
-      "cursor-pointer",
-    );
+    const activeCommand = screen.getByRole("button", { name: /first command/i });
+
+    expect(activeCommand.className).toContain("cursor-pointer");
+    expect(activeCommand.className).toContain("bg-selected-surface");
+    expect(activeCommand.className).not.toContain("bg-primary/20");
   });
 
   test("scrolls the active command into view when keyboard navigation changes selection", () => {

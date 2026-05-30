@@ -215,6 +215,8 @@ describe("AgentStudioDevServerPanel", () => {
     expect(html).toContain("/tmp/worktree/task-7");
     expect(html).toContain("inline-flex max-w-full items-center gap-1.5");
     expect(html).toContain("bg-[var(--dev-server-terminal-panel)]");
+    expect(html).toContain("data-[state=active]:border-t-selected-accent");
+    expect(html).not.toContain("data-[state=active]:border-t-primary");
     expect(html).toContain('data-testid="agent-studio-dev-server-terminal"');
   });
 

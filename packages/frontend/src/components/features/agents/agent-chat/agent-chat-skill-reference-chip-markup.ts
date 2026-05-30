@@ -1,4 +1,4 @@
-import { badgeVariants } from "@/components/ui/badge";
+import { badgeVariants } from "@/components/ui/badge-variants";
 import { cn } from "@/lib/utils";
 
 export const AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME = cn(
