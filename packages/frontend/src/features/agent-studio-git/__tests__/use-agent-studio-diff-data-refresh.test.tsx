@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { GitWorktreeStatus } from "@openducktor/contracts";
+import { appQueryClient, clearAppQueryClient, createQueryClient } from "@/lib/query-client";
+import { gitQueryKeys } from "@/state/queries/git";
 import {
   createBaseArgs,
   createDeferred,
@@ -15,6 +17,33 @@ import {
 setupAgentStudioDiffDataTestHarness();
 
 describe("useAgentStudioDiffData", () => {
+  test("manual refresh invalidates repo branches on the scoped query client", async () => {
+    await clearAppQueryClient();
+    const scopedQueryClient = createQueryClient();
+    const branchesQueryKey = gitQueryKeys.branches("/repo");
+    scopedQueryClient.setQueryData(branchesQueryKey, []);
+    appQueryClient.setQueryData(branchesQueryKey, []);
+    const harness = createHookHarness(createBaseArgs(), { queryClient: scopedQueryClient });
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+      expect(scopedQueryClient.getQueryState(branchesQueryKey)?.isInvalidated).toBe(false);
+      expect(appQueryClient.getQueryState(branchesQueryKey)?.isInvalidated).toBe(false);
+
+      await harness.run(async (state) => {
+        await state.refresh();
+      });
+
+      expect(scopedQueryClient.getQueryState(branchesQueryKey)?.isInvalidated).toBe(true);
+      expect(appQueryClient.getQueryState(branchesQueryKey)?.isInvalidated).toBe(false);
+    } finally {
+      await harness.unmount();
+      scopedQueryClient.clear();
+      await clearAppQueryClient();
+    }
+  });
+
   test("manual refresh fetches remote before reloading the active scope", async () => {
     const harness = createHookHarness(createBaseArgs());
 

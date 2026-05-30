@@ -1,6 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
-import { appQueryClient } from "@/lib/query-client";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
 import type { GitDiffRefresh } from "../contracts";
 import { mergeRefreshRequests, runDiffRefreshRequest } from "./refresh-execution";
@@ -37,6 +37,7 @@ export function useAgentStudioDiffRefreshController({
   refreshActiveScope,
   refreshActiveScopeSummary,
 }: UseAgentStudioDiffRefreshControllerArgs): UseAgentStudioDiffRefreshControllerResult {
+  const queryClient = useQueryClient();
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
@@ -81,11 +82,11 @@ export function useAgentStudioDiffRefreshController({
             context.targetBranch,
             context.workingDir ?? undefined,
           ),
-        invalidateRepoBranches: (repoPath) => invalidateRepoBranchesQuery(appQueryClient, repoPath),
+        invalidateRepoBranches: (repoPath) => invalidateRepoBranchesQuery(queryClient, repoPath),
         refreshActiveScope,
         refreshActiveScopeSummary,
       }),
-    [refreshActiveScope, refreshActiveScopeSummary],
+    [queryClient, refreshActiveScope, refreshActiveScopeSummary],
   );
 
   const refresh = useCallback<GitDiffRefresh>(

@@ -40,6 +40,12 @@ type ApplyFullResultArgs = {
   clearScopeInvalidation: (scope: DiffScope) => void;
 };
 
+type ApplyCachedFullResultArgs = {
+  scope: DiffScope;
+  snapshot: ScopeSnapshot;
+  clearScopeInvalidation: (scope: DiffScope) => void;
+};
+
 type ApplyScopeLoadErrorArgs = {
   scope: DiffScope;
   mode: LoadDataMode;
@@ -56,6 +62,7 @@ type UseAgentStudioDiffBatchStateResult = {
   pendingFullReload: LoadRequestContext | null;
   state: DiffBatchState;
   statusSnapshotKey: string | null;
+  applyCachedFullResult: (args: ApplyCachedFullResultArgs) => void;
   applyFullResult: (args: ApplyFullResultArgs) => void;
   applyScopeLoadError: (args: ApplyScopeLoadErrorArgs) => void;
   applySummaryResult: (args: ApplySummaryResultArgs) => void;
@@ -183,7 +190,7 @@ export function useAgentStudioDiffBatchState({
     [commitControllerState],
   );
 
-  const applyFullResult = useCallback(
+  const applyFullSnapshotResult = useCallback(
     ({ clearScopeInvalidation, requestSequence, scope, snapshot }: ApplyFullResultArgs): void => {
       clearScopeInvalidation(scope);
       const previousState = controllerStateRef.current;
@@ -207,6 +214,18 @@ export function useAgentStudioDiffBatchState({
       );
     },
     [commitControllerState],
+  );
+
+  const applyCachedFullResult = useCallback(
+    ({ clearScopeInvalidation, scope, snapshot }: ApplyCachedFullResultArgs): void => {
+      applyFullSnapshotResult({
+        clearScopeInvalidation,
+        requestSequence: controllerStateRef.current.latestSharedSequence,
+        scope,
+        snapshot,
+      });
+    },
+    [applyFullSnapshotResult],
   );
 
   const applyScopeLoadError = useCallback(
@@ -260,7 +279,8 @@ export function useAgentStudioDiffBatchState({
     pendingFullReload,
     state: controllerState.batchState,
     statusSnapshotKey,
-    applyFullResult,
+    applyCachedFullResult,
+    applyFullResult: applyFullSnapshotResult,
     applyScopeLoadError,
     applySummaryResult,
     consumePendingFullReload,

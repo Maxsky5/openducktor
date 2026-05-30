@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffScope } from "../contracts";
-import type { DiffBatchState, ScopeSnapshot } from "../model/diff-data-model";
+import {
+  type DiffBatchState,
+  type ScopeSnapshot,
+  toStatusSnapshotKey,
+} from "../model/diff-data-model";
+import {
+  createVisibleDiffBatchStateFromCachedFullLoad,
+  readCachedFullLoadSnapshot,
+} from "./cached-full-load";
 import { useAgentStudioDiffBatchState } from "./use-diff-batch-state";
 import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-diff-loader";
 import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
@@ -34,6 +43,7 @@ export function useAgentStudioDiffController({
   requestContextKey,
   shouldBlockDiffLoading,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
+  const queryClient = useQueryClient();
   const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
   const requestContextKeyRef = useRef<string | null>(null);
   const {
@@ -60,7 +70,7 @@ export function useAgentStudioDiffController({
   }, [resetRequestLifecycle]);
 
   const {
-    activeScopeState,
+    applyCachedFullResult,
     applyFullResult,
     applyScopeLoadError,
     applySummaryResult,
@@ -69,7 +79,6 @@ export function useAgentStudioDiffController({
     resetControllerState,
     setBatchLoading,
     state,
-    statusSnapshotKey,
   } = useAgentStudioDiffBatchState({
     diffScope,
     resetRequestTracking,
@@ -90,6 +99,7 @@ export function useAgentStudioDiffController({
     workingDirRef,
     diffScopeRef,
     shouldBlockDiffLoading,
+    applyCachedFullResult,
     applyFullResult,
     applyScopeLoadError,
     applySummaryResult,
@@ -131,6 +141,9 @@ export function useAgentStudioDiffController({
       return;
     }
 
+    const scope = hasContextChanged ? "uncommitted" : diffScopeRef.current;
+    const shouldHydrateFromCache = previousContextKey === null || hasContextChanged;
+
     if (hasContextChanged) {
       resetToDefaultScope();
       resetControllerState();
@@ -141,8 +154,9 @@ export function useAgentStudioDiffController({
         repoPath,
         targetBranch,
         workingDir,
-        scope: hasContextChanged ? "uncommitted" : diffScopeRef.current,
+        scope,
         force: hasContextChanged,
+        hydrateCachedFullLoad: shouldHydrateFromCache,
       });
     }
   }, [
@@ -185,12 +199,49 @@ export function useAgentStudioDiffController({
     workingDir,
   ]);
 
-  return {
-    activeScopeState,
-    diffScope,
-    setDiffScope,
+  const isRenderContextStale = requestContextKeyRef.current !== requestContextKey;
+  const visibleDiffScope = isRenderContextStale ? "uncommitted" : diffScope;
+  const visibleState = useMemo<DiffBatchState>(() => {
+    if (!isRenderContextStale) {
+      return state;
+    }
+
+    const cachedRenderSnapshot =
+      repoPath === null
+        ? null
+        : readCachedFullLoadSnapshot(queryClient, {
+            repoPath,
+            targetBranch,
+            workingDir,
+            scope: visibleDiffScope,
+          });
+    return createVisibleDiffBatchStateFromCachedFullLoad({
+      scope: visibleDiffScope,
+      snapshot: cachedRenderSnapshot,
+      isLoadingWhenMissing: repoPath !== null && !shouldBlockDiffLoading,
+    });
+  }, [
+    isRenderContextStale,
+    queryClient,
+    repoPath,
+    shouldBlockDiffLoading,
     state,
-    statusSnapshotKey,
+    targetBranch,
+    visibleDiffScope,
+    workingDir,
+  ]);
+  const visibleActiveScopeState = visibleState.byScope[visibleDiffScope];
+  const visibleStatusSnapshotKey = useMemo(
+    () => toStatusSnapshotKey(visibleActiveScopeState),
+    [visibleActiveScopeState],
+  );
+
+  return {
+    activeScopeState: visibleActiveScopeState,
+    diffScope: visibleDiffScope,
+    setDiffScope,
+    state: visibleState,
+    statusSnapshotKey: visibleStatusSnapshotKey,
     refreshActiveScope,
     refreshActiveScopeSummary,
   };

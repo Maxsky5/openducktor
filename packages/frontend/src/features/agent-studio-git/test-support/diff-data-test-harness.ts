@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { GitWorktreeStatus, GitWorktreeStatusSummary } from "@openducktor/contracts";
+import type { QueryClient } from "@tanstack/react-query";
 import { clearAppQueryClient } from "@/lib/query-client";
 import {
   createHookHarness as createSharedHookHarness,
@@ -60,9 +61,19 @@ type UseAgentStudioDiffDataHook =
 let useAgentStudioDiffData: UseAgentStudioDiffDataHook;
 
 export type HookArgs = Parameters<UseAgentStudioDiffDataHook>[0];
+type HookResult = ReturnType<UseAgentStudioDiffDataHook>;
 
-export const createHookHarness = (initialProps: HookArgs) => {
-  return createSharedHookHarness(useAgentStudioDiffData, initialProps);
+export const createHookHarness = (
+  initialProps: HookArgs,
+  options?: { queryClient?: QueryClient; onRender?: (state: HookResult) => void },
+) => {
+  const useObservedHook = (props: HookArgs): HookResult => {
+    const state = useAgentStudioDiffData(props);
+    options?.onRender?.(state);
+    return state;
+  };
+
+  return createSharedHookHarness(useObservedHook, initialProps, options);
 };
 
 export const createDeferred = <T>() => {
@@ -204,13 +215,13 @@ export const setupAgentStudioDiffDataTestHarness = (): void => {
     }));
 
     ({ useAgentStudioDiffData } = await import("../use-agent-studio-diff-data"));
-    await clearAppQueryClient();
     taskWorktreeEntriesMock.mockClear();
     taskWorktreeGetMock.mockClear();
     gitFetchRemoteMock.mockClear();
     retryWorktreeResolutionMock.mockClear();
     gitGetWorktreeStatusMock.mockClear();
     gitGetWorktreeStatusSummaryMock.mockClear();
+    await clearAppQueryClient();
     gitFetchRemoteMock.mockResolvedValue({ outcome: "fetched", output: "From origin" });
     gitGetWorktreeStatusMock.mockImplementation(
       async (

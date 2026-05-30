@@ -1,7 +1,7 @@
 import type { DevServerEvent, DevServerGroupState } from "@openducktor/contracts";
 import { devServerEventSchema } from "@openducktor/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import {
   type AgentStudioDevServerPanelMode,
   type AgentStudioDevServerPanelModel,
@@ -10,7 +10,7 @@ import {
 } from "@/components/features/agents/agent-studio-dev-server-panel";
 import { errorMessage } from "@/lib/errors";
 import { hostClient, subscribeDevServerEvents } from "@/lib/host-client";
-import { devServerGroupStateQueryOptions, devServerQueryKeys } from "@/state/queries/dev-servers";
+import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   applyDevServerEventToState,
@@ -20,6 +20,7 @@ import {
   isDevServerSubscriptionControlEvent,
 } from "./use-agent-studio-dev-server-panel-helpers";
 import { useAgentStudioDevServerPanelSelection } from "./use-agent-studio-dev-server-panel-selection";
+import { useAgentStudioDevServerStateQuery } from "./use-agent-studio-dev-server-state-query";
 import { useAgentStudioDevServerTerminalBuffers } from "./use-agent-studio-dev-server-terminal-buffers";
 
 export {
@@ -85,7 +86,6 @@ export function useAgentStudioDevServerPanel({
   enabled,
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
-  const forceHydrateFromQueryRef = useRef(false);
   const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
   const [localState, dispatchLocalState] = useReducer(devServerPanelReducer, {
     liveState: null,
@@ -97,23 +97,7 @@ export function useAgentStudioDevServerPanel({
   const configuredScripts = repoSettings?.devServers ?? [];
   const hasConfiguredScripts = configuredScripts.length > 0;
   const queryEnabled = enabled && hasConfiguredScripts && repoPath !== null && taskId !== null;
-  const [queryActivationState, setQueryActivationState] = useState<{
-    enabled: boolean;
-    since: number;
-  }>(() => ({
-    enabled: queryEnabled,
-    since: queryEnabled ? Date.now() : 0,
-  }));
-
   const taskMemoryKey = repoPath && taskId ? buildTaskMemoryKey(repoPath, taskId) : null;
-  const queryOptions =
-    repoPath && taskId
-      ? devServerGroupStateQueryOptions(repoPath, taskId)
-      : devServerGroupStateQueryOptions("__disabled__", "__disabled__");
-  const stateQuery = useQuery({
-    ...queryOptions,
-    enabled: queryEnabled,
-  });
 
   const {
     applyTerminalBuffersFromEvent,
@@ -128,51 +112,13 @@ export function useAgentStudioDevServerPanel({
     syncTerminalBuffersFromMutationState,
   } = useAgentStudioDevServerTerminalBuffers();
 
-  useEffect(() => {
-    setQueryActivationState((current) => {
-      if (current.enabled === queryEnabled) {
-        return current;
-      }
-
-      return {
-        enabled: queryEnabled,
-        since: queryEnabled ? Date.now() : 0,
-      };
+  const { effectiveState, isAwaitingFreshState, queryData, stateQuery } =
+    useAgentStudioDevServerStateQuery({
+      repoPath,
+      taskId,
+      queryEnabled,
+      liveState,
     });
-  }, [queryEnabled]);
-
-  useEffect(() => {
-    if (!queryEnabled || repoPath === null || taskId === null) {
-      return;
-    }
-
-    if (stateQuery.isFetching || stateQuery.dataUpdatedAt >= queryActivationState.since) {
-      return;
-    }
-
-    void stateQuery.refetch();
-  }, [
-    queryActivationState.since,
-    queryEnabled,
-    repoPath,
-    stateQuery,
-    stateQuery.dataUpdatedAt,
-    stateQuery.isFetching,
-    taskId,
-  ]);
-
-  const hasFreshQueryData =
-    stateQuery.data !== undefined && stateQuery.dataUpdatedAt >= queryActivationState.since;
-  const shouldUseQueryData =
-    queryEnabled && hasFreshQueryData && queryActivationState.enabled === queryEnabled;
-  const currentLiveState = queryEnabled ? liveState : null;
-  const effectiveState =
-    currentLiveState ?? (shouldUseQueryData ? (stateQuery.data ?? null) : null);
-  const isAwaitingFreshState =
-    queryEnabled &&
-    effectiveState == null &&
-    !stateQuery.error &&
-    (stateQuery.isPending || stateQuery.isFetching || stateQuery.data !== undefined);
 
   const { effectiveSelectedScriptId, onSelectScript, resetSelectedScript, selectedScriptIdRef } =
     useAgentStudioDevServerPanelSelection({
@@ -186,7 +132,6 @@ export function useAgentStudioDevServerPanel({
       return;
     }
 
-    forceHydrateFromQueryRef.current = true;
     void queryClient.refetchQueries({
       queryKey: devServerQueryKeys.state(repoPath, taskId),
       exact: true,
@@ -238,42 +183,28 @@ export function useAgentStudioDevServerPanel({
 
     if (scopeChanged) {
       clearTerminalBuffers();
-      forceHydrateFromQueryRef.current = false;
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
     }
 
     if (!queryEnabled) {
       clearTerminalBuffers();
-      forceHydrateFromQueryRef.current = false;
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
       return;
     }
 
-    if (
-      queryActivationState.enabled === queryEnabled &&
-      stateQuery.data &&
-      stateQuery.dataUpdatedAt >= queryActivationState.since
-    ) {
-      hydrateTerminalBuffersFromState(
-        stateQuery.data,
-        selectedScriptIdRef.current,
-        forceHydrateFromQueryRef.current,
-      );
-      forceHydrateFromQueryRef.current = false;
-      dispatchLocalState({ type: "liveStateChanged", state: stateQuery.data });
+    if (queryData) {
+      hydrateTerminalBuffersFromState(queryData, selectedScriptIdRef.current);
+      dispatchLocalState({ type: "liveStateChanged", state: queryData });
     }
   }, [
     clearTerminalBuffers,
     hydrateTerminalBuffersFromState,
-    queryActivationState.enabled,
-    queryActivationState.since,
+    queryData,
     queryEnabled,
     resetSelectedScript,
     selectedScriptIdRef,
-    stateQuery.data,
-    stateQuery.dataUpdatedAt,
     taskMemoryKey,
   ]);
 
@@ -449,6 +380,7 @@ export function useAgentStudioDevServerPanel({
 
         unsubscribe = cleanup;
         dispatchLocalState({ type: "subscriptionReady" });
+        requestTerminalRehydrate();
       })
       .catch((error: unknown) => {
         if (!cancelled) {

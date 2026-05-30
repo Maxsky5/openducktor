@@ -4,6 +4,7 @@ import {
   type RuntimeDescriptor,
   type TaskCard,
 } from "@openducktor/contracts";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   type ComponentProps,
   createElement,
@@ -29,6 +30,12 @@ type ReactActEnvironment = typeof globalThis & {
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]
 >;
+
+type HookHarnessOptions = {
+  queryClient?: QueryClient;
+  runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
+  runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
+};
 
 export const enableReactActEnvironment = (): void => {
   (globalThis as ReactActEnvironment).IS_REACT_ACT_ENVIRONMENT = true;
@@ -166,10 +173,7 @@ export const createAgentSessionFixture = (
 export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,
   initialProps: Props,
-  options?: {
-    runtimeDefinitionsContext?: RuntimeDefinitionsContextValue;
-    runtimeDefinitionsContextRef?: { current: RuntimeDefinitionsContextValue };
-  },
+  options?: HookHarnessOptions,
 ) => {
   const checksOperationsContext = {
     ...TEST_CHECKS_OPERATIONS_CONTEXT,
@@ -178,13 +182,19 @@ export const createHookHarness = <Props, State>(
     current: options?.runtimeDefinitionsContext ?? createRuntimeDefinitionsContextValue(),
   };
 
+  const renderQueryProvider = (children: ReactElement): ReactElement => {
+    if (options?.queryClient) {
+      return createElement(QueryClientProvider, { client: options.queryClient }, children);
+    }
+
+    return createElement(QueryProvider, { useIsolatedClient: true }, children);
+  };
+
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
       ChecksOperationsContext.Provider,
       { value: checksOperationsContext },
-      createElement(
-        QueryProvider,
-        { useIsolatedClient: true },
+      renderQueryProvider(
         createElement(
           RuntimeDefinitionsContext.Provider,
           { value: runtimeDefinitionsContextRef.current },

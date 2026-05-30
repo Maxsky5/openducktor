@@ -148,6 +148,17 @@ export const loadWorktreeStatusFromQuery = (
   });
 };
 
+export const getCachedWorktreeStatusFromQuery = (
+  queryClient: QueryClient,
+  repoPath: string,
+  targetBranch: string,
+  diffScope: "target" | "uncommitted",
+  workingDir: string | null,
+): GitWorktreeStatus | undefined =>
+  queryClient.getQueryData(
+    gitQueryKeys.worktreeStatus(repoPath, targetBranch, diffScope, workingDir),
+  );
+
 export const loadWorktreeStatusSummaryFromQuery = (
   queryClient: QueryClient,
   repoPath: string,

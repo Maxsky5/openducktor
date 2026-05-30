@@ -15,9 +15,15 @@ const SESSION_PATH = "session";
 type BrowserSseChannel = {
   eventSource: EventSource;
   listeners: Map<number, BrowserSseListener>;
+  ready: Promise<void>;
   handleMessage: (event: MessageEvent<string>) => void;
   handleOpen: () => void;
   handleStreamWarning: (event: MessageEvent<string>) => void;
+};
+
+type BrowserSseSubscription = {
+  ready: Promise<void>;
+  unsubscribe: () => void;
 };
 
 const sseChannels = new Map<string, BrowserSseChannel>();
@@ -132,7 +138,10 @@ const closeSseChannelIfUnused = (path: string, channel: BrowserSseChannel): void
   sseChannels.delete(path);
 };
 
-const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() => void) => {
+const subscribeSseChannel = (
+  path: string,
+  listener: BrowserSseListener,
+): BrowserSseSubscription => {
   const baseUrl = getBrowserBackendUrl().replace(/\/$/, "");
   let channel = sseChannels.get(path);
 
@@ -141,6 +150,10 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
     const listeners = new Map<number, BrowserSseListener>();
     const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
     let hasOpened = false;
+    let resolveReady: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
     const handleMessage = (event: MessageEvent<string>): void => {
       const payload = parseSsePayload(event.data);
       for (const currentListener of listeners.values()) {
@@ -148,11 +161,12 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
       }
     };
     const handleOpen = (): void => {
-      if (!shouldEmitControlEvents) {
-        return;
-      }
       if (!hasOpened) {
         hasOpened = true;
+        resolveReady();
+        return;
+      }
+      if (!shouldEmitControlEvents) {
         return;
       }
       for (const currentListener of listeners.values()) {
@@ -176,6 +190,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
     channel = {
       eventSource,
       listeners,
+      ready,
       handleMessage,
       handleOpen,
       handleStreamWarning,
@@ -187,13 +202,16 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
   nextSseListenerId += 1;
   channel.listeners.set(listenerId, listener);
 
-  return () => {
-    const currentChannel = sseChannels.get(path);
-    if (!currentChannel) {
-      return;
-    }
-    currentChannel.listeners.delete(listenerId);
-    closeSseChannelIfUnused(path, currentChannel);
+  return {
+    ready: channel.ready,
+    unsubscribe: () => {
+      const currentChannel = sseChannels.get(path);
+      if (!currentChannel) {
+        return;
+      }
+      currentChannel.listeners.delete(listenerId);
+      closeSseChannelIfUnused(path, currentChannel);
+    },
   };
 };
 
@@ -201,28 +219,30 @@ export const subscribeLocalHostRunEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
   await ensureLocalHostSession();
-  return subscribeSseChannel("events", listener);
+  return subscribeSseChannel("events", listener).unsubscribe;
 };
 
 export const subscribeLocalHostDevServerEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
   await ensureLocalHostSession();
-  return subscribeSseChannel("dev-server-events", listener);
+  const subscription = subscribeSseChannel("dev-server-events", listener);
+  await subscription.ready;
+  return subscription.unsubscribe;
 };
 
 export const subscribeLocalHostTaskEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
   await ensureLocalHostSession();
-  return subscribeSseChannel("task-events", listener);
+  return subscribeSseChannel("task-events", listener).unsubscribe;
 };
 
 export const subscribeLocalHostCodexAppServerEvents = async (
   listener: (payload: unknown) => void,
 ): Promise<() => void> => {
   await ensureLocalHostSession();
-  return subscribeSseChannel("codex-app-server-events", listener);
+  return subscribeSseChannel("codex-app-server-events", listener).unsubscribe;
 };
 
 export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: string): string => {

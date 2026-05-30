@@ -17,6 +17,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
+    const clear = mock(() => {});
     const writes: string[] = [];
     const write = mock((data: string, callback?: () => void) => {
       writes.push(data);
@@ -30,7 +31,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({});
       return {
-        terminal: { dispose, loadAddon, open, options: {}, reset, write },
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
     };
@@ -69,6 +70,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
+    const clear = mock(() => {});
     const writes: string[] = [];
     const write = mock((data: string, callback?: () => void) => {
       writes.push(data);
@@ -80,7 +82,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({});
       return {
-        terminal: { dispose, loadAddon, open, options: {}, reset, write },
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
     };
@@ -166,11 +168,89 @@ describe("AgentStudioDevServerTerminal", () => {
     expect(reset).toHaveBeenCalledTimes(2);
   });
 
+  test("clears stale terminal rows before replaying a reset window", async () => {
+    const open = mock((_container: HTMLElement) => {});
+    const loadAddon = mock((_addon: unknown) => {});
+    const fit = mock(() => {});
+    let screen = "";
+    const reset = mock(() => {});
+    const clear = mock(() => {
+      screen = "";
+    });
+    const write = mock((data: string, callback?: () => void) => {
+      screen += data;
+      callback?.();
+    });
+    const dispose = mock(() => {});
+    const onRendererError = () => {};
+    const createTerminalBinding = (container: HTMLElement) => {
+      open(container);
+      loadAddon({});
+      return {
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
+        fitAddon: { dispose, fit },
+      };
+    };
+
+    const view = render(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "old failed output\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 0,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("old failed output\r\n");
+    });
+
+    view.rerender(
+      <AgentStudioDevServerTerminal
+        scriptId="frontend"
+        terminalBuffer={{
+          entries: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "Starting `cd apps/web && pnpm dev`\r\n",
+              timestamp: "2026-03-19T15:31:00.000Z",
+            },
+          ],
+          lastSequence: 0,
+          resetToken: 1,
+        }}
+        onRendererError={onRendererError}
+        createTerminalBinding={createTerminalBinding}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen).toBe("Starting `cd apps/web && pnpm dev`\r\n");
+    });
+    expect(clear).toHaveBeenCalledTimes(2);
+    expect(reset).toHaveBeenCalledTimes(2);
+  });
+
   test("preserves split ANSI sequences across replay and incremental writes", async () => {
     const open = mock((_container: HTMLElement) => {});
     const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
+    const clear = mock(() => {
+      screen = "";
+    });
     const writes: string[] = [];
     let screen = "";
     const write = mock((data: string, callback?: () => void) => {
@@ -185,6 +265,7 @@ describe("AgentStudioDevServerTerminal", () => {
       loadAddon({});
       return {
         terminal: {
+          clear,
           dispose,
           loadAddon,
           open,
@@ -308,6 +389,9 @@ describe("AgentStudioDevServerTerminal", () => {
     const reset = mock(() => {
       screen = "";
     });
+    const clear = mock(() => {
+      screen = "";
+    });
     const write = mock((data: string, callback?: () => void) => {
       const delay = data.includes("frontend") ? 20 : 0;
       setTimeout(() => {
@@ -319,7 +403,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({});
       return {
-        terminal: { dispose, loadAddon, open, options: {}, reset, write },
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
     };
@@ -399,6 +483,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
+    const clear = mock(() => {});
     const dispose = mock(() => {});
     const onRendererError = mock(() => {});
     let shouldThrow = false;
@@ -413,7 +498,7 @@ describe("AgentStudioDevServerTerminal", () => {
       open(container);
       loadAddon({});
       return {
-        terminal: { dispose, loadAddon, open, options: {}, reset, write },
+        terminal: { clear, dispose, loadAddon, open, options: {}, reset, write },
         fitAddon: { dispose, fit },
       };
     };
@@ -481,6 +566,7 @@ describe("AgentStudioDevServerTerminal", () => {
     const loadAddon = mock((_addon: unknown) => {});
     const fit = mock(() => {});
     const reset = mock(() => {});
+    const clear = mock(() => {});
     const write = mock((_data: string, callback?: () => void) => {
       callback?.();
     });
@@ -497,6 +583,7 @@ describe("AgentStudioDevServerTerminal", () => {
           attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {
             keyHandler = handler;
           },
+          clear,
           dispose,
           getSelection: () => "copied terminal text",
           hasSelection: () => true,

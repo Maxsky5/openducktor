@@ -1,21 +1,24 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { appQueryClient } from "@/lib/query-client";
 import {
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
 } from "@/state/queries/git";
 import { toScopeSnapshot, toScopeSummaryFields } from "../model/normalization";
+import { readCachedFullLoadSnapshot } from "./cached-full-load";
 import type {
   DiffLoadRunner,
   InFlightRequestContext,
   UseAgentStudioDiffLoaderArgs,
 } from "./load-types";
+import type { LoadRequestContext } from "./use-diff-batch-state";
 
 type UseDiffLoadRunnerArgs = Pick<
   UseAgentStudioDiffLoaderArgs,
   | "repoPathRef"
   | "targetBranchRef"
   | "workingDirRef"
+  | "applyCachedFullResult"
   | "applyFullResult"
   | "applySummaryResult"
   | "clearScopeInvalidation"
@@ -27,18 +30,37 @@ export const useAgentStudioDiffLoadRunner = ({
   repoPathRef,
   targetBranchRef,
   workingDirRef,
+  applyCachedFullResult,
   applyFullResult,
   applySummaryResult,
   clearScopeInvalidation,
   markScopeInvalidated,
   shouldApplyResult,
 }: UseDiffLoadRunnerArgs): DiffLoadRunner => {
+  const queryClient = useQueryClient();
   const hasLoadContextChanged = useCallback(
     (path: string, nextTargetBranch: string, nextWorkingDir: string | null): boolean =>
       repoPathRef.current !== path ||
       targetBranchRef.current !== nextTargetBranch ||
       (workingDirRef.current ?? null) !== nextWorkingDir,
     [repoPathRef, targetBranchRef, workingDirRef],
+  );
+
+  const hydrateCachedFullLoad = useCallback(
+    (context: LoadRequestContext): boolean => {
+      const cachedSnapshot = readCachedFullLoadSnapshot(queryClient, context);
+      if (cachedSnapshot === null) {
+        return false;
+      }
+
+      applyCachedFullResult({
+        clearScopeInvalidation,
+        scope: context.scope,
+        snapshot: cachedSnapshot,
+      });
+      return true;
+    },
+    [applyCachedFullResult, clearScopeInvalidation, queryClient],
   );
 
   const runSummaryLoad = useCallback(
@@ -58,7 +80,7 @@ export const useAgentStudioDiffLoadRunner = ({
       }
 
       const summary = await loadWorktreeStatusSummaryFromQuery(
-        appQueryClient,
+        queryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
@@ -83,7 +105,13 @@ export const useAgentStudioDiffLoadRunner = ({
         });
       }
     },
-    [applySummaryResult, hasLoadContextChanged, markScopeInvalidated, shouldApplyResult],
+    [
+      applySummaryResult,
+      hasLoadContextChanged,
+      markScopeInvalidated,
+      queryClient,
+      shouldApplyResult,
+    ],
   );
 
   const runFullLoad = useCallback(
@@ -104,7 +132,7 @@ export const useAgentStudioDiffLoadRunner = ({
       }
 
       const snapshot = await loadWorktreeStatusFromQuery(
-        appQueryClient,
+        queryClient,
         activeRepoPath,
         activeTargetBranch,
         scope,
@@ -124,15 +152,22 @@ export const useAgentStudioDiffLoadRunner = ({
         });
       }
     },
-    [applyFullResult, clearScopeInvalidation, hasLoadContextChanged, shouldApplyResult],
+    [
+      applyFullResult,
+      clearScopeInvalidation,
+      hasLoadContextChanged,
+      queryClient,
+      shouldApplyResult,
+    ],
   );
 
   return useMemo(
     () => ({
       hasLoadContextChanged,
+      hydrateCachedFullLoad,
       runFullLoad,
       runSummaryLoad,
     }),
-    [hasLoadContextChanged, runFullLoad, runSummaryLoad],
+    [hasLoadContextChanged, hydrateCachedFullLoad, runFullLoad, runSummaryLoad],
   );
 };

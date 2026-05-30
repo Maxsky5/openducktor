@@ -1,17 +1,135 @@
 import { describe, expect, test } from "bun:test";
+import type { GitWorktreeStatus } from "@openducktor/contracts";
+import { createQueryClient } from "@/lib/query-client";
+import { gitQueryKeys } from "@/state/queries/git";
 import {
   createBaseArgs,
+  createDeferred,
   createHookHarness,
   gitFetchRemoteMock,
   gitGetWorktreeStatusMock,
   retryWorktreeResolutionMock,
   setupAgentStudioDiffDataTestHarness,
   taskWorktreeEntriesMock,
+  withSnapshotHashes,
 } from "../test-support/diff-data-test-harness";
 
 setupAgentStudioDiffDataTestHarness();
 
 describe("useAgentStudioDiffData", () => {
+  test("shows cached worktree diff data immediately while refreshing after task switch", async () => {
+    const queryClient = createQueryClient();
+    const taskBWorktreePath = "/repo/.worktrees/task-b";
+    const freshTaskBStatus = withSnapshotHashes({
+      currentBranch: { name: "feature/task-b", detached: false },
+      fileStatuses: [{ path: "src/fresh-task-b.ts", status: "M", staged: false }],
+      fileDiffs: [],
+      targetAheadBehind: { ahead: 1, behind: 0 },
+      upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+      snapshot: {
+        effectiveWorkingDir: taskBWorktreePath,
+        targetBranch: "origin/main",
+        diffScope: "uncommitted",
+        observedAtMs: 1731000002000,
+      },
+    });
+    const freshTaskBLoad = createDeferred<GitWorktreeStatus>();
+    const renders: Array<{
+      worktreePath: string | null;
+      filePath: string | undefined;
+      isLoading: boolean;
+    }> = [];
+    queryClient.setQueryData(
+      gitQueryKeys.worktreeStatus("/repo", "origin/main", "uncommitted", taskBWorktreePath),
+      withSnapshotHashes({
+        currentBranch: { name: "feature/task-b", detached: false },
+        fileStatuses: [{ path: "src/cached-task-b.ts", status: "M", staged: false }],
+        fileDiffs: [],
+        targetAheadBehind: { ahead: 1, behind: 0 },
+        upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+        snapshot: {
+          effectiveWorkingDir: taskBWorktreePath,
+          targetBranch: "origin/main",
+          diffScope: "uncommitted",
+          observedAtMs: 1731000001000,
+        },
+      }),
+    );
+    gitGetWorktreeStatusMock.mockImplementation(
+      async (
+        _repoPath: string,
+        targetBranch: string,
+        diffScope?: "target" | "uncommitted",
+        workingDir?: string,
+      ): Promise<GitWorktreeStatus> => {
+        if (workingDir === taskBWorktreePath && diffScope === "uncommitted") {
+          return freshTaskBLoad.promise;
+        }
+
+        return withSnapshotHashes({
+          currentBranch: { name: "feature/task-a", detached: false },
+          fileStatuses: [{ path: "src/task-a.ts", status: "M", staged: false }],
+          fileDiffs: [],
+          targetAheadBehind: { ahead: 0, behind: 0 },
+          upstreamAheadBehind: { outcome: "tracking", ahead: 0, behind: 0 },
+          snapshot: {
+            effectiveWorkingDir: workingDir ?? "/repo",
+            targetBranch,
+            diffScope: diffScope ?? "uncommitted",
+            observedAtMs: 1731000000000,
+          },
+        });
+      },
+    );
+    const harness = createHookHarness(
+      {
+        ...createBaseArgs(),
+        worktreeResolutionTaskId: "task-a",
+        worktreePath: "/repo/.worktrees/task-a",
+      },
+      {
+        queryClient,
+        onRender: (state) => {
+          renders.push({
+            worktreePath: state.worktreePath,
+            filePath: state.fileStatuses[0]?.path,
+            isLoading: state.isLoading,
+          });
+        },
+      },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      await harness.update({
+        ...createBaseArgs(),
+        worktreeResolutionTaskId: "task-b",
+        worktreePath: taskBWorktreePath,
+      });
+
+      expect(renders.find((render) => render.worktreePath === taskBWorktreePath)).toEqual({
+        worktreePath: taskBWorktreePath,
+        filePath: "src/cached-task-b.ts",
+        isLoading: false,
+      });
+      await harness.waitFor(
+        (state) => state.fileStatuses[0]?.path === "src/cached-task-b.ts" && !state.isLoading,
+      );
+      expect(gitGetWorktreeStatusMock.mock.calls.length).toBe(2);
+
+      await harness.run(async () => {
+        freshTaskBLoad.resolve(freshTaskBStatus);
+        await freshTaskBLoad.promise;
+      });
+      await harness.waitFor((state) => state.fileStatuses[0]?.path === "src/fresh-task-b.ts");
+    } finally {
+      await harness.unmount();
+      queryClient.clear();
+    }
+  });
+
   test("resets diff scope to uncommitted when repository context changes", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -48,11 +166,27 @@ describe("useAgentStudioDiffData", () => {
   });
 
   test("resets cached diff data when switching between task worktrees", async () => {
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      worktreeResolutionTaskId: "task-a",
-      worktreePath: "/repo/.worktrees/task-a",
-    });
+    const renders: Array<{
+      worktreePath: string | null;
+      filePath: string | undefined;
+      isLoading: boolean;
+    }> = [];
+    const harness = createHookHarness(
+      {
+        ...createBaseArgs(),
+        worktreeResolutionTaskId: "task-a",
+        worktreePath: "/repo/.worktrees/task-a",
+      },
+      {
+        onRender: (state) => {
+          renders.push({
+            worktreePath: state.worktreePath,
+            filePath: state.fileStatuses[0]?.path,
+            isLoading: state.isLoading,
+          });
+        },
+      },
+    );
 
     try {
       await harness.mount();
@@ -70,6 +204,11 @@ describe("useAgentStudioDiffData", () => {
         worktreePath: "/repo/.worktrees/task-b",
       });
 
+      expect(renders.find((render) => render.worktreePath === "/repo/.worktrees/task-b")).toEqual({
+        worktreePath: "/repo/.worktrees/task-b",
+        filePath: undefined,
+        isLoading: true,
+      });
       await harness.waitFor((state) => state.diffScope === "uncommitted");
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(

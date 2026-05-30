@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type { AgentStudioDevServerTerminalBuffer } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
 
 export type TerminalBinding = {
-  terminal: Pick<Terminal, "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
+  terminal: Pick<Terminal, "clear" | "dispose" | "loadAddon" | "open" | "options" | "reset"> & {
     attachCustomKeyEventHandler?(handler: (event: KeyboardEvent) => boolean): void;
     getSelection?(): string;
     hasSelection?(): boolean;
@@ -243,6 +243,7 @@ const renderTerminalBuffer = async ({
 
   if (didScriptChange || didResetTokenChange) {
     binding.terminal.reset();
+    binding.terminal.clear();
     await writeTerminalOutput(binding.terminal, readTerminalReplayOutput(entries));
     binding.fitAddon.fit();
     renderedStateRef.current = {

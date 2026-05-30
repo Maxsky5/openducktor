@@ -257,12 +257,11 @@ export const getDevServerTerminalBuffer = (
 export const getDevServerTerminalBufferReplacement = (
   currentContext: DevServerTerminalBufferReplacementContext | null,
   script: DevServerScriptState,
-  force = false,
 ): DevServerTerminalBufferReplacement | null => {
   const nextChunks = trimDevServerTerminalChunks(script.bufferedTerminalChunks);
   const nextWindow = readBufferedSequenceWindow(nextChunks);
 
-  if (force || currentContext === null) {
+  if (currentContext === null) {
     return {
       snapshotWindow: nextWindow,
       terminalChunks: nextChunks,
@@ -338,15 +337,13 @@ export const getDevServerTerminalBufferReplacement = (
 export const shouldReplaceDevServerTerminalBufferFromScript = (
   currentContext: DevServerTerminalBufferReplacementContext | null,
   script: DevServerScriptState,
-  force = false,
 ): boolean => {
-  return getDevServerTerminalBufferReplacement(currentContext, script, force) !== null;
+  return getDevServerTerminalBufferReplacement(currentContext, script) !== null;
 };
 
 export const reconcileDevServerTerminalBufferStore = (
   store: DevServerTerminalBufferStore,
   state: DevServerGroupState,
-  force = false,
 ): boolean => {
   let didChange = false;
   const nextScriptIds = new Set(state.scripts.map((script) => script.scriptId));
@@ -364,7 +361,6 @@ export const reconcileDevServerTerminalBufferStore = (
     const replacement = getDevServerTerminalBufferReplacement(
       getDevServerTerminalBufferReplacementContext(store, script.scriptId),
       script,
-      force,
     );
     if (replacement === null) {
       continue;

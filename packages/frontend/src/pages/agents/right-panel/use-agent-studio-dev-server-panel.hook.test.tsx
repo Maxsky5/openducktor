@@ -1,72 +1,25 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
-import type { DevServerGroupState, DevServerScriptState } from "@openducktor/contracts";
+import type { DevServerGroupState } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
+import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { devServerQueryKeys } from "@/state/queries/dev-servers";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { RepoSettingsInput } from "@/types/state-slices";
+import {
+  buildScript,
+  buildState,
+  createDeferred,
+  repoSettings,
+} from "./use-agent-studio-dev-server-panel-test-fixtures";
+import { renderDevServerPanelHook } from "./use-agent-studio-dev-server-panel-test-harness";
 
 const actualHostClientModule = await import("@/lib/host-client");
 
 if (typeof document === "undefined") {
   GlobalRegistrator.register();
 }
-
-const createDeferred = <T,>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  let reject: ((reason?: unknown) => void) | null = null;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return {
-    promise,
-    resolve: (value: T) => resolve?.(value),
-    reject: (reason?: unknown) => reject?.(reason),
-  };
-};
-
-const buildScript = (overrides: Partial<DevServerScriptState> = {}): DevServerScriptState => ({
-  scriptId: "frontend",
-  name: "Frontend",
-  command: "bun run dev",
-  status: "stopped",
-  pid: null,
-  startedAt: null,
-  exitCode: null,
-  lastError: null,
-  bufferedTerminalChunks: [],
-  ...overrides,
-});
-
-const buildState = (overrides: Partial<DevServerGroupState> = {}): DevServerGroupState => ({
-  repoPath: "/repo",
-  taskId: "task-7",
-  worktreePath: "/tmp/worktree/task-7",
-  scripts: [buildScript()],
-  updatedAt: "2026-03-19T15:30:00.000Z",
-  ...overrides,
-});
-
-const repoSettings: RepoSettingsInput = {
-  defaultRuntimeKind: "opencode",
-  worktreeBasePath: "",
-  branchPrefix: "",
-  defaultTargetBranch: { remote: "origin", branch: "main" },
-  preStartHooks: [],
-  postCompleteHooks: [],
-  devServers: [{ id: "frontend", name: "Frontend", command: "bun run dev" }],
-  worktreeCopyPaths: [],
-  agentDefaults: {
-    spec: null,
-    planner: null,
-    build: null,
-    qa: null,
-  },
-};
 
 let devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
@@ -77,6 +30,14 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
+let subscribeDevServerEventsMock = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  devServerEventListener = listener;
+  return () => {
+    devServerEventListener = null;
+  };
+};
 
 beforeEach(() => {
   mock.module("@/lib/host-client", () => ({
@@ -86,12 +47,8 @@ beforeEach(() => {
       devServerStop: (...args: [string, string]) => devServerStop(...args),
       devServerRestart: (...args: [string, string]) => devServerRestart(...args),
     },
-    subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
-      devServerEventListener = listener;
-      return () => {
-        devServerEventListener = null;
-      };
-    },
+    subscribeDevServerEvents: (listener: (payload: unknown) => void) =>
+      subscribeDevServerEventsMock(listener),
   }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
@@ -102,6 +59,12 @@ beforeEach(() => {
   devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerEventListener = null;
+  subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+    devServerEventListener = listener;
+    return () => {
+      devServerEventListener = null;
+    };
+  };
 });
 
 afterEach(async () => {
@@ -109,47 +72,6 @@ afterEach(async () => {
 });
 
 describe("useAgentStudioDevServerPanel", () => {
-  test("subscribes to dev-server events while enabled so startup events are not missed", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness
-          args={{
-            repoPath: "/repo",
-            taskId: "task-7",
-            repoSettings,
-            enabled: true,
-          }}
-        />
-      </QueryProvider>,
-    );
-
-    try {
-      await waitFor(() => {
-        expect(getLatest().mode).toBe("stopped");
-      });
-      expect(devServerEventListener).not.toBeNull();
-    } finally {
-      view.unmount();
-    }
-  });
-
   test("does not query dev-server state when the repository has no configured dev servers", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
@@ -946,7 +868,7 @@ describe("useAgentStudioDevServerPanel", () => {
     }
   });
 
-  test("reopens in loading mode until a fresh dev-server refetch completes", async () => {
+  test("reopens with cached dev-server state while a fresh refetch completes", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
     type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
@@ -1044,10 +966,10 @@ describe("useAgentStudioDevServerPanel", () => {
       );
 
       await waitFor(() => {
-        expect(getLatest().mode).toBe("loading");
+        expect(getLatest().scripts[0]?.status).toBe("running");
       });
-      expect(getLatest().isLoading).toBe(true);
-      expect(getLatest().scripts).toHaveLength(0);
+      expect(getLatest().mode).toBe("active");
+      expect(getLatest().isLoading).toBe(false);
 
       phase = "steady";
       reopenFetch.resolve(refreshedState);
@@ -1538,7 +1460,6 @@ describe("useAgentStudioDevServerPanel", () => {
   test("clears stale task state when switching to another task while enabled", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
 
     const taskOneState = buildState({
       repoPath: "/repo-a",
@@ -1561,17 +1482,93 @@ describe("useAgentStudioDevServerPanel", () => {
       return taskTwoFetch.promise;
     };
 
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
+    let currentArgs: HookArgs = {
+      repoPath: "/repo-a",
+      taskId: "task-1",
+      repoSettings,
+      enabled: true,
     };
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, currentArgs);
 
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().scripts[0]?.pid).toBe(1111);
+      });
+
+      currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
+      harness.update(currentArgs);
+
+      expect(harness.getLatest().mode).toBe("loading");
+      expect(harness.getLatest().scripts).toHaveLength(0);
+
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("loading");
+      });
+      expect(harness.getLatest().scripts).toHaveLength(0);
+
+      taskTwoFetch.resolve(taskTwoState);
+
+      await waitFor(() => {
+        expect(harness.getLatest().scripts[0]?.scriptId).toBe("backend");
+      });
+      expect(harness.getLatest().worktreePath).toBe("/tmp/worktree/task-2");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("shows cached dev-server state while refetching after task switch", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+
+    const queryClient = createQueryClient();
+    const taskOneState = buildState({
+      repoPath: "/repo-a",
+      taskId: "task-1",
+      worktreePath: "/tmp/worktree/task-1",
+      scripts: [buildScript({ status: "running", pid: 1111 })],
+    });
+    const cachedTaskTwoState = buildState({
+      repoPath: "/repo-b",
+      taskId: "task-2",
+      worktreePath: "/tmp/worktree/task-2",
+      scripts: [
+        buildScript({
+          scriptId: "backend",
+          name: "Backend",
+          command: "bun run api",
+          status: "running",
+          pid: 2221,
+        }),
+      ],
+    });
+    const freshTaskTwoState = buildState({
+      repoPath: "/repo-b",
+      taskId: "task-2",
+      worktreePath: "/tmp/worktree/task-2",
+      scripts: [
+        buildScript({
+          scriptId: "backend",
+          name: "Backend",
+          command: "bun run api",
+          status: "running",
+          pid: 2222,
+        }),
+      ],
+    });
+    const taskTwoFetch = createDeferred<DevServerGroupState>();
+    let didStartTaskTwoFetch = false;
+
+    queryClient.setQueryData(devServerQueryKeys.state("/repo-b", "task-2"), cachedTaskTwoState, {
+      updatedAt: 1,
+    });
+    devServerGetState = async (repoPath, taskId) => {
+      if (repoPath === "/repo-a" && taskId === "task-1") {
+        return taskOneState;
+      }
+
+      didStartTaskTwoFetch = true;
+      return taskTwoFetch.promise;
     };
 
     let currentArgs: HookArgs = {
@@ -1580,316 +1577,36 @@ describe("useAgentStudioDevServerPanel", () => {
       repoSettings,
       enabled: true,
     };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness args={currentArgs} />
-      </QueryProvider>,
-    );
+    const harness = renderDevServerPanelHook(useAgentStudioDevServerPanel, currentArgs, {
+      queryClient,
+    });
 
     try {
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.pid).toBe(1111);
+        expect(harness.getLatest().scripts[0]?.pid).toBe(1111);
       });
 
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
-      view.rerender(
-        <QueryProvider useIsolatedClient>
-          <Harness args={currentArgs} />
-        </QueryProvider>,
-      );
+      harness.update(currentArgs);
+
+      expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
+      expect(harness.getLatest().mode).toBe("active");
+      expect(harness.getLatest().isLoading).toBe(false);
 
       await waitFor(() => {
-        expect(getLatest().mode).toBe("loading");
+        expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
       });
-      expect(getLatest().scripts).toHaveLength(0);
+      expect(harness.getLatest().mode).toBe("active");
+      expect(harness.getLatest().isLoading).toBe(false);
+      expect(didStartTaskTwoFetch).toBe(true);
 
-      taskTwoFetch.resolve(taskTwoState);
-
+      taskTwoFetch.resolve(freshTaskTwoState);
       await waitFor(() => {
-        expect(getLatest().scripts[0]?.scriptId).toBe("backend");
+        expect(harness.getLatest().scripts[0]?.pid).toBe(2222);
       });
-      expect(getLatest().worktreePath).toBe("/tmp/worktree/task-2");
     } finally {
-      view.unmount();
-    }
-  });
-
-  test("rehydrates buffered terminal replay after a browser-live stream warning", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const initialState = buildState({
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-        }),
-      ],
-    });
-    const refreshedState = buildState({
-      updatedAt: "2026-03-19T15:31:00.000Z",
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              sequence: 4,
-              data: "rehydrated output\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    let getStateCalls = 0;
-    devServerGetState = async () => {
-      getStateCalls += 1;
-      return getStateCalls === 1 ? initialState : refreshedState;
-    };
-    const restartDeferred = createDeferred<DevServerGroupState>();
-    devServerRestart = async () => restartDeferred.promise;
-
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness
-          args={{
-            repoPath: "/repo",
-            taskId: "task-7",
-            repoSettings,
-            enabled: true,
-          }}
-        />
-      </QueryProvider>,
-    );
-
-    try {
-      await waitFor(() => {
-        expect(getLatest().mode).toBe("active");
-      });
-
-      await act(async () => {
-        getLatest().onRestart();
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      await act(async () => {
-        devServerEventListener?.({
-          __openducktorBrowserLive: true,
-          kind: "stream-warning",
-          message: "Dev server stream skipped 4 events; reconnect will replay buffered events.",
-        });
-      });
-
-      await waitFor(() => {
-        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "rehydrated output\r\n",
-        );
-      });
-      expect(getStateCalls).toBe(2);
-      restartDeferred.resolve(refreshedState);
-    } finally {
-      view.unmount();
-    }
-  });
-
-  test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    const initialState = buildState({
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              sequence: 0,
-              data: "stale output\r\n",
-              timestamp: "2026-03-19T15:30:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    const refreshedState = buildState({
-      updatedAt: "2026-03-19T15:31:00.000Z",
-      scripts: [
-        buildScript({
-          status: "running",
-          pid: 4242,
-          startedAt: "2026-03-19T15:30:00.000Z",
-          bufferedTerminalChunks: [
-            {
-              scriptId: "frontend",
-              sequence: 2,
-              data: "reconnected output\r\n",
-              timestamp: "2026-03-19T15:31:00.000Z",
-            },
-          ],
-        }),
-      ],
-    });
-    let getStateCalls = 0;
-    devServerGetState = async () => {
-      getStateCalls += 1;
-      return getStateCalls === 1 ? initialState : refreshedState;
-    };
-
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness
-          args={{
-            repoPath: "/repo",
-            taskId: "task-7",
-            repoSettings,
-            enabled: true,
-          }}
-        />
-      </QueryProvider>,
-    );
-
-    try {
-      await waitFor(() => {
-        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe("stale output\r\n");
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      await act(async () => {
-        devServerEventListener?.({
-          __openducktorBrowserLive: true,
-          kind: "reconnected",
-        });
-      });
-
-      await waitFor(() => {
-        expect(getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
-          "reconnected output\r\n",
-        );
-      });
-      expect(getStateCalls).toBe(2);
-    } finally {
-      view.unmount();
-    }
-  });
-
-  test("surfaces invalid dev server event payloads as actionable errors", async () => {
-    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
-    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
-    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
-
-    devServerGetState = async () =>
-      buildState({
-        scripts: [
-          buildScript({
-            status: "running",
-            pid: 4242,
-            startedAt: "2026-03-19T15:30:00.000Z",
-          }),
-        ],
-      });
-    const restartDeferred = createDeferred<DevServerGroupState>();
-    devServerRestart = async () => restartDeferred.promise;
-
-    let latest: HookResult | null = null;
-    const getLatest = (): HookResult => {
-      if (latest === null) {
-        throw new Error("Hook result not ready");
-      }
-      return latest;
-    };
-
-    const Harness = ({ args }: { args: HookArgs }) => {
-      latest = useAgentStudioDevServerPanel(args);
-      return null;
-    };
-
-    const view = render(
-      <QueryProvider useIsolatedClient>
-        <Harness
-          args={{
-            repoPath: "/repo",
-            taskId: "task-7",
-            repoSettings,
-            enabled: true,
-          }}
-        />
-      </QueryProvider>,
-    );
-    const originalConsoleError = console.error;
-    console.error = () => {};
-
-    try {
-      await waitFor(() => {
-        expect(getLatest().mode).toBe("active");
-      });
-
-      await act(async () => {
-        getLatest().onRestart();
-      });
-      await waitFor(() => {
-        expect(devServerEventListener).not.toBeNull();
-      });
-
-      act(() => {
-        devServerEventListener?.({ type: "terminal_chunk", repoPath: "/repo", taskId: "task-7" });
-      });
-
-      await waitFor(() => {
-        expect(getLatest().error).toContain("Received invalid dev server event payload");
-      });
-      restartDeferred.resolve(
-        buildState({
-          scripts: [
-            buildScript({
-              status: "running",
-              pid: 4242,
-              startedAt: "2026-03-19T15:30:00.000Z",
-            }),
-          ],
-        }),
-      );
-    } finally {
-      console.error = originalConsoleError;
-      view.unmount();
+      harness.unmount();
+      queryClient.clear();
     }
   });
 

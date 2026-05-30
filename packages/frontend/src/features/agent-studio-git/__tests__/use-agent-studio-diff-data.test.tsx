@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { GitWorktreeStatus } from "@openducktor/contracts";
+import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import { gitQueryKeys } from "@/state/queries/git";
 import {
   createBaseArgs,
   createHookHarness,
@@ -12,6 +14,23 @@ import {
 setupAgentStudioDiffDataTestHarness();
 
 describe("useAgentStudioDiffData", () => {
+  test("does not populate the app-global query client when an isolated client is provided", async () => {
+    await clearAppQueryClient();
+    const harness = createHookHarness(createBaseArgs());
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 1);
+
+      const globalWorktreeStatus = appQueryClient.getQueryData(
+        gitQueryKeys.worktreeStatus("/repo", "origin/main", "uncommitted", null),
+      );
+      expect(globalWorktreeStatus).toBeUndefined();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("loads active scope and reuses cache when switching back to loaded tabs", async () => {
     const harness = createHookHarness(createBaseArgs());
 

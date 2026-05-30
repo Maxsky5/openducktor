@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { QueryClient } from "@tanstack/react-query";
 import type { DiffDataState } from "@/features/agent-studio-git";
-import { clearAppQueryClient } from "@/lib/query-client";
+import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { taskWorktreeQueryKeys } from "@/state/queries/build-runtime";
 import {
   createAgentStudioBuildToolsWorktreeSnapshotHookForTest,
   type useAgentStudioBuildToolsWorktreeSnapshot,
@@ -115,8 +118,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   ...overrides,
 });
 
-const createHookHarness = (initialProps: HookArgs) =>
-  createSharedHookHarness(useSnapshotHookForTest, initialProps);
+const createHookHarness = (initialProps: HookArgs, options?: { queryClient?: QueryClient }) =>
+  createSharedHookHarness(useSnapshotHookForTest, initialProps, options);
 
 beforeEach(async () => {
   await clearAppQueryClient();
@@ -203,6 +206,54 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       });
     } finally {
       await harness.unmount();
+    }
+  });
+
+  test("uses cached task worktree context while refetching canonical worktree", async () => {
+    const queryClient = createQueryClient();
+    const taskWorktreeFetch = createDeferred<{ workingDirectory: string } | null>();
+    let didResolveTaskWorktreeFetch = false;
+    queryClient.setQueryData(
+      taskWorktreeQueryKeys.taskWorktree("/repo", "task-25", 0),
+      { workingDirectory: "/repo/.worktrees/task-25" },
+      { updatedAt: 1 },
+    );
+    taskWorktreeGetMock.mockImplementation(async () => taskWorktreeFetch.promise);
+    const harness = createHookHarness(
+      createBaseArgs({
+        viewTaskId: "task-25",
+        viewSelectedTask: createTaskCardFixture({ id: "task-25" }),
+      }),
+      { queryClient },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((snapshot) => snapshot.worktree.path === "/repo/.worktrees/task-25");
+
+      expect(taskWorktreeGetMock).toHaveBeenCalledWith("/repo", "task-25");
+      expect(harness.getLatest().worktree).toMatchObject({
+        path: "/repo/.worktrees/task-25",
+        status: "resolved",
+        isResolving: true,
+        shouldBlockDiffLoading: false,
+      });
+      expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        worktreePath: "/repo/.worktrees/task-25",
+        worktreeResolutionTaskId: "task-25",
+        isWorktreeResolutionResolving: true,
+        shouldBlockDiffLoading: false,
+      });
+
+      didResolveTaskWorktreeFetch = true;
+      taskWorktreeFetch.resolve({ workingDirectory: "/repo/.worktrees/task-25" });
+      await taskWorktreeFetch.promise;
+    } finally {
+      if (!didResolveTaskWorktreeFetch) {
+        taskWorktreeFetch.resolve({ workingDirectory: "/repo/.worktrees/task-25" });
+      }
+      await harness.unmount();
+      queryClient.clear();
     }
   });
 
