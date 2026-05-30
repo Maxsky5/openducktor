@@ -10,7 +10,6 @@ import {
   getDevServerTerminalBufferReplacement,
   getDevServerTerminalBufferReplacementContext,
   reconcileDevServerTerminalBufferStore,
-  replaceDevServerTerminalBuffer,
   shouldReplaceDevServerTerminalBufferFromScript,
   syncDevServerTerminalBufferStore,
 } from "@/features/agent-studio-build-tools/dev-server-log-buffer";
@@ -183,16 +182,26 @@ export const useAgentStudioDevServerTerminalBuffers =
     const applyTerminalBuffersFromEvent = useCallback(
       (event: DevServerEvent, selectedScriptId: string | null): void => {
         if (event.type === "snapshot") {
-          syncDevServerTerminalBufferStore(terminalBuffersRef.current, event.state);
-          syncSelectedScriptTerminalBuffer(selectedScriptId);
+          hydrateTerminalBuffersFromState(event.state, selectedScriptId);
           return;
         }
 
         if (event.type === "script_status_changed") {
-          replaceDevServerTerminalBuffer(
+          const replacement = getDevServerTerminalBufferReplacement(
+            getDevServerTerminalBufferReplacementContext(
+              terminalBuffersRef.current,
+              event.script.scriptId,
+            ),
+            event.script,
+          );
+          if (replacement === null) {
+            return;
+          }
+
+          applyDevServerTerminalBufferReplacement(
             terminalBuffersRef.current,
             event.script.scriptId,
-            event.script.bufferedTerminalChunks,
+            replacement,
           );
         } else {
           appendDevServerTerminalChunk(terminalBuffersRef.current, event.terminalChunk);
@@ -206,7 +215,7 @@ export const useAgentStudioDevServerTerminalBuffers =
           syncSelectedScriptTerminalBuffer(selectedScriptId);
         }
       },
-      [syncSelectedScriptTerminalBuffer],
+      [hydrateTerminalBuffersFromState, syncSelectedScriptTerminalBuffer],
     );
 
     const cancelMutationReplaySync = useCallback((): void => {

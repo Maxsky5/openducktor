@@ -371,6 +371,112 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
+  test("does not replace newer live terminal output with stale snapshot or status replay", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    devServerGetState = async () =>
+      buildState({
+        scripts: [
+          buildScript({
+            status: "running",
+            pid: 4242,
+            startedAt: "2026-03-19T15:30:00.000Z",
+          }),
+        ],
+      });
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    const emitLiveFailureOutput = (): void => {
+      devServerEventListener?.({
+        type: "terminal_chunk",
+        repoPath: "/repo",
+        taskId: "task-7",
+        terminalChunk: {
+          scriptId: "frontend",
+          sequence: 1,
+          data: "$ cd apps/web && pnpm dev\r\n",
+          timestamp: "2026-03-19T15:30:01.000Z",
+        },
+      });
+      devServerEventListener?.({
+        type: "terminal_chunk",
+        repoPath: "/repo",
+        taskId: "task-7",
+        terminalChunk: {
+          scriptId: "frontend",
+          sequence: 2,
+          data: "ELIFECYCLE Command failed.\r\n",
+          timestamp: "2026-03-19T15:30:02.000Z",
+        },
+      });
+    };
+    const expectLiveFailureOutput = async (): Promise<void> => {
+      await waitFor(() => {
+        expect(
+          harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual(["$ cd apps/web && pnpm dev\r\n", "ELIFECYCLE Command failed.\r\n"]);
+      });
+    };
+    const staleStartingScript = buildScript({
+      status: "failed",
+      pid: null,
+      startedAt: null,
+      lastError: "Command failed.",
+      bufferedTerminalChunks: [
+        {
+          scriptId: "frontend",
+          sequence: 0,
+          data: "Starting `cd apps/web && pnpm dev`\r\n",
+          timestamp: "2026-03-19T15:30:00.000Z",
+        },
+      ],
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("active");
+      });
+      await waitFor(() => {
+        expect(devServerEventListener).not.toBeNull();
+      });
+
+      act(emitLiveFailureOutput);
+      await expectLiveFailureOutput();
+
+      act(() => {
+        devServerEventListener?.({
+          type: "script_status_changed",
+          repoPath: "/repo",
+          taskId: "task-7",
+          updatedAt: "2026-03-19T15:30:03.000Z",
+          script: staleStartingScript,
+        });
+      });
+      await expectLiveFailureOutput();
+
+      act(() => {
+        devServerEventListener?.({
+          type: "snapshot",
+          state: buildState({
+            updatedAt: "2026-03-19T15:30:04.000Z",
+            scripts: [staleStartingScript],
+          }),
+        });
+      });
+      await expectLiveFailureOutput();
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
