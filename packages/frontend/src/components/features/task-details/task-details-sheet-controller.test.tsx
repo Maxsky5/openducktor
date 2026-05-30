@@ -71,7 +71,6 @@ describe("TaskDetailsSheetController", () => {
         allTasks: [task],
         taskSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
-        onOpenSession: () => {},
         workflowActionsEnabled: false,
       });
     };
@@ -139,7 +138,6 @@ describe("TaskDetailsSheetController", () => {
         allTasks: [task],
         taskSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
-        onOpenSession: () => {},
         workflowActionsEnabled: false,
         onDetectPullRequest,
         onUnlinkPullRequest,
@@ -165,6 +163,51 @@ describe("TaskDetailsSheetController", () => {
         onUnlinkPullRequest,
         detectingPullRequestTaskId: "task-1",
         unlinkingPullRequestTaskId: "task-1",
+      }),
+    );
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("closes the sheet when the selected task disappears from the task list", async () => {
+    const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
+    await restoreMockedModules([
+      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
+    ]);
+
+    const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
+    const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
+
+    const renderController = (allTasks: TaskCard[]) =>
+      createElement(TaskDetailsSheetController, {
+        ref: controllerRef,
+        allTasks,
+        taskSessionsByTaskId: new Map(),
+        activeTaskSessionContextByTaskId: new Map(),
+        workflowActionsEnabled: false,
+      });
+
+    const rendered = render(renderController([task]));
+
+    await act(async () => {
+      controllerRef.current?.openTask(task.id);
+    });
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        task,
+        open: true,
+      }),
+    );
+
+    await act(async () => {
+      rendered.rerender(renderController([]));
+    });
+    expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        task: null,
+        open: false,
       }),
     );
 

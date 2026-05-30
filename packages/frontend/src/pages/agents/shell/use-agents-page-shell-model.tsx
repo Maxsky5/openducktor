@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useMemo } from "react";
 import {
   useChecksOperationsContext,
   useRuntimeAvailabilityContext,
@@ -11,20 +11,13 @@ import {
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
-import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
-import { gitConflictQuickActionContextsEqual } from "./git-conflict-quick-action-context";
-import {
-  type AgentStudioPullRequestModalModel,
-  useAgentStudioPullRequestModalModel,
-} from "./use-agent-studio-pull-request-modal-model";
+import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
+import { useAgentStudioGitConflictQuickActionState } from "./use-agent-studio-git-conflict-quick-action-state";
 import {
   type AgentStudioRightPanelBridgeModel,
   useAgentStudioRightPanelBridge,
 } from "./use-agent-studio-right-panel-bridge";
-import {
-  type AgentStudioTaskDetailsLauncherModel,
-  useAgentStudioTaskDetailsLauncher,
-} from "./use-agent-studio-task-details-launcher";
+import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-actions";
 import { useAgentsPageOrchestrationShellModel } from "./use-agents-page-orchestration-shell-model";
 import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
 
@@ -49,12 +42,7 @@ type AgentsPageShellModel = {
   chatModel: ReturnType<typeof useAgentStudioOrchestrationController>["agentChatModel"];
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
-  mergedPullRequestModal: AgentStudioPullRequestModalModel | null;
-  humanReviewFeedbackModal: ReturnType<
-    typeof useAgentStudioOrchestrationController
-  >["humanReviewFeedbackModal"];
-  sessionStartModal: ReturnType<typeof useAgentStudioOrchestrationController>["sessionStartModal"];
-  taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
+  modalContent: AgentsPageModalContentModel;
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -101,11 +89,11 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   } = useAgentOperations();
   const sessions = useAgentSessionSummaries();
 
-  const [gitConflictQuickActionContext, setGitConflictQuickActionContext] =
-    useState<AgentStudioGitConflictQuickActionContext | null>(null);
-  const gitConflictQuickActionContextRef = useRef<AgentStudioGitConflictQuickActionContext | null>(
-    null,
-  );
+  const {
+    gitConflictQuickActionContext,
+    gitConflictQuickActionContextRef,
+    onGitConflictQuickActionContextChange,
+  } = useAgentStudioGitConflictQuickActionState();
   const routeSession = useAgentsPageRouteSessionModel({
     activeWorkspace,
     workspaceRepoPath,
@@ -132,53 +120,18 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     worktreeRecoverySignal,
   } = routeSession;
 
-  const handleGitConflictQuickActionContextChange = useCallback(
-    (context: AgentStudioGitConflictQuickActionContext | null): void => {
-      gitConflictQuickActionContextRef.current = context;
-      setGitConflictQuickActionContext((current) =>
-        gitConflictQuickActionContextsEqual(current, context) ? current : context,
-      );
-    },
-    [],
-  );
-
-  const handleDetectPullRequest = useCallback(
-    (taskId: string): void => {
-      void syncPullRequests(taskId);
-    },
-    [syncPullRequests],
-  );
-
-  const handleUnlinkPullRequest = useCallback(
-    (taskId: string): void => {
-      void unlinkPullRequest(taskId);
-    },
-    [unlinkPullRequest],
-  );
-
-  const handleLinkMergedPullRequest = useCallback((): Promise<void> => {
-    return linkMergedPullRequest();
-  }, [linkMergedPullRequest]);
-
-  const handleCancelLinkMergedPullRequest = useCallback((): void => {
-    cancelLinkMergedPullRequest();
-  }, [cancelLinkMergedPullRequest]);
-
-  const taskDetailsLauncher = useAgentStudioTaskDetailsLauncher({
+  const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
     tasks,
     selectedTaskId: selection.viewSelectedTask?.id ?? null,
     detectingPullRequestTaskId,
-    unlinkingPullRequestTaskId,
-    onDetectPullRequest: handleDetectPullRequest,
-    onUnlinkPullRequest: handleUnlinkPullRequest,
-  });
-
-  const mergedPullRequestModal = useAgentStudioPullRequestModalModel({
-    pendingMergedPullRequest,
     linkingMergedPullRequestTaskId,
-    onLinkMergedPullRequest: handleLinkMergedPullRequest,
-    onCancelLinkMergedPullRequest: handleCancelLinkMergedPullRequest,
+    pendingMergedPullRequest,
+    unlinkingPullRequestTaskId,
+    syncPullRequests,
+    linkMergedPullRequest,
+    cancelLinkMergedPullRequest,
+    unlinkPullRequest,
   });
 
   const {
@@ -195,7 +148,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     hasActiveGitConflict: gitConflictQuickActionContext !== null,
     gitConflictQuickActionContext,
     gitConflictQuickActionContextRef,
-    openTaskDetails: taskDetailsLauncher.openTaskDetails,
+    openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
     agentOperations: {
       bootstrapTaskSessions,
       hydrateRequestedTaskSessionHistory,
@@ -219,14 +172,31 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     branches: branches ?? [],
     activeBranch,
     selection: orchestrationSelection,
-    orchestration,
+    panel: orchestration.rightPanel,
+    documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
+    repoSettings: orchestration.repoSettings,
     worktreeRecoverySignal,
     setTaskTargetBranch,
     detectingPullRequestTaskId,
-    onDetectPullRequest: handleDetectPullRequest,
+    onDetectPullRequest: taskActions.onDetectPullRequest,
     onResolveGitConflict: handleResolveRebaseConflict,
-    onGitConflictQuickActionContextChange: handleGitConflictQuickActionContextChange,
+    onGitConflictQuickActionContextChange,
   });
+
+  const modalContent = useMemo<AgentsPageModalContentModel>(
+    () => ({
+      mergedPullRequestModal: taskActions.mergedPullRequestModal,
+      humanReviewFeedbackModal: orchestration.humanReviewFeedbackModal,
+      sessionStartModal: orchestration.sessionStartModal,
+      taskDetailsLauncher: taskActions.taskDetailsLauncher,
+    }),
+    [
+      orchestration.humanReviewFeedbackModal,
+      orchestration.sessionStartModal,
+      taskActions.mergedPullRequestModal,
+      taskActions.taskDetailsLauncher,
+    ],
+  );
 
   return {
     activeWorkspace,
@@ -243,9 +213,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,
     rightPanelBridge,
-    mergedPullRequestModal,
-    humanReviewFeedbackModal: orchestration.humanReviewFeedbackModal,
-    sessionStartModal: orchestration.sessionStartModal,
-    taskDetailsLauncher,
+    modalContent,
   };
 }

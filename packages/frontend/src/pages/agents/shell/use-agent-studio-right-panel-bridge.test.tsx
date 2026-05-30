@@ -19,10 +19,10 @@ const activeSession = createAgentSessionFixture({
   status: "running",
   workingDirectory: "/repo/worktrees/task-1",
 });
-const documentsModel: HookArgs["orchestration"]["agentStudioWorkspaceSidebarModel"] = {
+const documentsModel: HookArgs["documentsModel"] = {
   activeDocument: null,
 };
-const repoSettings: HookArgs["orchestration"]["repoSettings"] = null;
+const repoSettings: HookArgs["repoSettings"] = null;
 
 const activeWorkspace: HookArgs["activeWorkspace"] = {
   workspaceId: "workspace-repo",
@@ -30,17 +30,12 @@ const activeWorkspace: HookArgs["activeWorkspace"] = {
   repoPath: "/repo",
 };
 
-const createOrchestration = (
-  rightPanel: HookArgs["orchestration"]["rightPanel"] = {
+const createPanelState = (
+  panel: HookArgs["panel"] = {
     panelKind: "build_tools",
     isPanelOpen: true,
   },
-): HookArgs["orchestration"] =>
-  ({
-    agentStudioWorkspaceSidebarModel: documentsModel,
-    repoSettings,
-    rightPanel,
-  }) as unknown as HookArgs["orchestration"];
+): HookArgs["panel"] => panel;
 
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace,
@@ -53,7 +48,9 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     viewActiveSession: activeSession,
     isViewSessionHistoryHydrating: false,
   },
-  orchestration: createOrchestration(),
+  panel: createPanelState(),
+  documentsModel,
+  repoSettings,
   worktreeRecoverySignal: 3,
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
@@ -75,13 +72,13 @@ describe("useAgentStudioRightPanelBridge", () => {
 
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelBridge?.activeWorkspace).toBe(activeWorkspace);
-      expect(state.rightPanelBridge?.viewTaskId).toBe("task-1");
-      expect(state.rightPanelBridge?.viewRole).toBe("build");
-      expect(state.rightPanelBridge?.documentsModel).toBe(documentsModel);
-      expect(state.rightPanelBridge?.repoSettings).toBe(repoSettings);
-      expect(state.rightPanelBridge?.activeSession).toBe(activeSession);
-      expect(state.rightPanelBridge?.session).toEqual({
+      expect(state.rightPanelBridge?.rightPanel.activeWorkspace).toBe(activeWorkspace);
+      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe("task-1");
+      expect(state.rightPanelBridge?.rightPanel.viewRole).toBe("build");
+      expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(documentsModel);
+      expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(repoSettings);
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(activeSession);
+      expect(state.rightPanelBridge?.rightPanel.session).toEqual({
         role: "build",
         status: "running",
         workingDirectory: "/repo/worktrees/task-1",
@@ -95,7 +92,7 @@ describe("useAgentStudioRightPanelBridge", () => {
   test("omits bridge props when no panel kind is selected", async () => {
     const harness = createHookHarness(
       createArgs({
-        orchestration: createOrchestration({
+        panel: createPanelState({
           panelKind: null,
           isPanelOpen: true,
         }),

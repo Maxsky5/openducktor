@@ -58,7 +58,6 @@ export function useAgentStudioTaskDetailsLauncher({
       taskSessionsByTaskId: EMPTY_TASK_SESSIONS_BY_TASK_ID,
       activeTaskSessionContextByTaskId: EMPTY_ACTIVE_TASK_SESSION_CONTEXT_BY_TASK_ID,
       workflowActionsEnabled: false,
-      onOpenSession: () => undefined,
       onDetectPullRequest,
       onUnlinkPullRequest,
       detectingPullRequestTaskId,

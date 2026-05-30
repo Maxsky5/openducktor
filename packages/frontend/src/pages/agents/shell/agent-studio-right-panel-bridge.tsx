@@ -17,20 +17,14 @@ export function AgentStudioRightPanelBridge({
     return null;
   }
 
-  const { activeSession, ...rightPanelRuntimeModel } = model;
-
   return (
     <>
       <AgentsPageBuildWorktreeRefreshRuntime
-        panelKind={model.panelKind}
-        isPanelOpen={model.isPanelOpen}
-        viewRole={model.viewRole}
-        activeSession={activeSession}
-        isSessionHistoryHydrating={model.isViewSessionHistoryHydrating}
+        {...model.buildWorktreeRefresh}
         refreshWorktreeRef={rightPanelRefreshWorktreeRef}
       />
       <AgentsPageRightPanelRuntime
-        {...rightPanelRuntimeModel}
+        {...model.rightPanel}
         refreshWorktreeRef={rightPanelRefreshWorktreeRef}
       />
     </>

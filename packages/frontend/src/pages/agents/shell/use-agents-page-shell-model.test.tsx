@@ -11,9 +11,8 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
-import type { AgentStudioPullRequestModalModel } from "./use-agent-studio-pull-request-modal-model";
+import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
-import type { AgentStudioTaskDetailsLauncherModel } from "./use-agent-studio-task-details-launcher";
 
 enableReactActEnvironment();
 
@@ -108,10 +107,7 @@ type AgentsPageShellModelState = {
   hasSelectedTask: boolean;
   isRightPanelVisible: boolean;
   rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
-  sessionStartModal: SessionStartModalModel | null;
-  mergedPullRequestModal: AgentStudioPullRequestModalModel | null;
-  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
+  modalContent: AgentsPageModalContentModel;
 };
 
 let workspaceState = {
@@ -553,14 +549,18 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelBridge?.viewTaskId).toBe(selectionState.viewTaskId);
-      expect(state.rightPanelBridge?.documentsModel).toBe(
+      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe(selectionState.viewTaskId);
+      expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(
         orchestrationState.agentStudioWorkspaceSidebarModel,
       );
-      expect(state.sessionStartModal).toBe(orchestrationState.sessionStartModal);
-      expect(state.taskDetailsLauncher.taskDetailsSheetProps.allTasks).toBe(tasksState.tasks);
-      expect(state.humanReviewFeedbackModal).toBe(orchestrationState.humanReviewFeedbackModal);
-      expect(state.mergedPullRequestModal?.pullRequest).toEqual(
+      expect(state.modalContent.sessionStartModal).toBe(orchestrationState.sessionStartModal);
+      expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetProps.allTasks).toBe(
+        tasksState.tasks,
+      );
+      expect(state.modalContent.humanReviewFeedbackModal).toBe(
+        orchestrationState.humanReviewFeedbackModal,
+      );
+      expect(state.modalContent.mergedPullRequestModal?.pullRequest).toEqual(
         tasksState.pendingMergedPullRequest?.pullRequest ?? null,
       );
     } finally {
@@ -586,8 +586,8 @@ describe("useAgentsPageShellModel", () => {
 
       const state = harness.getLatest();
       expect(state.hasSelectedTask).toBe(false);
-      expect(state.sessionStartModal).toBeNull();
-      expect(state.mergedPullRequestModal).toBeNull();
+      expect(state.modalContent.sessionStartModal).toBeNull();
+      expect(state.modalContent.mergedPullRequestModal).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -619,7 +619,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.hasSelectedTask).toBe(false);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.taskDetailsLauncher.taskDetailsSheetRef.current).toBeNull();
+      expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetRef.current).toBeNull();
     } finally {
       await harness.unmount();
     }

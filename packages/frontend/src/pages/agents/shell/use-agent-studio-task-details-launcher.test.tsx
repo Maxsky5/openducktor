@@ -66,6 +66,7 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
       expect(props.activeWorkspace).toBe(activeWorkspace);
       expect(props.allTasks).toEqual([task]);
       expect(props.workflowActionsEnabled).toBe(false);
+      expect(props.onOpenSession).toBeUndefined();
       expect(props.taskSessionsByTaskId.size).toBe(0);
       expect(props.activeTaskSessionContextByTaskId.size).toBe(0);
       expect(props.detectingPullRequestTaskId).toBe("task-1");
@@ -73,7 +74,6 @@ describe("useAgentStudioTaskDetailsLauncher", () => {
 
       props.onDetectPullRequest?.("task-1");
       props.onUnlinkPullRequest?.("task-2");
-      props.onOpenSession("task-1", "planner");
 
       expect(onDetectPullRequest).toHaveBeenCalledWith("task-1");
       expect(onUnlinkPullRequest).toHaveBeenCalledWith("task-2");
