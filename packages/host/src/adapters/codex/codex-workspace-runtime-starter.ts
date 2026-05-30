@@ -9,23 +9,22 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
-import {
-  buildOpenDucktorMcpBridgeEnvironment,
-  OPENDUCKTOR_MCP_ENV_VAR_NAMES,
-} from "../mcp/openducktor-mcp-environment";
+import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
   waitForChildProcessClose,
-} from "../process/process-tree";
-import { resolveCodexBinary } from "../runtimes/runtime-binaries";
+} from "../../infrastructure/process/process-tree";
+import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
+import {
+  buildOpenDucktorMcpBridgeEnvironment,
+  OPENDUCKTOR_MCP_ENV_VAR_NAMES,
+} from "../mcp/openducktor-mcp-environment";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
-import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import type { CodexAppServerEventEmitter } from "./codex-app-server-transport-types";
@@ -44,13 +43,11 @@ export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
 >;
 
 export type CreateCodexWorkspaceRuntimeStarterInput = {
-  systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   codexAppServer: CodexAppServerTransportRegistry;
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
-  mcpCommand?: string[];
-  codexBinary?: string;
   eventEmitter?: CodexAppServerEventEmitter;
   clientVersion?: string;
   requestTimeoutMs?: number;
@@ -63,21 +60,6 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
 
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
-
-const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
-  if (configuredCommand) {
-    const command = configuredCommand.map((entry) => entry.trim());
-    if (command.length === 0 || command.some((entry) => entry.length === 0)) {
-      throw new HostValidationError({
-        message: "Codex MCP command must contain only non-empty strings.",
-        field: "mcpCommand",
-      });
-    }
-    return command;
-  }
-
-  return null;
-};
 
 const tomlString = (value: string): string => JSON.stringify(value);
 
@@ -155,13 +137,11 @@ const cleanupCodexRuntime = ({
   });
 
 export const createCodexWorkspaceRuntimeStarter = ({
-  systemCommands,
+  toolDiscovery,
   codexAppServer,
   resolveMcpBridgeConnection,
   runtimeDistribution,
   processEnv = process.env,
-  mcpCommand,
-  codexBinary,
   eventEmitter,
   clientVersion = processEnv.npm_package_version ?? "0.0.0",
   requestTimeoutMs = DEFAULT_CODEX_REQUEST_TIMEOUT_MS,
@@ -198,32 +178,21 @@ export const createCodexWorkspaceRuntimeStarter = ({
           toHostOperationError(cause, "codexWorkspaceRuntime.resolveMcpBridgeConnection"),
         ),
       );
-      const configuredMcpCommand = yield* Effect.try({
-        try: () => resolveConfiguredMcpCommand(mcpCommand),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: { runtimeKind: input.runtimeKind },
-          }),
+      const resolvedMcpCommand = yield* resolveOpenDucktorMcpCommand({
+        runtimeDistribution,
+        toolDiscovery,
       });
-      const resolvedMcpCommand =
-        configuredMcpCommand ??
-        (yield* resolveOpenDucktorMcpCommand({
-          systemCommands,
-          runtimeDistribution,
-        }));
-      const binary =
-        codexBinary ??
-        (yield* resolveCodexBinary(systemCommands, processEnv, {
-          runtimeDistribution,
-        }));
+      const binary = yield* toolDiscovery.resolveToolPath("codex");
+      const runtimeEnv = {
+        ...processEnv,
+        ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),
+      };
       const command = yield* Effect.try({
         try: () =>
-          createSystemCommandLaunch(
+          createProcessCommandLaunch(
             binary,
             [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
-            processEnv,
+            runtimeEnv,
             platform,
           ),
         catch: (cause) =>
@@ -241,12 +210,9 @@ export const createCodexWorkspaceRuntimeStarter = ({
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
-            env: {
-              ...processEnv,
-              ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),
-            },
+            env: command.env,
             stdio: ["pipe", "pipe", "pipe"],
-            windowsVerbatimArguments: command.windowsVerbatimArguments === true,
+            windowsVerbatimArguments: command.windowsVerbatimArguments,
           }) as CodexChildProcess,
         catch: (cause) =>
           toHostOperationError(cause, "codexWorkspaceRuntime.spawn", {

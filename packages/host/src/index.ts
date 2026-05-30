@@ -3,12 +3,12 @@ export { createLocalAttachmentAdapter } from "./adapters/attachments/local-attac
 export {
   type ArtifactMcpLauncher,
   type ArtifactRuntimeDistribution,
-  type BunScriptMcpLauncher,
   createArtifactRuntimeDistribution,
   createSourceRuntimeDistribution,
   type ExecutableMcpLauncher,
   type HostRuntimeDistribution,
   type SourceRuntimeDistribution,
+  type ToolScriptMcpLauncher,
 } from "./adapters/runtimes/runtime-distribution";
 export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";
@@ -52,4 +52,9 @@ export type {
 export type { SettingsConfigPort } from "./ports/settings-config-port";
 export type { SystemCommandPort } from "./ports/system-command-port";
 export type { TaskStorePort } from "./ports/task-repository-ports";
+export type {
+  ToolDiscoveryError,
+  ToolDiscoveryId,
+  ToolDiscoveryPort,
+} from "./ports/tool-discovery-port";
 export type { WorktreeFilePort } from "./ports/worktree-file-port";

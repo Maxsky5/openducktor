@@ -5,12 +5,14 @@ import type {
   RuntimeHealth,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
 
@@ -104,21 +106,17 @@ const createSystemCommandPort = ({
 }: {
   missingCommands?: string[];
   ghAuthResult?: SystemCommandRunResult;
-  versionForCommand?: (command: string) => string | null;
+  versionForCommand?: (command: string) => string | null | undefined;
 } = {}): SystemCommandPort => {
   const missing = new Set(missingCommands);
   const port: SystemCommandPort = {
     resolveCommandPath: (command) => Effect.succeed(missing.has(command) ? null : command),
-    requiredCommandError: (command) =>
-      Effect.succeed(
-        missing.has(command)
-          ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
-          : null,
-      ),
-    versionCommand: (command) =>
-      Effect.succeed(
-        missing.has(command) ? null : (versionForCommand?.(command) ?? `${command} version 1.0.0`),
-      ),
+    versionCommand: (command, _args, _options) => {
+      const version = versionForCommand?.(command);
+      return Effect.succeed(
+        missing.has(command) ? null : version === undefined ? `${command} version 1.0.0` : version,
+      );
+    },
     runCommandAllowFailure: (command) =>
       Effect.tryPromise({
         try: async () => {
@@ -137,6 +135,19 @@ const createSystemCommandPort = ({
   };
   return port as SystemCommandPort;
 };
+const createToolDiscoveryPort = ({
+  missingCommands = [],
+  versionForCommand,
+}: {
+  missingCommands?: string[];
+  versionForCommand?: (command: string) => string | null;
+} = {}): ToolDiscoveryPort =>
+  createToolDiscoveryAdapter({
+    systemCommands: createSystemCommandPort({
+      missingCommands,
+      versionForCommand: (command) => versionForCommand?.(command) ?? `${command} version 1.0.0`,
+    }),
+  });
 const healthyRepoStoreHealth: RepoStoreHealth = {
   category: "healthy",
   status: "ready",
@@ -175,8 +186,14 @@ const createTaskStore = (
       }),
   }) as Pick<TaskStorePort, "diagnoseRepoStore"> as unknown as TaskStorePort;
 const createSystemDiagnosticsServiceForTest = (
-  input: Parameters<typeof createSystemDiagnosticsService>[0],
-) => createSystemDiagnosticsService(input);
+  input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
+    toolDiscovery?: ToolDiscoveryPort;
+  },
+) =>
+  createSystemDiagnosticsService({
+    ...input,
+    toolDiscovery: input.toolDiscovery ?? createToolDiscoveryPort(),
+  });
 describe("createSystemDiagnosticsService", () => {
   test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
     const service = createSystemDiagnosticsServiceForTest({
@@ -220,6 +237,9 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands,
+      toolDiscovery: createToolDiscoveryPort({
+        versionForCommand: (command) => `${command} version ${version}`,
+      }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const first = await Effect.runPromise(service.runtimeCheck(true));
@@ -236,6 +256,7 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({ missingCommands: ["git", "gh"] }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["git", "gh"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
 
@@ -245,11 +266,36 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.ghOk).toBe(false);
     expect(check.ghAuthOk).toBe(false);
     expect(check.ghAuthError).toBe(
-      "Required command `gh` not found. Install gh and ensure it is available on PATH.",
+      "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
     );
     expect(check.errors).toEqual([
-      "Required command `git` not found. Install git and ensure it is available on PATH.",
-      "Required command `gh` not found. Install gh and ensure it is available on PATH.",
+      "git not found. Checked OPENDUCKTOR_GIT_PATH, PATH. Install git and ensure it is available on PATH, or set OPENDUCKTOR_GIT_PATH.",
+      "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
+    ]);
+  });
+  test("runtimeCheck reports unhealthy CLI tools when version probes fail", async () => {
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort({
+        versionForCommand: (command) => (command === "git" || command === "gh" ? null : undefined),
+      }),
+      toolDiscovery: createToolDiscoveryPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(service.runtimeCheck(true));
+
+    expect(check.gitOk).toBe(false);
+    expect(check.gitVersion).toBeNull();
+    expect(check.ghOk).toBe(false);
+    expect(check.ghVersion).toBeNull();
+    expect(check.ghAuthOk).toBe(false);
+    expect(check.ghAuthError).toBe("Failed reading gh --version from gh.");
+    expect(check.errors).toEqual([
+      "Failed reading git --version from git.",
+      "Failed reading gh --version from gh.",
     ]);
   });
   test("beadsCheck returns structured blocking health when bd is missing", async () => {
@@ -258,18 +304,21 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({ missingCommands: ["bd"] }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["bd"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.beadsCheck("/repo"));
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError: "Required command `bd` not found. Install bd and ensure it is available on PATH.",
+      beadsError:
+        "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail: "Required command `bd` not found. Install bd and ensure it is available on PATH.",
+        detail:
+          "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },
@@ -281,6 +330,7 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({ missingCommands: ["dolt"] }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["dolt"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.beadsCheck("/repo"));
@@ -288,13 +338,13 @@ describe("createSystemDiagnosticsService", () => {
       beadsOk: false,
       beadsPath: null,
       beadsError:
-        "Required command `dolt` not found. Install dolt and ensure it is available on PATH.",
+        "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
         detail:
-          "Required command `dolt` not found. Install dolt and ensure it is available on PATH.",
+          "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },

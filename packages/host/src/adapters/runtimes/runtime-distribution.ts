@@ -1,4 +1,9 @@
 import { HostValidationError } from "../../effect/host-errors";
+import {
+  isToolDiscoveryId,
+  TOOL_DISCOVERY_IDS,
+  type ToolDiscoveryId,
+} from "../../ports/tool-discovery-port";
 
 declare const hostRuntimeDistributionBrand: unique symbol;
 
@@ -16,18 +21,18 @@ export type ExecutableMcpLauncher = {
   executablePath: string;
 };
 
-export type BunScriptMcpLauncher = {
-  kind: "bunScript";
-  bunExecutablePath: string;
+export type ToolScriptMcpLauncher = {
+  kind: "toolScript";
+  toolId: ToolDiscoveryId;
   scriptPath: string;
 };
 
-export type ArtifactMcpLauncher = ExecutableMcpLauncher | BunScriptMcpLauncher;
+export type ArtifactMcpLauncher = ExecutableMcpLauncher | ToolScriptMcpLauncher;
 
 export type ArtifactRuntimeDistribution = HostRuntimeDistributionBrand & {
   mode: "artifact";
   mcpLauncher: ArtifactMcpLauncher;
-  bundledBinDir?: string;
+  bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
 };
 
 export type HostRuntimeDistribution = SourceRuntimeDistribution | ArtifactRuntimeDistribution;
@@ -41,6 +46,18 @@ const assertNonEmpty = (value: string, field: string): string => {
     });
   }
   return trimmed;
+};
+
+const assertToolDiscoveryId = (value: string, field: string): ToolDiscoveryId => {
+  const toolId = assertNonEmpty(value, field);
+  if (!isToolDiscoveryId(toolId)) {
+    throw new HostValidationError({
+      field,
+      message: `${field} must be one of: ${TOOL_DISCOVERY_IDS.join(", ")}.`,
+      details: { supportedToolIds: TOOL_DISCOVERY_IDS, toolId },
+    });
+  }
+  return toolId;
 };
 
 export const createSourceRuntimeDistribution = (workspaceRoot: string): SourceRuntimeDistribution =>
@@ -64,32 +81,50 @@ const createArtifactMcpLauncher = (launcher: ArtifactMcpLauncher): ArtifactMcpLa
         kind: "executable",
         executablePath: assertNonEmpty(launcher.executablePath, "mcpLauncher.executablePath"),
       };
-    case "bunScript":
+    case "toolScript":
       return {
-        kind: "bunScript",
-        bunExecutablePath: assertNonEmpty(
-          launcher.bunExecutablePath,
-          "mcpLauncher.bunExecutablePath",
-        ),
+        kind: "toolScript",
         scriptPath: assertNonEmpty(launcher.scriptPath, "mcpLauncher.scriptPath"),
+        toolId: assertToolDiscoveryId(launcher.toolId, "mcpLauncher.toolId"),
       };
   }
 
   return unsupportedArtifactMcpLauncher(launcher);
 };
 
+const createBundledToolBinDirs = (
+  bundledToolBinDirs: Partial<Record<ToolDiscoveryId, string>> | undefined,
+): Partial<Record<ToolDiscoveryId, string>> | undefined => {
+  if (bundledToolBinDirs === undefined) {
+    return undefined;
+  }
+
+  const normalized: Partial<Record<ToolDiscoveryId, string>> = {};
+  for (const [rawToolId, directory] of Object.entries(bundledToolBinDirs)) {
+    const toolId = assertToolDiscoveryId(rawToolId, `bundledToolBinDirs.${rawToolId}`);
+    if (directory !== undefined) {
+      normalized[toolId] = assertNonEmpty(directory, `bundledToolBinDirs.${toolId}`);
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
 export const createArtifactRuntimeDistribution = ({
-  bundledBinDir,
+  bundledToolBinDirs,
   mcpLauncher,
 }: {
-  bundledBinDir?: string;
+  bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
   mcpLauncher: ArtifactMcpLauncher;
 }): ArtifactRuntimeDistribution => {
+  const normalizedBundledToolBinDirs = createBundledToolBinDirs(bundledToolBinDirs);
   return {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),
-    ...(bundledBinDir === undefined
+    ...(normalizedBundledToolBinDirs === undefined
       ? {}
-      : { bundledBinDir: assertNonEmpty(bundledBinDir, "bundledBinDir") }),
+      : {
+          bundledToolBinDirs: normalizedBundledToolBinDirs,
+        }),
   } as ArtifactRuntimeDistribution;
 };

@@ -251,8 +251,7 @@ const createLocalAttachments = (): LocalAttachmentPort => ({
 });
 
 const createSystemCommands = (): SystemCommandPort => ({
-  requiredCommandError: (command) =>
-    Effect.succeed(command === "bd" ? "Required command `bd` not found." : null),
+  resolveCommandPath: (command) => Effect.succeed(command === "bd" ? null : command),
   versionCommand: (command) => Effect.succeed(`${command} version 1.0.0`),
   runCommandAllowFailure: (command) => {
     if (command === "gh") {
@@ -1139,7 +1138,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     await expect(router.invoke("beads_check", { repoPath: "/repo" })).resolves.toMatchObject({
       beadsOk: false,
-      beadsError: "Required command `bd` not found.",
+      beadsError:
+        "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
       repoStoreHealth: { status: "blocking" },
     });
   });

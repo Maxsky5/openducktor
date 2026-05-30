@@ -1,4 +1,5 @@
 import { type DirectoryListing, directoryListingSchema } from "@openducktor/contracts";
+import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { Data, Effect } from "effect";
 import type { FilesystemPort } from "../../ports/filesystem-port";
 export type FilesystemListDirectoryErrorKind =
@@ -35,17 +36,6 @@ const hasNodeErrorCode = (error: unknown, code: string): boolean =>
       code?: unknown;
     }
   ).code === code;
-const stripMatchingQuotes = (value: string): string => {
-  if (value.length < 2) {
-    return value;
-  }
-  const first = value.at(0);
-  const last = value.at(-1);
-  if ((first === `"` && last === `"`) || (first === `'` && last === `'`)) {
-    return value.slice(1, -1);
-  }
-  return value;
-};
 const resolveHome = (filesystem: FilesystemPort): string => {
   const home = filesystem.homeDirectory();
   if (home) {
@@ -57,26 +47,14 @@ const resolveHome = (filesystem: FilesystemPort): string => {
   );
 };
 const resolveUserPath = (filesystem: FilesystemPort, rawPath: string): string => {
-  const trimmedPath = rawPath.trim();
-  if (!trimmedPath) {
+  const normalizedPath = normalizeUserPathInput(rawPath);
+  if (!normalizedPath) {
     throw new FilesystemListDirectoryError("invalid_path", "Path is empty; provide a valid path");
   }
-  const unquotedPath = stripMatchingQuotes(trimmedPath);
-  if (!unquotedPath) {
-    throw new FilesystemListDirectoryError("invalid_path", "Path is empty; provide a valid path");
-  }
-  if (unquotedPath === "~") {
-    return resolveHome(filesystem);
-  }
-  const homeRelativePrefix = unquotedPath.startsWith("~/")
-    ? "~/"
-    : unquotedPath.startsWith("~\\")
-      ? "~\\"
-      : null;
-  if (!homeRelativePrefix) {
-    return unquotedPath;
-  }
-  return filesystem.join(resolveHome(filesystem), unquotedPath.slice(homeRelativePrefix.length));
+  return resolveNormalizedUserPath(normalizedPath, {
+    resolveHomeDir: () => resolveHome(filesystem),
+    joinHomePath: (homeDir, relativePath) => filesystem.join(homeDir, relativePath),
+  });
 };
 const resolveRequestedPath = (filesystem: FilesystemPort, rawPath: string | undefined): string => {
   if (rawPath !== undefined) {

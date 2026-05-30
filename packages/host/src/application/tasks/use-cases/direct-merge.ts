@@ -8,31 +8,35 @@ import {
 import { HostValidationError } from "../../../effect/host-errors";
 import { loadOpenApprovalContext } from "../support/approval-readiness";
 import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
-import { requireDirectMergeDependencies } from "../support/required-task-dependencies";
+import {
+  requireDependencies,
+  requireDirectMergeDependencies,
+  type TaskGithubDependencyInput,
+} from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskDirectMergeUseCase = ({
   devServerService,
-  gitPort,
+  githubDependencies,
   taskStore,
   settingsConfig,
-  systemCommands,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<TaskService, "directMerge"> => ({
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "directMerge"> => ({
   directMerge(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const mergeInput = input.input;
-      const dependencies = requireDirectMergeDependencies(
-        devServerService,
-        gitPort,
-        settingsConfig,
-        systemCommands,
-        taskWorktreeService,
-        workspaceSettingsService,
+      const dependencies = yield* requireDependencies(() =>
+        requireDirectMergeDependencies({
+          devServerService,
+          githubDependencies,
+          settingsConfig,
+          taskWorktreeService,
+          workspaceSettingsService,
+        }),
       );
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);

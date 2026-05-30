@@ -1,9 +1,5 @@
 import { Cause, Clock, Effect } from "effect";
-import {
-  HostOperationError,
-  HostResourceError,
-  toHostOperationError,
-} from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
   defaultRunBd,
   defaultRunBdJson,
@@ -46,16 +42,12 @@ import {
   makeBeadsCliContextFlight,
   resolveBeadsCliContextFlight,
 } from "./beads-cli-context-flight";
-import { assertRequiredCommand } from "./beads-required-command";
+import { createBeadsCliContextRequestResolver } from "./beads-cli-context-request";
 import { cloneTasks, createTaskListCache } from "./beads-task-list-cache";
 import { mapTaskStoreErrors } from "./beads-task-store-errors";
+import { createBeadsToolPathResolver, createSharedDoltToolPathResolver } from "./beads-tool-paths";
 
 export type { BeadsTaskRepository } from "../../infrastructure/beads/task-store/beads-raw-issue";
-
-type CliContextRequest = {
-  cacheKey: string;
-  options: Parameters<ResolveBeadsCliContext>[1];
-};
 
 export const createBeadsTaskRepository = ({
   now = () => new Date(),
@@ -65,13 +57,22 @@ export const createBeadsTaskRepository = ({
   resolveCliContext = resolveBeadsCliContext,
   resolveWorkspaceIdForRepoPath,
   stopSharedDoltServer = stopOwnedSharedDoltServer,
-  systemCommands,
-}: CreateBeadsTaskRepositoryInput = {}): BeadsTaskRepository => {
+  toolDiscovery,
+}: CreateBeadsTaskRepositoryInput): BeadsTaskRepository => {
   const ownedSharedDoltServers = new Map<string, BeadsCliContext["sharedServer"]>();
   const cliContextFlights = new Set<BeadsCliContextFlight>();
   const readyCliContexts = new Map<string, BeadsCliContextFlight>();
   const taskListCache = createTaskListCache();
   let closing = false;
+  const resolveBeadsToolPaths = createBeadsToolPathResolver(toolDiscovery);
+  const resolveSharedDoltToolPaths = createSharedDoltToolPathResolver(toolDiscovery);
+  const resolveContextRequest = createBeadsCliContextRequestResolver({
+    isClosing: () => closing,
+    processEnv,
+    resolveBeadsToolPaths,
+    resolveSharedDoltToolPaths,
+    ...(resolveWorkspaceIdForRepoPath === undefined ? {} : { resolveWorkspaceIdForRepoPath }),
+  });
   const trackOwnedSharedServer = (context: BeadsCliContext): BeadsCliContext => {
     if (context.sharedServer?.ownerPid === process.pid) {
       ownedSharedDoltServers.set(context.serverStatePath, context.sharedServer);
@@ -99,58 +100,15 @@ export const createBeadsTaskRepository = ({
         return yield* restore(awaitBeadsCliContextFlight(flight));
       }),
     );
-  const resolveContextRequest = (
-    repoPath: string,
-    options: Parameters<ResolveBeadsCliContext>[1] = {},
-  ): Effect.Effect<CliContextRequest, TaskStoreError> =>
-    Effect.gen(function* () {
-      if (closing) {
-        return yield* Effect.fail(
-          new HostResourceError({
-            resource: "beadsTaskStore",
-            operation: "beadsTaskRepository.resolveContextRequest",
-            message: "Beads task store is closing.",
-          }),
-        );
-      }
-      const configuredWorkspaceId =
-        typeof options.workspaceId === "string" && options.workspaceId.trim().length > 0
-          ? options.workspaceId.trim()
-          : null;
-      const cliOptions = { ...options, processEnv };
-      const workspaceId = configuredWorkspaceId
-        ? configuredWorkspaceId
-        : resolveWorkspaceIdForRepoPath
-          ? yield* resolveWorkspaceIdForRepoPath(repoPath)
-          : null;
-      if (closing) {
-        return yield* Effect.fail(
-          new HostResourceError({
-            resource: "beadsTaskStore",
-            operation: "beadsTaskRepository.resolveContextRequest",
-            message: "Beads task store is closing.",
-          }),
-        );
-      }
-      const normalizedWorkspaceId =
-        typeof workspaceId === "string" && workspaceId.trim().length > 0
-          ? workspaceId.trim()
-          : null;
-      const effectiveOptions = normalizedWorkspaceId
-        ? { ...cliOptions, workspaceId: normalizedWorkspaceId }
-        : cliOptions;
-      const cacheKey = `${repoPath}\0${normalizedWorkspaceId ?? ""}`;
-      return {
-        cacheKey,
-        options: effectiveOptions,
-      };
-    });
   const resolveEffectiveCliContext: ResolveBeadsCliContext = (repoPath, options = {}) =>
     Effect.gen(function* () {
       const request = yield* resolveContextRequest(repoPath, options);
-      if (options.requireSharedServer !== true) {
-        return yield* trackCliContextResolution(resolveCliContext(repoPath, request.options));
+      if (request.options.requireSharedServer !== true) {
+        return yield* trackCliContextResolution(
+          resolveCliContext(request.repoPath, request.options),
+        );
       }
+      const sharedServerOptions = request.options;
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const reservation = yield* Effect.sync(() => {
@@ -176,7 +134,7 @@ export const createBeadsTaskRepository = ({
               flight: reservation.flight,
               releaseReservation: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
               rememberOwnedContext: trackOwnedSharedServer,
-              resolveContext: resolveCliContext(repoPath, request.options),
+              resolveContext: resolveCliContext(request.repoPath, sharedServerOptions),
             }),
           );
           return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
@@ -192,19 +150,11 @@ export const createBeadsTaskRepository = ({
     );
   const effectiveRunBd = runBd ?? defaultRunBd(resolveEffectiveCliContext);
   const effectiveRunBdJson = runBdJson ?? defaultRunBdJson(resolveEffectiveCliContext);
-  const requireBdCommands = (requireSharedServer: boolean) =>
-    Effect.gen(function* () {
-      yield* assertRequiredCommand(systemCommands, "bd");
-      if (requireSharedServer) {
-        yield* assertRequiredCommand(systemCommands, "dolt");
-      }
-    });
   const runBdJsonForRepo = (repoPath: string) =>
     Effect.gen(function* () {
       if (runBdJson) {
         return effectiveRunBdJson;
       }
-      yield* requireBdCommands(true);
       const context = yield* resolveEffectiveCliContext(repoPath, { requireSharedServer: true });
       return (commandRepoPath: string, args: string[]) =>
         effectiveRunBdJson(commandRepoPath, args, context);
@@ -214,7 +164,6 @@ export const createBeadsTaskRepository = ({
       if (runBd) {
         return effectiveRunBd;
       }
-      yield* requireBdCommands(true);
       const context = yield* resolveEffectiveCliContext(repoPath, { requireSharedServer: true });
       return (commandRepoPath: string, args: string[]) =>
         effectiveRunBd(commandRepoPath, args, context);
@@ -294,7 +243,6 @@ export const createBeadsTaskRepository = ({
     },
     diagnoseRepoStore({ repoPath, prepare = false }) {
       return Effect.gen(function* () {
-        yield* requireBdCommands(prepare);
         return yield* diagnoseRepoStoreWithBd(
           effectiveRunBdJson,
           repoPath,

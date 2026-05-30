@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
-  resolveElectronBundledBinDir,
+  resolveElectronMcpSidecarBinDir,
   resolveElectronMcpSidecarPath,
   resolveElectronRuntimeDistribution,
 } from "./electron-runtime-distribution";
 
 describe("resolveElectronRuntimeDistribution", () => {
-  test("resolves the packaged Electron bundled binary directory", () => {
+  test("resolves the packaged Electron MCP sidecar directory", () => {
     const resourcesPath = "/Applications/OpenDucktor.app/Contents/Resources";
 
-    expect(resolveElectronBundledBinDir(resourcesPath)).toBe(join(resourcesPath, "bin"));
+    expect(resolveElectronMcpSidecarBinDir(resourcesPath)).toBe(join(resourcesPath, "bin"));
   });
 
   test("uses the workspace source distribution in Electron dev mode", () => {
@@ -29,22 +29,21 @@ describe("resolveElectronRuntimeDistribution", () => {
 
   test("uses the packaged Electron resources sidecar in artifact mode", () => {
     const resourcesPath = "/Applications/OpenDucktor.app/Contents/Resources";
+    const distribution = resolveElectronRuntimeDistribution({
+      platform: "darwin",
+      isPackaged: true,
+      resourcesPath,
+      workspaceRoot: "/repo",
+    });
 
-    expect(
-      resolveElectronRuntimeDistribution({
-        platform: "darwin",
-        isPackaged: true,
-        resourcesPath,
-        workspaceRoot: "/repo",
-      }),
-    ).toMatchObject({
+    expect(distribution).toMatchObject({
       mode: "artifact",
-      bundledBinDir: join(resourcesPath, "bin"),
       mcpLauncher: {
         kind: "executable",
         executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
       },
     });
+    expect("bundledToolBinDirs" in distribution).toBe(false);
     expect(resolveElectronMcpSidecarPath({ platform: "darwin", resourcesPath })).toBe(
       join(resourcesPath, "bin", "openducktor-mcp"),
     );
@@ -62,7 +61,6 @@ describe("resolveElectronRuntimeDistribution", () => {
       }),
     ).toMatchObject({
       mode: "artifact",
-      bundledBinDir: join(resourcesPath, "bin"),
       mcpLauncher: {
         kind: "executable",
         executablePath: join(resourcesPath, "bin", "openducktor-mcp"),

@@ -24,6 +24,7 @@
     "@tauri-apps/api": "^2.11.0"
   },
   "devDependencies": {
+    "@openducktor/path-support": "workspace:*",
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^25.9.1",

@@ -6,6 +6,7 @@ import { logError, logInfo, logSuccess } from "./logger";
 import { RUNTIME_CONFIG_PATH } from "./runtime-config";
 import { startTypescriptHostBackend, type TypescriptHostBackend } from "./typescript-host-backend";
 import { resolveWebRuntimeDistribution } from "./web-runtime-distribution";
+import { resolveWebProvidedToolPaths } from "./web-tool-discovery";
 
 export type LauncherOptions = {
   packageRoot: string;
@@ -378,11 +379,13 @@ export const runLauncher = async (options: LauncherOptions): Promise<number> => 
     workspaceMode: options.workspaceMode,
     ...(options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
   });
+  const providedToolPaths = resolveWebProvidedToolPaths();
   const hostBackend = await startTypescriptHostBackend({
     port: options.backendPort,
     frontendOrigin: frontendUrl,
     controlToken,
     appToken,
+    providedToolPaths,
     runtimeDistribution,
   });
   let frontendServer: FrontendServer | null = null;

@@ -1,16 +1,14 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { Effect } from "effect";
-import {
-  type BeadsCliContext,
-  resolveBeadsCliContext,
-} from "../../../adapters/beads/beads-cli-context";
+import type { BeadsCliContext } from "../../../adapters/beads/beads-cli-context";
 import {
   HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../../effect/host-errors";
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
+import { createProcessCommandLaunch } from "../../process/process-command-launch";
 import {
   BD_COMMAND_TIMEOUT_MS,
   type BeadsCommandJsonOutput,
@@ -38,8 +36,8 @@ export const spawnBd = (
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => string,
-  context?: BeadsCliContext,
-  resolveCliContext: ResolveBeadsCliContext = resolveBeadsCliContext,
+  context: BeadsCliContext | undefined,
+  resolveCliContext: ResolveBeadsCliContext,
 ): Effect.Effect<string, TaskStoreError> =>
   spawnBdWithParser(repoPath, args, onSuccess, context, resolveCliContext);
 
@@ -47,8 +45,8 @@ export const spawnBdJson = (
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => BeadsCommandJsonOutput,
-  context?: BeadsCliContext,
-  resolveCliContext: ResolveBeadsCliContext = resolveBeadsCliContext,
+  context: BeadsCliContext | undefined,
+  resolveCliContext: ResolveBeadsCliContext,
 ): Effect.Effect<BeadsCommandJsonOutput, TaskStoreError> =>
   spawnBdWithParser(repoPath, args, onSuccess, context, resolveCliContext);
 
@@ -74,12 +72,20 @@ const spawnBdProcess = (
   cliContext: BeadsCliContext,
 ): Effect.Effect<BdChildProcess, TaskStoreError> =>
   Effect.try({
-    try: () =>
-      spawn("bd", args, {
+    try: () => {
+      const launch = createProcessCommandLaunch(
+        cliContext.tools.beads,
+        args,
+        cliContext.env,
+        process.platform,
+      );
+      return spawn(launch.command, launch.args, {
         cwd: cliContext.workingDir,
-        env: cliContext.env,
+        env: launch.env,
         stdio: ["ignore", "pipe", "pipe"],
-      }),
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
+      });
+    },
     catch: (cause) => toBeadsSpawnError(cause, args, repoPath),
   });
 
@@ -186,8 +192,8 @@ const spawnBdWithParser = <A>(
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => A,
-  context?: BeadsCliContext,
-  resolveCliContext: ResolveBeadsCliContext = resolveBeadsCliContext,
+  context: BeadsCliContext | undefined,
+  resolveCliContext: ResolveBeadsCliContext,
 ): Effect.Effect<A, TaskStoreError> =>
   Effect.gen(function* () {
     const cliContext = yield* resolveCliContextForBd(repoPath, context, resolveCliContext);

@@ -5,12 +5,14 @@ import { join } from "node:path";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import { terminateProcessTree } from "../../infrastructure/process/process-tree";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
-import { terminateProcessTree } from "../process/process-tree";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import {
   buildOpenCodeConfigContent,
   createOpenCodeWorkspaceRuntimeStarter as createEffectOpenCodeWorkspaceRuntimeStarter,
@@ -19,32 +21,53 @@ import {
 type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
   typeof createEffectOpenCodeWorkspaceRuntimeStarter
 >[0];
+type OpenCodeWorkspaceRuntimeStarterTestInput = Omit<
+  OpenCodeWorkspaceRuntimeStarterInput,
+  "runtimeDistribution" | "toolDiscovery"
+> &
+  Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution" | "toolDiscovery">> & {
+    systemCommands?: SystemCommandPort;
+  };
 const testRuntimeDistribution = createArtifactRuntimeDistribution({
   mcpLauncher: {
     kind: "executable",
     executablePath: process.execPath,
   },
 });
-const createOpenCodeWorkspaceRuntimeStarter = (
-  input: Omit<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
-    Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
-) =>
-  createEffectOpenCodeWorkspaceRuntimeStarter({
+const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeStarterTestInput) => {
+  const { processEnv, systemCommands, toolDiscovery, ...starterInput } = input;
+  return createEffectOpenCodeWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
-    ...input,
+    toolDiscovery:
+      toolDiscovery ??
+      createToolDiscoveryAdapter({
+        ...(processEnv === undefined ? {} : { env: processEnv }),
+        systemCommands: systemCommands ?? createSystemCommands(),
+      }),
+    ...(processEnv === undefined ? {} : { processEnv }),
+    ...starterInput,
   });
+};
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
     return Effect.succeed(command);
-  },
-  requiredCommandError() {
-    return Effect.succeed(null);
   },
   versionCommand() {
     return Effect.succeed("opencode 1.0.0");
   },
   runCommandAllowFailure() {
     return Effect.succeed({ ok: true, stdout: "", stderr: "" });
+  },
+});
+
+const createFakeToolDiscovery = (
+  paths: Partial<Record<ToolDiscoveryId, string>>,
+): ToolDiscoveryPort => ({
+  resolveToolPath(toolId) {
+    const path = paths[toolId];
+    return path === undefined
+      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      : Effect.succeed(path);
   },
 });
 
@@ -186,7 +209,6 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
   test("fails fast when the MCP bridge connection is not configured", async () => {
     const starter = createOpenCodeWorkspaceRuntimeStarter({
       systemCommands: createSystemCommands(),
-      mcpCommand: ["mcp-bin"],
     });
     await expect(
       Effect.runPromise(
@@ -208,8 +230,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       const portProbeCalls: number[] = [];
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
-        opencodeBinary,
-        mcpCommand: ["mcp-bin"],
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.tryPromise({
             try: async () => {
@@ -293,8 +314,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       const opencodeBinary = await createFakeOpenCode(root, { childPidPath });
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
-        opencodeBinary,
-        mcpCommand: ["mcp-bin"],
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -340,8 +360,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       const opencodeBinary = await createFakeOpenCode(root, { childPidPath });
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
-        opencodeBinary,
-        mcpCommand: ["mcp-bin"],
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -384,8 +403,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       const opencodeBinary = await createFakeOpenCode(root);
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
-        opencodeBinary,
-        mcpCommand: ["mcp-bin"],
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -435,8 +453,7 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
       const opencodeBinary = await createFakeOpenCode(root);
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
-        opencodeBinary,
-        mcpCommand: ["mcp-bin"],
+        toolDiscovery: createFakeToolDiscovery({ opencode: opencodeBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -495,7 +512,6 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
           platform: "win32",
         }),
         processEnv: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
-        mcpCommand: ["mcp-bin"],
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",

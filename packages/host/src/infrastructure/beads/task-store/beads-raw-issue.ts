@@ -7,12 +7,15 @@ import {
 import type { Effect } from "effect";
 import type {
   BeadsCliContext,
-  ResolveBeadsCliContextOptions,
+  BeadsSharedServerContext,
+  ResolveBeadsCliContextRequestOptions,
+  ResolveBeadsOptionalServerContextOptions,
+  ResolveBeadsSharedServerContextOptions,
   StopSharedDoltServer,
 } from "../../../adapters/beads/beads-cli-context";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
+import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 export const METADATA_NAMESPACE = "openducktor";
 export const BD_COMMAND_TIMEOUT_MS = 30000;
 export const DOCUMENT_ENCODING_GZIP_BASE64_V1 = "gzip-base64-v1";
@@ -63,8 +66,18 @@ export type RunBd = (
 ) => Effect.Effect<string, TaskStoreError>;
 export type ResolveBeadsCliContext = (
   repoPath: string,
-  options?: ResolveBeadsCliContextOptions,
+  options?: ResolveBeadsCliContextRequestOptions,
 ) => Effect.Effect<BeadsCliContext, TaskStoreError>;
+export interface ResolveRawBeadsCliContext {
+  (
+    repoPath: string,
+    options: ResolveBeadsSharedServerContextOptions,
+  ): Effect.Effect<BeadsSharedServerContext, TaskStoreError>;
+  (
+    repoPath: string,
+    options: ResolveBeadsOptionalServerContextOptions,
+  ): Effect.Effect<BeadsCliContext, TaskStoreError>;
+}
 export type ResolveWorkspaceIdForRepoPath = (
   repoPath: string,
 ) => Effect.Effect<string | null | undefined, TaskStoreError>;
@@ -77,10 +90,10 @@ export type CreateBeadsTaskRepositoryInput = {
   processEnv?: NodeJS.ProcessEnv;
   runBd?: RunBd;
   runBdJson?: RunBdJson;
-  resolveCliContext?: ResolveBeadsCliContext;
+  resolveCliContext?: ResolveRawBeadsCliContext;
   resolveWorkspaceIdForRepoPath?: ResolveWorkspaceIdForRepoPath;
   stopSharedDoltServer?: StopSharedDoltServer;
-  systemCommands?: Pick<SystemCommandPort, "requiredCommandError">;
+  toolDiscovery: ToolDiscoveryPort;
 };
 export type BeadsTaskRepositoryShutdownResult = {
   stoppedSharedDoltServers: number;

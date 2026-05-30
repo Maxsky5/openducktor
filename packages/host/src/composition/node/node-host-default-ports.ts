@@ -9,11 +9,13 @@ import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-ad
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
-import { createProcessEnvironment } from "../../adapters/process/process-environment";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
+import { toHostOperationError } from "../../effect/host-errors";
+import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import {
   type DevServerProcessPort,
@@ -29,6 +31,11 @@ import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-to
 import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
+import {
+  type ToolDiscoveryId,
+  type ToolDiscoveryPort,
+  ToolDiscoveryPortTag,
+} from "../../ports/tool-discovery-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
 
 export type NodeHostDefaultPorts = {
@@ -44,6 +51,7 @@ export type NodeHostDefaultPorts = {
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   worktreeFiles: WorktreeFilePort;
 };
 
@@ -61,6 +69,8 @@ export type CreateNodeHostDefaultPortsInput = {
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
+  providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
   worktreeFiles: WorktreeFilePort;
 }>;
 
@@ -80,6 +90,7 @@ export type NodeHostDefaultPortServices =
   | RuntimeHealthPortTag
   | SettingsConfigPortTag
   | SystemCommandPortTag
+  | ToolDiscoveryPortTag
   | WorktreeFilePortTag;
 
 const isCodexAppServerTransportRegistry = (
@@ -96,9 +107,22 @@ const makeNodeHostDefaultPorts = (
   Effect.sync(() => {
     const processEnv = input.processEnv ?? createProcessEnvironment();
     const systemCommands = input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
+    const bundledToolBinDirs =
+      input.runtimeDistribution.mode === "artifact" && input.runtimeDistribution.bundledToolBinDirs
+        ? input.runtimeDistribution.bundledToolBinDirs
+        : undefined;
+    const toolDiscovery =
+      input.toolDiscovery ??
+      createToolDiscoveryAdapter({
+        env: processEnv,
+        options: {
+          ...(input.providedToolPaths ? { providedToolPaths: input.providedToolPaths } : {}),
+          ...(bundledToolBinDirs ? { bundledToolBinDirs } : {}),
+        },
+        systemCommands,
+      });
     const runtimeHealth =
-      input.runtimeHealth ??
-      createRuntimeHealthProbe(systemCommands, input.runtimeDistribution, processEnv);
+      input.runtimeHealth ?? createRuntimeHealthProbe(systemCommands, toolDiscovery);
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
     const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
     const codexTransportRegistry =
@@ -110,7 +134,19 @@ const makeNodeHostDefaultPorts = (
       codexTransportRegistry,
       devServerProcesses: input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
       filesystem: input.filesystem ?? createFilesystemAdapter(),
-      git: input.git ?? createGitCliAdapter({ processEnv }),
+      git:
+        input.git ??
+        createGitCliAdapter({
+          processEnv,
+          resolveCommand: () =>
+            toolDiscovery
+              .resolveToolPath("git")
+              .pipe(
+                Effect.mapError((cause) =>
+                  toHostOperationError(cause, "git.resolveCommand", { toolId: "git" }),
+                ),
+              ),
+        }),
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,
@@ -118,6 +154,7 @@ const makeNodeHostDefaultPorts = (
       runtimeHealth,
       settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
       systemCommands,
+      toolDiscovery,
       worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
     };
   });
@@ -138,6 +175,7 @@ const makeNodeHostDefaultPortContext = (
         Context.add(RuntimeHealthPortTag, ports.runtimeHealth),
         Context.add(SettingsConfigPortTag, ports.settingsConfig),
         Context.add(SystemCommandPortTag, ports.systemCommands),
+        Context.add(ToolDiscoveryPortTag, ports.toolDiscovery),
         Context.add(WorktreeFilePortTag, ports.worktreeFiles),
       ),
     ),

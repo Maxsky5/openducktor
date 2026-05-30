@@ -8,8 +8,10 @@ import {
   pullRequestRecordsMatch,
 } from "../support/github-pull-requests";
 import {
+  requireDependencies,
   requirePullRequestMergeCleanupDependencies,
   requirePullRequestSyncDependencies,
+  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
@@ -18,26 +20,28 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskSyncDeferUseCases = ({
   devServerService,
   gitPort,
+  githubDependencies,
   taskStore,
   settingsConfig,
-  systemCommands,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
   TaskService,
   "repoPullRequestSync" | "repoPullRequestSyncDetailed" | "deferTask" | "resumeDeferredTask"
 > => {
   const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) =>
     Effect.gen(function* () {
       const { repoPath } = input;
-      const dependencies = requirePullRequestSyncDependencies(
-        systemCommands,
-        workspaceSettingsService,
+      const dependencies = yield* requireDependencies(() =>
+        requirePullRequestSyncDependencies({
+          githubDependencies,
+          workspaceSettingsService,
+        }),
       );
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
-      const policy = yield* githubPullRequestSyncPolicy(dependencies.systemCommands, repoConfig);
+      const policy = yield* githubPullRequestSyncPolicy(dependencies, repoConfig);
       if (!policy.available) {
         return { ran: false, changedTaskIds: [] };
       }
@@ -63,11 +67,13 @@ export const createTaskSyncDeferUseCases = ({
         }
 
         if (updated.record.state === "merged" && task.status !== "closed") {
-          const cleanupDependencies = requirePullRequestMergeCleanupDependencies(
-            devServerService,
-            gitPort,
-            settingsConfig,
-            taskWorktreeService,
+          const cleanupDependencies = yield* requireDependencies(() =>
+            requirePullRequestMergeCleanupDependencies(
+              devServerService,
+              gitPort,
+              settingsConfig,
+              taskWorktreeService,
+            ),
           );
           yield* taskStore.setPullRequest({
             repoPath: effectiveRepoPath,
@@ -115,9 +121,7 @@ export const createTaskSyncDeferUseCases = ({
         return { ok: result.ran };
       });
     },
-
     repoPullRequestSyncDetailed,
-
     deferTask(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;
@@ -158,7 +162,6 @@ export const createTaskSyncDeferUseCases = ({
         return enrichTask(updated, nextTasks);
       });
     },
-
     resumeDeferredTask(input) {
       return Effect.gen(function* () {
         const { repoPath, taskId } = input;

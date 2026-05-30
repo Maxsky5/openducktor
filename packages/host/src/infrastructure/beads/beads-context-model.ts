@@ -3,21 +3,13 @@ import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { Effect, type Fiber } from "effect";
 import {
+  type HostDependencyError,
   type HostOperationError,
   type HostPathAccessError,
   type HostPathNotFoundError,
   type HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
-
-export {
-  DEFAULT_CONFIG_DIR_NAME,
-  OPENDUCKTOR_CONFIG_DIR_ENV,
-  resolveHomeDirectory,
-  resolveOpenDucktorBaseDir,
-  resolveUserPath,
-  stripMatchingQuotes,
-} from "../../config/openducktor-config-dir";
 export const SHARED_DOLT_SERVER_HOST = "127.0.0.1";
 export const SHARED_DOLT_SERVER_USER = "root";
 export const SHARED_DOLT_PORT_RANGE_START = 36_000;
@@ -49,6 +41,11 @@ export type BeadsSharedServerPaths = {
   doltConfigFile: string;
   env: NodeJS.ProcessEnv;
   serverStatePath: string;
+  tools: SharedDoltToolPaths;
+};
+
+export type BeadsToolPaths = {
+  beads: string;
 };
 
 export type BeadsCliContext = {
@@ -61,6 +58,16 @@ export type BeadsCliContext = {
   serverStatePath: string;
   sharedServer: BeadsSharedServerState | null;
   env: NodeJS.ProcessEnv;
+  tools: BeadsToolPaths;
+};
+
+export type SharedDoltToolPaths = {
+  dolt: string;
+};
+
+export type BeadsSharedServerContext = Omit<BeadsCliContext, "sharedServer"> & {
+  sharedServer: BeadsSharedServerState;
+  sharedDoltTools: SharedDoltToolPaths;
 };
 
 export type BeadsInfrastructureError =
@@ -70,12 +77,14 @@ export type BeadsInfrastructureError =
   | HostResourceError
   | HostValidationError;
 
+export type BeadsCliContextResolutionError = BeadsInfrastructureError | HostDependencyError;
+
 export type EnsureSharedDoltServer = (
   paths: BeadsSharedServerPaths,
 ) => Effect.Effect<BeadsSharedServerState, BeadsInfrastructureError>;
 
 export type EnsureBeadsAttachment = (
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ) => Effect.Effect<void, BeadsInfrastructureError>;
 
 export type BeadsCommandRunner = (input: {
@@ -85,12 +94,32 @@ export type BeadsCommandRunner = (input: {
   env?: NodeJS.ProcessEnv;
 }) => Effect.Effect<{ ok: boolean; stdout: string; stderr: string }, BeadsInfrastructureError>;
 
-export type ResolveBeadsCliContextOptions = {
-  requireSharedServer?: boolean;
+type ResolveBeadsCliContextBaseOptions = {
   ensureSharedServer?: EnsureSharedDoltServer;
   ensureAttachment?: EnsureBeadsAttachment;
   processEnv?: NodeJS.ProcessEnv;
+  tools: BeadsToolPaths;
   workspaceId?: string | null;
+};
+
+export type ResolveBeadsOptionalServerContextOptions = ResolveBeadsCliContextBaseOptions & {
+  requireSharedServer?: false | undefined;
+};
+
+export type ResolveBeadsSharedServerContextOptions = ResolveBeadsCliContextBaseOptions & {
+  requireSharedServer: true;
+  sharedDoltTools: SharedDoltToolPaths;
+};
+
+export type ResolveBeadsCliContextOptions =
+  | ResolveBeadsOptionalServerContextOptions
+  | ResolveBeadsSharedServerContextOptions;
+
+export type ResolveBeadsCliContextRequestOptions = Omit<
+  ResolveBeadsCliContextBaseOptions,
+  "processEnv" | "sharedDoltTools" | "tools"
+> & {
+  requireSharedServer?: boolean;
 };
 
 export type BeadsAttachmentMetadata = {
@@ -189,4 +218,18 @@ export const workspaceRepoId = (workspaceId: string): string => {
     });
   }
   return normalizedWorkspaceId;
+};
+
+export const beadsCliContextCacheKey = ({
+  canonicalRepoPath,
+  workspaceId,
+}: {
+  canonicalRepoPath: string;
+  workspaceId?: string | null;
+}): string => {
+  const normalizedWorkspaceId =
+    typeof workspaceId === "string" && workspaceId.trim().length > 0 ? workspaceId.trim() : null;
+  return normalizedWorkspaceId
+    ? `workspace:${workspaceRepoId(normalizedWorkspaceId)}`
+    : `repo:${canonicalRepoPath}`;
 };

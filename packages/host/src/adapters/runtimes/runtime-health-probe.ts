@@ -3,15 +3,11 @@ import { Effect } from "effect";
 import { errorMessage } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import { resolveCodexBinary, resolveOpencodeBinary } from "./runtime-binaries";
-import type { HostRuntimeDistribution } from "./runtime-distribution";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 
 const OPENCODE_VERSION_ENV = {
   OPENCODE_CONFIG_CONTENT: '{"logLevel":"INFO"}',
 };
-
-const parseCommandMissingError = (command: string): string =>
-  `Required command \`${command}\` not found.`;
 
 const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): RuntimeHealth => ({
   kind,
@@ -23,15 +19,14 @@ const runtimeHealthForMissingCommand = (kind: RuntimeKind, detail: string): Runt
 
 export const createRuntimeHealthProbe = (
   systemCommands: SystemCommandPort,
-  runtimeDistribution: HostRuntimeDistribution,
-  env: NodeJS.ProcessEnv = process.env,
+  toolDiscovery: ToolDiscoveryPort,
 ): RuntimeHealthPort => ({
   getRuntimeHealth(kind) {
     return Effect.gen(function* () {
       if (kind === "opencode") {
         const health = yield* Effect.either(
           Effect.gen(function* () {
-            const binary = yield* resolveOpencodeBinary(systemCommands, env);
+            const binary = yield* toolDiscovery.resolveToolPath("opencode");
             const version = yield* systemCommands.versionCommand(binary, ["--version"], {
               env: OPENCODE_VERSION_ENV,
               timeoutMs: 2_000,
@@ -54,9 +49,7 @@ export const createRuntimeHealthProbe = (
       if (kind === "codex") {
         const health = yield* Effect.either(
           Effect.gen(function* () {
-            const binary = yield* resolveCodexBinary(systemCommands, env, {
-              runtimeDistribution,
-            });
+            const binary = yield* toolDiscovery.resolveToolPath("codex");
             const version = yield* systemCommands.versionCommand(binary, ["--version"], {
               timeoutMs: 2_000,
             });
@@ -75,8 +68,11 @@ export const createRuntimeHealthProbe = (
         return runtimeHealthForMissingCommand(kind, errorMessage(health.left));
       }
 
-      const missing = parseCommandMissingError(kind);
-      return runtimeHealthForMissingCommand(kind, missing);
+      const unsupportedRuntime: never = kind;
+      return runtimeHealthForMissingCommand(
+        unsupportedRuntime,
+        `Runtime ${unsupportedRuntime} is not supported by runtime health checks.`,
+      );
     });
   },
 });

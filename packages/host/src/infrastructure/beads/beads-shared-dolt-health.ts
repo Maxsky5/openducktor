@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import net from "node:net";
 import { Clock, Effect } from "effect";
-import { processIsAlive } from "../../adapters/process/process-tree";
 import { toHostPathStatError } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
+import { processIsAlive } from "../process/process-tree";
 import {
   type BeadsCommandRunner,
   type BeadsSharedServerPaths,
@@ -66,15 +67,18 @@ export const tcpProbe = (port: number): Effect.Effect<boolean> =>
   });
 
 export const runDoltAllowFailure = (
+  doltCommand: string,
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Effect.Effect<boolean> =>
   Effect.async<boolean>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn("dolt", args, {
-        env,
+      const launch = createProcessCommandLaunch(doltCommand, args, env, process.platform);
+      child = spawn(launch.command, launch.args, {
+        env: launch.env,
         stdio: ["ignore", "ignore", "ignore"],
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
     } catch {
       resume(Effect.succeed(false));
@@ -110,10 +114,17 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
   Effect.async<BeadsCommandResult, SharedDoltServerError>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(command, args, {
+      const launch = createProcessCommandLaunch(
+        command,
+        args,
+        env ?? process.env,
+        process.platform,
+      );
+      child = spawn(launch.command, launch.args, {
         cwd,
-        env,
+        env: launch.env,
         stdio: ["ignore", "pipe", "pipe"],
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
     } catch (cause) {
       resume(Effect.fail(toSharedDoltServerError(cause, "shared-dolt.run-command")));
@@ -177,8 +188,13 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
     child.once("close", onClose);
   });
 
-export const sqlProbe = (port: number, env: NodeJS.ProcessEnv): Effect.Effect<boolean> =>
+export const sqlProbe = (
+  port: number,
+  env: NodeJS.ProcessEnv,
+  doltCommand: string,
+): Effect.Effect<boolean> =>
   runDoltAllowFailure(
+    doltCommand,
     [
       "--host",
       SHARED_DOLT_SERVER_HOST,
@@ -207,18 +223,25 @@ export const serverStateIsHealthy = (
     if (state.sharedServerRoot !== paths.sharedServerRoot || state.doltDataDir !== paths.doltRoot) {
       return false;
     }
-    if (!(yield* tcpProbe(state.port)) || !(yield* sqlProbe(state.port, paths.env))) {
+    if (
+      !(yield* tcpProbe(state.port)) ||
+      !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt))
+    ) {
       return false;
     }
     return processIsAlive(state.pid);
   });
 
-export const waitForServerReady = (port: number, env: NodeJS.ProcessEnv): Effect.Effect<boolean> =>
+export const waitForServerReady = (
+  port: number,
+  env: NodeJS.ProcessEnv,
+  doltCommand: string,
+): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
     const deadline = startedAt + SHARED_DOLT_HEALTH_TIMEOUT_MS;
     while ((yield* Clock.currentTimeMillis) < deadline) {
-      if ((yield* tcpProbe(port)) && (yield* sqlProbe(port, env))) {
+      if ((yield* tcpProbe(port)) && (yield* sqlProbe(port, env, doltCommand))) {
         return true;
       }
       yield* Effect.sleep(`${SHARED_DOLT_HEALTH_POLL_INTERVAL_MS} millis`);

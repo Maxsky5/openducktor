@@ -13,12 +13,16 @@ export type SystemCommandRunResult = {
   stderr: string;
 };
 
+export type SystemCommandResolveOptions = {
+  env?: NodeJS.ProcessEnv;
+  searchPath?: readonly string[];
+};
+
 export type SystemCommandPort = {
-  resolveCommandPath?(
+  resolveCommandPath(
     command: string,
-    env?: NodeJS.ProcessEnv,
+    options?: SystemCommandResolveOptions,
   ): Effect.Effect<string | null, HostPathAccessError>;
-  requiredCommandError(command: string): Effect.Effect<string | null, HostPathAccessError>;
   versionCommand(
     command: string,
     args: string[],

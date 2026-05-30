@@ -10,6 +10,7 @@ Transport-neutral TypeScript host for Electron and local browser shells. It expo
 - `src/interface/router/`: transport-neutral command dispatch.
 - `src/ports/`: driven-port contracts implemented by adapters.
 - `src/infrastructure/`: infrastructure modules coupled to external command output, filesystem layouts, Beads/Dolt, and git internals.
+- `src/infrastructure/process/`: shared Node process, PATH, PATHEXT, command-launch, and process-tree helpers used by infrastructure and adapters.
 - `src/adapters/`: adapter implementations grouped by external system or technical concern. Names should describe the external boundary (`git-cli-adapter`, `beads-task-repository`, `runtime-registry`) instead of the runtime platform. No production files should live directly in the adapter root.
 - `src/composition/`: process-wide wiring and lifecycle orchestration.
 

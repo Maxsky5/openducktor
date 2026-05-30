@@ -17,10 +17,10 @@ export const resolveElectronMcpSidecarPath = ({
   resourcesPath,
 }: Pick<ResolveElectronRuntimeDistributionInput, "platform" | "resourcesPath">): string => {
   const executableName = platform === "win32" ? "openducktor-mcp.exe" : "openducktor-mcp";
-  return join(resourcesPath, "bin", executableName);
+  return join(resolveElectronMcpSidecarBinDir(resourcesPath), executableName);
 };
 
-export const resolveElectronBundledBinDir = (resourcesPath: string): string =>
+export const resolveElectronMcpSidecarBinDir = (resourcesPath: string): string =>
   join(resourcesPath, "bin");
 
 export const resolveElectronRuntimeDistribution = ({
@@ -33,9 +33,7 @@ export const resolveElectronRuntimeDistribution = ({
     return createSourceRuntimeDistribution(workspaceRoot);
   }
 
-  const bundledBinDir = resolveElectronBundledBinDir(resourcesPath);
   return createArtifactRuntimeDistribution({
-    bundledBinDir,
     mcpLauncher: {
       kind: "executable",
       executablePath: resolveElectronMcpSidecarPath({

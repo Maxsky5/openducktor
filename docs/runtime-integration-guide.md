@@ -333,7 +333,9 @@ Current TypeScript host anchors:
 - `packages/host/src/adapters/runtimes/runtime-registry.ts`
 - `packages/host/src/adapters/opencode/opencode-workspace-runtime-starter.ts`
 - `packages/host/src/adapters/codex/codex-workspace-runtime-starter.ts`
-- `packages/host/src/adapters/runtimes/runtime-binaries.ts`
+- `packages/host/src/adapters/system/tool-discovery.ts`
+- `packages/host/src/infrastructure/process/process-command-resolution.ts`
+- `packages/host/src/infrastructure/process/process-command-launch.ts`
 - `packages/host/src/application/runtimes/runtime-orchestrator-service.ts`
 
 Legacy Tauri/Rust anchors:
@@ -497,7 +499,9 @@ Start with these anchor references:
 - `packages/frontend/src/lib/agent-runtime.ts`
 - `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`
 - `packages/host/src/adapters/runtimes/runtime-registry.ts`
-- `packages/host/src/adapters/runtimes/runtime-binaries.ts`
+- `packages/host/src/adapters/system/tool-discovery.ts`
+- `packages/host/src/infrastructure/process/process-command-resolution.ts`
+- `packages/host/src/infrastructure/process/process-command-launch.ts`
 - `packages/host/src/adapters/codex/codex-workspace-runtime-starter.ts`
 - `packages/host/src/adapters/opencode/opencode-workspace-runtime-starter.ts`
 - `apps/desktop/src-tauri/src/commands/runtime.rs`

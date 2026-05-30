@@ -5,12 +5,17 @@ import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
 import {
   readSharedServerState,
+  runCommandAllowFailure,
   serverStateIsHealthy,
   stopOwnedSharedDoltServer,
   writeDoltConfigFile,
   writeSharedServerState,
   yamlQuotePath,
 } from "./beads-shared-dolt-server";
+
+const TEST_SHARED_DOLT_TOOL_PATHS = {
+  dolt: "dolt",
+};
 
 const createPaths = async (): Promise<BeadsSharedServerPaths> => {
   const baseDir = await mkdtemp(path.join(tmpdir(), "odt config shared dolt-"));
@@ -25,6 +30,7 @@ const createPaths = async (): Promise<BeadsSharedServerPaths> => {
     doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
     env: { ...process.env, OPENDUCKTOR_CONFIG_DIR: baseDir },
     serverStatePath: path.join(sharedServerRoot, "server.json"),
+    tools: TEST_SHARED_DOLT_TOOL_PATHS,
   };
 };
 
@@ -212,5 +218,31 @@ describe("Dolt config YAML rendering", () => {
     await expect(readdir(paths.sharedServerRoot)).resolves.not.toContain(
       `dolt-config.yaml.tmp-${process.pid}`,
     );
+  });
+});
+
+describe("runCommandAllowFailure", () => {
+  test("runs Windows cmd launchers through cmd.exe", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-cmd-"));
+    const command = path.join(root, "tool.cmd");
+    await writeFile(command, "@echo off\r\necho cmd:%~1:%~2\r\n");
+
+    await expect(
+      Effect.runPromise(
+        runCommandAllowFailure({
+          command,
+          args: ["one", "two words"],
+          cwd: root,
+          env: { ...process.env },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      stdout: "cmd:one:two words\r\n",
+    });
   });
 });

@@ -6,17 +6,22 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import {
+  createProcessCommandLaunch,
+  type ProcessCommandLaunchPlan,
+  parseProcessCommandLine,
+} from "../../infrastructure/process/process-command-launch";
+import { normalizeProcessEnvironment } from "../../infrastructure/process/process-environment";
+import {
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+} from "../../infrastructure/process/process-tree";
+import {
   type DevServerProcessExit,
   type DevServerProcessPort,
   DevServerProcessPortTag,
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
-import {
-  createProcessCommandLaunch,
-  parseProcessCommandLine,
-} from "../process/process-command-launch";
-import { shouldStartDetachedProcessGroup, terminateProcessTree } from "../process/process-tree";
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
@@ -35,21 +40,16 @@ type DevServerLaunchFailureDetails = {
 };
 
 type DevServerChildProcess = ReturnType<typeof spawn>;
-type DevServerCommandLaunch = {
-  command: string;
-  args: string[];
-  windowsVerbatimArguments?: boolean;
-};
 
 const createDevServerCommandLaunch = (
   command: string,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-): DevServerCommandLaunch => {
+): ProcessCommandLaunchPlan => {
   if (platform !== "win32") {
     // Repo dev-server commands are configured as shell command strings so users can
     // keep common scripts such as `cd app && npm run dev` or inline env assignments.
-    return { command: "/bin/sh", args: ["-lc", command] };
+    return { command: "/bin/sh", args: ["-lc", command], env, windowsVerbatimArguments: false };
   }
 
   const parsedCommand = parseProcessCommandLine(command);
@@ -159,7 +159,7 @@ export const createDevServerProcessAdapter = ({
     let scope: Parameters<typeof Scope.close>[0] | null = null;
     return Effect.gen(function* () {
       const { command, cwd, env, onExit, onOutput } = input;
-      const commandEnv = { ...processEnv, ...env };
+      const commandEnv = normalizeProcessEnvironment({ ...processEnv, ...env }, process.platform);
       const launch = yield* Effect.try({
         try: () => createDevServerCommandLaunch(command, commandEnv, process.platform),
         catch: (cause) =>
@@ -181,9 +181,9 @@ export const createDevServerProcessAdapter = ({
           spawn(launch.command, launch.args, {
             cwd,
             detached: shouldStartDetachedProcessGroup(process.platform),
-            env: commandEnv,
+            env: launch.env,
             stdio: ["ignore", "pipe", "pipe"],
-            windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
+            windowsVerbatimArguments: launch.windowsVerbatimArguments,
           }),
         catch: (cause) =>
           toHostOperationError(cause, "devServerProcess.spawn", launchFailureDetails),

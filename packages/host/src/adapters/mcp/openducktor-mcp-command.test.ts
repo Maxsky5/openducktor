@@ -2,21 +2,21 @@ import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import {
   createArtifactRuntimeDistribution,
   createSourceRuntimeDistribution,
 } from "../runtimes/runtime-distribution";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
 
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 
 const createSystemCommands = (bunAvailable = true): SystemCommandPort => ({
-  requiredCommandError(command) {
-    if (command === "bun" && bunAvailable) {
-      return Effect.succeed(null);
-    }
-    return Effect.succeed(`Required command \`${command}\` not found.`);
+  resolveCommandPath(command) {
+    return Effect.succeed(command === "bun" && bunAvailable ? command : null);
   },
   versionCommand() {
     return Effect.succeed(null);
@@ -25,6 +25,10 @@ const createSystemCommands = (bunAvailable = true): SystemCommandPort => ({
     return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   },
 });
+const createToolDiscovery = (bunAvailable = true): ToolDiscoveryPort =>
+  createToolDiscoveryAdapter({
+    systemCommands: createSystemCommands(bunAvailable),
+  });
 const createWorkspaceRoot = async (): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), "odt-mcp-command-"));
   await mkdir(join(root, "apps"));
@@ -41,13 +45,13 @@ const expectArtifactMcpCommandRejected = async (
   await expect(
     Effect.runPromise(
       resolveOpenDucktorMcpCommand({
-        systemCommands: createSystemCommands(),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: {
             kind: "executable",
             executablePath: sidecar,
           },
         }),
+        toolDiscovery: createToolDiscovery(),
       }),
     ),
   ).rejects.toThrow(expectedMessage);
@@ -55,19 +59,22 @@ const expectArtifactMcpCommandRejected = async (
 describe("resolveOpenDucktorMcpCommand", () => {
   test("uses an executable MCP artifact launcher from the runtime distribution", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-sidecar-"));
-    const sidecar = join(root, "openducktor-mcp");
+    const sidecar = join(
+      root,
+      process.platform === "win32" ? "openducktor-mcp.cmd" : "openducktor-mcp",
+    );
     await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
     await chmod(sidecar, 0o755);
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
               kind: "executable",
               executablePath: sidecar,
             },
           }),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).resolves.toEqual([sidecar]);
@@ -81,75 +88,88 @@ describe("resolveOpenDucktorMcpCommand", () => {
       "Runtime artifact distribution MCP launcher points to a missing file",
     );
   });
-  test("fails fast when an artifact MCP command dependency is missing", async () => {
+  test("validates an artifact MCP script before resolving its runner tool", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-required-file-"));
-    const bun = join(root, "bun");
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
-    await writeFile(bun, "#!/bin/sh\nexit 0\n");
-    await chmod(bun, 0o755);
 
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
-              kind: "bunScript",
-              bunExecutablePath: bun,
+              kind: "toolScript",
               scriptPath: mcpEntrypoint,
+              toolId: "bun",
             },
           }),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).rejects.toThrow("Runtime artifact distribution MCP launcher requires a missing file");
   });
   test("fails fast when an artifact MCP command dependency is a directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-required-file-"));
-    const bun = join(root, "bun");
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
-    await writeFile(bun, "#!/bin/sh\nexit 0\n");
-    await chmod(bun, 0o755);
     await mkdir(mcpEntrypoint);
 
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
-              kind: "bunScript",
-              bunExecutablePath: bun,
+              kind: "toolScript",
               scriptPath: mcpEntrypoint,
+              toolId: "bun",
             },
           }),
+          toolDiscovery: createToolDiscovery(),
         }),
       ),
     ).rejects.toThrow(
       "Runtime artifact distribution MCP launcher requires a regular file but received a directory",
     );
   });
-  test("uses a Bun script MCP artifact launcher from the runtime distribution", async () => {
+  test("uses tool discovery for artifact script launchers", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-bun-script-"));
-    const bun = join(root, "bun");
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
-    await writeFile(bun, "#!/bin/sh\nexit 0\n");
-    await chmod(bun, 0o755);
     await writeFile(mcpEntrypoint, "#!/usr/bin/env bun\n");
 
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
-              kind: "bunScript",
-              bunExecutablePath: bun,
+              kind: "toolScript",
               scriptPath: mcpEntrypoint,
+              toolId: "bun",
             },
           }),
+          toolDiscovery: {
+            resolveToolPath: (toolId) => Effect.succeed(`/resolved/${toolId}`),
+          },
         }),
       ),
-    ).resolves.toEqual([bun, mcpEntrypoint]);
+    ).resolves.toEqual(["/resolved/bun", mcpEntrypoint]);
+  });
+  test("fails fast through tool discovery when an artifact script launcher tool is unavailable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-tool-script-"));
+    const mcpEntrypoint = join(root, "openducktor-mcp.js");
+    await writeFile(mcpEntrypoint, "#!/usr/bin/env bun\n");
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "toolScript",
+              scriptPath: mcpEntrypoint,
+              toolId: "bun",
+            },
+          }),
+          toolDiscovery: createToolDiscovery(false),
+        }),
+      ),
+    ).rejects.toThrow("bun not found");
   });
   testIfUnixModeIsAvailable(
     "fails fast when the artifact MCP command is not executable",
@@ -181,8 +201,8 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(),
           runtimeDistribution: createSourceRuntimeDistribution(root),
+          toolDiscovery: createToolDiscovery(),
         }),
       ),
     ).resolves.toEqual(["bun", join(root, "packages", "openducktor-mcp", "src", "index.ts")]);
@@ -192,10 +212,36 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createSourceRuntimeDistribution(root),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
-    ).rejects.toThrow("OpenDucktor MCP workspace execution requires bun on PATH.");
+    ).rejects.toThrow("OpenDucktor MCP workspace execution requires bun.");
+  });
+  test("preserves validation errors from Bun discovery", async () => {
+    const root = await createWorkspaceRoot();
+    const result = await Effect.runPromise(
+      Effect.either(
+        resolveOpenDucktorMcpCommand({
+          runtimeDistribution: createSourceRuntimeDistribution(root),
+          toolDiscovery: {
+            resolveToolPath: () =>
+              Effect.fail(
+                new HostValidationError({
+                  field: "OPENDUCKTOR_BUN_PATH",
+                  message: "Configured bun override is invalid.",
+                }),
+              ),
+          },
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+    expect(result.left).toBeInstanceOf(HostValidationError);
+    expect(result.left.message).toBe("Configured bun override is invalid.");
   });
 });

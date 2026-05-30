@@ -1,14 +1,16 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { resolveUserPath } from "@openducktor/path-support";
 import { Effect } from "effect";
 import {
   HostDependencyError,
   HostValidationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import { isExecutableFile, resolveUserPath } from "../runtimes/runtime-binaries";
+import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type {
   ArtifactRuntimeDistribution,
   HostRuntimeDistribution,
@@ -16,8 +18,8 @@ import type {
 } from "../runtimes/runtime-distribution";
 
 export type ResolveOpenDucktorMcpCommandInput = {
-  systemCommands: SystemCommandPort;
   runtimeDistribution: HostRuntimeDistribution;
+  toolDiscovery: ToolDiscoveryPort;
 };
 const isFile = (path: string) =>
   Effect.tryPromise({
@@ -55,7 +57,12 @@ const nonFileDescription = (stats: Stats): string =>
 
 const resolveWorkspaceRoot = (runtimeDistribution: SourceRuntimeDistribution) =>
   Effect.gen(function* () {
-    const workspaceRoot = resolve(resolveUserPath(runtimeDistribution.workspaceRoot));
+    const workspaceRoot = resolve(
+      resolveUserPath(runtimeDistribution.workspaceRoot, {
+        resolveHomeDir: homedir,
+        joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+      }),
+    );
     if (!(yield* isWorkspaceRootCandidate(workspaceRoot))) {
       return yield* Effect.fail(
         new HostValidationError({
@@ -70,7 +77,12 @@ const resolveWorkspaceRoot = (runtimeDistribution: SourceRuntimeDistribution) =>
 
 const resolveExecutablePath = (path: string, field: string) =>
   Effect.gen(function* () {
-    const resolvedPath = resolve(resolveUserPath(path));
+    const resolvedPath = resolve(
+      resolveUserPath(path, {
+        resolveHomeDir: homedir,
+        joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+      }),
+    );
     const stats = yield* statPath(resolvedPath, "openducktorMcpCommand.statExecutable").pipe(
       Effect.catchTag("HostPathNotFoundError", () =>
         Effect.fail(
@@ -93,7 +105,7 @@ const resolveExecutablePath = (path: string, field: string) =>
         }),
       );
     }
-    if (!(yield* isExecutableFile(resolvedPath))) {
+    if (!(yield* isExecutableCommandFile(resolvedPath))) {
       return yield* Effect.fail(
         new HostValidationError({
           field,
@@ -107,7 +119,12 @@ const resolveExecutablePath = (path: string, field: string) =>
 
 const resolveRequiredFile = (path: string, field: string) =>
   Effect.gen(function* () {
-    const resolvedPath = resolve(resolveUserPath(path));
+    const resolvedPath = resolve(
+      resolveUserPath(path, {
+        resolveHomeDir: homedir,
+        joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+      }),
+    );
     const stats = yield* statPath(resolvedPath, "openducktorMcpCommand.statRequiredFile").pipe(
       Effect.catchTag("HostPathNotFoundError", () =>
         Effect.fail(
@@ -143,7 +160,10 @@ const unsupportedArtifactMcpLauncher = (launcher: never) =>
     }),
   );
 
-const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution) =>
+const resolveArtifactCommand = (
+  runtimeDistribution: ArtifactRuntimeDistribution,
+  toolDiscovery: ToolDiscoveryPort,
+) =>
   Effect.gen(function* () {
     const { mcpLauncher } = runtimeDistribution;
     switch (mcpLauncher.kind) {
@@ -154,16 +174,13 @@ const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution
             "runtimeDistribution.mcpLauncher.executablePath",
           ),
         ];
-      case "bunScript": {
-        const bunExecutable = yield* resolveExecutablePath(
-          mcpLauncher.bunExecutablePath,
-          "runtimeDistribution.mcpLauncher.bunExecutablePath",
-        );
+      case "toolScript": {
         const scriptPath = yield* resolveRequiredFile(
           mcpLauncher.scriptPath,
           "runtimeDistribution.mcpLauncher.scriptPath",
         );
-        return [bunExecutable, scriptPath];
+        const toolExecutable = yield* toolDiscovery.resolveToolPath(mcpLauncher.toolId);
+        return [toolExecutable, scriptPath];
       }
     }
 
@@ -171,12 +188,12 @@ const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution
   });
 
 export const resolveOpenDucktorMcpCommand = ({
-  systemCommands,
   runtimeDistribution,
+  toolDiscovery,
 }: ResolveOpenDucktorMcpCommandInput) =>
   Effect.gen(function* () {
     if (runtimeDistribution.mode === "artifact") {
-      return yield* resolveArtifactCommand(runtimeDistribution);
+      return yield* resolveArtifactCommand(runtimeDistribution, toolDiscovery);
     }
     const workspaceRoot = yield* resolveWorkspaceRoot(runtimeDistribution);
     const entrypoint = join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts");
@@ -190,16 +207,17 @@ export const resolveOpenDucktorMcpCommand = ({
         }),
       );
     }
-    const bunError = yield* systemCommands.requiredCommandError("bun");
-    if (bunError !== null) {
-      return yield* Effect.fail(
-        new HostDependencyError({
-          dependency: "bun",
-          operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
-          message: "OpenDucktor MCP workspace execution requires bun on PATH.",
-          details: { requiredCommandError: bunError },
-        }),
-      );
-    }
-    return ["bun", entrypoint];
+    const bunExecutable = yield* toolDiscovery.resolveToolPath("bun").pipe(
+      Effect.catchTag("HostDependencyError", (cause) =>
+        Effect.fail(
+          new HostDependencyError({
+            dependency: "bun",
+            operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
+            message: "OpenDucktor MCP workspace execution requires bun.",
+            cause,
+          }),
+        ),
+      ),
+    );
+    return [bunExecutable, entrypoint];
   });

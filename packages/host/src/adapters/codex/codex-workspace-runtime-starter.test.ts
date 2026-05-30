@@ -6,10 +6,12 @@ import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
   buildCodexMcpConfigArgs,
@@ -19,29 +21,39 @@ import {
 type CodexWorkspaceRuntimeStarterInput = Parameters<
   typeof createEffectCodexWorkspaceRuntimeStarter
 >[0];
+type CodexWorkspaceRuntimeStarterTestInput = Omit<
+  CodexWorkspaceRuntimeStarterInput,
+  "runtimeDistribution" | "toolDiscovery"
+> &
+  Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution" | "toolDiscovery">> & {
+    systemCommands?: SystemCommandPort;
+  };
 const testRuntimeDistribution = createArtifactRuntimeDistribution({
   mcpLauncher: {
     kind: "executable",
     executablePath: process.execPath,
   },
 });
-const createCodexWorkspaceRuntimeStarter = (
-  input: Omit<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
-    Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
-) =>
-  createEffectCodexWorkspaceRuntimeStarter({
+const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterTestInput) => {
+  const { processEnv, systemCommands, toolDiscovery, ...starterInput } = input;
+  return createEffectCodexWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
-    ...input,
+    toolDiscovery:
+      toolDiscovery ??
+      createToolDiscoveryAdapter({
+        ...(processEnv === undefined ? {} : { env: processEnv }),
+        systemCommands: systemCommands ?? createSystemCommands(),
+      }),
+    ...(processEnv === undefined ? {} : { processEnv }),
+    ...starterInput,
   });
+};
 const createCodexAppServerTransportRegistry = (
   ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
 ) => createEffectCodexAppServerTransportRegistry(...args);
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
     return Effect.succeed(command);
-  },
-  requiredCommandError() {
-    return Effect.succeed(null);
   },
   versionCommand() {
     return Effect.succeed("codex 1.0.0");
@@ -50,6 +62,18 @@ const createSystemCommands = (): SystemCommandPort => ({
     return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   },
 });
+
+const createFakeToolDiscovery = (
+  paths: Partial<Record<ToolDiscoveryId, string>>,
+): ToolDiscoveryPort => ({
+  resolveToolPath(toolId) {
+    const path = paths[toolId];
+    return path === undefined
+      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      : Effect.succeed(path);
+  },
+});
+
 const createFakeCodex = async (
   root: string,
   {
@@ -214,7 +238,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
     const starter = createCodexWorkspaceRuntimeStarter({
       systemCommands: createSystemCommands(),
       codexAppServer: createCodexAppServerTransportRegistry(),
-      mcpCommand: ["mcp-bin"],
     });
     await expect(
       Effect.runPromise(
@@ -241,8 +264,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
-        codexBinary,
-        mcpCommand: ["mcp-bin", "--stdio"],
+        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
         clientVersion: "0.3.1-test",
         resolveMcpBridgeConnection: () =>
           Effect.tryPromise({
@@ -330,8 +352,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
-        codexBinary,
-        mcpCommand: ["mcp-bin", "--stdio"],
+        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -376,8 +397,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
-        codexBinary,
-        mcpCommand: ["mcp-bin", "--stdio"],
+        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -415,8 +435,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
-        codexBinary,
-        mcpCommand: ["mcp-bin", "--stdio"],
+        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
             workspaceId: "repo",
@@ -481,7 +500,6 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         }),
         processEnv: { ...process.env, PATH: pathWithFakeRuntime, PATHEXT: ".CMD" },
         codexAppServer,
-        mcpCommand: ["mcp-bin", "--stdio"],
         clientVersion: "0.3.1-test",
         resolveMcpBridgeConnection: () =>
           Effect.succeed({
@@ -529,8 +547,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       const starter = createCodexWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
         codexAppServer,
-        codexBinary,
-        mcpCommand: ["mcp-bin", "--stdio"],
+        toolDiscovery: createFakeToolDiscovery({ codex: codexBinary }),
         eventEmitter: (event) => events.push(event),
         resolveMcpBridgeConnection: () =>
           Effect.tryPromise({

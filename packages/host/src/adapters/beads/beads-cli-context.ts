@@ -1,16 +1,22 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
+import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { toHostOperationError } from "../../effect/host-errors";
 import { defaultEnsureBeadsAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
 import {
+  type BeadsCliContext,
+  type BeadsCliContextResolutionError,
+  type BeadsSharedServerContext,
   type BeadsSharedServerPaths,
+  type BeadsSharedServerState,
   canonicalOrAbsolute,
   databaseName,
   databaseNameForWorkspace,
   type ResolveBeadsCliContextOptions,
+  type ResolveBeadsOptionalServerContextOptions,
+  type ResolveBeadsSharedServerContextOptions,
   repoId,
-  resolveOpenDucktorBaseDir,
   SHARED_DOLT_SERVER_HOST,
   SHARED_DOLT_SERVER_USER,
   workspaceRepoId,
@@ -27,22 +33,38 @@ export {
 } from "../../infrastructure/beads/beads-attachment-provisioning";
 export type {
   BeadsCliContext,
+  BeadsCliContextResolutionError,
   BeadsCommandRunner,
+  BeadsSharedServerContext,
   BeadsSharedServerPaths,
   BeadsSharedServerState,
+  BeadsToolPaths,
   EnsureBeadsAttachment,
   EnsureSharedDoltServer,
   ResolveBeadsCliContextOptions,
+  ResolveBeadsCliContextRequestOptions,
+  ResolveBeadsOptionalServerContextOptions,
+  ResolveBeadsSharedServerContextOptions,
+  SharedDoltToolPaths,
 } from "../../infrastructure/beads/beads-context-model";
 export type { StopSharedDoltServer } from "../../infrastructure/beads/beads-shared-dolt-server";
 export { stopOwnedSharedDoltServer } from "../../infrastructure/beads/beads-shared-dolt-server";
 
-export const resolveBeadsCliContext = (
+export function resolveBeadsCliContext(
   repoPath: string,
-  options: ResolveBeadsCliContextOptions = {},
-) =>
-  Effect.gen(function* () {
+  options: ResolveBeadsSharedServerContextOptions,
+): Effect.Effect<BeadsSharedServerContext, BeadsCliContextResolutionError>;
+export function resolveBeadsCliContext(
+  repoPath: string,
+  options: ResolveBeadsOptionalServerContextOptions,
+): Effect.Effect<BeadsCliContext, BeadsCliContextResolutionError>;
+export function resolveBeadsCliContext(
+  repoPath: string,
+  options: ResolveBeadsCliContextOptions,
+): Effect.Effect<BeadsCliContext | BeadsSharedServerContext, BeadsCliContextResolutionError> {
+  return Effect.gen(function* () {
     const processEnv = options.processEnv ?? process.env;
+    const tools = options.tools;
     const canonicalRepoPath = yield* canonicalOrAbsolute(repoPath).pipe(
       Effect.mapError((cause) =>
         toHostOperationError(cause, "beads.resolveCanonicalPath", { repoPath }),
@@ -66,47 +88,23 @@ export const resolveBeadsCliContext = (
     const attachmentRoot = path.join(beadsRoot, resolvedRepoId);
     const beadsDir = path.join(attachmentRoot, ".beads");
     const serverStatePath = path.join(sharedServerRoot, "server.json");
-    const sharedServerPaths: BeadsSharedServerPaths = {
-      baseDir,
-      beadsRoot,
-      sharedServerRoot,
-      doltRoot,
-      cfgDir,
-      doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
-      env: processEnv,
-      serverStatePath,
-    };
-    let sharedServer = yield* readSharedServerState(serverStatePath).pipe(
-      Effect.mapError((cause) =>
-        toHostOperationError(cause, "beads.readSharedServerState", { repoPath }),
-      ),
-    );
+    const createEnv = (sharedServer: BeadsSharedServerState | null): NodeJS.ProcessEnv => {
+      const env: NodeJS.ProcessEnv = {
+        ...processEnv,
+        BEADS_DIR: beadsDir,
+      };
 
-    if (options.requireSharedServer === true) {
-      yield* Effect.tryPromise({
-        try: () => mkdir(attachmentRoot, { recursive: true }),
-        catch: (cause) =>
-          toHostOperationError(cause, "beads.createAttachmentRoot", { attachmentRoot }),
-      });
-      sharedServer = yield* ensureSharedDoltServerRunning(
-        sharedServerPaths,
-        options.ensureSharedServer ?? defaultEnsureSharedDoltServerRunning,
-      );
-    }
+      if (sharedServer) {
+        env.BEADS_DOLT_SERVER_MODE = "1";
+        env.BEADS_DOLT_SERVER_HOST = sharedServer.host || SHARED_DOLT_SERVER_HOST;
+        env.BEADS_DOLT_SERVER_PORT = String(sharedServer.port);
+        env.BEADS_DOLT_SERVER_USER = sharedServer.user || SHARED_DOLT_SERVER_USER;
+      }
 
-    const env: NodeJS.ProcessEnv = {
-      ...processEnv,
-      BEADS_DIR: beadsDir,
+      return env;
     };
 
-    if (sharedServer) {
-      env.BEADS_DOLT_SERVER_MODE = "1";
-      env.BEADS_DOLT_SERVER_HOST = sharedServer.host || SHARED_DOLT_SERVER_HOST;
-      env.BEADS_DOLT_SERVER_PORT = String(sharedServer.port);
-      env.BEADS_DOLT_SERVER_USER = sharedServer.user || SHARED_DOLT_SERVER_USER;
-    }
-
-    const context = {
+    const createContext = (sharedServer: BeadsSharedServerState | null): BeadsCliContext => ({
       repoPath: canonicalRepoPath,
       repoId: resolvedRepoId,
       databaseName: resolvedDatabaseName,
@@ -115,12 +113,45 @@ export const resolveBeadsCliContext = (
       workingDir: attachmentRoot,
       serverStatePath,
       sharedServer,
-      env,
-    };
+      env: createEnv(sharedServer),
+      tools,
+    });
 
     if (options.requireSharedServer === true) {
-      yield* (options.ensureAttachment ?? defaultEnsureBeadsAttachment)(context);
+      const sharedServerPaths: BeadsSharedServerPaths = {
+        baseDir,
+        beadsRoot,
+        sharedServerRoot,
+        doltRoot,
+        cfgDir,
+        doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
+        env: processEnv,
+        serverStatePath,
+        tools: options.sharedDoltTools,
+      };
+      yield* Effect.tryPromise({
+        try: () => mkdir(attachmentRoot, { recursive: true }),
+        catch: (cause) =>
+          toHostOperationError(cause, "beads.createAttachmentRoot", { attachmentRoot }),
+      });
+      const sharedServer = yield* ensureSharedDoltServerRunning(
+        sharedServerPaths,
+        options.ensureSharedServer ?? defaultEnsureSharedDoltServerRunning,
+      );
+      const sharedContext: BeadsSharedServerContext = {
+        ...createContext(sharedServer),
+        sharedServer,
+        sharedDoltTools: options.sharedDoltTools,
+      };
+      yield* (options.ensureAttachment ?? defaultEnsureBeadsAttachment)(sharedContext);
+      return sharedContext;
     }
 
-    return context;
+    const existingSharedServer = yield* readSharedServerState(serverStatePath).pipe(
+      Effect.mapError((cause) =>
+        toHostOperationError(cause, "beads.readSharedServerState", { repoPath }),
+      ),
+    );
+    return createContext(existingSharedServer);
   });
+}

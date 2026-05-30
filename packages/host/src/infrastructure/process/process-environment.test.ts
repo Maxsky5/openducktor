@@ -3,7 +3,10 @@ import {
   buildLoginShellPathProbeArgs,
   createProcessEnvironment,
   mergePathValues,
+  normalizeProcessEnvironment,
   parsePathFromLoginShellOutput,
+  pathEnvironmentKey,
+  pathEnvironmentValue,
 } from "./process-environment";
 
 describe("createProcessEnvironment", () => {
@@ -17,16 +20,26 @@ describe("createProcessEnvironment", () => {
     expect(env.PATH?.split(":")).toEqual(["/opt/homebrew/bin", "/usr/bin", "/bin"]);
   });
 
-  test("does not read a login shell PATH on non-macOS platforms", () => {
+  test("merges the Linux login shell PATH before the inherited GUI PATH", () => {
     const env = createProcessEnvironment({
       baseEnv: { PATH: "/usr/bin:/bin" },
       platform: "linux",
+      readLoginShellPath: () => "/home/dev/.local/bin:/usr/bin",
+    });
+
+    expect(env.PATH?.split(":")).toEqual(["/home/dev/.local/bin", "/usr/bin", "/bin"]);
+  });
+
+  test("does not read a login shell PATH on Windows", () => {
+    const env = createProcessEnvironment({
+      baseEnv: { Path: "C:\\Windows\\System32" },
+      platform: "win32",
       readLoginShellPath: () => {
-        throw new Error("login shell should not be read on Linux");
+        throw new Error("login shell should not be read on Windows");
       },
     });
 
-    expect(env.PATH).toBe("/usr/bin:/bin");
+    expect(env.Path).toBe("C:\\Windows\\System32");
   });
 
   test("does not mutate the caller environment object", () => {
@@ -40,6 +53,41 @@ describe("createProcessEnvironment", () => {
 
     expect(baseEnv.PATH).toBe("/usr/bin:/bin");
     expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin");
+  });
+
+  test("normalizes Windows PATH casing without losing explicit PATH overrides", () => {
+    const baseEnv: NodeJS.ProcessEnv = {
+      Path: "C:\\Windows\\System32",
+      PATH: "C:\\Tools\\bin",
+    };
+
+    const env = createProcessEnvironment({
+      baseEnv,
+      platform: "win32",
+      readLoginShellPath: () => {
+        throw new Error("login shell should not be read on Windows");
+      },
+    });
+
+    expect(pathEnvironmentKey(baseEnv, "win32")).toBe("PATH");
+    expect(pathEnvironmentValue(baseEnv, "win32")).toBe("C:\\Tools\\bin");
+    expect(env).toMatchObject({ Path: "C:\\Tools\\bin" });
+    expect(env.PATH).toBeUndefined();
+  });
+});
+
+describe("normalizeProcessEnvironment", () => {
+  test("deduplicates Windows PATH keys before spawning child processes", () => {
+    expect(
+      normalizeProcessEnvironment(
+        {
+          Path: "C:\\Windows",
+          PATH: "C:\\Tools",
+          PaTh: "C:\\Other",
+        },
+        "win32",
+      ),
+    ).toEqual({ Path: "C:\\Tools" });
   });
 });
 

@@ -8,11 +8,20 @@ import {
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
-import type { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import {
+  errorMessage,
+  type HostOperationError,
+  type HostValidationError,
+} from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 import type { RepoStoreDiagnostics, TaskStoreError } from "../../ports/task-repository-ports";
+import type {
+  ToolDiscoveryError,
+  ToolDiscoveryId,
+  ToolDiscoveryPort,
+} from "../../ports/tool-discovery-port";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 
 type CachedRuntimeCheck = {
@@ -28,7 +37,8 @@ export type SystemDiagnosticsError =
   | HostOperationError
   | HostValidationError
   | SettingsConfigError
-  | TaskStoreError;
+  | TaskStoreError
+  | ToolDiscoveryError;
 const RUNTIME_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
 const GH_NON_INTERACTIVE_ENV = { GH_PROMPT_DISABLED: "1" };
 const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
@@ -45,10 +55,10 @@ const parseGithubAuthLogin = (output: string): string | null => {
   const login = remainder.split(/[\s(']/)[0]?.trim() ?? "";
   return login.length > 0 ? login : null;
 };
-const probeGithubAuthStatus = (systemCommands: SystemCommandPort) =>
+const probeGithubAuthStatus = (systemCommands: SystemCommandPort, ghCommand: string) =>
   Effect.gen(function* () {
     const result: SystemCommandRunResult = yield* systemCommands.runCommandAllowFailure(
-      "gh",
+      ghCommand,
       ["auth", "status", "--hostname", "github.com"],
       {
         env: GH_NON_INTERACTIVE_ENV,
@@ -111,29 +121,84 @@ const buildBeadsCheck = (repoStoreHealth: RepoStoreHealth): BeadsCheck => {
 };
 const enabledForRuntime = (config: LoadedGlobalConfig, kind: string): boolean =>
   config.agentRuntimes[kind]?.enabled ?? DEFAULT_AGENT_RUNTIMES[kind]?.enabled ?? false;
+type ToolAvailability = {
+  error: string | null;
+  path: string | null;
+};
+type ToolVersionAvailability = {
+  error: string | null;
+  version: string | null;
+};
+const resolveToolAvailability = (
+  toolDiscovery: ToolDiscoveryPort,
+  toolId: ToolDiscoveryId,
+): Effect.Effect<ToolAvailability, never> =>
+  Effect.either(toolDiscovery.resolveToolPath(toolId)).pipe(
+    Effect.map((result) =>
+      result._tag === "Right"
+        ? { error: null, path: result.right }
+        : { error: errorMessage(result.left), path: null },
+    ),
+  );
+const versionForResolvedTool = (
+  systemCommands: SystemCommandPort,
+  toolName: string,
+  toolPath: string | null,
+  args: string[],
+) =>
+  toolPath === null
+    ? Effect.succeed({ error: null, version: null } satisfies ToolVersionAvailability)
+    : Effect.either(systemCommands.versionCommand(toolPath, args)).pipe(
+        Effect.map((result) => {
+          if (result._tag === "Left") {
+            return {
+              error: `Failed reading ${toolName} --version from ${toolPath}: ${errorMessage(result.left)}`,
+              version: null,
+            } satisfies ToolVersionAvailability;
+          }
+          if (result.right === null) {
+            return {
+              error: `Failed reading ${toolName} --version from ${toolPath}.`,
+              version: null,
+            } satisfies ToolVersionAvailability;
+          }
+          return { error: null, version: result.right } satisfies ToolVersionAvailability;
+        }),
+      );
 export const createSystemDiagnosticsService = ({
   runtimeDefinitionsService,
   runtimeHealth,
   settingsConfig,
   systemCommands,
+  toolDiscovery,
   repoStoreDiagnostics,
 }: {
   runtimeDefinitionsService: RuntimeDefinitionsService;
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   repoStoreDiagnostics: RepoStoreDiagnostics;
 }): SystemDiagnosticsService => {
   let cachedRuntimeCheck: CachedRuntimeCheck | null = null;
   const probeRuntimeCheck = () =>
     Effect.gen(function* () {
-      const gitError = yield* systemCommands.requiredCommandError("git");
-      const ghError = yield* systemCommands.requiredCommandError("gh");
+      const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
+      const ghTool = yield* resolveToolAvailability(toolDiscovery, "githubCli");
+      const gitVersion = yield* versionForResolvedTool(systemCommands, "git", gitTool.path, [
+        "--version",
+      ]);
+      const ghVersion = yield* versionForResolvedTool(systemCommands, "gh", ghTool.path, [
+        "--version",
+      ]);
+      const gitError = gitTool.error ?? gitVersion.error;
+      const ghError = ghTool.error ?? ghVersion.error;
       const gitOk = gitError === null;
       const ghOk = ghError === null;
-      const githubAuth = ghOk
-        ? yield* probeGithubAuthStatus(systemCommands)
-        : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
+      const githubAuth =
+        ghOk && ghTool.path !== null
+          ? yield* probeGithubAuthStatus(systemCommands, ghTool.path)
+          : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
       const config = yield* loadGlobalConfig(settingsConfig);
       const runtimes: RuntimeHealth[] = [];
       for (const definition of runtimeDefinitionsService.listRuntimeDefinitions()) {
@@ -151,9 +216,9 @@ export const createSystemDiagnosticsService = ({
       }
       return {
         gitOk,
-        gitVersion: yield* systemCommands.versionCommand("git", ["--version"]),
+        gitVersion: gitVersion.version,
         ghOk,
-        ghVersion: yield* systemCommands.versionCommand("gh", ["--version"]),
+        ghVersion: ghVersion.version,
         ...githubAuth,
         runtimes,
         errors,
@@ -179,17 +244,16 @@ export const createSystemDiagnosticsService = ({
     });
   const beadsCheck = (repoPath: string) =>
     Effect.gen(function* () {
-      const validatedRepoPath = repoPath;
-      const bdError = yield* systemCommands.requiredCommandError("bd");
-      if (bdError !== null) {
-        return buildBeadsCheck(repoStoreHealthForMissingCommand(bdError));
+      const bdTool = yield* resolveToolAvailability(toolDiscovery, "beads");
+      if (bdTool.error !== null) {
+        return buildBeadsCheck(repoStoreHealthForMissingCommand(bdTool.error));
       }
-      const doltError = yield* systemCommands.requiredCommandError("dolt");
-      if (doltError !== null) {
-        return buildBeadsCheck(repoStoreHealthForMissingCommand(doltError));
+      const doltTool = yield* resolveToolAvailability(toolDiscovery, "dolt");
+      if (doltTool.error !== null) {
+        return buildBeadsCheck(repoStoreHealthForMissingCommand(doltTool.error));
       }
       const repoStoreHealth = yield* repoStoreDiagnostics.diagnoseRepoStore({
-        repoPath: validatedRepoPath,
+        repoPath,
         prepare: true,
       });
       return buildBeadsCheck(repoStoreHealth);

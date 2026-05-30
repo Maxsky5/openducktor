@@ -12,6 +12,8 @@ export type CreateProcessEnvironmentInput = {
   readLoginShellPath?: (env: NodeJS.ProcessEnv) => string | null;
 };
 
+const isPathKey = (key: string): boolean => key.toLowerCase() === "path";
+
 const pathDelimiterForPlatform = (platform: NodeJS.Platform): ":" | ";" =>
   platform === "win32" ? ";" : ":";
 
@@ -40,6 +42,67 @@ export const mergePathValues = (
     ...primaryPath.split(pathDelimiter),
     ...(secondaryPath ?? "").split(pathDelimiter),
   ]).join(pathDelimiter);
+
+export const pathEnvironmentKey = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string => {
+  if (platform !== "win32") {
+    return "PATH";
+  }
+
+  return (
+    Object.keys(env).find((key) => key === "PATH") ??
+    Object.keys(env).find((key) => key === "Path") ??
+    Object.keys(env).find(isPathKey) ??
+    "Path"
+  );
+};
+
+export const pathEnvironmentValue = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string => env[pathEnvironmentKey(env, platform)] ?? "";
+
+export const normalizeProcessEnvironment = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv => {
+  const next = { ...env };
+  if (platform !== "win32") {
+    return next;
+  }
+
+  const pathKey = pathEnvironmentKey(env, platform);
+  const pathValue = env[pathKey];
+  for (const key of Object.keys(next)) {
+    if (isPathKey(key)) {
+      delete next[key];
+    }
+  }
+  if (pathValue !== undefined) {
+    next.Path = pathValue;
+  }
+  return next;
+};
+
+const setPathEnvironmentValue = (
+  env: NodeJS.ProcessEnv,
+  value: string,
+  platform: NodeJS.Platform,
+): void => {
+  if (platform === "win32") {
+    for (const key of Object.keys(env)) {
+      if (isPathKey(key)) {
+        delete env[key];
+      }
+    }
+    env.Path = value;
+    return;
+  }
+
+  env.PATH = value;
+};
 
 const currentUserShell = (env: NodeJS.ProcessEnv): string | null => {
   const shell = env.SHELL;
@@ -120,14 +183,22 @@ export const createProcessEnvironment = ({
   platform = process.platform,
   readLoginShellPath = readCurrentUserLoginShellPath,
 }: CreateProcessEnvironmentInput = {}): NodeJS.ProcessEnv => {
-  const env = { ...baseEnv };
-  if (platform !== "darwin") {
+  const env = normalizeProcessEnvironment(baseEnv, platform);
+  if (platform === "win32") {
     return env;
   }
 
   const loginShellPath = readLoginShellPath(env);
   if (loginShellPath) {
-    env.PATH = mergePathValues(loginShellPath, env.PATH, pathDelimiterForPlatform(platform));
+    setPathEnvironmentValue(
+      env,
+      mergePathValues(
+        loginShellPath,
+        pathEnvironmentValue(env, platform),
+        pathDelimiterForPlatform(platform),
+      ),
+      platform,
+    );
   }
 
   return env;

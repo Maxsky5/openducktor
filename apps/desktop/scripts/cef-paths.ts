@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
+import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 const OPENDUCKTOR_CARGO_TOOLS_ROOT_ENV = "OPENDUCKTOR_CARGO_TOOLS_ROOT";
@@ -14,16 +15,12 @@ function readTauriRevisionPrefix(tauriRoot: string): string {
   return readTauriCefRevision(tauriRoot).slice(0, 12);
 }
 
-function expandHome(path: string): string {
-  if (path === "~") {
-    return homedir();
+function resolveHomeDirectory(): string {
+  const home = homedir();
+  if (home.length === 0) {
+    throw new Error("Unable to resolve the user home directory.");
   }
-
-  if (path.startsWith(`~${sep}`)) {
-    return resolve(homedir(), path.slice(2));
-  }
-
-  return path;
+  return home;
 }
 
 function resolveConfiguredPath(envName: string): string | undefined {
@@ -32,12 +29,17 @@ function resolveConfiguredPath(envName: string): string | undefined {
     return undefined;
   }
 
-  const trimmedValue = rawValue.trim();
-  if (trimmedValue.length === 0) {
+  const normalizedValue = normalizeUserPathInput(rawValue);
+  if (normalizedValue.length === 0) {
     throw new Error(`${envName} is set but empty. Provide a valid directory path.`);
   }
 
-  return resolve(expandHome(trimmedValue));
+  return resolve(
+    resolveNormalizedUserPath(normalizedValue, {
+      resolveHomeDir: resolveHomeDirectory,
+      joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+    }),
+  );
 }
 
 function readCargoLock(tauriRoot: string): string {
@@ -108,7 +110,10 @@ export function readTauriCefRevision(tauriRoot: string): string {
 }
 
 export function resolveOpenducktorDataRoot(): string {
-  return resolveConfiguredPath(OPENDUCKTOR_CONFIG_DIR_ENV) ?? resolve(homedir(), ".openducktor");
+  return (
+    resolveConfiguredPath(OPENDUCKTOR_CONFIG_DIR_ENV) ??
+    resolve(resolveHomeDirectory(), ".openducktor")
+  );
 }
 
 export function resolveCargoToolsRoot(tauriRoot: string): string {
