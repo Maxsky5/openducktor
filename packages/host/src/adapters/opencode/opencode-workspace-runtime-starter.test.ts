@@ -35,12 +35,16 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
   },
 });
 const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeStarterTestInput) => {
-  const { systemCommands, toolDiscovery, ...starterInput } = input;
+  const { processEnv, systemCommands, toolDiscovery, ...starterInput } = input;
   return createEffectOpenCodeWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
     toolDiscovery:
       toolDiscovery ??
-      createToolDiscoveryAdapter({ systemCommands: systemCommands ?? createSystemCommands() }),
+      createToolDiscoveryAdapter({
+        ...(processEnv === undefined ? {} : { env: processEnv }),
+        systemCommands: systemCommands ?? createSystemCommands(),
+      }),
+    ...(processEnv === undefined ? {} : { processEnv }),
     ...starterInput,
   });
 };

@@ -59,7 +59,10 @@ const expectArtifactMcpCommandRejected = async (
 describe("resolveOpenDucktorMcpCommand", () => {
   test("uses an executable MCP artifact launcher from the runtime distribution", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-sidecar-"));
-    const sidecar = join(root, "openducktor-mcp");
+    const sidecar = join(
+      root,
+      process.platform === "win32" ? "openducktor-mcp.cmd" : "openducktor-mcp",
+    );
     await writeFile(sidecar, "#!/bin/sh\nexit 0\n");
     await chmod(sidecar, 0o755);
     await expect(

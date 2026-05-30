@@ -81,16 +81,18 @@ const createTestBeadsTaskRepository = (
     toolDiscovery: createToolDiscoveryPort(),
     ...input,
   });
-const createFakeBd = async (binDir: string, script: string): Promise<void> => {
+const createFakeBd = async (binDir: string, script: string): Promise<string> => {
   const scriptPath = path.join(binDir, "bd.mjs");
   await writeFile(scriptPath, script);
   if (process.platform === "win32") {
-    await writeFile(path.join(binDir, "bd.cmd"), `@echo off\r\nbun "%~dp0bd.mjs" %*\r\n`);
-    return;
+    const bdPath = path.join(binDir, "bd.cmd");
+    await writeFile(bdPath, `@echo off\r\nbun "%~dp0bd.mjs" %*\r\n`);
+    return bdPath;
   }
   const bdPath = path.join(binDir, "bd");
   await writeFile(bdPath, `#!/bin/sh\nexec bun "$(dirname "$0")/bd.mjs" "$@"\n`);
   await chmod(bdPath, 0o755);
+  return bdPath;
 };
 describe("createBeadsTaskRepository", () => {
   test("stops the owned shared Dolt server on close", async () => {
@@ -490,10 +492,11 @@ describe("createBeadsTaskRepository", () => {
   test("uses configured workspace id for default bd command runner", async () => {
     const context = await createExistingBeadsCliContext();
     const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
-    await createFakeBd(
+    const bdPath = await createFakeBd(
       binDir,
       `console.log(JSON.stringify([{ id: "task-1", title: "Task", status: "open", priority: 0, issue_type: "task", labels: [], updated_at: "2026-05-10T00:00:00Z", created_at: "2026-05-10T00:00:00Z" }]));\n`,
     );
+    context.tools = { beads: bdPath };
     context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createTestBeadsTaskRepository({
@@ -533,7 +536,7 @@ describe("createBeadsTaskRepository", () => {
   test("reuses the prepared Beads context across default bd task-list commands", async () => {
     const context = await createExistingBeadsCliContext();
     const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
-    await createFakeBd(
+    const bdPath = await createFakeBd(
       binDir,
       `const args = process.argv.slice(2);
 if (args.join(" ") === "list --limit 0 --json") {
@@ -546,6 +549,7 @@ if (args.join(" ") === "list --limit 0 --json") {
 }
 `,
     );
+    context.tools = { beads: bdPath };
     context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createTestBeadsTaskRepository({

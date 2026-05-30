@@ -17,9 +17,9 @@ const escapeWindowsBatchCharacter = (character: string): string => {
     case "^":
       return "^^";
     case "%":
-      return "%%";
+      return "^%";
     case "!":
-      return "^!";
+      return "!";
     case `"`:
       return `^"`;
     default:

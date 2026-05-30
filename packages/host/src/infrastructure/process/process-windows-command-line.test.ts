@@ -8,7 +8,7 @@ import {
 describe("quoteWindowsBatchArgument", () => {
   test("escapes batch expansion and quote characters inside one argv value", () => {
     expect(quoteWindowsBatchArgument('path=%APPDATA% caret=foo^bar bang=!value! quote="x"')).toBe(
-      '"path=%%APPDATA%% caret=foo^^bar bang=^!value^! quote=^"x^""',
+      '"path=^%APPDATA^% caret=foo^^bar bang=!value! quote=^"x^""',
     );
   });
 
@@ -28,7 +28,7 @@ describe("buildWindowsBatchCommandLine", () => {
         "caret=foo^bar",
       ]),
     ).toBe(
-      String.raw`""C:\Program Files\Codex\codex.cmd" "--config" "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%%APPDATA%%\foo" "caret=foo^^bar""`,
+      String.raw`""C:\Program Files\Codex\codex.cmd" "--config" "mcp_servers.openducktor.command=^"mcp-bin^"" "path=^%APPDATA^%\foo" "caret=foo^^bar""`,
     );
   });
 
