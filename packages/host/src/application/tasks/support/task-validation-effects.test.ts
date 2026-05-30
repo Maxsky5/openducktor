@@ -40,10 +40,8 @@ describe("task validation effects", () => {
       Effect.flip(validatePullRequestManagementStatusEffect("open")),
     );
 
-    if (!(error instanceof TaskPolicyError)) {
-      throw new Error("Expected a TaskPolicyError.");
-    }
-    expect(error.code).toBe("TASK_POLICY_ERROR");
+    expect(error).toBeInstanceOf(TaskPolicyError);
+    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
   });
 
   test("blockBuildCompletionTask preserves transition policy errors", async () => {
@@ -58,9 +56,7 @@ describe("task validation effects", () => {
       Effect.flip(blockBuildCompletionTask(taskStore, "/repo", current.id, current, [current])),
     );
 
-    if (!(error instanceof TaskPolicyError)) {
-      throw new Error("Expected a TaskPolicyError.");
-    }
-    expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+    expect(error).toBeInstanceOf(TaskPolicyError);
+    expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
   });
 });

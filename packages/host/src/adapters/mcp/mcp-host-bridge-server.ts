@@ -144,11 +144,25 @@ const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostO
   });
 
 const sendJson = (response: ServerResponse, statusCode: number, payload: unknown): void => {
+  if (response.headersSent || response.writableEnded) {
+    return;
+  }
   response.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
   });
   response.end(JSON.stringify(payload));
+};
+
+const sendBridgeErrorResponse = (response: ServerResponse, error: unknown): void => {
+  if (response.headersSent || response.writableEnded) {
+    if (!response.writableEnded) {
+      response.destroy(error instanceof Error ? error : undefined);
+    }
+    return;
+  }
+
+  sendJson(response, 400, bridgeErrorPayload(error, errorMessage(error)));
 };
 
 const errorMessage = (error: unknown): string =>
@@ -307,12 +321,12 @@ const createBridgeRequestHandler =
     }).pipe(
       Effect.catchAll((error) =>
         Effect.sync(() => {
-          sendJson(response, 400, bridgeErrorPayload(error, errorMessage(error)));
+          sendBridgeErrorResponse(response, error);
         }),
       ),
     );
     Effect.runPromise(handle).catch((error) => {
-      sendJson(response, 400, bridgeErrorPayload(error, errorMessage(error)));
+      sendBridgeErrorResponse(response, error);
     });
   };
 

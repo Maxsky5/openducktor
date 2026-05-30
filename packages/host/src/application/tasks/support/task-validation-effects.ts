@@ -2,6 +2,8 @@ import { Effect } from "effect";
 import {
   ensurePullRequestManagementStatus,
   TaskPolicyError,
+  validateParentRelationshipsForCreate,
+  validateParentRelationshipsForUpdate,
   validateTransition,
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -33,5 +35,21 @@ export const validatePullRequestManagementStatusEffect = (
 ): Effect.Effect<void, TaskPolicyValidationError> =>
   Effect.try({
     try: () => ensurePullRequestManagementStatus(status),
+    catch: taskPolicyValidationError,
+  });
+
+export const validateParentRelationshipsForCreateEffect = (
+  ...args: Parameters<typeof validateParentRelationshipsForCreate>
+): Effect.Effect<void, TaskPolicyValidationError> =>
+  Effect.try({
+    try: () => validateParentRelationshipsForCreate(...args),
+    catch: taskPolicyValidationError,
+  });
+
+export const validateParentRelationshipsForUpdateEffect = (
+  ...args: Parameters<typeof validateParentRelationshipsForUpdate>
+): Effect.Effect<void, TaskPolicyValidationError> =>
+  Effect.try({
+    try: () => validateParentRelationshipsForUpdate(...args),
     catch: taskPolicyValidationError,
   });

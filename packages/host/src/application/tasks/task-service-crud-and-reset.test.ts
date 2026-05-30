@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
@@ -262,8 +263,8 @@ describe("createTaskService task mutations and reset", () => {
         });
       },
     };
-    await expect(
-      Effect.runPromise(
+    const error = await Effect.runPromise(
+      Effect.flip(
         createTaskService({ taskStore }).createTask({
           repoPath: "/repo",
           task: {
@@ -275,7 +276,11 @@ describe("createTaskService task mutations and reset", () => {
           },
         }),
       ),
-    ).rejects.toThrow("Only epics can have subtasks.");
+    );
+
+    expect(error).toBeInstanceOf(TaskPolicyError);
+    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    expect((error as TaskPolicyError).message).toBe("Only epics can have subtasks.");
   });
   test("deletes a task without subtasks and stops task-scoped dev servers", async () => {
     const calls: unknown[] = [];
@@ -1918,15 +1923,19 @@ describe("createTaskService task mutations and reset", () => {
         });
       },
     };
-    await expect(
-      Effect.runPromise(
+    const error = await Effect.runPromise(
+      Effect.flip(
         createTaskService({ taskStore }).updateTask({
           repoPath: "/repo",
           taskId: "task-1",
           patch: { parentId: "epic-2" },
         }),
       ),
-    ).rejects.toThrow("Tasks with subtasks cannot become subtasks.");
+    );
+
+    expect(error).toBeInstanceOf(TaskPolicyError);
+    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    expect((error as TaskPolicyError).message).toBe("Tasks with subtasks cannot become subtasks.");
   });
   test("transitions a task after validating workflow rules and enriches the result", async () => {
     const calls: unknown[] = [];
