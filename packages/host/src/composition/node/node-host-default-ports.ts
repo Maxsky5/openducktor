@@ -14,6 +14,7 @@ import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-di
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import {
   type DevServerProcessPort,
@@ -29,6 +30,7 @@ import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-to
 import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
+import { type ToolDiscoveryPort, ToolDiscoveryPortTag } from "../../ports/tool-discovery-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
 
 export type NodeHostDefaultPorts = {
@@ -44,6 +46,7 @@ export type NodeHostDefaultPorts = {
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   worktreeFiles: WorktreeFilePort;
 };
 
@@ -61,6 +64,7 @@ export type CreateNodeHostDefaultPortsInput = {
   runtimeHealth: RuntimeHealthPort;
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   worktreeFiles: WorktreeFilePort;
 }>;
 
@@ -80,6 +84,7 @@ export type NodeHostDefaultPortServices =
   | RuntimeHealthPortTag
   | SettingsConfigPortTag
   | SystemCommandPortTag
+  | ToolDiscoveryPortTag
   | WorktreeFilePortTag;
 
 const isCodexAppServerTransportRegistry = (
@@ -96,9 +101,19 @@ const makeNodeHostDefaultPorts = (
   Effect.sync(() => {
     const processEnv = input.processEnv ?? createProcessEnvironment();
     const systemCommands = input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
+    const toolDiscovery =
+      input.toolDiscovery ??
+      createToolDiscoveryAdapter({
+        env: processEnv,
+        options:
+          input.runtimeDistribution.mode === "artifact" &&
+          input.runtimeDistribution.bundledToolBinDir
+            ? { bundledToolBinDir: input.runtimeDistribution.bundledToolBinDir }
+            : {},
+        systemCommands,
+      });
     const runtimeHealth =
-      input.runtimeHealth ??
-      createRuntimeHealthProbe(systemCommands, input.runtimeDistribution, processEnv);
+      input.runtimeHealth ?? createRuntimeHealthProbe(systemCommands, toolDiscovery);
     const defaultCodexAppServer = createCodexAppServerTransportRegistry();
     const codexAppServer = input.codexAppServer ?? defaultCodexAppServer;
     const codexTransportRegistry =
@@ -118,6 +133,7 @@ const makeNodeHostDefaultPorts = (
       runtimeHealth,
       settingsConfig: input.settingsConfig ?? createSettingsConfigAdapter(),
       systemCommands,
+      toolDiscovery,
       worktreeFiles: input.worktreeFiles ?? createWorktreeFileAdapter(),
     };
   });
@@ -138,6 +154,7 @@ const makeNodeHostDefaultPortContext = (
         Context.add(RuntimeHealthPortTag, ports.runtimeHealth),
         Context.add(SettingsConfigPortTag, ports.settingsConfig),
         Context.add(SystemCommandPortTag, ports.systemCommands),
+        Context.add(ToolDiscoveryPortTag, ports.toolDiscovery),
         Context.add(WorktreeFilePortTag, ports.worktreeFiles),
       ),
     ),

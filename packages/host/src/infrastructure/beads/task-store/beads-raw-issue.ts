@@ -11,8 +11,8 @@ import type {
   StopSharedDoltServer,
 } from "../../../adapters/beads/beads-cli-context";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { TaskStoreError, TaskStorePort } from "../../../ports/task-repository-ports";
+import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 export const METADATA_NAMESPACE = "openducktor";
 export const BD_COMMAND_TIMEOUT_MS = 30000;
 export const DOCUMENT_ENCODING_GZIP_BASE64_V1 = "gzip-base64-v1";
@@ -80,7 +80,7 @@ export type CreateBeadsTaskRepositoryInput = {
   resolveCliContext?: ResolveBeadsCliContext;
   resolveWorkspaceIdForRepoPath?: ResolveWorkspaceIdForRepoPath;
   stopSharedDoltServer?: StopSharedDoltServer;
-  systemCommands?: Pick<SystemCommandPort, "requiredCommandError">;
+  toolDiscovery?: ToolDiscoveryPort;
 };
 export type BeadsTaskRepositoryShutdownResult = {
   stoppedSharedDoltServers: number;

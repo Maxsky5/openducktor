@@ -10,7 +10,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import {
   buildOpenDucktorMcpBridgeEnvironment,
@@ -23,7 +23,6 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../process/process-tree";
-import { resolveCodexBinary } from "../runtimes/runtime-binaries";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
@@ -44,7 +43,7 @@ export type CodexMcpBridgeConnectionResolver = () => Effect.Effect<
 >;
 
 export type CreateCodexWorkspaceRuntimeStarterInput = {
-  systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   codexAppServer: CodexAppServerTransportRegistry;
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
@@ -155,7 +154,7 @@ const cleanupCodexRuntime = ({
   });
 
 export const createCodexWorkspaceRuntimeStarter = ({
-  systemCommands,
+  toolDiscovery,
   codexAppServer,
   resolveMcpBridgeConnection,
   runtimeDistribution,
@@ -210,14 +209,10 @@ export const createCodexWorkspaceRuntimeStarter = ({
       const resolvedMcpCommand =
         configuredMcpCommand ??
         (yield* resolveOpenDucktorMcpCommand({
-          systemCommands,
           runtimeDistribution,
+          toolDiscovery,
         }));
-      const binary =
-        codexBinary ??
-        (yield* resolveCodexBinary(systemCommands, processEnv, {
-          runtimeDistribution,
-        }));
+      const binary = codexBinary ?? (yield* toolDiscovery.resolveToolPath("codex"));
       const command = yield* Effect.try({
         try: () =>
           createSystemCommandLaunch(

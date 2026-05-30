@@ -21,6 +21,7 @@ export const createTaskSyncDeferUseCases = ({
   taskStore,
   settingsConfig,
   systemCommands,
+  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<
@@ -30,14 +31,15 @@ export const createTaskSyncDeferUseCases = ({
   const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) =>
     Effect.gen(function* () {
       const { repoPath } = input;
-      const dependencies = requirePullRequestSyncDependencies(
+      const dependencies = requirePullRequestSyncDependencies({
         systemCommands,
+        toolDiscovery,
         workspaceSettingsService,
-      );
+      });
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
-      const policy = yield* githubPullRequestSyncPolicy(dependencies.systemCommands, repoConfig);
+      const policy = yield* githubPullRequestSyncPolicy(dependencies, repoConfig);
       if (!policy.available) {
         return { ran: false, changedTaskIds: [] };
       }

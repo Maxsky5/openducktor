@@ -12,6 +12,10 @@ import {
   yamlQuotePath,
 } from "./beads-shared-dolt-server";
 
+const TEST_SHARED_DOLT_TOOL_PATHS = {
+  dolt: "dolt",
+};
+
 const createPaths = async (): Promise<BeadsSharedServerPaths> => {
   const baseDir = await mkdtemp(path.join(tmpdir(), "odt config shared dolt-"));
   const beadsRoot = path.join(baseDir, "beads");
@@ -25,6 +29,7 @@ const createPaths = async (): Promise<BeadsSharedServerPaths> => {
     doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
     env: { ...process.env, OPENDUCKTOR_CONFIG_DIR: baseDir },
     serverStatePath: path.join(sharedServerRoot, "server.json"),
+    tools: TEST_SHARED_DOLT_TOOL_PATHS,
   };
 };
 

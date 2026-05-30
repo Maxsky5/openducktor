@@ -20,19 +20,21 @@ export const createTaskApprovalContextUseCase = ({
   taskStore,
   settingsConfig,
   systemCommands,
+  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "getApprovalContext"> => ({
   getApprovalContext(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const dependencies = requireApprovalContextDependencies(
+      const dependencies = requireApprovalContextDependencies({
         gitPort,
         settingsConfig,
         systemCommands,
+        toolDiscovery,
         taskWorktreeService,
         workspaceSettingsService,
-      );
+      });
 
       const current = yield* taskStore.getTask({ repoPath, taskId });
       yield* Effect.try({

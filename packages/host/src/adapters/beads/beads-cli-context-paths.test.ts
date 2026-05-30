@@ -5,6 +5,10 @@ import { Effect } from "effect";
 import { databaseNameForWorkspace } from "../../infrastructure/beads/beads-context-model";
 import { resolveBeadsCliContext } from "./beads-cli-context";
 
+const TEST_BEADS_TOOL_PATHS = {
+  beads: "bd",
+};
+
 describe("resolveBeadsCliContext path identity", () => {
   test("resolves workspace-scoped managed Beads paths when workspace id is provided", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt-config-workspace-test-"));
@@ -15,6 +19,7 @@ describe("resolveBeadsCliContext path identity", () => {
       resolveBeadsCliContext(repoRoot, {
         processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
         requireSharedServer: false,
+        tools: TEST_BEADS_TOOL_PATHS,
         workspaceId: "openducktor",
       }),
     );
@@ -46,6 +51,7 @@ describe("resolveBeadsCliContext path identity", () => {
           resolveBeadsCliContext(repoPath, {
             processEnv,
             requireSharedServer: false,
+            tools: TEST_BEADS_TOOL_PATHS,
             workspaceId,
           }),
         ),
@@ -71,6 +77,7 @@ describe("resolveBeadsCliContext path identity", () => {
       resolveBeadsCliContext(existingRepo, {
         processEnv,
         requireSharedServer: false,
+        tools: TEST_BEADS_TOOL_PATHS,
       }),
     );
 
@@ -83,6 +90,7 @@ describe("resolveBeadsCliContext path identity", () => {
       resolveBeadsCliContext(syntheticRepo, {
         processEnv,
         requireSharedServer: false,
+        tools: TEST_BEADS_TOOL_PATHS,
       }),
     );
 
@@ -99,10 +107,18 @@ describe("resolveBeadsCliContext path identity", () => {
 
     const [lowerContext, upperContext] = await Promise.all([
       Effect.runPromise(
-        resolveBeadsCliContext(lowerRepo, { processEnv, requireSharedServer: false }),
+        resolveBeadsCliContext(lowerRepo, {
+          processEnv,
+          requireSharedServer: false,
+          tools: TEST_BEADS_TOOL_PATHS,
+        }),
       ),
       Effect.runPromise(
-        resolveBeadsCliContext(upperRepo, { processEnv, requireSharedServer: false }),
+        resolveBeadsCliContext(upperRepo, {
+          processEnv,
+          requireSharedServer: false,
+          tools: TEST_BEADS_TOOL_PATHS,
+        }),
       ),
     ]);
 
@@ -122,6 +138,7 @@ describe("resolveBeadsCliContext path identity", () => {
       resolveBeadsCliContext(repoRoot, {
         processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: configRoot },
         requireSharedServer: false,
+        tools: TEST_BEADS_TOOL_PATHS,
         workspaceId: "workspace-id",
       }),
     );
@@ -139,6 +156,7 @@ describe("resolveBeadsCliContext path identity", () => {
         resolveBeadsCliContext("/repo", {
           processEnv: { ...process.env, OPENDUCKTOR_CONFIG_DIR: "" },
           requireSharedServer: false,
+          tools: TEST_BEADS_TOOL_PATHS,
         }),
       ),
     ).rejects.toThrow("OPENDUCKTOR_CONFIG_DIR is set but empty");

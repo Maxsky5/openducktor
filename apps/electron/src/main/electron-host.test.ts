@@ -1139,7 +1139,7 @@ describe("createElectronHostCommandRouter", () => {
     });
     await expect(router.invoke("beads_check", { repoPath: "/repo" })).resolves.toMatchObject({
       beadsOk: false,
-      beadsError: "Required command `bd` not found.",
+      beadsError: "bd not found. Checked PATH. Install bd and ensure it is available on PATH.",
       repoStoreHealth: { status: "blocking" },
     });
   });

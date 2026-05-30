@@ -7,19 +7,15 @@ import {
   publishTargetFromTargetBranch,
 } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { effectiveTargetBranchForTask } from "./builder-worktree-cleanup";
-import { githubProviderStatus } from "./github-pull-requests";
+import { type GithubRepositoryDependencies, githubProviderStatus } from "./github-pull-requests";
 import { loadDefaultMergeMethod } from "./task-workflow-helpers";
 export const loadOpenApprovalContext = (
-  dependencies: {
-    gitPort: GitPort;
+  dependencies: GithubRepositoryDependencies & {
     settingsConfig: SettingsConfigPort;
-    systemCommands: SystemCommandPort;
     taskWorktreeService: TaskWorktreeService;
     workspaceSettingsService: WorkspaceSettingsService;
   },
@@ -114,10 +110,7 @@ export const loadOpenApprovalContext = (
     };
   });
 export const providerStatuses = (
-  dependencies: {
-    gitPort: GitPort;
-    systemCommands: SystemCommandPort;
-  },
+  dependencies: GithubRepositoryDependencies,
   repoPath: string,
   repoConfig: RepoConfig,
 ) =>

@@ -16,6 +16,7 @@ export const createTaskPullRequestDetectionUseCase = ({
   gitPort,
   taskStore,
   systemCommands,
+  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "detectPullRequest"> => ({
@@ -23,12 +24,13 @@ export const createTaskPullRequestDetectionUseCase = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
-        requirePullRequestDetectionDependencies(
+        requirePullRequestDetectionDependencies({
           gitPort,
           systemCommands,
+          toolDiscovery,
           taskWorktreeService,
           workspaceSettingsService,
-        ),
+        }),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
       yield* Effect.try({

@@ -13,7 +13,7 @@ import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeWorkspaceStarterPort,
 } from "../../ports/runtime-registry-port";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
 import {
@@ -23,7 +23,6 @@ import {
   terminateProcessTree,
   waitForChildProcessClose,
 } from "../process/process-tree";
-import { resolveOpencodeBinary } from "../runtimes/runtime-binaries";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { canConnect, pickFreePort } from "./opencode-local-port";
@@ -46,7 +45,7 @@ type LocalPortProbe = (
 ) => Effect.Effect<boolean, HostOperationError>;
 
 export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
-  systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
@@ -127,7 +126,7 @@ const startupProbeSchedule = (startupTimeoutMs: number, retryDelayMs: number) =>
   );
 
 export const createOpenCodeWorkspaceRuntimeStarter = ({
-  systemCommands,
+  toolDiscovery,
   resolveMcpBridgeConnection,
   runtimeDistribution,
   processEnv = process.env,
@@ -194,8 +193,8 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
       const resolvedMcpCommand =
         configuredMcpCommand ??
         (yield* resolveOpenDucktorMcpCommand({
-          systemCommands,
           runtimeDistribution,
+          toolDiscovery,
         }));
       const configContent = yield* Effect.try({
         try: () => buildOpenCodeConfigContent(bridge, resolvedMcpCommand),
@@ -206,7 +205,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             details: { runtimeKind: input.runtimeKind },
           }),
       });
-      const binary = opencodeBinary ?? (yield* resolveOpencodeBinary(systemCommands, processEnv));
+      const binary = opencodeBinary ?? (yield* toolDiscovery.resolveToolPath("opencode"));
       const port = yield* portAllocator().pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),

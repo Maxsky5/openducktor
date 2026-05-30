@@ -11,6 +11,7 @@ import { removeTestDirectory } from "../../test-support/temp-directory";
 import { terminateProcessTree } from "../process/process-tree";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import {
   buildOpenCodeConfigContent,
   createOpenCodeWorkspaceRuntimeStarter as createEffectOpenCodeWorkspaceRuntimeStarter,
@@ -19,20 +20,29 @@ import {
 type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
   typeof createEffectOpenCodeWorkspaceRuntimeStarter
 >[0];
+type OpenCodeWorkspaceRuntimeStarterTestInput = Omit<
+  OpenCodeWorkspaceRuntimeStarterInput,
+  "runtimeDistribution" | "toolDiscovery"
+> &
+  Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution" | "toolDiscovery">> & {
+    systemCommands?: SystemCommandPort;
+  };
 const testRuntimeDistribution = createArtifactRuntimeDistribution({
   mcpLauncher: {
     kind: "executable",
     executablePath: process.execPath,
   },
 });
-const createOpenCodeWorkspaceRuntimeStarter = (
-  input: Omit<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
-    Partial<Pick<OpenCodeWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
-) =>
-  createEffectOpenCodeWorkspaceRuntimeStarter({
+const createOpenCodeWorkspaceRuntimeStarter = (input: OpenCodeWorkspaceRuntimeStarterTestInput) => {
+  const { systemCommands, toolDiscovery, ...starterInput } = input;
+  return createEffectOpenCodeWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
-    ...input,
+    toolDiscovery:
+      toolDiscovery ??
+      createToolDiscoveryAdapter({ systemCommands: systemCommands ?? createSystemCommands() }),
+    ...starterInput,
   });
+};
 const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
     return Effect.succeed(command);

@@ -105,6 +105,7 @@ export const createNodeEffectHostCommandRouter = (
     runtimeHealth,
     settingsConfig,
     systemCommands,
+    toolDiscovery,
     worktreeFiles,
   } = createNodeHostDefaultPorts(input);
   const codexAppServerService: CodexAppServerService =
@@ -122,7 +123,7 @@ export const createNodeEffectHostCommandRouter = (
     (() => {
       ownedTaskStore = createBeadsTaskRepository({
         processEnv,
-        systemCommands,
+        toolDiscovery,
         resolveWorkspaceIdForRepoPath: (repoPath) =>
           workspaceSettingsService
             .getRepoConfigByRepoPath(repoPath)
@@ -135,6 +136,7 @@ export const createNodeEffectHostCommandRouter = (
     runtimeHealth,
     settingsConfig,
     systemCommands,
+    toolDiscovery,
     repoStoreDiagnostics: taskStore,
   });
   let resolvedMcpHostBridge = mcpHostBridge;
@@ -142,7 +144,7 @@ export const createNodeEffectHostCommandRouter = (
     startWorkspaceRuntime(input) {
       if (input.runtimeKind === "codex") {
         return createCodexWorkspaceRuntimeStarter({
-          systemCommands,
+          toolDiscovery,
           codexAppServer: effectiveCodexTransportRegistry,
           processEnv,
           runtimeDistribution,
@@ -176,7 +178,7 @@ export const createNodeEffectHostCommandRouter = (
       }
 
       return createOpenCodeWorkspaceRuntimeStarter({
-        systemCommands,
+        toolDiscovery,
         processEnv,
         runtimeDistribution,
         resolveMcpBridgeConnection: (runtimeInput) =>
@@ -227,6 +229,7 @@ export const createNodeEffectHostCommandRouter = (
     taskActivityGuard,
     settingsConfig,
     systemCommands,
+    toolDiscovery,
     taskWorktreeService,
     workspaceSettingsService,
     runtimeDefinitionsService,

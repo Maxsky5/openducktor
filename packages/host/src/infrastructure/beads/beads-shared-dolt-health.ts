@@ -66,13 +66,14 @@ export const tcpProbe = (port: number): Effect.Effect<boolean> =>
   });
 
 export const runDoltAllowFailure = (
+  doltCommand: string,
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Effect.Effect<boolean> =>
   Effect.async<boolean>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn("dolt", args, {
+      child = spawn(doltCommand, args, {
         env,
         stdio: ["ignore", "ignore", "ignore"],
       });
@@ -177,8 +178,13 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
     child.once("close", onClose);
   });
 
-export const sqlProbe = (port: number, env: NodeJS.ProcessEnv): Effect.Effect<boolean> =>
+export const sqlProbe = (
+  port: number,
+  env: NodeJS.ProcessEnv,
+  doltCommand: string,
+): Effect.Effect<boolean> =>
   runDoltAllowFailure(
+    doltCommand,
     [
       "--host",
       SHARED_DOLT_SERVER_HOST,
@@ -207,18 +213,25 @@ export const serverStateIsHealthy = (
     if (state.sharedServerRoot !== paths.sharedServerRoot || state.doltDataDir !== paths.doltRoot) {
       return false;
     }
-    if (!(yield* tcpProbe(state.port)) || !(yield* sqlProbe(state.port, paths.env))) {
+    if (
+      !(yield* tcpProbe(state.port)) ||
+      !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt))
+    ) {
       return false;
     }
     return processIsAlive(state.pid);
   });
 
-export const waitForServerReady = (port: number, env: NodeJS.ProcessEnv): Effect.Effect<boolean> =>
+export const waitForServerReady = (
+  port: number,
+  env: NodeJS.ProcessEnv,
+  doltCommand: string,
+): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
     const deadline = startedAt + SHARED_DOLT_HEALTH_TIMEOUT_MS;
     while ((yield* Clock.currentTimeMillis) < deadline) {
-      if ((yield* tcpProbe(port)) && (yield* sqlProbe(port, env))) {
+      if ((yield* tcpProbe(port)) && (yield* sqlProbe(port, env, doltCommand))) {
         return true;
       }
       yield* Effect.sleep(`${SHARED_DOLT_HEALTH_POLL_INTERVAL_MS} millis`);

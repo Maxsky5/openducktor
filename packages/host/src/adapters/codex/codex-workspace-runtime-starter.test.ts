@@ -10,6 +10,7 @@ import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import {
   buildCodexMcpConfigArgs,
@@ -19,20 +20,29 @@ import {
 type CodexWorkspaceRuntimeStarterInput = Parameters<
   typeof createEffectCodexWorkspaceRuntimeStarter
 >[0];
+type CodexWorkspaceRuntimeStarterTestInput = Omit<
+  CodexWorkspaceRuntimeStarterInput,
+  "runtimeDistribution" | "toolDiscovery"
+> &
+  Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution" | "toolDiscovery">> & {
+    systemCommands?: SystemCommandPort;
+  };
 const testRuntimeDistribution = createArtifactRuntimeDistribution({
   mcpLauncher: {
     kind: "executable",
     executablePath: process.execPath,
   },
 });
-const createCodexWorkspaceRuntimeStarter = (
-  input: Omit<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution"> &
-    Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution">>,
-) =>
-  createEffectCodexWorkspaceRuntimeStarter({
+const createCodexWorkspaceRuntimeStarter = (input: CodexWorkspaceRuntimeStarterTestInput) => {
+  const { systemCommands, toolDiscovery, ...starterInput } = input;
+  return createEffectCodexWorkspaceRuntimeStarter({
     runtimeDistribution: testRuntimeDistribution,
-    ...input,
+    toolDiscovery:
+      toolDiscovery ??
+      createToolDiscoveryAdapter({ systemCommands: systemCommands ?? createSystemCommands() }),
+    ...starterInput,
   });
+};
 const createCodexAppServerTransportRegistry = (
   ...args: Parameters<typeof createEffectCodexAppServerTransportRegistry>
 ) => createEffectCodexAppServerTransportRegistry(...args);

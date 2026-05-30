@@ -8,6 +8,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createToolDiscoveryAdapter } from "../../../adapters/system/tool-discovery";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
@@ -78,6 +79,12 @@ const createSettingsConfigPort = (port: SettingsConfigPort): SettingsConfigPort 
   port as unknown as SettingsConfigPort;
 const createSystemCommandPort = (port: SystemCommandPort): SystemCommandPort =>
   port as unknown as SystemCommandPort;
+const defaultSystemCommands = createSystemCommandPort({
+  resolveCommandPath: (command) => Effect.succeed(command),
+  requiredCommandError: () => Effect.succeed(null),
+  versionCommand: () => Effect.succeed(null),
+  runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
+});
 const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePort =>
   ({
     ensureDirectory: () => Effect.dieMessage("unexpected ensure directory"),
@@ -200,9 +207,12 @@ const createTaskService = (
     taskStore: TaskStorePort;
   },
 ) => {
-  const { taskActivityGuard, taskStore, ...rest } = input;
+  const { taskActivityGuard, taskStore, toolDiscovery, ...rest } = input;
   return createRealTaskService({
     ...rest,
+    toolDiscovery:
+      toolDiscovery ??
+      createToolDiscoveryAdapter({ systemCommands: rest.systemCommands ?? defaultSystemCommands }),
     workspaceSettingsService: createWorkspaceSettingsServicePort(rest.workspaceSettingsService),
     ...(taskActivityGuard
       ? { taskActivityGuard: createTaskActivityGuardPort(taskActivityGuard) }
