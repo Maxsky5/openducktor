@@ -14,28 +14,28 @@ import {
 import {
   requireApprovalContextDependencies,
   requireDependencies,
+  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskApprovalContextUseCase = ({
-  gitPort,
+  githubDependencies,
   taskStore,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<TaskService, "getApprovalContext"> => ({
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
+  TaskService,
+  "getApprovalContext"
+> => ({
   getApprovalContext(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requireApprovalContextDependencies({
-          gitPort,
+          githubDependencies,
           settingsConfig,
-          systemCommands,
-          toolDiscovery,
           taskWorktreeService,
           workspaceSettingsService,
         }),

@@ -8,26 +8,23 @@ import {
 import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
+  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
-  gitPort,
+  githubDependencies,
   taskStore,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<TaskService, "detectPullRequest"> => ({
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "detectPullRequest"> => ({
   detectPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestDetectionDependencies({
-          gitPort,
-          systemCommands,
-          toolDiscovery,
+          githubDependencies,
           taskWorktreeService,
           workspaceSettingsService,
         }),

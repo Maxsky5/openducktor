@@ -11,6 +11,7 @@ import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-clea
 import {
   requireDependencies,
   requireDirectMergeDependencies,
+  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
@@ -18,14 +19,12 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskDirectMergeUseCase = ({
   devServerService,
-  gitPort,
+  githubDependencies,
   taskStore,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<TaskService, "directMerge"> => ({
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<TaskService, "directMerge"> => ({
   directMerge(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
@@ -33,10 +32,8 @@ export const createTaskDirectMergeUseCase = ({
       const dependencies = yield* requireDependencies(() =>
         requireDirectMergeDependencies({
           devServerService,
-          gitPort,
+          githubDependencies,
           settingsConfig,
-          systemCommands,
-          toolDiscovery,
           taskWorktreeService,
           workspaceSettingsService,
         }),

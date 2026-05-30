@@ -11,6 +11,7 @@ import {
   requireDependencies,
   requirePullRequestMergeCleanupDependencies,
   requirePullRequestSyncDependencies,
+  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
@@ -19,13 +20,12 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 export const createTaskSyncDeferUseCases = ({
   devServerService,
   gitPort,
+  githubDependencies,
   taskStore,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Pick<
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
   TaskService,
   "repoPullRequestSync" | "repoPullRequestSyncDetailed" | "deferTask" | "resumeDeferredTask"
 > => {
@@ -34,8 +34,7 @@ export const createTaskSyncDeferUseCases = ({
       const { repoPath } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestSyncDependencies({
-          systemCommands,
-          toolDiscovery,
+          githubDependencies,
           workspaceSettingsService,
         }),
       );

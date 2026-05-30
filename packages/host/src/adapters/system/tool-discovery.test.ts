@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryId } from "../../ports/tool-discovery-port";
 import { createSystemCommandRunner } from "./system-command-runner";
 import {
   createToolDiscoveryAdapter,
@@ -46,6 +47,20 @@ const writeExecutable = async (path: string): Promise<void> => {
   await writeFile(path, "#!/bin/sh\nexit 0\n");
   await chmod(path, 0o755);
 };
+
+const builtInOverrideCases = [
+  { command: "bd", toolId: "beads", variable: "OPENDUCKTOR_BD_PATH" },
+  { command: "bun", toolId: "bun", variable: "OPENDUCKTOR_BUN_PATH" },
+  { command: "codex", toolId: "codex", variable: "OPENDUCKTOR_CODEX_BINARY" },
+  { command: "dolt", toolId: "dolt", variable: "OPENDUCKTOR_DOLT_PATH" },
+  { command: "git", toolId: "git", variable: "OPENDUCKTOR_GIT_PATH" },
+  { command: "gh", toolId: "githubCli", variable: "OPENDUCKTOR_GH_PATH" },
+  { command: "opencode", toolId: "opencode", variable: "OPENDUCKTOR_OPENCODE_BINARY" },
+] as const satisfies readonly {
+  command: string;
+  toolId: ToolDiscoveryId;
+  variable: string;
+}[];
 
 const customToolDescriptor: ToolDiscoveryDescriptor = {
   command: "custom-tool",
@@ -291,5 +306,35 @@ describe("discoverToolPath", () => {
     });
 
     await expect(Effect.runPromise(adapter.resolveToolPath("codex"))).resolves.toBe("/path/codex");
+  });
+
+  test("supports descriptor environment overrides for every built-in tool", async () => {
+    await withTempDir(async (root) => {
+      for (const overrideCase of builtInOverrideCases) {
+        const executable = join(root, overrideCase.command);
+        await writeExecutable(executable);
+        const adapter = createToolDiscoveryAdapter({
+          env: { [overrideCase.variable]: executable },
+          options: { homeDir: root, platform: "linux" },
+          systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+        });
+
+        await expect(Effect.runPromise(adapter.resolveToolPath(overrideCase.toolId))).resolves.toBe(
+          executable,
+        );
+      }
+    });
+  });
+
+  test("reports descriptor override variables for PATH-resolved built-in tools", async () => {
+    const adapter = createToolDiscoveryAdapter({
+      env: {},
+      options: { platform: "linux" },
+      systemCommands: createSystemCommands(),
+    });
+
+    await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).rejects.toThrow(
+      "bun not found. Checked OPENDUCKTOR_BUN_PATH, PATH. Install bun and ensure it is available on PATH, or set OPENDUCKTOR_BUN_PATH.",
+    );
   });
 });

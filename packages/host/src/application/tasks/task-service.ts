@@ -37,6 +37,7 @@ import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
+import { createTaskGithubDependencies } from "./support/required-task-dependencies";
 import type {
   AgentSessionsListBulkInput,
   AgentSessionUpsertInput,
@@ -193,23 +194,25 @@ const mapTaskServiceErrors = <A, E>(
 ): Effect.Effect<A, TaskServiceError> => effect.pipe(Effect.mapError(toTaskServiceError));
 
 export const createTaskService = (input: CreateTaskServiceInput): TaskService => {
+  const githubDependencies = createTaskGithubDependencies(input);
+  const useCaseInput = { ...input, githubDependencies };
   const service = {
-    ...createTaskQueryUseCases(input),
-    ...createTaskApprovalContextUseCase(input),
-    ...createTaskPullRequestDetectionUseCase(input),
-    ...createTaskPullRequestManagementUseCases(input),
-    ...createTaskLinkMergedPullRequestUseCase(input),
-    ...createTaskDirectMergeUseCase(input),
-    ...createTaskCompleteDirectMergeUseCase(input),
-    ...createTaskCrudUseCases(input),
-    ...createTaskDeleteUseCase(input),
-    ...createTaskImplementationResetUseCase(input),
-    ...createTaskFullResetUseCase(input),
-    ...createTaskDocumentUseCases(input),
-    ...createTaskBuildStartUseCase(input),
-    ...createTaskBuildStateUseCases(input),
-    ...createTaskReviewUseCases(input),
-    ...createTaskSyncDeferUseCases(input),
+    ...createTaskQueryUseCases(useCaseInput),
+    ...createTaskApprovalContextUseCase(useCaseInput),
+    ...createTaskPullRequestDetectionUseCase(useCaseInput),
+    ...createTaskPullRequestManagementUseCases(useCaseInput),
+    ...createTaskLinkMergedPullRequestUseCase(useCaseInput),
+    ...createTaskDirectMergeUseCase(useCaseInput),
+    ...createTaskCompleteDirectMergeUseCase(useCaseInput),
+    ...createTaskCrudUseCases(useCaseInput),
+    ...createTaskDeleteUseCase(useCaseInput),
+    ...createTaskImplementationResetUseCase(useCaseInput),
+    ...createTaskFullResetUseCase(useCaseInput),
+    ...createTaskDocumentUseCases(useCaseInput),
+    ...createTaskBuildStartUseCase(useCaseInput),
+    ...createTaskBuildStateUseCases(useCaseInput),
+    ...createTaskReviewUseCases(useCaseInput),
+    ...createTaskSyncDeferUseCases(useCaseInput),
   };
   return {
     agentSessionsList: (input) => mapTaskServiceErrors(service.agentSessionsList(input)),

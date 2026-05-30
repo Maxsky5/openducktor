@@ -643,7 +643,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       },
     });
     await expect(Effect.runPromise(port.listTasks({ repoPath: "/repo" }))).rejects.toThrow(
-      "dolt not found. Checked PATH. Install dolt and ensure it is available on PATH.",
+      "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
     );
   });
   test("diagnoses existing Beads store without requiring Dolt when preparation is disabled", async () => {

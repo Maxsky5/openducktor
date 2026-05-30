@@ -35,38 +35,72 @@ export const requireDependencies = <A>(resolve: () => A): Effect.Effect<A, HostD
           }),
   });
 type GithubCommandDependencyInput = {
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
+  systemCommands?: SystemCommandPort;
+  toolDiscovery?: ToolDiscoveryPort;
 };
 type GithubRepositoryDependencyInput = GithubCommandDependencyInput & {
-  gitPort: GitPort | undefined;
+  gitPort?: GitPort;
+};
+export type TaskGithubDependencies = {
+  command: GithubCommandDependencies | undefined;
+  commandMissingDependency: string | undefined;
+  repository: GithubRepositoryDependencies | undefined;
+  repositoryMissingDependency: string | undefined;
+};
+export type TaskGithubDependencyInput = {
+  githubDependencies: TaskGithubDependencies;
+};
+export const createTaskGithubDependencies = ({
+  gitPort,
+  systemCommands,
+  toolDiscovery,
+}: GithubRepositoryDependencyInput): TaskGithubDependencies => {
+  const commandMissingDependency =
+    systemCommands === undefined
+      ? "System command port"
+      : toolDiscovery === undefined
+        ? "Tool discovery port"
+        : undefined;
+  const command =
+    systemCommands === undefined || toolDiscovery === undefined
+      ? undefined
+      : createGithubCommandDependencies({ systemCommands, toolDiscovery });
+  const repositoryMissingDependency = gitPort === undefined ? "Git port" : commandMissingDependency;
+  const repository =
+    gitPort === undefined || command === undefined
+      ? undefined
+      : {
+          gitPort,
+          ...command,
+        };
+  return {
+    command,
+    commandMissingDependency,
+    repository,
+    repositoryMissingDependency,
+  };
 };
 const requireGithubCommandDependencies = (
-  input: GithubCommandDependencyInput,
+  githubDependencies: TaskGithubDependencies,
   operation: string,
 ): GithubCommandDependencies => {
-  if (!input.systemCommands) {
-    throw missingTaskDependency(`System command port is required for ${operation}.`);
+  if (!githubDependencies.command) {
+    throw missingTaskDependency(
+      `${githubDependencies.commandMissingDependency ?? "GitHub command dependencies"} is required for ${operation}.`,
+    );
   }
-  if (!input.toolDiscovery) {
-    throw missingTaskDependency(`Tool discovery port is required for ${operation}.`);
-  }
-  return createGithubCommandDependencies({
-    systemCommands: input.systemCommands,
-    toolDiscovery: input.toolDiscovery,
-  });
+  return githubDependencies.command;
 };
 const requireGithubRepositoryDependencies = (
-  input: GithubRepositoryDependencyInput,
+  githubDependencies: TaskGithubDependencies,
   operation: string,
 ): GithubRepositoryDependencies => {
-  if (!input.gitPort) {
-    throw missingTaskDependency(`Git port is required for ${operation}.`);
+  if (!githubDependencies.repository) {
+    throw missingTaskDependency(
+      `${githubDependencies.repositoryMissingDependency ?? "GitHub repository dependencies"} is required for ${operation}.`,
+    );
   }
-  return {
-    gitPort: input.gitPort,
-    ...requireGithubCommandDependencies(input, operation),
-  };
+  return githubDependencies.repository;
 };
 export const requireAgentSessionDependencies = (
   taskStore: TaskStorePort,
@@ -198,18 +232,14 @@ export const requireDirectMergeCompleteDependencies = (
 };
 export const requireDirectMergeDependencies = ({
   devServerService,
-  gitPort,
+  githubDependencies,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: {
   devServerService: DevServerService | undefined;
-  gitPort: GitPort | undefined;
+  githubDependencies: TaskGithubDependencies;
   settingsConfig: SettingsConfigPort | undefined;
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
 }): {
@@ -230,13 +260,13 @@ export const requireDirectMergeDependencies = ({
   if (!workspaceSettingsService) {
     throw missingTaskDependency("Workspace settings service is required for task_direct_merge.");
   }
-  const githubDependencies = requireGithubRepositoryDependencies(
-    { gitPort, systemCommands, toolDiscovery },
+  const githubRepositoryDependencies = requireGithubRepositoryDependencies(
+    githubDependencies,
     "task_direct_merge",
   );
   return {
     devServerService,
-    ...githubDependencies,
+    ...githubRepositoryDependencies,
     settingsConfig,
     taskWorktreeService,
     workspaceSettingsService,
@@ -287,17 +317,13 @@ export const requireLinkMergedPullRequestDependencies = (
   };
 };
 export const requireApprovalContextDependencies = ({
-  gitPort,
+  githubDependencies,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: {
-  gitPort: GitPort | undefined;
+  githubDependencies: TaskGithubDependencies;
   settingsConfig: SettingsConfigPort | undefined;
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
 }): {
@@ -316,27 +342,23 @@ export const requireApprovalContextDependencies = ({
       "Workspace settings service is required for task_approval_context_get.",
     );
   }
-  const githubDependencies = requireGithubRepositoryDependencies(
-    { gitPort, systemCommands, toolDiscovery },
+  const githubRepositoryDependencies = requireGithubRepositoryDependencies(
+    githubDependencies,
     "task_approval_context_get",
   );
   return {
-    ...githubDependencies,
+    ...githubRepositoryDependencies,
     settingsConfig,
     taskWorktreeService,
     workspaceSettingsService,
   };
 };
 export const requirePullRequestDetectionDependencies = ({
-  gitPort,
-  systemCommands,
-  toolDiscovery,
+  githubDependencies,
   taskWorktreeService,
   workspaceSettingsService,
 }: {
-  gitPort: GitPort | undefined;
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
+  githubDependencies: TaskGithubDependencies;
   taskWorktreeService: TaskWorktreeService | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
 }): {
@@ -351,25 +373,21 @@ export const requirePullRequestDetectionDependencies = ({
       "Workspace settings service is required for task_pull_request_detect.",
     );
   }
-  const githubDependencies = requireGithubRepositoryDependencies(
-    { gitPort, systemCommands, toolDiscovery },
+  const githubRepositoryDependencies = requireGithubRepositoryDependencies(
+    githubDependencies,
     "task_pull_request_detect",
   );
   return {
-    ...githubDependencies,
+    ...githubRepositoryDependencies,
     taskWorktreeService,
     workspaceSettingsService,
   };
 };
 export const requirePullRequestLinkDependencies = ({
-  gitPort,
-  systemCommands,
-  toolDiscovery,
+  githubDependencies,
   workspaceSettingsService,
 }: {
-  gitPort: GitPort | undefined;
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
+  githubDependencies: TaskGithubDependencies;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
 }): {
   workspaceSettingsService: WorkspaceSettingsService;
@@ -379,27 +397,23 @@ export const requirePullRequestLinkDependencies = ({
       "Workspace settings service is required for task_pull_request_link.",
     );
   }
-  const githubDependencies = requireGithubRepositoryDependencies(
-    { gitPort, systemCommands, toolDiscovery },
+  const githubRepositoryDependencies = requireGithubRepositoryDependencies(
+    githubDependencies,
     "task_pull_request_link",
   );
   return {
-    ...githubDependencies,
+    ...githubRepositoryDependencies,
     workspaceSettingsService,
   };
 };
 export const requirePullRequestUpsertDependencies = ({
-  gitPort,
+  githubDependencies,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: {
-  gitPort: GitPort | undefined;
+  githubDependencies: TaskGithubDependencies;
   settingsConfig: SettingsConfigPort | undefined;
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
   taskWorktreeService: TaskWorktreeService | undefined;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
 }): {
@@ -418,12 +432,12 @@ export const requirePullRequestUpsertDependencies = ({
       "Workspace settings service is required for task_pull_request_upsert.",
     );
   }
-  const githubDependencies = requireGithubRepositoryDependencies(
-    { gitPort, systemCommands, toolDiscovery },
+  const githubRepositoryDependencies = requireGithubRepositoryDependencies(
+    githubDependencies,
     "task_pull_request_upsert",
   );
   return {
-    ...githubDependencies,
+    ...githubRepositoryDependencies,
     settingsConfig,
     taskWorktreeService,
     workspaceSettingsService,
@@ -431,12 +445,10 @@ export const requirePullRequestUpsertDependencies = ({
 };
 
 export const requirePullRequestSyncDependencies = ({
-  systemCommands,
-  toolDiscovery,
+  githubDependencies,
   workspaceSettingsService,
 }: {
-  systemCommands: SystemCommandPort | undefined;
-  toolDiscovery: ToolDiscoveryPort | undefined;
+  githubDependencies: TaskGithubDependencies;
   workspaceSettingsService: WorkspaceSettingsService | undefined;
 }): {
   workspaceSettingsService: WorkspaceSettingsService;
@@ -446,12 +458,12 @@ export const requirePullRequestSyncDependencies = ({
       "Workspace settings service is required for repo_pull_request_sync.",
     );
   }
-  const githubDependencies = requireGithubCommandDependencies(
-    { systemCommands, toolDiscovery },
+  const githubCommandDependencies = requireGithubCommandDependencies(
+    githubDependencies,
     "repo_pull_request_sync",
   );
 
-  return { ...githubDependencies, workspaceSettingsService };
+  return { ...githubCommandDependencies, workspaceSettingsService };
 };
 
 export const requirePullRequestMergeCleanupDependencies = (

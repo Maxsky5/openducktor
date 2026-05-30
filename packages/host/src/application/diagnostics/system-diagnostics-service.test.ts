@@ -264,11 +264,11 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.ghOk).toBe(false);
     expect(check.ghAuthOk).toBe(false);
     expect(check.ghAuthError).toBe(
-      "gh not found. Checked PATH. Install gh and ensure it is available on PATH.",
+      "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
     );
     expect(check.errors).toEqual([
-      "git not found. Checked PATH. Install git and ensure it is available on PATH.",
-      "gh not found. Checked PATH. Install gh and ensure it is available on PATH.",
+      "git not found. Checked OPENDUCKTOR_GIT_PATH, PATH. Install git and ensure it is available on PATH, or set OPENDUCKTOR_GIT_PATH.",
+      "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
     ]);
   });
   test("beadsCheck returns structured blocking health when bd is missing", async () => {
@@ -284,12 +284,14 @@ describe("createSystemDiagnosticsService", () => {
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError: "bd not found. Checked PATH. Install bd and ensure it is available on PATH.",
+      beadsError:
+        "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail: "bd not found. Checked PATH. Install bd and ensure it is available on PATH.",
+        detail:
+          "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },
@@ -308,12 +310,14 @@ describe("createSystemDiagnosticsService", () => {
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError: "dolt not found. Checked PATH. Install dolt and ensure it is available on PATH.",
+      beadsError:
+        "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail: "dolt not found. Checked PATH. Install dolt and ensure it is available on PATH.",
+        detail:
+          "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },

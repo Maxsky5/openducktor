@@ -225,25 +225,58 @@ export const discoverToolPath = (
     return yield* Effect.fail(missingToolError(descriptor, checked));
   });
 
-const pathOnlyTool = (command: string, installHint?: string): ToolDiscoveryDescriptor => ({
+const commandTool = ({
   command,
-  displayName: command,
-  installHint: installHint ?? `Install ${command} and ensure it is available on PATH.`,
-  sources: [{ kind: "path" }],
+  displayName = command,
+  installHint,
+  overrideVariable,
+  sources = [],
+}: {
+  command: string;
+  displayName?: string;
+  installHint?: string;
+  overrideVariable: string;
+  sources?: ToolDiscoverySource[];
+}): ToolDiscoveryDescriptor => ({
+  command,
+  displayName,
+  installHint:
+    installHint ??
+    `Install ${command} and ensure it is available on PATH, or set ${overrideVariable}.`,
+  sources: [{ kind: "environment", variable: overrideVariable }, ...sources, { kind: "path" }],
 });
 
-export const BUN_TOOL_DESCRIPTOR = pathOnlyTool("bun");
-export const GIT_TOOL_DESCRIPTOR = pathOnlyTool("git");
-export const GITHUB_CLI_TOOL_DESCRIPTOR = pathOnlyTool("gh");
-export const BEADS_TOOL_DESCRIPTOR = pathOnlyTool("bd");
-export const DOLT_TOOL_DESCRIPTOR = pathOnlyTool("dolt");
+export const BUN_TOOL_DESCRIPTOR = commandTool({
+  command: "bun",
+  overrideVariable: "OPENDUCKTOR_BUN_PATH",
+});
+export const GIT_TOOL_DESCRIPTOR = commandTool({
+  command: "git",
+  overrideVariable: "OPENDUCKTOR_GIT_PATH",
+});
+export const GITHUB_CLI_TOOL_DESCRIPTOR = commandTool({
+  command: "gh",
+  displayName: "GitHub CLI",
+  installHint: "Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
+  overrideVariable: "OPENDUCKTOR_GH_PATH",
+});
+export const BEADS_TOOL_DESCRIPTOR = commandTool({
+  command: "bd",
+  displayName: "Beads",
+  overrideVariable: "OPENDUCKTOR_BD_PATH",
+});
+export const DOLT_TOOL_DESCRIPTOR = commandTool({
+  command: "dolt",
+  displayName: "Dolt",
+  overrideVariable: "OPENDUCKTOR_DOLT_PATH",
+});
 
-export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
+export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   command: "opencode",
   displayName: "OpenCode",
   installHint: "Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
+  overrideVariable: "OPENDUCKTOR_OPENCODE_BINARY",
   sources: [
-    { kind: "environment", variable: "OPENDUCKTOR_OPENCODE_BINARY" },
     {
       directories: (context) => [context.bundledToolBinDirs.opencode],
       kind: "searchDirectories",
@@ -256,16 +289,15 @@ export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
       label: "standard install directories",
       policy: "candidate",
     },
-    { kind: "path" },
   ],
-};
+});
 
-export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
+export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   command: "codex",
   displayName: "Codex",
   installHint: "Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
+  overrideVariable: "OPENDUCKTOR_CODEX_BINARY",
   sources: [
-    { kind: "environment", variable: "OPENDUCKTOR_CODEX_BINARY" },
     {
       directories: (context) => [context.bundledToolBinDirs.codex],
       kind: "searchDirectories",
@@ -291,9 +323,8 @@ export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
       kind: "candidateFiles",
       label: "standard install locations",
     },
-    { kind: "path" },
   ],
-};
+});
 
 export const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDescriptor> = {
   beads: BEADS_TOOL_DESCRIPTOR,

@@ -12,6 +12,7 @@ import {
   requireDependencies,
   requirePullRequestLinkDependencies,
   requirePullRequestUpsertDependencies,
+  type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
@@ -19,14 +20,12 @@ import type { CreateTaskServiceInput, TaskService } from "../task-service";
 type Cases = Pick<TaskService, "linkPullRequest" | "upsertPullRequest" | "unlinkPullRequest">;
 
 export const createTaskPullRequestManagementUseCases = ({
-  gitPort,
+  githubDependencies,
   taskStore,
   settingsConfig,
-  systemCommands,
-  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
-}: CreateTaskServiceInput): Cases => ({
+}: CreateTaskServiceInput & TaskGithubDependencyInput): Cases => ({
   linkPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, providerId, number } = input;
@@ -41,9 +40,7 @@ export const createTaskPullRequestManagementUseCases = ({
       }
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestLinkDependencies({
-          gitPort,
-          systemCommands,
-          toolDiscovery,
+          githubDependencies,
           workspaceSettingsService,
         }),
       );
@@ -95,10 +92,8 @@ export const createTaskPullRequestManagementUseCases = ({
       const { repoPath, taskId, content } = input;
       const dependencies = yield* requireDependencies(() =>
         requirePullRequestUpsertDependencies({
-          gitPort,
+          githubDependencies,
           settingsConfig,
-          systemCommands,
-          toolDiscovery,
           taskWorktreeService,
           workspaceSettingsService,
         }),

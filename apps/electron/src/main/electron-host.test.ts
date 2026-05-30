@@ -1138,7 +1138,8 @@ describe("createElectronHostCommandRouter", () => {
     });
     await expect(router.invoke("beads_check", { repoPath: "/repo" })).resolves.toMatchObject({
       beadsOk: false,
-      beadsError: "bd not found. Checked PATH. Install bd and ensure it is available on PATH.",
+      beadsError:
+        "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
       repoStoreHealth: { status: "blocking" },
     });
   });
