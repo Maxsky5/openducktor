@@ -1,4 +1,5 @@
 import { HostValidationError } from "../../effect/host-errors";
+import type { ToolDiscoveryId } from "../../ports/tool-discovery-port";
 
 declare const hostRuntimeDistributionBrand: unique symbol;
 
@@ -27,7 +28,7 @@ export type ArtifactMcpLauncher = ExecutableMcpLauncher | BunScriptMcpLauncher;
 export type ArtifactRuntimeDistribution = HostRuntimeDistributionBrand & {
   mode: "artifact";
   mcpLauncher: ArtifactMcpLauncher;
-  bundledToolBinDir?: string;
+  bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
 };
 
 export type HostRuntimeDistribution = SourceRuntimeDistribution | ArtifactRuntimeDistribution;
@@ -78,20 +79,39 @@ const createArtifactMcpLauncher = (launcher: ArtifactMcpLauncher): ArtifactMcpLa
   return unsupportedArtifactMcpLauncher(launcher);
 };
 
+const createBundledToolBinDirs = (
+  bundledToolBinDirs: Partial<Record<ToolDiscoveryId, string>> | undefined,
+): Partial<Record<ToolDiscoveryId, string>> | undefined => {
+  if (bundledToolBinDirs === undefined) {
+    return undefined;
+  }
+
+  const normalized: Partial<Record<ToolDiscoveryId, string>> = {};
+  for (const toolId of Object.keys(bundledToolBinDirs) as ToolDiscoveryId[]) {
+    const directory = bundledToolBinDirs[toolId];
+    if (directory !== undefined) {
+      normalized[toolId] = assertNonEmpty(directory, `bundledToolBinDirs.${toolId}`);
+    }
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
 export const createArtifactRuntimeDistribution = ({
-  bundledToolBinDir,
+  bundledToolBinDirs,
   mcpLauncher,
 }: {
-  bundledToolBinDir?: string;
+  bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
   mcpLauncher: ArtifactMcpLauncher;
 }): ArtifactRuntimeDistribution => {
+  const normalizedBundledToolBinDirs = createBundledToolBinDirs(bundledToolBinDirs);
   return {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),
-    ...(bundledToolBinDir === undefined
+    ...(normalizedBundledToolBinDirs === undefined
       ? {}
       : {
-          bundledToolBinDir: assertNonEmpty(bundledToolBinDir, "bundledToolBinDir"),
+          bundledToolBinDirs: normalizedBundledToolBinDirs,
         }),
   } as ArtifactRuntimeDistribution;
 };

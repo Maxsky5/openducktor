@@ -34,8 +34,6 @@ const createToolDiscoveryPort = (missingCommands: string[] = []) =>
     systemCommands: {
       resolveCommandPath: (command) =>
         Effect.succeed(missingCommands.includes(command) ? null : command),
-      requiredCommandError: (command) =>
-        Effect.succeed(missingCommands.includes(command) ? `${command} is missing.` : null),
       versionCommand: () => Effect.succeed(null),
       runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
     },

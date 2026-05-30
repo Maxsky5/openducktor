@@ -16,6 +16,7 @@ import {
   buildOpenDucktorMcpBridgeEnvironment,
   OPENDUCKTOR_MCP_ENV_VAR_NAMES,
 } from "../mcp/openducktor-mcp-environment";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -24,7 +25,6 @@ import {
   waitForChildProcessClose,
 } from "../process/process-tree";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
-import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
 import type { CodexAppServerEventEmitter } from "./codex-app-server-transport-types";
@@ -213,12 +213,16 @@ export const createCodexWorkspaceRuntimeStarter = ({
           toolDiscovery,
         }));
       const binary = codexBinary ?? (yield* toolDiscovery.resolveToolPath("codex"));
+      const runtimeEnv = {
+        ...processEnv,
+        ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),
+      };
       const command = yield* Effect.try({
         try: () =>
-          createSystemCommandLaunch(
+          createProcessCommandLaunch(
             binary,
             [...buildCodexMcpConfigArgs(resolvedMcpCommand), "app-server"],
-            processEnv,
+            runtimeEnv,
             platform,
           ),
         catch: (cause) =>
@@ -236,12 +240,9 @@ export const createCodexWorkspaceRuntimeStarter = ({
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
-            env: {
-              ...processEnv,
-              ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),
-            },
+            env: command.env,
             stdio: ["pipe", "pipe", "pipe"],
-            windowsVerbatimArguments: command.windowsVerbatimArguments === true,
+            windowsVerbatimArguments: command.windowsVerbatimArguments,
           }) as CodexChildProcess,
         catch: (cause) =>
           toHostOperationError(cause, "codexWorkspaceRuntime.spawn", {

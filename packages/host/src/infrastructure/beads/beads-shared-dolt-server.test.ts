@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
 import {
   readSharedServerState,
+  runCommandAllowFailure,
   serverStateIsHealthy,
   stopOwnedSharedDoltServer,
   writeDoltConfigFile,
@@ -217,5 +218,31 @@ describe("Dolt config YAML rendering", () => {
     await expect(readdir(paths.sharedServerRoot)).resolves.not.toContain(
       `dolt-config.yaml.tmp-${process.pid}`,
     );
+  });
+});
+
+describe("runCommandAllowFailure", () => {
+  test("runs Windows cmd launchers through cmd.exe", async () => {
+    if (process.platform !== "win32") {
+      return;
+    }
+
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-cmd-"));
+    const command = path.join(root, "tool.cmd");
+    await writeFile(command, "@echo off\r\necho cmd:%~1:%~2\r\n");
+
+    await expect(
+      Effect.runPromise(
+        runCommandAllowFailure({
+          command,
+          args: ["one", "two words"],
+          cwd: root,
+          env: { ...process.env },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      stdout: "cmd:one:two words\r\n",
+    });
   });
 });

@@ -8,12 +8,13 @@ import {
   toHostPathStatError,
 } from "../../effect/host-errors";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { isExecutableCommandFile } from "../process/process-command-resolution";
 import type {
   ArtifactRuntimeDistribution,
   HostRuntimeDistribution,
   SourceRuntimeDistribution,
 } from "../runtimes/runtime-distribution";
-import { isExecutableFile, resolveUserPath } from "../system/tool-discovery";
+import { resolveUserPath } from "../system/tool-discovery";
 
 export type ResolveOpenDucktorMcpCommandInput = {
   runtimeDistribution: HostRuntimeDistribution;
@@ -93,7 +94,7 @@ const resolveExecutablePath = (path: string, field: string) =>
         }),
       );
     }
-    if (!(yield* isExecutableFile(resolvedPath))) {
+    if (!(yield* isExecutableCommandFile(resolvedPath))) {
       return yield* Effect.fail(
         new HostValidationError({
           field,

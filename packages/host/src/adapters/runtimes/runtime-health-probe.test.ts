@@ -6,10 +6,8 @@ import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createRuntimeHealthProbe } from "./runtime-health-probe";
 
 const missingSystemCommands: SystemCommandPort = {
-  requiredCommandError(command) {
-    return Effect.succeed(
-      `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`,
-    );
+  resolveCommandPath() {
+    return Effect.succeed(null);
   },
   versionCommand() {
     return Effect.succeed(null);
@@ -41,9 +39,7 @@ describe("createRuntimeHealthProbe", () => {
 
     expect(health.ok).toBe(false);
     expect(health.error).toContain("opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY");
-    expect(health.error).toContain(
-      "standard install locations (/missing/home/.opencode/bin/opencode)",
-    );
+    expect(health.error).toContain("standard install directories (/missing/home/.opencode/bin)");
     expect(health.error).toContain("PATH");
     expect(health.error).toContain("Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.");
   });
@@ -53,9 +49,6 @@ describe("createRuntimeHealthProbe", () => {
       ...missingSystemCommands,
       resolveCommandPath(command) {
         return Effect.succeed(command === "opencode" ? "/usr/local/bin/opencode" : null);
-      },
-      requiredCommandError() {
-        return Effect.succeed(null);
       },
     };
     const probe = createRuntimeHealthProbe(systemCommands, createToolDiscovery(systemCommands));

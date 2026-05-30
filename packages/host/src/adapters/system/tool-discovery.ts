@@ -1,36 +1,36 @@
-import { constants } from "node:fs";
-import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 import { Effect } from "effect";
-import {
-  HostDependencyError,
-  HostValidationError,
-  toHostPathStatError,
-} from "../../effect/host-errors";
+import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { isExecutableCommandFile } from "../process/process-command-resolution";
 
 export type ToolDiscoveryPathOptions = {
   applicationsDir?: string;
-  bundledToolBinDir?: string;
+  bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
   homeDir?: string;
   platform?: NodeJS.Platform;
 };
 
 export type ToolDiscoveryContext = {
   applicationsDir: string;
-  bundledToolBinDir?: string;
+  bundledToolBinDirs: Partial<Record<ToolDiscoveryId, string>>;
   homeDir: string;
   platform: NodeJS.Platform;
 };
 
 export type ToolDiscoverySource =
   | { kind: "environment"; variable: string }
-  | { kind: "bundledToolBin"; policy: "candidate" | "required" }
+  | {
+      directories: (context: ToolDiscoveryContext) => (string | undefined)[];
+      kind: "searchDirectories";
+      label?: string;
+      policy: "candidate" | "required";
+    }
   | {
       candidates: (context: ToolDiscoveryContext) => string[];
-      kind: "standardLocations";
+      kind: "candidateFiles";
       label: string;
     }
   | { kind: "path" };
@@ -50,56 +50,37 @@ const stripMatchingQuotes = (value: string): string =>
     ? value.slice(1, -1)
     : value;
 
-export const resolveUserPath = (rawPath: string, homeDir = homedir()): string => {
+const joinPlatformPath = (platform: NodeJS.Platform, ...segments: string[]): string =>
+  platform === "win32" ? win32.join(...segments) : posix.join(...segments);
+
+export const resolveUserPath = (
+  rawPath: string,
+  homeDir = homedir(),
+  platform: NodeJS.Platform = process.platform,
+): string => {
   const trimmed = stripMatchingQuotes(rawPath.trim());
   if (trimmed === "~") {
     return homeDir;
   }
   if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
-    return join(homeDir, trimmed.slice(2));
+    return joinPlatformPath(platform, homeDir, trimmed.slice(2));
   }
   return trimmed;
 };
 
-export const isExecutableFile = (candidate: string, platform: NodeJS.Platform = process.platform) =>
-  Effect.tryPromise({
-    try: async () => {
-      const file = await stat(candidate);
-      if (!file.isFile()) {
-        return false;
-      }
-      if (platform !== "win32") {
-        await access(candidate, constants.X_OK);
-      }
-      return true;
-    },
-    catch: (cause) => toHostPathStatError(cause, "toolDiscovery.isExecutableFile", candidate),
-  }).pipe(
-    Effect.catchTags({
-      HostPathAccessError: () => Effect.succeed(false),
-      HostPathNotFoundError: () => Effect.succeed(false),
-    }),
-  );
-
-const executableName = (command: string, platform: NodeJS.Platform): string =>
-  platform === "win32" ? `${command}.exe` : command;
-
-const joinToolPath = (...segments: string[]): string => join(...segments);
-
-const toolPathInDirectory = (
+const joinToolPath = (
   context: Pick<ToolDiscoveryContext, "platform">,
-  directory: string,
-  command: string,
-): string => joinToolPath(directory, executableName(command, context.platform));
+  ...segments: string[]
+): string => joinPlatformPath(context.platform, ...segments);
 
 const createToolDiscoveryContext = ({
   applicationsDir,
-  bundledToolBinDir,
+  bundledToolBinDirs,
   homeDir,
   platform,
 }: ToolDiscoveryPathOptions = {}): ToolDiscoveryContext => ({
   applicationsDir: applicationsDir ?? DEFAULT_MACOS_APPLICATIONS_DIR,
-  ...(bundledToolBinDir === undefined ? {} : { bundledToolBinDir }),
+  bundledToolBinDirs: bundledToolBinDirs ?? {},
   homeDir: homeDir ?? homedir(),
   platform: platform ?? process.platform,
 });
@@ -110,20 +91,25 @@ const resolvePathCommand = (
   env: NodeJS.ProcessEnv,
 ) =>
   Effect.gen(function* () {
-    const resolved = systemCommands.resolveCommandPath?.(command, env);
-    if (resolved !== undefined) {
-      return yield* resolved.pipe(
-        Effect.catchTag("HostPathAccessError", () => Effect.succeed(null)),
-      );
-    }
-    const requiredError = yield* systemCommands
-      .requiredCommandError(command)
-      .pipe(Effect.catchTag("HostPathAccessError", () => Effect.succeed("unavailable")));
-    return requiredError === null ? command : null;
+    return yield* systemCommands
+      .resolveCommandPath(command, { env })
+      .pipe(Effect.catchTag("HostPathAccessError", () => Effect.succeed(null)));
   });
 
-const describeCandidates = (candidates: string[]): string =>
-  candidates.length > 0 ? candidates.join(", ") : "none configured";
+const resolveDirectoryCommand = (
+  command: string,
+  directories: readonly string[],
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv,
+) =>
+  Effect.gen(function* () {
+    return yield* systemCommands
+      .resolveCommandPath(command, { env, searchPath: directories })
+      .pipe(Effect.catchTag("HostPathAccessError", () => Effect.succeed(null)));
+  });
+
+const describeLocations = (locations: string[]): string =>
+  locations.length > 0 ? locations.join(", ") : "none configured";
 
 const invalidOverrideError = (
   descriptor: ToolDiscoveryDescriptor,
@@ -173,9 +159,10 @@ export const discoverToolPath = (
               invalidOverrideError(descriptor, source.variable, "is empty"),
             );
           }
-          const resolvedOverride = resolveUserPath(rawOverride, context.homeDir);
-          if (yield* isExecutableFile(resolvedOverride, context.platform)) {
-            return resolvedOverride;
+          const resolvedOverride = resolveUserPath(rawOverride, context.homeDir, context.platform);
+          const resolved = yield* resolvePathCommand(resolvedOverride, systemCommands, env);
+          if (resolved !== null) {
+            return resolved;
           }
           return yield* Effect.fail(
             invalidOverrideError(
@@ -187,32 +174,39 @@ export const discoverToolPath = (
           );
         }
 
-        case "bundledToolBin": {
-          if (context.bundledToolBinDir === undefined) {
-            break;
-          }
-          const candidate = toolPathInDirectory(
-            context,
-            resolveUserPath(context.bundledToolBinDir, context.homeDir),
-            descriptor.command,
-          );
-          checked.push(`bundled tool location (${candidate})`);
-          if (yield* isExecutableFile(candidate, context.platform)) {
-            return candidate;
-          }
-          if (source.policy === "required") {
-            return yield* Effect.fail(missingToolError(descriptor, checked, { candidate }));
+        case "candidateFiles": {
+          const candidates = source.candidates(context);
+          checked.push(`${source.label} (${describeLocations(candidates)})`);
+          for (const candidate of candidates) {
+            if (yield* isExecutableCommandFile(candidate, context.platform)) {
+              return candidate;
+            }
           }
           break;
         }
 
-        case "standardLocations": {
-          const candidates = source.candidates(context);
-          checked.push(`${source.label} (${describeCandidates(candidates)})`);
-          for (const candidate of candidates) {
-            if (yield* isExecutableFile(candidate, context.platform)) {
-              return candidate;
-            }
+        case "searchDirectories": {
+          const directories = source
+            .directories(context)
+            .filter((directory): directory is string => directory !== undefined)
+            .map((directory) => resolveUserPath(directory, context.homeDir, context.platform));
+          if (directories.length === 0) {
+            break;
+          }
+          checked.push(
+            `${source.label ?? "search directories"} (${describeLocations(directories)})`,
+          );
+          const resolved = yield* resolveDirectoryCommand(
+            descriptor.command,
+            directories,
+            systemCommands,
+            env,
+          );
+          if (resolved !== null) {
+            return resolved;
+          }
+          if (source.policy === "required") {
+            return yield* Effect.fail(missingToolError(descriptor, checked, { directories }));
           }
           break;
         }
@@ -250,13 +244,17 @@ export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
   installHint: "Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
   sources: [
     { kind: "environment", variable: "OPENDUCKTOR_OPENCODE_BINARY" },
-    { kind: "bundledToolBin", policy: "required" },
     {
-      candidates: (context) => [
-        toolPathInDirectory(context, joinToolPath(context.homeDir, ".opencode", "bin"), "opencode"),
-      ],
-      kind: "standardLocations",
-      label: "standard install locations",
+      directories: (context) => [context.bundledToolBinDirs.opencode],
+      kind: "searchDirectories",
+      label: "bundled tool directory",
+      policy: "required",
+    },
+    {
+      directories: (context) => [joinToolPath(context, context.homeDir, ".opencode", "bin")],
+      kind: "searchDirectories",
+      label: "standard install directories",
+      policy: "candidate",
     },
     { kind: "path" },
   ],
@@ -268,20 +266,29 @@ export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
   installHint: "Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
   sources: [
     { kind: "environment", variable: "OPENDUCKTOR_CODEX_BINARY" },
-    { kind: "bundledToolBin", policy: "required" },
+    {
+      directories: (context) => [context.bundledToolBinDirs.codex],
+      kind: "searchDirectories",
+      label: "bundled tool directory",
+      policy: "required",
+    },
     {
       candidates: (context) => {
         if (context.platform !== "darwin") {
           return [];
         }
         const appPath = ["Codex.app", "Contents", "Resources", "codex"];
-        const applicationsDir = resolveUserPath(context.applicationsDir, context.homeDir);
+        const applicationsDir = resolveUserPath(
+          context.applicationsDir,
+          context.homeDir,
+          context.platform,
+        );
         return [
-          joinToolPath(applicationsDir, ...appPath),
-          joinToolPath(context.homeDir, "Applications", ...appPath),
+          joinToolPath(context, applicationsDir, ...appPath),
+          joinToolPath(context, context.homeDir, "Applications", ...appPath),
         ];
       },
-      kind: "standardLocations",
+      kind: "candidateFiles",
       label: "standard install locations",
     },
     { kind: "path" },

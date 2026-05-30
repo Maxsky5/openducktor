@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import {
-  type HostOperationError,
+  HostOperationError,
   type HostPathAccessError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import type { OpenInCommandRunner } from "./open-in-tools-adapter";
+import type {
+  SystemCommandRunOptions,
+  SystemCommandRunResult,
+} from "../../ports/system-command-port";
 
 const MAX_OPEN_IN_ICON_DIMENSION = 256;
 
@@ -16,19 +19,36 @@ type ResolveMacOsAppIconInput = {
   appLabel: string;
   appPath: string;
   pathExists: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
-  runner: OpenInCommandRunner;
+  runCommand: RunOpenInCommand;
 };
+
+type RunOpenInCommand = (
+  command: string,
+  args: string[],
+  options?: SystemCommandRunOptions,
+) => Effect.Effect<SystemCommandRunResult, HostOperationError>;
 
 const iconFileName = (value: string): string => (value.endsWith(".icns") ? value : `${value}.icns`);
 
 const runIconCommand = (
-  runner: OpenInCommandRunner,
+  runCommand: RunOpenInCommand,
   program: string,
   args: string[],
   operation: string,
 ) =>
-  runner(program, args).pipe(
+  runCommand(program, args).pipe(
     Effect.mapError((cause) => toHostOperationError(cause, operation, { program, args })),
+    Effect.flatMap((result) =>
+      result.ok
+        ? Effect.succeed(result)
+        : Effect.fail(
+            new HostOperationError({
+              operation,
+              message: `Command ${program} exited unsuccessfully.`,
+              details: { program, args, stderr: result.stderr },
+            }),
+          ),
+    ),
   );
 
 const readDirectoryEntries = (directoryPath: string, operation: string) =>
@@ -52,7 +72,7 @@ const removePath = (targetPath: string, recursive = false) =>
 const readBundleIconFile = ({
   appPath,
   pathExists,
-  runner,
+  runCommand,
 }: Omit<ResolveMacOsAppIconInput, "appLabel">): Effect.Effect<
   string | null,
   HostOperationError | HostPathAccessError
@@ -64,7 +84,7 @@ const readBundleIconFile = ({
     }
 
     const output = yield* runIconCommand(
-      runner,
+      runCommand,
       "defaults",
       ["read", infoPlistPath, "CFBundleIconFile"],
       "openInTools.icon.readBundleIconFile",
@@ -75,14 +95,14 @@ const readBundleIconFile = ({
 
 const resolveMetadataIconFile = ({
   appPath,
-  runner,
-}: Pick<ResolveMacOsAppIconInput, "appPath" | "runner">): Effect.Effect<
+  runCommand,
+}: Pick<ResolveMacOsAppIconInput, "appPath" | "runCommand">): Effect.Effect<
   string | null,
   HostOperationError
 > =>
   Effect.gen(function* () {
     const output = yield* runIconCommand(
-      runner,
+      runCommand,
       "mdls",
       ["-name", "kMDItemIconFile", "-raw", appPath],
       "openInTools.icon.resolveMetadataIconFile",
@@ -109,7 +129,7 @@ const findFirstResourceIcon = (
 const resolveAppIconPath = ({
   appPath,
   pathExists,
-  runner,
+  runCommand,
 }: Omit<ResolveMacOsAppIconInput, "appLabel">): Effect.Effect<
   string | null,
   HostOperationError | HostPathAccessError
@@ -120,10 +140,10 @@ const resolveAppIconPath = ({
     }
 
     const resourcesPath = path.posix.join(appPath, "Contents", "Resources");
-    const bundleIconFile = yield* readBundleIconFile({ appPath, pathExists, runner });
+    const bundleIconFile = yield* readBundleIconFile({ appPath, pathExists, runCommand });
     const metadataIconFile = bundleIconFile
       ? null
-      : yield* resolveMetadataIconFile({ appPath, runner });
+      : yield* resolveMetadataIconFile({ appPath, runCommand });
     const iconFile =
       bundleIconFile ?? metadataIconFile ?? (yield* findFirstResourceIcon(resourcesPath));
     if (!iconFile) {
@@ -205,15 +225,15 @@ const resolveBestIconsetRepresentation = (
 const extractBestPngFromIconset = ({
   appLabel,
   iconPath,
-  runner,
-}: Pick<ResolveMacOsAppIconInput, "appLabel" | "runner"> & {
+  runCommand,
+}: Pick<ResolveMacOsAppIconInput, "appLabel" | "runCommand"> & {
   iconPath: string;
 }): Effect.Effect<Buffer | null, HostOperationError> => {
   const iconsetDirectory = tempIconOutputPath(appLabel, "iconset");
 
   return Effect.gen(function* () {
     yield* runIconCommand(
-      runner,
+      runCommand,
       "iconutil",
       ["-c", "iconset", iconPath, "-o", iconsetDirectory],
       "openInTools.icon.extractIconset",
@@ -231,15 +251,15 @@ const extractBestPngFromIconset = ({
 const convertIconToPng = ({
   appLabel,
   iconPath,
-  runner,
-}: Pick<ResolveMacOsAppIconInput, "appLabel" | "runner"> & {
+  runCommand,
+}: Pick<ResolveMacOsAppIconInput, "appLabel" | "runCommand"> & {
   iconPath: string;
 }): Effect.Effect<Buffer | null, HostOperationError> => {
   const outputPath = tempIconOutputPath(appLabel, "png");
 
   return Effect.gen(function* () {
     yield* runIconCommand(
-      runner,
+      runCommand,
       "sips",
       ["-s", "format", "png", "-Z", "256", iconPath, "--out", outputPath],
       "openInTools.icon.convertIconToPng",

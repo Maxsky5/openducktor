@@ -13,7 +13,7 @@ describe("runtime distribution factories", () => {
   test("trims artifact launcher paths at construction time", () => {
     expect(
       createArtifactRuntimeDistribution({
-        bundledToolBinDir: " /app/resources/bin ",
+        bundledToolBinDirs: { opencode: " /app/resources/bin " },
         mcpLauncher: {
           kind: "bunScript",
           bunExecutablePath: " /usr/local/bin/bun ",
@@ -22,7 +22,7 @@ describe("runtime distribution factories", () => {
       }),
     ).toMatchObject({
       mode: "artifact",
-      bundledToolBinDir: "/app/resources/bin",
+      bundledToolBinDirs: { opencode: "/app/resources/bin" },
       mcpLauncher: {
         kind: "bunScript",
         bunExecutablePath: "/usr/local/bin/bun",

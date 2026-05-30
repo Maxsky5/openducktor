@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import net from "node:net";
 import { Clock, Effect } from "effect";
+import { createProcessCommandLaunch } from "../../adapters/process/process-command-launch";
 import { processIsAlive } from "../../adapters/process/process-tree";
 import { toHostPathStatError } from "../../effect/host-errors";
 import {
@@ -73,9 +74,11 @@ export const runDoltAllowFailure = (
   Effect.async<boolean>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(doltCommand, args, {
-        env,
+      const launch = createProcessCommandLaunch(doltCommand, args, env, process.platform);
+      child = spawn(launch.command, launch.args, {
+        env: launch.env,
         stdio: ["ignore", "ignore", "ignore"],
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
     } catch {
       resume(Effect.succeed(false));
@@ -111,10 +114,17 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
   Effect.async<BeadsCommandResult, SharedDoltServerError>((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(command, args, {
+      const launch = createProcessCommandLaunch(
+        command,
+        args,
+        env ?? process.env,
+        process.platform,
+      );
+      child = spawn(launch.command, launch.args, {
         cwd,
-        env,
+        env: launch.env,
         stdio: ["ignore", "pipe", "pipe"],
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
     } catch (cause) {
       resume(Effect.fail(toSharedDoltServerError(cause, "shared-dolt.run-command")));

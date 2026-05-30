@@ -43,7 +43,7 @@ describe("resolveElectronRuntimeDistribution", () => {
         executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
       },
     });
-    expect("bundledToolBinDir" in distribution).toBe(false);
+    expect("bundledToolBinDirs" in distribution).toBe(false);
     expect(resolveElectronMcpSidecarPath({ platform: "darwin", resourcesPath })).toBe(
       join(resourcesPath, "bin", "openducktor-mcp"),
     );

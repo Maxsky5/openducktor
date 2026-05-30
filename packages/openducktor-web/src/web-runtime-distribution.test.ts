@@ -50,7 +50,7 @@ describe("resolveWebRuntimeDistribution", () => {
         scriptPath: mcpEntrypoint,
       },
     });
-    expect("bundledToolBinDir" in distribution).toBe(false);
+    expect("bundledToolBinDirs" in distribution).toBe(false);
   });
 
   test("uses the current Bun executable for the npm package MCP launcher by default", () => {

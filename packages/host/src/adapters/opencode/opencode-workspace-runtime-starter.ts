@@ -16,6 +16,7 @@ import type {
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -24,7 +25,6 @@ import {
   waitForChildProcessClose,
 } from "../process/process-tree";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
-import { createSystemCommandLaunch } from "../system/system-command-runner";
 import { canConnect, pickFreePort } from "./opencode-local-port";
 
 export type OpenCodeMcpBridgeConnection = {
@@ -211,10 +211,14 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),
         ),
       );
-      const command = createSystemCommandLaunch(
+      const runtimeEnv = {
+        ...processEnv,
+        OPENCODE_CONFIG_CONTENT: configContent,
+      };
+      const command = createProcessCommandLaunch(
         binary,
         ["serve", "--hostname", "127.0.0.1", "--port", port.toString()],
-        processEnv,
+        runtimeEnv,
         platform,
       );
       const runtimeScope = yield* Scope.make();
@@ -224,12 +228,9 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           spawn(command.command, command.args, {
             cwd: input.workingDirectory,
             detached: shouldStartDetachedProcessGroup(platform),
-            env: {
-              ...processEnv,
-              OPENCODE_CONFIG_CONTENT: configContent,
-            },
+            env: command.env,
             stdio: ["ignore", "pipe", "pipe"],
-            windowsVerbatimArguments: command.windowsVerbatimArguments === true,
+            windowsVerbatimArguments: command.windowsVerbatimArguments,
           }) as OpenCodeChildProcess,
         catch: (cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.spawn", {

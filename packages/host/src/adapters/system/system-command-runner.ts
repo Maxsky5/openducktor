@@ -1,103 +1,38 @@
 import { spawn } from "node:child_process";
-import { constants } from "node:fs";
-import { access, stat } from "node:fs/promises";
-import { extname, join } from "node:path";
 import { Effect, Layer } from "effect";
-import {
-  HostOperationError,
-  toHostOperationError,
-  toHostPathStatError,
-} from "../../effect/host-errors";
+import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import {
   type SystemCommandPort,
   SystemCommandPortTag,
+  type SystemCommandResolveOptions,
   type SystemCommandRunResult,
 } from "../../ports/system-command-port";
 import { createProcessCommandLaunch } from "../process/process-command-launch";
+import { resolveProcessCommandPath } from "../process/process-command-resolution";
+import { normalizeProcessEnvironment } from "../process/process-environment";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
-const WINDOWS_DEFAULT_PATHEXT = [".EXE", ".CMD", ".BAT", ".COM"];
 
 export type CreateSystemCommandRunnerInput = {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
 };
 
-const pathDelimiterForPlatform = (platform: NodeJS.Platform): string =>
-  platform === "win32" ? ";" : ":";
-
-const commandHasPath = (command: string): boolean =>
-  command.includes("/") || command.includes("\\");
-
-const hasCommandExtension = (command: string): boolean => extname(command).length > 0;
-
-const windowsPathExt = (env: NodeJS.ProcessEnv): string[] => {
-  const configured = env.PATHEXT;
-  if (configured === undefined) {
-    return WINDOWS_DEFAULT_PATHEXT;
-  }
-
-  const extensions = configured
-    .split(";")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => (entry.startsWith(".") ? entry : `.${entry}`));
-
-  return extensions.length > 0 ? extensions : WINDOWS_DEFAULT_PATHEXT;
-};
-
-const commandFileNames = (
+const resolveCommandPath = (
   command: string,
+  {
+    env,
+    searchPath,
+  }: {
+    env: NodeJS.ProcessEnv;
+    searchPath?: readonly string[] | undefined;
+  },
   platform: NodeJS.Platform,
-  env: NodeJS.ProcessEnv,
-): string[] => {
-  if (platform !== "win32" || hasCommandExtension(command) || commandHasPath(command)) {
-    return [command];
-  }
-
-  return windowsPathExt(env).map((extension) => `${command}${extension}`);
-};
-
-const canExecute = (candidate: string, platform: NodeJS.Platform) =>
-  Effect.gen(function* () {
-    if (platform === "win32") {
-      const file = yield* Effect.tryPromise({
-        try: () => stat(candidate),
-        catch: (cause) => toHostPathStatError(cause, "systemCommand.canExecute", candidate),
-      });
-      return file.isFile();
-    }
-
-    yield* Effect.tryPromise({
-      try: () => access(candidate, constants.X_OK),
-      catch: (cause) => toHostPathStatError(cause, "systemCommand.canExecute", candidate),
-    });
-    return true;
-  }).pipe(
-    Effect.catchTags({
-      HostPathAccessError: () => Effect.succeed(false),
-      HostPathNotFoundError: () => Effect.succeed(false),
-    }),
+) =>
+  resolveProcessCommandPath(
+    command,
+    searchPath === undefined ? { env, platform } : { env, platform, searchPath },
   );
-
-const resolveCommandPath = (command: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform) =>
-  Effect.gen(function* () {
-    if (commandHasPath(command)) {
-      return (yield* canExecute(command, platform)) ? command : null;
-    }
-
-    const pathValue = env.PATH ?? "";
-    for (const directory of pathValue.split(pathDelimiterForPlatform(platform)).filter(Boolean)) {
-      for (const fileName of commandFileNames(command, platform, env)) {
-        const candidate = join(directory, fileName);
-        if (yield* canExecute(candidate, platform)) {
-          return candidate;
-        }
-      }
-    }
-
-    return null;
-  });
 
 const firstNonEmptyLine = (value: string): string | null =>
   value
@@ -105,30 +40,23 @@ const firstNonEmptyLine = (value: string): string | null =>
     .map((line) => line.trim())
     .find(Boolean) ?? null;
 
-export const createSystemCommandLaunch = (
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-) => {
-  const envComSpec = env.ComSpec?.trim();
-  const processComSpec = process.env.ComSpec?.trim();
-  const launchEnv = envComSpec || !processComSpec ? env : { ...env, ComSpec: processComSpec };
-  return createProcessCommandLaunch(command, args, launchEnv, platform);
-};
-
 export const createSystemCommandRunner = ({
-  env = process.env,
+  env: inputEnv = process.env,
   platform = process.platform,
 }: CreateSystemCommandRunnerInput = {}): SystemCommandPort => {
+  const env = normalizeProcessEnvironment(inputEnv, platform);
   const runCommandAllowFailure: SystemCommandPort["runCommandAllowFailure"] = (
     command,
     args,
     options = {},
   ) =>
     Effect.gen(function* () {
-      const commandEnv = { ...env, ...options.env };
-      const resolvedCommand = yield* resolveCommandPath(command, commandEnv, platform).pipe(
+      const commandEnv = normalizeProcessEnvironment({ ...env, ...options.env }, platform);
+      const resolvedCommand = yield* resolveCommandPath(
+        command,
+        { env: commandEnv },
+        platform,
+      ).pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "systemCommand.resolveCommandPath", {
             command,
@@ -136,21 +64,25 @@ export const createSystemCommandRunner = ({
           }),
         ),
       );
-      const launch = createSystemCommandLaunch(
-        resolvedCommand ?? command,
-        args,
-        commandEnv,
-        platform,
-      );
+      if (resolvedCommand === null) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "systemCommand.resolveCommandPath",
+            message: `Command ${command} not found.`,
+            details: { command, cwd: options.cwd },
+          }),
+        );
+      }
+      const launch = createProcessCommandLaunch(resolvedCommand, args, commandEnv, platform);
 
       return yield* Effect.async<SystemCommandRunResult, HostOperationError>((resume, signal) => {
         let child: ReturnType<typeof spawn>;
         try {
           child = spawn(launch.command, launch.args, {
             cwd: options.cwd,
-            env: commandEnv,
+            env: launch.env,
             stdio: ["ignore", "pipe", "pipe"],
-            windowsVerbatimArguments: launch.windowsVerbatimArguments === true,
+            windowsVerbatimArguments: launch.windowsVerbatimArguments,
           });
         } catch (error) {
           resume(
@@ -244,16 +176,13 @@ export const createSystemCommandRunner = ({
     });
 
   return {
-    resolveCommandPath(command, commandEnv = env) {
-      return resolveCommandPath(command, commandEnv, platform);
-    },
-    requiredCommandError(command) {
-      return Effect.gen(function* () {
-        const resolved = yield* resolveCommandPath(command, env, platform);
-        return resolved === null
-          ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
-          : null;
-      });
+    resolveCommandPath(command, options?: SystemCommandResolveOptions) {
+      const commandEnv = normalizeProcessEnvironment(options?.env ?? env, platform);
+      return resolveCommandPath(
+        command,
+        { env: commandEnv, searchPath: options?.searchPath },
+        platform,
+      );
     },
     versionCommand(command, args, options) {
       return Effect.gen(function* () {

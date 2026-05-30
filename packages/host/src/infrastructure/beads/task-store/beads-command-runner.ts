@@ -2,6 +2,7 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { Effect } from "effect";
 import type { BeadsCliContext } from "../../../adapters/beads/beads-cli-context";
+import { createProcessCommandLaunch } from "../../../adapters/process/process-command-launch";
 import {
   HostOperationError,
   HostValidationError,
@@ -71,12 +72,20 @@ const spawnBdProcess = (
   cliContext: BeadsCliContext,
 ): Effect.Effect<BdChildProcess, TaskStoreError> =>
   Effect.try({
-    try: () =>
-      spawn(cliContext.tools.beads, args, {
+    try: () => {
+      const launch = createProcessCommandLaunch(
+        cliContext.tools.beads,
+        args,
+        cliContext.env,
+        process.platform,
+      );
+      return spawn(launch.command, launch.args, {
         cwd: cliContext.workingDir,
-        env: cliContext.env,
+        env: launch.env,
         stdio: ["ignore", "pipe", "pipe"],
-      }),
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
+      });
+    },
     catch: (cause) => toBeadsSpawnError(cause, args, repoPath),
   });
 

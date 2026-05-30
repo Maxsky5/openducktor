@@ -444,9 +444,9 @@ describe("createTaskService pull requests", () => {
         },
       }),
       systemCommands: createSystemCommandPort({
-        requiredCommandError(command) {
-          calls.push({ type: "requiredCommand", command });
-          return Effect.succeed(null);
+        resolveCommandPath(command) {
+          calls.push({ type: "resolveCommand", command });
+          return Effect.succeed(command);
         },
         versionCommand() {
           return Effect.dieMessage("unexpected version command");
@@ -1235,14 +1235,14 @@ describe("createTaskService pull requests", () => {
         ]),
       }),
     );
-    const requiredGhChecks = calls.filter(
+    const resolvedGhChecks = calls.filter(
       (call) =>
         typeof call === "object" &&
         call !== null &&
-        (call as { type?: unknown }).type === "requiredCommand" &&
+        (call as { type?: unknown }).type === "resolveCommand" &&
         (call as { command?: unknown }).command === "gh",
     );
-    expect(requiredGhChecks).toHaveLength(1);
+    expect(resolvedGhChecks).toHaveLength(1);
     expect(calls).toContainEqual({
       type: "setPullRequest",
       input: {
@@ -2656,7 +2656,7 @@ describe("createTaskService pull requests", () => {
         }).repoPullRequestSync({ repoPath: "/repo" }),
       ),
     ).resolves.toEqual({ ok: false });
-    expect(calls).toEqual([{ type: "requiredCommand", command: "gh" }]);
+    expect(calls).toEqual([{ type: "resolveCommand", command: "gh" }]);
   });
   test("unlinks a pull request after validating task state and metadata", async () => {
     const calls: unknown[] = [];

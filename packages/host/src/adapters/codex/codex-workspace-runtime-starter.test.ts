@@ -50,9 +50,6 @@ const createSystemCommands = (): SystemCommandPort => ({
   resolveCommandPath(command) {
     return Effect.succeed(command);
   },
-  requiredCommandError() {
-    return Effect.succeed(null);
-  },
   versionCommand() {
     return Effect.succeed("codex 1.0.0");
   },

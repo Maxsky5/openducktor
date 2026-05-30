@@ -1,9 +1,12 @@
 import { HostValidationError } from "../../effect/host-errors";
+import { normalizeProcessEnvironment } from "./process-environment";
+import { buildWindowsBatchCommandLine } from "./process-windows-command-line";
 
-type ProcessCommandLaunchPlan = {
+export type ProcessCommandLaunchPlan = {
   command: string;
   args: string[];
-  windowsVerbatimArguments?: boolean;
+  env: NodeJS.ProcessEnv;
+  windowsVerbatimArguments: boolean;
 };
 
 type ParsedProcessCommand = {
@@ -20,15 +23,19 @@ export const createProcessCommandLaunch = (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ): ProcessCommandLaunchPlan => {
+  const launchEnv = normalizeProcessEnvironment(env, platform);
+
   if (!isWindowsCommandScript(command, platform)) {
-    return { command, args };
+    return { command, args, env: launchEnv, windowsVerbatimArguments: false };
   }
 
-  const windowsCommandShell = env.ComSpec?.trim() || "cmd.exe";
+  const windowsCommandShell = launchEnv.ComSpec?.trim() || "cmd.exe";
 
   return {
     command: windowsCommandShell,
-    args: ["/d", "/c", "call", command, ...args],
+    args: ["/d", "/v:off", "/s", "/c", buildWindowsBatchCommandLine(command, args)],
+    env: launchEnv,
+    windowsVerbatimArguments: true,
   };
 };
 

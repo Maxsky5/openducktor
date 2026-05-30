@@ -77,14 +77,14 @@ type TaskStorePort = Partial<RealTaskStorePort>;
 type TaskActivityGuardPort = RealTaskActivityGuardPort;
 const createSettingsConfigPort = (port: SettingsConfigPort): SettingsConfigPort =>
   port as unknown as SettingsConfigPort;
-const createSystemCommandPort = (port: SystemCommandPort): SystemCommandPort =>
-  port as unknown as SystemCommandPort;
-const defaultSystemCommands = createSystemCommandPort({
-  resolveCommandPath: (command) => Effect.succeed(command),
-  requiredCommandError: () => Effect.succeed(null),
-  versionCommand: () => Effect.succeed(null),
-  runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
-});
+const createSystemCommandPort = (port: Partial<SystemCommandPort>): SystemCommandPort =>
+  ({
+    resolveCommandPath: (command: string) => Effect.succeed(command),
+    versionCommand: () => Effect.succeed(null),
+    runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
+    ...port,
+  }) as unknown as SystemCommandPort;
+const defaultSystemCommands = createSystemCommandPort({});
 const createWorktreeFilePort = (port: Partial<WorktreeFilePort>): WorktreeFilePort =>
   ({
     ensureDirectory: () => Effect.dieMessage("unexpected ensure directory"),
@@ -343,9 +343,6 @@ const createBuildWorkspaceSettingsService = (
   }) as unknown as WorkspaceSettingsService;
 const createBuildSystemCommands = (calls: unknown[], ok = true): SystemCommandPort =>
   createSystemCommandPort({
-    requiredCommandError() {
-      return Effect.dieMessage("unexpected required command check");
-    },
     versionCommand() {
       return Effect.dieMessage("unexpected version command");
     },
@@ -721,10 +718,8 @@ const createDirectMergeTaskWorktreeService = (
 });
 const createApprovalSystemCommands = (available = true): SystemCommandPort =>
   createSystemCommandPort({
-    requiredCommandError(command) {
-      return Effect.succeed(
-        command === "gh" && !available ? "Required command `gh` not found." : null,
-      );
+    resolveCommandPath(command) {
+      return Effect.succeed(command === "gh" && available ? command : null);
     },
     versionCommand() {
       return Effect.dieMessage("unexpected version command");
@@ -795,9 +790,9 @@ const createPullRequestDetectSystemCommands = ({
   allPayload?: string;
 }): SystemCommandPort =>
   createSystemCommandPort({
-    requiredCommandError(command) {
-      calls.push({ type: "requiredCommand", command });
-      return Effect.succeed(null);
+    resolveCommandPath(command) {
+      calls.push({ type: "resolveCommand", command });
+      return Effect.succeed(command === "gh" ? command : null);
     },
     versionCommand() {
       return Effect.dieMessage("unexpected version command");
@@ -834,9 +829,9 @@ const createPullRequestUpsertSystemCommands = ({
   payload: string;
 }): SystemCommandPort =>
   createSystemCommandPort({
-    requiredCommandError(command) {
-      calls.push({ type: "requiredCommand", command });
-      return Effect.succeed(null);
+    resolveCommandPath(command) {
+      calls.push({ type: "resolveCommand", command });
+      return Effect.succeed(command === "gh" ? command : null);
     },
     versionCommand() {
       return Effect.dieMessage("unexpected version command");
@@ -872,9 +867,9 @@ const createPullRequestSyncSystemCommands = ({
   payload: string;
 }): SystemCommandPort =>
   createSystemCommandPort({
-    requiredCommandError(command) {
-      calls.push({ type: "requiredCommand", command });
-      return Effect.succeed(available ? null : "Required command `gh` not found.");
+    resolveCommandPath(command) {
+      calls.push({ type: "resolveCommand", command });
+      return Effect.succeed(command === "gh" && available ? command : null);
     },
     versionCommand() {
       return Effect.dieMessage("unexpected version command");

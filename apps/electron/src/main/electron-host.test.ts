@@ -251,8 +251,7 @@ const createLocalAttachments = (): LocalAttachmentPort => ({
 });
 
 const createSystemCommands = (): SystemCommandPort => ({
-  requiredCommandError: (command) =>
-    Effect.succeed(command === "bd" ? "Required command `bd` not found." : null),
+  resolveCommandPath: (command) => Effect.succeed(command === "bd" ? null : command),
   versionCommand: (command) => Effect.succeed(`${command} version 1.0.0`),
   runCommandAllowFailure: (command) => {
     if (command === "gh") {

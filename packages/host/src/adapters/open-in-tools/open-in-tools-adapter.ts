@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { Effect, Layer } from "effect";
 import {
@@ -26,22 +24,8 @@ import {
   macMetadataForTool,
 } from "./open-in-tool-catalog";
 
-const execFileAsync = promisify(execFile);
-
-type CommandResult = {
-  stdout: string;
-  stderr: string;
-};
-
-export type OpenInCommandRunner = (
-  program: string,
-  args: string[],
-  options?: { cwd?: string },
-) => Effect.Effect<CommandResult, unknown>;
-
 export type CreateOpenInToolsAdapterInput = {
   platform?: NodeJS.Platform;
-  runner?: OpenInCommandRunner;
   pathExists?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
   pathIsDirectory?: (inputPath: string) => Effect.Effect<boolean, HostPathAccessError>;
   homeDirectory?: () => string;
@@ -52,16 +36,7 @@ export type CreateOpenInToolsAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;
 };
 
-const defaultRunner: OpenInCommandRunner = (program, args, options) =>
-  Effect.tryPromise({
-    try: () =>
-      execFileAsync(program, args, {
-        cwd: options?.cwd,
-        maxBuffer: 16 * 1024 * 1024,
-      }),
-    catch: (cause) =>
-      toHostOperationError(cause, "openInTools.runCommand", { program, args, cwd: options?.cwd }),
-  }).pipe(Effect.map((output) => ({ stdout: output.stdout, stderr: output.stderr })));
+type RunOpenInCommand = Pick<SystemCommandPort, "runCommandAllowFailure">["runCommandAllowFailure"];
 
 const defaultPathExists = (inputPath: string) =>
   Effect.tryPromise({
@@ -110,6 +85,7 @@ const buildLaunchArgs = (
 const buildOpenExternalUrlCommand = (
   platform: NodeJS.Platform,
   url: string,
+  env: NodeJS.ProcessEnv,
 ): { program: string; args: string[] } => {
   switch (platform) {
     case "darwin":
@@ -117,7 +93,7 @@ const buildOpenExternalUrlCommand = (
     case "linux":
       return { program: "xdg-open", args: [url] };
     case "win32":
-      return { program: "cmd", args: ["/C", "start", "", url] };
+      return { program: env.ComSpec?.trim() || "cmd.exe", args: ["/d", "/c", "start", "", url] };
     default:
       throw new HostValidationError({
         message: `Opening external URLs is not supported on ${platform}.`,
@@ -128,7 +104,6 @@ const buildOpenExternalUrlCommand = (
 
 export const createOpenInToolsAdapter = ({
   platform = process.platform,
-  runner = defaultRunner,
   pathExists = defaultPathExists,
   pathIsDirectory = defaultPathIsDirectory,
   homeDirectory = homedir,
@@ -140,28 +115,28 @@ export const createOpenInToolsAdapter = ({
       catch: (cause) => toHostPathStatError(cause, "openInTools.realpath", inputPath),
     }),
 }: CreateOpenInToolsAdapterInput = {}): OpenInToolsPort => {
-  const runOpenInCommand = (program: string, args: string[], options?: { cwd?: string }) =>
-    runner(program, args, options).pipe(
+  const runOpenInCommand: RunOpenInCommand = (command, args, options) =>
+    systemCommands.runCommandAllowFailure(command, args, options);
+  const runRequiredOpenInCommand = (program: string, args: string[], options?: { cwd?: string }) =>
+    runOpenInCommand(program, args, options).pipe(
       Effect.mapError((cause) =>
         toHostOperationError(cause, "openInTools.runCommand", { program, args, cwd: options?.cwd }),
+      ),
+      Effect.flatMap((result) =>
+        result.ok
+          ? Effect.succeed(result)
+          : Effect.fail(
+              new HostOperationError({
+                operation: "openInTools.runCommand",
+                message: `Command ${program} exited unsuccessfully.`,
+                details: { program, args, cwd: options?.cwd, stderr: result.stderr },
+              }),
+            ),
       ),
     );
   const supportedCommandMetadata = () =>
     COMMAND_OPEN_IN_TOOL_CATALOG.filter((metadata) => metadata.platforms.includes(platform));
-  const resolveCommandPath = (command: string) => {
-    if (!systemCommands.resolveCommandPath) {
-      // The port keeps command resolution optional for callers that only run known commands.
-      return Effect.fail(
-        new HostOperationError({
-          operation: "openInTools.resolveCommandPath",
-          message: "Open In command discovery requires system command resolution.",
-          details: { command, platform },
-        }),
-      );
-    }
-
-    return systemCommands.resolveCommandPath(command);
-  };
+  const resolveCommandPath = (command: string) => systemCommands.resolveCommandPath(command);
   const resolveCommandTool = (metadata: CommandOpenInToolMetadata) =>
     Effect.gen(function* () {
       for (const command of metadata.commands) {
@@ -256,7 +231,7 @@ export const createOpenInToolsAdapter = ({
       }
 
       const bundleName = bundleNameForApp(appName);
-      const output = yield* runOpenInCommand("mdfind", ["-name", bundleName]).pipe(
+      const output = yield* runRequiredOpenInCommand("mdfind", ["-name", bundleName]).pipe(
         Effect.catchAll(() => Effect.succeed(null)),
       );
       if (!output) {
@@ -300,7 +275,7 @@ export const createOpenInToolsAdapter = ({
         appLabel: metadata.label,
         appPath,
         pathExists,
-        runner,
+        runCommand: runOpenInCommand,
       });
       return {
         toolId: metadata.id,
@@ -391,7 +366,10 @@ export const createOpenInToolsAdapter = ({
           );
         }
 
-        yield* runner("open", buildLaunchArgs(metadata, appPath, directoryPath)).pipe(
+        yield* runRequiredOpenInCommand(
+          "open",
+          buildLaunchArgs(metadata, appPath, directoryPath),
+        ).pipe(
           Effect.mapError((cause) =>
             toHostOperationError(cause, "openInTools.openDirectoryInTool", {
               directoryPath,
@@ -414,27 +392,44 @@ export const createOpenInToolsAdapter = ({
     openExternalUrl(url) {
       return Effect.gen(function* () {
         const command = yield* Effect.try({
-          try: () => buildOpenExternalUrlCommand(platform, url),
+          try: () => buildOpenExternalUrlCommand(platform, url, processEnv),
           catch: (cause) => toHostOperationError(cause, "openInTools.buildOpenExternalUrlCommand"),
         });
-        yield* runner(command.program, command.args).pipe(
-          Effect.mapError((cause) =>
-            toHostOperationError(cause, "openInTools.openExternalUrl", {
-              url,
-              platform,
-              command: command.program,
-            }),
-          ),
-          Effect.mapError(
-            (error) =>
-              new HostOperationError({
-                operation: "openInTools.openExternalUrl",
-                message: `Failed to open URL in the system browser: ${error.message}`,
-                details: { url, platform, command: command.program },
-                cause: error,
+        const result = yield* systemCommands
+          .runCommandAllowFailure(command.program, command.args)
+          .pipe(
+            Effect.mapError((cause) =>
+              toHostOperationError(cause, "openInTools.openExternalUrl", {
+                url,
+                platform,
+                command: command.program,
               }),
-          ),
-        );
+            ),
+            Effect.mapError(
+              (error) =>
+                new HostOperationError({
+                  operation: "openInTools.openExternalUrl",
+                  message: `Failed to open URL in the system browser: ${error.message}`,
+                  details: { url, platform, command: command.program },
+                  cause: error,
+                }),
+            ),
+          );
+        if (!result.ok) {
+          return yield* Effect.fail(
+            new HostOperationError({
+              operation: "openInTools.openExternalUrl",
+              message: "Failed to open URL in the system browser. Command exited unsuccessfully.",
+              details: {
+                url,
+                platform,
+                command: command.program,
+                args: command.args,
+                stderr: result.stderr,
+              },
+            }),
+          );
+        }
       });
     },
   };

@@ -15,6 +15,7 @@ import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
+import { toHostOperationError } from "../../effect/host-errors";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import {
   type DevServerProcessPort,
@@ -107,8 +108,8 @@ const makeNodeHostDefaultPorts = (
         env: processEnv,
         options:
           input.runtimeDistribution.mode === "artifact" &&
-          input.runtimeDistribution.bundledToolBinDir
-            ? { bundledToolBinDir: input.runtimeDistribution.bundledToolBinDir }
+          input.runtimeDistribution.bundledToolBinDirs
+            ? { bundledToolBinDirs: input.runtimeDistribution.bundledToolBinDirs }
             : {},
         systemCommands,
       });
@@ -125,7 +126,19 @@ const makeNodeHostDefaultPorts = (
       codexTransportRegistry,
       devServerProcesses: input.devServerProcesses ?? createDevServerProcessAdapter({ processEnv }),
       filesystem: input.filesystem ?? createFilesystemAdapter(),
-      git: input.git ?? createGitCliAdapter({ processEnv }),
+      git:
+        input.git ??
+        createGitCliAdapter({
+          processEnv,
+          resolveCommand: () =>
+            toolDiscovery
+              .resolveToolPath("git")
+              .pipe(
+                Effect.mapError((cause) =>
+                  toHostOperationError(cause, "git.resolveCommand", { toolId: "git" }),
+                ),
+              ),
+        }),
       localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
       openInTools: input.openInTools ?? createOpenInToolsAdapter({ processEnv, systemCommands }),
       processEnv,

@@ -111,12 +111,6 @@ const createSystemCommandPort = ({
   const missing = new Set(missingCommands);
   const port: SystemCommandPort = {
     resolveCommandPath: (command) => Effect.succeed(missing.has(command) ? null : command),
-    requiredCommandError: (command) =>
-      Effect.succeed(
-        missing.has(command)
-          ? `Required command \`${command}\` not found. Install ${command} and ensure it is available on PATH.`
-          : null,
-      ),
     versionCommand: (command, _args, _options) =>
       Effect.succeed(
         missing.has(command) ? null : (versionForCommand?.(command) ?? `${command} version 1.0.0`),

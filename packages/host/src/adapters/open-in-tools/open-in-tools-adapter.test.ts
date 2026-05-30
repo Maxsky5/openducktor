@@ -3,42 +3,42 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
-import type { SystemCommandPort } from "../../ports/system-command-port";
+import type {
+  SystemCommandPort,
+  SystemCommandRunOptions,
+  SystemCommandRunResult,
+} from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "../system/system-command-runner";
-import { createOpenInToolsAdapter, type OpenInCommandRunner } from "./open-in-tools-adapter";
+import { createOpenInToolsAdapter } from "./open-in-tools-adapter";
 
-const createRunner = () => {
-  const calls: Array<{
-    program: string;
-    args: string[];
-  }> = [];
-  const runner: OpenInCommandRunner = (program, args) => {
-    calls.push({ program, args });
-    if (program === "mdfind" && args[1] === "Ghostty.app") {
-      return Effect.succeed({ stdout: "/Applications/Ghostty.app\n", stderr: "" });
-    }
-    return Effect.succeed({ stdout: "", stderr: "" });
-  };
-  return { calls, runner };
+type CommandLaunch = {
+  args: string[];
+  command: string;
+  options?: SystemCommandRunOptions;
 };
 
 const createSystemCommands = ({
   resolvedCommands,
+  runCommand,
   runOk = true,
   runStderr = "",
 }: {
   resolvedCommands: Record<string, string | null>;
+  runCommand?: (launch: CommandLaunch) => Effect.Effect<SystemCommandRunResult>;
   runOk?: boolean;
   runStderr?: string;
 }) => {
-  const launches: Array<{ command: string; args: string[] }> = [];
+  const launches: Array<{ args: string[]; command: string }> = [];
   const systemCommands: Pick<SystemCommandPort, "resolveCommandPath" | "runCommandAllowFailure"> = {
     resolveCommandPath(command) {
       return Effect.succeed(resolvedCommands[command] ?? null);
     },
-    runCommandAllowFailure(command, args) {
+    runCommandAllowFailure(command, args, options) {
       launches.push({ command, args });
-      return Effect.succeed({ ok: runOk, stdout: "", stderr: runStderr });
+      return (
+        runCommand?.(options === undefined ? { command, args } : { command, args, options }) ??
+        Effect.succeed({ ok: runOk, stdout: "", stderr: runStderr })
+      );
     },
   };
 
@@ -56,39 +56,39 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 
 describe("createOpenInToolsAdapter", () => {
   test("discovers installed macOS applications with bounded application icons", async () => {
-    const calls: Array<{
-      program: string;
-      args: string[];
-    }> = [];
-    const runner: OpenInCommandRunner = (program, args) =>
-      Effect.gen(function* () {
-        calls.push({ program, args });
-        if (program === "mdfind" && args[1] === "Ghostty.app") {
-          return { stdout: "/Applications/Ghostty.app\n", stderr: "" };
-        }
-        if (program === "defaults" && args[1] === "/Applications/Finder.app/Contents/Info.plist") {
-          return { stdout: "FinderIcon\n", stderr: "" };
-        }
-        if (program === "iconutil") {
-          const outputDirectory = args.at(-1);
-          if (!outputDirectory) {
-            return yield* Effect.fail(new Error("missing iconutil output directory"));
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {},
+      runCommand: ({ args, command }) =>
+        Effect.gen(function* () {
+          if (command === "mdfind" && args[1] === "Ghostty.app") {
+            return { ok: true, stdout: "/Applications/Ghostty.app\n", stderr: "" };
           }
-          yield* Effect.tryPromise(() => mkdir(outputDirectory, { recursive: true }));
-          yield* Effect.tryPromise(() => writeFile(`${outputDirectory}/icon_16x16.png`, "small"));
-          yield* Effect.tryPromise(() =>
-            writeFile(`${outputDirectory}/icon_128x128@2x.png`, "best"),
-          );
-          yield* Effect.tryPromise(() =>
-            writeFile(`${outputDirectory}/icon_512x512@2x.png`, "too-large"),
-          );
-          return { stdout: "", stderr: "" };
-        }
-        return { stdout: "", stderr: "" };
-      });
+          if (
+            command === "defaults" &&
+            args[1] === "/Applications/Finder.app/Contents/Info.plist"
+          ) {
+            return { ok: true, stdout: "FinderIcon\n", stderr: "" };
+          }
+          if (command === "iconutil") {
+            const outputDirectory = args.at(-1);
+            if (!outputDirectory) {
+              return { ok: false, stdout: "", stderr: "missing iconutil output directory" };
+            }
+            yield* Effect.promise(() => mkdir(outputDirectory, { recursive: true }));
+            yield* Effect.promise(() => writeFile(`${outputDirectory}/icon_16x16.png`, "small"));
+            yield* Effect.promise(() =>
+              writeFile(`${outputDirectory}/icon_128x128@2x.png`, "best"),
+            );
+            yield* Effect.promise(() =>
+              writeFile(`${outputDirectory}/icon_512x512@2x.png`, "too-large"),
+            );
+          }
+          return { ok: true, stdout: "", stderr: "" };
+        }),
+    });
     const port = createOpenInToolsAdapter({
       platform: "darwin",
-      runner,
+      systemCommands,
       homeDirectory: () => "/Users/dev",
       pathExists: (inputPath) =>
         Effect.succeed(
@@ -106,21 +106,24 @@ describe("createOpenInToolsAdapter", () => {
       },
       { toolId: "ghostty", iconDataUrl: null },
     ]);
-    expect(calls.some((call) => call.program === "sips")).toBe(false);
+    expect(launches.some((launch) => launch.command === "sips")).toBe(false);
   });
   test("keeps catalog discovery available when Spotlight lookup fails", async () => {
-    const runner: OpenInCommandRunner = (program) => {
-      if (program === "mdfind") {
-        return Effect.fail(new Error("Spotlight unavailable"));
-      }
-      if (program === "mdls") {
-        return Effect.succeed({ stdout: "MissingIcon\n", stderr: "" });
-      }
-      return Effect.succeed({ stdout: "", stderr: "" });
-    };
+    const { systemCommands } = createSystemCommands({
+      resolvedCommands: {},
+      runCommand: ({ command }) => {
+        if (command === "mdfind") {
+          return Effect.succeed({ ok: false, stdout: "", stderr: "Spotlight unavailable" });
+        }
+        if (command === "mdls") {
+          return Effect.succeed({ ok: true, stdout: "MissingIcon\n", stderr: "" });
+        }
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
+      },
+    });
     const port = createOpenInToolsAdapter({
       platform: "darwin",
-      runner,
+      systemCommands,
       homeDirectory: () => "/Users/dev",
       pathExists: (inputPath) => Effect.succeed(inputPath === "/Applications/Finder.app"),
       pathIsDirectory: (inputPath) => Effect.succeed(inputPath.endsWith(".app")),
@@ -130,10 +133,22 @@ describe("createOpenInToolsAdapter", () => {
     ]);
   });
   test("launches a directory with the selected app", async () => {
-    const { calls, runner } = createRunner();
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {},
+      runCommand: ({ args, command }) => {
+        if (command === "mdfind" && args[1] === "Visual Studio Code.app") {
+          return Effect.succeed({
+            ok: true,
+            stdout: "/Applications/Visual Studio Code.app\n",
+            stderr: "",
+          });
+        }
+        return Effect.succeed({ ok: true, stdout: "", stderr: "" });
+      },
+    });
     const port = createOpenInToolsAdapter({
       platform: "darwin",
-      runner,
+      systemCommands,
       homeDirectory: () => "/Users/dev",
       pathExists: (inputPath) =>
         Effect.succeed(inputPath === "/Applications/Visual Studio Code.app"),
@@ -141,8 +156,8 @@ describe("createOpenInToolsAdapter", () => {
       realpathFn: (inputPath) => Effect.succeed(inputPath),
     });
     await Effect.runPromise(port.openDirectoryInTool("/repo", "vscode"));
-    expect(calls.at(-1)).toEqual({
-      program: "open",
+    expect(launches.at(-1)).toEqual({
+      command: "open",
       args: ["-a", "/Applications/Visual Studio Code.app", "/repo"],
     });
   });
@@ -165,13 +180,34 @@ describe("createOpenInToolsAdapter", () => {
     expect(result.left).toHaveProperty("message", "Unsupported Open In tool: explorer");
   });
   test("opens external URLs with the platform browser command", async () => {
-    const { calls, runner } = createRunner();
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: { open: "/usr/bin/open" },
+    });
     const port = createOpenInToolsAdapter({
       platform: "darwin",
-      runner,
+      systemCommands,
     });
     await Effect.runPromise(port.openExternalUrl("https://example.com"));
-    expect(calls).toEqual([{ program: "open", args: ["https://example.com"] }]);
+    expect(launches).toEqual([{ command: "open", args: ["https://example.com"] }]);
+  });
+  test("opens Windows external URLs through ComSpec and system commands", async () => {
+    const { launches, systemCommands } = createSystemCommands({
+      resolvedCommands: {},
+    });
+    const port = createOpenInToolsAdapter({
+      platform: "win32",
+      processEnv: { ComSpec: String.raw`C:\Windows\System32\cmd.exe` },
+      systemCommands,
+    });
+
+    await Effect.runPromise(port.openExternalUrl("https://example.com"));
+
+    expect(launches).toEqual([
+      {
+        command: String.raw`C:\Windows\System32\cmd.exe`,
+        args: ["/d", "/c", "start", "", "https://example.com"],
+      },
+    ]);
   });
   test("rejects external URL opening on unsupported platforms", async () => {
     const port = createOpenInToolsAdapter({ platform: "aix" });

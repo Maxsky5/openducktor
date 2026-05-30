@@ -3,6 +3,8 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
+import { createProcessCommandLaunch } from "../../adapters/process/process-command-launch";
+import { normalizeProcessEnvironment } from "../../adapters/process/process-environment";
 import {
   HostOperationError,
   HostValidationError,
@@ -28,10 +30,42 @@ export type GitCommandRunner = (
   },
   GitCommandError
 >;
-export const createGitEnvironment = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
-  ...env,
+export const createGitEnvironment = (
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv => ({
+  ...normalizeProcessEnvironment(env, platform),
   GIT_TERMINAL_PROMPT: "0",
 });
+export type ResolveGitCommand = () => Effect.Effect<string, HostOperationError>;
+export type GitCommandLaunchOptions = (
+  | { command: string; resolveCommand?: never }
+  | { command?: never; resolveCommand: ResolveGitCommand }
+) & {
+  platform?: NodeJS.Platform;
+};
+
+const createGitCommandResolver = (options: GitCommandLaunchOptions): ResolveGitCommand => {
+  let cachedCommand: string | null = null;
+  return () => {
+    if (cachedCommand !== null) {
+      return Effect.succeed(cachedCommand);
+    }
+
+    const nextCommand =
+      options.resolveCommand === undefined
+        ? Effect.succeed(options.command)
+        : options.resolveCommand();
+    return nextCommand.pipe(
+      Effect.tap((resolvedCommand) =>
+        Effect.sync(() => {
+          cachedCommand = resolvedCommand;
+        }),
+      ),
+    );
+  };
+};
+
 export const runSpawnedGit = (
   workingDirectory: string,
   args: string[],
@@ -40,6 +74,8 @@ export const runSpawnedGit = (
     stdin: string;
   },
   env: NodeJS.ProcessEnv,
+  command: string,
+  platform: NodeJS.Platform,
 ): Effect.Effect<
   GitCommandResult & {
     ok: boolean;
@@ -54,9 +90,11 @@ export const runSpawnedGit = (
   >((resume, signal) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn("git", args, {
+      const launch = createProcessCommandLaunch(command, args, env, platform);
+      child = spawn(launch.command, launch.args, {
         cwd: workingDirectory,
-        env: createGitEnvironment(env),
+        env: launch.env,
+        windowsVerbatimArguments: launch.windowsVerbatimArguments,
       });
     } catch (cause) {
       resume(Effect.fail(toHostOperationError(cause, "git.spawn", { args, workingDirectory })));
@@ -145,28 +183,38 @@ export const runSpawnedGit = (
     child.on("close", onClose);
     child.stdin.end(options.stdin);
   });
-export const createDefaultGitRunner =
-  (env: NodeJS.ProcessEnv): GitCommandRunner =>
-  (workingDirectory, args, options) => {
-    if (options?.stdin !== undefined) {
-      return runSpawnedGit(
-        workingDirectory,
-        args,
-        {
-          allowFailure: options.allowFailure === true,
-          stdin: options.stdin,
-        },
-        env,
-      );
-    }
-    return Effect.gen(function* () {
+export const createDefaultGitRunner = (
+  env: NodeJS.ProcessEnv,
+  launchOptions: GitCommandLaunchOptions,
+): GitCommandRunner => {
+  const resolveCommand = createGitCommandResolver(launchOptions);
+  return (workingDirectory, args, options) =>
+    Effect.gen(function* () {
+      const platform = launchOptions.platform ?? process.platform;
+      const commandEnv = createGitEnvironment(env, platform);
+      const command = yield* resolveCommand();
+      if (options?.stdin !== undefined) {
+        return yield* runSpawnedGit(
+          workingDirectory,
+          args,
+          {
+            allowFailure: options.allowFailure === true,
+            stdin: options.stdin,
+          },
+          commandEnv,
+          command,
+          platform,
+        );
+      }
+      const launch = createProcessCommandLaunch(command, args, commandEnv, platform);
       const exit = yield* Effect.either(
         Effect.tryPromise({
           try: () =>
-            execFileAsync("git", args, {
+            execFileAsync(launch.command, launch.args, {
               cwd: workingDirectory,
-              env: createGitEnvironment(env),
+              env: launch.env,
               maxBuffer: 16 * 1024 * 1024,
+              windowsVerbatimArguments: launch.windowsVerbatimArguments,
             }),
           catch: (cause) => cause,
         }),
@@ -189,7 +237,7 @@ export const createDefaultGitRunner =
         toHostOperationError(exit.left, "git.execFile", { args, workingDirectory }),
       );
     });
-  };
+};
 export const requireNonEmpty = (value: string, label: string): string => {
   const trimmed = value.trim();
   if (!trimmed) {

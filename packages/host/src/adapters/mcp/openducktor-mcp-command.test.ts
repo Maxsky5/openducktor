@@ -14,11 +14,8 @@ import { resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 
 const createSystemCommands = (bunAvailable = true): SystemCommandPort => ({
-  requiredCommandError(command) {
-    if (command === "bun" && bunAvailable) {
-      return Effect.succeed(null);
-    }
-    return Effect.succeed(`Required command \`${command}\` not found.`);
+  resolveCommandPath(command) {
+    return Effect.succeed(command === "bun" && bunAvailable ? command : null);
   },
   versionCommand() {
     return Effect.succeed(null);
