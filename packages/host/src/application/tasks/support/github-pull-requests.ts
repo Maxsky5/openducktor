@@ -9,7 +9,7 @@ import { checkoutBranch } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../../ports/system-command-port";
-import type { ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
+import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../../ports/tool-discovery-port";
 import { parseGithubRemoteUrl } from "../../git/github-repository-detection-service";
 import {
   combinedCommandOutput,
@@ -44,23 +44,49 @@ export {
 } from "./github-pull-request-model";
 
 export type GithubCommandDependencies = {
+  resolveGithubCommand: () => Effect.Effect<ResolvedGithubCommandDependencies, ToolDiscoveryError>;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
 };
 export type GithubRepositoryDependencies = GithubCommandDependencies & {
   gitPort: GitPort;
 };
-type ResolvedGithubCommandDependencies = {
+export type ResolvedGithubCommandDependencies = {
   ghCommand: string;
   systemCommands: SystemCommandPort;
 };
 
+export const createGithubCommandDependencies = ({
+  systemCommands,
+  toolDiscovery,
+}: {
+  systemCommands: SystemCommandPort;
+  toolDiscovery: ToolDiscoveryPort;
+}): GithubCommandDependencies => {
+  let cachedCommand: ResolvedGithubCommandDependencies | null = null;
+  const resolveGithubCommand = () =>
+    cachedCommand === null
+      ? toolDiscovery.resolveToolPath("githubCli").pipe(
+          Effect.map((ghCommand): ResolvedGithubCommandDependencies => {
+            return { ghCommand, systemCommands };
+          }),
+          Effect.tap((resolvedCommand) =>
+            Effect.sync(() => {
+              cachedCommand = resolvedCommand;
+            }),
+          ),
+        )
+      : Effect.succeed(cachedCommand);
+
+  return {
+    resolveGithubCommand,
+    systemCommands,
+    toolDiscovery,
+  };
+};
+
 const resolveGithubCommandDependencies = (dependencies: GithubCommandDependencies) =>
-  dependencies.toolDiscovery.resolveToolPath("githubCli").pipe(
-    Effect.map((ghCommand): ResolvedGithubCommandDependencies => {
-      return { ghCommand, systemCommands: dependencies.systemCommands };
-    }),
-  );
+  dependencies.resolveGithubCommand();
 
 const resolveRequiredGithubCommandDependencies = (
   dependencies: GithubCommandDependencies,

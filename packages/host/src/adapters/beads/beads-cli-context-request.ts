@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
-import type { ResolveBeadsCliContextOptions } from "../../infrastructure/beads/beads-context-model";
+import type {
+  ResolveBeadsCliContextOptions,
+  ResolveBeadsCliContextRequestOptions,
+} from "../../infrastructure/beads/beads-context-model";
 import type { ResolveWorkspaceIdForRepoPath } from "../../infrastructure/beads/task-store/beads-raw-issue";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { BeadsToolPaths, SharedDoltToolPaths } from "./beads-cli-context";
@@ -37,7 +40,7 @@ export const createBeadsCliContextRequestResolver =
   }: CreateBeadsCliContextRequestResolverInput) =>
   (
     repoPath: string,
-    options: ResolveBeadsCliContextOptions = {},
+    options: ResolveBeadsCliContextRequestOptions = {},
   ): Effect.Effect<BeadsCliContextRequest, TaskStoreError> =>
     Effect.gen(function* () {
       if (isClosing()) {
@@ -49,12 +52,21 @@ export const createBeadsCliContextRequestResolver =
           ? options.workspaceId.trim()
           : null;
       const tools = yield* resolveBeadsToolPaths();
-      const sharedDoltTools =
-        options.requireSharedServer === true ? yield* resolveSharedDoltToolPaths() : undefined;
-      const cliOptions =
-        sharedDoltTools === undefined
-          ? { ...options, processEnv, tools }
-          : { ...options, processEnv, tools, sharedDoltTools };
+      const cliOptions: ResolveBeadsCliContextOptions =
+        options.requireSharedServer === true
+          ? {
+              ...options,
+              processEnv,
+              requireSharedServer: true,
+              sharedDoltTools: yield* resolveSharedDoltToolPaths(),
+              tools,
+            }
+          : {
+              ...options,
+              processEnv,
+              requireSharedServer: false,
+              tools,
+            };
       const workspaceId = configuredWorkspaceId
         ? configuredWorkspaceId
         : resolveWorkspaceIdForRepoPath

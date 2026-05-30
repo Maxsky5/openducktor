@@ -11,7 +11,10 @@ import {
   effectiveTargetBranchForTask,
   findLatestCleanupTarget,
 } from "../support/builder-worktree-cleanup";
-import { requireApprovalContextDependencies } from "../support/required-task-dependencies";
+import {
+  requireApprovalContextDependencies,
+  requireDependencies,
+} from "../support/required-task-dependencies";
 import { loadDefaultMergeMethod } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -27,14 +30,16 @@ export const createTaskApprovalContextUseCase = ({
   getApprovalContext(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
-      const dependencies = requireApprovalContextDependencies({
-        gitPort,
-        settingsConfig,
-        systemCommands,
-        toolDiscovery,
-        taskWorktreeService,
-        workspaceSettingsService,
-      });
+      const dependencies = yield* requireDependencies(() =>
+        requireApprovalContextDependencies({
+          gitPort,
+          settingsConfig,
+          systemCommands,
+          toolDiscovery,
+          taskWorktreeService,
+          workspaceSettingsService,
+        }),
+      );
 
       const current = yield* taskStore.getTask({ repoPath, taskId });
       yield* Effect.try({

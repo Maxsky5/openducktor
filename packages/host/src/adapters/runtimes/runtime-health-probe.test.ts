@@ -86,5 +86,6 @@ describe("createRuntimeHealthProbe", () => {
       "standard install locations (/missing/Applications/Codex.app/Contents/Resources/codex, /missing/home/Applications/Codex.app/Contents/Resources/codex)",
     );
     expect(health.error).toContain("PATH");
+    expect(health.error).toContain("Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.");
   });
 });

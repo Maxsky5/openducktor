@@ -219,7 +219,6 @@ export const createSystemDiagnosticsService = ({
     });
   const beadsCheck = (repoPath: string) =>
     Effect.gen(function* () {
-      const validatedRepoPath = repoPath;
       const bdTool = yield* resolveToolAvailability(toolDiscovery, "beads");
       if (bdTool.error !== null) {
         return buildBeadsCheck(repoStoreHealthForMissingCommand(bdTool.error));
@@ -229,7 +228,7 @@ export const createSystemDiagnosticsService = ({
         return buildBeadsCheck(repoStoreHealthForMissingCommand(doltTool.error));
       }
       const repoStoreHealth = yield* repoStoreDiagnostics.diagnoseRepoStore({
-        repoPath: validatedRepoPath,
+        repoPath,
         prepare: true,
       });
       return buildBeadsCheck(repoStoreHealth);

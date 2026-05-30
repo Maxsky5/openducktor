@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, posix } from "node:path";
+import { join } from "node:path";
 import { Effect } from "effect";
 import {
   HostDependencyError,
@@ -84,14 +84,13 @@ export const isExecutableFile = (candidate: string, platform: NodeJS.Platform = 
 const executableName = (command: string, platform: NodeJS.Platform): string =>
   platform === "win32" ? `${command}.exe` : command;
 
-const joinToolPath = (platform: NodeJS.Platform, ...segments: string[]): string =>
-  platform === "win32" ? join(...segments) : posix.join(...segments);
+const joinToolPath = (...segments: string[]): string => join(...segments);
 
 const toolPathInDirectory = (
   context: Pick<ToolDiscoveryContext, "platform">,
   directory: string,
   command: string,
-): string => joinToolPath(context.platform, directory, executableName(command, context.platform));
+): string => joinToolPath(directory, executableName(command, context.platform));
 
 const createToolDiscoveryContext = ({
   applicationsDir,
@@ -113,9 +112,14 @@ const resolvePathCommand = (
   Effect.gen(function* () {
     const resolved = systemCommands.resolveCommandPath?.(command, env);
     if (resolved !== undefined) {
-      return yield* resolved;
+      return yield* resolved.pipe(
+        Effect.catchTag("HostPathAccessError", () => Effect.succeed(null)),
+      );
     }
-    return (yield* systemCommands.requiredCommandError(command)) === null ? command : null;
+    const requiredError = yield* systemCommands
+      .requiredCommandError(command)
+      .pipe(Effect.catchTag("HostPathAccessError", () => Effect.succeed("unavailable")));
+    return requiredError === null ? command : null;
   });
 
 const describeCandidates = (candidates: string[]): string =>
@@ -249,11 +253,7 @@ export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
     { kind: "bundledToolBin", policy: "required" },
     {
       candidates: (context) => [
-        toolPathInDirectory(
-          context,
-          joinToolPath(context.platform, context.homeDir, ".opencode", "bin"),
-          "opencode",
-        ),
+        toolPathInDirectory(context, joinToolPath(context.homeDir, ".opencode", "bin"), "opencode"),
       ],
       kind: "standardLocations",
       label: "standard install locations",
@@ -277,8 +277,8 @@ export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = {
         const appPath = ["Codex.app", "Contents", "Resources", "codex"];
         const applicationsDir = resolveUserPath(context.applicationsDir, context.homeDir);
         return [
-          joinToolPath(context.platform, applicationsDir, ...appPath),
-          joinToolPath(context.platform, context.homeDir, "Applications", ...appPath),
+          joinToolPath(applicationsDir, ...appPath),
+          joinToolPath(context.homeDir, "Applications", ...appPath),
         ];
       },
       kind: "standardLocations",
