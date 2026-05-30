@@ -6,7 +6,7 @@ export const normalizePlanSubtasks = (inputs: PlanSubtaskInput[]): TaskCreateInp
   inputs.map((input) => {
     const title = input.title.trim();
     if (!title) {
-      throw new TaskPolicyError("Subtask proposals require a non-empty title.");
+      throw TaskPolicyError.policy("Subtask proposals require a non-empty title.");
     }
 
     const issueType = input.issueType ?? "task";
@@ -27,14 +27,14 @@ export const validatePlanSubtaskRules = (
 ): void => {
   if (task.issueType !== "epic") {
     if (planSubtasks.length > 0) {
-      throw new TaskPolicyError("Only epics can receive subtask proposals during planning.");
+      throw TaskPolicyError.policy("Only epics can receive subtask proposals during planning.");
     }
     return;
   }
 
   const hasDirectSubtasks = allTasks.some((entry) => entry.parentId === task.id);
   if (!hasDirectSubtasks && planSubtasks.length === 0) {
-    throw new TaskPolicyError("Epic plans must provide at least one direct subtask proposal.");
+    throw TaskPolicyError.policy("Epic plans must provide at least one direct subtask proposal.");
   }
 };
 
@@ -45,7 +45,7 @@ export const validateEpicSubtasksReplaceable = (task: TaskCard, allTasks: TaskCa
     .map((entry) => `${entry.id} (${entry.status})`);
 
   if (blockedSubtasks.length > 0) {
-    throw new TaskPolicyError(
+    throw TaskPolicyError.policy(
       `Cannot replace epic subtasks while active work exists. Move subtasks to open/spec_ready/ready_for_dev first: ${blockedSubtasks.join(", ")}`,
     );
   }

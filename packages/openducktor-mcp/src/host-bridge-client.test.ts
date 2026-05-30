@@ -64,7 +64,13 @@ describe("OdtHostBridgeClient", () => {
       const url = String(input);
       if (url.endsWith("/health")) {
         return jsonResponse(
-          { error: "bridge unavailable" },
+          {
+            ok: false,
+            error: {
+              code: "ODT_HOST_BRIDGE_ERROR",
+              message: "bridge unavailable",
+            },
+          },
           { status: 503, statusText: "Service Unavailable" },
         );
       }
@@ -101,8 +107,11 @@ describe("OdtHostBridgeClient", () => {
     const fetchImpl: typeof fetch = async () => {
       return jsonResponse(
         {
-          error: "Transition not allowed for task-1 (bug): human_review -> blocked",
-          code: "TASK_TRANSITION_NOT_ALLOWED",
+          ok: false,
+          error: {
+            code: "TASK_TRANSITION_NOT_ALLOWED",
+            message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          },
         },
         { status: 400, statusText: "Bad Request" },
       );
@@ -126,12 +135,16 @@ describe("OdtHostBridgeClient", () => {
     }
   });
 
-  test("preserves uncoded host error details when wrapping bridge errors", async () => {
+  test("preserves canonical host bridge error details", async () => {
     const fetchImpl: typeof fetch = async () => {
       return jsonResponse(
         {
-          error: "Task not found: task-1",
-          details: { repoPath: "/repo", taskId: "task-1" },
+          ok: false,
+          error: {
+            code: "ODT_HOST_BRIDGE_ERROR",
+            message: "Task not found: task-1",
+            details: { repoPath: "/repo", taskId: "task-1" },
+          },
         },
         { status: 400, statusText: "Bad Request" },
       );
@@ -150,10 +163,75 @@ describe("OdtHostBridgeClient", () => {
       expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
       expect((error as Error).message).toBe("Task not found: task-1");
       expect((error as OdtToolError).details).toEqual({
+        repoPath: "/repo",
+        taskId: "task-1",
+      });
+    }
+  });
+
+  test("preserves canonical host bridge error issues", async () => {
+    const issues = [
+      {
+        path: ["workspaceId"],
+        code: "forbidden_workspace_id",
+        message: "workspaceId is not allowed in workflow-scoped tool calls.",
+      },
+    ];
+    const fetchImpl: typeof fetch = async () => {
+      return jsonResponse(
+        {
+          ok: false,
+          error: {
+            code: "ODT_WORKSPACE_SCOPE_VIOLATION",
+            message: "workspaceId is not allowed",
+            issues,
+          },
+        },
+        { status: 400, statusText: "Bad Request" },
+      );
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    try {
+      await client.call("odt_read_task", "repo", {
+        taskId: "task-1",
+      });
+      throw new Error("Expected call() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OdtToolError);
+      expect((error as OdtToolError).code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
+      expect((error as Error).message).toBe("workspaceId is not allowed");
+      expect((error as OdtToolError).issues).toEqual(issues);
+    }
+  });
+
+  test("wraps non-canonical host HTTP errors as bridge failures", async () => {
+    const fetchImpl: typeof fetch = async () => {
+      return jsonResponse(
+        { error: "legacy bridge error" },
+        { status: 400, statusText: "Bad Request" },
+      );
+    };
+
+    const client = new OdtHostBridgeClient({ baseUrl: "http://127.0.0.1:14327" }, { fetchImpl });
+
+    try {
+      await client.call("odt_build_blocked", "repo", {
+        taskId: "task-1",
+        reason: "needs a product decision",
+      });
+      throw new Error("Expected call() to reject.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(OdtToolError);
+      expect((error as OdtToolError).code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect((error as Error).message).toBe(
+        "host odt_build_blocked failed with HTTP 400 Bad Request",
+      );
+      expect((error as OdtToolError).details).toEqual({
         action: "host odt_build_blocked",
         status: 400,
         statusText: "Bad Request",
-        hostDetails: { repoPath: "/repo", taskId: "task-1" },
       });
     }
   });

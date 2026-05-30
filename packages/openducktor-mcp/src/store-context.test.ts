@@ -203,7 +203,13 @@ describe("resolveStoreContext", () => {
       const url = String(input);
       if (url.endsWith("/health")) {
         return jsonResponse(
-          { error: "host down" },
+          {
+            ok: false,
+            error: {
+              code: "ODT_HOST_BRIDGE_ERROR",
+              message: "host down",
+            },
+          },
           { status: 503, statusText: "Service Unavailable" },
         );
       }

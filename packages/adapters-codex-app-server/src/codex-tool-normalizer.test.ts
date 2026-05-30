@@ -145,6 +145,42 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("output");
   });
 
+  test("keeps file change cards out of ODT error parsing", () => {
+    const part = toStreamPart(
+      {
+        type: "fileChange",
+        id: "change-1",
+        status: "completed",
+        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@" }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: {
+                code: "TASK_POLICY_ERROR",
+                message: "This belongs to another tool surface",
+              },
+            }),
+          },
+        ],
+      },
+      "message-live",
+      "change-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        status: "completed",
+        output: "@@ -1 +1 @@",
+      }),
+    );
+    expect(part).not.toHaveProperty("error");
+  });
+
   test("parses non-patch dynamic tool string input without treating it as a patch", () => {
     const part = toStreamPart(
       {

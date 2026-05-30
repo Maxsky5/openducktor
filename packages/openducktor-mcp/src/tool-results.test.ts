@@ -5,8 +5,10 @@ import { OdtToolError, toErrorMessage, toToolError } from "./tool-results";
 describe("tool result error normalization", () => {
   test("keeps OdtToolError issues in the top-level structured error payload", () => {
     const result = toToolError(
-      new OdtToolError("ODT_WORKSPACE_SCOPE_VIOLATION", "workspaceId is not allowed", {
-        toolName: "odt_read_task",
+      new OdtToolError({
+        code: "ODT_WORKSPACE_SCOPE_VIOLATION",
+        message: "workspaceId is not allowed",
+        details: { toolName: "odt_read_task" },
         issues: [
           {
             path: ["workspaceId"],
@@ -24,13 +26,6 @@ describe("tool result error normalization", () => {
         message: "workspaceId is not allowed",
         details: {
           toolName: "odt_read_task",
-          issues: [
-            {
-              path: ["workspaceId"],
-              code: "forbidden_workspace_id",
-              message: "workspaceId is not allowed in workflow-scoped tool calls.",
-            },
-          ],
         },
         issues: [
           {

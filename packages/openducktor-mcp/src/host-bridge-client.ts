@@ -3,10 +3,9 @@ import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
   type OdtHostBridgeReady,
-  type OdtToolErrorCode,
   type OdtToolName,
   odtHostBridgeReadySchema,
-  odtToolErrorCodeSchema,
+  odtToolErrorPayloadSchema,
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
@@ -40,45 +39,6 @@ export type OdtHostBridgeClientDeps = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const READY_TOOL_NAME = "odt_mcp_ready";
-
-type BridgeErrorPayload = {
-  code?: OdtToolErrorCode;
-  details?: Record<string, unknown>;
-  message: string;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const toBridgeErrorPayload = async (
-  response: Response,
-  action: string,
-): Promise<BridgeErrorPayload> => {
-  const fallback = `${action} failed with HTTP ${response.status} ${response.statusText}`;
-  try {
-    const body = await response.json();
-    if (!isRecord(body)) {
-      return { message: fallback };
-    }
-
-    const parsedCode = odtToolErrorCodeSchema.safeParse(body.code);
-    const details = isRecord(body.details) ? body.details : undefined;
-    if (typeof body.error === "string" && body.error.trim().length > 0) {
-      return {
-        message: body.error,
-        ...(parsedCode.success ? { code: parsedCode.data } : {}),
-        ...(details ? { details } : {}),
-      };
-    }
-
-    return {
-      message: fallback,
-      ...(details ? { details } : {}),
-    };
-  } catch {
-    return { message: fallback };
-  }
-};
 
 const toCauseMessage = (error: unknown): string => {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -119,43 +79,57 @@ const parseHostResponse = <Schema extends z.ZodType>(
     return parsed.data;
   }
 
-  throw new OdtToolError(
-    "ODT_HOST_RESPONSE_INVALID",
-    `Invalid response from host ${command}: ${parsed.error.message}`,
-    { command, issues: toIssueDetails(parsed.error) },
-  );
+  throw new OdtToolError({
+    code: "ODT_HOST_RESPONSE_INVALID",
+    message: `Invalid response from host ${command}: ${parsed.error.message}`,
+    details: { command },
+    issues: toIssueDetails(parsed.error),
+  });
 };
 
 const createBridgeHttpError = async (response: Response, action: string): Promise<OdtToolError> => {
-  const payload = await toBridgeErrorPayload(response, action);
-  if (payload.code) {
-    return new OdtToolError(payload.code, payload.message, payload.details);
+  try {
+    const body = await response.json();
+    const parsedPayload = odtToolErrorPayloadSchema.safeParse(body);
+    if (parsedPayload.success) {
+      const { code, message, details, issues } = parsedPayload.data.error;
+      return new OdtToolError({ code, message, details, issues });
+    }
+  } catch {
+    // Non-JSON bridge failures are normalized below with HTTP context.
   }
 
-  return new OdtToolError("ODT_HOST_BRIDGE_ERROR", payload.message, {
-    action,
-    status: response.status,
-    statusText: response.statusText,
-    ...(payload.details ? { hostDetails: payload.details } : {}),
+  return new OdtToolError({
+    code: "ODT_HOST_BRIDGE_ERROR",
+    message: `${action} failed with HTTP ${response.status} ${response.statusText}`,
+    details: {
+      action,
+      status: response.status,
+      statusText: response.statusText,
+    },
   });
 };
 
 const createBridgeTransportError = (action: string, error: unknown): OdtToolError => {
-  return new OdtToolError("ODT_HOST_BRIDGE_ERROR", `${action} failed: ${toCauseMessage(error)}`, {
-    action,
-    causeName: error instanceof Error ? error.name : typeof error,
+  return new OdtToolError({
+    code: "ODT_HOST_BRIDGE_ERROR",
+    message: `${action} failed: ${toCauseMessage(error)}`,
+    details: {
+      action,
+      causeName: error instanceof Error ? error.name : typeof error,
+    },
   });
 };
 
 const createBridgeJsonError = (action: string, error: unknown): OdtToolError => {
-  return new OdtToolError(
-    "ODT_HOST_RESPONSE_INVALID",
-    `Invalid JSON response from ${action}: ${toCauseMessage(error)}`,
-    {
+  return new OdtToolError({
+    code: "ODT_HOST_RESPONSE_INVALID",
+    message: `Invalid JSON response from ${action}: ${toCauseMessage(error)}`,
+    details: {
       action,
       causeName: error instanceof Error ? error.name : typeof error,
     },
-  );
+  });
 };
 
 const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
@@ -163,11 +137,11 @@ const assertToolCoverage = (ready: OdtHostBridgeReady): void => {
     (toolName) => !ready.toolNames.includes(toolName),
   );
   if (missing.length > 0) {
-    throw new OdtToolError(
-      "ODT_HOST_RESPONSE_INVALID",
-      `OpenDucktor host bridge is missing required MCP tools: ${missing.join(", ")}`,
-      { missingToolNames: missing },
-    );
+    throw new OdtToolError({
+      code: "ODT_HOST_RESPONSE_INVALID",
+      message: `OpenDucktor host bridge is missing required MCP tools: ${missing.join(", ")}`,
+      details: { missingToolNames: missing },
+    });
   }
 };
 

@@ -17,7 +17,7 @@ import {
   resolveMcpBridgeDiscoveryPath,
   writeMcpBridgeDiscoveryFile,
 } from "./mcp-bridge-discovery-file";
-import { bridgeErrorPayload } from "./mcp-host-bridge-errors";
+import { bridgeErrorPayload, bridgeMessagePayload } from "./mcp-host-bridge-errors";
 
 export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
 
@@ -261,18 +261,21 @@ const createBridgeRequestHandler =
       }
 
       if (request.method !== "POST" || !request.url?.startsWith("/invoke/")) {
-        sendJson(response, 404, { error: "MCP host bridge endpoint not found." });
+        sendJson(response, 404, bridgeMessagePayload("MCP host bridge endpoint not found."));
         return;
       }
 
       const receivedToken = request.headers[APP_TOKEN_HEADER];
       if (receivedToken !== token) {
-        sendJson(response, receivedToken === undefined ? 401 : 403, {
-          error:
+        sendJson(
+          response,
+          receivedToken === undefined ? 401 : 403,
+          bridgeMessagePayload(
             receivedToken === undefined
               ? "Missing OpenDucktor web host app token."
               : "Invalid OpenDucktor web host app token.",
-        });
+          ),
+        );
         return;
       }
 
@@ -288,7 +291,11 @@ const createBridgeRequestHandler =
       }
 
       if (!workspaceScopedToolNames.has(command)) {
-        sendJson(response, 404, { error: `Unknown MCP host bridge command: ${command}` });
+        sendJson(
+          response,
+          404,
+          bridgeMessagePayload(`Unknown MCP host bridge command: ${command}`),
+        );
         return;
       }
 

@@ -226,7 +226,11 @@ describe("createMcpHostBridgeServer", () => {
         body: {},
       });
       expect(missingToken.body).toEqual({
-        error: "Missing OpenDucktor web host app token.",
+        ok: false,
+        error: {
+          code: "ODT_HOST_BRIDGE_ERROR",
+          message: "Missing OpenDucktor web host app token.",
+        },
       });
       expect(missingToken.status).toBe(401);
       const ready = await requestJson(`${connection.hostUrl}/invoke/odt_mcp_ready`, {
@@ -406,8 +410,7 @@ describe("createMcpHostBridgeServer", () => {
         },
         invoke() {
           return Effect.fail(
-            TaskPolicyError.withCode(
-              "TASK_TRANSITION_NOT_ALLOWED",
+            TaskPolicyError.transitionNotAllowed(
               "Transition not allowed for task-1 (bug): human_review -> blocked",
               { reason: "needs a product decision", taskId: "task-1" },
             ),
@@ -427,9 +430,12 @@ describe("createMcpHostBridgeServer", () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({
-        error: "Transition not allowed for task-1 (bug): human_review -> blocked",
-        code: "TASK_TRANSITION_NOT_ALLOWED",
-        details: { reason: "needs a product decision", taskId: "task-1" },
+        ok: false,
+        error: {
+          code: "TASK_TRANSITION_NOT_ALLOWED",
+          message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          details: { reason: "needs a product decision", taskId: "task-1" },
+        },
       });
     } finally {
       await Effect.runPromise(bridge.close());

@@ -1,27 +1,23 @@
-import { type OdtToolErrorCode, odtToolErrorCodeSchema } from "@openducktor/contracts";
+import { type OdtToolErrorPayload, odtToolErrorCodeSchema } from "@openducktor/contracts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export type BridgeErrorPayload = {
-  code?: OdtToolErrorCode;
-  details?: Record<string, unknown>;
-  error: string;
+export const bridgeErrorPayload = (error: unknown, message: string): OdtToolErrorPayload => {
+  const parsedCode = isRecord(error)
+    ? odtToolErrorCodeSchema.safeParse(error.code)
+    : { success: false as const };
+  const details = isRecord(error) && isRecord(error.details) ? error.details : undefined;
+
+  return {
+    ok: false,
+    error: {
+      code: parsedCode.success ? parsedCode.data : "ODT_HOST_BRIDGE_ERROR",
+      message,
+      ...(details ? { details } : {}),
+    },
+  };
 };
 
-export const bridgeErrorPayload = (error: unknown, message: string): BridgeErrorPayload => {
-  const payload: BridgeErrorPayload = { error: message };
-  if (!isRecord(error)) {
-    return payload;
-  }
-
-  const parsedCode = odtToolErrorCodeSchema.safeParse(error.code);
-  if (parsedCode.success) {
-    payload.code = parsedCode.data;
-  }
-  if (isRecord(error.details)) {
-    payload.details = error.details;
-  }
-
-  return payload;
-};
+export const bridgeMessagePayload = (message: string): OdtToolErrorPayload =>
+  bridgeErrorPayload(null, message);

@@ -152,16 +152,28 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       writeJson(
         response,
         {
-          error: "Transition not allowed for task-1 (bug): human_review -> blocked",
-          code: "TASK_TRANSITION_NOT_ALLOWED",
+          ok: false,
+          error: {
+            code: "TASK_TRANSITION_NOT_ALLOWED",
+            message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          },
         },
         400,
       );
       return;
     }
 
-    response.statusCode = 404;
-    response.end(JSON.stringify({ error: `Unexpected URL: ${url}` }));
+    writeJson(
+      response,
+      {
+        ok: false,
+        error: {
+          code: "ODT_HOST_BRIDGE_ERROR",
+          message: `Unexpected URL: ${url}`,
+        },
+      },
+      404,
+    );
   });
 
   activeServers.add(server);
@@ -321,7 +333,7 @@ describe("MCP server tool results", () => {
           message: "workspaceId is not allowed in workflow-scoped tool calls.",
         },
       ]);
-      expect(JSON.stringify(error.details)).toContain("workspaceId");
+      expect(error.details).toEqual({ toolName: "odt_read_task" });
       expect(bridge.requests).toEqual([
         { url: "/invoke/odt_mcp_ready", body: {} },
         { url: "/invoke/odt_get_workspaces", body: {} },
@@ -400,7 +412,8 @@ describe("MCP server tool results", () => {
 
       expect(error.code).toBe("ODT_HOST_RESPONSE_INVALID");
       expect(error.message).toContain("Invalid response from host odt_read_task");
-      expect(JSON.stringify(error.details)).toContain("title");
+      expect(error.details).toEqual({ command: "odt_read_task" });
+      expect(JSON.stringify(error.issues)).toContain("title");
     } finally {
       await client.close();
     }

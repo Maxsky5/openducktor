@@ -2,7 +2,6 @@ import type { FileDiff } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentStreamPart, AgentUserMessagePart } from "@openducktor/core";
 import {
   arrayFromUnknown,
-  codexToolErrorFromObject,
   extractNumberField,
   extractOptionalObject,
   extractStringField,
@@ -15,6 +14,11 @@ import {
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
+import {
+  codexDynamicToolErrorFromResult,
+  codexFileChangeErrorFromItem,
+  codexMcpToolErrorFromResult,
+} from "./codex-tool-error-extractor";
 import {
   codexNamespacedToolName,
   type NormalizedCodexToolInvocation,
@@ -775,7 +779,7 @@ const codexFileChangeStreamParts = (
 ): AgentStreamPart[] => {
   const changes = fileChangeEntries(value);
   const diff = fileChangeDiff(changes);
-  const error = codexToolErrorFromObject(value);
+  const error = codexFileChangeErrorFromItem(value);
   return normalizedCodexToolPart({
     messageId,
     partId,
@@ -799,7 +803,7 @@ const codexMcpToolCallStreamParts = (
   const server = extractStringField(value, ["server"]);
   const tool = extractStringField(value, ["tool"]) ?? "mcp_tool";
   const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
-  const error = codexToolErrorFromObject(value.result) ?? codexToolErrorFromObject(value);
+  const error = codexMcpToolErrorFromResult(value.result, value);
   const output = codexToolResultText(value.result);
   return normalizedCodexToolPart({
     messageId,
@@ -868,7 +872,7 @@ const codexDynamicToolCallStreamParts = (
   const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
   const resultPayload = value.contentItems ?? value.content_items ?? value.result;
   const output = codexToolResultText(resultPayload);
-  const error = codexToolErrorFromObject(resultPayload) ?? codexToolErrorFromObject(value);
+  const error = codexDynamicToolErrorFromResult(resultPayload, value);
   const success = typeof value.success === "boolean" ? value.success : true;
   const failed = !success || error !== null;
   return normalizedCodexToolPart({
