@@ -14,25 +14,42 @@ enableReactActEnvironment();
 
 const actualTaskDetailsSheetModule = await import("./task-details-sheet");
 
-const taskDetailsSheetRenderMock = mock(
-  (_props: {
-    activeWorkspace?: { workspaceId: string; workspaceName: string; repoPath: string } | null;
-    task: TaskCard | null;
-    allTasks: TaskCard[];
-    taskSessions: KanbanTaskSession[];
-    hasActiveSession: boolean;
-    open: boolean;
-    workflowActionsEnabled?: boolean;
-    onOpenChange: (open: boolean) => void;
-  }) => null,
-);
+type TaskDetailsSheetRenderProps = {
+  activeWorkspace?: { workspaceId: string; workspaceName: string; repoPath: string } | null;
+  task: TaskCard | null;
+  allTasks: TaskCard[];
+  taskSessions: KanbanTaskSession[];
+  hasActiveSession: boolean;
+  open: boolean;
+  workflowActionsEnabled?: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+type TaskDetailsSheetControllerComponent =
+  typeof import("./task-details-sheet-controller").TaskDetailsSheetController;
+
+const activeWorkspace = {
+  workspaceId: "workspace-a",
+  workspaceName: "Workspace A",
+  repoPath: "/repo-a",
+};
+
+const taskDetailsSheetRenderMock = mock((_props: TaskDetailsSheetRenderProps) => null);
+
+async function restoreTaskDetailsSheetModule(): Promise<void> {
+  await restoreMockedModules([["./task-details-sheet", async () => actualTaskDetailsSheetModule]]);
+}
+
+async function importMockedTaskDetailsSheetController(): Promise<TaskDetailsSheetControllerComponent> {
+  const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
+  await restoreTaskDetailsSheetModule();
+  return TaskDetailsSheetController;
+}
 
 describe("TaskDetailsSheetController", () => {
   beforeEach(() => {
     mock.module("./task-details-sheet", () => ({
-      TaskDetailsSheet: (
-        props: Parameters<typeof taskDetailsSheetRenderMock>[0],
-      ): ReactElement | null => {
+      TaskDetailsSheet: (props: TaskDetailsSheetRenderProps): ReactElement | null => {
         taskDetailsSheetRenderMock(props);
         return null;
       },
@@ -40,9 +57,7 @@ describe("TaskDetailsSheetController", () => {
   });
 
   afterEach(async () => {
-    await restoreMockedModules([
-      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
-    ]);
+    await restoreTaskDetailsSheetModule();
   });
 
   beforeEach(() => {
@@ -50,10 +65,7 @@ describe("TaskDetailsSheetController", () => {
   });
 
   test("opens the details sheet without rerendering the parent component", async () => {
-    const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
-    await restoreMockedModules([
-      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
-    ]);
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
 
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
@@ -63,11 +75,7 @@ describe("TaskDetailsSheetController", () => {
       parentRenderCount += 1;
       return createElement(TaskDetailsSheetController, {
         ref: controllerRef,
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        activeWorkspace,
         allTasks: [task],
         taskSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
@@ -81,11 +89,7 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task: null,
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        activeWorkspace,
         allTasks: [task],
         open: false,
         workflowActionsEnabled: false,
@@ -100,11 +104,7 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task,
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        activeWorkspace,
         allTasks: [task],
         open: true,
         workflowActionsEnabled: false,
@@ -117,10 +117,7 @@ describe("TaskDetailsSheetController", () => {
   });
 
   test("forwards pull request detection props to the task details sheet", async () => {
-    const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
-    await restoreMockedModules([
-      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
-    ]);
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
 
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1", status: "human_review" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();
@@ -130,11 +127,7 @@ describe("TaskDetailsSheetController", () => {
     const rendered = render(
       createElement(TaskDetailsSheetController, {
         ref: controllerRef,
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        activeWorkspace,
         allTasks: [task],
         taskSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
@@ -153,11 +146,7 @@ describe("TaskDetailsSheetController", () => {
     expect(taskDetailsSheetRenderMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         task,
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        activeWorkspace,
         open: true,
         onDetectPullRequest,
         onUnlinkPullRequest,
@@ -172,10 +161,7 @@ describe("TaskDetailsSheetController", () => {
   });
 
   test("closes the sheet when the selected task disappears from the task list", async () => {
-    const { TaskDetailsSheetController } = await import("./task-details-sheet-controller");
-    await restoreMockedModules([
-      ["./task-details-sheet", async () => actualTaskDetailsSheetModule],
-    ]);
+    const TaskDetailsSheetController = await importMockedTaskDetailsSheetController();
 
     const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
     const controllerRef = createRef<TaskDetailsSheetControllerHandle>();

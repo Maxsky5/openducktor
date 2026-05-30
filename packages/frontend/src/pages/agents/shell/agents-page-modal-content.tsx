@@ -13,11 +13,11 @@ export type AgentsPageModalContentModel = {
   taskDetailsLauncher: AgentStudioTaskDetailsLauncherModel;
 };
 
-export function AgentsPageModalContent({
-  model,
-}: {
+type AgentsPageModalContentProps = {
   model: AgentsPageModalContentModel;
-}): ReactElement {
+};
+
+export function AgentsPageModalContent({ model }: AgentsPageModalContentProps): ReactElement {
   const {
     mergedPullRequestModal,
     humanReviewFeedbackModal,

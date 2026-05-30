@@ -6,11 +6,13 @@ import {
 } from "./agents-page-right-panel-runtime";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 
+type AgentStudioRightPanelBridgeProps = {
+  model: AgentStudioRightPanelBridgeModel | null;
+};
+
 export function AgentStudioRightPanelBridge({
   model,
-}: {
-  model: AgentStudioRightPanelBridgeModel | null;
-}): ReactElement | null {
+}: AgentStudioRightPanelBridgeProps): ReactElement | null {
   const rightPanelRefreshWorktreeRef = useRef<GitDiffRefresh | null>(null);
 
   if (!model) {

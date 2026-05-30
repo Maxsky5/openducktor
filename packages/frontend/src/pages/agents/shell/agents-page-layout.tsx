@@ -23,6 +23,11 @@ type AgentsPageWorkspaceProps = {
   rightPanelContent: ReactNode;
 };
 
+type AgentChatPaneProps = {
+  chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
+  chatModel: ComponentProps<typeof AgentChatSurface>["model"];
+};
+
 function AgentsPageWorkspace({
   hasSelectedTask,
   chatContent,
@@ -61,10 +66,7 @@ function AgentsPageWorkspace({
 const MemoizedAgentChatPane = memo(function AgentChatPane({
   chatHeaderModel,
   chatModel,
-}: {
-  chatHeaderModel: ComponentProps<typeof AgentStudioHeader>["model"];
-  chatModel: ComponentProps<typeof AgentChatSurface>["model"];
-}): ReactElement {
+}: AgentChatPaneProps): ReactElement {
   return (
     <AgentChatSurface header={<AgentStudioHeader model={chatHeaderModel} />} model={chatModel} />
   );
