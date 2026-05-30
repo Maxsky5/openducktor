@@ -44,8 +44,8 @@ let runtimeListError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
-let actualRepoRuntimeReadiness: Awaited<typeof import("./use-repo-runtime-readiness")>;
-let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-data")>;
+let actualRepoRuntimeReadiness: Awaited<typeof import("../use-repo-runtime-readiness")>;
+let actualRuntimeData: Awaited<typeof import("../use-agent-chat-session-runtime-data")>;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 
@@ -165,7 +165,7 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement => (
   <QueryProvider useIsolatedClient>{children}</QueryProvider>
 );
 
-describe("useReadonlySessionTranscriptSurfaceModel", () => {
+describe("useSessionTranscriptSurfaceModel", () => {
   beforeAll(async () => {
     [
       actualAppStateProvider,
@@ -177,8 +177,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       import("@/state/app-state-provider"),
       import("@/state/app-state-contexts"),
       import("@/state/operations/host"),
-      import("./use-repo-runtime-readiness"),
-      import("./use-agent-chat-session-runtime-data"),
+      import("../use-repo-runtime-readiness"),
+      import("../use-agent-chat-session-runtime-data"),
     ]);
     originalHostRuntimeList = actualHostOperations.host.runtimeList;
     originalWorkspaceGetSettingsSnapshot = actualHostOperations.host.workspaceGetSettingsSnapshot;
@@ -260,7 +260,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       }),
     }));
 
-    mock.module("./use-repo-runtime-readiness", () => ({
+    mock.module("../use-repo-runtime-readiness", () => ({
       useRepoRuntimeReadiness: () => ({
         readinessState: "ready" as const,
         isReady: true,
@@ -270,7 +270,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       }),
     }));
 
-    mock.module("./use-agent-chat-session-runtime-data", () => ({
+    mock.module("../use-agent-chat-session-runtime-data", () => ({
       useAgentChatSessionRuntimeData: ({ session }: { session: AgentSessionState | null }) => ({
         session,
         runtimeDataError: null,
@@ -282,8 +282,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
-      ["./use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
-      ["./use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
+      ["../use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
+      ["../use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
     ]);
     actualHostOperations.host.runtimeList = originalHostRuntimeList;
     actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
@@ -294,11 +294,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       ...makeTranscriptSource(),
       workingDirectory: "/repo-a/worktree",
     };
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -336,11 +336,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
   test("passes explicit file diff expansion settings into the read-only chat surface", async () => {
     settingsChat = createChatSettingsFixture({ expandFileDiffsByDefault: false });
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -368,11 +368,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
   test("does not load history while the dialog is closed", async () => {
     const transcriptSource = makeTranscriptSource();
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -398,11 +398,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   test("attaches live runtime transcripts to the session event stream without polling", async () => {
     const liveTranscriptSource = makeLiveTranscriptSource();
     const pendingApproval = makePendingApproval();
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -444,11 +444,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     attachRuntimeTranscriptSession.mockImplementationOnce(async () => {
       throw new Error("attach unavailable");
     });
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -494,11 +494,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
       requestedSessionId === "session-subagent-1" ? liveSession : null,
     );
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -533,11 +533,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   test("keeps parent-observed subagent approvals on the transcript session", async () => {
     const transcriptSourceWithPendingApproval = makeTranscriptSourceWithPendingApproval();
     const pendingApproval = makePendingApproval();
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -565,11 +565,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
   test("replies to parent-observed approvals through the runtime transcript session", async () => {
     const transcriptSourceWithPendingApproval = makeTranscriptSourceWithPendingApproval();
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -605,11 +605,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   test("keeps and replies to parent-observed subagent questions through the runtime transcript session", async () => {
     const transcriptSourceWithPendingQuestion = makeTranscriptSourceWithPendingQuestion();
     const pendingQuestion = makePendingQuestion();
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -646,11 +646,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       ...makeLiveTranscriptSession(),
       externalSessionId: "session-other",
     }));
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -679,11 +679,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     readSessionHistory.mockImplementationOnce(async () => {
       throw new Error("history unavailable");
     });
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -712,11 +712,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
   test("surfaces a failed empty state when chat settings cannot load", async () => {
     settingsSnapshotError = new Error("settings unavailable");
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -746,11 +746,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   test("surfaces an unavailable state when the source runtime is not attached", async () => {
     const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeList = [];
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -784,11 +784,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   test("surfaces runtime list failures without converting them to missing runtimes", async () => {
     const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeListError = new Error("runtime registry unavailable");
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",
@@ -819,11 +819,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
   test("surfaces an ambiguous runtime attachment as unresolved and blocks approval replies", async () => {
     const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeList = [makeRuntime(), makeRuntime()];
-    const { useReadonlySessionTranscriptSurfaceModel } = await import(
-      "./use-readonly-session-transcript-surface-model"
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
     );
     const harness = createSharedHookHarness(
-      useReadonlySessionTranscriptSurfaceModel,
+      useSessionTranscriptSurfaceModel,
       {
         activeWorkspace: {
           workspaceId: "workspace-a",

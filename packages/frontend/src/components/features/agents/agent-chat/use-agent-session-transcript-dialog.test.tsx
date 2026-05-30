@@ -4,7 +4,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;

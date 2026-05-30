@@ -14,7 +14,7 @@ import {
 } from "@/state/app-state-provider";
 import { isTranscriptAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 
 export type OpenAgentSessionTranscriptRequest = {
   externalSessionId: string;

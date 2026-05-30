@@ -5,12 +5,12 @@ import type {
   AgentQuestionRequest,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
+import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import {
   mergeRuntimePendingApprovals,
   mergeRuntimePendingQuestions,
 } from "./runtime-transcript-pending-requests";
-import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import type { RuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
 
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,

@@ -9,8 +9,8 @@ import {
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
-import { useReadonlySessionTranscriptSurfaceModel } from "./use-readonly-session-transcript-surface-model";
+import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
+import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
 
 type AgentSessionTranscriptDialogProps = {
   activeWorkspace: ActiveWorkspace | null;
@@ -31,7 +31,7 @@ export function AgentSessionTranscriptDialog({
   title,
   description,
 }: AgentSessionTranscriptDialogProps): ReactElement {
-  const { model } = useReadonlySessionTranscriptSurfaceModel({
+  const { model } = useSessionTranscriptSurfaceModel({
     isOpen: open,
     activeWorkspace,
     externalSessionId,

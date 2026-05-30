@@ -6,30 +6,30 @@ import {
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useRepoRuntimeHealthWarmup } from "../use-repo-runtime-health-warmup";
+import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
+import { useAgentChatSessionRuntimeData } from "../use-agent-chat-session-runtime-data";
+import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
+import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
-import { useAgentChatSessionRuntimeData } from "./use-agent-chat-session-runtime-data";
-import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 import { useLiveTranscriptAttachment } from "./use-live-transcript-attachment";
-import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHydration } from "./use-runtime-transcript-session-hydration";
 import { useRuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
 
-type UseReadonlySessionTranscriptSurfaceModelArgs = {
+type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
   activeWorkspace: ActiveWorkspace | null;
   externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
 };
 
-export function useReadonlySessionTranscriptSurfaceModel({
+export function useSessionTranscriptSurfaceModel({
   isOpen,
   activeWorkspace,
   externalSessionId: requestedExternalSessionId,
   source,
-}: UseReadonlySessionTranscriptSurfaceModelArgs) {
+}: UseSessionTranscriptSurfaceModelArgs) {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
