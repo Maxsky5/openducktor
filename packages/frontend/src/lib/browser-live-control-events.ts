@@ -1,4 +1,5 @@
 import {
+  BROWSER_LIVE_CONNECTED_EVENT_KIND,
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@/lib/browser-live/constants";
@@ -21,7 +22,8 @@ export const isBrowserLiveControlEvent = (payload: unknown): payload is BrowserL
   const record = payload as Record<string, unknown>;
   return (
     record.__openducktorBrowserLive === true &&
-    (record.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND ||
+    (record.kind === BROWSER_LIVE_CONNECTED_EVENT_KIND ||
+      record.kind === BROWSER_LIVE_RECONNECTED_EVENT_KIND ||
       record.kind === BROWSER_LIVE_STREAM_WARNING_EVENT_KIND) &&
     (record.message === undefined || typeof record.message === "string")
   );

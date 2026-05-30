@@ -248,6 +248,30 @@ describe("local host SSE subscriptions", () => {
     unsubscribe();
   });
 
+  test("emits connected and reconnect control payloads for dev-server event subscribers", async () => {
+    const { subscribeLocalHostDevServerEvents } = await loadLocalHostTransport();
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const listener = mock(() => {});
+
+    const unsubscribe = await subscribeLocalHostDevServerEvents(listener);
+
+    FakeEventSource.instances[0]?.emit("open", "");
+    FakeEventSource.instances[0]?.emit("open", "");
+
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      __openducktorBrowserLive: true,
+      kind: "connected",
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      __openducktorBrowserLive: true,
+      kind: "reconnected",
+    });
+
+    unsubscribe();
+  });
+
   test("buildLocalAttachmentPreviewUrl normalizes the backend base URL", async () => {
     const { buildLocalAttachmentPreviewUrl } = await loadLocalHostTransport();
 

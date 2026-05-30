@@ -389,6 +389,7 @@ export function useAgentStudioDevServerPanel({
 
         unsubscribe = cleanup;
         dispatchLocalState({ type: "subscriptionReady" });
+        requestTerminalRehydrate();
       })
       .catch((error: unknown) => {
         if (!cancelled) {

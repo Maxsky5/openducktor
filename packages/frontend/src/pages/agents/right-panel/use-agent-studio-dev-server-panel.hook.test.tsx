@@ -79,6 +79,14 @@ let devServerStop = async (_repoPath: string, _taskId: string): Promise<DevServe
 let devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
   buildState();
 let devServerEventListener: ((payload: unknown) => void) | null = null;
+let subscribeDevServerEventsMock = async (
+  listener: (payload: unknown) => void,
+): Promise<() => void> => {
+  devServerEventListener = listener;
+  return () => {
+    devServerEventListener = null;
+  };
+};
 
 beforeEach(() => {
   mock.module("@/lib/host-client", () => ({
@@ -88,12 +96,8 @@ beforeEach(() => {
       devServerStop: (...args: [string, string]) => devServerStop(...args),
       devServerRestart: (...args: [string, string]) => devServerRestart(...args),
     },
-    subscribeDevServerEvents: async (listener: (payload: unknown) => void) => {
-      devServerEventListener = listener;
-      return () => {
-        devServerEventListener = null;
-      };
-    },
+    subscribeDevServerEvents: (listener: (payload: unknown) => void) =>
+      subscribeDevServerEventsMock(listener),
   }));
   devServerGetState = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
@@ -104,6 +108,12 @@ beforeEach(() => {
   devServerRestart = async (_repoPath: string, _taskId: string): Promise<DevServerGroupState> =>
     buildState();
   devServerEventListener = null;
+  subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+    devServerEventListener = listener;
+    return () => {
+      devServerEventListener = null;
+    };
+  };
 });
 
 afterEach(async () => {
@@ -1785,6 +1795,80 @@ describe("useAgentStudioDevServerPanel", () => {
       restartDeferred.resolve(refreshedState);
     } finally {
       view.unmount();
+    }
+  });
+
+  test("rehydrates full buffered terminal replay when the dev-server subscription first becomes ready", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const bufferedTerminalChunks = Array.from({ length: 300 }, (_, sequence) => ({
+      scriptId: "frontend",
+      sequence,
+      data: `subscription-gap output ${sequence}\r\n`,
+      timestamp: "2026-03-19T15:31:00.000Z",
+    }));
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+        }),
+      ],
+    });
+    const refreshedState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks,
+        }),
+      ],
+    });
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return getStateCalls === 1 ? initialState : refreshedState;
+    };
+    const subscriptionReady = createDeferred<() => void>();
+    subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+      devServerEventListener = listener;
+      return subscriptionReady.promise;
+    };
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().mode).toBe("active");
+      });
+      expect(getStateCalls).toBe(1);
+
+      subscriptionReady.resolve(() => {
+        devServerEventListener = null;
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(300);
+      });
+      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+        "subscription-gap output 0\r\n",
+      );
+      expect(harness.getLatest().selectedScriptTerminalBuffer?.entries.at(-1)?.data).toBe(
+        "subscription-gap output 299\r\n",
+      );
+      expect(getStateCalls).toBe(2);
+    } finally {
+      harness.unmount();
     }
   });
 

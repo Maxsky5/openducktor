@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  BROWSER_LIVE_CONNECTED_EVENT_KIND,
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@/lib/browser-live/constants";
@@ -15,6 +16,12 @@ describe("browser-live-control-events", () => {
   });
 
   test("accepts valid control events", () => {
+    expect(
+      isBrowserLiveControlEvent({
+        __openducktorBrowserLive: true,
+        kind: BROWSER_LIVE_CONNECTED_EVENT_KIND,
+      }),
+    ).toBe(true);
     expect(
       isBrowserLiveControlEvent({
         __openducktorBrowserLive: true,

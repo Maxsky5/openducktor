@@ -1,4 +1,5 @@
 import {
+  BROWSER_LIVE_CONNECTED_EVENT_KIND,
   BROWSER_LIVE_RECONNECTED_EVENT_KIND,
   BROWSER_LIVE_STREAM_WARNING_EVENT_KIND,
 } from "@openducktor/frontend/lib/browser-live/constants";
@@ -140,6 +141,7 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
     const eventSource = new EventSource(`${baseUrl}/${path}`, { withCredentials: true });
     const listeners = new Map<number, BrowserSseListener>();
     const shouldEmitControlEvents = CONTROL_EVENT_SSE_PATHS.has(path);
+    const shouldEmitInitialOpenControlEvent = path === "dev-server-events";
     let hasOpened = false;
     const handleMessage = (event: MessageEvent<string>): void => {
       const payload = parseSsePayload(event.data);
@@ -153,6 +155,11 @@ const subscribeSseChannel = (path: string, listener: BrowserSseListener): (() =>
       }
       if (!hasOpened) {
         hasOpened = true;
+        if (shouldEmitInitialOpenControlEvent) {
+          for (const currentListener of listeners.values()) {
+            currentListener(browserLiveControlEvent(BROWSER_LIVE_CONNECTED_EVENT_KIND));
+          }
+        }
         return;
       }
       for (const currentListener of listeners.values()) {
