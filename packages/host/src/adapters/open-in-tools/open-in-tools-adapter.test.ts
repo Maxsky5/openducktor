@@ -190,7 +190,7 @@ describe("createOpenInToolsAdapter", () => {
     await Effect.runPromise(port.openExternalUrl("https://example.com"));
     expect(launches).toEqual([{ command: "open", args: ["https://example.com"] }]);
   });
-  test("opens Windows external URLs through ComSpec and system commands", async () => {
+  test("opens Windows external URLs without routing them through cmd", async () => {
     const { launches, systemCommands } = createSystemCommands({
       resolvedCommands: {},
     });
@@ -204,8 +204,8 @@ describe("createOpenInToolsAdapter", () => {
 
     expect(launches).toEqual([
       {
-        command: String.raw`C:\Windows\System32\cmd.exe`,
-        args: ["/d", "/c", "start", "", "https://example.com"],
+        command: "explorer.exe",
+        args: ["https://example.com"],
       },
     ]);
   });

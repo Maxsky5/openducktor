@@ -73,7 +73,15 @@ export const createSystemCommandRunner = ({
           }),
         );
       }
-      const launch = createProcessCommandLaunch(resolvedCommand, args, commandEnv, platform);
+      const launch = yield* Effect.try({
+        try: () => createProcessCommandLaunch(resolvedCommand, args, commandEnv, platform),
+        catch: (cause) =>
+          toHostOperationError(cause, "systemCommand.createProcessCommandLaunch", {
+            command,
+            args,
+            cwd: options.cwd,
+          }),
+      });
 
       return yield* Effect.async<SystemCommandRunResult, HostOperationError>((resume, signal) => {
         let child: ReturnType<typeof spawn>;

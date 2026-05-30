@@ -188,7 +188,7 @@ Discovery returns typed host failures.
 | --- | --- | --- |
 | Explicit override is empty | `HostValidationError` | The user configured an invalid value. |
 | Explicit override points to a missing or non-executable file | `HostValidationError` | The configured value is wrong and should be fixed. |
-| Required bundled source is configured but missing | `HostDependencyError` | The distribution promised a tool that is absent. |
+| Required bundled source is configured but missing | `HostDependencyError` | The distribution promised to bundle a tool that is absent. |
 | No source finds the tool | `HostDependencyError` | The host dependency is unavailable. |
 
 Missing-tool errors include every checked source and the descriptor install hint.
@@ -329,14 +329,14 @@ Consumer tests should assert behavior, not reimplement the descriptor search ord
 ## Design Rules
 
 - Keep CLI discovery in `packages/host`.
-- Keep descriptors as the source of search order, install hints, and override names.
-- Keep low-level platform resolution in `process-command-resolution.ts` and `SystemCommandPort`.
-- Do not add Codex-specific, OpenCode-specific, or shell-specific discovery branches.
-- Do not fall back from an invalid explicit override to PATH.
-- Do not let packaged mode point at source worktrees.
-- Do not let the web package point at Electron or Tauri resources.
-- Do not duplicate descriptor search logic in diagnostics, runtime starters, or task workflows.
-- Do not mask missing required bundled tools with PATH lookup.
+- Use descriptors as the source of search order, install hints, and override names.
+- Leave low-level platform resolution in `process-command-resolution.ts` and `SystemCommandPort`.
+- Avoid Codex-specific, OpenCode-specific, or shell-specific discovery branches.
+- Reject invalid explicit overrides instead of falling back to PATH.
+- Keep packaged mode independent from source worktrees.
+- Keep the web package independent from Electron or Tauri resources.
+- Reuse descriptor search logic from diagnostics, runtime starters, and task workflows.
+- Treat missing required bundled tools as distribution errors, not PATH lookup misses.
 - Keep errors actionable and specific to the failed source.
 
-The goal is boring on purpose: one port, one descriptor registry, one platform command resolver, many consumers.
+The goal is deliberately boring: one port, one descriptor registry, one platform command resolver, many consumers.

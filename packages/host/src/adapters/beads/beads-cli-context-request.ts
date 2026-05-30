@@ -47,22 +47,23 @@ export const createBeadsCliContextRequestResolver =
         return yield* Effect.fail(closingError());
       }
 
+      const { workspaceId: requestedWorkspaceId, ...optionsWithoutWorkspaceId } = options;
       const configuredWorkspaceId =
-        typeof options.workspaceId === "string" && options.workspaceId.trim().length > 0
-          ? options.workspaceId.trim()
+        typeof requestedWorkspaceId === "string" && requestedWorkspaceId.trim().length > 0
+          ? requestedWorkspaceId.trim()
           : null;
       const tools = yield* resolveBeadsToolPaths();
       const cliOptions: ResolveBeadsCliContextOptions =
-        options.requireSharedServer === true
+        optionsWithoutWorkspaceId.requireSharedServer === true
           ? {
-              ...options,
+              ...optionsWithoutWorkspaceId,
               processEnv,
               requireSharedServer: true,
               sharedDoltTools: yield* resolveSharedDoltToolPaths(),
               tools,
             }
           : {
-              ...options,
+              ...optionsWithoutWorkspaceId,
               processEnv,
               requireSharedServer: false,
               tools,

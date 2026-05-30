@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { HostValidationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import {
@@ -200,5 +201,31 @@ describe("resolveOpenDucktorMcpCommand", () => {
         }),
       ),
     ).rejects.toThrow("OpenDucktor MCP workspace execution requires bun.");
+  });
+  test("preserves validation errors from Bun discovery", async () => {
+    const root = await createWorkspaceRoot();
+    const result = await Effect.runPromise(
+      Effect.either(
+        resolveOpenDucktorMcpCommand({
+          runtimeDistribution: createSourceRuntimeDistribution(root),
+          toolDiscovery: {
+            resolveToolPath: () =>
+              Effect.fail(
+                new HostValidationError({
+                  field: "OPENDUCKTOR_BUN_PATH",
+                  message: "Configured bun override is invalid.",
+                }),
+              ),
+          },
+        }),
+      ),
+    );
+
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+    expect(result.left).toBeInstanceOf(HostValidationError);
+    expect(result.left.message).toBe("Configured bun override is invalid.");
   });
 });

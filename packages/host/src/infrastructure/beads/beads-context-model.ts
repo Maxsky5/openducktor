@@ -107,7 +107,7 @@ type ResolveBeadsCliContextBaseOptions = {
   ensureSharedServer?: EnsureSharedDoltServer;
   ensureAttachment?: EnsureBeadsAttachment;
   processEnv?: NodeJS.ProcessEnv;
-  tools?: BeadsToolPaths;
+  tools: BeadsToolPaths;
   workspaceId?: string | null;
 };
 

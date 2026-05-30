@@ -1,9 +1,13 @@
 import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
-import { Effect } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import type { SystemCommandPort } from "../../ports/system-command-port";
-import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import type {
+  ToolDiscoveryError,
+  ToolDiscoveryId,
+  ToolDiscoveryPort,
+} from "../../ports/tool-discovery-port";
 import { isExecutableCommandFile } from "../process/process-command-resolution";
 
 export type ToolDiscoveryPathOptions = {
@@ -336,6 +340,14 @@ export const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDe
   opencode: OPENCODE_TOOL_DESCRIPTOR,
 };
 
+type ToolDiscoveryFlight = {
+  deferred: Deferred.Deferred<string, ToolDiscoveryError>;
+};
+
+const makeToolDiscoveryFlight = (): ToolDiscoveryFlight => ({
+  deferred: Deferred.unsafeMake(FiberId.none),
+});
+
 export const createToolDiscoveryAdapter = ({
   env = process.env,
   options = {},
@@ -344,8 +356,65 @@ export const createToolDiscoveryAdapter = ({
   env?: NodeJS.ProcessEnv;
   options?: ToolDiscoveryPathOptions;
   systemCommands: SystemCommandPort;
-}): ToolDiscoveryPort => ({
-  resolveToolPath(toolId) {
-    return discoverToolPath(TOOL_DISCOVERY_DESCRIPTORS[toolId], systemCommands, env, options);
-  },
-});
+}): ToolDiscoveryPort => {
+  const cachedPaths = new Map<ToolDiscoveryId, string>();
+  const flights = new Map<ToolDiscoveryId, ToolDiscoveryFlight>();
+
+  const completeFlight = (toolId: ToolDiscoveryId, flight: ToolDiscoveryFlight) =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        discoverToolPath(TOOL_DISCOVERY_DESCRIPTORS[toolId], systemCommands, env, options),
+      );
+      if (exit._tag === "Success") {
+        cachedPaths.set(toolId, exit.value);
+      }
+      yield* Deferred.done(flight.deferred, exit);
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (flights.get(toolId) === flight) {
+            flights.delete(toolId);
+          }
+        }),
+      ),
+    );
+
+  return {
+    resolveToolPath(toolId) {
+      const cachedPath = cachedPaths.get(toolId);
+      if (cachedPath !== undefined) {
+        return Effect.succeed(cachedPath);
+      }
+
+      return Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const reservation = yield* Effect.sync(() => {
+            const reservedCachedPath = cachedPaths.get(toolId);
+            if (reservedCachedPath !== undefined) {
+              return { _tag: "cached" as const, path: reservedCachedPath };
+            }
+
+            const existingFlight = flights.get(toolId);
+            if (existingFlight) {
+              return { _tag: "existing" as const, flight: existingFlight };
+            }
+
+            const flight = makeToolDiscoveryFlight();
+            flights.set(toolId, flight);
+            return { _tag: "created" as const, flight };
+          });
+
+          if (reservation._tag === "cached") {
+            return reservation.path;
+          }
+
+          if (reservation._tag === "created") {
+            yield* Effect.forkDaemon(completeFlight(toolId, reservation.flight));
+          }
+
+          return yield* restore(Deferred.await(reservation.flight.deferred));
+        }),
+      );
+    },
+  };
+};

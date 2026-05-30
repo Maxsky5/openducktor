@@ -337,4 +337,42 @@ describe("discoverToolPath", () => {
       "bun not found. Checked OPENDUCKTOR_BUN_PATH, PATH. Install bun and ensure it is available on PATH, or set OPENDUCKTOR_BUN_PATH.",
     );
   });
+
+  test("deduplicates concurrent discovery and caches successful tool paths", async () => {
+    let resolveCalls = 0;
+    const systemCommands: SystemCommandPort = {
+      resolveCommandPath(command) {
+        resolveCalls += 1;
+        return Effect.promise(
+          () =>
+            new Promise<string>((resolve) => {
+              setTimeout(() => resolve(`/path/${command}`), 10);
+            }),
+        );
+      },
+      versionCommand() {
+        return Effect.succeed(null);
+      },
+      runCommandAllowFailure() {
+        return Effect.succeed({ ok: false, stdout: "", stderr: "" });
+      },
+    };
+    const adapter = createToolDiscoveryAdapter({
+      env: {},
+      options: { platform: "linux" },
+      systemCommands,
+    });
+
+    await expect(
+      Effect.runPromise(
+        Effect.all([adapter.resolveToolPath("bun"), adapter.resolveToolPath("bun")], {
+          concurrency: "unbounded",
+        }),
+      ),
+    ).resolves.toEqual(["/path/bun", "/path/bun"]);
+    expect(resolveCalls).toBe(1);
+
+    await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe("/path/bun");
+    expect(resolveCalls).toBe(1);
+  });
 });

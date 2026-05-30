@@ -63,20 +63,12 @@ export const createGithubCommandDependencies = ({
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
 }): GithubCommandDependencies => {
-  let cachedCommand: ResolvedGithubCommandDependencies | null = null;
   const resolveGithubCommand = () =>
-    cachedCommand === null
-      ? toolDiscovery.resolveToolPath("githubCli").pipe(
-          Effect.map((ghCommand): ResolvedGithubCommandDependencies => {
-            return { ghCommand, systemCommands };
-          }),
-          Effect.tap((resolvedCommand) =>
-            Effect.sync(() => {
-              cachedCommand = resolvedCommand;
-            }),
-          ),
-        )
-      : Effect.succeed(cachedCommand);
+    toolDiscovery.resolveToolPath("githubCli").pipe(
+      Effect.map((ghCommand): ResolvedGithubCommandDependencies => {
+        return { ghCommand, systemCommands };
+      }),
+    );
 
   return {
     resolveGithubCommand,

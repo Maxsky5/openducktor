@@ -75,7 +75,7 @@ export interface ResolveRawBeadsCliContext {
   ): Effect.Effect<BeadsSharedServerContext, TaskStoreError>;
   (
     repoPath: string,
-    options?: ResolveBeadsOptionalServerContextOptions,
+    options: ResolveBeadsOptionalServerContextOptions,
   ): Effect.Effect<BeadsCliContext, TaskStoreError>;
 }
 export type ResolveWorkspaceIdForRepoPath = (

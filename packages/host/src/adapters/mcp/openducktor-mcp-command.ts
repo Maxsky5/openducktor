@@ -192,14 +192,15 @@ export const resolveOpenDucktorMcpCommand = ({
       );
     }
     const bunExecutable = yield* toolDiscovery.resolveToolPath("bun").pipe(
-      Effect.mapError(
-        (cause) =>
+      Effect.catchTag("HostDependencyError", (cause) =>
+        Effect.fail(
           new HostDependencyError({
             dependency: "bun",
             operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
             message: "OpenDucktor MCP workspace execution requires bun.",
             cause,
           }),
+        ),
       ),
     );
     return [bunExecutable, entrypoint];

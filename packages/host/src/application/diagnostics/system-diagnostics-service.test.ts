@@ -106,15 +106,17 @@ const createSystemCommandPort = ({
 }: {
   missingCommands?: string[];
   ghAuthResult?: SystemCommandRunResult;
-  versionForCommand?: (command: string) => string | null;
+  versionForCommand?: (command: string) => string | null | undefined;
 } = {}): SystemCommandPort => {
   const missing = new Set(missingCommands);
   const port: SystemCommandPort = {
     resolveCommandPath: (command) => Effect.succeed(missing.has(command) ? null : command),
-    versionCommand: (command, _args, _options) =>
-      Effect.succeed(
-        missing.has(command) ? null : (versionForCommand?.(command) ?? `${command} version 1.0.0`),
-      ),
+    versionCommand: (command, _args, _options) => {
+      const version = versionForCommand?.(command);
+      return Effect.succeed(
+        missing.has(command) ? null : version === undefined ? `${command} version 1.0.0` : version,
+      );
+    },
     runCommandAllowFailure: (command) =>
       Effect.tryPromise({
         try: async () => {
@@ -269,6 +271,31 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.errors).toEqual([
       "git not found. Checked OPENDUCKTOR_GIT_PATH, PATH. Install git and ensure it is available on PATH, or set OPENDUCKTOR_GIT_PATH.",
       "gh not found. Checked OPENDUCKTOR_GH_PATH, PATH. Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
+    ]);
+  });
+  test("runtimeCheck reports unhealthy CLI tools when version probes fail", async () => {
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(["opencode"]),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort({
+        versionForCommand: (command) => (command === "git" || command === "gh" ? null : undefined),
+      }),
+      toolDiscovery: createToolDiscoveryPort(),
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(service.runtimeCheck(true));
+
+    expect(check.gitOk).toBe(false);
+    expect(check.gitVersion).toBeNull();
+    expect(check.ghOk).toBe(false);
+    expect(check.ghVersion).toBeNull();
+    expect(check.ghAuthOk).toBe(false);
+    expect(check.ghAuthError).toBe("Failed reading gh --version from gh.");
+    expect(check.errors).toEqual([
+      "Failed reading git --version from git.",
+      "Failed reading gh --version from gh.",
     ]);
   });
   test("beadsCheck returns structured blocking health when bd is missing", async () => {

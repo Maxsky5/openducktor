@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
-import { HostDependencyError, toHostOperationError } from "../../effect/host-errors";
+import { toHostOperationError } from "../../effect/host-errors";
 import { defaultEnsureBeadsAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
 import {
   type BeadsCliContext,
@@ -9,7 +9,6 @@ import {
   type BeadsSharedServerContext,
   type BeadsSharedServerPaths,
   type BeadsSharedServerState,
-  type BeadsToolPaths,
   canonicalOrAbsolute,
   databaseName,
   databaseNameForWorkspace,
@@ -20,7 +19,6 @@ import {
   resolveOpenDucktorBaseDir,
   SHARED_DOLT_SERVER_HOST,
   SHARED_DOLT_SERVER_USER,
-  type SharedDoltToolPaths,
   workspaceRepoId,
 } from "../../infrastructure/beads/beads-context-model";
 import {
@@ -52,51 +50,21 @@ export type {
 export type { StopSharedDoltServer } from "../../infrastructure/beads/beads-shared-dolt-server";
 export { stopOwnedSharedDoltServer } from "../../infrastructure/beads/beads-shared-dolt-server";
 
-const requireBeadsToolPaths = (
-  tools: BeadsToolPaths | undefined,
-): Effect.Effect<BeadsToolPaths, HostDependencyError> => {
-  if (tools) {
-    return Effect.succeed(tools);
-  }
-  return Effect.fail(
-    new HostDependencyError({
-      dependency: "beads-tools",
-      operation: "beads.resolveCliContext",
-      message: "Beads CLI context requires a discovered Beads tool path.",
-    }),
-  );
-};
-
-const requireSharedDoltToolPaths = (
-  tools: SharedDoltToolPaths | undefined,
-): Effect.Effect<SharedDoltToolPaths, HostDependencyError> => {
-  if (tools) {
-    return Effect.succeed(tools);
-  }
-  return Effect.fail(
-    new HostDependencyError({
-      dependency: "dolt-tool",
-      operation: "beads.resolveCliContext",
-      message: "Shared Dolt server context requires a discovered Dolt tool path.",
-    }),
-  );
-};
-
 export function resolveBeadsCliContext(
   repoPath: string,
   options: ResolveBeadsSharedServerContextOptions,
 ): Effect.Effect<BeadsSharedServerContext, BeadsCliContextResolutionError>;
 export function resolveBeadsCliContext(
   repoPath: string,
-  options?: ResolveBeadsOptionalServerContextOptions,
+  options: ResolveBeadsOptionalServerContextOptions,
 ): Effect.Effect<BeadsCliContext, BeadsCliContextResolutionError>;
 export function resolveBeadsCliContext(
   repoPath: string,
-  options: ResolveBeadsCliContextOptions = {},
+  options: ResolveBeadsCliContextOptions,
 ): Effect.Effect<BeadsCliContext | BeadsSharedServerContext, BeadsCliContextResolutionError> {
   return Effect.gen(function* () {
     const processEnv = options.processEnv ?? process.env;
-    const tools = yield* requireBeadsToolPaths(options.tools);
+    const tools = options.tools;
     const canonicalRepoPath = yield* canonicalOrAbsolute(repoPath).pipe(
       Effect.mapError((cause) =>
         toHostOperationError(cause, "beads.resolveCanonicalPath", { repoPath }),
@@ -150,7 +118,6 @@ export function resolveBeadsCliContext(
     });
 
     if (options.requireSharedServer === true) {
-      const sharedDoltTools = yield* requireSharedDoltToolPaths(options.sharedDoltTools);
       const sharedServerPaths: BeadsSharedServerPaths = {
         baseDir,
         beadsRoot,
@@ -160,7 +127,7 @@ export function resolveBeadsCliContext(
         doltConfigFile: path.join(sharedServerRoot, "dolt-config.yaml"),
         env: processEnv,
         serverStatePath,
-        tools: sharedDoltTools,
+        tools: options.sharedDoltTools,
       };
       yield* Effect.tryPromise({
         try: () => mkdir(attachmentRoot, { recursive: true }),
@@ -174,7 +141,7 @@ export function resolveBeadsCliContext(
       const sharedContext: BeadsSharedServerContext = {
         ...createContext(sharedServer),
         sharedServer,
-        sharedDoltTools,
+        sharedDoltTools: options.sharedDoltTools,
       };
       yield* (options.ensureAttachment ?? defaultEnsureBeadsAttachment)(sharedContext);
       return sharedContext;

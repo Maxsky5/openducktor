@@ -85,7 +85,6 @@ const buildLaunchArgs = (
 const buildOpenExternalUrlCommand = (
   platform: NodeJS.Platform,
   url: string,
-  env: NodeJS.ProcessEnv,
 ): { program: string; args: string[] } => {
   switch (platform) {
     case "darwin":
@@ -93,7 +92,7 @@ const buildOpenExternalUrlCommand = (
     case "linux":
       return { program: "xdg-open", args: [url] };
     case "win32":
-      return { program: env.ComSpec?.trim() || "cmd.exe", args: ["/d", "/c", "start", "", url] };
+      return { program: "explorer.exe", args: [url] };
     default:
       throw new HostValidationError({
         message: `Opening external URLs is not supported on ${platform}.`,
@@ -392,7 +391,7 @@ export const createOpenInToolsAdapter = ({
     openExternalUrl(url) {
       return Effect.gen(function* () {
         const command = yield* Effect.try({
-          try: () => buildOpenExternalUrlCommand(platform, url, processEnv),
+          try: () => buildOpenExternalUrlCommand(platform, url),
           catch: (cause) => toHostOperationError(cause, "openInTools.buildOpenExternalUrlCommand"),
         });
         const result = yield* systemCommands

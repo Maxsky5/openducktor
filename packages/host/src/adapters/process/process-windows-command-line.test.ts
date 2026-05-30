@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { HostValidationError } from "../../effect/host-errors";
 import {
   buildWindowsBatchCommandLine,
   quoteWindowsBatchArgument,
@@ -9,6 +10,11 @@ describe("quoteWindowsBatchArgument", () => {
     expect(quoteWindowsBatchArgument('path=%APPDATA% caret=foo^bar bang=!value! quote="x"')).toBe(
       '"path=%%APPDATA%% caret=foo^^bar bang=^!value^! quote=^"x^""',
     );
+  });
+
+  test("rejects carriage returns and newlines", () => {
+    expect(() => quoteWindowsBatchArgument("safe\nunsafe")).toThrow(HostValidationError);
+    expect(() => quoteWindowsBatchArgument("safe\runsafe")).toThrow(HostValidationError);
   });
 });
 
@@ -24,5 +30,9 @@ describe("buildWindowsBatchCommandLine", () => {
     ).toBe(
       String.raw`""C:\Program Files\Codex\codex.cmd" "--config" "mcp_servers.openducktor.command=^"mcp-bin^"" "path=%%APPDATA%%\foo" "caret=foo^^bar""`,
     );
+  });
+
+  test("rejects carriage returns and newlines in commands", () => {
+    expect(() => buildWindowsBatchCommandLine("tool.cmd\nwhoami", [])).toThrow(HostValidationError);
   });
 });

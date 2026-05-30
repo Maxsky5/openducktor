@@ -125,6 +125,10 @@ type ToolAvailability = {
   error: string | null;
   path: string | null;
 };
+type ToolVersionAvailability = {
+  error: string | null;
+  version: string | null;
+};
 const resolveToolAvailability = (
   toolDiscovery: ToolDiscoveryPort,
   toolId: ToolDiscoveryId,
@@ -138,14 +142,29 @@ const resolveToolAvailability = (
   );
 const versionForResolvedTool = (
   systemCommands: SystemCommandPort,
+  toolName: string,
   toolPath: string | null,
   args: string[],
 ) =>
   toolPath === null
-    ? Effect.succeed(null)
-    : systemCommands
-        .versionCommand(toolPath, args)
-        .pipe(Effect.catchAll(() => Effect.succeed(null)));
+    ? Effect.succeed({ error: null, version: null } satisfies ToolVersionAvailability)
+    : Effect.either(systemCommands.versionCommand(toolPath, args)).pipe(
+        Effect.map((result) => {
+          if (result._tag === "Left") {
+            return {
+              error: `Failed reading ${toolName} --version from ${toolPath}: ${errorMessage(result.left)}`,
+              version: null,
+            } satisfies ToolVersionAvailability;
+          }
+          if (result.right === null) {
+            return {
+              error: `Failed reading ${toolName} --version from ${toolPath}.`,
+              version: null,
+            } satisfies ToolVersionAvailability;
+          }
+          return { error: null, version: result.right } satisfies ToolVersionAvailability;
+        }),
+      );
 export const createSystemDiagnosticsService = ({
   runtimeDefinitionsService,
   runtimeHealth,
@@ -166,12 +185,18 @@ export const createSystemDiagnosticsService = ({
     Effect.gen(function* () {
       const gitTool = yield* resolveToolAvailability(toolDiscovery, "git");
       const ghTool = yield* resolveToolAvailability(toolDiscovery, "githubCli");
-      const gitError = gitTool.error;
-      const ghError = ghTool.error;
+      const gitVersion = yield* versionForResolvedTool(systemCommands, "git", gitTool.path, [
+        "--version",
+      ]);
+      const ghVersion = yield* versionForResolvedTool(systemCommands, "gh", ghTool.path, [
+        "--version",
+      ]);
+      const gitError = gitTool.error ?? gitVersion.error;
+      const ghError = ghTool.error ?? ghVersion.error;
       const gitOk = gitError === null;
       const ghOk = ghError === null;
       const githubAuth =
-        ghTool.path !== null
+        ghOk && ghTool.path !== null
           ? yield* probeGithubAuthStatus(systemCommands, ghTool.path)
           : { ghAuthOk: false, ghAuthLogin: null, ghAuthError: ghError };
       const config = yield* loadGlobalConfig(settingsConfig);
@@ -191,9 +216,9 @@ export const createSystemDiagnosticsService = ({
       }
       return {
         gitOk,
-        gitVersion: yield* versionForResolvedTool(systemCommands, gitTool.path, ["--version"]),
+        gitVersion: gitVersion.version,
         ghOk,
-        ghVersion: yield* versionForResolvedTool(systemCommands, ghTool.path, ["--version"]),
+        ghVersion: ghVersion.version,
         ...githubAuth,
         runtimes,
         errors,
