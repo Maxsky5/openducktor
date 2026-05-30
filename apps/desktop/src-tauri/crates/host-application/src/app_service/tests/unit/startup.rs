@@ -302,9 +302,7 @@ fn terminate_child_process_stops_background_process() {
 
 #[test]
 fn wait_for_local_server_with_process_returns_early_when_child_exits() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
-    let port = listener.local_addr().expect("addr").port();
-    drop(listener);
+    let port = find_closed_low_port();
 
     let mut child = Command::new("/bin/sh")
         .arg("-lc")
@@ -329,9 +327,7 @@ fn wait_for_local_server_with_process_returns_early_when_child_exits() {
 
 #[test]
 fn wait_for_local_server_with_process_times_out_when_child_stays_alive() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
-    let port = listener.local_addr().expect("addr").port();
-    drop(listener);
+    let port = find_closed_low_port();
 
     let mut child = Command::new("/bin/sh")
         .arg("-lc")
