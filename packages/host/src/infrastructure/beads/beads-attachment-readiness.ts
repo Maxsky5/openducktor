@@ -17,7 +17,7 @@ import {
   type BeadsCliContext,
   type BeadsCommandRunner,
   type BeadsReadiness,
-  type BeadsSharedServerState,
+  type BeadsSharedServerContext,
   type BeadsWherePayload,
   SHARED_DOLT_SERVER_HOST,
   SHARED_DOLT_SERVER_USER,
@@ -68,21 +68,6 @@ const commandFailureReason = (defaultMessage: string, stdout: string, stderr: st
   return trimmedStdout || defaultMessage;
 };
 
-const requireSharedServer = (
-  context: BeadsCliContext,
-): Effect.Effect<BeadsSharedServerState, HostResourceError> => {
-  if (!context.sharedServer) {
-    return Effect.fail(
-      beadsResourceError(
-        `Shared Dolt server state is missing at ${context.serverStatePath}`,
-        "beads.shared-server.require",
-        context.serverStatePath,
-      ),
-    );
-  }
-  return Effect.succeed(context.sharedServer);
-};
-
 const metadataString = (
   metadata: BeadsAttachmentMetadata,
   field: keyof BeadsAttachmentMetadata,
@@ -128,12 +113,11 @@ const readAttachmentMetadata = (
   });
 
 const verifyAttachmentContract = (
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
     const metadata = yield* readAttachmentMetadata(context.beadsDir);
-    const sharedServer = yield* requireSharedServer(context);
-    const expectedPort = sharedServer.port;
+    const expectedPort = context.sharedServer.port;
 
     if (metadataString(metadata, "backend") !== "dolt") {
       return yield* Effect.fail(
@@ -199,12 +183,12 @@ const databaseListContains = (output: string, expectedDatabase: string): boolean
 
 const probeSharedDatabasePresence = (
   runCommand: BeadsCommandRunner,
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ): Effect.Effect<"available" | "missing", BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
-    const sharedServer = yield* requireSharedServer(context);
+    const sharedServer = context.sharedServer;
     const result = yield* runCommand({
-      command: "dolt",
+      command: context.sharedDoltTools.dolt,
       args: [
         "--host",
         sharedServer.host || SHARED_DOLT_SERVER_HOST,
@@ -319,7 +303,7 @@ const verifyBeadsWhere = (
 ): Effect.Effect<BeadsReadiness, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
     const result = yield* runCommand({
-      command: "bd",
+      command: context.tools.beads,
       args: ["where", "--json"],
       cwd: context.workingDir,
       env: context.env,
@@ -357,7 +341,7 @@ const verifyBeadsWhere = (
 
 export const verifyBeadsReadiness = (
   runCommand: BeadsCommandRunner,
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ): Effect.Effect<BeadsReadiness, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
     const hasBeadsDir = yield* pathExists(context.beadsDir);

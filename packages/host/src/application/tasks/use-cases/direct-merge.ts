@@ -19,6 +19,7 @@ export const createTaskDirectMergeUseCase = ({
   taskStore,
   settingsConfig,
   systemCommands,
+  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<TaskService, "directMerge"> => ({
@@ -26,14 +27,15 @@ export const createTaskDirectMergeUseCase = ({
     return Effect.gen(function* () {
       const { repoPath, taskId } = input;
       const mergeInput = input.input;
-      const dependencies = requireDirectMergeDependencies(
+      const dependencies = requireDirectMergeDependencies({
         devServerService,
         gitPort,
         settingsConfig,
         systemCommands,
+        toolDiscovery,
         taskWorktreeService,
         workspaceSettingsService,
-      );
+      });
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;

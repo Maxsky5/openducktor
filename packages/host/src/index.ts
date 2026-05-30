@@ -52,4 +52,9 @@ export type {
 export type { SettingsConfigPort } from "./ports/settings-config-port";
 export type { SystemCommandPort } from "./ports/system-command-port";
 export type { TaskStorePort } from "./ports/task-repository-ports";
+export type {
+  ToolDiscoveryError,
+  ToolDiscoveryId,
+  ToolDiscoveryPort,
+} from "./ports/tool-discovery-port";
 export type { WorktreeFilePort } from "./ports/worktree-file-port";

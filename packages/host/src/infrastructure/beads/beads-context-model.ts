@@ -3,6 +3,7 @@ import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { Effect, type Fiber } from "effect";
 import {
+  type HostDependencyError,
   type HostOperationError,
   type HostPathAccessError,
   type HostPathNotFoundError,
@@ -49,6 +50,11 @@ export type BeadsSharedServerPaths = {
   doltConfigFile: string;
   env: NodeJS.ProcessEnv;
   serverStatePath: string;
+  tools: SharedDoltToolPaths;
+};
+
+export type BeadsToolPaths = {
+  beads: string;
 };
 
 export type BeadsCliContext = {
@@ -61,6 +67,16 @@ export type BeadsCliContext = {
   serverStatePath: string;
   sharedServer: BeadsSharedServerState | null;
   env: NodeJS.ProcessEnv;
+  tools: BeadsToolPaths;
+};
+
+export type SharedDoltToolPaths = {
+  dolt: string;
+};
+
+export type BeadsSharedServerContext = Omit<BeadsCliContext, "sharedServer"> & {
+  sharedServer: BeadsSharedServerState;
+  sharedDoltTools: SharedDoltToolPaths;
 };
 
 export type BeadsInfrastructureError =
@@ -70,12 +86,14 @@ export type BeadsInfrastructureError =
   | HostResourceError
   | HostValidationError;
 
+export type BeadsCliContextResolutionError = BeadsInfrastructureError | HostDependencyError;
+
 export type EnsureSharedDoltServer = (
   paths: BeadsSharedServerPaths,
 ) => Effect.Effect<BeadsSharedServerState, BeadsInfrastructureError>;
 
 export type EnsureBeadsAttachment = (
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ) => Effect.Effect<void, BeadsInfrastructureError>;
 
 export type BeadsCommandRunner = (input: {
@@ -90,7 +108,17 @@ export type ResolveBeadsCliContextOptions = {
   ensureSharedServer?: EnsureSharedDoltServer;
   ensureAttachment?: EnsureBeadsAttachment;
   processEnv?: NodeJS.ProcessEnv;
+  sharedDoltTools?: SharedDoltToolPaths;
+  tools?: BeadsToolPaths;
   workspaceId?: string | null;
+};
+
+export type ResolveBeadsSharedServerContextOptions = ResolveBeadsCliContextOptions & {
+  requireSharedServer: true;
+};
+
+export type ResolveBeadsOptionalServerContextOptions = ResolveBeadsCliContextOptions & {
+  requireSharedServer?: false | undefined;
 };
 
 export type BeadsAttachmentMetadata = {

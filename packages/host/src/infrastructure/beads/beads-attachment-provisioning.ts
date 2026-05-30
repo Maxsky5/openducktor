@@ -18,7 +18,7 @@ import {
 import {
   type BeadsCliContext,
   type BeadsCommandRunner,
-  type BeadsSharedServerState,
+  type BeadsSharedServerContext,
   CUSTOM_STATUS_VALUES,
   type EnsureBeadsAttachment,
   SHARED_DOLT_SERVER_HOST,
@@ -148,7 +148,7 @@ export const runBdForAttachment = (
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
     const result = yield* runCommand({
-      command: "bd",
+      command: context.tools.beads,
       args,
       cwd: context.workingDir,
       env: context.env,
@@ -164,24 +164,9 @@ export const runBdForAttachment = (
     }
   });
 
-export const requireSharedServer = (
-  context: BeadsCliContext,
-): Effect.Effect<BeadsSharedServerState, HostResourceError> => {
-  if (!context.sharedServer) {
-    return Effect.fail(
-      beadsResourceError(
-        `Shared Dolt server state is missing at ${context.serverStatePath}`,
-        "beads.shared-server.require",
-        context.serverStatePath,
-      ),
-    );
-  }
-  return Effect.succeed(context.sharedServer);
-};
-
 export const restoreSharedDatabaseFromAttachmentBackup = (
   runCommand: BeadsCommandRunner,
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
     const backupDir = path.join(context.beadsDir, "backup");
@@ -195,12 +180,11 @@ export const restoreSharedDatabaseFromAttachmentBackup = (
         ),
       );
     }
-    const sharedServer = yield* requireSharedServer(context);
     const backupUrl = `file://${backupDir}`;
     const result = yield* runCommand({
-      command: "dolt",
+      command: context.sharedDoltTools.dolt,
       args: ["backup", "restore", backupUrl, context.databaseName],
-      cwd: sharedServer.doltDataDir,
+      cwd: context.sharedServer.doltDataDir,
       env: context.env,
     });
     if (!result.ok) {
@@ -219,7 +203,7 @@ export const restoreSharedDatabaseFromAttachmentBackup = (
 
 export const ensureRepoReadyAfterRecovery = (
   runCommand: BeadsCommandRunner,
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
   recoveryStep: string,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
@@ -243,21 +227,12 @@ export const ensureRepoReadyAfterRecovery = (
 
 export const initializeMissingAttachment = (
   runCommand: BeadsCommandRunner,
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
-    const serverPort = context.sharedServer?.port;
-    if (!serverPort) {
-      return yield* Effect.fail(
-        beadsResourceError(
-          `Missing shared Dolt server port while initializing ${context.beadsDir}`,
-          "beads.init",
-          context.serverStatePath,
-        ),
-      );
-    }
+    const serverPort = context.sharedServer.port;
     const result = yield* runCommand({
-      command: "bd",
+      command: context.tools.beads,
       args: [
         "init",
         "--server",
@@ -295,7 +270,7 @@ export const initializeMissingAttachment = (
 
 const provisionAttachment = (
   runCommand: BeadsCommandRunner,
-  context: BeadsCliContext,
+  context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
     yield* ensureDirectory(context.workingDir, "beads.attachment.ensure-working-dir");

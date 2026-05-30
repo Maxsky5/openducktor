@@ -7,17 +7,17 @@ import {
   HostValidationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
-import type { SystemCommandPort } from "../../ports/system-command-port";
-import { isExecutableFile, resolveUserPath } from "../runtimes/runtime-binaries";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type {
   ArtifactRuntimeDistribution,
   HostRuntimeDistribution,
   SourceRuntimeDistribution,
 } from "../runtimes/runtime-distribution";
+import { isExecutableFile, resolveUserPath } from "../system/tool-discovery";
 
 export type ResolveOpenDucktorMcpCommandInput = {
-  systemCommands: SystemCommandPort;
   runtimeDistribution: HostRuntimeDistribution;
+  toolDiscovery: ToolDiscoveryPort;
 };
 const isFile = (path: string) =>
   Effect.tryPromise({
@@ -171,8 +171,8 @@ const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution
   });
 
 export const resolveOpenDucktorMcpCommand = ({
-  systemCommands,
   runtimeDistribution,
+  toolDiscovery,
 }: ResolveOpenDucktorMcpCommandInput) =>
   Effect.gen(function* () {
     if (runtimeDistribution.mode === "artifact") {
@@ -190,16 +190,16 @@ export const resolveOpenDucktorMcpCommand = ({
         }),
       );
     }
-    const bunError = yield* systemCommands.requiredCommandError("bun");
-    if (bunError !== null) {
-      return yield* Effect.fail(
-        new HostDependencyError({
-          dependency: "bun",
-          operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
-          message: "OpenDucktor MCP workspace execution requires bun on PATH.",
-          details: { requiredCommandError: bunError },
-        }),
-      );
-    }
-    return ["bun", entrypoint];
+    const bunExecutable = yield* toolDiscovery.resolveToolPath("bun").pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostDependencyError({
+            dependency: "bun",
+            operation: "openducktorMcpCommand.resolveOpenDucktorMcpCommand",
+            message: "OpenDucktor MCP workspace execution requires bun.",
+            cause,
+          }),
+      ),
+    );
+    return [bunExecutable, entrypoint];
   });

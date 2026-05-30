@@ -75,7 +75,7 @@ const spawnBdProcess = (
 ): Effect.Effect<BdChildProcess, TaskStoreError> =>
   Effect.try({
     try: () =>
-      spawn("bd", args, {
+      spawn(cliContext.tools.beads, args, {
         cwd: cliContext.workingDir,
         env: cliContext.env,
         stdio: ["ignore", "pipe", "pipe"],

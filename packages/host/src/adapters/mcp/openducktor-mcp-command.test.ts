@@ -3,10 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import {
   createArtifactRuntimeDistribution,
   createSourceRuntimeDistribution,
 } from "../runtimes/runtime-distribution";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
 
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
@@ -25,6 +27,10 @@ const createSystemCommands = (bunAvailable = true): SystemCommandPort => ({
     return Effect.succeed({ ok: true, stdout: "", stderr: "" });
   },
 });
+const createToolDiscovery = (bunAvailable = true): ToolDiscoveryPort =>
+  createToolDiscoveryAdapter({
+    systemCommands: createSystemCommands(bunAvailable),
+  });
 const createWorkspaceRoot = async (): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), "odt-mcp-command-"));
   await mkdir(join(root, "apps"));
@@ -41,13 +47,13 @@ const expectArtifactMcpCommandRejected = async (
   await expect(
     Effect.runPromise(
       resolveOpenDucktorMcpCommand({
-        systemCommands: createSystemCommands(),
         runtimeDistribution: createArtifactRuntimeDistribution({
           mcpLauncher: {
             kind: "executable",
             executablePath: sidecar,
           },
         }),
+        toolDiscovery: createToolDiscovery(),
       }),
     ),
   ).rejects.toThrow(expectedMessage);
@@ -61,13 +67,13 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
               kind: "executable",
               executablePath: sidecar,
             },
           }),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).resolves.toEqual([sidecar]);
@@ -91,7 +97,6 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
               kind: "bunScript",
@@ -99,6 +104,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
               scriptPath: mcpEntrypoint,
             },
           }),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).rejects.toThrow("Runtime artifact distribution MCP launcher requires a missing file");
@@ -114,7 +120,6 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
               kind: "bunScript",
@@ -122,6 +127,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
               scriptPath: mcpEntrypoint,
             },
           }),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).rejects.toThrow(
@@ -139,7 +145,6 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
               kind: "bunScript",
@@ -147,6 +152,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
               scriptPath: mcpEntrypoint,
             },
           }),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).resolves.toEqual([bun, mcpEntrypoint]);
@@ -181,8 +187,8 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(),
           runtimeDistribution: createSourceRuntimeDistribution(root),
+          toolDiscovery: createToolDiscovery(),
         }),
       ),
     ).resolves.toEqual(["bun", join(root, "packages", "openducktor-mcp", "src", "index.ts")]);
@@ -192,10 +198,10 @@ describe("resolveOpenDucktorMcpCommand", () => {
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
-          systemCommands: createSystemCommands(false),
           runtimeDistribution: createSourceRuntimeDistribution(root),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
-    ).rejects.toThrow("OpenDucktor MCP workspace execution requires bun on PATH.");
+    ).rejects.toThrow("OpenDucktor MCP workspace execution requires bun.");
   });
 });

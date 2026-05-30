@@ -27,7 +27,7 @@ export type ArtifactMcpLauncher = ExecutableMcpLauncher | BunScriptMcpLauncher;
 export type ArtifactRuntimeDistribution = HostRuntimeDistributionBrand & {
   mode: "artifact";
   mcpLauncher: ArtifactMcpLauncher;
-  bundledBinDir?: string;
+  bundledToolBinDir?: string;
 };
 
 export type HostRuntimeDistribution = SourceRuntimeDistribution | ArtifactRuntimeDistribution;
@@ -79,17 +79,19 @@ const createArtifactMcpLauncher = (launcher: ArtifactMcpLauncher): ArtifactMcpLa
 };
 
 export const createArtifactRuntimeDistribution = ({
-  bundledBinDir,
+  bundledToolBinDir,
   mcpLauncher,
 }: {
-  bundledBinDir?: string;
+  bundledToolBinDir?: string;
   mcpLauncher: ArtifactMcpLauncher;
 }): ArtifactRuntimeDistribution => {
   return {
     mode: "artifact",
     mcpLauncher: createArtifactMcpLauncher(mcpLauncher),
-    ...(bundledBinDir === undefined
+    ...(bundledToolBinDir === undefined
       ? {}
-      : { bundledBinDir: assertNonEmpty(bundledBinDir, "bundledBinDir") }),
+      : {
+          bundledToolBinDir: assertNonEmpty(bundledToolBinDir, "bundledToolBinDir"),
+        }),
   } as ArtifactRuntimeDistribution;
 };

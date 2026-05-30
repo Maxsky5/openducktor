@@ -258,7 +258,7 @@ export const spawnSharedDoltServer = (
       );
       const child = yield* Effect.try({
         try: () =>
-          spawn("dolt", ["sql-server", "--config", paths.doltConfigFile], {
+          spawn(paths.tools.dolt, ["sql-server", "--config", paths.doltConfigFile], {
             cwd: paths.sharedServerRoot,
             detached: shouldStartDetachedProcessGroup(),
             env: paths.env,
@@ -316,7 +316,7 @@ export const spawnSharedDoltServer = (
         );
       }
 
-      if (yield* waitForServerReady(port, paths.env)) {
+      if (yield* waitForServerReady(port, paths.env, paths.tools.dolt)) {
         if (!child.pid) {
           child.kill();
           return yield* Effect.fail(

@@ -5,12 +5,14 @@ import type {
   RuntimeHealth,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort, SystemCommandRunResult } from "../../ports/system-command-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { createSystemDiagnosticsService } from "./system-diagnostics-service";
 
@@ -137,6 +139,19 @@ const createSystemCommandPort = ({
   };
   return port as SystemCommandPort;
 };
+const createToolDiscoveryPort = ({
+  missingCommands = [],
+  versionForCommand,
+}: {
+  missingCommands?: string[];
+  versionForCommand?: (command: string) => string | null;
+} = {}): ToolDiscoveryPort =>
+  createToolDiscoveryAdapter({
+    systemCommands: createSystemCommandPort({
+      missingCommands,
+      versionForCommand: (command) => versionForCommand?.(command) ?? `${command} version 1.0.0`,
+    }),
+  });
 const healthyRepoStoreHealth: RepoStoreHealth = {
   category: "healthy",
   status: "ready",
@@ -175,8 +190,14 @@ const createTaskStore = (
       }),
   }) as Pick<TaskStorePort, "diagnoseRepoStore"> as unknown as TaskStorePort;
 const createSystemDiagnosticsServiceForTest = (
-  input: Parameters<typeof createSystemDiagnosticsService>[0],
-) => createSystemDiagnosticsService(input);
+  input: Omit<Parameters<typeof createSystemDiagnosticsService>[0], "toolDiscovery"> & {
+    toolDiscovery?: ToolDiscoveryPort;
+  },
+) =>
+  createSystemDiagnosticsService({
+    ...input,
+    toolDiscovery: input.toolDiscovery ?? createToolDiscoveryPort(),
+  });
 describe("createSystemDiagnosticsService", () => {
   test("runtimeCheck reports CLI, GitHub auth, runtime health, and config enablement", async () => {
     const service = createSystemDiagnosticsServiceForTest({
@@ -220,6 +241,9 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands,
+      toolDiscovery: createToolDiscoveryPort({
+        versionForCommand: (command) => `${command} version ${version}`,
+      }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const first = await Effect.runPromise(service.runtimeCheck(true));
@@ -236,6 +260,7 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({ missingCommands: ["git", "gh"] }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["git", "gh"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
 
@@ -245,11 +270,11 @@ describe("createSystemDiagnosticsService", () => {
     expect(check.ghOk).toBe(false);
     expect(check.ghAuthOk).toBe(false);
     expect(check.ghAuthError).toBe(
-      "Required command `gh` not found. Install gh and ensure it is available on PATH.",
+      "gh not found. Checked PATH. Install gh and ensure it is available on PATH.",
     );
     expect(check.errors).toEqual([
-      "Required command `git` not found. Install git and ensure it is available on PATH.",
-      "Required command `gh` not found. Install gh and ensure it is available on PATH.",
+      "git not found. Checked PATH. Install git and ensure it is available on PATH.",
+      "gh not found. Checked PATH. Install gh and ensure it is available on PATH.",
     ]);
   });
   test("beadsCheck returns structured blocking health when bd is missing", async () => {
@@ -258,18 +283,19 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({ missingCommands: ["bd"] }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["bd"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.beadsCheck("/repo"));
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError: "Required command `bd` not found. Install bd and ensure it is available on PATH.",
+      beadsError: "bd not found. Checked PATH. Install bd and ensure it is available on PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail: "Required command `bd` not found. Install bd and ensure it is available on PATH.",
+        detail: "bd not found. Checked PATH. Install bd and ensure it is available on PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },
@@ -281,20 +307,19 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort({ missingCommands: ["dolt"] }),
+      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["dolt"] }),
       repoStoreDiagnostics: createTaskStore(),
     });
     const check = await Effect.runPromise(service.beadsCheck("/repo"));
     expect(check).toEqual({
       beadsOk: false,
       beadsPath: null,
-      beadsError:
-        "Required command `dolt` not found. Install dolt and ensure it is available on PATH.",
+      beadsError: "dolt not found. Checked PATH. Install dolt and ensure it is available on PATH.",
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
         isReady: false,
-        detail:
-          "Required command `dolt` not found. Install dolt and ensure it is available on PATH.",
+        detail: "dolt not found. Checked PATH. Install dolt and ensure it is available on PATH.",
         attachment: { path: null, databaseName: null },
         sharedServer: { host: null, port: null, ownershipState: "unavailable" },
       },

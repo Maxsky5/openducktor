@@ -5,7 +5,8 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { BeadsCommandJsonOutput } from "../../infrastructure/beads/task-store/beads-raw-issue";
-import type { BeadsCliContext } from "./beads-cli-context";
+import { createToolDiscoveryAdapter } from "../system/tool-discovery";
+import type { BeadsCliContext, BeadsSharedServerContext } from "./beads-cli-context";
 import { createBeadsTaskRepository } from "./beads-task-repository";
 
 const encodedMarkdown = (markdown: string): string => gzipSync(markdown).toString("base64");
@@ -21,7 +22,25 @@ const rawTask = (overrides: RawTaskFixture = {}): RawTaskFixture => ({
   created_at: "2026-05-10T00:00:00Z",
   ...overrides,
 });
-const createBeadsCliContext = (beadsDir: string): BeadsCliContext => ({
+const TEST_BEADS_TOOL_PATHS = {
+  beads: "bd",
+};
+
+const TEST_SHARED_DOLT_TOOL_PATHS = {
+  dolt: "dolt",
+};
+const createToolDiscoveryPort = (missingCommands: string[] = []) =>
+  createToolDiscoveryAdapter({
+    systemCommands: {
+      resolveCommandPath: (command) =>
+        Effect.succeed(missingCommands.includes(command) ? null : command),
+      requiredCommandError: (command) =>
+        Effect.succeed(missingCommands.includes(command) ? `${command} is missing.` : null),
+      versionCommand: () => Effect.succeed(null),
+      runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
+    },
+  });
+const createBeadsCliContext = (beadsDir: string): BeadsSharedServerContext => ({
   repoPath: "/repo",
   repoId: "repo-12345678",
   databaseName: "odt_repo_123456789abc",
@@ -47,13 +66,20 @@ const createBeadsCliContext = (beadsDir: string): BeadsCliContext => ({
     BEADS_DOLT_SERVER_PORT: "36000",
     BEADS_DOLT_SERVER_USER: "root",
   },
+  tools: TEST_BEADS_TOOL_PATHS,
+  sharedDoltTools: TEST_SHARED_DOLT_TOOL_PATHS,
 });
-const createExistingBeadsCliContext = async (): Promise<BeadsCliContext> => {
+const createExistingBeadsCliContext = async (): Promise<BeadsSharedServerContext> => {
   const attachmentRoot = await mkdtemp(path.join(tmpdir(), "odt-beads-test-"));
   const beadsDir = path.join(attachmentRoot, ".beads");
   await mkdir(beadsDir);
   return createBeadsCliContext(beadsDir);
 };
+const createTestBeadsTaskRepository = (input: Parameters<typeof createBeadsTaskRepository>[0]) =>
+  createBeadsTaskRepository({
+    toolDiscovery: createToolDiscoveryPort(),
+    ...input,
+  });
 const createFakeBd = async (binDir: string, script: string): Promise<void> => {
   const scriptPath = path.join(binDir, "bd.mjs");
   await writeFile(scriptPath, script);
@@ -72,7 +98,7 @@ describe("createBeadsTaskRepository", () => {
       pid: number;
       serverStatePath: string;
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext: () =>
         Effect.tryPromise({
           try: async () => {
@@ -135,7 +161,7 @@ describe("createBeadsTaskRepository", () => {
     const contextResolution = new Promise<BeadsCliContext>((resolve) => {
       resolveContext = resolve;
     });
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext() {
         return Effect.tryPromise({
           try: async () => {
@@ -203,7 +229,7 @@ describe("createBeadsTaskRepository", () => {
       resolveContext = resolve;
     });
     let contextResolutionAttempts = 0;
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext() {
         return Effect.tryPromise({
           try: async () => {
@@ -260,7 +286,7 @@ describe("createBeadsTaskRepository", () => {
       args: string[];
       context?: BeadsCliContext;
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext: () =>
         Effect.tryPromise({
           try: async () => {
@@ -314,7 +340,7 @@ describe("createBeadsTaskRepository", () => {
   test("passes configured workspace id into Beads context resolution", async () => {
     const context = await createExistingBeadsCliContext();
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveWorkspaceIdForRepoPath(repoPath) {
         return Effect.tryPromise({
           try: async () => {
@@ -378,7 +404,7 @@ describe("createBeadsTaskRepository", () => {
       workspaceId: string | null | undefined;
       requireSharedServer: boolean | undefined;
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveWorkspaceIdForRepoPath(requestedRepoPath) {
         return Effect.sync(() => {
           workspaceResolverCalls.push(requestedRepoPath);
@@ -423,7 +449,7 @@ describe("createBeadsTaskRepository", () => {
   test("prepares the shared Dolt server when diagnostics request preparation", async () => {
     const context = await createExistingBeadsCliContext();
     const requestedSharedServerModes: Array<boolean | undefined> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext(_repoPath, options) {
         return Effect.tryPromise({
           try: async () => {
@@ -469,7 +495,7 @@ describe("createBeadsTaskRepository", () => {
     );
     context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveWorkspaceIdForRepoPath() {
         return Effect.tryPromise({
           try: async () => {
@@ -521,7 +547,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     );
     context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveWorkspaceIdForRepoPath() {
         return Effect.tryPromise({
           try: async () => {
@@ -560,7 +586,7 @@ if (args.join(" ") === "list --limit 0 --json") {
   });
   test("reuses fresh task lists and invalidates them after metadata mutations", async () => {
     let listCalls = 0;
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       now: () => new Date("2026-05-10T12:00:00.000Z"),
       runBdJson(_repoPath, args) {
         return Effect.tryPromise({
@@ -599,11 +625,8 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(refreshed[0]?.title).toBe("Task 2");
   });
   test("preflights Dolt before task commands that require the shared server", async () => {
-    const port = createBeadsTaskRepository({
-      systemCommands: {
-        requiredCommandError: (command) =>
-          Effect.succeed(command === "dolt" ? "Required command `dolt` not found." : null),
-      },
+    const port = createTestBeadsTaskRepository({
+      toolDiscovery: createToolDiscoveryPort(["dolt"]),
       resolveCliContext() {
         return Effect.tryPromise({
           try: async () => {
@@ -619,12 +642,29 @@ if (args.join(" ") === "list --limit 0 --json") {
       },
     });
     await expect(Effect.runPromise(port.listTasks({ repoPath: "/repo" }))).rejects.toThrow(
-      "Required command `dolt` not found.",
+      "dolt not found. Checked PATH. Install dolt and ensure it is available on PATH.",
     );
+  });
+  test("diagnoses existing Beads store without requiring Dolt when preparation is disabled", async () => {
+    const context = await createExistingBeadsCliContext();
+    const port = createTestBeadsTaskRepository({
+      toolDiscovery: createToolDiscoveryPort(["dolt"]),
+      resolveCliContext: () => Effect.succeed(context),
+      runBdJson() {
+        return Effect.succeed({ path: context.beadsDir });
+      },
+    });
+
+    await expect(
+      Effect.runPromise(port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: false })),
+    ).resolves.toMatchObject({
+      category: "healthy",
+      status: "ready",
+    });
   });
   test("diagnoses Beads repo store verification errors from bd where", async () => {
     const context = await createExistingBeadsCliContext();
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext: () =>
         Effect.tryPromise({
           try: async () => {
@@ -667,7 +707,7 @@ if (args.join(" ") === "list --limit 0 --json") {
   test("diagnoses a missing managed Beads attachment before running bd", async () => {
     const attachmentRoot = await mkdtemp(path.join(tmpdir(), "odt-beads-missing-test-"));
     const context = createBeadsCliContext(path.join(attachmentRoot, ".beads"));
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       resolveCliContext: () =>
         Effect.tryPromise({
           try: async () => {
@@ -712,7 +752,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       now: () => new Date("2026-05-10T12:00:00Z"),
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
@@ -868,7 +908,7 @@ if (args.join(" ") === "list --limit 0 --json") {
   });
   test("uses the all-tasks bd query when kanban visibility is not requested", async () => {
     const calls: string[][] = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(_repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -888,7 +928,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(calls).toEqual([["list", "--all", "--limit", "0"]]);
   });
   test("lists only open pull request sync candidates", async () => {
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson() {
         return Effect.tryPromise({
           try: async () => {
@@ -976,7 +1016,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     ).resolves.toMatchObject([{ id: "task-open-pr", pullRequest: { number: 42, state: "open" } }]);
   });
   test("keeps invalid target branch metadata as a task-local error", async () => {
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson() {
         return Effect.tryPromise({
           try: async () => {
@@ -1011,7 +1051,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1046,7 +1086,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       now: () => new Date("2026-05-10T12:00:00.000Z"),
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
@@ -1121,7 +1161,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1249,7 +1289,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       now: () => new Date("2026-05-10T12:00:00.000Z"),
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
@@ -1368,7 +1408,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1471,7 +1511,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1542,7 +1582,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1622,7 +1662,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1687,7 +1727,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1756,7 +1796,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1823,7 +1863,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     });
   });
   test("returns document-level errors for malformed task metadata documents", async () => {
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson() {
         return Effect.tryPromise({
           try: async () => {
@@ -1874,7 +1914,7 @@ if (args.join(" ") === "list --limit 0 --json") {
   });
   test("rejects malformed existing plan document revisions before overwriting metadata", async () => {
     const calls: string[][] = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(_repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -1917,7 +1957,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(calls).toEqual([["show", "--id", "task-1"]]);
   });
   test("fails fast for invalid Beads issue status", async () => {
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson() {
         return Effect.tryPromise({
           try: async () => {
@@ -1951,7 +1991,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -2051,7 +2091,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -2190,7 +2230,7 @@ if (args.join(" ") === "list --limit 0 --json") {
   });
   test("returns the current task without update commands for no-op empty labels", async () => {
     const calls: string[][] = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(_repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -2232,7 +2272,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBdJson(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -2282,7 +2322,7 @@ if (args.join(" ") === "list --limit 0 --json") {
       repoPath: string;
       args: string[];
     }> = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBd(repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -2307,7 +2347,7 @@ if (args.join(" ") === "list --limit 0 --json") {
   });
   test("passes cascade when deleting subtasks is requested", async () => {
     const calls: string[][] = [];
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBd(_repoPath, args) {
         return Effect.tryPromise({
           try: async () => {
@@ -2331,7 +2371,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(calls).toEqual([["delete", "--force", "--cascade", "--", "epic-1"]]);
   });
   test("propagates Beads delete failures", async () => {
-    const port = createBeadsTaskRepository({
+    const port = createTestBeadsTaskRepository({
       runBd() {
         return Effect.tryPromise({
           try: async () => {

@@ -20,6 +20,7 @@ export const createTaskPullRequestManagementUseCases = ({
   taskStore,
   settingsConfig,
   systemCommands,
+  toolDiscovery,
   taskWorktreeService,
   workspaceSettingsService,
 }: CreateTaskServiceInput): Pick<
@@ -38,11 +39,12 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-      const dependencies = requirePullRequestLinkDependencies(
+      const dependencies = requirePullRequestLinkDependencies({
         gitPort,
         systemCommands,
+        toolDiscovery,
         workspaceSettingsService,
-      );
+      });
       const current = yield* taskStore.getTask({ repoPath, taskId });
       yield* validatePullRequestManagementStatusEffect(current.status);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
@@ -64,7 +66,6 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
       const effectiveRepoPath = repoConfig.repoPath;
@@ -92,13 +93,14 @@ export const createTaskPullRequestManagementUseCases = ({
   upsertPullRequest(input) {
     return Effect.gen(function* () {
       const { repoPath, taskId, content } = input;
-      const dependencies = requirePullRequestUpsertDependencies(
+      const dependencies = requirePullRequestUpsertDependencies({
         gitPort,
         settingsConfig,
         systemCommands,
+        toolDiscovery,
         taskWorktreeService,
         workspaceSettingsService,
-      );
+      });
       const current = yield* taskStore.getTask({ repoPath, taskId });
       const repoConfig =
         yield* dependencies.workspaceSettingsService.getRepoConfigByRepoPath(repoPath);
@@ -113,7 +115,6 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-
       const approval = yield* loadOpenApprovalContext(
         dependencies,
         taskId,
@@ -162,7 +163,6 @@ export const createTaskPullRequestManagementUseCases = ({
           }),
         );
       }
-
       const pullRequest = yield* upsertGithubPullRequest(
         dependencies,
         effectiveRepoPath,

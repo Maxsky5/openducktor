@@ -29,6 +29,7 @@ import type { SettingsConfigError, SettingsConfigPort } from "../../ports/settin
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type { TaskStoreError, TaskStorePort } from "../../ports/task-repository-ports";
+import type { ToolDiscoveryError, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { DevServerService, DevServerServiceError } from "../dev-servers/dev-server-service";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
@@ -87,6 +88,7 @@ export type TaskServiceError =
   | SettingsConfigError
   | TaskPolicyError
   | TaskStoreError
+  | ToolDiscoveryError
   | WorktreeFileError
   | WorkspaceSettingsError;
 
@@ -165,6 +167,7 @@ export type CreateTaskServiceInput = {
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
   systemCommands?: SystemCommandPort;
+  toolDiscovery?: ToolDiscoveryPort;
   taskWorktreeService?: TaskWorktreeService;
   workspaceSettingsService?: WorkspaceSettingsService;
   runtimeDefinitionsService?: RuntimeDefinitionsService;
