@@ -243,6 +243,134 @@ describe("useAgentStudioDevServerPanel subscriptions", () => {
     }
   });
 
+  test("does not replace newer live terminal output with a stale browser-live rehydrate replay", async () => {
+    const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
+    type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];
+    type HookResult = ReturnType<typeof useAgentStudioDevServerPanel>;
+
+    const initialState = buildState({
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "Starting `cd apps/web && pnpm dev`\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const staleRehydrateState = buildState({
+      updatedAt: "2026-03-19T15:31:00.000Z",
+      scripts: [
+        buildScript({
+          status: "running",
+          pid: 4242,
+          startedAt: "2026-03-19T15:30:00.000Z",
+          bufferedTerminalChunks: [
+            {
+              scriptId: "frontend",
+              sequence: 0,
+              data: "Starting `cd apps/web && pnpm dev`\r\n",
+              timestamp: "2026-03-19T15:30:00.000Z",
+            },
+          ],
+        }),
+      ],
+    });
+    const staleRehydrate = createDeferred<DevServerGroupState>();
+    let getStateCalls = 0;
+    devServerGetState = async () => {
+      getStateCalls += 1;
+      return getStateCalls === 1 ? initialState : staleRehydrate.promise;
+    };
+    const subscriptionReady = createDeferred<() => void>();
+    subscribeDevServerEventsMock = async (listener: (payload: unknown) => void) => {
+      devServerEventListener = listener;
+      return subscriptionReady.promise;
+    };
+
+    const harness = renderDevServerPanelHook<HookArgs, HookResult>(useAgentStudioDevServerPanel, {
+      repoPath: "/repo",
+      taskId: "task-7",
+      repoSettings,
+      enabled: true,
+    });
+
+    try {
+      await waitFor(() => {
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries[0]?.data).toBe(
+          "Starting `cd apps/web && pnpm dev`\r\n",
+        );
+      });
+      const initialResetToken = harness.getLatest().selectedScriptTerminalBuffer?.resetToken;
+      expect(getStateCalls).toBe(1);
+
+      act(() => {
+        devServerEventListener?.({
+          __openducktorBrowserLive: true,
+          kind: "stream-warning",
+          message: "Dev server stream skipped events; reconnect will replay buffered events.",
+        });
+      });
+
+      await waitFor(() => {
+        expect(getStateCalls).toBe(2);
+      });
+
+      act(() => {
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 1,
+            data: "$ cd apps/web && pnpm dev\r\n",
+            timestamp: "2026-03-19T15:30:01.000Z",
+          },
+        });
+        devServerEventListener?.({
+          type: "terminal_chunk",
+          repoPath: "/repo",
+          taskId: "task-7",
+          terminalChunk: {
+            scriptId: "frontend",
+            sequence: 2,
+            data: "ELIFECYCLE Command failed.\r\n",
+            timestamp: "2026-03-19T15:30:02.000Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(harness.getLatest().selectedScriptTerminalBuffer?.entries).toHaveLength(3);
+      });
+
+      await act(async () => {
+        staleRehydrate.resolve(staleRehydrateState);
+      });
+
+      await waitFor(() => {
+        expect(
+          harness.getLatest().selectedScriptTerminalBuffer?.entries.map((entry) => entry.data),
+        ).toEqual([
+          "Starting `cd apps/web && pnpm dev`\r\n",
+          "$ cd apps/web && pnpm dev\r\n",
+          "ELIFECYCLE Command failed.\r\n",
+        ]);
+      });
+      expect(harness.getLatest().selectedScriptTerminalBuffer?.resetToken).toBe(initialResetToken);
+    } finally {
+      harness.unmount();
+    }
+  });
+
   test("rehydrates buffered terminal replay after a browser-live reconnect", async () => {
     const { useAgentStudioDevServerPanel } = await import("./use-agent-studio-dev-server-panel");
     type HookArgs = Parameters<typeof useAgentStudioDevServerPanel>[0];

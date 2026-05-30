@@ -28,7 +28,6 @@ type UseAgentStudioDevServerTerminalBuffersResult = {
   hydrateTerminalBuffersFromState: (
     state: DevServerGroupState | null,
     selectedScriptId: string | null,
-    force?: boolean,
   ) => void;
   markMutationReplayObserved: (event: DevServerEvent) => void;
   replaceTerminalBuffersFromState: (
@@ -67,15 +66,12 @@ export const useAgentStudioDevServerTerminalBuffers =
     );
 
     const hydrateTerminalBuffersFromState = useCallback(
-      (state: DevServerGroupState | null, selectedScriptId: string | null, force = false): void => {
+      (state: DevServerGroupState | null, selectedScriptId: string | null): void => {
         if (state === null) {
-          if (force) {
-            replaceTerminalBuffersFromState(null, selectedScriptId);
-          }
           return;
         }
 
-        if (force || terminalBuffersRef.current.size === 0) {
+        if (terminalBuffersRef.current.size === 0) {
           replaceTerminalBuffersFromState(state, selectedScriptId);
           return;
         }

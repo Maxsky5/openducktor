@@ -86,7 +86,6 @@ export function useAgentStudioDevServerPanel({
   enabled,
 }: UseAgentStudioDevServerPanelArgs): AgentStudioDevServerPanelModel {
   const queryClient = useQueryClient();
-  const forceHydrateFromQueryRef = useRef(false);
   const previousTaskMemoryKeyRef = useRef<string | null | undefined>(undefined);
   const [localState, dispatchLocalState] = useReducer(devServerPanelReducer, {
     liveState: null,
@@ -133,7 +132,6 @@ export function useAgentStudioDevServerPanel({
       return;
     }
 
-    forceHydrateFromQueryRef.current = true;
     void queryClient.refetchQueries({
       queryKey: devServerQueryKeys.state(repoPath, taskId),
       exact: true,
@@ -185,26 +183,19 @@ export function useAgentStudioDevServerPanel({
 
     if (scopeChanged) {
       clearTerminalBuffers();
-      forceHydrateFromQueryRef.current = false;
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
     }
 
     if (!queryEnabled) {
       clearTerminalBuffers();
-      forceHydrateFromQueryRef.current = false;
       resetSelectedScript();
       dispatchLocalState({ type: "scopeReset" });
       return;
     }
 
     if (queryData) {
-      hydrateTerminalBuffersFromState(
-        queryData,
-        selectedScriptIdRef.current,
-        forceHydrateFromQueryRef.current,
-      );
-      forceHydrateFromQueryRef.current = false;
+      hydrateTerminalBuffersFromState(queryData, selectedScriptIdRef.current);
       dispatchLocalState({ type: "liveStateChanged", state: queryData });
     }
   }, [
