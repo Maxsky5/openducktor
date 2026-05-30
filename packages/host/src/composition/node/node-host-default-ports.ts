@@ -31,7 +31,11 @@ import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-to
 import { type RuntimeHealthPort, RuntimeHealthPortTag } from "../../ports/runtime-health-port";
 import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
 import { type SystemCommandPort, SystemCommandPortTag } from "../../ports/system-command-port";
-import { type ToolDiscoveryPort, ToolDiscoveryPortTag } from "../../ports/tool-discovery-port";
+import {
+  type ToolDiscoveryId,
+  type ToolDiscoveryPort,
+  ToolDiscoveryPortTag,
+} from "../../ports/tool-discovery-port";
 import { type WorktreeFilePort, WorktreeFilePortTag } from "../../ports/worktree-file-port";
 
 export type NodeHostDefaultPorts = {
@@ -66,6 +70,7 @@ export type CreateNodeHostDefaultPortsInput = {
   settingsConfig: SettingsConfigPort;
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
+  providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
   worktreeFiles: WorktreeFilePort;
 }>;
 
@@ -102,15 +107,18 @@ const makeNodeHostDefaultPorts = (
   Effect.sync(() => {
     const processEnv = input.processEnv ?? createProcessEnvironment();
     const systemCommands = input.systemCommands ?? createSystemCommandRunner({ env: processEnv });
+    const bundledToolBinDirs =
+      input.runtimeDistribution.mode === "artifact" && input.runtimeDistribution.bundledToolBinDirs
+        ? input.runtimeDistribution.bundledToolBinDirs
+        : undefined;
     const toolDiscovery =
       input.toolDiscovery ??
       createToolDiscoveryAdapter({
         env: processEnv,
-        options:
-          input.runtimeDistribution.mode === "artifact" &&
-          input.runtimeDistribution.bundledToolBinDirs
-            ? { bundledToolBinDirs: input.runtimeDistribution.bundledToolBinDirs }
-            : {},
+        options: {
+          ...(input.providedToolPaths ? { providedToolPaths: input.providedToolPaths } : {}),
+          ...(bundledToolBinDirs ? { bundledToolBinDirs } : {}),
+        },
         systemCommands,
       });
     const runtimeHealth =

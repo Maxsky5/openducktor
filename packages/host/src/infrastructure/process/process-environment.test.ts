@@ -20,16 +20,26 @@ describe("createProcessEnvironment", () => {
     expect(env.PATH?.split(":")).toEqual(["/opt/homebrew/bin", "/usr/bin", "/bin"]);
   });
 
-  test("does not read a login shell PATH on non-macOS platforms", () => {
+  test("merges the Linux login shell PATH before the inherited GUI PATH", () => {
     const env = createProcessEnvironment({
       baseEnv: { PATH: "/usr/bin:/bin" },
       platform: "linux",
+      readLoginShellPath: () => "/home/dev/.local/bin:/usr/bin",
+    });
+
+    expect(env.PATH?.split(":")).toEqual(["/home/dev/.local/bin", "/usr/bin", "/bin"]);
+  });
+
+  test("does not read a login shell PATH on Windows", () => {
+    const env = createProcessEnvironment({
+      baseEnv: { Path: "C:\\Windows\\System32" },
+      platform: "win32",
       readLoginShellPath: () => {
-        throw new Error("login shell should not be read on Linux");
+        throw new Error("login shell should not be read on Windows");
       },
     });
 
-    expect(env.PATH).toBe("/usr/bin:/bin");
+    expect(env.Path).toBe("C:\\Windows\\System32");
   });
 
   test("does not mutate the caller environment object", () => {

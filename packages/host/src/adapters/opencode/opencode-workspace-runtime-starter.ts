@@ -49,8 +49,6 @@ export type CreateOpenCodeWorkspaceRuntimeStarterInput = {
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: OpenCodeMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
-  mcpCommand?: string[];
-  opencodeBinary?: string;
   startupTimeoutMs?: number;
   connectTimeoutMs?: number;
   retryDelayMs?: number;
@@ -70,21 +68,6 @@ const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
 
 type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
-
-const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
-  if (configuredCommand) {
-    const command = configuredCommand.map((entry) => entry.trim());
-    if (command.length === 0 || command.some((entry) => entry.length === 0)) {
-      throw new HostValidationError({
-        message: "OpenCode MCP command must contain only non-empty strings.",
-        field: "mcpCommand",
-      });
-    }
-    return command;
-  }
-
-  return null;
-};
 
 export const buildOpenCodeConfigContent = (
   bridge: OpenCodeMcpBridgeConnection,
@@ -130,8 +113,6 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
   resolveMcpBridgeConnection,
   runtimeDistribution,
   processEnv = process.env,
-  mcpCommand,
-  opencodeBinary,
   startupTimeoutMs = DEFAULT_STARTUP_TIMEOUT_MS,
   connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
@@ -181,21 +162,10 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
           toHostOperationError(cause, "opencodeWorkspaceRuntime.resolveMcpBridgeConnection"),
         ),
       );
-      const configuredMcpCommand = yield* Effect.try({
-        try: () => resolveConfiguredMcpCommand(mcpCommand),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: { runtimeKind: input.runtimeKind },
-          }),
+      const resolvedMcpCommand = yield* resolveOpenDucktorMcpCommand({
+        runtimeDistribution,
+        toolDiscovery,
       });
-      const resolvedMcpCommand =
-        configuredMcpCommand ??
-        (yield* resolveOpenDucktorMcpCommand({
-          runtimeDistribution,
-          toolDiscovery,
-        }));
       const configContent = yield* Effect.try({
         try: () => buildOpenCodeConfigContent(bridge, resolvedMcpCommand),
         catch: (cause) =>
@@ -205,7 +175,7 @@ export const createOpenCodeWorkspaceRuntimeStarter = ({
             details: { runtimeKind: input.runtimeKind },
           }),
       });
-      const binary = opencodeBinary ?? (yield* toolDiscovery.resolveToolPath("opencode"));
+      const binary = yield* toolDiscovery.resolveToolPath("opencode");
       const port = yield* portAllocator().pipe(
         Effect.mapError((cause) =>
           toHostOperationError(cause, "opencodeWorkspaceRuntime.pickFreePort"),

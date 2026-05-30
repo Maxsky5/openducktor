@@ -184,7 +184,7 @@ export const createProcessEnvironment = ({
   readLoginShellPath = readCurrentUserLoginShellPath,
 }: CreateProcessEnvironmentInput = {}): NodeJS.ProcessEnv => {
   const env = normalizeProcessEnvironment(baseEnv, platform);
-  if (platform !== "darwin") {
+  if (platform === "win32") {
     return env;
   }
 

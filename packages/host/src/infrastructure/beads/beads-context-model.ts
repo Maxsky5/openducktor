@@ -10,15 +10,6 @@ import {
   type HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
-
-export {
-  DEFAULT_CONFIG_DIR_NAME,
-  OPENDUCKTOR_CONFIG_DIR_ENV,
-  resolveHomeDirectory,
-  resolveOpenDucktorBaseDir,
-  resolveUserPath,
-  stripMatchingQuotes,
-} from "../../config/openducktor-config-dir";
 export const SHARED_DOLT_SERVER_HOST = "127.0.0.1";
 export const SHARED_DOLT_SERVER_USER = "root";
 export const SHARED_DOLT_PORT_RANGE_START = 36_000;
@@ -227,4 +218,18 @@ export const workspaceRepoId = (workspaceId: string): string => {
     });
   }
   return normalizedWorkspaceId;
+};
+
+export const beadsCliContextCacheKey = ({
+  canonicalRepoPath,
+  workspaceId,
+}: {
+  canonicalRepoPath: string;
+  workspaceId?: string | null;
+}): string => {
+  const normalizedWorkspaceId =
+    typeof workspaceId === "string" && workspaceId.trim().length > 0 ? workspaceId.trim() : null;
+  return normalizedWorkspaceId
+    ? `workspace:${workspaceRepoId(normalizedWorkspaceId)}`
+    : `repo:${canonicalRepoPath}`;
 };

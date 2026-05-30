@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@openducktor/contracts": "workspace:*",
+    "@openducktor/path-support": "workspace:*",
     "effect": "^3.21.2"
   },
   "devDependencies": {

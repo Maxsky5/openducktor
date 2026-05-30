@@ -1,19 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, posix, win32 } from "node:path";
+import { join } from "node:path";
 import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId } from "../../ports/tool-discovery-port";
 import { createSystemCommandRunner } from "./system-command-runner";
-import {
-  createToolDiscoveryAdapter,
-  discoverToolPath,
-  type ToolDiscoveryDescriptor,
-} from "./tool-discovery";
-
-const joinPlatformPath = (platform: NodeJS.Platform, ...segments: string[]): string =>
-  platform === "win32" ? win32.join(...segments) : posix.join(...segments);
+import { createToolDiscoveryAdapter, discoverToolPath } from "./tool-discovery";
 
 const createSystemCommands = ({
   available = [],
@@ -62,68 +55,34 @@ const builtInOverrideCases = [
   variable: string;
 }[];
 
-const customToolDescriptor: ToolDiscoveryDescriptor = {
-  command: "custom-tool",
-  displayName: "Custom Tool",
-  installHint: "Install custom-tool.",
-  sources: [
-    { kind: "environment", variable: "OPENDUCKTOR_CUSTOM_TOOL_BINARY" },
-    {
-      directories: (context) => [context.bundledToolBinDirs.opencode],
-      kind: "searchDirectories",
-      label: "bundled tool directory",
-      policy: "candidate",
-    },
-    {
-      directories: (context) => [
-        joinPlatformPath(context.platform, context.homeDir, ".custom-tool", "bin"),
-      ],
-      kind: "searchDirectories",
-      label: "standard install directories",
-      policy: "candidate",
-    },
-    { kind: "path" },
-  ],
-};
-const requiredBundledToolDescriptor: ToolDiscoveryDescriptor = {
-  command: "required-tool",
-  displayName: "Required Tool",
-  installHint: "Install required-tool.",
-  sources: [
-    {
-      directories: (context) => [context.bundledToolBinDirs.opencode],
-      kind: "searchDirectories",
-      label: "bundled tool directory",
-      policy: "required",
-    },
-    { kind: "path" },
-  ],
-};
-const discoverCustomTool = ({
+const discoverBuiltInTool = ({
   env = {},
   options = {},
-  systemCommands = createSystemCommands({ available: ["custom-tool"] }),
+  systemCommands = createSystemCommands(),
+  toolId,
 }: {
   env?: NodeJS.ProcessEnv;
   options?: Parameters<typeof discoverToolPath>[3];
   systemCommands?: SystemCommandPort;
-} = {}) => Effect.runPromise(discoverToolPath(customToolDescriptor, systemCommands, env, options));
+  toolId: ToolDiscoveryId;
+}) => Effect.runPromise(discoverToolPath(toolId, systemCommands, env, options));
 
 describe("discoverToolPath", () => {
   test("uses a descriptor environment override before bundled, standard, and PATH", async () => {
     await withTempDir(async (root) => {
-      const override = join(root, "custom-tool");
+      const override = join(root, "opencode");
       await writeExecutable(override);
 
       await expect(
-        discoverCustomTool({
-          env: { OPENDUCKTOR_CUSTOM_TOOL_BINARY: override },
+        discoverBuiltInTool({
+          env: { OPENDUCKTOR_OPENCODE_BINARY: override },
           options: {
             bundledToolBinDirs: { opencode: join(root, "bundled") },
             homeDir: root,
             platform: "linux",
           },
           systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          toolId: "opencode",
         }),
       ).resolves.toBe(override);
     });
@@ -131,23 +90,25 @@ describe("discoverToolPath", () => {
 
   test("returns the validated command path for command-name environment overrides", async () => {
     await expect(
-      discoverCustomTool({
-        env: { OPENDUCKTOR_CUSTOM_TOOL_BINARY: "custom-tool" },
-        systemCommands: createSystemCommands({ available: ["custom-tool"] }),
+      discoverBuiltInTool({
+        env: { OPENDUCKTOR_BUN_PATH: "bun" },
+        systemCommands: createSystemCommands({ available: ["bun"] }),
+        toolId: "bun",
       }),
-    ).resolves.toBe("/path/custom-tool");
+    ).resolves.toBe("/path/bun");
   });
 
   test("rejects Windows environment overrides that are not runnable command files", async () => {
     await withTempDir(async (root) => {
-      const override = join(root, "custom-tool.txt");
+      const override = join(root, "bun.txt");
       await writeFile(override, "");
 
       await expect(
-        discoverCustomTool({
-          env: { OPENDUCKTOR_CUSTOM_TOOL_BINARY: override },
+        discoverBuiltInTool({
+          env: { OPENDUCKTOR_BUN_PATH: override },
           options: { homeDir: root, platform: "win32" },
           systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "win32" }),
+          toolId: "bun",
         }),
       ).rejects.toThrow("points to a missing or non-executable file");
     });
@@ -157,77 +118,92 @@ describe("discoverToolPath", () => {
     await withTempDir(async (root) => {
       const bundledDir = join(root, "bundled");
       await mkdir(bundledDir);
-      const bundled = join(bundledDir, "custom-tool");
+      const bundled = join(bundledDir, "opencode");
       await writeExecutable(bundled);
 
-      const options = {
+      const bundledOptions = {
         bundledToolBinDirs: { opencode: bundledDir },
         homeDir: root,
         platform: "linux" as const,
       };
       await expect(
-        discoverCustomTool({
-          options,
+        discoverBuiltInTool({
+          options: bundledOptions,
           systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          toolId: "opencode",
         }),
       ).resolves.toBe(bundled);
 
       await rm(bundledDir, { force: true, recursive: true });
-      const standardDir = join(root, ".custom-tool", "bin");
+      const standardDir = join(root, ".opencode", "bin");
       await mkdir(standardDir, { recursive: true });
-      const standard = join(standardDir, "custom-tool");
+      const standard = join(standardDir, "opencode");
       await writeExecutable(standard);
+      const standardOptions = {
+        homeDir: root,
+        platform: "linux" as const,
+      };
 
       await expect(
-        discoverCustomTool({
-          options,
+        discoverBuiltInTool({
+          options: standardOptions,
           systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+          toolId: "opencode",
         }),
       ).resolves.toBe(standard);
 
       await rm(standardDir, { force: true, recursive: true });
-      await expect(discoverCustomTool({ options })).resolves.toBe("/path/custom-tool");
+      await expect(
+        discoverBuiltInTool({
+          options: standardOptions,
+          systemCommands: createSystemCommands({ available: ["opencode"] }),
+          toolId: "opencode",
+        }),
+      ).resolves.toBe("/path/opencode");
     });
   });
 
   test("reports all checked descriptor sources when a tool is missing", async () => {
-    await expect(
-      discoverCustomTool({
-        options: {
-          bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
-          homeDir: "/home/alice",
-          platform: "linux",
-        },
-        systemCommands: createSystemCommands(),
-      }),
-    ).rejects.toThrow(
-      "custom-tool not found. Checked OPENDUCKTOR_CUSTOM_TOOL_BINARY, bundled tool directory (/opt/OpenDucktor/bin), standard install directories (/home/alice/.custom-tool/bin), PATH. Install custom-tool.",
-    );
+    await withTempDir(async (root) => {
+      const applicationsDir = join(root, "Applications");
+      const homeDir = join(root, "home");
+
+      await expect(
+        discoverBuiltInTool({
+          options: {
+            applicationsDir,
+            homeDir,
+            platform: "darwin",
+          },
+          systemCommands: createSystemCommands(),
+          toolId: "codex",
+        }),
+      ).rejects.toThrow(
+        `codex not found. Checked OPENDUCKTOR_CODEX_BINARY, standard install locations (${applicationsDir}/Codex.app/Contents/Resources/codex, ${homeDir}/Applications/Codex.app/Contents/Resources/codex), PATH. Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.`,
+      );
+    });
   });
 
   test("fails at a required bundled source before PATH", async () => {
     await expect(
-      Effect.runPromise(
-        discoverToolPath(
-          requiredBundledToolDescriptor,
-          createSystemCommands({ available: ["required-tool"] }),
-          {},
-          {
-            bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
-            platform: "linux",
-          },
-        ),
-      ),
+      discoverBuiltInTool({
+        options: {
+          bundledToolBinDirs: { opencode: "/opt/OpenDucktor/bin" },
+          platform: "linux",
+        },
+        systemCommands: createSystemCommands({ available: ["opencode"] }),
+        toolId: "opencode",
+      }),
     ).rejects.toThrow(
-      "required-tool not found. Checked bundled tool directory (/opt/OpenDucktor/bin). Install required-tool.",
+      "opencode not found. Checked OPENDUCKTOR_OPENCODE_BINARY, bundled tool directory (/opt/OpenDucktor/bin). Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
     );
   });
 
-  test("uses SystemCommandRunner PATHEXT resolution for bundled and standard directories", async () => {
+  test("uses SystemCommandRunner PATHEXT resolution for bundled directories", async () => {
     await withTempDir(async (root) => {
       const bundledDir = join(root, "bundled");
       await mkdir(bundledDir);
-      const bundled = join(bundledDir, "custom-tool.CMD");
+      const bundled = join(bundledDir, "opencode.CMD");
       await writeFile(bundled, "");
 
       const systemCommands = createSystemCommandRunner({
@@ -236,62 +212,35 @@ describe("discoverToolPath", () => {
       });
 
       await expect(
-        discoverCustomTool({
+        discoverBuiltInTool({
           options: {
             bundledToolBinDirs: { opencode: bundledDir },
             homeDir: root,
             platform: "win32",
           },
           systemCommands,
+          toolId: "opencode",
         }),
       ).resolves.toBe(bundled);
-
-      await rm(bundledDir, { force: true, recursive: true });
-      const standardDir = join(root, "standard");
-      await mkdir(standardDir, { recursive: true });
-      const standard = join(standardDir, "custom-tool.BAT");
-      await writeFile(standard, "");
-
-      await expect(
-        Effect.runPromise(
-          discoverToolPath(
-            {
-              command: "custom-tool",
-              displayName: "Custom Tool",
-              installHint: "Install custom-tool.",
-              sources: [
-                {
-                  directories: () => [standardDir],
-                  kind: "searchDirectories",
-                  label: "standard install directories",
-                  policy: "candidate",
-                },
-              ],
-            },
-            systemCommands,
-            {},
-            { platform: "win32" },
-          ),
-        ),
-      ).resolves.toBe(standard);
     });
   });
 
   test("does not resolve executable POSIX directories from PATH", async () => {
     await withTempDir(async (root) => {
-      await mkdir(join(root, "custom-tool"));
-      await chmod(join(root, "custom-tool"), 0o755);
+      await mkdir(join(root, "bun"));
+      await chmod(join(root, "bun"), 0o755);
 
       await expect(
-        discoverCustomTool({
+        discoverBuiltInTool({
           env: { PATH: root },
           options: { homeDir: root, platform: "linux" },
           systemCommands: createSystemCommandRunner({
             env: { PATH: root },
             platform: "linux",
           }),
+          toolId: "bun",
         }),
-      ).rejects.toThrow("custom-tool not found");
+      ).rejects.toThrow("bun not found");
     });
   });
 
@@ -324,6 +273,59 @@ describe("discoverToolPath", () => {
         );
       }
     });
+  });
+
+  test("uses provided tool paths after environment overrides and before PATH", async () => {
+    await withTempDir(async (root) => {
+      const provided = join(root, "provided-bun");
+      await writeExecutable(provided);
+
+      const adapter = createToolDiscoveryAdapter({
+        env: {},
+        options: {
+          platform: "linux",
+          providedToolPaths: { bun: provided },
+        },
+        systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+      });
+
+      await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe(provided);
+    });
+  });
+
+  test("keeps explicit environment overrides ahead of provided tool paths", async () => {
+    await withTempDir(async (root) => {
+      const provided = join(root, "provided-bun");
+      const override = join(root, "override-bun");
+      await writeExecutable(provided);
+      await writeExecutable(override);
+
+      const adapter = createToolDiscoveryAdapter({
+        env: { OPENDUCKTOR_BUN_PATH: override },
+        options: {
+          platform: "linux",
+          providedToolPaths: { bun: provided },
+        },
+        systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
+      });
+
+      await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).resolves.toBe(override);
+    });
+  });
+
+  test("rejects invalid provided tool paths before PATH", async () => {
+    const adapter = createToolDiscoveryAdapter({
+      env: {},
+      options: {
+        platform: "linux",
+        providedToolPaths: { bun: "/missing/provided-bun" },
+      },
+      systemCommands: createSystemCommands({ available: ["bun"] }),
+    });
+
+    await expect(Effect.runPromise(adapter.resolveToolPath("bun"))).rejects.toThrow(
+      "Provided bun path for bun points to a missing or non-executable file: /missing/provided-bun",
+    );
   });
 
   test("reports descriptor override variables for PATH-resolved built-in tools", async () => {

@@ -104,7 +104,9 @@ export const createBeadsTaskRepository = ({
     Effect.gen(function* () {
       const request = yield* resolveContextRequest(repoPath, options);
       if (request.options.requireSharedServer !== true) {
-        return yield* trackCliContextResolution(resolveCliContext(repoPath, request.options));
+        return yield* trackCliContextResolution(
+          resolveCliContext(request.repoPath, request.options),
+        );
       }
       const sharedServerOptions = request.options;
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -132,7 +134,7 @@ export const createBeadsTaskRepository = ({
               flight: reservation.flight,
               releaseReservation: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
               rememberOwnedContext: trackOwnedSharedServer,
-              resolveContext: resolveCliContext(repoPath, sharedServerOptions),
+              resolveContext: resolveCliContext(request.repoPath, sharedServerOptions),
             }),
           );
           return yield* restore(awaitBeadsCliContextFlight(reservation.flight));

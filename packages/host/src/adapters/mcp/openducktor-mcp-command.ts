@@ -1,6 +1,8 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { resolveUserPath } from "@openducktor/path-support";
 import { Effect } from "effect";
 import {
   HostDependencyError,
@@ -14,7 +16,6 @@ import type {
   HostRuntimeDistribution,
   SourceRuntimeDistribution,
 } from "../runtimes/runtime-distribution";
-import { resolveUserPath } from "../system/tool-discovery";
 
 export type ResolveOpenDucktorMcpCommandInput = {
   runtimeDistribution: HostRuntimeDistribution;
@@ -56,7 +57,12 @@ const nonFileDescription = (stats: Stats): string =>
 
 const resolveWorkspaceRoot = (runtimeDistribution: SourceRuntimeDistribution) =>
   Effect.gen(function* () {
-    const workspaceRoot = resolve(resolveUserPath(runtimeDistribution.workspaceRoot));
+    const workspaceRoot = resolve(
+      resolveUserPath(runtimeDistribution.workspaceRoot, {
+        resolveHomeDir: homedir,
+        joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+      }),
+    );
     if (!(yield* isWorkspaceRootCandidate(workspaceRoot))) {
       return yield* Effect.fail(
         new HostValidationError({
@@ -71,7 +77,12 @@ const resolveWorkspaceRoot = (runtimeDistribution: SourceRuntimeDistribution) =>
 
 const resolveExecutablePath = (path: string, field: string) =>
   Effect.gen(function* () {
-    const resolvedPath = resolve(resolveUserPath(path));
+    const resolvedPath = resolve(
+      resolveUserPath(path, {
+        resolveHomeDir: homedir,
+        joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+      }),
+    );
     const stats = yield* statPath(resolvedPath, "openducktorMcpCommand.statExecutable").pipe(
       Effect.catchTag("HostPathNotFoundError", () =>
         Effect.fail(
@@ -108,7 +119,12 @@ const resolveExecutablePath = (path: string, field: string) =>
 
 const resolveRequiredFile = (path: string, field: string) =>
   Effect.gen(function* () {
-    const resolvedPath = resolve(resolveUserPath(path));
+    const resolvedPath = resolve(
+      resolveUserPath(path, {
+        resolveHomeDir: homedir,
+        joinHomePath: (homeDir, relativePath) => resolve(homeDir, relativePath),
+      }),
+    );
     const stats = yield* statPath(resolvedPath, "openducktorMcpCommand.statRequiredFile").pipe(
       Effect.catchTag("HostPathNotFoundError", () =>
         Effect.fail(
@@ -159,11 +175,11 @@ const resolveArtifactCommand = (
           ),
         ];
       case "toolScript": {
-        const toolExecutable = yield* toolDiscovery.resolveToolPath(mcpLauncher.toolId);
         const scriptPath = yield* resolveRequiredFile(
           mcpLauncher.scriptPath,
           "runtimeDistribution.mcpLauncher.scriptPath",
         );
+        const toolExecutable = yield* toolDiscovery.resolveToolPath(mcpLauncher.toolId);
         return [toolExecutable, scriptPath];
       }
     }

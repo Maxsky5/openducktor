@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Effect } from "effect";
+import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { toHostOperationError } from "../../effect/host-errors";
 import { defaultEnsureBeadsAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
 import {
@@ -16,7 +17,6 @@ import {
   type ResolveBeadsOptionalServerContextOptions,
   type ResolveBeadsSharedServerContextOptions,
   repoId,
-  resolveOpenDucktorBaseDir,
   SHARED_DOLT_SERVER_HOST,
   SHARED_DOLT_SERVER_USER,
   workspaceRepoId,

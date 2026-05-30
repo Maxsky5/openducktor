@@ -4,6 +4,10 @@ import type {
   ResolveBeadsCliContextOptions,
   ResolveBeadsCliContextRequestOptions,
 } from "../../infrastructure/beads/beads-context-model";
+import {
+  beadsCliContextCacheKey,
+  canonicalOrAbsolute,
+} from "../../infrastructure/beads/beads-context-model";
 import type { ResolveWorkspaceIdForRepoPath } from "../../infrastructure/beads/task-store/beads-raw-issue";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { BeadsToolPaths, SharedDoltToolPaths } from "./beads-cli-context";
@@ -11,6 +15,7 @@ import type { BeadsToolPaths, SharedDoltToolPaths } from "./beads-cli-context";
 export type BeadsCliContextRequest = {
   cacheKey: string;
   options: ResolveBeadsCliContextOptions;
+  repoPath: string;
 };
 
 type ToolPathResolver<ToolPaths> = () => Effect.Effect<ToolPaths, TaskStoreError>;
@@ -85,9 +90,14 @@ export const createBeadsCliContextRequestResolver =
       const effectiveOptions = normalizedWorkspaceId
         ? { ...cliOptions, workspaceId: normalizedWorkspaceId }
         : cliOptions;
-      const cacheKey = `${repoPath}\0${normalizedWorkspaceId ?? ""}`;
+      const canonicalRepoPath = yield* canonicalOrAbsolute(repoPath);
+      const cacheKey = beadsCliContextCacheKey({
+        canonicalRepoPath,
+        workspaceId: normalizedWorkspaceId,
+      });
       return {
         cacheKey,
         options: effectiveOptions,
+        repoPath: canonicalRepoPath,
       };
     });

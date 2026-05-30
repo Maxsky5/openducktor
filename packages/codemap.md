@@ -1,12 +1,13 @@
 # packages/
 
 ## Responsibility
-Workspace-level shared code: shared frontend, contracts, core domain services, TypeScript host boundaries, runtime adapters, browser launcher, and MCP tooling.
+Workspace-level shared code: shared frontend, contracts, core domain services, TypeScript host boundaries, runtime adapters, Node support helpers, browser launcher, and MCP tooling.
 
 ## Design Patterns
 - Contracts-first boundaries keep runtime descriptors, config/session schemas, slash-command catalogs, and host payloads stable before adapters consume them.
 - Hexagonal core and host packages keep runtime/session/approval-policy and host-command logic behind ports while adapters translate host APIs at the edge.
 - Frontend, browser, and MCP packages own their own UI, launcher, and bridge surfaces instead of sharing shell internals.
+- Platform-neutral path helpers live in `packages/path-support`; Node-specific home-directory and process-platform access stays at caller boundaries.
 - Adapter event-stream handling is split so OpenCode message normalization lives under `packages/adapters-opencode-sdk/src/event-stream/message-events/` while session-level routing stays in `session-events.ts`.
 
 ## Data & Control Flow
@@ -17,5 +18,6 @@ Workspace-level shared code: shared frontend, contracts, core domain services, T
 - `@openducktor/core`
 - `@openducktor/host`
 - `@openducktor/frontend`
+- `@openducktor/path-support`
 - `@openducktor/web`
 - `@openducktor/mcp`

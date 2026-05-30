@@ -66,7 +66,7 @@ describe("cef-paths", () => {
   });
 
   test("uses the shared config root for default cache paths", () => {
-    process.env.OPENDUCKTOR_CONFIG_DIR = "~/.openducktor-dev";
+    process.env.OPENDUCKTOR_CONFIG_DIR = ` "~/.openducktor-dev" `;
     const tauriRoot = withTempTauriRoot(
       '[[package]]\nname = "cef"\nversion = "136.2.1"\n\n[[package]]\nname = "tauri"\nversion = "2.10.3"\nsource = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#1234567890abcdef1234567890abcdef12345678"\n',
     );
@@ -150,6 +150,14 @@ describe("cef-paths", () => {
 
     expect(() => resolveCargoToolsRoot(process.cwd())).toThrow(
       "OPENDUCKTOR_CARGO_TOOLS_ROOT is set but empty. Provide a valid directory path.",
+    );
+  });
+
+  test("rejects quoted empty overrides", () => {
+    process.env.OPENDUCKTOR_CONFIG_DIR = `"   "`;
+
+    expect(() => resolveCargoToolsRoot(process.cwd())).toThrow(
+      "OPENDUCKTOR_CONFIG_DIR is set but empty. Provide a valid directory path.",
     );
   });
 });

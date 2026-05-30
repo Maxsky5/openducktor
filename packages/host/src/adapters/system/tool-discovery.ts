@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
+import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { Deferred, Effect, FiberId } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
@@ -15,17 +16,18 @@ export type ToolDiscoveryPathOptions = {
   bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
   homeDir?: string;
   platform?: NodeJS.Platform;
+  providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
 };
 
-export type ToolDiscoveryContext = {
+type ToolDiscoveryContext = {
   applicationsDir: string;
   bundledToolBinDirs: Partial<Record<ToolDiscoveryId, string>>;
   homeDir: string;
   platform: NodeJS.Platform;
+  providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
 };
 
-export type ToolDiscoverySource =
-  | { kind: "environment"; variable: string }
+type ToolDiscoverySource =
   | {
       directories: (context: ToolDiscoveryContext) => (string | undefined)[];
       kind: "searchDirectories";
@@ -36,57 +38,41 @@ export type ToolDiscoverySource =
       candidates: (context: ToolDiscoveryContext) => string[];
       kind: "candidateFiles";
       label: string;
-    }
-  | { kind: "path" };
+    };
 
-export type ToolDiscoveryDescriptor = {
+type ToolDiscoveryDescriptor = {
   command: string;
   displayName: string;
   installHint: string;
+  overrideVariable: string;
   sources: ToolDiscoverySource[];
 };
 
 const DEFAULT_MACOS_APPLICATIONS_DIR = "/Applications";
 
-const stripMatchingQuotes = (value: string): string =>
-  value.length >= 2 &&
-  ((value.at(0) === `"` && value.at(-1) === `"`) || (value.at(0) === `'` && value.at(-1) === `'`))
-    ? value.slice(1, -1)
-    : value;
-
-const joinPlatformPath = (platform: NodeJS.Platform, ...segments: string[]): string =>
-  platform === "win32" ? win32.join(...segments) : posix.join(...segments);
-
-export const resolveUserPath = (
-  rawPath: string,
-  homeDir = homedir(),
-  platform: NodeJS.Platform = process.platform,
-): string => {
-  const trimmed = stripMatchingQuotes(rawPath.trim());
-  if (trimmed === "~") {
-    return homeDir;
-  }
-  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
-    return joinPlatformPath(platform, homeDir, trimmed.slice(2));
-  }
-  return trimmed;
-};
-
 const joinToolPath = (
   context: Pick<ToolDiscoveryContext, "platform">,
   ...segments: string[]
-): string => joinPlatformPath(context.platform, ...segments);
+): string => (context.platform === "win32" ? win32.join(...segments) : posix.join(...segments));
+
+const resolveUserPathForContext = (rawPath: string, context: ToolDiscoveryContext): string =>
+  resolveNormalizedUserPath(normalizeUserPathInput(rawPath), {
+    homeDir: context.homeDir,
+    joinHomePath: (homeDir, relativePath) => joinToolPath(context, homeDir, relativePath),
+  });
 
 const createToolDiscoveryContext = ({
   applicationsDir,
   bundledToolBinDirs,
   homeDir,
   platform,
+  providedToolPaths,
 }: ToolDiscoveryPathOptions = {}): ToolDiscoveryContext => ({
   applicationsDir: applicationsDir ?? DEFAULT_MACOS_APPLICATIONS_DIR,
   bundledToolBinDirs: bundledToolBinDirs ?? {},
   homeDir: homeDir ?? homedir(),
   platform: platform ?? process.platform,
+  providedToolPaths: providedToolPaths ?? {},
 });
 
 const resolvePathCommand = (
@@ -127,6 +113,55 @@ const invalidOverrideError = (
     details,
   });
 
+const invalidProvidedToolPathError = (
+  descriptor: ToolDiscoveryDescriptor,
+  toolId: ToolDiscoveryId,
+  message: string,
+  details?: Record<string, unknown>,
+) =>
+  new HostValidationError({
+    field: `providedToolPaths.${toolId}`,
+    message: `Provided ${descriptor.displayName} path for ${toolId} ${message}`,
+    details,
+  });
+
+const resolveExplicitToolPathSource = ({
+  context,
+  detailKey,
+  env,
+  invalidError,
+  rawPath,
+  systemCommands,
+}: {
+  context: ToolDiscoveryContext;
+  detailKey: string;
+  env: NodeJS.ProcessEnv;
+  invalidError: (message: string, details?: Record<string, unknown>) => HostValidationError;
+  rawPath: string;
+  systemCommands: SystemCommandPort;
+}) =>
+  Effect.gen(function* () {
+    const normalizedPath = normalizeUserPathInput(rawPath);
+    if (!normalizedPath) {
+      return yield* Effect.fail(invalidError("is empty"));
+    }
+
+    const resolvedPath = resolveNormalizedUserPath(normalizedPath, {
+      homeDir: context.homeDir,
+      joinHomePath: (homeDir, relativePath) => joinToolPath(context, homeDir, relativePath),
+    });
+    const resolved = yield* resolvePathCommand(resolvedPath, systemCommands, env);
+    if (resolved !== null) {
+      return resolved;
+    }
+
+    return yield* Effect.fail(
+      invalidError(`points to a missing or non-executable file: ${resolvedPath}`, {
+        [detailKey]: resolvedPath,
+      }),
+    );
+  });
+
 const missingToolError = (
   descriptor: ToolDiscoveryDescriptor,
   checked: readonly string[],
@@ -141,43 +176,52 @@ const missingToolError = (
     details,
   });
 
-export const discoverToolPath = (
-  descriptor: ToolDiscoveryDescriptor,
-  systemCommands: SystemCommandPort,
-  env: NodeJS.ProcessEnv = process.env,
-  options: ToolDiscoveryPathOptions = {},
-) =>
+const discoverDescriptorToolPath = ({
+  descriptor,
+  env,
+  options,
+  systemCommands,
+  toolId,
+}: {
+  descriptor: ToolDiscoveryDescriptor;
+  env: NodeJS.ProcessEnv;
+  options: ToolDiscoveryPathOptions;
+  systemCommands: SystemCommandPort;
+  toolId: ToolDiscoveryId;
+}) =>
   Effect.gen(function* () {
     const context = createToolDiscoveryContext(options);
     const checked: string[] = [];
+    checked.push(descriptor.overrideVariable);
+    const rawOverride = env[descriptor.overrideVariable];
+    if (rawOverride !== undefined) {
+      return yield* resolveExplicitToolPathSource({
+        context,
+        detailKey: "resolvedOverride",
+        env,
+        invalidError: (message, details) =>
+          invalidOverrideError(descriptor, descriptor.overrideVariable, message, details),
+        rawPath: rawOverride,
+        systemCommands,
+      });
+    }
+
+    const rawProvidedPath = context.providedToolPaths[toolId];
+    if (rawProvidedPath !== undefined) {
+      checked.push(`provided ${toolId} path`);
+      return yield* resolveExplicitToolPathSource({
+        context,
+        detailKey: "resolvedProvidedPath",
+        env,
+        invalidError: (message, details) =>
+          invalidProvidedToolPathError(descriptor, toolId, message, details),
+        rawPath: rawProvidedPath,
+        systemCommands,
+      });
+    }
+
     for (const source of descriptor.sources) {
       switch (source.kind) {
-        case "environment": {
-          checked.push(source.variable);
-          const rawOverride = env[source.variable];
-          if (rawOverride === undefined) {
-            break;
-          }
-          if (rawOverride.trim().length === 0) {
-            return yield* Effect.fail(
-              invalidOverrideError(descriptor, source.variable, "is empty"),
-            );
-          }
-          const resolvedOverride = resolveUserPath(rawOverride, context.homeDir, context.platform);
-          const resolved = yield* resolvePathCommand(resolvedOverride, systemCommands, env);
-          if (resolved !== null) {
-            return resolved;
-          }
-          return yield* Effect.fail(
-            invalidOverrideError(
-              descriptor,
-              source.variable,
-              `points to a missing or non-executable file: ${resolvedOverride}`,
-              { resolvedOverride },
-            ),
-          );
-        }
-
         case "candidateFiles": {
           const candidates = source.candidates(context);
           checked.push(`${source.label} (${describeLocations(candidates)})`);
@@ -193,7 +237,7 @@ export const discoverToolPath = (
           const directories = source
             .directories(context)
             .filter((directory): directory is string => directory !== undefined)
-            .map((directory) => resolveUserPath(directory, context.homeDir, context.platform));
+            .map((directory) => resolveUserPathForContext(directory, context));
           if (directories.length === 0) {
             break;
           }
@@ -214,19 +258,30 @@ export const discoverToolPath = (
           }
           break;
         }
-
-        case "path": {
-          checked.push("PATH");
-          const pathCommand = yield* resolvePathCommand(descriptor.command, systemCommands, env);
-          if (pathCommand !== null) {
-            return pathCommand;
-          }
-          break;
-        }
       }
     }
 
+    checked.push("PATH");
+    const pathCommand = yield* resolvePathCommand(descriptor.command, systemCommands, env);
+    if (pathCommand !== null) {
+      return pathCommand;
+    }
+
     return yield* Effect.fail(missingToolError(descriptor, checked));
+  });
+
+export const discoverToolPath = (
+  toolId: ToolDiscoveryId,
+  systemCommands: SystemCommandPort,
+  env: NodeJS.ProcessEnv = process.env,
+  options: ToolDiscoveryPathOptions = {},
+) =>
+  discoverDescriptorToolPath({
+    descriptor: TOOL_DISCOVERY_DESCRIPTORS[toolId],
+    env,
+    options,
+    systemCommands,
+    toolId,
   });
 
 const commandTool = ({
@@ -247,35 +302,36 @@ const commandTool = ({
   installHint:
     installHint ??
     `Install ${command} and ensure it is available on PATH, or set ${overrideVariable}.`,
-  sources: [{ kind: "environment", variable: overrideVariable }, ...sources, { kind: "path" }],
+  overrideVariable,
+  sources,
 });
 
-export const BUN_TOOL_DESCRIPTOR = commandTool({
+const BUN_TOOL_DESCRIPTOR = commandTool({
   command: "bun",
   overrideVariable: "OPENDUCKTOR_BUN_PATH",
 });
-export const GIT_TOOL_DESCRIPTOR = commandTool({
+const GIT_TOOL_DESCRIPTOR = commandTool({
   command: "git",
   overrideVariable: "OPENDUCKTOR_GIT_PATH",
 });
-export const GITHUB_CLI_TOOL_DESCRIPTOR = commandTool({
+const GITHUB_CLI_TOOL_DESCRIPTOR = commandTool({
   command: "gh",
   displayName: "GitHub CLI",
   installHint: "Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
   overrideVariable: "OPENDUCKTOR_GH_PATH",
 });
-export const BEADS_TOOL_DESCRIPTOR = commandTool({
+const BEADS_TOOL_DESCRIPTOR = commandTool({
   command: "bd",
   displayName: "Beads",
   overrideVariable: "OPENDUCKTOR_BD_PATH",
 });
-export const DOLT_TOOL_DESCRIPTOR = commandTool({
+const DOLT_TOOL_DESCRIPTOR = commandTool({
   command: "dolt",
   displayName: "Dolt",
   overrideVariable: "OPENDUCKTOR_DOLT_PATH",
 });
 
-export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
+const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   command: "opencode",
   displayName: "OpenCode",
   installHint: "Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
@@ -296,7 +352,7 @@ export const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   ],
 });
 
-export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
+const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   command: "codex",
   displayName: "Codex",
   installHint: "Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
@@ -314,11 +370,7 @@ export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
           return [];
         }
         const appPath = ["Codex.app", "Contents", "Resources", "codex"];
-        const applicationsDir = resolveUserPath(
-          context.applicationsDir,
-          context.homeDir,
-          context.platform,
-        );
+        const applicationsDir = resolveUserPathForContext(context.applicationsDir, context);
         return [
           joinToolPath(context, applicationsDir, ...appPath),
           joinToolPath(context, context.homeDir, "Applications", ...appPath),
@@ -330,7 +382,7 @@ export const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   ],
 });
 
-export const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDescriptor> = {
+const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDescriptor> = {
   beads: BEADS_TOOL_DESCRIPTOR,
   bun: BUN_TOOL_DESCRIPTOR,
   codex: CODEX_TOOL_DESCRIPTOR,
@@ -362,9 +414,7 @@ export const createToolDiscoveryAdapter = ({
 
   const completeFlight = (toolId: ToolDiscoveryId, flight: ToolDiscoveryFlight) =>
     Effect.gen(function* () {
-      const exit = yield* Effect.exit(
-        discoverToolPath(TOOL_DISCOVERY_DESCRIPTORS[toolId], systemCommands, env, options),
-      );
+      const exit = yield* Effect.exit(discoverToolPath(toolId, systemCommands, env, options));
       if (exit._tag === "Success") {
         cachedPaths.set(toolId, exit.value);
       }

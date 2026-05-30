@@ -100,9 +100,8 @@ const createBundledToolBinDirs = (
   }
 
   const normalized: Partial<Record<ToolDiscoveryId, string>> = {};
-  for (const rawToolId of Object.keys(bundledToolBinDirs)) {
+  for (const [rawToolId, directory] of Object.entries(bundledToolBinDirs)) {
     const toolId = assertToolDiscoveryId(rawToolId, `bundledToolBinDirs.${rawToolId}`);
-    const directory = bundledToolBinDirs[toolId];
     if (directory !== undefined) {
       normalized[toolId] = assertNonEmpty(directory, `bundledToolBinDirs.${toolId}`);
     }

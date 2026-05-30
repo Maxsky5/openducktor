@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@openducktor/contracts": "workspace:*",
+    "@openducktor/path-support": "workspace:*",
     "bun-types": "^1.3.14"
   }
 }

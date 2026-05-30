@@ -28,7 +28,7 @@ The host resolves that tool by walking its descriptor:
 ```text
 ToolDiscoveryPort
   -> tool descriptor registry
-  -> ordered descriptor sources
+  -> generic explicit paths, ordered descriptor sources, PATH
   -> SystemCommandPort.resolveCommandPath
   -> infrastructure/process platform rules
 ```
@@ -40,7 +40,8 @@ The result is either an executable command path or a typed, actionable host erro
 | Concern | Owner |
 | --- | --- |
 | Public tool ids | `packages/host/src/ports/tool-discovery-port.ts` |
-| Tool descriptors and source ordering | `packages/host/src/adapters/system/tool-discovery.ts` |
+| User path parsing and home expansion | `packages/path-support/src/user-path.ts` |
+| Tool descriptors and discovery ordering | `packages/host/src/adapters/system/tool-discovery.ts` |
 | PATH, PATHEXT, executable-file checks | `packages/host/src/infrastructure/process/process-command-resolution.ts` |
 | Command resolution and version probing port | `packages/host/src/adapters/system/system-command-runner.ts` |
 | Node host wiring for Electron and web | `packages/host/src/composition/node/node-host-default-ports.ts` |
@@ -50,6 +51,7 @@ The result is either an executable command path or a typed, actionable host erro
 
 Application services and runtime adapters should depend on `ToolDiscoveryPort`.
 They should not read `process.env`, call `which`, inspect app bundles, or hard-code package resource paths.
+When a package needs to parse a user-supplied path, it should use the pure helpers in `@openducktor/path-support` and supply any environment-specific home-directory or path-joining behavior at its own boundary.
 
 ## Runtime Flow
 
@@ -57,7 +59,7 @@ At host startup, `createNodeHostDefaultPorts` builds:
 
 1. `processEnv` with platform-aware environment normalization
 2. `systemCommands` from that environment
-3. `toolDiscovery` from `systemCommands`, `processEnv`, and distribution-owned bundled directories
+3. `toolDiscovery` from `systemCommands`, `processEnv`, shell-provided tool paths, and distribution-owned bundled directories
 4. higher-level adapters and services that consume `toolDiscovery`
 
 The same composition path is used by:
@@ -68,9 +70,10 @@ The same composition path is used by:
 
 This is why CLI discovery belongs in `packages/host`, not in shell code.
 
-## Descriptor Sources
+## Discovery Order
 
-Each tool descriptor declares an ordered list of sources.
+Each tool descriptor declares only the sources that are specific to that tool.
+The shared discovery pipeline wraps those descriptor sources with generic explicit paths and PATH.
 Discovery stops at the first valid executable source.
 
 ### Environment Override
@@ -84,11 +87,20 @@ OPENDUCKTOR_BUN_PATH=/opt/homebrew/bin/bun
 ```
 
 An override may be an absolute path, a home-relative path such as `~/bin/tool`, or a command name resolvable by the command runner.
+Quote trimming and `~` expansion come from `@openducktor/path-support`.
 
 Invalid overrides fail immediately with `HostValidationError`.
 There is no fallthrough from a broken explicit override to another source, because that would hide the user's configured state.
 
-### Search Directories
+### Provided Tool Path
+
+Shells may pass a tool path they already know through Node host composition.
+This is a generic `providedToolPaths` map keyed by `ToolDiscoveryId`, not a Bun-specific or shell-specific branch.
+
+Provided paths are checked after environment overrides and before descriptor conventional locations or PATH.
+If a provided path is invalid, discovery fails immediately because the shell explicitly promised that path for the current run.
+
+### Descriptor Search Directories
 
 Descriptor-owned directories are used for product-owned or conventional install locations.
 
@@ -106,7 +118,7 @@ There are two policies:
 
 Use `required` only when the current distribution promises that directory contains the tool.
 
-### Candidate Files
+### Descriptor Candidate Files
 
 Candidate files are explicit executable paths that are not naturally represented as a directory search.
 
@@ -123,6 +135,7 @@ PATH is the final generic source for built-in descriptors.
 It uses `SystemCommandPort.resolveCommandPath`, so platform details stay centralized:
 
 - POSIX paths require executable regular files
+- POSIX host startup merges the user's login-shell PATH before inherited GUI PATH entries
 - Windows uses PATHEXT for command discovery
 - Windows accepts runnable command extensions such as `.exe`, `.cmd`, and `.bat`
 - directories are not accepted as executable commands
@@ -150,7 +163,7 @@ Source mode is used by local development.
 
 The runtime distribution contains the workspace root.
 It does not provide package-owned tool directories.
-Discovery uses environment overrides, descriptor conventional locations, and PATH.
+Discovery uses environment overrides, shell-provided tool paths, descriptor conventional locations, and PATH.
 
 ### Electron Packaged Mode
 
@@ -168,9 +181,10 @@ Resource paths must come from the packaged app resources for that run.
 `bunx @openducktor/web` also uses an artifact runtime distribution.
 
 The MCP launcher is the package-owned `dist/openducktor-mcp.js` script executed by the `bun` tool resolved through `ToolDiscoveryPort`.
+The web launcher provides the active Bun executable to `ToolDiscoveryPort`, so `bunx @openducktor/web` launches its MCP script with the same Bun executable that started the package.
 The web package does not use Electron resources and does not currently provide bundled runtime tool directories.
 
-Therefore, runtime CLIs such as Git, Beads, Dolt, OpenCode, Codex, and GitHub CLI are discovered through their descriptor overrides, descriptor conventional locations, and PATH.
+Therefore, runtime CLIs such as Git, Beads, Dolt, OpenCode, Codex, and GitHub CLI are discovered through their descriptor overrides, descriptor conventional locations, and PATH unless the web shell has an exact provided path for that tool.
 If the web package ever bundles a CLI, its resolver must provide package-owned paths from the npm package layout, not desktop app paths.
 
 ### Legacy Tauri Path
@@ -188,7 +202,7 @@ Discovery returns typed host failures.
 | --- | --- | --- |
 | Explicit override is empty | `HostValidationError` | The user configured an invalid value. |
 | Explicit override points to a missing or non-executable file | `HostValidationError` | The configured value is wrong and should be fixed. |
-| Required bundled source is configured but missing | `HostDependencyError` | The distribution promised to bundle a tool that is absent. |
+| Bundled source is configured but missing | `HostDependencyError` | The distribution promised to bundle a tool that is absent. |
 | No source finds the tool | `HostDependencyError` | The host dependency is unavailable. |
 
 Missing-tool errors include every checked source and the descriptor install hint.
@@ -231,17 +245,18 @@ packages/host/src/adapters/system/tool-discovery.ts
 Prefer the shared `commandTool` helper for standard tools:
 
 ```ts
-export const EXAMPLE_TOOL_DESCRIPTOR = commandTool({
+const EXAMPLE_TOOL_DESCRIPTOR = commandTool({
   command: "example",
   displayName: "Example",
   overrideVariable: "OPENDUCKTOR_EXAMPLE_PATH",
 });
 ```
 
-If the tool has product-owned or conventional locations, add descriptor sources between the override and PATH:
+If the tool has product-owned or conventional locations, add descriptor sources.
+The shared discovery pipeline checks environment overrides and provided paths before those sources, then PATH after those sources.
 
 ```ts
-export const EXAMPLE_TOOL_DESCRIPTOR = commandTool({
+const EXAMPLE_TOOL_DESCRIPTOR = commandTool({
   command: "example",
   displayName: "Example",
   overrideVariable: "OPENDUCKTOR_EXAMPLE_PATH",
@@ -300,6 +315,9 @@ If a shell package owns a bundled copy of the CLI:
 For Electron, package paths must come from Electron resources.
 For `@openducktor/web`, package paths must come from the npm package layout.
 Never reuse a path from another shell, another worktree, or a removed development directory.
+
+If a shell already knows the exact executable path for a tool it is using to run OpenDucktor, pass that path through the host composition `providedToolPaths` input.
+Do not add a one-off discovery branch for that shell or tool.
 
 ### 7. Keep Tauri Parity When Needed
 

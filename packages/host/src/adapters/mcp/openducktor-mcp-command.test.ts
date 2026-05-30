@@ -85,7 +85,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
       "Runtime artifact distribution MCP launcher points to a missing file",
     );
   });
-  test("fails fast when an artifact MCP command dependency is missing", async () => {
+  test("validates an artifact MCP script before resolving its runner tool", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-required-file-"));
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
 
@@ -99,7 +99,7 @@ describe("resolveOpenDucktorMcpCommand", () => {
               toolId: "bun",
             },
           }),
-          toolDiscovery: createToolDiscovery(),
+          toolDiscovery: createToolDiscovery(false),
         }),
       ),
     ).rejects.toThrow("Runtime artifact distribution MCP launcher requires a missing file");

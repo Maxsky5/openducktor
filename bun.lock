@@ -24,6 +24,7 @@
         "@tauri-apps/api": "^2.11.0",
       },
       "devDependencies": {
+        "@openducktor/path-support": "workspace:*",
         "@tailwindcss/vite": "^4.3.0",
         "@tauri-apps/cli": "^2.11.2",
         "@types/node": "^25.9.1",
@@ -140,6 +141,7 @@
       "version": "0.3.1",
       "dependencies": {
         "@openducktor/contracts": "workspace:*",
+        "@openducktor/path-support": "workspace:*",
         "effect": "^3.21.2",
       },
       "devDependencies": {
@@ -168,6 +170,7 @@
       },
       "devDependencies": {
         "@openducktor/contracts": "workspace:*",
+        "@openducktor/path-support": "workspace:*",
         "bun-types": "^1.3.14",
       },
     },
@@ -188,6 +191,13 @@
         "bun-types": "^1.3.14",
         "effect": "^3.21.2",
         "vite": "^8.0.14",
+      },
+    },
+    "packages/path-support": {
+      "name": "@openducktor/path-support",
+      "version": "0.3.1",
+      "devDependencies": {
+        "bun-types": "^1.3.14",
       },
     },
   },
@@ -351,6 +361,8 @@
     "@openducktor/host-client": ["@openducktor/host-client@workspace:packages/host-client"],
 
     "@openducktor/mcp": ["@openducktor/mcp@workspace:packages/openducktor-mcp"],
+
+    "@openducktor/path-support": ["@openducktor/path-support@workspace:packages/path-support"],
 
     "@openducktor/web": ["@openducktor/web@workspace:packages/openducktor-web"],
 

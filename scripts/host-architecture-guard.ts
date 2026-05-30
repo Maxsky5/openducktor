@@ -82,6 +82,9 @@ const hasForbiddenInwardDependency = (source: string): boolean =>
     source,
   );
 
+const hasForbiddenSupportPackageDependency = (source: string): boolean =>
+  /(?:^|\n)\s*import(?:\s+type)?[\s\S]*?from\s+["']@openducktor\/node-support["']/.test(source);
+
 const isDirectRootModuleFile = (filePath: string): boolean => {
   const segments = relativeHostPath(filePath).split("/");
   return ROOT_MODULE_DIRECTORIES.includes(segments[0] ?? "") && segments.length === 2;
@@ -131,6 +134,13 @@ const findViolations = (): Violation[] => {
       violations.push({
         filePath,
         message: "host inner-layer files must not import adapters or infrastructure",
+      });
+    }
+
+    if (isInnerLayerFile(filePath) && hasForbiddenSupportPackageDependency(source)) {
+      violations.push({
+        filePath,
+        message: "host inner-layer files must not import Node-only support packages",
       });
     }
 

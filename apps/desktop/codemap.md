@@ -6,6 +6,7 @@ Tauri desktop workspace for OpenDucktor. It owns the thin shell, desktop bridge,
 ## Design/Patterns
 - Thin-shell boundary: `src/main.tsx` only supplies the desktop shell bridge to the shared frontend bootstrap.
 - Workspace-local packaging: scripts prepare desktop build inputs, CEF assets, and Tauri release artifacts without mixing UI logic into the host.
+- Node build scripts reuse pure `@openducktor/path-support` helpers for user path parsing instead of duplicating shell rules.
 - Host/runtime concerns stay in `src-tauri/`; workspace settings, config persistence, command wiring, and the browser-backend server live there instead of in the UI.
 
 ## Data & Control Flow

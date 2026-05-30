@@ -48,8 +48,6 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
   runtimeDistribution: HostRuntimeDistribution;
   resolveMcpBridgeConnection?: CodexMcpBridgeConnectionResolver;
   processEnv?: NodeJS.ProcessEnv;
-  mcpCommand?: string[];
-  codexBinary?: string;
   eventEmitter?: CodexAppServerEventEmitter;
   clientVersion?: string;
   requestTimeoutMs?: number;
@@ -62,21 +60,6 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
 
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
-
-const resolveConfiguredMcpCommand = (configuredCommand?: string[]): string[] | null => {
-  if (configuredCommand) {
-    const command = configuredCommand.map((entry) => entry.trim());
-    if (command.length === 0 || command.some((entry) => entry.length === 0)) {
-      throw new HostValidationError({
-        message: "Codex MCP command must contain only non-empty strings.",
-        field: "mcpCommand",
-      });
-    }
-    return command;
-  }
-
-  return null;
-};
 
 const tomlString = (value: string): string => JSON.stringify(value);
 
@@ -159,8 +142,6 @@ export const createCodexWorkspaceRuntimeStarter = ({
   resolveMcpBridgeConnection,
   runtimeDistribution,
   processEnv = process.env,
-  mcpCommand,
-  codexBinary,
   eventEmitter,
   clientVersion = processEnv.npm_package_version ?? "0.0.0",
   requestTimeoutMs = DEFAULT_CODEX_REQUEST_TIMEOUT_MS,
@@ -197,22 +178,11 @@ export const createCodexWorkspaceRuntimeStarter = ({
           toHostOperationError(cause, "codexWorkspaceRuntime.resolveMcpBridgeConnection"),
         ),
       );
-      const configuredMcpCommand = yield* Effect.try({
-        try: () => resolveConfiguredMcpCommand(mcpCommand),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-            details: { runtimeKind: input.runtimeKind },
-          }),
+      const resolvedMcpCommand = yield* resolveOpenDucktorMcpCommand({
+        runtimeDistribution,
+        toolDiscovery,
       });
-      const resolvedMcpCommand =
-        configuredMcpCommand ??
-        (yield* resolveOpenDucktorMcpCommand({
-          runtimeDistribution,
-          toolDiscovery,
-        }));
-      const binary = codexBinary ?? (yield* toolDiscovery.resolveToolPath("codex"));
+      const binary = yield* toolDiscovery.resolveToolPath("codex");
       const runtimeEnv = {
         ...processEnv,
         ...buildOpenDucktorMcpBridgeEnvironment(bridge, "Codex"),

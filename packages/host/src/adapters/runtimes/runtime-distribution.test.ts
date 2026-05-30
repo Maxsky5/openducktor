@@ -31,6 +31,21 @@ describe("runtime distribution factories", () => {
     });
   });
 
+  test("preserves bundled directory values when normalizing raw tool ids", () => {
+    expect(
+      createArtifactRuntimeDistribution({
+        bundledToolBinDirs: { " opencode ": " /app/resources/bin " } as never,
+        mcpLauncher: {
+          kind: "executable",
+          executablePath: "/app/resources/openducktor-mcp",
+        },
+      }),
+    ).toMatchObject({
+      mode: "artifact",
+      bundledToolBinDirs: { opencode: "/app/resources/bin" },
+    });
+  });
+
   test("rejects unsupported artifact launcher kinds with a typed validation error", () => {
     expect(() =>
       createArtifactRuntimeDistribution({
