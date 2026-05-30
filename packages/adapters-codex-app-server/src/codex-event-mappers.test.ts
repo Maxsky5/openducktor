@@ -135,6 +135,32 @@ describe("Codex todo event mapper", () => {
     expect(secondTool.part.partId).toBe("turn-1-update-plan-2");
     expect(secondTool.part.callId).toBe("turn-1-update-plan-2");
   });
+
+  test("does not map thread-read todo updates with content item errors", () => {
+    const result = todoMapper.fromThreadItemObject(
+      {
+        type: "dynamicToolCall",
+        id: "call-1",
+        namespace: "functions",
+        tool: "update_plan",
+        arguments: TODO_PAYLOAD,
+        status: "completed",
+        contentItems: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: { message: "Plan update failed" },
+            }),
+          },
+        ],
+      },
+      { source: "thread_read", threadId: "thread-1" },
+    );
+
+    expect(result.handled).toBe(false);
+    expect(result.events).toEqual([]);
+  });
 });
 
 describe("Codex compaction event mapper", () => {

@@ -190,6 +190,9 @@ export const codexDynamicToolErrorFromResult = (
   return dynamicToolErrorFromValue(resultPayload) ?? dynamicToolErrorFromValue(item);
 };
 
+export const codexDynamicToolResultPayload = (item: Record<string, unknown>): unknown =>
+  item.contentItems ?? item.content_items ?? item.result;
+
 export const codexFileChangeErrorFromItem = (item: Record<string, unknown>): string | null => {
   const explicitError = errorMessageFromValue(item.error) ?? extractStringField(item, ["stderr"]);
   if (explicitError) {

@@ -15,7 +15,10 @@ import type {
 } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper, CodexLiveInput, CodexThreadItemInput } from "../codex-event-mapper";
-import { codexDynamicToolErrorFromResult } from "../codex-tool-error-extractor";
+import {
+  codexDynamicToolErrorFromResult,
+  codexDynamicToolResultPayload,
+} from "../codex-tool-error-extractor";
 import { statusFromCodexStatus } from "../codex-tool-normalizer";
 
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
@@ -198,7 +201,8 @@ const completedDynamicToolCallEvents = (
   if (!codexItemTypeMatches(item, "dynamicToolCall")) {
     return emptyCodexMappingResult();
   }
-  const error = codexDynamicToolErrorFromResult(item.result, item);
+  const resultPayload = codexDynamicToolResultPayload(item);
+  const error = codexDynamicToolErrorFromResult(resultPayload, item);
   if (
     item.success === false ||
     error ||

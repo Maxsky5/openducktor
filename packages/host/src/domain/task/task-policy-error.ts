@@ -1,6 +1,10 @@
+import type { OdtToolErrorCode } from "@openducktor/contracts";
 import { Data } from "effect";
 
-export type TaskPolicyErrorCode = "TASK_POLICY_ERROR" | "TASK_TRANSITION_NOT_ALLOWED";
+export type TaskPolicyErrorCode = Extract<
+  OdtToolErrorCode,
+  "TASK_POLICY_ERROR" | "TASK_TRANSITION_NOT_ALLOWED"
+>;
 
 export type TaskPolicyErrorInput = {
   readonly code?: TaskPolicyErrorCode;

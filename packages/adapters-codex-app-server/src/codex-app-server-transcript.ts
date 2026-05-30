@@ -16,6 +16,7 @@ import {
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import {
   codexDynamicToolErrorFromResult,
+  codexDynamicToolResultPayload,
   codexFileChangeErrorFromItem,
   codexMcpToolErrorFromResult,
 } from "./codex-tool-error-extractor";
@@ -870,7 +871,7 @@ const codexDynamicToolCallStreamParts = (
   const patch =
     isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
   const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
-  const resultPayload = value.contentItems ?? value.content_items ?? value.result;
+  const resultPayload = codexDynamicToolResultPayload(value);
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromResult(resultPayload, value);
   const success = typeof value.success === "boolean" ? value.success : true;

@@ -56,6 +56,11 @@ type McpHostBridgeStartup = {
   deferred: Deferred.Deferred<{ baseUrl: string; port: number }, HostOperationError>;
 };
 
+type BridgeHttpResponse = {
+  readonly statusCode: number;
+  readonly payload: unknown;
+};
+
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const MAX_BODY_BYTES = 1024 * 1024;
 const workspaceScopedToolNames = new Set<string>(ODT_WORKSPACE_SCOPED_TOOL_NAMES);
@@ -143,26 +148,20 @@ const readRequestBody = (request: IncomingMessage): Effect.Effect<unknown, HostO
     request.on("error", onError);
   });
 
-const sendJson = (response: ServerResponse, statusCode: number, payload: unknown): void => {
-  if (response.headersSent || response.writableEnded) {
-    return;
-  }
+const bridgeHttpResponse = (statusCode: number, payload: unknown): BridgeHttpResponse => ({
+  statusCode,
+  payload,
+});
+
+const bridgeErrorResponse = (error: unknown): BridgeHttpResponse =>
+  bridgeHttpResponse(400, bridgeErrorPayload(error, errorMessage(error)));
+
+const sendJson = (response: ServerResponse, { statusCode, payload }: BridgeHttpResponse): void => {
   response.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
   });
   response.end(JSON.stringify(payload));
-};
-
-const sendBridgeErrorResponse = (response: ServerResponse, error: unknown): void => {
-  if (response.headersSent || response.writableEnded) {
-    if (!response.writableEnded) {
-      response.destroy(error instanceof Error ? error : undefined);
-    }
-    return;
-  }
-
-  sendJson(response, 400, bridgeErrorPayload(error, errorMessage(error)));
 };
 
 const errorMessage = (error: unknown): string =>
@@ -270,19 +269,16 @@ const createBridgeRequestHandler =
   (request: IncomingMessage, response: ServerResponse): void => {
     const handle = Effect.gen(function* () {
       if (request.method === "GET" && request.url === "/health") {
-        sendJson(response, 200, { ok: true });
-        return;
+        return bridgeHttpResponse(200, { ok: true });
       }
 
       if (request.method !== "POST" || !request.url?.startsWith("/invoke/")) {
-        sendJson(response, 404, bridgeMessagePayload("MCP host bridge endpoint not found."));
-        return;
+        return bridgeHttpResponse(404, bridgeMessagePayload("MCP host bridge endpoint not found."));
       }
 
       const receivedToken = request.headers[APP_TOKEN_HEADER];
       if (receivedToken !== token) {
-        sendJson(
-          response,
+        return bridgeHttpResponse(
           receivedToken === undefined ? 401 : 403,
           bridgeMessagePayload(
             receivedToken === undefined
@@ -290,44 +286,39 @@ const createBridgeRequestHandler =
               : "Invalid OpenDucktor web host app token.",
           ),
         );
-        return;
       }
 
       const command = decodeURIComponent(request.url.slice("/invoke/".length));
       const body = yield* readRequestBody(request);
       if (command === "odt_mcp_ready") {
-        sendJson(response, 200, yield* bridgeService.ready(body));
-        return;
+        return bridgeHttpResponse(200, yield* bridgeService.ready(body));
       }
       if (command === "odt_get_workspaces") {
-        sendJson(response, 200, yield* bridgeService.getWorkspaces(body));
-        return;
+        return bridgeHttpResponse(200, yield* bridgeService.getWorkspaces(body));
       }
 
       if (!workspaceScopedToolNames.has(command)) {
-        sendJson(
-          response,
+        return bridgeHttpResponse(
           404,
           bridgeMessagePayload(`Unknown MCP host bridge command: ${command}`),
         );
-        return;
       }
 
-      sendJson(
-        response,
+      return bridgeHttpResponse(
         200,
         yield* bridgeService.invoke(command as WorkspaceScopedOdtToolName, body),
       );
-    }).pipe(
-      Effect.catchAll((error) =>
-        Effect.sync(() => {
-          sendBridgeErrorResponse(response, error);
-        }),
-      ),
-    );
-    Effect.runPromise(handle).catch((error) => {
-      sendBridgeErrorResponse(response, error);
     });
+    Effect.runPromise(Effect.either(handle))
+      .then((result) => {
+        sendJson(
+          response,
+          result._tag === "Right" ? result.right : bridgeErrorResponse(result.left),
+        );
+      })
+      .catch((error) => {
+        sendJson(response, bridgeErrorResponse(error));
+      });
   };
 
 export const createMcpHostBridgeServer = ({
