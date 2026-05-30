@@ -1,9 +1,11 @@
 # Hexagonal Architecture (Ports & Adapters)
 
 > Sources:
+> Primary:
 > - [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) — Alistair Cockburn (2005)
 > - [Hexagonal Architecture Explained](https://openlibrary.org/works/OL38388131W) — Alistair Cockburn & Juan Manuel Garrido de Paz (2024)
 > - [Interview with Alistair Cockburn](https://jmgarridopaz.github.io/content/interviewalistair.html) — Juan Manuel Garrido de Paz
+> Implementation guide:
 > - [Hexagonal Architecture Pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/hexagonal-architecture.html) — AWS
 
 ## Core Concept
@@ -14,6 +16,8 @@
 **Design validation technique:** The pattern was designed with FIT testing in mind—business experts can write test cases before any GUI exists. If you can run your entire application from test fixtures, your hexagonal boundaries are correct.
 
 **The hexagon is conceptual.** Most applications have 2-4 ports, not six. The shape emphasizes that all external interactions go through ports, regardless of direction.
+
+This file uses a Hexagonal-focused layout where driven ports live under `application/ports/driven/`. In a DDD-centered layout, aggregate repository interfaces often live beside the aggregate in `domain/`. The important rule is ownership: the application/domain defines the abstractions it needs, and technology adapters implement them from the outside.
 
 ```mermaid
 flowchart TB
@@ -55,6 +59,8 @@ flowchart TB
 ## Ports
 
 Interfaces defining how the application communicates with the outside world.
+
+Explicit port interfaces are useful when multiple adapters, testing seams, or team boundaries justify them. For small codebases, a public use-case handler method can be enough as the driver port.
 
 ### Driver Ports (Primary / Inbound)
 
@@ -331,6 +337,8 @@ class RabbitMQEventPublisher implements IEventPublisherPort:
 | Using prefix | `IOrderStorage` | `OrderStorageUsingPostgres` |
 
 ### Project Structure
+
+Use this structure when you want all Hexagonal ports grouped by direction. If the codebase follows the DDD-centered default from `SKILL.md`, keep aggregate repositories in `domain/{aggregate}/repository` and reserve `application/ports/driven/` for application-owned dependencies such as payment gateways, notification gateways, clocks, or event publishers.
 
 ```
 src/

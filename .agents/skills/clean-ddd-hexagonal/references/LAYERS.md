@@ -1,8 +1,12 @@
 # Layer Structure - Complete Reference
 
 > Sources:
+> Primary:
 > - [The Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) — Robert C. Martin
+> - [Onion Architecture](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/) — Jeffrey Palermo
+> Implementation guide:
 > - [Designing a DDD-oriented Microservice](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice) — Microsoft
+> Supplemental synthesis:
 > - [Clean Architecture: Standing on the Shoulders of Giants](https://herbertograca.com/2017/09/28/clean-architecture-standing-on-the-shoulders-of-giants/) — Herberto Graça
 
 ## The Four Layers
@@ -13,6 +17,8 @@
 | **Application** | Use cases, orchestration | Domain |
 | **Infrastructure** | External systems, frameworks | Application, Domain |
 | **Presentation** | API/UI entry points | Application |
+
+This reference uses a DDD-centered variant: aggregate repository interfaces live in the Domain layer, while use-case ports and application-owned outbound ports live in the Application layer. A stricter Hexagonal layout may put all driven ports under `application/ports/driven/` instead. Both are acceptable when dependencies still point inward and infrastructure implements, rather than owns, the abstractions.
 
 ---
 
@@ -29,7 +35,7 @@ domain/
 │   ├── order_item.ts           # Child entity
 │   ├── value_objects.ts        # Money, Address, OrderStatus
 │   ├── events.ts               # OrderPlaced, OrderShipped
-│   ├── repository.ts           # IOrderRepository interface
+│   ├── repository.ts           # IOrderRepository interface (DDD repository port)
 │   ├── services.ts             # PricingService, DiscountService
 │   └── errors.ts               # InsufficientStockError
 ├── customer/
@@ -141,7 +147,7 @@ application/
 ### Rules
 
 1. **Depends only on Domain** - No infrastructure imports
-2. **Defines ports** - Interfaces for repositories, external services
+2. **Defines application ports** - Use-case interfaces and application-owned outbound dependencies
 3. **Orchestrates, doesn't implement** - Calls domain methods
 4. **Transaction boundary** - Manages unit of work
 
@@ -279,7 +285,7 @@ infrastructure/
 
 ### Rules
 
-1. **Implements ports** - Concrete classes for interfaces
+1. **Implements ports** - Concrete classes for domain/application interfaces
 2. **Contains framework code** - ORM, HTTP frameworks, etc.
 3. **Maps between layers** - Domain ↔ Database/DTO mapping
 4. **Easily replaceable** - Can swap Postgres for MongoDB

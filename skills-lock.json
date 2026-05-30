@@ -5,7 +5,7 @@
       "source": "ccheney/robust-skills",
       "sourceType": "github",
       "skillPath": "skills/clean-ddd-hexagonal/SKILL.md",
-      "computedHash": "b9a54e257685086d0034bd8277964452b7208e2f18bf68d158996936ce667b6a"
+      "computedHash": "223df951adb9adf655b139221d4a3b68a314f5a0c24c8bc137a754ce9dee5713"
     },
     "shadcn": {
       "source": "shadcn/ui",

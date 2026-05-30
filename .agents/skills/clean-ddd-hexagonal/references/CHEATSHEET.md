@@ -2,6 +2,8 @@
 
 > See [SKILL.md](../SKILL.md#sources) for full source list.
 
+This cheatsheet summarizes an opinionated synthesis, not a single canonical architecture. Use DDD, Hexagonal, Clean Architecture, Onion Architecture, CQRS, and Event Sourcing independently when only one pattern fits the problem.
+
 ## Layer Summary
 
 ```mermaid
@@ -44,6 +46,19 @@ flowchart TB
 ```
 
 *Dependencies point inward*
+
+---
+
+## Pattern Boundaries
+
+| Pattern | Use For | Avoid Assuming |
+|---------|---------|----------------|
+| DDD | Ubiquitous language, bounded contexts, aggregates | It requires a specific folder layout |
+| Hexagonal | Ports/adapters around an application core | Every port must be a separate interface |
+| Clean Architecture | Inward dependency rule and use-case boundaries | Every project needs four layers |
+| Onion Architecture | Domain-centered dependency inversion | It is mandatory in addition to Clean/Hexagonal |
+| CQRS | Divergent read/write models in a bounded context | It should be system-wide by default |
+| Event Sourcing | Audit trails, temporal queries, replayable workflows | It is a normal CRUD persistence choice |
 
 ---
 
@@ -241,6 +256,8 @@ export class PlaceOrderHandler {
 
 ## Port Naming Conventions
 
+Repository port placement varies by school: DDD-centered code often keeps aggregate repositories in `domain/{aggregate}/repository`; stricter Hexagonal layouts often group them under `application/ports/driven/`. Pick one convention per codebase.
+
 | Type | Pattern | Examples |
 |------|---------|----------|
 | Driver Port | `I{Action}UseCase` | `IPlaceOrderUseCase`, `IGetOrderUseCase` |
@@ -260,7 +277,7 @@ export class PlaceOrderHandler {
 | Leaky Abstraction | Domain depends on ORM | Keep domain pure |
 | God Aggregate | One massive aggregate | Split into smaller ones |
 | Cross-Aggregate TX | Modifying multiple in one TX | Use domain events |
-| Direct Layer Skip | Controller → Repository | Go through application layer |
+| Direct Layer Skip | Controller -> Repository in this architecture style | Route through application use case |
 | Premature CQRS | Adding complexity early | Start simple, evolve |
 | Event Proliferation | Too many fine-grained events | May signal context boundary |
 
@@ -384,12 +401,17 @@ infrastructure/
 
 ## Resources
 
-### Books
+### Books & Primary Articles
 - Clean Architecture (Robert C. Martin, 2017)
 - Domain-Driven Design (Eric Evans, 2003)
 - Implementing Domain-Driven Design (Vaughn Vernon, 2013)
+- Onion Architecture (Jeffrey Palermo, 2008 article series)
 - Hexagonal Architecture Explained (Alistair Cockburn, 2024)
 - Get Your Hands Dirty on Clean Architecture (Tom Hombergs, 2019)
+
+### Supplemental Syntheses
+- Herberto Graça, Clean Architecture comparison and Explicit Architecture articles (opinionated synthesis, not canonical source)
+- Tom Hombergs, practical Clean Architecture examples
 
 ### Reference Implementations
 - Go: [bxcodec/go-clean-arch](https://github.com/bxcodec/go-clean-arch)
@@ -402,5 +424,6 @@ infrastructure/
 ### Official Documentation
 - https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
 - https://alistair.cockburn.us/hexagonal-architecture/
+- https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/
 - https://www.domainlanguage.com/ddd/
 - https://martinfowler.com/tags/domain%20driven%20design.html
