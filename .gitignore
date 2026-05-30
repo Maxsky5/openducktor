@@ -10,14 +10,6 @@ coverage
 .idea
 .env
 .env.*
-apps/desktop/src-tauri/target
-apps/desktop/src-tauri/gen
-apps/desktop/src-tauri/.cargo
-apps/desktop/src-tauri/binaries
-apps/desktop/src-tauri/crates/*/target
-# Keep the Tauri app workspace lockfile in VCS for reproducible builds.
-!apps/desktop/src-tauri/Cargo.lock
-apps/desktop/src-tauri/crates/*/Cargo.lock
 apps/electron/release/
 apps/electron/.electron-dev/
 
@@ -26,9 +18,7 @@ apps/electron/.electron-dev/
 .agents/skills/desloppify/
 scorecard.png
 packages/openducktor-mcp/tsconfig.tsbuildinfo
-.cache/cef/
 .effect/
-.cargo-tools/
 .husky/_/
 # Added by code-review-graph
 .code-review-graph/

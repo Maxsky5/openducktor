@@ -1,17 +1,19 @@
 # apps/
 
 ## Responsibility
-Application workspaces for OpenDucktor, currently including the legacy Tauri desktop shell and the additive Electron migration shell.
+
+Application workspaces for OpenDucktor, currently including the Electron desktop shell.
 
 ## Design Patterns
-- Workspace split: `apps/desktop` owns the legacy Tauri shell, scripts, and host runtime; `apps/electron` owns the Electron shell migration; packages own shared contracts, core logic, host boundaries, adapters, and browser launcher code.
-- Thin shell composition: UI and host boundaries stay explicit so contract changes flow through package surfaces first.
+
+- `apps/electron` owns the Electron shell, renderer bootstrap, preload bridge, desktop packaging, and Electron IPC transport.
+- Shared contracts, core logic, host boundaries, adapters, and browser launcher code live under `packages/`.
+- Shell packages stay thin and delegate product behavior to `@openducktor/frontend` and `@openducktor/host`.
 
 ## Data & Control Flow
-Root scripts route legacy desktop development, desktop builds, and host packaging through `apps/desktop`; Electron migration scripts route through `apps/electron`. Runtime data then flows from shared contracts/core into the shell-specific bridges and host layers.
+
+Root scripts route desktop development and packaging through `apps/electron`. Runtime data flows from shared contracts/core into the Electron shell bridge and the TypeScript host layer.
 
 ## Integration Points
-- `apps/desktop/codemap.md`
-- `apps/desktop/src/codemap.md`
-- `apps/desktop/scripts/codemap.md`
+
 - `apps/electron/codemap.md`

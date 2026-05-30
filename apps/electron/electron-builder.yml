@@ -27,6 +27,7 @@ extraMetadata:
 mac:
   artifactName: OpenDucktor-Electron-${version}-${os}-${arch}.${ext}
   icon: resources/icon.icns
+  minimumSystemVersion: "12.0"
   binaries:
     - Contents/Resources/bin/openducktor-mcp
   category: public.app-category.developer-tools

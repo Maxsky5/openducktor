@@ -1,25 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { HOST_COMMAND_NAMES } from "./host-command-registry";
-
-const repoRoot = resolve(import.meta.dir, "../../../../..");
-
-const readTauriRegisteredCommandNames = (): string[] => {
-  const registrySource = readFileSync(
-    resolve(repoRoot, "apps/desktop/src-tauri/src/commands/command_registry.rs"),
-    "utf8",
-  );
-
-  const commandNames = [...registrySource.matchAll(/commands(?:::[a-z_]+)+::([a-z][a-z0-9_]*)/g)]
-    .map((match) => match[1])
-    .filter((name): name is string => name !== undefined);
-
-  return [...new Set(commandNames)].sort();
-};
+import {
+  HOST_COMMAND_NAMES,
+  isHostCommandName,
+  parseHostCommandName,
+} from "./host-command-registry";
 
 describe("HOST_COMMAND_NAMES", () => {
-  test("matches the Tauri desktop command registry", () => {
-    expect(readTauriRegisteredCommandNames()).toEqual([...HOST_COMMAND_NAMES].sort());
+  test("stays unique and sorted for transport validation", () => {
+    const commandNames: string[] = [...HOST_COMMAND_NAMES];
+
+    expect(commandNames).toEqual([...commandNames].sort());
+    expect(new Set(commandNames).size).toBe(commandNames.length);
+  });
+
+  test("parses known commands and rejects unknown commands", () => {
+    expect(isHostCommandName("tasks_list")).toBe(true);
+    expect(parseHostCommandName("tasks_list")).toBe("tasks_list");
+    expect(isHostCommandName("missing_command")).toBe(false);
+    expect(() => parseHostCommandName("missing_command")).toThrow(
+      "Unknown OpenDucktor host command: missing_command",
+    );
   });
 });

@@ -1818,7 +1818,7 @@ describe("AgentStudioGitPanel", () => {
             diffScope: "uncommitted",
             fileDiffs: [
               {
-                file: "apps/desktop/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
+                file: "packages/frontend/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
                 type: "modified",
                 additions: 3,
                 deletions: 1,
@@ -1827,7 +1827,7 @@ describe("AgentStudioGitPanel", () => {
             ],
             fileStatuses: [
               {
-                path: "apps/desktop/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
+                path: "packages/frontend/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
                 staged: false,
                 status: "modified",
               },
@@ -1845,13 +1845,13 @@ describe("AgentStudioGitPanel", () => {
     expect(headerNode.props.className).toContain("flex-wrap");
     expect(headerNode.props.className).toContain("min-w-0");
     expect(pathNode.props.title).toBe(
-      "apps/desktop/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
+      "packages/frontend/src/components/features/agents/agent-studio-git-panel/file-diff-entry.tsx",
     );
     expect(pathNode.props.className).toContain("flex-col");
     expect(pathNode.props.className).toContain("overflow-hidden");
     expect(getNodeText(pathNode)).toContain("file-diff-entry.tsx");
     expect(getNodeText(pathNode)).toContain(
-      "apps/desktop/src/components/features/agents/agent-studio-git-panel",
+      "packages/frontend/src/components/features/agents/agent-studio-git-panel",
     );
 
     const fileNameNode = pathNode.findAll(
@@ -1861,7 +1861,7 @@ describe("AgentStudioGitPanel", () => {
       (node) =>
         typeof node.type === "string" &&
         node.children.includes(
-          "apps/desktop/src/components/features/agents/agent-studio-git-panel",
+          "packages/frontend/src/components/features/agents/agent-studio-git-panel",
         ),
     )[0];
 

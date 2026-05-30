@@ -9,8 +9,6 @@
 - [ ] `bun run typecheck`
 - [ ] `bun run test`
 - [ ] `bun run build`
-- [ ] `bun run check:rust`
-- [ ] `bun run test:rust`
 - [ ] Not applicable
 
 ## Checklist

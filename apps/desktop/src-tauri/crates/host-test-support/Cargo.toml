@@ -1,6 +1,0 @@
-[package]
-name = "host-test-support"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]

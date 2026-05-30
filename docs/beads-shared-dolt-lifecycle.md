@@ -10,7 +10,7 @@ That means OpenDucktor needs two things to work well:
 - a Beads attachment for each repository
 - a Dolt database that Beads can read and write
 
-In the current architecture, the OpenDucktor host is the only owner of that storage lifecycle. The TypeScript host owns this path for Electron and browser mode; the Rust host keeps the equivalent legacy path for Tauri. MCP clients and agent runtimes never receive Beads attachment paths, Dolt connection details, or metadata-namespace control as part of their startup contract.
+In the current architecture, the OpenDucktor TypeScript host is the only owner of that storage lifecycle. MCP clients and agent runtimes never receive Beads attachment paths, Dolt connection details, or metadata-namespace control as part of their startup contract.
 
 The important design choice is that OpenDucktor does **not** run one Dolt process per repository.
 Instead, it runs **one shared local Dolt server per OpenDucktor config directory** and gives each repository its own database inside that server.
@@ -220,16 +220,16 @@ That is the normal lifecycle.
 
 The host keeps this lifecycle split explicit instead of embedding it across task CRUD code.
 
-- `packages/host/src/infrastructure/beads/*` and `packages/host/src/adapters/beads/*` own the TypeScript host Beads/Dolt path used by Electron and browser mode.
+- `packages/host/src/infrastructure/beads/*` and `packages/host/src/adapters/beads/*` own the Beads/Dolt path used by Electron and browser mode.
 - `packages/host/src/ports/task-repository-ports.ts` is the TypeScript task-store port boundary consumed by application services.
-- `packages/host/src/application/tasks/*` owns TypeScript task workflow use cases, document/session persistence orchestration, and task action enrichment.
-- `host-infra-system` owns the legacy Rust repo attachment locator and identity resolver: repo id, attachment root, attachment dir, and shared Dolt database name/path derivation.
-- `host-infra-system` also owns the legacy Rust shared Dolt server manager: state locking, health checks, startup, reuse, adoption, shutdown, and restore-time restart coordination.
-- `host-infra-beads/src/lifecycle/context.rs` owns legacy Rust Beads CLI working-directory and `BEADS_*` environment resolution from the managed attachment root.
-- `host-infra-beads/src/lifecycle/verifier.rs` owns legacy Rust attachment metadata verification and `bd where --json` readiness parsing.
-- `host-infra-beads/src/lifecycle/provisioner.rs` owns legacy Rust `bd init`, `bd doctor --fix`, backup restore, and custom-status provisioning.
-- `host-infra-beads/src/lifecycle/coordinator.rs` owns the legacy Rust repo-init lock, readiness cache, and the verify -> restore/repair/init -> reverify -> configure-statuses algorithm.
-- `host-infra-beads/src/store/*` is the legacy Rust persistence gateway for task CRUD, documents, sessions, and delivery metadata.
+- `packages/host/src/application/tasks/*` owns task workflow use cases, document/session persistence orchestration, and task action enrichment.
+- `packages/host/src/infrastructure/beads/beads-context-model.ts` and `packages/host/src/adapters/beads/beads-cli-context.ts` own repo id, attachment root, attachment dir, and shared Dolt database name/path derivation.
+- `packages/host/src/infrastructure/beads/beads-shared-dolt-server.ts`, `beads-shared-dolt-state.ts`, `beads-shared-dolt-startup.ts`, and `beads-shared-dolt-process.ts` own shared Dolt server state locking, health checks, startup, reuse, adoption, shutdown, and restore-time restart coordination.
+- `packages/host/src/adapters/beads/beads-cli-context.ts` owns Beads CLI working-directory and `BEADS_*` environment resolution from the managed attachment root.
+- `packages/host/src/infrastructure/beads/beads-attachment-readiness.ts` owns attachment metadata verification and `bd where --json` readiness parsing.
+- `packages/host/src/infrastructure/beads/beads-attachment-provisioning.ts` owns `bd init`, `bd doctor --fix`, backup restore, and custom-status provisioning.
+- `packages/host/src/infrastructure/beads/beads-attachment-store.ts` owns the repo-init lock, readiness cache, and the verify -> restore/repair/init -> reverify -> configure-statuses algorithm.
+- `packages/host/src/infrastructure/beads/task-store/*` is the persistence gateway for task CRUD, documents, sessions, and delivery metadata.
 
 ## Verification For An Existing Attachment
 

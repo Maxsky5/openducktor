@@ -30,12 +30,12 @@ Concretely:
 - The command router exposes an Effect-native surface and a Promise adapter, making Promise interop explicit instead of the host's internal model.
 - Retries, polling, and background work may use Effect scheduling and fibers only when they represent existing product behavior. They must not hide failures or introduce fallback paths.
 
-This decision is scoped to `packages/host`, but it is intentionally a first step rather than the final scope of Effect in OpenDucktor. It does not migrate `packages/contracts` from Zod, does not replace TanStack Query or frontend state ownership, and does not require the Rust Tauri host to adopt an equivalent abstraction.
+This decision is scoped to `packages/host`, but it is intentionally a first step rather than the final scope of Effect in OpenDucktor. It does not migrate `packages/contracts` from Zod and does not replace TanStack Query or frontend state ownership.
 
 ## Considered Options
 
 - Keep the host Promise-based. Rejected because the host has many fallible I/O boundaries and long-lived resources; Promise-only orchestration keeps failure types, cleanup, and dependency wiring implicit.
-- Adopt Effect across the entire monorepo in one step. Rejected because a broad migration would mix packages with very different ownership models and would obscure whether Effect is improving each boundary. Frontend reads are intentionally owned by TanStack Query, shared contracts are Zod-based, and the Rust host cannot share the same runtime model.
+- Adopt Effect across the entire monorepo in one step. Rejected because a broad migration would mix packages with very different ownership models and would obscure whether Effect is improving each boundary. Frontend reads are intentionally owned by TanStack Query and shared contracts are Zod-based.
 - Adopt Effect progressively, starting with `packages/host`. Accepted because the host has the clearest immediate fit and can establish reusable patterns for later migrations in runtime adapters, the local web runner, and MCP bridge code.
 - Use Effect only in leaf adapters. Rejected as too shallow: it would wrap external calls but leave application orchestration and port contracts Promise-based, preserving the same ambiguity at the layer where most host decisions are made.
 - Make every public host API return Effect. Rejected because shell transports, Electron IPC, browser HTTP handlers, and existing host clients need Promise-compatible boundaries.

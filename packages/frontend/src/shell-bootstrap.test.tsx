@@ -264,16 +264,16 @@ describe("bootstrapOpenDucktorShell", () => {
 });
 
 describe("shell entrypoints", () => {
-  test("desktop delegates shared startup to the frontend bootstrap", () => {
-    const source = readRepoFile("apps/desktop/src/main.tsx");
+  test("Electron delegates shared startup to the frontend bootstrap", () => {
+    const source = readRepoFile("apps/electron/src/renderer/main.tsx");
 
     expect(source).toMatch(
       /import\s*\{\s*bootstrapOpenDucktorShell\s*\}\s*from\s*"@openducktor\/frontend"/u,
     );
     expect(source).toMatch(
-      /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createDesktopShellBridge,\s*\}\)/u,
+      /bootstrapOpenDucktorShell\(\{\s*createShellBridge:\s*createElectronShellBridge,\s*routerMode:\s*"hash",\s*\}\)/u,
     );
-    expect(source).toContain('console.error("Critical desktop bootstrap failure", error);');
+    expect(source).toContain('console.error("Critical Electron bootstrap failure", error);');
     expectNoManualShellBootstrapSteps(source);
   });
 

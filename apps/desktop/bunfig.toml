@@ -1,3 +1,0 @@
-[test]
-root = "src"
-preload = ["../../packages/frontend/src/test-utils/bun-test-preload.ts"]

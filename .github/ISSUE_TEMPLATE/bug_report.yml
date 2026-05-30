@@ -59,16 +59,15 @@ body:
     id: app_mode
     attributes:
       label: App mode
-      description: For example `tauri:dev`, packaged app, or browser dev mode.
-      placeholder: bun run tauri:dev
+      description: For example `electron:dev`, packaged app, or browser dev mode.
+      placeholder: bun run electron:dev
   - type: textarea
     id: tooling
     attributes:
       label: Tooling versions
-      description: Include Bun, Rust, `bd`, `opencode`, and OS version if relevant.
+      description: Include Bun, `bd`, `opencode`, and OS version if relevant.
       placeholder: |
         Bun:
-        Rust:
         bd:
         opencode:
         macOS:

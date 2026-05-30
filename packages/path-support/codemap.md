@@ -9,9 +9,9 @@ Small platform-neutral utilities shared by host-side packages, CLIs, and reposit
 - Prefer explicit caller-owned error handling over throwing domain-specific host errors from this package.
 
 ## Data & Control Flow
-Host, MCP, web, and desktop script packages import focused pure helpers from `src/index.ts`.
+Host, MCP, web, Electron, and repo script packages import focused pure helpers from `src/index.ts`.
 
 ## Integration Points
 - `@openducktor/host`
 - `@openducktor/mcp`
-- `@openducktor/desktop` scripts
+- repo release/build scripts

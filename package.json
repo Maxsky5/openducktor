@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter @openducktor/desktop dev",
+    "dev": "bun run electron:dev",
     "electron:dev": "cd apps/electron && bun run dev",
     "electron:build": "bun run --filter @openducktor/electron build",
     "electron:package": "bun run --filter @openducktor/electron package",
@@ -19,24 +19,12 @@
     "release:version:check": "bun run scripts/release-version.ts check",
     "release:homebrew:cask": "bun run scripts/release-homebrew-cask.ts",
     "test:release:homebrew:cask": "bun test scripts/release-homebrew-cask.test.ts",
-    "release:cef:env": "bun run --cwd apps/desktop scripts/resolve-cef-release-env.ts",
-    "tauri": "cd apps/desktop && bun run tauri",
-    "tauri:dev": "cd apps/desktop && bun run tauri:dev",
-    "tauri:build": "cd apps/desktop && bun run tauri:build",
-    "tauri:setup:cef": "cd apps/desktop && bun run tauri:setup:cef",
-    "tauri:dev:cef": "cd apps/desktop && FORCE_COLOR=1 bun run tauri:dev:cef",
-    "tauri:build:cef": "cd apps/desktop && bun run tauri:build:cef",
-    "check:rust": "cd apps/desktop/src-tauri && cargo check",
-    "test:rust": "cd apps/desktop/src-tauri && cargo test",
-    "web-host:build": "cd apps/desktop/src-tauri && cargo build --release --bin openducktor-web-host",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
     "test": "bun run --workspaces test",
-    "test:hooks": "bun run --filter @openducktor/desktop test:hooks",
-    "lint": "bun run tauri:commands:panic-guard && bun run frontend:boundary-guard && bun run host:architecture-guard && bun run --workspaces lint",
+    "lint": "bun run frontend:boundary-guard && bun run host:architecture-guard && bun run --workspaces lint",
     "frontend:boundary-guard": "bun run scripts/frontend-boundary-guard.ts",
     "host:architecture-guard": "bun run scripts/host-architecture-guard.ts",
-    "tauri:commands:panic-guard": "bun run scripts/tauri-command-panic-guard.ts",
     "deps:unused:deps": "bunx knip --workspace='@openducktor/*' --include dependencies",
     "deps:unused:exports": "bunx knip --workspace='@openducktor/*' --include exports --no-exit-code",
     "deps:unused": "bun run deps:unused:deps && bun run deps:unused:exports",
@@ -59,10 +47,10 @@
     "@commitlint/cli": "^21.0.1",
     "@commitlint/config-conventional": "^21.0.1",
     "@biomejs/biome": "^2.4.15",
-    "@iarna/toml": "^2.2.5",
     "@types/node": "^25.9.1",
     "husky": "^9.1.7",
     "knip": "^6.14.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "yaml": "^2.9.0"
   }
 }

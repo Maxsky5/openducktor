@@ -7,7 +7,6 @@ This repository uses recurring checks and automated update PRs to keep dependenc
 - Config: `.github/dependabot.yml`
 - Coverage:
   - Bun workspace updates from repository root
-  - Cargo updates for `apps/desktop/src-tauri`
   - GitHub Actions updates
 - Cadence: weekly
 - Grouping: patch/minor updates are grouped to reduce PR noise

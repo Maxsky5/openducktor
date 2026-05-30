@@ -122,8 +122,8 @@ const classifyBranchProbeErrorCode = (
   }
 
   if (
-    combined.includes("tauri runtime not available") ||
     combined.includes("desktop shell") ||
+    combined.includes("host runtime not available") ||
     combined.includes("runtime unavailable")
   ) {
     return "runtime_unavailable";

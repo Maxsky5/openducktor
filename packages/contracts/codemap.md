@@ -13,4 +13,4 @@ Shared runtime descriptors, config/settings schemas, session/run shapes, slash-c
 
 ## Integration Points
 - Imported by `packages/core`, `packages/adapters-*`, `packages/openducktor-mcp`, and `packages/openducktor-web`
-- Supplies host/runtime schemas consumed by the Rust host, desktop shell, and browser launcher
+- Supplies host/runtime schemas consumed by the TypeScript host, Electron shell, browser launcher, adapters, and MCP package

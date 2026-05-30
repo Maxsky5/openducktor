@@ -1,22 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 
 const FRONTEND_ROOT = "packages/frontend/src";
-const DESKTOP_SHELL_ROOT = "apps/desktop/src";
-
-const ALLOWED_DESKTOP_SHELL_FILES = new Set([
-  "desktop-shell-bridge.ts",
-  "main.tsx",
-]);
 
 const SHARED_FRONTEND_BANNED_PATTERNS = [
   {
-    pattern: /(?:^|\n)\s*(?:import\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?|export\s+(?:type\s+)?[\s\S]*?\s+from\s+|await\s+import\(|import\()\s*["'][^"']*@tauri-apps\/api/,
-    message: "Shared frontend code must use the shell bridge instead of importing Tauri APIs directly.",
-  },
-  {
-    pattern: /(?:^|\n)\s*(?:import\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?|export\s+(?:type\s+)?[\s\S]*?\s+from\s+|await\s+import\(|import\()\s*["'][^"']*(?:apps\/desktop|src-tauri)/,
-    message: "Shared frontend code must not import desktop-shell or Rust host internals.",
+    pattern: /(?:^|\n)\s*(?:import\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?|export\s+(?:type\s+)?[\s\S]*?\s+from\s+|await\s+import\(|import\()\s*["'][^"']*(?:apps\/electron|packages\/openducktor-web)/,
+    message: "Shared frontend code must not import shell internals; use the shell bridge instead.",
   },
 ];
 
@@ -86,19 +76,7 @@ const findSharedFrontendViolations = (): Violation[] => {
   return violations;
 };
 
-const findDesktopShellViolations = (): Violation[] => {
-  return walkFiles(DESKTOP_SHELL_ROOT)
-    .filter((filePath) => !ALLOWED_DESKTOP_SHELL_FILES.has(relative(DESKTOP_SHELL_ROOT, filePath)))
-    .map((filePath) => ({
-      filePath,
-      line: 1,
-      message:
-        "Desktop app source must stay a thin shell. Move shared UI/runtime code to packages/frontend/src.",
-      snippet: relative(DESKTOP_SHELL_ROOT, filePath),
-    }));
-};
-
-const violations = [...findSharedFrontendViolations(), ...findDesktopShellViolations()];
+const violations = findSharedFrontendViolations();
 
 if (violations.length > 0) {
   console.error(`[frontend-boundary-guard] Found ${violations.length} frontend boundary violation(s).`);
@@ -110,4 +88,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("[frontend-boundary-guard] Shared frontend and desktop shell boundaries are clean.");
+console.log("[frontend-boundary-guard] Shared frontend shell boundaries are clean.");

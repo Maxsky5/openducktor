@@ -14,4 +14,4 @@ Typed host-side clients that wrap shell-provided host commands for workspace, ta
 ## Integration Points
 - `@openducktor/contracts`
 - `@openducktor/core`
-- Shell-specific invoke bridges from Tauri, Electron, and Web hosts
+- Shell-specific invoke bridges from Electron and Web hosts

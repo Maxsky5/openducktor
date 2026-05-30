@@ -6,9 +6,7 @@ describe("release version helpers", () => {
   test("keeps stable release and desktop versions aligned", () => {
     expect(deriveDesktopVersion("0.4.0")).toBe("0.4.0");
     expect(expectedVersionForEntry("packages/openducktor-web/package.json", "0.4.0")).toBe("0.4.0");
-    expect(expectedVersionForEntry("apps/desktop/src-tauri/tauri.conf.json", "0.4.0")).toBe(
-      "0.4.0",
-    );
+    expect(expectedVersionForEntry("apps/electron/package.json", "0.4.0")).toBe("0.4.0");
   });
 
   test("keeps prerelease versions on npm packages but uses numeric desktop versions", () => {
@@ -22,23 +20,7 @@ describe("release version helpers", () => {
     expect(expectedVersionForEntry("packages/openducktor-mcp/package.json", releaseVersion)).toBe(
       releaseVersion,
     );
-    expect(expectedVersionForEntry("apps/desktop/package.json", releaseVersion)).toBe("0.4.0");
     expect(expectedVersionForEntry("apps/electron/package.json", releaseVersion)).toBe("0.4.0");
-    expect(expectedVersionForEntry("apps/desktop/src-tauri/tauri.conf.json", releaseVersion)).toBe(
-      "0.4.0",
-    );
-    expect(
-      expectedVersionForEntry(
-        "apps/desktop/src-tauri/Cargo.toml [workspace.package]",
-        releaseVersion,
-      ),
-    ).toBe("0.4.0");
-    expect(
-      expectedVersionForEntry(
-        "apps/desktop/src-tauri/Cargo.lock [openducktor-desktop]",
-        releaseVersion,
-      ),
-    ).toBe("0.4.0");
   });
 
   test("rejects malformed release versions", () => {

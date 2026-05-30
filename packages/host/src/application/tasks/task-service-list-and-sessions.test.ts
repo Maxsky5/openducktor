@@ -459,7 +459,7 @@ describe("createTaskService list and session reads", () => {
     });
     expect(calls).toEqual([{ repoPath: "/repo", taskId: "task-1" }]);
   });
-  test("loads Tauri-compatible document and agent-session read commands from metadata", async () => {
+  test("loads host-compatible document and agent-session read commands from metadata", async () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord();
     const taskStore: TaskStorePort = {

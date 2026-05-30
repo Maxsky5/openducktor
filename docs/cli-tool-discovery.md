@@ -187,13 +187,6 @@ The web package does not use Electron resources and does not currently provide b
 Therefore, runtime CLIs such as Git, Beads, Dolt, OpenCode, Codex, and GitHub CLI are discovered through their descriptor overrides, descriptor conventional locations, and PATH unless the web shell has an exact provided path for that tool.
 If the web package ever bundles a CLI, its resolver must provide package-owned paths from the npm package layout, not desktop app paths.
 
-### Legacy Tauri Path
-
-The Rust host still has equivalent command resolution for the legacy Tauri path.
-
-When adding a tool that must work through Tauri-hosted functionality, keep the Rust resolver and diagnostics in parity.
-For Electron and web, the TypeScript host descriptor registry is the source of truth.
-
 ## Error Model
 
 Discovery returns typed host failures.
@@ -319,13 +312,7 @@ Never reuse a path from another shell, another worktree, or a removed developmen
 If a shell already knows the exact executable path for a tool it is using to run OpenDucktor, pass that path through the host composition `providedToolPaths` input.
 Do not add a one-off discovery branch for that shell or tool.
 
-### 7. Keep Tauri Parity When Needed
-
-If the tool is used by still-active Tauri/Rust host behavior, update the Rust resolver and integration tests in the same change.
-
-If the tool is TypeScript-host-only, call that out in the PR so reviewers do not assume the legacy path changed.
-
-### 8. Add Tests
+### 7. Add Tests
 
 At minimum, add or update tests for:
 
@@ -352,7 +339,7 @@ Consumer tests should assert behavior, not reimplement the descriptor search ord
 - Avoid Codex-specific, OpenCode-specific, or shell-specific discovery branches.
 - Reject invalid explicit overrides instead of falling back to PATH.
 - Keep packaged mode independent from source worktrees.
-- Keep the web package independent from Electron or Tauri resources.
+- Keep the web package independent from Electron resources.
 - Reuse descriptor search logic from diagnostics, runtime starters, and task workflows.
 - Treat missing required bundled tools as distribution errors, not PATH lookup misses.
 - Keep errors actionable and specific to the failed source.

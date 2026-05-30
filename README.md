@@ -129,7 +129,7 @@ The TypeScript host in `packages/host` is the Effect-native host boundary used b
 
 ## Contributing
 
-Contributor setup, local build instructions, CEF details, and verification commands live in [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributor setup, local build instructions, packaging details, and verification commands live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

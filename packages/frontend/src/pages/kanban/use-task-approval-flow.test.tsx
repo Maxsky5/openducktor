@@ -68,7 +68,7 @@ const originalToastError = toast.error;
 
 const createUnavailableHostClient = () =>
   createHostClient(async () => {
-    throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+    throw new Error("Host runtime not available. Run inside a supported shell.");
   });
 
 const buildMockedHost = () => ({

@@ -8,7 +8,7 @@ Shared React/Vite frontend package for OpenDucktor. It owns App composition, reu
 
 - `src/index.ts` exposes the package entrypoint, shell bootstrap API, styles subpath, and shell-bridge contract types.
 - `src/shell-bootstrap-workflow.ts` owns the shared bootstrap sequence; `src/shell-bootstrap.tsx` binds that workflow to the DOM, router, theme preload, and crash shell.
-- `src/lib/shell-bridge.ts` is the host boundary. Shared UI code reaches host operations through this bridge instead of importing Tauri or browser transport APIs directly.
+- `src/lib/shell-bridge.ts` is the host boundary. Shared UI code reaches host operations through this bridge instead of importing shell transport APIs directly.
 - `src/components`, `src/pages`, `src/state`, `src/features`, `src/lib`, and `src/test-utils` keep the layered frontend structure, now shell-neutral.
 
 ## Flow
@@ -17,4 +17,4 @@ Shells call `bootstrapOpenDucktorShell(...)` with shell-specific bridge inputs. 
 
 ## Integration
 
-Desktop integration lives in `apps/desktop/src/desktop-shell-bridge.ts`; shared host seams live in `src/lib/shell-bridge.ts` and the browser/web shell adapters.
+Desktop integration lives in `apps/electron/src/renderer/electron-shell-bridge.ts`; shared host seams live in `src/lib/shell-bridge.ts` and the browser/web shell adapters.

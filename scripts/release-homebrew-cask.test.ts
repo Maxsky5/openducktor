@@ -5,13 +5,17 @@ import {
   resolveHomebrewMacosRequirement,
 } from "./release-homebrew-cask";
 
-test("resolveAssetPattern creates an arch-aware Tauri DMG pattern", () => {
+test("resolveAssetPattern creates an arch-aware Electron DMG pattern", () => {
   expect(
-    resolveAssetPattern("0.0.5", "OpenDucktor_0.0.5_aarch64.dmg", "OpenDucktor_0.0.5_x64.dmg"),
+    resolveAssetPattern(
+      "0.0.5",
+      "OpenDucktor-Electron-0.0.5-macos-arm64.dmg",
+      "OpenDucktor-Electron-0.0.5-macos-x64.dmg",
+    ),
   ).toEqual({
-    armArchToken: "aarch64",
+    armArchToken: "arm64",
     intelArchToken: "x64",
-    assetPattern: "OpenDucktor_#{version}_#{arch}.dmg",
+    assetPattern: "OpenDucktor-Electron-#{version}-macos-#{arch}.dmg",
   });
 });
 
@@ -70,22 +74,22 @@ test("renderHomebrewCask renders the expected OpenDucktor cask", () => {
     version: "0.0.5",
     repository: "Maxsky5/openducktor",
     productName: "OpenDucktor",
-    bundleIdentifier: "dev.openducktor.desktop",
+    bundleIdentifier: "com.openducktor.app",
     minimumSystemVersion: "12.0",
-    armAssetName: "OpenDucktor_0.0.5_aarch64.dmg",
+    armAssetName: "OpenDucktor-Electron-0.0.5-macos-arm64.dmg",
     armSha256: "a".repeat(64),
-    intelAssetName: "OpenDucktor_0.0.5_x64.dmg",
+    intelAssetName: "OpenDucktor-Electron-0.0.5-macos-x64.dmg",
     intelSha256: "b".repeat(64),
   });
 
   expect(contents).toContain('cask "openducktor" do');
-  expect(contents).toContain('arch arm: "aarch64", intel: "x64"');
+  expect(contents).toContain('arch arm: "arm64", intel: "x64"');
   expect(contents).toContain('version "0.0.5"');
   expect(contents).toContain(
-    'url "https://github.com/Maxsky5/openducktor/releases/download/v#{version}/OpenDucktor_#{version}_#{arch}.dmg"',
+    'url "https://github.com/Maxsky5/openducktor/releases/download/v#{version}/OpenDucktor-Electron-#{version}-macos-#{arch}.dmg"',
   );
   expect(contents).toContain('depends_on macos: ">= :monterey"');
   expect(contents).toContain('app "OpenDucktor.app"');
   expect(contents).toContain('"~/.openducktor"');
-  expect(contents).toContain('"~/Library/Preferences/dev.openducktor.desktop.plist"');
+  expect(contents).toContain('"~/Library/Preferences/com.openducktor.app.plist"');
 });
