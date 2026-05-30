@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/core";
 import { type ReactElement, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { badgeVariants } from "@/components/ui/badge";
+import { badgeVariants } from "@/components/ui/badge-variants";
 import { cn } from "@/lib/utils";
 import {
   type AgentChatComposerDraft,
@@ -18,12 +18,12 @@ import {
 } from "./agent-chat-composer-selection";
 import { AgentChatComposerSkillMenu } from "./agent-chat-composer-skill-menu";
 import { AgentChatComposerSlashMenu } from "./agent-chat-composer-slash-menu";
+import type { AgentChatFileReferenceChipFile } from "./agent-chat-file-reference-chip";
 import {
   AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME,
   AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME,
   AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME,
-  type AgentChatFileReferenceChipFile,
-} from "./agent-chat-file-reference-chip";
+} from "./agent-chat-file-reference-chip-classnames";
 import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
 import {
   AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME,

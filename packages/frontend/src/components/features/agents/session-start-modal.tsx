@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { sessionStartModeButtonLabel } from "@/features/session-start/session-start-display";
 
 type SessionStartModalConfirmInput =
@@ -89,19 +90,22 @@ function StartModeField({
   return (
     <div className="grid gap-1.5">
       <p className="text-sm font-medium text-foreground">Session Mode</p>
-      <div className="grid grid-cols-2 gap-2">
-        {availableStartModes.map((startMode) => (
-          <Button
-            key={startMode}
-            type="button"
-            variant={selectedStartMode === startMode ? "default" : "outline"}
-            disabled={isStartModeDisabled(startMode)}
-            onClick={() => onSelectStartMode(startMode)}
-          >
-            {sessionStartModeButtonLabel(startMode)}
-          </Button>
-        ))}
-      </div>
+      <SegmentedControlRoot size="lg" className="w-full" aria-label="Session mode">
+        {availableStartModes.map((startMode) => {
+          const isSelected = selectedStartMode === startMode;
+          return (
+            <SegmentedControlItem
+              key={startMode}
+              active={isSelected}
+              size="lg"
+              disabled={isStartModeDisabled(startMode)}
+              onClick={() => onSelectStartMode(startMode)}
+            >
+              {sessionStartModeButtonLabel(startMode)}
+            </SegmentedControlItem>
+          );
+        })}
+      </SegmentedControlRoot>
     </div>
   );
 }

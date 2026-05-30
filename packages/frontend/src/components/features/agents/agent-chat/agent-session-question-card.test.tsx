@@ -14,6 +14,21 @@ const originalConsoleError = console.error;
 
 type CardProps = React.ComponentProps<typeof AgentSessionQuestionCard>;
 
+const getRequiredAttribute = (element: Element, attribute: string): string => {
+  const value = element.getAttribute(attribute);
+  if (value === null) {
+    throw new Error(`Expected element to have '${attribute}' attribute`);
+  }
+  return value;
+};
+
+const expectActiveTabPanel = (tab: HTMLElement): void => {
+  const panel = screen.getByRole("tabpanel");
+  expect(tab.getAttribute("aria-selected")).toBe("true");
+  expect(panel.id).toBe(getRequiredAttribute(tab, "aria-controls"));
+  expect(panel.getAttribute("aria-labelledby")).toBe(tab.id);
+};
+
 const buildRequest = (overrides: Partial<AgentQuestionRequest> = {}): AgentQuestionRequest => ({
   requestId: "request-1",
   questions: [
@@ -51,6 +66,13 @@ const createCardHarness = (props: CardProps) => {
     });
   };
 
+  const clickTabByText = async (label: string): Promise<void> => {
+    const tab = screen.getByRole("tab", { name: new RegExp(label, "i") });
+    await act(async () => {
+      fireEvent.click(tab);
+    });
+  };
+
   const getButtonDisabled = (label: string): boolean => {
     const button = screen.getByRole("button", { name: new RegExp(label, "i") });
     return button.hasAttribute("disabled");
@@ -63,7 +85,7 @@ const createCardHarness = (props: CardProps) => {
     return rendered.container.textContent ?? "";
   };
 
-  return { mount, unmount, clickButtonByText, getButtonDisabled, asText };
+  return { mount, unmount, clickButtonByText, clickTabByText, getButtonDisabled, asText };
 };
 
 describe("AgentSessionQuestionCard", () => {
@@ -99,16 +121,23 @@ describe("AgentSessionQuestionCard", () => {
     });
     await harness.mount();
 
-    await harness.clickButtonByText("Summary");
+    expect(screen.getByRole("tablist", { name: "Questions" })).toBeTruthy();
+    const architectureTab = screen.getByRole("tab", { name: /Architecture/i });
+    expectActiveTabPanel(architectureTab);
+
+    await harness.clickTabByText("Summary");
+    const summaryTab = screen.getByRole("tab", { name: /Summary/i });
+    expectActiveTabPanel(summaryTab);
     expect(harness.asText()).toContain("No answer yet");
 
-    await harness.clickButtonByText("Validation", 1);
+    await harness.clickTabByText("Validation");
+    const validationTab = screen.getByRole("tab", { name: /Validation/i });
+    expectActiveTabPanel(validationTab);
     expect(harness.asText()).toContain("How should we validate this change?");
     expect(harness.asText()).not.toContain("No answer yet");
 
     await harness.unmount();
   });
-
   test("enables submit after completion and sends normalized answers", async () => {
     const onSubmit = mock(async () => {});
     const harness = createCardHarness({

@@ -1,6 +1,7 @@
 import { CheckCircle2, Circle, CircleDotDashed, ListChecks } from "lucide-react";
-import type { ReactElement } from "react";
-import { Button } from "@/components/ui/button";
+import type { HTMLAttributes, ReactElement } from "react";
+import { useId } from "react";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import { isAgentQuestionAnswered } from "./agent-session-question-draft";
@@ -44,12 +45,25 @@ export function AgentSessionQuestionCard({
     resetDraft,
     buildAnswers,
   } = useQuestionDraft({ request });
+  const tabGroupId = useId();
 
   if (request.questions.length === 0) {
     return null;
   }
 
   const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+  const getTabId = (tabId: string): string => `${tabGroupId}-tab-${tabId}`;
+  const getPanelId = (tabId: string): string => `${tabGroupId}-panel-${tabId}`;
+  const getTabPanelProps = (tabId: string): HTMLAttributes<HTMLDivElement> | undefined => {
+    if (!hasMultipleQuestions) {
+      return undefined;
+    }
+    return {
+      role: "tabpanel",
+      id: getPanelId(tabId),
+      "aria-labelledby": getTabId(tabId),
+    };
+  };
 
   return (
     <section className="rounded-xl border border-input bg-card shadow-sm">
@@ -65,66 +79,72 @@ export function AgentSessionQuestionCard({
 
       <div className="space-y-2 p-2.5">
         {hasMultipleQuestions ? (
-          <div className="flex flex-wrap gap-1">
+          <SegmentedControlRoot
+            role="tablist"
+            size="sm"
+            className="h-auto flex-wrap bg-transparent p-0"
+            aria-label="Questions"
+          >
             {questionRenderEntries.map(({ question, key }, index) => {
               const tabId = String(index);
               const isTabActive = activeTabId === tabId;
               const answered = isAgentQuestionAnswered(question, normalizedDraft[index]);
               return (
-                <Button
+                <SegmentedControlItem
                   key={key}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className={cn(
-                    "h-7 cursor-pointer border-input px-2 text-[11px]",
-                    isTabActive
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-card text-foreground hover:bg-accent",
-                  )}
+                  active={isTabActive}
+                  role="tab"
+                  id={getTabId(tabId)}
+                  aria-controls={getPanelId(tabId)}
+                  grow="hug"
+                  size="xs"
+                  inactiveClassName="bg-card text-foreground hover:bg-accent"
+                  className="h-7 gap-1 border border-input px-2"
                   onClick={() => setActiveTabId(tabId)}
                 >
                   {answered ? (
                     <CheckCircle2
                       className={cn(
                         "size-3.5",
-                        isTabActive ? "text-primary-foreground/70" : "text-success-accent",
+                        isTabActive ? "text-selected-control-foreground/70" : "text-success-accent",
                       )}
                     />
                   ) : (
                     <Circle
                       className={cn(
                         "size-3.5",
-                        isTabActive ? "text-primary-foreground/70" : "text-muted-foreground",
+                        isTabActive
+                          ? "text-selected-control-foreground/70"
+                          : "text-muted-foreground",
                       )}
                     />
                   )}
                   {question.header?.trim() || `Question ${index + 1}`}
-                </Button>
+                </SegmentedControlItem>
               );
             })}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={cn(
-                "h-7 cursor-pointer border-input px-2 text-[11px]",
-                isSummaryTab
-                  ? "bg-sidebar-accent text-white hover:bg-sidebar-accent/90"
-                  : "bg-card text-foreground hover:bg-muted",
-              )}
+            <SegmentedControlItem
+              active={isSummaryTab}
+              role="tab"
+              id={getTabId(QUESTION_SUMMARY_TAB_ID)}
+              aria-controls={getPanelId(QUESTION_SUMMARY_TAB_ID)}
+              grow="hug"
+              size="xs"
+              inactiveClassName="bg-card text-foreground hover:bg-muted"
+              className="h-7 gap-1 border border-input px-2"
               onClick={() => setActiveTabId(QUESTION_SUMMARY_TAB_ID)}
             >
               <ListChecks className="size-3.5" />
               Summary
-            </Button>
-          </div>
+            </SegmentedControlItem>
+          </SegmentedControlRoot>
         ) : null}
 
         {isSummaryTab ? (
           <QuestionSummaryTab
             request={request}
             draft={normalizedDraft}
+            panelProps={getTabPanelProps(QUESTION_SUMMARY_TAB_ID)}
             onSelectQuestion={(index) => setActiveTabId(String(index))}
           />
         ) : activeQuestion ? (
@@ -137,6 +157,7 @@ export function AgentSessionQuestionCard({
             onSelectOption={(optionLabel) => selectOption(activeQuestionIndex, optionLabel)}
             onToggleFreeText={() => toggleFreeText(activeQuestionIndex)}
             onChangeFreeText={(value) => updateFreeText(activeQuestionIndex, value)}
+            panelProps={getTabPanelProps(String(activeQuestionIndex))}
           />
         ) : null}
 

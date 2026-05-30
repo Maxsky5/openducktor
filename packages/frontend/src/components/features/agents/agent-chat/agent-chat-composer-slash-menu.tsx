@@ -61,7 +61,7 @@ export function AgentChatComposerSlashMenu({
                 type="button"
                 className={cn(
                   "flex w-full cursor-pointer gap-3 px-3 py-2 text-left transition-colors",
-                  isActive ? "bg-primary/20" : "hover:bg-muted/80",
+                  isActive ? "bg-selected-surface" : "hover:bg-muted/80",
                 )}
                 onPointerDown={(event) => {
                   event.preventDefault();

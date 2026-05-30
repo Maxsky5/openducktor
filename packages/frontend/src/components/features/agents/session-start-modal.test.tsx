@@ -284,4 +284,26 @@ describe("SessionStartModal", () => {
 
     unmount();
   });
+
+  test("styles session mode selection with the segmented control tokens", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          availableStartModes: ["fresh", "reuse", "fork"],
+          selectedStartMode: "reuse",
+          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
+          selectedSourceSessionId: "session-1",
+        }),
+      }),
+    );
+
+    const reuseButton = screen.getByRole("button", { name: /reuse existing/i });
+    const freshButton = screen.getByRole("button", { name: /start fresh/i });
+
+    expect(reuseButton.className).toContain("bg-selected-control");
+    expect(reuseButton.className).not.toContain("bg-primary");
+    expect(freshButton.className).not.toContain("bg-selected-control");
+
+    unmount();
+  });
 });

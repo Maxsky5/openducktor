@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
+import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 
 type AgentSessionTodoPanelProps = {
   todos: AgentSessionTodoItem[];
@@ -18,20 +19,6 @@ type AgentSessionTodoPanelProps = {
   accentColor?: string | undefined;
   onToggleCollapse: () => void;
   className?: string;
-};
-
-export const getVisibleSessionTodos = (todos: AgentSessionTodoItem[]): AgentSessionTodoItem[] => {
-  return todos.filter((todo) => todo.status !== "cancelled");
-};
-
-export const getActionableSessionTodo = (
-  todos: AgentSessionTodoItem[],
-): AgentSessionTodoItem | null => {
-  return (
-    todos.find((todo) => todo.status === "in_progress") ??
-    todos.find((todo) => todo.status === "pending") ??
-    null
-  );
 };
 
 const statusIcon = (
@@ -43,9 +30,9 @@ const statusIcon = (
   }
   if (status === "in_progress") {
     return isSessionWorking ? (
-      <LoaderCircle className="size-3.5 animate-spin text-primary" />
+      <LoaderCircle className="size-3.5 animate-spin text-status-running" />
     ) : (
-      <CircleDotDashed className="size-3.5 text-primary" />
+      <CircleDotDashed className="size-3.5 text-status-running" />
     );
   }
   return <Circle className="size-3.5 text-muted-foreground" />;

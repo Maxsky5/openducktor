@@ -319,7 +319,7 @@ export const AgentStudioDevServerPanel = memo(function AgentStudioDevServerPanel
                   <TabsTrigger
                     key={script.scriptId}
                     value={script.scriptId}
-                    className="h-8 w-auto max-w-[320px] flex-none justify-start rounded-none border-b-0 border-l-0 border-r border-t-4 bg-(--dev-server-terminal-tab-inactive) border-r-(--dev-server-terminal-border) border-t-transparent px-3 py-1 font-mono text-[11px] text-(--dev-server-terminal-muted) data-[state=active]:border-t-primary data-[state=active]:bg-(--dev-server-terminal-tab-active) data-[state=active]:border-r-(--dev-server-terminal-border) data-[state=active]:text-(--dev-server-terminal-foreground)"
+                    className="h-8 w-auto max-w-[320px] flex-none justify-start rounded-none border-b-0 border-l-0 border-r border-t-4 bg-(--dev-server-terminal-tab-inactive) border-r-(--dev-server-terminal-border) border-t-transparent px-3 py-1 font-mono text-[11px] text-(--dev-server-terminal-muted) data-[state=active]:border-t-selected-accent data-[state=active]:bg-(--dev-server-terminal-tab-active) data-[state=active]:border-r-(--dev-server-terminal-border) data-[state=active]:text-(--dev-server-terminal-foreground)"
                     data-testid={`agent-studio-dev-server-tab-${script.scriptId}`}
                   >
                     <span className="mr-2 font-mono text-[11px] text-(--dev-server-terminal-subtle)">

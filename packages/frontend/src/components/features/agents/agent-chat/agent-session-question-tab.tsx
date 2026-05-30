@@ -1,6 +1,6 @@
 import { CheckCircle2, CheckSquare, Circle, MessageSquarePlus, Square } from "lucide-react";
-import type { ReactElement } from "react";
-import { Button } from "@/components/ui/button";
+import type { HTMLAttributes, ReactElement } from "react";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
@@ -15,6 +15,7 @@ type QuestionTabProps = {
   onSelectOption: (optionLabel: string) => void;
   onToggleFreeText: () => void;
   onChangeFreeText: (value: string) => void;
+  panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
 };
 
 export const QuestionTab = ({
@@ -26,9 +27,12 @@ export const QuestionTab = ({
   onSelectOption,
   onToggleFreeText,
   onChangeFreeText,
+  panelProps,
 }: QuestionTabProps): ReactElement => {
+  const { className: panelClassName, ...rootProps } = panelProps ?? {};
+
   return (
-    <div className="space-y-2">
+    <div {...rootProps} className={cn("space-y-2", panelClassName)}>
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -90,22 +94,24 @@ export const QuestionTab = ({
       ) : null}
 
       {question.options.length > 0 ? (
-        <Button
-          type="button"
+        <SegmentedControlRoot
           size="sm"
-          variant="outline"
-          className={cn(
-            "h-6 cursor-pointer border-input px-2 text-[11px]",
-            entry?.useFreeText
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-card text-foreground hover:bg-accent",
-          )}
-          disabled={disabled}
-          onClick={onToggleFreeText}
+          className="h-auto bg-transparent p-0"
+          aria-label="Answer mode"
         >
-          <MessageSquarePlus className="size-3.5" />
-          Other answer
-        </Button>
+          <SegmentedControlItem
+            active={Boolean(entry?.useFreeText)}
+            grow="hug"
+            size="xs"
+            inactiveClassName="bg-card text-foreground hover:bg-accent"
+            className="gap-1 border border-input px-2"
+            disabled={disabled}
+            onClick={onToggleFreeText}
+          >
+            <MessageSquarePlus className="size-3.5" />
+            Other answer
+          </SegmentedControlItem>
+        </SegmentedControlRoot>
       ) : null}
 
       {question.options.length === 0 || entry?.useFreeText ? (

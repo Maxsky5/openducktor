@@ -75,6 +75,7 @@ function AgentStudioTaskTabLabel({
   onMouseDown?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onMouseUp?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }): ReactElement {
+  const statusLabel = statusLabelByTab(tab.status);
   const className = cn(
     "h-9 max-w-[19rem] cursor-pointer items-center justify-start gap-2 rounded-t-[8px] border-none bg-transparent px-0 pr-1 text-sm font-medium leading-none",
     "text-inherit",
@@ -85,13 +86,13 @@ function AgentStudioTaskTabLabel({
   const content = (
     <>
       <span
-        role="img"
-        aria-label={statusLabelByTab(tab.status)}
-        title={statusLabelByTab(tab.status)}
+        aria-hidden="true"
+        title={statusLabel}
         className="inline-flex size-5 shrink-0 items-center justify-center"
       >
         {statusIconByTab(tab.status)}
       </span>
+      <span className="sr-only">{statusLabel}</span>
       <span className="max-w-52 truncate">{tab.taskTitle}</span>
     </>
   );
@@ -125,12 +126,24 @@ const statusLabelByTab = (status: AgentStudioTaskTabStatus): string => {
 
 const statusIconByTab = (status: AgentStudioTaskTabStatus): ReactElement => {
   if (status === "working") {
-    return <LoaderCircle className="size-3.5 animate-spin text-primary" />;
+    return (
+      <span className="agent-studio-task-status-running-dot">
+        <Circle className="size-3 fill-status-running text-status-running" />
+      </span>
+    );
   }
   if (status === "waiting_input") {
     return <CircleAlert className="size-3.5 text-warning-accent" />;
   }
   return <Circle className="size-3.5 fill-input text-input" />;
+};
+
+const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
+  const pendingFrame = frameRef.current;
+  if (pendingFrame !== null) {
+    globalThis.cancelAnimationFrame(pendingFrame);
+    frameRef.current = null;
+  }
 };
 
 function AgentStudioTaskTabShell({
@@ -285,6 +298,9 @@ export function AgentStudioTaskTabs({
     tabTaskIds,
     onReorderTab,
   });
+  const selectedTaskId = availableTabTasks.some((task) => task.id === pendingTaskId)
+    ? pendingTaskId
+    : (availableTabTasks[0]?.id ?? "");
 
   useEffect(() => {
     if (!isCreateDialogOpen) {
@@ -295,20 +311,6 @@ export function AgentStudioTaskTabs({
     return () => globalThis.cancelAnimationFrame(frame);
   }, [isCreateDialogOpen]);
 
-  useEffect(() => {
-    if (!isCreateDialogOpen) {
-      return;
-    }
-    if (availableTabTasks.length === 0) {
-      setPendingTaskId("");
-      return;
-    }
-    if (availableTabTasks.some((task) => task.id === pendingTaskId)) {
-      return;
-    }
-    setPendingTaskId(availableTabTasks[0]?.id ?? "");
-  }, [availableTabTasks, isCreateDialogOpen, pendingTaskId]);
-
   const canOpenCreateDialog = agentStudioReady;
   const hasCreatableTasks = availableTabTasks.length > 0;
   const hasAnyTab = tabs.length > 0;
@@ -317,9 +319,7 @@ export function AgentStudioTaskTabs({
     : null;
 
   const scheduleSelectionSuppressionClear = (): void => {
-    if (selectionSuppressionFrameRef.current !== null) {
-      globalThis.cancelAnimationFrame(selectionSuppressionFrameRef.current);
-    }
+    cancelPendingAnimationFrame(selectionSuppressionFrameRef);
     selectionSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
       suppressedSelectionTaskIdRef.current = null;
       selectionSuppressionFrameRef.current = null;
@@ -327,11 +327,7 @@ export function AgentStudioTaskTabs({
   };
 
   useEffect(() => {
-    return () => {
-      if (selectionSuppressionFrameRef.current !== null) {
-        globalThis.cancelAnimationFrame(selectionSuppressionFrameRef.current);
-      }
-    };
+    return () => cancelPendingAnimationFrame(selectionSuppressionFrameRef);
   }, []);
 
   return (
@@ -405,7 +401,10 @@ export function AgentStudioTaskTabs({
             aria-label="Open new task tab"
             className="size-10 shrink-0 rounded-md border-none border-transparent bg-transparent p-0 text-studio-chrome-foreground shadow-none hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             disabled={!canOpenCreateDialog}
-            onClick={() => setIsCreateDialogOpen(true)}
+            onClick={() => {
+              setPendingTaskId(availableTabTasks[0]?.id ?? "");
+              setIsCreateDialogOpen(true);
+            }}
           >
             <Plus className="size-[1.4rem]" />
             <span className="sr-only">New Tab</span>
@@ -444,7 +443,7 @@ export function AgentStudioTaskTabs({
             ) : hasCreatableTasks ? (
               <TaskSelector
                 tasks={availableTabTasks}
-                value={pendingTaskId}
+                value={selectedTaskId}
                 includeEmptyOption={false}
                 emptyLabel="Select task"
                 disabled={!agentStudioReady}
@@ -463,12 +462,12 @@ export function AgentStudioTaskTabs({
             </Button>
             <Button
               type="button"
-              disabled={isLoadingAvailableTabTasks || !pendingTaskId || !hasCreatableTasks}
+              disabled={isLoadingAvailableTabTasks || !selectedTaskId || !hasCreatableTasks}
               onClick={() => {
-                if (!pendingTaskId) {
+                if (!selectedTaskId) {
                   return;
                 }
-                onCreateTab(pendingTaskId);
+                onCreateTab(selectedTaskId);
                 setIsCreateDialogOpen(false);
               }}
             >

@@ -10,10 +10,14 @@ import {
   Target,
   X,
 } from "lucide-react";
-import { memo, type ReactElement, useEffect, useState } from "react";
+import { memo, type ReactElement, useState } from "react";
 import { BranchSelector } from "@/components/features/repository/branch-selector";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { Button } from "@/components/ui/button";
+import {
+  segmentedControlRootClassName,
+  segmentedControlTriggerClassName,
+} from "@/components/ui/segmented-control-classnames";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
@@ -163,39 +167,180 @@ function GitInfoHeaderSummaryRow({
 type GitBranchContextRowProps = {
   currentBranchLabel: string;
   branchState: {
-    canEditTargetBranch: boolean;
     hasTargetAhead: boolean;
-    isEditingTargetBranch: boolean;
     isRepositoryMode: boolean;
-    isSavingTargetBranch: boolean;
   };
-  onCancelTargetBranchEdit: () => void;
-  onEditTargetBranch: () => void;
+  canEditTargetBranch: boolean;
   targetAheadCount: number | null;
   targetBranchLabel: string;
   targetBranchOptions: NonNullable<GitInfoHeaderProps["targetBranchOptions"]>;
   targetBranchSelectionValue: string;
-  updateTargetBranchSelection: (selection: string) => void;
+  onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
 };
+
+type TargetBranchEditorState =
+  | { mode: "display" }
+  | {
+      mode: "editing";
+      draft: string;
+      isSaving: boolean;
+    };
+
+type GitTargetBranchPanelProps = {
+  canEditTargetBranch: boolean;
+  targetBranchLabel: string;
+  targetBranchOptions: NonNullable<GitInfoHeaderProps["targetBranchOptions"]>;
+  targetBranchSelectionValue: string;
+  onUpdateTargetBranch: GitInfoHeaderProps["onUpdateTargetBranch"];
+};
+
+function GitTargetBranchPanel({
+  canEditTargetBranch,
+  targetBranchLabel,
+  targetBranchOptions,
+  targetBranchSelectionValue,
+  onUpdateTargetBranch,
+}: GitTargetBranchPanelProps): ReactElement {
+  const [editorState, setEditorState] = useState<TargetBranchEditorState>({ mode: "display" });
+  const isEditorOpen = canEditTargetBranch && editorState.mode === "editing";
+  const isSavingTargetBranch = isEditorOpen ? editorState.isSaving : false;
+  const displayedSelectionValue = isEditorOpen ? editorState.draft : targetBranchSelectionValue;
+
+  const handleEditTargetBranch = (): void => {
+    if (!canEditTargetBranch || isSavingTargetBranch) {
+      return;
+    }
+
+    setEditorState({
+      mode: "editing",
+      draft: targetBranchSelectionValue,
+      isSaving: false,
+    });
+  };
+
+  const handleCancelTargetBranchEdit = (): void => {
+    if (isSavingTargetBranch) {
+      return;
+    }
+
+    setEditorState({ mode: "display" });
+  };
+
+  const handleSelectTargetBranch = (selection: string): void => {
+    if (!onUpdateTargetBranch || editorState.mode !== "editing" || editorState.isSaving) {
+      return;
+    }
+
+    if (selection === targetBranchSelectionValue) {
+      setEditorState({ mode: "display" });
+      return;
+    }
+
+    setEditorState({
+      mode: "editing",
+      draft: selection,
+      isSaving: true,
+    });
+
+    void onUpdateTargetBranch(selection).then(
+      () => {
+        setEditorState({ mode: "display" });
+      },
+      () => {
+        // Task operations already surface actionable errors.
+        setEditorState({
+          mode: "editing",
+          draft: selection,
+          isSaving: false,
+        });
+      },
+    );
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2">
+      <p
+        id={TARGET_BRANCH_LABEL_ID}
+        className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+      >
+        Target branch
+      </p>
+      {isEditorOpen ? (
+        <div
+          className="mt-1 flex h-7 min-w-0 items-center gap-2"
+          data-testid="agent-studio-git-target-branch-editor"
+        >
+          <div className="min-w-0 flex-1">
+            <BranchSelector
+              value={displayedSelectionValue}
+              options={targetBranchOptions}
+              triggerAriaLabelledBy={TARGET_BRANCH_LABEL_ID}
+              className="w-full"
+              popoverClassName="w-[min(28rem,calc(100vw-2rem))] p-0"
+              triggerClassName="h-7 text-xs"
+              disabled={isSavingTargetBranch}
+              onValueChange={handleSelectTargetBranch}
+            />
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            aria-label="Cancel target branch edit"
+            onClick={handleCancelTargetBranchEdit}
+            disabled={isSavingTargetBranch}
+            data-testid="agent-studio-git-target-branch-cancel"
+          >
+            {isSavingTargetBranch ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <X className="size-3.5" />
+            )}
+          </Button>
+        </div>
+      ) : (
+        <div
+          className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
+          data-testid="agent-studio-git-target-branch-display-row"
+        >
+          <Target className="size-3.5 shrink-0 text-muted-foreground" />
+          <span
+            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
+            data-testid="agent-studio-git-target-branch"
+          >
+            {targetBranchLabel}
+          </span>
+          {canEditTargetBranch ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="ml-auto size-7 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Edit target branch"
+              onClick={handleEditTargetBranch}
+              data-testid="agent-studio-git-target-branch-edit"
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function GitBranchContextRow({
   currentBranchLabel,
   branchState,
-  onCancelTargetBranchEdit,
-  onEditTargetBranch,
+  canEditTargetBranch,
   targetAheadCount,
   targetBranchLabel,
   targetBranchOptions,
   targetBranchSelectionValue,
-  updateTargetBranchSelection,
+  onUpdateTargetBranch,
 }: GitBranchContextRowProps): ReactElement {
-  const {
-    canEditTargetBranch,
-    hasTargetAhead,
-    isEditingTargetBranch,
-    isRepositoryMode,
-    isSavingTargetBranch,
-  } = branchState;
+  const { hasTargetAhead, isRepositoryMode } = branchState;
   return (
     <div
       className={cn(
@@ -240,75 +385,14 @@ function GitBranchContextRow({
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-border bg-card px-3 py-2">
-            <p
-              id={TARGET_BRANCH_LABEL_ID}
-              className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
-            >
-              Target branch
-            </p>
-            {isEditingTargetBranch ? (
-              <div
-                className="mt-1 flex h-7 min-w-0 items-center gap-2"
-                data-testid="agent-studio-git-target-branch-editor"
-              >
-                <div className="min-w-0 flex-1">
-                  <BranchSelector
-                    value={targetBranchSelectionValue}
-                    options={targetBranchOptions}
-                    triggerAriaLabelledBy={TARGET_BRANCH_LABEL_ID}
-                    className="w-full"
-                    popoverClassName="w-[min(28rem,calc(100vw-2rem))] p-0"
-                    triggerClassName="h-7 text-xs"
-                    disabled={isSavingTargetBranch}
-                    onValueChange={updateTargetBranchSelection}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="size-7"
-                  aria-label="Cancel target branch edit"
-                  onClick={onCancelTargetBranchEdit}
-                  disabled={isSavingTargetBranch}
-                  data-testid="agent-studio-git-target-branch-cancel"
-                >
-                  {isSavingTargetBranch ? (
-                    <LoaderCircle className="size-3.5 animate-spin" />
-                  ) : (
-                    <X className="size-3.5" />
-                  )}
-                </Button>
-              </div>
-            ) : (
-              <div
-                className="mt-1 flex h-7 min-w-0 items-center gap-1.5"
-                data-testid="agent-studio-git-target-branch-display-row"
-              >
-                <Target className="size-3.5 shrink-0 text-muted-foreground" />
-                <span
-                  className="min-w-0 flex-1 truncate font-mono text-xs text-foreground"
-                  data-testid="agent-studio-git-target-branch"
-                >
-                  {targetBranchLabel}
-                </span>
-                {canEditTargetBranch ? (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="ml-auto size-7 shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Edit target branch"
-                    onClick={onEditTargetBranch}
-                    data-testid="agent-studio-git-target-branch-edit"
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                ) : null}
-              </div>
-            )}
-          </div>
+          <GitTargetBranchPanel
+            key={canEditTargetBranch ? "editable" : "readonly"}
+            canEditTargetBranch={canEditTargetBranch}
+            targetBranchLabel={targetBranchLabel}
+            targetBranchOptions={targetBranchOptions}
+            targetBranchSelectionValue={targetBranchSelectionValue}
+            onUpdateTargetBranch={onUpdateTargetBranch}
+          />
         </>
       )}
     </div>
@@ -478,16 +562,21 @@ function GitDiffScopeTabs({ diffScope, onScopeChange }: GitDiffScopeTabsProps): 
       >
         <TabsList
           aria-label="Git diff scope"
-          className="inline-flex h-9 w-full items-center gap-1 rounded-none bg-muted p-1"
+          className={segmentedControlRootClassName({
+            size: "sm",
+            className: "w-full rounded-none",
+          })}
         >
           {DIFF_SCOPE_OPTIONS.map((option) => (
             <TabsTrigger
               key={option.scope}
               value={option.scope}
               className={cn(
-                "inline-flex h-7 flex-1 cursor-pointer justify-center rounded-sm px-3 text-xs transition-none",
-                "border-none bg-transparent data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
-                "text-muted-foreground hover:bg-background/80 hover:text-foreground data-[state=active]:border-transparent",
+                segmentedControlTriggerClassName({
+                  size: "sm",
+                  inactiveClassName: "hover:bg-background/80",
+                }),
+                "border-none bg-transparent transition-none data-[state=active]:border-transparent",
               )}
               data-testid={option.testId}
             >
@@ -562,9 +651,6 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   onUpdateTargetBranch,
   openDirectoryInTool,
 }: GitInfoHeaderProps): ReactElement {
-  const [isEditingTargetBranch, setIsEditingTargetBranch] = useState(false);
-  const [targetBranchDraft, setTargetBranchDraft] = useState(targetBranchSelectionValue);
-  const [isSavingTargetBranch, setIsSavingTargetBranch] = useState(false);
   const showDetectPullRequest = pullRequest == null && onDetectPullRequest != null;
   const isRepositoryMode = contextMode === "repository";
   const trimmedTargetBranch = targetBranch.trim();
@@ -644,69 +730,11 @@ export const GitInfoHeader = memo(function GitInfoHeader({
   const canEditTargetBranch =
     !isRepositoryMode && onUpdateTargetBranch != null && targetBranchOptions.length > 0;
 
-  useEffect(() => {
-    if (!canEditTargetBranch && isEditingTargetBranch) {
-      setIsEditingTargetBranch(false);
-      setTargetBranchDraft(targetBranchSelectionValue);
-    }
-  }, [canEditTargetBranch, isEditingTargetBranch, targetBranchSelectionValue]);
-
-  useEffect(() => {
-    if (!isEditingTargetBranch) {
-      setTargetBranchDraft(targetBranchSelectionValue);
-    }
-  }, [isEditingTargetBranch, targetBranchSelectionValue]);
-
   const handleScopeChange = (scope: DiffScope): void => {
     if (diffScope === scope) {
       return;
     }
     setDiffScope(scope);
-  };
-
-  const handleEditTargetBranch = (): void => {
-    if (!canEditTargetBranch || isSavingTargetBranch) {
-      return;
-    }
-
-    setTargetBranchDraft(targetBranchSelectionValue);
-    setIsEditingTargetBranch(true);
-  };
-
-  const handleCancelTargetBranchEdit = (): void => {
-    if (isSavingTargetBranch) {
-      return;
-    }
-
-    setTargetBranchDraft(targetBranchSelectionValue);
-    setIsEditingTargetBranch(false);
-  };
-
-  const handleSelectTargetBranch = (selection: string): void => {
-    if (!onUpdateTargetBranch || isSavingTargetBranch) {
-      return;
-    }
-
-    setTargetBranchDraft(selection);
-
-    if (selection === targetBranchSelectionValue) {
-      setIsEditingTargetBranch(false);
-      return;
-    }
-
-    setIsSavingTargetBranch(true);
-    void onUpdateTargetBranch(selection)
-      .then(
-        () => {
-          setIsEditingTargetBranch(false);
-        },
-        () => {
-          // Task operations already surface actionable errors.
-        },
-      )
-      .finally(() => {
-        setIsSavingTargetBranch(false);
-      });
   };
 
   return (
@@ -722,19 +750,15 @@ export const GitInfoHeader = memo(function GitInfoHeader({
       <GitBranchContextRow
         currentBranchLabel={currentBranchLabel}
         branchState={{
-          canEditTargetBranch,
           hasTargetAhead,
-          isEditingTargetBranch: isEditingTargetBranch && canEditTargetBranch,
           isRepositoryMode,
-          isSavingTargetBranch,
         }}
-        onCancelTargetBranchEdit={handleCancelTargetBranchEdit}
-        onEditTargetBranch={handleEditTargetBranch}
+        canEditTargetBranch={canEditTargetBranch}
         targetAheadCount={targetAheadCount}
         targetBranchLabel={targetBranchLabel}
         targetBranchOptions={targetBranchOptions}
-        targetBranchSelectionValue={targetBranchDraft}
-        updateTargetBranchSelection={handleSelectTargetBranch}
+        targetBranchSelectionValue={targetBranchSelectionValue}
+        onUpdateTargetBranch={onUpdateTargetBranch}
       />
 
       <GitActionRow

@@ -1,5 +1,5 @@
 import { CheckCircle2, Circle } from "lucide-react";
-import type { ReactElement } from "react";
+import type { HTMLAttributes, ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
@@ -12,6 +12,7 @@ type QuestionSummaryTabProps = {
   request: AgentQuestionRequest;
   draft: AgentQuestionDraftEntry[];
   onSelectQuestion: (index: number) => void;
+  panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
 };
 
 const answerPreviewForQuestion = (
@@ -34,11 +35,16 @@ export const QuestionSummaryTab = ({
   request,
   draft,
   onSelectQuestion,
+  panelProps,
 }: QuestionSummaryTabProps): ReactElement => {
   const questionRenderEntries = buildQuestionRenderEntries(request.requestId, request.questions);
+  const { className: panelClassName, ...rootProps } = panelProps ?? {};
 
   return (
-    <div className="space-y-1.5 rounded-lg border border-input bg-card p-1.5">
+    <div
+      {...rootProps}
+      className={cn("space-y-1.5 rounded-lg border border-input bg-card p-1.5", panelClassName)}
+    >
       {questionRenderEntries.map(({ question, key }, index) => {
         const answered = isAgentQuestionAnswered(question, draft[index]);
         return (

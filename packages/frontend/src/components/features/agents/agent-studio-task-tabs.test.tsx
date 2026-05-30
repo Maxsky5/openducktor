@@ -20,8 +20,14 @@ const buildModel = () => ({
       status: "waiting_input" as const,
       isActive: false,
     },
+    {
+      taskId: "task-3",
+      taskTitle: "Document CLI",
+      status: "idle" as const,
+      isActive: false,
+    },
   ],
-  availableTabTasks: [buildTask({ id: "task-3", title: "Stabilize desktop startup" })],
+  availableTabTasks: [buildTask({ id: "task-4", title: "Stabilize desktop startup" })],
   isLoadingAvailableTabTasks: false,
   onSelectTab: () => {},
   onCreateTab: () => {},
@@ -42,9 +48,18 @@ describe("AgentStudioTaskTabs", () => {
 
     expect(html).toContain("Add social login");
     expect(html).toContain("Ship QA checklist");
-    expect(html).toContain('aria-label="Working"');
-    expect(html).toContain('aria-label="Waiting input"');
+    expect(html).toContain("Document CLI");
+    expect(html).toContain('title="Working"');
+    expect(html).toContain('title="Waiting input"');
+    expect(html).toContain('title="Idle"');
+    expect(html).toContain(">Working</span>");
+    expect(html).toContain(">Waiting input</span>");
+    expect(html).toContain(">Idle</span>");
+    expect(html).toContain("agent-studio-task-status-running-dot");
+    expect(html).toContain("fill-status-running");
+    expect(html).toContain("fill-input");
     expect(html).toContain("text-warning-accent");
+    expect(html).not.toContain("animate-spin text-status-running");
     expect(html).toContain('aria-label="Open new task tab"');
     expect(html).toContain("Close tab for Add social login");
     expect(html).toContain("bg-secondary");

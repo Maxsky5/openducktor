@@ -16,7 +16,7 @@ describe("SidebarNavigation", () => {
 
     expect(html).toContain("Kanban");
     expect(html).toContain("Agents");
-    expect(html).toContain("animate-rise-in");
+    expect(html).toContain("gap-2");
   });
 
   test("hides text labels in compact mode but keeps aria labels", () => {
@@ -30,7 +30,7 @@ describe("SidebarNavigation", () => {
 
     expect(html).toContain('aria-label="Kanban"');
     expect(html).toContain('aria-label="Agents"');
-    expect(html).not.toContain("animate-rise-in");
+    expect(html).not.toContain("gap-2");
     expect(html).toContain("justify-center");
   });
 

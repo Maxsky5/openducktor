@@ -19,11 +19,8 @@ import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
-import {
-  AgentSessionTodoPanel,
-  getActionableSessionTodo,
-  getVisibleSessionTodos,
-} from "./agent-session-todo-panel";
+import { AgentSessionTodoPanel } from "./agent-session-todo-panel";
+import { getActionableSessionTodo, getVisibleSessionTodos } from "./agent-session-todo-panel-model";
 import { ScrollToBottomButton } from "./scroll-to-bottom-button";
 import { ScrollToTopButton } from "./scroll-to-top-button";
 import { useAgentChatDeferredTranscript } from "./use-agent-chat-deferred-transcript";
@@ -630,7 +627,11 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const stagedRows = stagedTranscript.rows;
   const stagedWindowTurns = stagedTranscript.turns;
   const rowKeys = useMemo(() => stagedRows.map((row) => row.key), [stagedRows]);
-  const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void>>(new Map());
+  const rowRefByKeyRef = useRef<Map<string, (element: HTMLDivElement | null) => void> | null>(null);
+  if (rowRefByKeyRef.current === null) {
+    rowRefByKeyRef.current = new Map();
+  }
+  const rowRefByKey = rowRefByKeyRef.current;
   const { registerRowElement } = useAgentChatRowMotion({
     activeExternalSessionId,
     rowKeys,
@@ -649,16 +650,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
   const resolveRowRef = useCallback(
     (rowKey: string) => {
-      const cached = rowRefByKeyRef.current.get(rowKey);
+      const cached = rowRefByKey.get(rowKey);
       if (cached) {
         return cached;
       }
 
       const nextRef = registerRowElement(rowKey);
-      rowRefByKeyRef.current.set(rowKey, nextRef);
+      rowRefByKey.set(rowKey, nextRef);
       return nextRef;
     },
-    [registerRowElement],
+    [registerRowElement, rowRefByKey],
   );
   // Keep the newest turn measured after completion too. Re-applying content-visibility to the
   // just-finished turn can make the browser anchor around the prompt and jump away from the bottom.

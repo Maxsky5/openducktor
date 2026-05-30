@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PromptOverrideCard } from "./settings-modal-prompt-components";
+import { PromptOverrideCard, PromptRoleTabs } from "./settings-modal-prompt-components";
 
 const noop = () => undefined;
 
@@ -39,5 +39,23 @@ describe("PromptOverrideCard", () => {
     );
 
     expect(markup).toContain(">reusable prompt</textarea>");
+  });
+});
+
+describe("PromptRoleTabs", () => {
+  test("renders active role and placeholder error status", () => {
+    const markup = renderToStaticMarkup(
+      <PromptRoleTabs
+        value="spec"
+        disabled={false}
+        errorCounts={{ shared: 0, spec: 1, planner: 0, build: 0, qa: 0 }}
+        onChange={noop}
+      />,
+    );
+
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain("Spec");
+    expect(markup).toContain("1 prompt placeholder error");
   });
 });

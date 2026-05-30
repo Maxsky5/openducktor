@@ -58,6 +58,14 @@ const deriveWorkspaceInitials = (workspaceName: string): string => {
   return trimmedName.slice(0, 2).toUpperCase();
 };
 
+const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
+  const pendingFrame = frameRef.current;
+  if (pendingFrame !== null) {
+    globalThis.cancelAnimationFrame(pendingFrame);
+    frameRef.current = null;
+  }
+};
+
 function WorkspaceRailAvatar({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
   const [failedIconDataUrl, markIconDataUrlFailed] = useReducer(
     (_current: string | null, next: string) => next,
@@ -131,7 +139,7 @@ function WorkspaceRailButtonShell({
         size="icon"
         variant="ghost"
         className={cn(
-          "size-10 rounded-lg border-none p-0 shadow-sm",
+          "size-10 rounded-lg border-none p-0 shadow-sm transition-none",
           workspace.isActive
             ? "bg-primary text-primary-foreground hover:bg-primary"
             : "bg-card text-foreground hover:bg-card",
@@ -235,9 +243,7 @@ export function WorkspaceRail({
   );
 
   const scheduleSelectionSuppressionClear = (): void => {
-    if (selectionSuppressionFrameRef.current !== null) {
-      globalThis.cancelAnimationFrame(selectionSuppressionFrameRef.current);
-    }
+    cancelPendingAnimationFrame(selectionSuppressionFrameRef);
 
     selectionSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
       suppressedSelectionWorkspaceIdRef.current = null;
@@ -246,11 +252,7 @@ export function WorkspaceRail({
   };
 
   useEffect(() => {
-    return () => {
-      if (selectionSuppressionFrameRef.current !== null) {
-        globalThis.cancelAnimationFrame(selectionSuppressionFrameRef.current);
-      }
-    };
+    return () => cancelPendingAnimationFrame(selectionSuppressionFrameRef);
   }, []);
 
   const handleDragStart = (event: DragStartEvent): void => {
