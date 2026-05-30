@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { ensurePullRequestManagementStatus, validateTransition } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
   canSkipRelinkedPullRequestCleanup,
@@ -10,6 +9,10 @@ import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
 } from "../support/required-task-dependencies";
+import {
+  validatePullRequestManagementStatusEffect,
+  validateTaskTransitionEffect,
+} from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -44,14 +47,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           workspaceSettingsService,
         ),
       );
-      yield* Effect.try({
-        try: () => ensurePullRequestManagementStatus(current.status),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validatePullRequestManagementStatusEffect(current.status);
       if (metadata.directMerge !== undefined) {
         return yield* Effect.fail(
           new HostValidationError({
@@ -114,14 +110,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           cleanup.targetBranch,
         );
       }
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, "closed"),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
       const task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
       const nextTasks = currentTasks.map((entry) => (entry.id === taskId ? task : entry));
 

@@ -124,20 +124,6 @@ export const stringifyJsonValue = (value: unknown): string | null => {
   }
 };
 
-export const codexToolErrorFromObject = (value: unknown): string | null => {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  const explicitError = extractStringField(value, ["error", "stderr"]);
-  if (explicitError) {
-    return explicitError;
-  }
-  if (value.isError === true || value.ok === false || value.success === false) {
-    return extractStringField(value, ["message"]) ?? stringifyJsonValue(value);
-  }
-  return null;
-};
-
 export const extractOptionalObject = (
   value: unknown,
   key: string,

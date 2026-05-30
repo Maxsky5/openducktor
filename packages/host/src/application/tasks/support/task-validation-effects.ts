@@ -1,27 +1,55 @@
 import { Effect } from "effect";
-import { ensurePullRequestManagementStatus, validateTransition } from "../../../domain/task";
+import {
+  ensurePullRequestManagementStatus,
+  TaskPolicyError,
+  validateParentRelationshipsForCreate,
+  validateParentRelationshipsForUpdate,
+  validateTransition,
+} from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+
+export type TaskPolicyValidationError = HostValidationError | TaskPolicyError;
+export type TaskTransitionValidationError = TaskPolicyValidationError;
+
+const taskPolicyValidationError = (cause: unknown): TaskPolicyValidationError => {
+  if (cause instanceof TaskPolicyError) {
+    return cause;
+  }
+
+  return new HostValidationError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
+};
 
 export const validateTaskTransitionEffect = (
   ...args: Parameters<typeof validateTransition>
-): Effect.Effect<void, HostValidationError> =>
+): Effect.Effect<void, TaskTransitionValidationError> =>
   Effect.try({
     try: () => validateTransition(...args),
-    catch: (cause) =>
-      new HostValidationError({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-      }),
+    catch: taskPolicyValidationError,
   });
 
 export const validatePullRequestManagementStatusEffect = (
   status: Parameters<typeof ensurePullRequestManagementStatus>[0],
-): Effect.Effect<void, HostValidationError> =>
+): Effect.Effect<void, TaskPolicyValidationError> =>
   Effect.try({
     try: () => ensurePullRequestManagementStatus(status),
-    catch: (cause) =>
-      new HostValidationError({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-      }),
+    catch: taskPolicyValidationError,
+  });
+
+export const validateParentRelationshipsForCreateEffect = (
+  ...args: Parameters<typeof validateParentRelationshipsForCreate>
+): Effect.Effect<void, TaskPolicyValidationError> =>
+  Effect.try({
+    try: () => validateParentRelationshipsForCreate(...args),
+    catch: taskPolicyValidationError,
+  });
+
+export const validateParentRelationshipsForUpdateEffect = (
+  ...args: Parameters<typeof validateParentRelationshipsForUpdate>
+): Effect.Effect<void, TaskPolicyValidationError> =>
+  Effect.try({
+    try: () => validateParentRelationshipsForUpdate(...args),
+    catch: taskPolicyValidationError,
   });

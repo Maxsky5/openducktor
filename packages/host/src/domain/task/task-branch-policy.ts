@@ -5,10 +5,10 @@ export const normalizeApprovalTargetBranch = (targetBranch: GitTargetBranch): Gi
   const remote = targetBranch.remote?.trim();
   const branch = targetBranch.branch.trim();
   if (!branch) {
-    throw new TaskPolicyError("Human approval requires a target branch.");
+    throw TaskPolicyError.policy("Human approval requires a target branch.");
   }
   if (branch === "@{upstream}") {
-    throw new TaskPolicyError(
+    throw TaskPolicyError.policy(
       "Human approval requires an explicit target branch. '@{upstream}' is not supported for direct merge or pull requests.",
     );
   }

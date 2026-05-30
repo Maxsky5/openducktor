@@ -1,10 +1,10 @@
 import { Effect } from "effect";
-import {
-  validateParentRelationshipsForCreate,
-  validateParentRelationshipsForUpdate,
-  validateTransition,
-} from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
+import {
+  validateParentRelationshipsForCreateEffect,
+  validateParentRelationshipsForUpdateEffect,
+  validateTaskTransitionEffect,
+} from "../support/task-validation-effects";
 import { enrichTask } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -15,14 +15,7 @@ export const createTaskCrudUseCases = ({
     return Effect.gen(function* () {
       const { repoPath, task } = input;
       const currentTasks = yield* taskStore.listTasks({ repoPath });
-      yield* Effect.try({
-        try: () => validateParentRelationshipsForCreate(currentTasks, task),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateParentRelationshipsForCreateEffect(currentTasks, task);
       const created = yield* taskStore.createTask({ repoPath, task });
 
       return enrichTask(created, [...currentTasks, created]);
@@ -43,14 +36,7 @@ export const createTaskCrudUseCases = ({
           }),
         );
       }
-      yield* Effect.try({
-        try: () => validateParentRelationshipsForUpdate(currentTasks, current, patch),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateParentRelationshipsForUpdateEffect(currentTasks, current, patch);
       const updated = yield* taskStore.updateTask({ repoPath, taskId, patch });
       const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
 
@@ -72,14 +58,7 @@ export const createTaskCrudUseCases = ({
           }),
         );
       }
-      yield* Effect.try({
-        try: () => validateTransition(current, currentTasks, current.status, status),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validateTaskTransitionEffect(current, currentTasks, current.status, status);
 
       if (current.status === status) {
         return enrichTask(current, currentTasks);

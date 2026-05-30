@@ -12,7 +12,7 @@ export const ensureCleanBuilderWorktree = (approval: TaskApprovalContext): void 
       ? "1 uncommitted file"
       : `${approval.uncommittedFileCount} uncommitted files`;
   const pronoun = approval.uncommittedFileCount === 1 ? "it" : "them";
-  throw new TaskPolicyError(
+  throw TaskPolicyError.policy(
     `Human approval is blocked because the builder worktree has ${fileLabel}. Commit or discard ${pronoun} before merging or opening a pull request.`,
   );
 };

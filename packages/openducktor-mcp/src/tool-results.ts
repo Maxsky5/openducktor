@@ -13,15 +13,24 @@ export type ToolResult = {
 
 export type OdtToolErrorDetails = Record<string, unknown>;
 
+export type OdtToolErrorInput = {
+  readonly code: OdtToolErrorCode;
+  readonly message: string;
+  readonly details?: OdtToolErrorDetails | undefined;
+  readonly issues?: OdtToolErrorIssue[] | undefined;
+};
+
 export class OdtToolError extends Error {
   readonly code: OdtToolErrorCode;
   readonly details: OdtToolErrorDetails | undefined;
+  readonly issues: OdtToolErrorIssue[] | undefined;
 
-  constructor(code: OdtToolErrorCode, message: string, details?: OdtToolErrorDetails) {
+  constructor({ code, message, details, issues }: OdtToolErrorInput) {
     super(message);
     this.name = "OdtToolError";
     this.code = code;
     this.details = details;
+    this.issues = issues;
   }
 }
 
@@ -73,11 +82,11 @@ const readZodIssues = (error: unknown): ZodIssueSummary[] | undefined => {
 };
 
 const readOdtToolErrorIssues = (error: unknown): ZodIssueSummary[] | undefined => {
-  if (!(error instanceof OdtToolError) || !error.details) {
+  if (!(error instanceof OdtToolError)) {
     return undefined;
   }
 
-  return normalizeIssues(error.details.issues);
+  return normalizeIssues(error.issues);
 };
 
 export const toToolResult = (payload: unknown): ToolResult => {

@@ -3,7 +3,6 @@ import { normalizeAgentSessionTodoList } from "@openducktor/core";
 import {
   arrayFromUnknown,
   codexNamespacedToolName,
-  codexToolErrorFromObject,
   extractOptionalObject,
   extractStringField,
   isPlainObject,
@@ -16,6 +15,7 @@ import type {
 } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper, CodexLiveInput, CodexThreadItemInput } from "../codex-event-mapper";
+import { codexDynamicToolErrorFromResult } from "../codex-tool-error-extractor";
 import { statusFromCodexStatus } from "../codex-tool-normalizer";
 
 const parseJsonObject = (value: unknown): Record<string, unknown> | null => {
@@ -198,7 +198,7 @@ const completedDynamicToolCallEvents = (
   if (!codexItemTypeMatches(item, "dynamicToolCall")) {
     return emptyCodexMappingResult();
   }
-  const error = codexToolErrorFromObject(item.result) ?? codexToolErrorFromObject(item);
+  const error = codexDynamicToolErrorFromResult(item.result, item);
   if (
     item.success === false ||
     error ||

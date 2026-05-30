@@ -162,7 +162,6 @@ describe("CodexAppServerAdapter history hydration", () => {
             toolType: "workflow",
             status: "error",
             error: "task missing",
-            output: expect.stringContaining("task missing"),
           }),
         ],
       }),

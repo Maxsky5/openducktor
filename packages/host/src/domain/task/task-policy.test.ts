@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
-import { deriveAgentWorkflows, deriveAvailableActions, validateTransition } from "./index";
+import {
+  deriveAgentWorkflows,
+  deriveAvailableActions,
+  TaskPolicyError,
+  validateTransition,
+} from "./index";
 
 const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -37,6 +42,22 @@ describe("task domain policy", () => {
     );
   });
 
+  test("reports disallowed transitions with a stable policy code", () => {
+    try {
+      validateTransition(
+        task({ status: "human_review" }),
+        [task({ status: "human_review" })],
+        "human_review",
+        "blocked",
+      );
+      throw new Error("Expected transition validation to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TaskPolicyError);
+      expect((error as TaskPolicyError).code).toBe("TASK_TRANSITION_NOT_ALLOWED");
+      expect((error as Error).message).toContain("human_review -> blocked");
+    }
+  });
+
   test("allows task issue types to skip spec and planning", () => {
     const workItem = task({ issueType: "task" });
 
@@ -52,9 +73,14 @@ describe("task domain policy", () => {
       status: "in_progress",
     });
 
-    expect(() => validateTransition(epic, [epic, subtask], "human_review", "closed")).toThrow(
-      "Epic cannot be completed",
-    );
+    try {
+      validateTransition(epic, [epic, subtask], "human_review", "closed");
+      throw new Error("Expected epic completion validation to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(TaskPolicyError);
+      expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+      expect((error as Error).message).toContain("Epic cannot be completed");
+    }
   });
 
   test("derives role workflows from task type, status, and documents", () => {

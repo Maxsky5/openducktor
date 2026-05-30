@@ -71,6 +71,116 @@ describe("Codex tool normalization", () => {
     );
   });
 
+  test("uses structured MCP tool errors instead of raw JSON output", () => {
+    const errorPayload = {
+      ok: false,
+      error: {
+        code: "TASK_TRANSITION_NOT_ALLOWED",
+        message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+      },
+    };
+    const part = toStreamPart(
+      {
+        type: "mcpToolCall",
+        id: "tool-1",
+        server: "openducktor",
+        tool: "odt_build_blocked",
+        status: "completed",
+        arguments: { taskId: "task-1", reason: "needs a product decision" },
+        result: {
+          isError: true,
+          structuredContent: errorPayload,
+          content: [{ type: "text", text: JSON.stringify(errorPayload, null, 2) }],
+        },
+      },
+      "message-live",
+      "tool-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "odt_build_blocked",
+        toolType: "workflow",
+        status: "error",
+        error: "Transition not allowed for task-1 (bug): human_review -> blocked",
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
+  });
+
+  test("uses structured dynamic tool errors instead of raw JSON output", () => {
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "tool-1",
+        namespace: "functions",
+        tool: "exec_command",
+        status: "completed",
+        success: true,
+        arguments: { cmd: "bun test" },
+        contentItems: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: { message: "Command failed with exit code 1" },
+            }),
+          },
+        ],
+      },
+      "message-live",
+      "tool-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "exec_command",
+        toolType: "bash",
+        status: "error",
+        error: "Command failed with exit code 1",
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
+  });
+
+  test("keeps file change cards out of ODT error parsing", () => {
+    const part = toStreamPart(
+      {
+        type: "fileChange",
+        id: "change-1",
+        status: "completed",
+        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@" }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: false,
+              error: {
+                code: "TASK_POLICY_ERROR",
+                message: "This belongs to another tool surface",
+              },
+            }),
+          },
+        ],
+      },
+      "message-live",
+      "change-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        status: "completed",
+        output: "@@ -1 +1 @@",
+      }),
+    );
+    expect(part).not.toHaveProperty("error");
+  });
+
   test("parses non-patch dynamic tool string input without treating it as a patch", () => {
     const part = toStreamPart(
       {

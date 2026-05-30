@@ -1,8 +1,9 @@
 import { Effect } from "effect";
-import { canonicalTargetBranch, checkoutBranch, validateTransition } from "../../../domain/task";
+import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { cleanupDirectMergeBuilderState } from "../support/builder-worktree-cleanup";
 import { requireDirectMergeCompleteDependencies } from "../support/required-task-dependencies";
+import { validateTaskTransitionEffect } from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -76,14 +77,7 @@ export const createTaskCompleteDirectMergeUseCase = ({
 
       let task = current;
       if (current.status !== "closed") {
-        yield* Effect.try({
-          try: () => validateTransition(current, currentTasks, current.status, "closed"),
-          catch: (cause) =>
-            new HostValidationError({
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
+        yield* validateTaskTransitionEffect(current, currentTasks, current.status, "closed");
         task = yield* taskStore.transitionTask({ repoPath, taskId, status: "closed" });
       }
       yield* cleanupDirectMergeBuilderState(dependencies, taskStore, repoPath, taskId, directMerge);

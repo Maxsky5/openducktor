@@ -10,6 +10,7 @@ import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import { createMcpHostBridgeServer } from "./mcp-host-bridge-server";
 
@@ -225,7 +226,11 @@ describe("createMcpHostBridgeServer", () => {
         body: {},
       });
       expect(missingToken.body).toEqual({
-        error: "Missing OpenDucktor web host app token.",
+        ok: false,
+        error: {
+          code: "ODT_HOST_BRIDGE_ERROR",
+          message: "Missing OpenDucktor web host app token.",
+        },
       });
       expect(missingToken.status).toBe(401);
       const ready = await requestJson(`${connection.hostUrl}/invoke/odt_mcp_ready`, {
@@ -384,6 +389,54 @@ describe("createMcpHostBridgeServer", () => {
           input: { workspaceId: "repo", taskId: "task-1" },
         },
       ]);
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  test("preserves coded business errors from workspace-scoped commands", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      bridgeService: createBridgeService({
+        ready() {
+          return Effect.succeed({ bridgeVersion: 1, toolNames: [...ODT_MCP_TOOL_NAMES] });
+        },
+        getWorkspaces() {
+          return Effect.succeed({ workspaces: [] });
+        },
+        invoke() {
+          return Effect.fail(
+            TaskPolicyError.transitionNotAllowed(
+              "Transition not allowed for task-1 (bug): human_review -> blocked",
+              { reason: "needs a product decision", taskId: "task-1" },
+            ),
+          );
+        },
+      }),
+    });
+    try {
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_build_blocked`, {
+        method: "POST",
+        headers: {
+          "x-openducktor-app-token": "token-1",
+        },
+        body: { workspaceId: "repo", taskId: "task-1", reason: "needs a product decision" },
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        ok: false,
+        error: {
+          code: "TASK_TRANSITION_NOT_ALLOWED",
+          message: "Transition not allowed for task-1 (bug): human_review -> blocked",
+          details: { reason: "needs a product decision", taskId: "task-1" },
+        },
+      });
     } finally {
       await Effect.runPromise(bridge.close());
       await rm(tempDir, { force: true, recursive: true });

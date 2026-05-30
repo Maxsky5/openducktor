@@ -136,7 +136,7 @@ export const validateTransition = (
   to: TaskStatus,
 ): void => {
   if (!allowsTransition(task, from, to)) {
-    throw new TaskPolicyError(
+    throw TaskPolicyError.transitionNotAllowed(
       `Transition not allowed for ${task.id} (${task.issueType}): ${from} -> ${to}`,
     );
   }
@@ -152,7 +152,7 @@ export const validateTransition = (
       candidate.status !== "deferred",
   );
   if (blockingSubtask) {
-    throw new TaskPolicyError(
+    throw TaskPolicyError.policy(
       `Epic cannot be completed while direct subtask ${blockingSubtask.id} is still active.`,
     );
   }
@@ -163,7 +163,7 @@ export const ensurePullRequestManagementStatus = (status: TaskCard["status"]): v
     return;
   }
 
-  throw new TaskPolicyError(
+  throw TaskPolicyError.policy(
     "Pull request management is only available from in_progress, ai_review, or human_review.",
   );
 };
@@ -173,5 +173,5 @@ export const ensureHumanApprovalStatus = (status: TaskCard["status"]): void => {
     return;
   }
 
-  throw new TaskPolicyError("Human approval is only allowed from ai_review or human_review.");
+  throw TaskPolicyError.policy("Human approval is only allowed from ai_review or human_review.");
 };

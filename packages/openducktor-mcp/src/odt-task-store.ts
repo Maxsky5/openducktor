@@ -35,11 +35,11 @@ export class OdtTaskStore {
       return workspaceId;
     }
 
-    throw new OdtToolError(
-      "ODT_WORKSPACE_MISSING",
-      `Missing workspaceId for workspace-scoped tool '${toolName}'. Start @openducktor/mcp with --workspace-id or provide workspaceId in the tool input.`,
-      { toolName },
-    );
+    throw new OdtToolError({
+      code: "ODT_WORKSPACE_MISSING",
+      message: `Missing workspaceId for workspace-scoped tool '${toolName}'. Start @openducktor/mcp with --workspace-id or provide workspaceId in the tool input.`,
+      details: { toolName },
+    });
   }
 
   private async executeWorkspaceScoped<Name extends WorkspaceScopedToolName>(

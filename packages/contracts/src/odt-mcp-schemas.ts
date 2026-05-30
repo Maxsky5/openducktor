@@ -20,6 +20,8 @@ import {
 } from "./task-schemas";
 
 export const odtToolErrorCodeSchema = z.enum([
+  "TASK_POLICY_ERROR",
+  "TASK_TRANSITION_NOT_ALLOWED",
   "ODT_TOOL_INPUT_INVALID",
   "ODT_WORKSPACE_SCOPE_VIOLATION",
   "ODT_WORKSPACE_MISSING",
