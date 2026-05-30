@@ -58,9 +58,11 @@ export function useAgentStudioDevServerStateQuery({
     void refetch();
   }, [activationState.since, dataUpdatedAt, isFetching, queryEnabled, refetch, repoPath, taskId]);
 
-  const queryData =
-    queryEnabled && activationState.enabled === queryEnabled ? (data ?? null) : null;
-  const currentLiveState = queryEnabled ? liveState : null;
+  const queryData = queryEnabled && activationState.enabled ? (data ?? null) : null;
+  const currentLiveState =
+    queryEnabled && liveState?.repoPath === repoPath && liveState.taskId === taskId
+      ? liveState
+      : null;
   const effectiveState = currentLiveState ?? queryData;
   const isAwaitingFreshState =
     queryEnabled &&

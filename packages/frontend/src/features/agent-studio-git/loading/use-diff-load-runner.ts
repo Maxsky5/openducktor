@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
-  getCachedWorktreeStatusFromQuery,
   loadWorktreeStatusFromQuery,
   loadWorktreeStatusSummaryFromQuery,
 } from "@/state/queries/git";
 import { toScopeSnapshot, toScopeSummaryFields } from "../model/normalization";
+import { readCachedFullLoadSnapshot } from "./cached-full-load";
 import type {
   DiffLoadRunner,
   InFlightRequestContext,
@@ -47,27 +47,16 @@ export const useAgentStudioDiffLoadRunner = ({
   );
 
   const hydrateCachedFullLoad = useCallback(
-    ({ repoPath, scope, targetBranch, workingDir }: LoadRequestContext): boolean => {
-      // Worktree contexts are task-keyed; repository-mode branch identity is tracked outside this query key.
-      if (workingDir === null) {
-        return false;
-      }
-
-      const cachedStatus = getCachedWorktreeStatusFromQuery(
-        queryClient,
-        repoPath,
-        targetBranch,
-        scope,
-        workingDir,
-      );
-      if (cachedStatus === undefined) {
+    (context: LoadRequestContext): boolean => {
+      const cachedSnapshot = readCachedFullLoadSnapshot(queryClient, context);
+      if (cachedSnapshot === null) {
         return false;
       }
 
       applyCachedFullResult({
         clearScopeInvalidation,
-        scope,
-        snapshot: toScopeSnapshot(cachedStatus),
+        scope: context.scope,
+        snapshot: cachedSnapshot,
       });
       return true;
     },

@@ -34,6 +34,11 @@ describe("useAgentStudioDiffData", () => {
       },
     });
     const freshTaskBLoad = createDeferred<GitWorktreeStatus>();
+    const renders: Array<{
+      worktreePath: string | null;
+      filePath: string | undefined;
+      isLoading: boolean;
+    }> = [];
     queryClient.setQueryData(
       gitQueryKeys.worktreeStatus("/repo", "origin/main", "uncommitted", taskBWorktreePath),
       withSnapshotHashes({
@@ -82,7 +87,16 @@ describe("useAgentStudioDiffData", () => {
         worktreeResolutionTaskId: "task-a",
         worktreePath: "/repo/.worktrees/task-a",
       },
-      { queryClient },
+      {
+        queryClient,
+        onRender: (state) => {
+          renders.push({
+            worktreePath: state.worktreePath,
+            filePath: state.fileStatuses[0]?.path,
+            isLoading: state.isLoading,
+          });
+        },
+      },
     );
 
     try {
@@ -95,6 +109,11 @@ describe("useAgentStudioDiffData", () => {
         worktreePath: taskBWorktreePath,
       });
 
+      expect(renders.find((render) => render.worktreePath === taskBWorktreePath)).toEqual({
+        worktreePath: taskBWorktreePath,
+        filePath: "src/cached-task-b.ts",
+        isLoading: false,
+      });
       await harness.waitFor(
         (state) => state.fileStatuses[0]?.path === "src/cached-task-b.ts" && !state.isLoading,
       );
@@ -147,11 +166,27 @@ describe("useAgentStudioDiffData", () => {
   });
 
   test("resets cached diff data when switching between task worktrees", async () => {
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      worktreeResolutionTaskId: "task-a",
-      worktreePath: "/repo/.worktrees/task-a",
-    });
+    const renders: Array<{
+      worktreePath: string | null;
+      filePath: string | undefined;
+      isLoading: boolean;
+    }> = [];
+    const harness = createHookHarness(
+      {
+        ...createBaseArgs(),
+        worktreeResolutionTaskId: "task-a",
+        worktreePath: "/repo/.worktrees/task-a",
+      },
+      {
+        onRender: (state) => {
+          renders.push({
+            worktreePath: state.worktreePath,
+            filePath: state.fileStatuses[0]?.path,
+            isLoading: state.isLoading,
+          });
+        },
+      },
+    );
 
     try {
       await harness.mount();
@@ -169,6 +204,11 @@ describe("useAgentStudioDiffData", () => {
         worktreePath: "/repo/.worktrees/task-b",
       });
 
+      expect(renders.find((render) => render.worktreePath === "/repo/.worktrees/task-b")).toEqual({
+        worktreePath: "/repo/.worktrees/task-b",
+        filePath: undefined,
+        isLoading: true,
+      });
       await harness.waitFor((state) => state.diffScope === "uncommitted");
       await harness.waitFor(() => gitGetWorktreeStatusMock.mock.calls.length >= 3);
       expect(gitGetWorktreeStatusMock).toHaveBeenNthCalledWith(

@@ -61,12 +61,19 @@ type UseAgentStudioDiffDataHook =
 let useAgentStudioDiffData: UseAgentStudioDiffDataHook;
 
 export type HookArgs = Parameters<UseAgentStudioDiffDataHook>[0];
+type HookResult = ReturnType<UseAgentStudioDiffDataHook>;
 
 export const createHookHarness = (
   initialProps: HookArgs,
-  options?: { queryClient?: QueryClient },
+  options?: { queryClient?: QueryClient; onRender?: (state: HookResult) => void },
 ) => {
-  return createSharedHookHarness(useAgentStudioDiffData, initialProps, options);
+  const useObservedHook = (props: HookArgs): HookResult => {
+    const state = useAgentStudioDiffData(props);
+    options?.onRender?.(state);
+    return state;
+  };
+
+  return createSharedHookHarness(useObservedHook, initialProps, options);
 };
 
 export const createDeferred = <T>() => {

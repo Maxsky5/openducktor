@@ -1578,6 +1578,9 @@ describe("useAgentStudioDevServerPanel", () => {
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
       harness.update(currentArgs);
 
+      expect(harness.getLatest().mode).toBe("loading");
+      expect(harness.getLatest().scripts).toHaveLength(0);
+
       await waitFor(() => {
         expect(harness.getLatest().mode).toBe("loading");
       });
@@ -1665,6 +1668,10 @@ describe("useAgentStudioDevServerPanel", () => {
 
       currentArgs = { ...currentArgs, repoPath: "/repo-b", taskId: "task-2" };
       harness.update(currentArgs);
+
+      expect(harness.getLatest().scripts[0]?.pid).toBe(2221);
+      expect(harness.getLatest().mode).toBe("active");
+      expect(harness.getLatest().isLoading).toBe(false);
 
       await waitFor(() => {
         expect(harness.getLatest().scripts[0]?.pid).toBe(2221);

@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DiffScope } from "../contracts";
-import type { DiffBatchState, ScopeSnapshot } from "../model/diff-data-model";
+import {
+  createInitialDiffBatchState,
+  type DiffBatchState,
+  type ScopeSnapshot,
+  toStatusSnapshotKey,
+} from "../model/diff-data-model";
+import { readCachedFullLoadSnapshot } from "./cached-full-load";
 import { useAgentStudioDiffBatchState } from "./use-diff-batch-state";
 import { type LoadDataContext, useAgentStudioDiffLoader } from "./use-diff-loader";
 import { useAgentStudioDiffRequestController } from "./use-diff-request-controller";
@@ -34,6 +41,7 @@ export function useAgentStudioDiffController({
   requestContextKey,
   shouldBlockDiffLoading,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
+  const queryClient = useQueryClient();
   const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
   const requestContextKeyRef = useRef<string | null>(null);
   const {
@@ -60,7 +68,6 @@ export function useAgentStudioDiffController({
   }, [resetRequestLifecycle]);
 
   const {
-    activeScopeState,
     applyCachedFullResult,
     applyFullResult,
     applyScopeLoadError,
@@ -70,7 +77,6 @@ export function useAgentStudioDiffController({
     resetControllerState,
     setBatchLoading,
     state,
-    statusSnapshotKey,
   } = useAgentStudioDiffBatchState({
     diffScope,
     resetRequestTracking,
@@ -191,12 +197,62 @@ export function useAgentStudioDiffController({
     workingDir,
   ]);
 
-  return {
-    activeScopeState,
-    diffScope,
-    setDiffScope,
+  const isRenderContextStale = requestContextKeyRef.current !== requestContextKey;
+  const visibleDiffScope = isRenderContextStale ? "uncommitted" : diffScope;
+  const cachedRenderSnapshot =
+    isRenderContextStale && repoPath !== null
+      ? readCachedFullLoadSnapshot(queryClient, {
+          repoPath,
+          targetBranch,
+          workingDir,
+          scope: visibleDiffScope,
+        })
+      : null;
+  const visibleState = useMemo<DiffBatchState>(() => {
+    if (!isRenderContextStale) {
+      return state;
+    }
+
+    const nextState = createInitialDiffBatchState();
+    if (cachedRenderSnapshot === null) {
+      return {
+        ...nextState,
+        isLoading: repoPath !== null && !shouldBlockDiffLoading,
+      };
+    }
+
+    return {
+      ...nextState,
+      byScope: {
+        ...nextState.byScope,
+        [visibleDiffScope]: cachedRenderSnapshot,
+      },
+      loadedByScope: {
+        ...nextState.loadedByScope,
+        [visibleDiffScope]: true,
+      },
+      isLoading: false,
+    };
+  }, [
+    cachedRenderSnapshot,
+    isRenderContextStale,
+    repoPath,
+    shouldBlockDiffLoading,
     state,
-    statusSnapshotKey,
+    visibleDiffScope,
+  ]);
+  const visibleActiveScopeState = visibleState.byScope[visibleDiffScope];
+  const visibleStatusSnapshotKey = useMemo(
+    () => toStatusSnapshotKey(visibleActiveScopeState),
+    [visibleActiveScopeState],
+  );
+
+  return {
+    activeScopeState: visibleActiveScopeState,
+    diffScope: visibleDiffScope,
+    setDiffScope,
+    state: visibleState,
+    statusSnapshotKey: visibleStatusSnapshotKey,
     refreshActiveScope,
     refreshActiveScopeSummary,
   };
