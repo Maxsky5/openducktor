@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { ensurePullRequestManagementStatus } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import {
   canSkipRelinkedPullRequestCleanup,
@@ -10,7 +9,10 @@ import {
   requireDependencies,
   requireLinkMergedPullRequestDependencies,
 } from "../support/required-task-dependencies";
-import { validateTaskTransitionEffect } from "../support/task-validation-effects";
+import {
+  validatePullRequestManagementStatusEffect,
+  validateTaskTransitionEffect,
+} from "../support/task-validation-effects";
 import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
@@ -45,14 +47,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
           workspaceSettingsService,
         ),
       );
-      yield* Effect.try({
-        try: () => ensurePullRequestManagementStatus(current.status),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validatePullRequestManagementStatusEffect(current.status);
       if (metadata.directMerge !== undefined) {
         return yield* Effect.fail(
           new HostValidationError({

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { TaskPolicyError } from "../../domain/task";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   createAgentSessionRecord,
@@ -241,6 +242,35 @@ describe("createTaskService pull requests", () => {
         pullRequest: expect.objectContaining({ number: 42, state: "open" }),
       },
     });
+  });
+  test("detectPullRequest preserves task policy errors for invalid workflow statuses", async () => {
+    const calls: unknown[] = [];
+    const taskStore = {
+      getTask() {
+        return Effect.succeed(task({ status: "open" }));
+      },
+    } as unknown as TaskStorePort;
+    const service = createTaskService({
+      gitPort: createDirectMergeGitPort({ calls }),
+      systemCommands: createPullRequestDetectSystemCommands({
+        calls,
+        openPayload: githubPullListPayload([]),
+      }),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(service.detectPullRequest({ repoPath: "/repo", taskId: "task-1" })),
+    );
+
+    expect(error).toBeInstanceOf(TaskPolicyError);
+    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
   });
   test("links a pull request by number after fetching provider metadata", async () => {
     const calls: unknown[] = [];
@@ -3175,6 +3205,52 @@ describe("createTaskService pull requests", () => {
         type: "transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "closed" },
       },
+    ]);
+  });
+  test("linkMergedPullRequest preserves task policy errors for invalid workflow statuses", async () => {
+    const calls: unknown[] = [];
+    const taskStore = {
+      listTasks(input: { repoPath: string }) {
+        calls.push({ type: "list", input });
+        return Effect.succeed([task({ status: "open" })]);
+      },
+      getTaskMetadata(input: { repoPath: string; taskId: string }) {
+        calls.push({ type: "metadata", input });
+        return Effect.succeed({
+          spec: { markdown: "# Spec" },
+          plan: { markdown: "# Plan" },
+          agentSessions: [],
+        });
+      },
+    } as unknown as TaskStorePort;
+    const service = createTaskService({
+      devServerService: createDirectMergeDevServerService(calls),
+      gitPort: createDirectMergeGitPort({ calls }),
+      settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+      taskStore,
+      taskWorktreeService: createDirectMergeTaskWorktreeService(null),
+      workspaceSettingsService: createBuildWorkspaceSettingsService({
+        workspaceId: "repo",
+        repoPath: "/repo",
+        hooks: { preStart: [], postComplete: [] },
+      }),
+    });
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        service.linkMergedPullRequest({
+          repoPath: "/repo",
+          taskId: "task-1",
+          pullRequest: pullRequest(),
+        }),
+      ),
+    );
+
+    expect(error).toBeInstanceOf(TaskPolicyError);
+    expect((error as TaskPolicyError).code).toBe("TASK_POLICY_ERROR");
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
     ]);
   });
   test("returns a closed task unchanged when the same merged pull request is already linked", async () => {

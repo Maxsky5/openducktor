@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import { ensurePullRequestManagementStatus } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { loadBuilderBranchCleanup } from "../support/builder-worktree-cleanup";
 import {
@@ -10,6 +9,7 @@ import {
   requireDependencies,
   requirePullRequestDetectionDependencies,
 } from "../support/required-task-dependencies";
+import { validatePullRequestManagementStatusEffect } from "../support/task-validation-effects";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
@@ -31,14 +31,7 @@ export const createTaskPullRequestDetectionUseCase = ({
         ),
       );
       const current = yield* taskStore.getTask({ repoPath, taskId });
-      yield* Effect.try({
-        try: () => ensurePullRequestManagementStatus(current.status),
-        catch: (cause) =>
-          new HostValidationError({
-            message: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      });
+      yield* validatePullRequestManagementStatusEffect(current.status);
       const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       if (metadata.pullRequest !== undefined) {
         return yield* Effect.fail(
