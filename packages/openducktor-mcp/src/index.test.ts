@@ -138,6 +138,24 @@ const startMockBridge = async (): Promise<{ url: string; requests: RecordedReque
       if (
         typeof body === "object" &&
         body !== null &&
+        (body as { taskId?: unknown }).taskId === "missing-task"
+      ) {
+        writeJson(
+          response,
+          {
+            ok: false,
+            error: {
+              code: "ODT_HOST_BRIDGE_ERROR",
+              message: "Task missing-task was not found.",
+            },
+          },
+          404,
+        );
+        return;
+      }
+      if (
+        typeof body === "object" &&
+        body !== null &&
         (body as { taskId?: unknown }).taskId === "bad-response"
       ) {
         writeJson(response, { task: { id: "bad-response" } });
@@ -229,14 +247,14 @@ const requireContentToolResult = (result: unknown): ContentToolResult => {
   return result as ContentToolResult;
 };
 
-const expectStructuredError = (
+const expectToolError = (
   result: ContentToolResult,
 ): { code?: unknown; message?: unknown; details?: unknown; issues?: unknown } => {
   expect(result.isError).toBe(true);
-  expect(result.structuredContent).toMatchObject({ ok: false });
+  expect(result.structuredContent).toBeUndefined();
   const textPayload = JSON.parse(result.content[0]?.text ?? "null");
-  expect(textPayload).toEqual(result.structuredContent);
-  const error = (result.structuredContent as { error?: unknown }).error;
+  expect(textPayload).toMatchObject({ ok: false });
+  const error = (textPayload as { error?: unknown }).error;
   expect(error).toBeTruthy();
   return error as { code?: unknown; message?: unknown; details?: unknown; issues?: unknown };
 };
@@ -321,7 +339,7 @@ describe("MCP server tool results", () => {
         },
       });
       const contentResult = requireContentToolResult(result);
-      const error = expectStructuredError(contentResult);
+      const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_WORKSPACE_SCOPE_VIOLATION");
       expect(error.message).toContain("Invalid arguments for tool odt_read_task");
@@ -343,7 +361,7 @@ describe("MCP server tool results", () => {
     }
   });
 
-  test("host bridge HTTP failures return structured tool errors", async () => {
+  test("host bridge HTTP failures return content tool errors", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
@@ -358,7 +376,7 @@ describe("MCP server tool results", () => {
         },
       });
       const contentResult = requireContentToolResult(result);
-      const error = expectStructuredError(contentResult);
+      const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
       expect(error.message).toContain("Unexpected URL: /invoke/odt_set_plan");
@@ -367,7 +385,7 @@ describe("MCP server tool results", () => {
     }
   });
 
-  test("host bridge business errors keep their structured error code", async () => {
+  test("host bridge business errors keep their error code", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
@@ -382,7 +400,7 @@ describe("MCP server tool results", () => {
         },
       });
       const contentResult = requireContentToolResult(result);
-      const error = expectStructuredError(contentResult);
+      const error = expectToolError(contentResult);
 
       expect(error.code).toBe("TASK_TRANSITION_NOT_ALLOWED");
       expect(error.message).toBe(
@@ -394,7 +412,30 @@ describe("MCP server tool results", () => {
     }
   });
 
-  test("host response schema failures return structured tool errors", async () => {
+  test("odt_read_task bridge errors do not get validated as success output", async () => {
+    const bridge = await startMockBridge();
+    const transport = await createTransport(bridge.url, { workspaceId: "repo" });
+    const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+      const result = await client.callTool({
+        name: "odt_read_task",
+        arguments: {
+          taskId: "missing-task",
+        },
+      });
+      const contentResult = requireContentToolResult(result);
+      const error = expectToolError(contentResult);
+
+      expect(error.code).toBe("ODT_HOST_BRIDGE_ERROR");
+      expect(error.message).toBe("Task missing-task was not found.");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("host response schema failures return content tool errors", async () => {
     const bridge = await startMockBridge();
     const transport = await createTransport(bridge.url, { workspaceId: "repo" });
     const client = new Client({ name: "odt-mcp-test", version: "1.0.0" });
@@ -408,7 +449,7 @@ describe("MCP server tool results", () => {
         },
       });
       const contentResult = requireContentToolResult(result);
-      const error = expectStructuredError(contentResult);
+      const error = expectToolError(contentResult);
 
       expect(error.code).toBe("ODT_HOST_RESPONSE_INVALID");
       expect(error.message).toContain("Invalid response from host odt_read_task");
