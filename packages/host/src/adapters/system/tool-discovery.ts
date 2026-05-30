@@ -2,13 +2,13 @@ import { homedir } from "node:os";
 import { posix, win32 } from "node:path";
 import { Deferred, Effect, FiberId } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
+import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type {
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
 } from "../../ports/tool-discovery-port";
-import { isExecutableCommandFile } from "../process/process-command-resolution";
 
 export type ToolDiscoveryPathOptions = {
   applicationsDir?: string;

@@ -15,18 +15,18 @@ describe("runtime distribution factories", () => {
       createArtifactRuntimeDistribution({
         bundledToolBinDirs: { opencode: " /app/resources/bin " },
         mcpLauncher: {
-          kind: "bunScript",
-          bunExecutablePath: " /usr/local/bin/bun ",
+          kind: "toolScript",
           scriptPath: " /app/resources/openducktor-mcp.js ",
+          toolId: "bun",
         },
       }),
     ).toMatchObject({
       mode: "artifact",
       bundledToolBinDirs: { opencode: "/app/resources/bin" },
       mcpLauncher: {
-        kind: "bunScript",
-        bunExecutablePath: "/usr/local/bin/bun",
+        kind: "toolScript",
         scriptPath: "/app/resources/openducktor-mcp.js",
+        toolId: "bun",
       },
     });
   });
@@ -48,5 +48,47 @@ describe("runtime distribution factories", () => {
         } as never,
       }),
     ).toThrow("Unsupported MCP launcher kind: shellScript");
+  });
+
+  test("rejects unsupported artifact tool script launcher ids with a typed validation error", () => {
+    expect(() =>
+      createArtifactRuntimeDistribution({
+        mcpLauncher: {
+          kind: "toolScript",
+          scriptPath: "/app/openducktor-mcp.js",
+          toolId: "node",
+        } as never,
+      }),
+    ).toThrow(HostValidationError);
+    expect(() =>
+      createArtifactRuntimeDistribution({
+        mcpLauncher: {
+          kind: "toolScript",
+          scriptPath: "/app/openducktor-mcp.js",
+          toolId: "node",
+        } as never,
+      }),
+    ).toThrow("mcpLauncher.toolId must be one of:");
+  });
+
+  test("rejects unsupported bundled tool directory ids with a typed validation error", () => {
+    expect(() =>
+      createArtifactRuntimeDistribution({
+        bundledToolBinDirs: { node: "/app/resources/bin" } as never,
+        mcpLauncher: {
+          kind: "executable",
+          executablePath: "/app/resources/openducktor-mcp",
+        },
+      }),
+    ).toThrow(HostValidationError);
+    expect(() =>
+      createArtifactRuntimeDistribution({
+        bundledToolBinDirs: { node: "/app/resources/bin" } as never,
+        mcpLauncher: {
+          kind: "executable",
+          executablePath: "/app/resources/openducktor-mcp",
+        },
+      }),
+    ).toThrow("bundledToolBinDirs.node must be one of:");
   });
 });

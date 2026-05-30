@@ -7,8 +7,8 @@ import {
   HostValidationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
+import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
-import { isExecutableCommandFile } from "../process/process-command-resolution";
 import type {
   ArtifactRuntimeDistribution,
   HostRuntimeDistribution,
@@ -144,7 +144,10 @@ const unsupportedArtifactMcpLauncher = (launcher: never) =>
     }),
   );
 
-const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution) =>
+const resolveArtifactCommand = (
+  runtimeDistribution: ArtifactRuntimeDistribution,
+  toolDiscovery: ToolDiscoveryPort,
+) =>
   Effect.gen(function* () {
     const { mcpLauncher } = runtimeDistribution;
     switch (mcpLauncher.kind) {
@@ -155,16 +158,13 @@ const resolveArtifactCommand = (runtimeDistribution: ArtifactRuntimeDistribution
             "runtimeDistribution.mcpLauncher.executablePath",
           ),
         ];
-      case "bunScript": {
-        const bunExecutable = yield* resolveExecutablePath(
-          mcpLauncher.bunExecutablePath,
-          "runtimeDistribution.mcpLauncher.bunExecutablePath",
-        );
+      case "toolScript": {
+        const toolExecutable = yield* toolDiscovery.resolveToolPath(mcpLauncher.toolId);
         const scriptPath = yield* resolveRequiredFile(
           mcpLauncher.scriptPath,
           "runtimeDistribution.mcpLauncher.scriptPath",
         );
-        return [bunExecutable, scriptPath];
+        return [toolExecutable, scriptPath];
       }
     }
 
@@ -177,7 +177,7 @@ export const resolveOpenDucktorMcpCommand = ({
 }: ResolveOpenDucktorMcpCommandInput) =>
   Effect.gen(function* () {
     if (runtimeDistribution.mode === "artifact") {
-      return yield* resolveArtifactCommand(runtimeDistribution);
+      return yield* resolveArtifactCommand(runtimeDistribution, toolDiscovery);
     }
     const workspaceRoot = yield* resolveWorkspaceRoot(runtimeDistribution);
     const entrypoint = join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts");

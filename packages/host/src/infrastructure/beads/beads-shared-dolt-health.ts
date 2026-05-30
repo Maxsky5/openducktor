@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import net from "node:net";
 import { Clock, Effect } from "effect";
-import { createProcessCommandLaunch } from "../../adapters/process/process-command-launch";
-import { processIsAlive } from "../../adapters/process/process-tree";
 import { toHostPathStatError } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
+import { processIsAlive } from "../process/process-tree";
 import {
   type BeadsCommandRunner,
   type BeadsSharedServerPaths,

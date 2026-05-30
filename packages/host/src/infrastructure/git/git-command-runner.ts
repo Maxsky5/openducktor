@@ -3,14 +3,14 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
-import { createProcessCommandLaunch } from "../../adapters/process/process-command-launch";
-import { normalizeProcessEnvironment } from "../../adapters/process/process-environment";
 import {
   HostOperationError,
   HostValidationError,
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
+import { normalizeProcessEnvironment } from "../process/process-environment";
 export const execFileAsync = promisify(execFile);
 export type GitCommandResult = {
   stdout: string;

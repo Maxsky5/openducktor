@@ -9,6 +9,14 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import {
+  type ProcessTreePlatform,
+  type ProcessTreeTerminator,
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+  waitForChildProcessClose,
+} from "../../infrastructure/process/process-tree";
 import type { RuntimeWorkspaceStarterPort } from "../../ports/runtime-registry-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
@@ -16,14 +24,6 @@ import {
   buildOpenDucktorMcpBridgeEnvironment,
   OPENDUCKTOR_MCP_ENV_VAR_NAMES,
 } from "../mcp/openducktor-mcp-environment";
-import { createProcessCommandLaunch } from "../process/process-command-launch";
-import {
-  type ProcessTreePlatform,
-  type ProcessTreeTerminator,
-  shouldStartDetachedProcessGroup,
-  terminateProcessTree,
-  waitForChildProcessClose,
-} from "../process/process-tree";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";

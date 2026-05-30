@@ -1,15 +1,15 @@
 import { spawn } from "node:child_process";
 import { Effect, Layer } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { resolveProcessCommandPath } from "../../infrastructure/process/process-command-resolution";
+import { normalizeProcessEnvironment } from "../../infrastructure/process/process-environment";
 import {
   type SystemCommandPort,
   SystemCommandPortTag,
   type SystemCommandResolveOptions,
   type SystemCommandRunResult,
 } from "../../ports/system-command-port";
-import { createProcessCommandLaunch } from "../process/process-command-launch";
-import { resolveProcessCommandPath } from "../process/process-command-resolution";
-import { normalizeProcessEnvironment } from "../process/process-environment";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
 

@@ -3,12 +3,12 @@ export { createLocalAttachmentAdapter } from "./adapters/attachments/local-attac
 export {
   type ArtifactMcpLauncher,
   type ArtifactRuntimeDistribution,
-  type BunScriptMcpLauncher,
   createArtifactRuntimeDistribution,
   createSourceRuntimeDistribution,
   type ExecutableMcpLauncher,
   type HostRuntimeDistribution,
   type SourceRuntimeDistribution,
+  type ToolScriptMcpLauncher,
 } from "./adapters/runtimes/runtime-distribution";
 export { createRuntimeRegistry } from "./adapters/runtimes/runtime-registry";
 export { createRuntimeDefinitionsService } from "./application/runtimes/runtime-definitions-service";

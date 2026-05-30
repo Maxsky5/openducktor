@@ -6,19 +6,22 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import {
+  createProcessCommandLaunch,
+  type ProcessCommandLaunchPlan,
+  parseProcessCommandLine,
+} from "../../infrastructure/process/process-command-launch";
+import { normalizeProcessEnvironment } from "../../infrastructure/process/process-environment";
+import {
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+} from "../../infrastructure/process/process-tree";
+import {
   type DevServerProcessExit,
   type DevServerProcessPort,
   DevServerProcessPortTag,
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
-import {
-  createProcessCommandLaunch,
-  type ProcessCommandLaunchPlan,
-  parseProcessCommandLine,
-} from "../process/process-command-launch";
-import { normalizeProcessEnvironment } from "../process/process-environment";
-import { shouldStartDetachedProcessGroup, terminateProcessTree } from "../process/process-tree";
 
 export type CreateDevServerProcessAdapterInput = {
   processEnv?: NodeJS.ProcessEnv;

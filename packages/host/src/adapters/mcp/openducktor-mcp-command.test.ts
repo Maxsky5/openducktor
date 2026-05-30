@@ -87,32 +87,26 @@ describe("resolveOpenDucktorMcpCommand", () => {
   });
   test("fails fast when an artifact MCP command dependency is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-required-file-"));
-    const bun = join(root, "bun");
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
-    await writeFile(bun, "#!/bin/sh\nexit 0\n");
-    await chmod(bun, 0o755);
 
     await expect(
       Effect.runPromise(
         resolveOpenDucktorMcpCommand({
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
-              kind: "bunScript",
-              bunExecutablePath: bun,
+              kind: "toolScript",
               scriptPath: mcpEntrypoint,
+              toolId: "bun",
             },
           }),
-          toolDiscovery: createToolDiscovery(false),
+          toolDiscovery: createToolDiscovery(),
         }),
       ),
     ).rejects.toThrow("Runtime artifact distribution MCP launcher requires a missing file");
   });
   test("fails fast when an artifact MCP command dependency is a directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-directory-required-file-"));
-    const bun = join(root, "bun");
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
-    await writeFile(bun, "#!/bin/sh\nexit 0\n");
-    await chmod(bun, 0o755);
     await mkdir(mcpEntrypoint);
 
     await expect(
@@ -120,24 +114,21 @@ describe("resolveOpenDucktorMcpCommand", () => {
         resolveOpenDucktorMcpCommand({
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
-              kind: "bunScript",
-              bunExecutablePath: bun,
+              kind: "toolScript",
               scriptPath: mcpEntrypoint,
+              toolId: "bun",
             },
           }),
-          toolDiscovery: createToolDiscovery(false),
+          toolDiscovery: createToolDiscovery(),
         }),
       ),
     ).rejects.toThrow(
       "Runtime artifact distribution MCP launcher requires a regular file but received a directory",
     );
   });
-  test("uses a Bun script MCP artifact launcher from the runtime distribution", async () => {
+  test("uses tool discovery for artifact script launchers", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-mcp-bun-script-"));
-    const bun = join(root, "bun");
     const mcpEntrypoint = join(root, "openducktor-mcp.js");
-    await writeFile(bun, "#!/bin/sh\nexit 0\n");
-    await chmod(bun, 0o755);
     await writeFile(mcpEntrypoint, "#!/usr/bin/env bun\n");
 
     await expect(
@@ -145,15 +136,37 @@ describe("resolveOpenDucktorMcpCommand", () => {
         resolveOpenDucktorMcpCommand({
           runtimeDistribution: createArtifactRuntimeDistribution({
             mcpLauncher: {
-              kind: "bunScript",
-              bunExecutablePath: bun,
+              kind: "toolScript",
               scriptPath: mcpEntrypoint,
+              toolId: "bun",
+            },
+          }),
+          toolDiscovery: {
+            resolveToolPath: (toolId) => Effect.succeed(`/resolved/${toolId}`),
+          },
+        }),
+      ),
+    ).resolves.toEqual(["/resolved/bun", mcpEntrypoint]);
+  });
+  test("fails fast through tool discovery when an artifact script launcher tool is unavailable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "odt-mcp-missing-tool-script-"));
+    const mcpEntrypoint = join(root, "openducktor-mcp.js");
+    await writeFile(mcpEntrypoint, "#!/usr/bin/env bun\n");
+
+    await expect(
+      Effect.runPromise(
+        resolveOpenDucktorMcpCommand({
+          runtimeDistribution: createArtifactRuntimeDistribution({
+            mcpLauncher: {
+              kind: "toolScript",
+              scriptPath: mcpEntrypoint,
+              toolId: "bun",
             },
           }),
           toolDiscovery: createToolDiscovery(false),
         }),
       ),
-    ).resolves.toEqual([bun, mcpEntrypoint]);
+    ).rejects.toThrow("bun not found");
   });
   testIfUnixModeIsAvailable(
     "fails fast when the artifact MCP command is not executable",

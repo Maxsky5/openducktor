@@ -3,13 +3,13 @@ import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { Clock, Effect, Fiber } from "effect";
-import { createProcessCommandLaunch } from "../../adapters/process/process-command-launch";
+import { HostResourceError } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../process/process-command-launch";
 import {
   processIsAlive,
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
-} from "../../adapters/process/process-tree";
-import { HostResourceError } from "../../effect/host-errors";
+} from "../process/process-tree";
 import {
   type BeadsSharedServerPaths,
   type BeadsSharedServerState,
@@ -41,7 +41,7 @@ import {
 } from "./beads-shared-dolt-startup";
 import { readSharedServerState, writeSharedServerState } from "./beads-shared-dolt-state";
 
-export { processIsAlive } from "../../adapters/process/process-tree";
+export { processIsAlive } from "../process/process-tree";
 export type { SharedDoltServerError } from "./beads-shared-dolt-errors";
 export {
   formatDoltStartupLog,

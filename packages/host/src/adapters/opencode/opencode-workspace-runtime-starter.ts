@@ -9,6 +9,14 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import {
+  type ProcessTreePlatform,
+  type ProcessTreeTerminator,
+  shouldStartDetachedProcessGroup,
+  terminateProcessTree,
+  waitForChildProcessClose,
+} from "../../infrastructure/process/process-tree";
 import type {
   RuntimeEnsureWorkspaceInput,
   RuntimeWorkspaceStarterPort,
@@ -16,14 +24,6 @@ import type {
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { buildOpenDucktorMcpBridgeEnvironment } from "../mcp/openducktor-mcp-environment";
-import { createProcessCommandLaunch } from "../process/process-command-launch";
-import {
-  type ProcessTreePlatform,
-  type ProcessTreeTerminator,
-  shouldStartDetachedProcessGroup,
-  terminateProcessTree,
-  waitForChildProcessClose,
-} from "../process/process-tree";
 import type { HostRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { canConnect, pickFreePort } from "./opencode-local-port";
 

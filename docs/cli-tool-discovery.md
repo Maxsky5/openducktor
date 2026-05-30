@@ -30,7 +30,7 @@ ToolDiscoveryPort
   -> tool descriptor registry
   -> ordered descriptor sources
   -> SystemCommandPort.resolveCommandPath
-  -> process-command-resolution platform rules
+  -> infrastructure/process platform rules
 ```
 
 The result is either an executable command path or a typed, actionable host error.
@@ -41,7 +41,7 @@ The result is either an executable command path or a typed, actionable host erro
 | --- | --- |
 | Public tool ids | `packages/host/src/ports/tool-discovery-port.ts` |
 | Tool descriptors and source ordering | `packages/host/src/adapters/system/tool-discovery.ts` |
-| PATH, PATHEXT, executable-file checks | `packages/host/src/adapters/process/process-command-resolution.ts` |
+| PATH, PATHEXT, executable-file checks | `packages/host/src/infrastructure/process/process-command-resolution.ts` |
 | Command resolution and version probing port | `packages/host/src/adapters/system/system-command-runner.ts` |
 | Node host wiring for Electron and web | `packages/host/src/composition/node/node-host-default-ports.ts` |
 | Distribution mode input | `packages/host/src/adapters/runtimes/runtime-distribution.ts` |
@@ -132,7 +132,7 @@ It uses `SystemCommandPort.resolveCommandPath`, so platform details stay central
 | Tool id | Command | Override variable | Extra descriptor sources | Main consumers |
 | --- | --- | --- | --- | --- |
 | `beads` | `bd` | `OPENDUCKTOR_BD_PATH` | none | Beads task store, diagnostics |
-| `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | none | source-mode OpenDucktor MCP command |
+| `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | none | source-mode and web artifact OpenDucktor MCP command |
 | `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | bundled directory when provided, macOS Codex.app candidates | Codex runtime startup and health |
 | `dolt` | `dolt` | `OPENDUCKTOR_DOLT_PATH` | none | shared Dolt server, Beads diagnostics |
 | `git` | `git` | `OPENDUCKTOR_GIT_PATH` | none | Git adapter, diagnostics |
@@ -167,7 +167,7 @@ Resource paths must come from the packaged app resources for that run.
 
 `bunx @openducktor/web` also uses an artifact runtime distribution.
 
-The MCP launcher is the package-owned `dist/openducktor-mcp.js` script executed by the current Bun executable.
+The MCP launcher is the package-owned `dist/openducktor-mcp.js` script executed by the `bun` tool resolved through `ToolDiscoveryPort`.
 The web package does not use Electron resources and does not currently provide bundled runtime tool directories.
 
 Therefore, runtime CLIs such as Git, Beads, Dolt, OpenCode, Codex, and GitHub CLI are discovered through their descriptor overrides, descriptor conventional locations, and PATH.
@@ -330,7 +330,7 @@ Consumer tests should assert behavior, not reimplement the descriptor search ord
 
 - Keep CLI discovery in `packages/host`.
 - Use descriptors as the source of search order, install hints, and override names.
-- Leave low-level platform resolution in `process-command-resolution.ts` and `SystemCommandPort`.
+- Leave low-level platform resolution in `infrastructure/process` and `SystemCommandPort`.
 - Avoid Codex-specific, OpenCode-specific, or shell-specific discovery branches.
 - Reject invalid explicit overrides instead of falling back to PATH.
 - Keep packaged mode independent from source worktrees.

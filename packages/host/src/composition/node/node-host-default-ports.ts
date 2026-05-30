@@ -9,13 +9,13 @@ import { createFilesystemAdapter } from "../../adapters/filesystem/filesystem-ad
 import { createWorktreeFileAdapter } from "../../adapters/filesystem/worktree-file-adapter";
 import { createGitCliAdapter } from "../../adapters/git/git-cli-adapter";
 import { createOpenInToolsAdapter } from "../../adapters/open-in-tools/open-in-tools-adapter";
-import { createProcessEnvironment } from "../../adapters/process/process-environment";
 import type { HostRuntimeDistribution } from "../../adapters/runtimes/runtime-distribution";
 import { createRuntimeHealthProbe } from "../../adapters/runtimes/runtime-health-probe";
 import { createSettingsConfigAdapter } from "../../adapters/settings/settings-config-adapter";
 import { createSystemCommandRunner } from "../../adapters/system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
 import { toHostOperationError } from "../../effect/host-errors";
+import { createProcessEnvironment } from "../../infrastructure/process/process-environment";
 import { type CodexAppServerPort, CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import {
   type DevServerProcessPort,

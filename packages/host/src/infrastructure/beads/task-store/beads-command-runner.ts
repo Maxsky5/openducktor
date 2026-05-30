@@ -2,13 +2,13 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { Effect } from "effect";
 import type { BeadsCliContext } from "../../../adapters/beads/beads-cli-context";
-import { createProcessCommandLaunch } from "../../../adapters/process/process-command-launch";
 import {
   HostOperationError,
   HostValidationError,
   toHostOperationError,
 } from "../../../effect/host-errors";
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
+import { createProcessCommandLaunch } from "../../process/process-command-launch";
 import {
   BD_COMMAND_TIMEOUT_MS,
   type BeadsCommandJsonOutput,

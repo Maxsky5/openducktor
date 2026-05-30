@@ -36,7 +36,6 @@ describe("resolveWebRuntimeDistribution", () => {
     );
 
     const distribution = resolveWebRuntimeDistribution({
-      bunExecutable: "/usr/local/bin/bun",
       packageRoot: "/tmp/bunx/@openducktor/web",
       workspaceMode: false,
       workspaceRoot: "/repo/that/must/not/be/used",
@@ -45,32 +44,11 @@ describe("resolveWebRuntimeDistribution", () => {
     expect(distribution).toMatchObject({
       mode: "artifact",
       mcpLauncher: {
-        kind: "bunScript",
-        bunExecutablePath: "/usr/local/bin/bun",
+        kind: "toolScript",
         scriptPath: mcpEntrypoint,
+        toolId: "bun",
       },
     });
     expect("bundledToolBinDirs" in distribution).toBe(false);
-  });
-
-  test("uses the current Bun executable for the npm package MCP launcher by default", () => {
-    const bunExecutable = Bun.argv[0];
-    if (!bunExecutable) {
-      throw new Error("Expected Bun.argv[0] to be available in Bun tests.");
-    }
-
-    expect(
-      resolveWebRuntimeDistribution({
-        packageRoot: "/tmp/bunx/@openducktor/web",
-        workspaceMode: false,
-      }),
-    ).toMatchObject({
-      mode: "artifact",
-      mcpLauncher: {
-        kind: "bunScript",
-        bunExecutablePath: bunExecutable,
-        scriptPath: path.join("/tmp/bunx/@openducktor/web", "dist", WEB_PACKAGE_MCP_ENTRYPOINT),
-      },
-    });
   });
 });
