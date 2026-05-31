@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run React Doctor
-        uses: millionco/react-doctor@3bde0309e8e2aa51404ba6e4993f5af41ad80eaf # main
+        uses: millionco/react-doctor@6448d5bfe1a920003a0d74d4080351d973dcbc0b # main
         with:
           project: "@openducktor/frontend,@openducktor/electron"
           diff: ${{ github.base_ref }}
