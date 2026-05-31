@@ -11,7 +11,7 @@
     "lint": "biome check src"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.15.10",
+    "@opencode-ai/sdk": "^1.15.13",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*"
   }
