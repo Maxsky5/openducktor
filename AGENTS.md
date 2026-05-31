@@ -80,7 +80,7 @@ Run from repo root unless stated otherwise:
 
 ```sh
 bun install                  # install deps
-bun run dev                  # Electron desktop dev server
+bun run dev                  # frontend dev server
 bun run electron:dev         # Electron desktop dev server
 bun run browser:dev          # local browser runner
 bun run typecheck            # typecheck all workspaces

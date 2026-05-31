@@ -96,7 +96,7 @@ bun run --filter @openducktor/electron test
 bun run --filter @openducktor/electron typecheck
 bun run --filter @openducktor/electron lint
 bun run --filter @openducktor/frontend test
-bun run --filter @openducktor/web test
+bun run --filter @openducktor/host test
 ```
 
 ## Local Git Hooks
