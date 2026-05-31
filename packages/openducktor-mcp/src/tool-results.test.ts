@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { OdtToolError, toErrorMessage, toToolError } from "./tool-results";
 
 describe("tool result error normalization", () => {
-  test("keeps OdtToolError issues in the top-level structured error payload", () => {
+  test("keeps OdtToolError issues in the content error payload", () => {
     const result = toToolError(
       new OdtToolError({
         code: "ODT_WORKSPACE_SCOPE_VIOLATION",
@@ -19,7 +19,9 @@ describe("tool result error normalization", () => {
       }),
     );
 
-    expect(result.structuredContent).toEqual({
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(JSON.parse(result.content[0]?.text ?? "null")).toEqual({
       ok: false,
       error: {
         code: "ODT_WORKSPACE_SCOPE_VIOLATION",

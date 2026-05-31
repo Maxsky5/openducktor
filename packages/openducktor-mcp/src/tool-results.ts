@@ -128,7 +128,6 @@ export const toToolError = (error: unknown): ToolResult => {
         text: JSON.stringify(errorPayload, null, 2),
       },
     ],
-    structuredContent: errorPayload,
     isError: true,
   };
 };
