@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
@@ -111,6 +111,34 @@ describe("AgentChatFileEditCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
 
     expect(screen.getByRole("button", { name: /example\.ts/i })).toBeDefined();
+    expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+  });
+
+  test("syncs default expansion changes until the user toggles the card", async () => {
+    const data = buildFileEditData();
+    const { rerender } = render(
+      <AgentChatFileEditCard data={data} expandFileDiffsByDefault={true} />,
+    );
+
+    expect(screen.getByTestId("pierre-diff-viewer")).toBeDefined();
+
+    rerender(<AgentChatFileEditCard data={data} expandFileDiffsByDefault={false} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+    });
+  });
+
+  test("keeps the user's manual collapsed state when defaults change", () => {
+    const data = buildFileEditData();
+    const { rerender } = render(
+      <AgentChatFileEditCard data={data} expandFileDiffsByDefault={true} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+    rerender(<AgentChatFileEditCard data={data} expandFileDiffsByDefault={false} />);
+    rerender(<AgentChatFileEditCard data={data} expandFileDiffsByDefault={true} />);
+
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
   });
 

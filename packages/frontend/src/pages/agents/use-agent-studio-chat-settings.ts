@@ -9,8 +9,9 @@ import { errorMessage } from "@/lib/errors";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-const DEFAULT_SHOW_THINKING_MESSAGES = false;
-const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = chatSettingsSchema.parse({}).expandFileDiffsByDefault;
+const DEFAULT_CHAT_SETTINGS = chatSettingsSchema.parse({});
+const DEFAULT_SHOW_THINKING_MESSAGES = DEFAULT_CHAT_SETTINGS.showThinkingMessages;
+const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault;
 const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
 
 type AgentStudioChatSettings = {

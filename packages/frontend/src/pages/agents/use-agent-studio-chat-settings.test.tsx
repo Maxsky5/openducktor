@@ -64,14 +64,17 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   repoPath,
 });
 
+const resolveActiveWorkspace = (props: LegacyHookArgs): ActiveWorkspace | null => {
+  if ("workspaceRepoPath" in props) {
+    return props.workspaceRepoPath ? createActiveWorkspace(props.workspaceRepoPath) : null;
+  }
+
+  return props.activeWorkspace ?? null;
+};
+
 const useChatSettingsHarness = (props: LegacyHookArgs) =>
   useAgentStudioChatSettings({
-    activeWorkspace:
-      "workspaceRepoPath" in props
-        ? props.workspaceRepoPath
-          ? createActiveWorkspace(props.workspaceRepoPath)
-          : null
-        : (props.activeWorkspace ?? null),
+    activeWorkspace: resolveActiveWorkspace(props),
   });
 
 const createSettingsSnapshot = (
