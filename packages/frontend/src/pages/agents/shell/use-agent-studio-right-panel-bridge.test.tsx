@@ -110,7 +110,7 @@ describe("useAgentStudioRightPanelBridge", () => {
     }
   });
 
-  test("reports the panel as hidden when the selected panel is closed", async () => {
+  test("omits bridge props when the selected panel is closed", async () => {
     const harness = createHookHarness(
       createArgs({
         panel: createPanelState({
@@ -125,8 +125,7 @@ describe("useAgentStudioRightPanelBridge", () => {
 
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(false);
-      expect(state.rightPanelBridge?.rightPanel.panelKind).toBe("build_tools");
-      expect(state.rightPanelBridge?.rightPanel.isPanelOpen).toBe(false);
+      expect(state.rightPanelBridge).toBeNull();
     } finally {
       await harness.unmount();
     }

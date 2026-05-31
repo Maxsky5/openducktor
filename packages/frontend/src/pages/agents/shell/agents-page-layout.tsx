@@ -1,4 +1,4 @@
-import { type ComponentProps, memo, type ReactElement, type ReactNode } from "react";
+import { type ComponentProps, memo, type ReactElement, type ReactNode, useMemo } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { AgentStudioTaskTabs } from "@/components/features/agents/agent-studio-task-tabs";
@@ -113,6 +113,39 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     modalContent,
   } = model;
 
+  const taskTabsContent = useMemo(
+    () => (
+      <AgentStudioTaskTabs
+        model={taskTabsModel}
+        {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
+      />
+    ),
+    [rightPanelToggleModel, taskTabsModel],
+  );
+  const chatContent = useMemo(
+    () => <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />,
+    [chatHeaderModel, chatModel],
+  );
+  const rightPanelContent = useMemo(
+    () => <AgentStudioRightPanelBridge model={rightPanelBridge} />,
+    [rightPanelBridge],
+  );
+  const workspaceContent = useMemo(
+    () => (
+      <AgentsPageWorkspace
+        hasSelectedTask={hasSelectedTask}
+        chatContent={chatContent}
+        isRightPanelVisible={isRightPanelVisible}
+        rightPanelContent={rightPanelContent}
+      />
+    ),
+    [chatContent, hasSelectedTask, isRightPanelVisible, rightPanelContent],
+  );
+  const modalContentElement = useMemo(
+    () => <AgentsPageModalContent model={modalContent} />,
+    [modalContent],
+  );
+
   return (
     <AgentsPageShell
       activeWorkspace={activeWorkspace}
@@ -122,23 +155,9 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
       onRetryNavigationPersistence={onRetryNavigationPersistence}
       onRetryChatSettingsLoad={onRetryChatSettingsLoad}
       onTabValueChange={onTabValueChange}
-      taskTabs={
-        <AgentStudioTaskTabs
-          model={taskTabsModel}
-          {...(rightPanelToggleModel !== undefined ? { rightPanelToggleModel } : {})}
-        />
-      }
-      workspace={
-        <AgentsPageWorkspace
-          hasSelectedTask={hasSelectedTask}
-          chatContent={
-            <MemoizedAgentChatPane chatHeaderModel={chatHeaderModel} chatModel={chatModel} />
-          }
-          isRightPanelVisible={isRightPanelVisible}
-          rightPanelContent={<AgentStudioRightPanelBridge model={rightPanelBridge} />}
-        />
-      }
-      modalContent={<AgentsPageModalContent model={modalContent} />}
+      taskTabs={taskTabsContent}
+      workspace={workspaceContent}
+      modalContent={modalContentElement}
     />
   );
 }

@@ -176,7 +176,7 @@ export function useAgentStudioRightPanelBridge({
   const session = useRightPanelSessionDescriptor(selection.viewActiveSession);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
-    if (!panelKind) {
+    if (!isRightPanelVisible || !panelKind) {
       return null;
     }
 
@@ -204,6 +204,7 @@ export function useAgentStudioRightPanelBridge({
     detectingPullRequestTaskId,
     documentsModel,
     isPanelOpen,
+    isRightPanelVisible,
     onDetectPullRequest,
     onGitConflictQuickActionContextChange,
     onResolveGitConflict,
