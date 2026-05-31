@@ -437,7 +437,7 @@ describe("agent-orchestrator/support/persistence", () => {
     const subagent = messages.find(
       (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
     );
-    if (!subagent || subagent.meta?.kind !== "subagent") {
+    if (subagent?.meta?.kind !== "subagent") {
       throw new Error("Expected subagent message with subagent meta");
     }
     expect(subagent.meta.status).toBe("completed");
@@ -625,6 +625,131 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(subagent.meta.startedAtMs).toBe(100);
     expect(subagent.meta.endedAtMs).toBe(300);
     expect(subagent.content).toContain("Cancelled by user");
+  });
+
+  test("preserves unresolved hydrated subagent history rows when no child session link exists", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "The subtask timed out. Let me try directly reading the file.",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant",
+              partId: "p-subagent-running",
+              correlationKey: "part:m-assistant:p-subagent-running",
+              status: "running",
+              agent: "explorer",
+              prompt: "Read the file at ~/maxsky5.omp.json",
+              description: "Read the file at ~/maxsky5.omp.json",
+              startedAtMs: 100,
+            },
+            {
+              kind: "step",
+              messageId: "m-assistant",
+              partId: "p-step-finish",
+              phase: "finish",
+              reason: "stop",
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const subagentMessages = messages.filter(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(1);
+
+    const subagentIndex = messages.findIndex(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    const assistantIndex = messages.findIndex(
+      (entry) =>
+        entry.role === "assistant" &&
+        entry.content === "The subtask timed out. Let me try directly reading the file.",
+    );
+    expect(subagentIndex).toBeLessThan(assistantIndex);
+
+    const subagent = subagentMessages[0];
+    if (!subagent || subagent.meta?.kind !== "subagent") {
+      throw new Error("Expected unresolved subagent message with subagent meta");
+    }
+    expect(subagent.meta.status).toBe("running");
+    expect(subagent.meta.externalSessionId).toBeUndefined();
+    expect(subagent.meta.correlationKey).toBe("part:m-assistant:p-subagent-running");
+    expect(subagent.content).toContain("Read the file at ~/maxsky5.omp.json");
+  });
+
+  test("preserves repeated same-prompt subagent rows from separate history turns", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant-first",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant-first",
+              partId: "p-subagent-completed",
+              correlationKey: "session:m-assistant-first:session-child-1",
+              status: "completed",
+              agent: "explorer",
+              prompt: "Read the file at ~/maxsky5.omp.json",
+              description: "Read completed",
+              externalSessionId: "session-child-1",
+              startedAtMs: 100,
+              endedAtMs: 300,
+            },
+          ],
+        },
+        {
+          messageId: "m-assistant-second",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:12.000Z",
+          text: "The subtask timed out. Let me try directly reading the file.",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant-second",
+              partId: "p-subagent-running",
+              correlationKey: "part:m-assistant-second:p-subagent-running",
+              status: "running",
+              agent: "explorer",
+              prompt: "Read the file at ~/maxsky5.omp.json",
+              description: "Read the file at ~/maxsky5.omp.json",
+              startedAtMs: 400,
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const subagentMessages = messages.filter(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(2);
+    expect(
+      subagentMessages.map((entry) =>
+        entry.meta?.kind === "subagent" ? entry.meta.correlationKey : null,
+      ),
+    ).toEqual([
+      "session:m-assistant-first:session-child-1",
+      "part:m-assistant-second:p-subagent-running",
+    ]);
   });
 
   test("surfaces only the identified hydrated subagent history part when part and session correlation keys differ", () => {
@@ -1034,7 +1159,9 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
+    const assistant = messages.find(
+      (entry) => entry.role === "assistant" && entry.content === "Reviewed the changes",
+    );
     if (!assistant || assistant.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }

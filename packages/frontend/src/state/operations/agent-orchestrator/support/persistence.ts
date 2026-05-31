@@ -48,6 +48,10 @@ type LegacySubtaskHistoryPart = {
 type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
 
 type HydratedSubagentMessage = SubagentMessage;
+type HiddenHydratedSubagentMessage = {
+  message: HydratedSubagentMessage;
+  insertionIndex: number;
+};
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   if (!isWorkflowAgentSession(session)) {
@@ -282,6 +286,26 @@ const matchesHydratedSubagentMessage = (
   return false;
 };
 
+const matchesHydratedSubagentActivity = (
+  existingMessage: HydratedSubagentMessage,
+  incomingMessage: HydratedSubagentMessage,
+): boolean => {
+  const existingAgent = existingMessage.meta.agent;
+  const incomingAgent = incomingMessage.meta.agent;
+  const existingPrompt = existingMessage.meta.prompt;
+  const incomingPrompt = incomingMessage.meta.prompt;
+
+  return (
+    existingMessage.timestamp === incomingMessage.timestamp &&
+    typeof existingAgent === "string" &&
+    typeof incomingAgent === "string" &&
+    existingAgent === incomingAgent &&
+    typeof existingPrompt === "string" &&
+    typeof incomingPrompt === "string" &&
+    existingPrompt === incomingPrompt
+  );
+};
+
 const mergeHydratedSubagentMessages = (
   existingMessage: HydratedSubagentMessage,
   incomingMessage: HydratedSubagentMessage,
@@ -310,7 +334,7 @@ export const historyToChatMessages = (
   },
 ): AgentChatMessage[] => {
   const next: AgentChatMessage[] = [];
-  const hiddenSubagentsByCorrelationKey = new Map<string, HydratedSubagentMessage>();
+  const hiddenSubagentsByCorrelationKey = new Map<string, HiddenHydratedSubagentMessage>();
   let userAnchorAtMs: number | undefined;
   let previousAssistantCompletedAtMs: number | undefined;
   const findLastMatchingHydratedSubagentIndex = (
@@ -328,6 +352,17 @@ export const historyToChatMessages = (
 
     return -1;
   };
+  const hasVisibleIdentifiedSubagentForActivity = (
+    incomingMessage: HydratedSubagentMessage,
+  ): boolean => {
+    return next.some((entry) => {
+      return (
+        isSubagentMessage(entry) &&
+        typeof entry.meta.externalSessionId === "string" &&
+        matchesHydratedSubagentActivity(entry, incomingMessage)
+      );
+    });
+  };
 
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
@@ -338,13 +373,19 @@ export const historyToChatMessages = (
         if (isSubagentMessage(partMessage)) {
           const correlationKey = partMessage.meta.correlationKey;
           if (!partMessage.meta.externalSessionId) {
-            hiddenSubagentsByCorrelationKey.set(correlationKey, partMessage);
+            const hiddenSubagent = hiddenSubagentsByCorrelationKey.get(correlationKey);
+            hiddenSubagentsByCorrelationKey.set(correlationKey, {
+              message: hiddenSubagent
+                ? mergeHydratedSubagentMessages(hiddenSubagent.message, partMessage)
+                : partMessage,
+              insertionIndex: hiddenSubagent?.insertionIndex ?? next.length,
+            });
             continue;
           }
 
           const hiddenSubagent = hiddenSubagentsByCorrelationKey.get(correlationKey);
           const visiblePartMessage = hiddenSubagent
-            ? mergeHydratedSubagentMessages(hiddenSubagent, partMessage)
+            ? mergeHydratedSubagentMessages(hiddenSubagent.message, partMessage)
             : partMessage;
           hiddenSubagentsByCorrelationKey.delete(correlationKey);
           const existingIndex = findLastMatchingHydratedSubagentIndex(visiblePartMessage);
@@ -434,6 +475,21 @@ export const historyToChatMessages = (
         previousAssistantCompletedAtMs = parsed;
       }
     }
+  }
+
+  const unresolvedHiddenSubagents = [...hiddenSubagentsByCorrelationKey.values()]
+    .filter(({ message }) => {
+      return (
+        findLastMatchingHydratedSubagentIndex(message) < 0 &&
+        !hasVisibleIdentifiedSubagentForActivity(message)
+      );
+    })
+    .sort((left, right) => left.insertionIndex - right.insertionIndex);
+  let insertedHiddenSubagentCount = 0;
+  for (const { message, insertionIndex } of unresolvedHiddenSubagents) {
+    const targetIndex = Math.min(insertionIndex + insertedHiddenSubagentCount, next.length);
+    next.splice(targetIndex, 0, message);
+    insertedHiddenSubagentCount += 1;
   }
 
   return next;
