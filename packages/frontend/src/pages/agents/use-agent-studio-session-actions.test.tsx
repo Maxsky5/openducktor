@@ -277,6 +277,7 @@ describe("useAgentStudioSessionActions", () => {
       },
       chat: {
         showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       kanban: {

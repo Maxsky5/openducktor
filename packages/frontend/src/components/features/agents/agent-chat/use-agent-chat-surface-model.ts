@@ -175,6 +175,7 @@ type UseAgentChatSurfaceModelArgs = {
   isTaskHydrating: boolean;
   isSessionSelectionResolving: boolean;
   showThinkingMessages: boolean;
+  expandFileDiffsByDefault: boolean;
   isSessionWorking: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -198,6 +199,7 @@ export function useAgentChatSurfaceModel({
   isTaskHydrating,
   isSessionSelectionResolving,
   showThinkingMessages,
+  expandFileDiffsByDefault,
   isSessionWorking,
   isSessionHistoryLoading,
   isWaitingForRuntimeReadiness,
@@ -271,6 +273,7 @@ export function useAgentChatSurfaceModel({
       session: threadSession,
       isSessionWorking,
       showThinkingMessages,
+      expandFileDiffsByDefault,
       isSessionViewLoading: isContextSwitching,
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness,
@@ -315,6 +318,7 @@ export function useAgentChatSurfaceModel({
       composer?.isSending,
       composer?.isStarting,
       emptyState,
+      expandFileDiffsByDefault,
       handleToggleTodoPanel,
       isContextSwitching,
       isComposerInteractionEnabled,

@@ -22,13 +22,16 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
 
 const createElement = (
   _type: typeof AgentChatMessageCard,
-  props: React.ComponentProps<typeof AgentChatMessageCard>,
+  props: Omit<React.ComponentProps<typeof AgentChatMessageCard>, "expandFileDiffsByDefault"> & {
+    expandFileDiffsByDefault?: boolean;
+  },
 ) => {
   return createReactElement(
     RuntimeDefinitionsContext.Provider,
     { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
     createReactElement(AgentChatMessageCard, {
       sessionRuntimeKind: "opencode",
+      expandFileDiffsByDefault: props.expandFileDiffsByDefault ?? true,
       ...props,
     }),
   );
@@ -398,6 +401,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
+        expandFileDiffsByDefault: false,
       }),
     );
 

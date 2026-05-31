@@ -38,6 +38,7 @@ type AgentChatThreadMotionRowProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  expandFileDiffsByDefault: boolean;
   subagentPendingApprovals: AgentSessionState["pendingApprovals"];
   subagentPendingApprovalCount: number;
   subagentPendingQuestions: AgentSessionState["pendingQuestions"];
@@ -56,6 +57,7 @@ type AgentChatTranscriptProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  expandFileDiffsByDefault: boolean;
   subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
   subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
@@ -207,6 +209,7 @@ const AgentChatThreadMotionRow = memo(
     sessionWorkingDirectory,
     sessionRuntimeKind,
     sessionRuntimeId,
+    expandFileDiffsByDefault,
     subagentPendingApprovals,
     subagentPendingApprovalCount,
     subagentPendingQuestions,
@@ -222,6 +225,7 @@ const AgentChatThreadMotionRow = memo(
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
           sessionRuntimeId={sessionRuntimeId}
+          expandFileDiffsByDefault={expandFileDiffsByDefault}
           subagentPendingApprovals={subagentPendingApprovals}
           subagentPendingApprovalCount={subagentPendingApprovalCount}
           subagentPendingQuestions={subagentPendingQuestions}
@@ -235,6 +239,7 @@ const AgentChatThreadMotionRow = memo(
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionRuntimeId === nextProps.sessionRuntimeId &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
+      previousProps.expandFileDiffsByDefault === nextProps.expandFileDiffsByDefault &&
       previousProps.subagentPendingApprovals === nextProps.subagentPendingApprovals &&
       previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
       previousProps.subagentPendingQuestions === nextProps.subagentPendingQuestions &&
@@ -254,6 +259,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
+  expandFileDiffsByDefault,
   subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
@@ -267,6 +273,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
   sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  expandFileDiffsByDefault: boolean;
   subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
   subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
@@ -287,6 +294,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
           sessionRuntimeId={sessionRuntimeId}
+          expandFileDiffsByDefault={expandFileDiffsByDefault}
           subagentPendingApprovals={readSubagentPendingApprovals(
             row,
             subagentPendingApprovalsByExternalSessionId,
@@ -321,6 +329,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
+  expandFileDiffsByDefault,
   subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
@@ -414,6 +423,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
                 sessionRuntimeId={sessionRuntimeId}
+                expandFileDiffsByDefault={expandFileDiffsByDefault}
                 subagentPendingApprovalsByExternalSessionId={
                   subagentPendingApprovalsByExternalSessionId
                 }
@@ -509,6 +519,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const {
     session,
     showThinkingMessages,
+    expandFileDiffsByDefault,
     isSessionViewLoading,
     isSessionHistoryLoading,
     isWaitingForRuntimeReadiness,
@@ -749,6 +760,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
         sessionRuntimeId={sessionRuntimeId}
+        expandFileDiffsByDefault={expandFileDiffsByDefault}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={

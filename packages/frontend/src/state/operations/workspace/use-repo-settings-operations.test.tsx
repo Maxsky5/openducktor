@@ -79,6 +79,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {
@@ -696,6 +697,7 @@ describe("use-repo-settings-operations", () => {
       },
       chat: {
         showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       kanban: {

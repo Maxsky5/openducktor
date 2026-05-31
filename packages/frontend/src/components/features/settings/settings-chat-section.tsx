@@ -15,7 +15,7 @@ export function SettingsChatSection({
 }: SettingsChatSectionProps): ReactElement {
   return (
     <div className="grid gap-4 p-4">
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-foreground">Chat Settings</h3>
         <p className="text-xs text-muted-foreground">
           Configure chat display behavior for Agent Studio sessions.
@@ -24,7 +24,7 @@ export function SettingsChatSection({
 
       <div className="rounded-md border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">Show Thinking Messages</p>
             <p className="text-xs text-muted-foreground">
               Thinking messages are hidden by default. When enabled, they will appear in the Agent
@@ -38,6 +38,25 @@ export function SettingsChatSection({
             }
             disabled={disabled}
             aria-label="Show thinking messages in Agent Studio transcript"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border bg-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium text-foreground">Expand file diffs by default</p>
+            <p className="text-xs text-muted-foreground">
+              File diffs in Agent Studio transcripts will start expanded after you save settings.
+            </p>
+          </div>
+          <Switch
+            checked={chat.expandFileDiffsByDefault}
+            onCheckedChange={(checked) =>
+              onUpdateChat((current) => ({ ...current, expandFileDiffsByDefault: checked }))
+            }
+            disabled={disabled}
+            aria-label="Expand file diffs by default in Agent Studio transcripts"
           />
         </div>
       </div>

@@ -71,7 +71,7 @@ afterEach(async () => {
 
 describe("AgentChatFileEditCard", () => {
   test("does not mount the hidden diff preloader while collapsed", () => {
-    render(<AgentChatFileEditCard data={buildFileEditData()} />);
+    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={false} />);
 
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
@@ -79,8 +79,19 @@ describe("AgentChatFileEditCard", () => {
     expect(viewerMock).not.toHaveBeenCalled();
   });
 
+  test("renders the visible diff viewer immediately when diffs expand by default", () => {
+    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={true} />);
+
+    const viewer = screen.getByTestId("pierre-diff-viewer");
+    expect(viewer.getAttribute("data-file-path")).toBe("src/example.ts");
+    expect(viewer.getAttribute("data-patch")).toBe("@@ -1 +1 @@\n-old\n+new\n");
+    expect(viewer.getAttribute("data-diff-style")).toBe("split");
+    expect(preloaderMock).not.toHaveBeenCalled();
+    expect(viewerMock).toHaveBeenCalledTimes(1);
+  });
+
   test("renders the visible diff viewer after expansion with the existing split view props", () => {
-    render(<AgentChatFileEditCard data={buildFileEditData()} />);
+    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={false} />);
 
     fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
 
@@ -92,7 +103,21 @@ describe("AgentChatFileEditCard", () => {
     expect(viewerMock).toHaveBeenCalledTimes(1);
   });
 
-  test("keeps no-diff cards on the metadata-only path", () => {
+  test("collapses an expanded diff card without changing metadata", () => {
+    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={true} />);
+
+    expect(screen.getByTestId("pierre-diff-viewer")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
+
+    expect(screen.getByRole("button", { name: /example\.ts/i })).toBeDefined();
+    expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+  });
+
+  test.each([
+    true,
+    false,
+  ])("keeps no-diff cards on the metadata-only path when expandFileDiffsByDefault is %p", (expandFileDiffsByDefault) => {
     render(
       <AgentChatFileEditCard
         data={buildFileEditData({
@@ -101,6 +126,7 @@ describe("AgentChatFileEditCard", () => {
           additions: 0,
           deletions: 0,
         })}
+        expandFileDiffsByDefault={expandFileDiffsByDefault}
       />,
     );
 

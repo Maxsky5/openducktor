@@ -324,6 +324,7 @@ describe("settings save transforms", () => {
       },
       chat: {
         showThinkingMessages: true,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [
         {

@@ -235,6 +235,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   };
   const chatSettings = {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
     ...overrides.chatSettings,
   };
   const composer = {
@@ -919,6 +920,7 @@ describe("useAgentStudioPageModels", () => {
       },
       chatSettings: {
         showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
       },
     });
     const harness = createHookHarness(baseProps);
@@ -932,6 +934,7 @@ describe("useAgentStudioPageModels", () => {
       ...baseProps,
       chatSettings: {
         showThinkingMessages: true,
+        expandFileDiffsByDefault: true,
       },
     });
 
@@ -939,6 +942,44 @@ describe("useAgentStudioPageModels", () => {
     expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
     expect(nextState.agentChatModel.thread.showThinkingMessages).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("updates thread model when file diff expansion default changes without rebuilding composer", async () => {
+    const session = createSession("session-1", "external-1");
+    const baseProps = createHookArgs({
+      selectedSessionCore: {
+        activeSession: session,
+        sessionsForTask: [session],
+      },
+      composer: {
+        draftStateKey: "draft-diff-toggle",
+      },
+      chatSettings: {
+        showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
+      },
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialState = harness.getLatest();
+    const initialThreadModel = initialState.agentChatModel.thread;
+    const initialComposerModel = initialState.agentChatModel.composer;
+
+    await harness.update({
+      ...baseProps,
+      chatSettings: {
+        showThinkingMessages: false,
+        expandFileDiffsByDefault: false,
+      },
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
+    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.thread.expandFileDiffsByDefault).toBe(false);
 
     await harness.unmount();
   });

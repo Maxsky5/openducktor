@@ -157,6 +157,7 @@ type BuildAgentStudioPageModelsArgsInput = {
   modelSelection: AgentStudioPageModelsModelSelectionContext;
   chatSettings: {
     showThinkingMessages: boolean;
+    expandFileDiffsByDefault: boolean;
   };
   composer: AgentStudioOrchestrationComposerContext;
 };
@@ -283,8 +284,13 @@ export function useAgentStudioOrchestrationController({
   const { repoSettings } = useAgentStudioRepoSettings({
     activeWorkspace,
   });
-  const { showThinkingMessages, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
-    useAgentStudioChatSettings({ activeWorkspace });
+  const {
+    showThinkingMessages,
+    expandFileDiffsByDefault,
+    reusablePrompts,
+    chatSettingsLoadError,
+    retryChatSettingsLoad,
+  } = useAgentStudioChatSettings({ activeWorkspace });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
     activeWorkspace,
@@ -525,6 +531,7 @@ export function useAgentStudioOrchestrationController({
     },
     chatSettings: {
       showThinkingMessages,
+      expandFileDiffsByDefault,
     },
     composer: {
       draftStateKey,

@@ -30,12 +30,9 @@ import {
   SYSTEM_PROMPT_PREFIX,
 } from "./agent-chat-message-card-model";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
-import {
-  assistantRoleIcon,
-  RegularToolMessage,
-  WorkflowToolMessage,
-} from "./agent-chat-message-card-tool-presenters";
+import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
+import { assistantRoleIcon } from "./assistant-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
@@ -666,6 +663,7 @@ type MessageBodyProps = {
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  expandFileDiffsByDefault: boolean;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
@@ -682,6 +680,7 @@ export const MessageBody = ({
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
+  expandFileDiffsByDefault,
   subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
@@ -713,6 +712,7 @@ export const MessageBody = ({
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        expandFileDiffsByDefault={expandFileDiffsByDefault}
       />
     );
   }

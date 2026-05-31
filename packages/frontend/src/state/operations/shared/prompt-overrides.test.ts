@@ -41,7 +41,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
   agentRuntimes: DEFAULT_AGENT_RUNTIMES,
   workspaces: {},
-  chat: { showThinkingMessages: false },
+  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },

@@ -9,6 +9,7 @@ import type { FileEditData } from "./agent-chat-message-card-model";
 
 type AgentChatFileEditCardProps = {
   data: FileEditData;
+  expandFileDiffsByDefault: boolean;
 };
 
 const STATUS_CONFIG: Record<string, { icon: typeof FileText; color: string; badge: string }> = {
@@ -33,8 +34,10 @@ const DEFAULT_CONFIG = {
 
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
+  expandFileDiffsByDefault,
 }: AgentChatFileEditCardProps): ReactElement {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const hasDiff = Boolean(data.diff);
+  const [isExpanded, setIsExpanded] = useState(() => hasDiff && expandFileDiffsByDefault);
 
   const status = inferStatus(data);
   const config = STATUS_CONFIG[status] ?? DEFAULT_CONFIG;
@@ -44,8 +47,6 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   const dirName = data.filePath.includes("/")
     ? data.filePath.slice(0, data.filePath.lastIndexOf("/"))
     : "";
-
-  const hasDiff = Boolean(data.diff);
 
   return (
     <div

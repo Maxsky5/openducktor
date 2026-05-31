@@ -34,6 +34,7 @@ export type AgentChatThreadModel = {
   session: AgentSessionState | null;
   isSessionWorking: boolean;
   showThinkingMessages: boolean;
+  expandFileDiffsByDefault: boolean;
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;

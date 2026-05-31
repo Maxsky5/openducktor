@@ -23,6 +23,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {

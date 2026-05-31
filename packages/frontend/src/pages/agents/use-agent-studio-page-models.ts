@@ -91,6 +91,7 @@ type AgentStudioComposerContext = {
 
 type AgentStudioChatSettingsContext = {
   showThinkingMessages: boolean;
+  expandFileDiffsByDefault: boolean;
 };
 
 type UseAgentStudioPageModelsArgs = {
@@ -397,6 +398,7 @@ export function useAgentStudioPageModels({
     isTaskHydrating: selectedSession.runtime.isTaskHydrating,
     isSessionSelectionResolving: selectedSession.runtime.isSessionSelectionResolving,
     showThinkingMessages: chatSettings.showThinkingMessages,
+    expandFileDiffsByDefault: chatSettings.expandFileDiffsByDefault,
     isSessionWorking: sessionActions.isSessionWorking,
     isSessionHistoryLoading: isSessionHistoryBlockingRender,
     isWaitingForRuntimeReadiness: selectedSession.runtime.isWaitingForRuntimeReadiness,

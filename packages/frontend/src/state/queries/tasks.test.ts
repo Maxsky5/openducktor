@@ -26,7 +26,7 @@ const settingsSnapshotFixture: SettingsSnapshot = {
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false },
+  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
   reusablePrompts: [],
   kanban: { doneVisibleDays: DONE_VISIBLE_DAYS, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },

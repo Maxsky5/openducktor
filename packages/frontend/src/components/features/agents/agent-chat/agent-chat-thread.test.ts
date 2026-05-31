@@ -21,6 +21,7 @@ import { AgentChatThread } from "./agent-chat-thread";
 const buildBaseModel = () => ({
   isSessionWorking: false,
   showThinkingMessages: false,
+  expandFileDiffsByDefault: true,
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
   isWaitingForRuntimeReadiness: false,

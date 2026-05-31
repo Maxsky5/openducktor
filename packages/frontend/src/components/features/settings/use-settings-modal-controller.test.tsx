@@ -33,6 +33,7 @@ const createSettingsSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {
@@ -362,6 +363,7 @@ describe("useSettingsModalController", () => {
       ...createSettingsSnapshot(),
       chat: {
         showThinkingMessages: true,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       agentRuntimes: DEFAULT_AGENT_RUNTIMES,

@@ -13,6 +13,7 @@ const buildModel = () => ({
     }),
     isSessionWorking: true,
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,

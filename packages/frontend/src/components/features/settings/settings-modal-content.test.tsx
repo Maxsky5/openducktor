@@ -13,7 +13,7 @@ const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): Settings
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false },
+  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: { rules: [] },
@@ -131,7 +131,7 @@ describe("settings modal content", () => {
 
   test("renders chat section with SettingsChatSection when section is chat", () => {
     const snapshot = createMockSnapshot({
-      chat: { showThinkingMessages: true },
+      chat: { showThinkingMessages: true, expandFileDiffsByDefault: true },
     });
     const controller = createMockController(snapshot);
 

@@ -38,6 +38,7 @@ const createSnapshot = (workspaces: SettingsSnapshot["workspaces"]): SettingsSna
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {

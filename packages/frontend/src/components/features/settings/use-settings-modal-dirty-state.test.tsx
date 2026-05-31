@@ -23,6 +23,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {
@@ -104,6 +105,7 @@ describe("useSettingsModalDirtyState", () => {
         ...createSnapshot(),
         chat: {
           showThinkingMessages: true,
+          expandFileDiffsByDefault: true,
         },
         reusablePrompts: [],
       },

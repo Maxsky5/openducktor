@@ -1,15 +1,11 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import {
-  Bot,
   FileText,
   Folder,
   Globe,
   ListTodo,
   LoaderCircle,
   Search,
-  ShieldCheck,
-  Sparkles,
   Terminal,
   Wrench,
 } from "lucide-react";
@@ -31,19 +27,6 @@ import {
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { formatAgentDuration } from "./format-agent-duration";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
-
-export const assistantRoleIcon = (role: AgentRole): ReactElement => {
-  if (role === "spec") {
-    return <Sparkles className="size-3" />;
-  }
-  if (role === "planner") {
-    return <Bot className="size-3" />;
-  }
-  if (role === "build") {
-    return <Wrench className="size-3" />;
-  }
-  return <ShieldCheck className="size-3" />;
-};
 
 const toolIcon = (meta: Pick<ToolMeta, "tool" | "toolType">): ReactElement => {
   const value = meta.toolType;
@@ -265,6 +248,7 @@ type RegularToolMessageProps = {
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
+  expandFileDiffsByDefault: boolean;
 };
 
 export const RegularToolMessage = ({
@@ -274,6 +258,7 @@ export const RegularToolMessage = ({
   timeLabel,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
+  expandFileDiffsByDefault,
 }: RegularToolMessageProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
@@ -404,7 +389,11 @@ export const RegularToolMessage = ({
           const allFileEditData = extractAllFileEditData(meta, sessionWorkingDirectory);
           return allFileEditData.length > 0
             ? allFileEditData.map((data) => (
-                <AgentChatFileEditCard key={data.filePath} data={data} />
+                <AgentChatFileEditCard
+                  key={data.filePath}
+                  data={data}
+                  expandFileDiffsByDefault={expandFileDiffsByDefault}
+                />
               ))
             : null;
         })()}

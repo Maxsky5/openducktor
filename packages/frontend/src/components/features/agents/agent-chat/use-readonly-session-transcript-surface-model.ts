@@ -1,4 +1,8 @@
-import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
+import {
+  chatSettingsSchema,
+  type RuntimeApprovalReplyOutcome,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -19,7 +23,9 @@ import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
-const DEFAULT_SHOW_THINKING_MESSAGES = false;
+const DEFAULT_CHAT_SETTINGS = chatSettingsSchema.parse({});
+const DEFAULT_SHOW_THINKING_MESSAGES = DEFAULT_CHAT_SETTINGS.showThinkingMessages;
+const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault;
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
 
@@ -167,10 +173,10 @@ export function useReadonlySessionTranscriptSurfaceModel({
       isMountedRef.current = false;
     };
   }, []);
-  const { data: showThinkingMessages = DEFAULT_SHOW_THINKING_MESSAGES } = useQuery({
+  const { data: chatSettings = DEFAULT_CHAT_SETTINGS } = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
-    select: (snapshot) => snapshot.chat.showThinkingMessages,
+    select: (snapshot) => chatSettingsSchema.parse(snapshot.chat),
   });
 
   const runtimeListQuery = useQuery({
@@ -548,7 +554,12 @@ export function useReadonlySessionTranscriptSurfaceModel({
     session: runtimeData.session,
     isTaskHydrating: isResolvingTranscript,
     isSessionSelectionResolving: false,
-    showThinkingMessages: activeWorkspace ? showThinkingMessages : DEFAULT_SHOW_THINKING_MESSAGES,
+    showThinkingMessages: activeWorkspace
+      ? chatSettings.showThinkingMessages
+      : DEFAULT_SHOW_THINKING_MESSAGES,
+    expandFileDiffsByDefault: activeWorkspace
+      ? chatSettings.expandFileDiffsByDefault
+      : DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT,
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,

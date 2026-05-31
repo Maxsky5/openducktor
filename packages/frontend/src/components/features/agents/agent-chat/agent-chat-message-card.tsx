@@ -16,6 +16,7 @@ type AgentChatMessageCardProps = {
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
   sessionRuntimeId?: string | null | undefined;
+  expandFileDiffsByDefault: boolean;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
   subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
@@ -31,6 +32,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
+  expandFileDiffsByDefault,
   subagentPendingApprovals,
   subagentPendingApprovalCount,
   subagentPendingApprovalCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
@@ -79,6 +81,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
+        expandFileDiffsByDefault={expandFileDiffsByDefault}
         subagentPendingApprovals={subagentPendingApprovals}
         subagentPendingApprovalCount={resolvedSubagentPendingApprovalCount}
         subagentPendingQuestions={subagentPendingQuestions}

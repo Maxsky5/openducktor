@@ -21,6 +21,7 @@ const hostMock = {
       },
       chat: {
         showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       kanban: {
@@ -75,6 +76,7 @@ const useChatSettingsHarness = (props: LegacyHookArgs) =>
 
 const createSettingsSnapshot = (
   showThinkingMessages = false,
+  expandFileDiffsByDefault: boolean | undefined = true,
   includeChat = true,
 ): SettingsSnapshot => {
   const snapshot = {
@@ -103,11 +105,12 @@ const createSettingsSnapshot = (
         content: "Review this.",
       },
     ],
-  } as Omit<SettingsSnapshot, "chat"> & { chat?: SettingsSnapshot["chat"] };
+  } as Omit<SettingsSnapshot, "chat"> & { chat?: unknown };
 
   if (includeChat) {
     snapshot.chat = {
       showThinkingMessages,
+      ...(typeof expandFileDiffsByDefault === "boolean" ? { expandFileDiffsByDefault } : {}),
     };
   }
 
@@ -133,6 +136,7 @@ describe("useAgentStudioChatSettings", () => {
 
     expect(hostMock.workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
     expect(harness.getLatest().showThinkingMessages).toBe(true);
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().reusablePrompts).toEqual([
       {
         id: "prompt-1",
@@ -145,7 +149,26 @@ describe("useAgentStudioChatSettings", () => {
     await harness.unmount();
   });
 
-  test("surfaces malformed snapshots that omit chat settings", async () => {
+  test("defaults file diff expansion for older chat snapshots", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => createSettingsSnapshot(false, undefined),
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
+    await harness.waitFor((state) => state.reusablePrompts.length === 1);
+
+    expect(harness.getLatest().showThinkingMessages).toBe(false);
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("loads explicit collapsed file diff setting", async () => {
     hostMock.workspaceGetSettingsSnapshot.mockClear();
     hostMock.workspaceGetSettingsSnapshot.mockImplementation(
       async (): Promise<SettingsSnapshot> => createSettingsSnapshot(false, false),
@@ -156,9 +179,28 @@ describe("useAgentStudioChatSettings", () => {
     });
 
     await harness.mount();
+    await harness.waitFor((state) => state.reusablePrompts.length === 1);
+
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(false);
+
+    await harness.unmount();
+  });
+
+  test("surfaces malformed snapshots that omit chat settings", async () => {
+    hostMock.workspaceGetSettingsSnapshot.mockClear();
+    hostMock.workspaceGetSettingsSnapshot.mockImplementation(
+      async (): Promise<SettingsSnapshot> => createSettingsSnapshot(false, true, false),
+    );
+
+    const harness = createHookHarness({
+      workspaceRepoPath: "/repo",
+    });
+
+    await harness.mount();
 
     await harness.waitFor((state) => state.chatSettingsLoadError !== null);
     expect(harness.getLatest().showThinkingMessages).toBe(false);
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().chatSettingsLoadError?.message).toMatch(
       /snapshot\.chat\.showThinkingMessages|undefined/,
     );
@@ -187,6 +229,7 @@ describe("useAgentStudioChatSettings", () => {
     await harness.mount();
     await harness.waitFor((state) => state.chatSettingsLoadError !== null);
     expect(harness.getLatest().showThinkingMessages).toBe(false);
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().chatSettingsLoadError?.message).toContain("settings read failed");
 
     await harness.run((state) => {
@@ -213,10 +256,12 @@ describe("useAgentStudioChatSettings", () => {
     await harness.mount();
     await harness.waitFor((state) => state.showThinkingMessages === true);
     expect(harness.getLatest().showThinkingMessages).toBe(true);
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
 
     await harness.update({ workspaceRepoPath: null });
 
     expect(harness.getLatest().showThinkingMessages).toBe(false);
+    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().reusablePrompts).toEqual([]);
 
     await harness.unmount();

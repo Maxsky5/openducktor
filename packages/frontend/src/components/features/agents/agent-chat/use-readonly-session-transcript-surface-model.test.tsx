@@ -30,6 +30,10 @@ const useAgentSessionMock = mock(
   (_externalSessionId: string | null): AgentSessionState | null => null,
 );
 let latestSurfaceModelArgs: Record<string, unknown> | null = null;
+let settingsChat = {
+  showThinkingMessages: false,
+  expandFileDiffsByDefault: true,
+};
 let runtimeList: RuntimeInstanceSummary[] = [];
 let runtimeListError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
@@ -201,6 +205,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       (_externalSessionId: string | null): AgentSessionState | null => null,
     );
     latestSurfaceModelArgs = null;
+    settingsChat = {
+      showThinkingMessages: false,
+      expandFileDiffsByDefault: true,
+    };
     runtimeList = [makeRuntime()];
     runtimeListError = null;
     actualHostOperations.host.runtimeList = async () => {
@@ -248,9 +256,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       settingsSnapshotQueryOptions: () => ({
         queryKey: ["workspace", "settings-snapshot"],
         queryFn: async () => ({
-          chat: {
-            showThinkingMessages: false,
-          },
+          chat: settingsChat,
         }),
       }),
     }));
@@ -280,7 +286,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           thread: {
             session: args.session ?? null,
             isSessionWorking: false,
-            showThinkingMessages: false,
+            showThinkingMessages: Boolean(args.showThinkingMessages),
+            expandFileDiffsByDefault: Boolean(args.expandFileDiffsByDefault),
             isSessionViewLoading: false,
             isSessionHistoryLoading: false,
             isWaitingForRuntimeReadiness: false,
@@ -364,6 +371,41 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
       expect(session.externalSessionId).toBe("session-subagent-1");
       expect(session.messages).toBeTruthy();
+      expect(latestSurfaceModelArgs?.showThinkingMessages).toBe(false);
+      expect(latestSurfaceModelArgs?.expandFileDiffsByDefault).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("passes explicit file diff expansion settings into the read-only chat surface", async () => {
+    settingsChat = {
+      showThinkingMessages: false,
+      expandFileDiffsByDefault: false,
+    };
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: makeTranscriptSource(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => latestSurfaceModelArgs?.expandFileDiffsByDefault === false);
+
+      expect(latestSurfaceModelArgs?.expandFileDiffsByDefault).toBe(false);
     } finally {
       await harness.unmount();
     }

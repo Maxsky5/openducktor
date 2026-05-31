@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { createElement } from "react";
+import { createElement as createReactElement } from "react";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { withCapturedConsole } from "@/test-utils/console-capture";
@@ -9,6 +9,15 @@ import { withMockedToast } from "@/test-utils/mock-toast";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 
 enableReactActEnvironment();
+
+const createElement = (
+  type: typeof AgentChatMessageCard,
+  props: Omit<React.ComponentProps<typeof AgentChatMessageCard>, "expandFileDiffsByDefault">,
+) =>
+  createReactElement(type, {
+    expandFileDiffsByDefault: true,
+    ...props,
+  });
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;

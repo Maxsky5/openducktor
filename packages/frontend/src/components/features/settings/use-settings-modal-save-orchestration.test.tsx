@@ -22,6 +22,7 @@ const createSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   general: {
     openAgentStudioTabOnBackgroundSessionStart: true,
@@ -357,6 +358,7 @@ describe("useSettingsModalSaveOrchestration", () => {
       expect.objectContaining({
         chat: {
           showThinkingMessages: true,
+          expandFileDiffsByDefault: true,
         },
         general: {
           openAgentStudioTabOnBackgroundSessionStart: true,

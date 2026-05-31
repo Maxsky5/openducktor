@@ -323,6 +323,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       },
       chat: {
         showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       kanban: {

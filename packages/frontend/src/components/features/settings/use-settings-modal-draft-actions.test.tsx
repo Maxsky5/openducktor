@@ -21,6 +21,7 @@ const createInitialSnapshot = (): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   general: {
     openAgentStudioTabOnBackgroundSessionStart: true,

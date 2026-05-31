@@ -284,6 +284,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {

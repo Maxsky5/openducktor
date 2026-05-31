@@ -28,7 +28,7 @@ const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 const createSettingsSnapshotFixture = () => ({
   theme: "light" as const,
   git: { defaultMergeMethod: "merge_commit" as const },
-  chat: { showThinkingMessages: false },
+  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" as const },
   autopilot: { rules: [] },

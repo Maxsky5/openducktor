@@ -59,6 +59,7 @@ const workspaceGetSettingsSnapshotMock = mock(async () => ({
   },
   chat: {
     showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
   },
   reusablePrompts: [],
   kanban: {
@@ -628,6 +629,7 @@ describe("KanbanPage session start modal flow", () => {
       },
       chat: {
         showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
       },
       reusablePrompts: [],
       kanban: {
