@@ -209,6 +209,9 @@ type ToolPart = Extract<Part, { type: "tool" }>;
 type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ToolStatus = ToolStreamPart["status"];
+type MapPartOptions = {
+  linkedSubagentExternalSessionId?: string;
+};
 
 const SUBAGENT_TOOL_NAMES = new Set(["task", "delegate", "subtask"]);
 
@@ -394,13 +397,16 @@ const buildSubagentFromToolPart = (
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
   structuredError: string | undefined,
+  options: MapPartOptions,
 ): SubagentStreamPart => {
   const rawInput = readUnknownProp(toolState, "input");
   const rawOutput = readUnknownProp(toolState, "output");
   const input = asUnknownRecord(rawInput);
   const output = asUnknownRecord(rawOutput) ?? parseStructuredTextObject(rawOutput);
   const outputIdentity = asUnknownRecord(readUnknownProp(output, "metadata")) ?? output;
-  const externalSessionId = resolveSubagentExternalSessionId(metadata, input, outputIdentity);
+  const externalSessionId =
+    options.linkedSubagentExternalSessionId ??
+    resolveSubagentExternalSessionId(metadata, input, outputIdentity);
   const agent = resolveSubagentAgent(input, metadata, output);
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const directError = toDisplayText(readUnknownProp(toolState, "error"));
@@ -545,7 +551,10 @@ const buildToolStreamPart = (
   };
 };
 
-export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => {
+export const mapPartToAgentStreamPart = (
+  part: Part,
+  options: MapPartOptions = {},
+): AgentStreamPart | null => {
   switch (part.type) {
     case "text":
       return {
@@ -583,6 +592,7 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
           timing,
           metadata,
           structuredError,
+          options,
         );
       }
 
@@ -625,6 +635,9 @@ export const mapPartToAgentStreamPart = (part: Part): AgentStreamPart | null => 
         agent: part.agent,
         prompt: part.prompt,
         description: part.description,
+        ...(options.linkedSubagentExternalSessionId
+          ? { externalSessionId: options.linkedSubagentExternalSessionId }
+          : {}),
         ...(subtaskMetadata ? { metadata: subtaskMetadata } : {}),
       });
     }
