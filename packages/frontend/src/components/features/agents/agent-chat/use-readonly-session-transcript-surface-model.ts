@@ -1,8 +1,4 @@
-import {
-  chatSettingsSchema,
-  type RuntimeApprovalReplyOutcome,
-  type RuntimeInstanceSummary,
-} from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -14,7 +10,11 @@ import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app
 import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import {
+  DEFAULT_CHAT_SETTINGS,
+  readChatSettingsFromSnapshot,
+  settingsSnapshotQueryOptions,
+} from "@/state/queries/workspace";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
@@ -23,7 +23,6 @@ import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
-const DEFAULT_CHAT_SETTINGS = chatSettingsSchema.parse({});
 const DEFAULT_SHOW_THINKING_MESSAGES = DEFAULT_CHAT_SETTINGS.showThinkingMessages;
 const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault;
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
@@ -176,7 +175,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
   const { data: chatSettings = DEFAULT_CHAT_SETTINGS } = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
-    select: (snapshot) => chatSettingsSchema.parse(snapshot.chat),
+    select: readChatSettingsFromSnapshot,
   });
 
   const runtimeListQuery = useQuery({

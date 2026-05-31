@@ -1,15 +1,14 @@
-import {
-  chatSettingsSchema,
-  type ReusablePrompt,
-  type SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { ChatSettings, ReusablePrompt, SettingsSnapshot } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { errorMessage } from "@/lib/errors";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import {
+  DEFAULT_CHAT_SETTINGS,
+  readChatSettingsFromSnapshot,
+  settingsSnapshotQueryOptions,
+} from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-const DEFAULT_CHAT_SETTINGS = chatSettingsSchema.parse({});
 const DEFAULT_SHOW_THINKING_MESSAGES = DEFAULT_CHAT_SETTINGS.showThinkingMessages;
 const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault;
 const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
@@ -21,7 +20,7 @@ type AgentStudioChatSettings = {
 };
 
 const readAgentStudioChatSettings = (snapshot: SettingsSnapshot): AgentStudioChatSettings => {
-  const chat = chatSettingsSchema.parse(snapshot.chat);
+  const chat: ChatSettings = readChatSettingsFromSnapshot(snapshot);
   return {
     showThinkingMessages: chat.showThinkingMessages,
     expandFileDiffsByDefault: chat.expandFileDiffsByDefault,
