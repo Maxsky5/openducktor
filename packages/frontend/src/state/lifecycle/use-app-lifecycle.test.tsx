@@ -148,7 +148,7 @@ beforeEach(() => {
   mock.module("@/lib/host-client", () => ({
     createHostBridge: () => ({
       client: createHostClient(async () => {
-        throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+        throw new Error("Host runtime not available. Run inside a supported shell.");
       }),
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
         if (!subscribeTaskEventsImpl) {
@@ -159,11 +159,11 @@ beforeEach(() => {
     }),
     createHostClient: () =>
       createHostClient(async () => {
-        throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+        throw new Error("Host runtime not available. Run inside a supported shell.");
       }),
     hostBridge: {
       client: createHostClient(async () => {
-        throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+        throw new Error("Host runtime not available. Run inside a supported shell.");
       }),
       subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
         if (!subscribeTaskEventsImpl) {
@@ -173,7 +173,7 @@ beforeEach(() => {
       },
     },
     hostClient: createHostClient(async () => {
-      throw new Error("Tauri runtime not available. Run inside the desktop shell.");
+      throw new Error("Host runtime not available. Run inside a supported shell.");
     }),
     subscribeTaskEvents: async (listener: (payload: unknown) => void) => {
       if (!subscribeTaskEventsImpl) {

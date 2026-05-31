@@ -15,7 +15,7 @@ const createLogStream = (isTTY = false) => {
 };
 
 describe("createElectronMainLogger", () => {
-  test("formats host logs like the Tauri human logger without ANSI when color is disabled", () => {
+  test("formats host logs like the legacy human logger without ANSI when color is disabled", () => {
     const { stream, output } = createLogStream(true);
     const logger = createElectronMainLogger({
       env: { NO_COLOR: "1" },

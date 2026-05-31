@@ -304,10 +304,10 @@ describe("stream-part-mapper", () => {
           id: "preview-shell",
           tool: "bash",
           status: "running",
-          input: { command: "bun run test --filter @openducktor/desktop" },
+          input: { command: "bun run test --filter @openducktor/frontend" },
           title: "Run desktop tests",
         }),
-        expectedPreview: "bun run test --filter @openducktor/desktop",
+        expectedPreview: "bun run test --filter @openducktor/frontend",
       },
       {
         label: "skill",

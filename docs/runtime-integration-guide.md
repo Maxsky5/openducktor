@@ -26,7 +26,7 @@ OpenDucktor uses several runtime-related payloads. Each one describes a differen
 
 ### `RuntimeDescriptor`
 
-Defined in `packages/contracts/src/agent-runtime-schemas.ts` and mirrored in the Rust host domain under `apps/desktop/src-tauri/crates/host-domain/src/runtime/registry/descriptor.rs` and its capability modules. `apps/desktop/src-tauri/crates/host-domain/src/runtime/mod.rs` re-exports the host-visible runtime types.
+Defined in `packages/contracts/src/agent-runtime-schemas.ts`.
 
 It is the stable definition of a runtime kind:
 
@@ -62,7 +62,7 @@ The canonical `odt_*` names stay implicit and do not need to be repeated in this
 
 ### `RuntimeInstanceSummary`
 
-Defined in `packages/contracts/src/run-schemas.ts` and mirrored in Rust runtime domain types.
+Defined in `packages/contracts/src/run-schemas.ts`.
 
 It is live runtime-instance metadata only:
 
@@ -106,7 +106,7 @@ The adapter boundary turns this payload into runtime-specific client input. Gene
 
 ### Persisted session record
 
-Defined in `packages/contracts/src/session-schemas.ts` and mirrored by `apps/desktop/src-tauri/crates/host-domain/src/document.rs`.
+Defined in `packages/contracts/src/session-schemas.ts`.
 
 Persisted records keep durable session context only:
 
@@ -284,7 +284,7 @@ At this layer, update:
 - any new route or transport schema support,
 - runtime-aware config and persisted session fields.
 
-These contracts are mirrored across TypeScript and Rust, so the host-visible shapes must stay aligned in the same change set.
+These contracts are the host-visible source of truth, so downstream adapters, host services, frontend orchestration, and docs must stay aligned in the same change set.
 
 ### 2. Core boundary and runtime adapter
 
@@ -302,7 +302,7 @@ For Builder PR generation, the runtime integration is responsible for making pro
 
 ### 3. Frontend and shell runtime orchestration
 
-The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-registry.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The Tauri shell under `apps/desktop/src`, the Electron shell under `apps/electron`, and the browser runner under `packages/openducktor-web` all mount `@openducktor/frontend` through shell bridge adapters.
+The main shared frontend anchors are `packages/frontend/src/state/agent-runtime-registry.ts`, `packages/frontend/src/lib/agent-runtime.ts`, and `packages/frontend/src/state/operations/agent-orchestrator/runtime/runtime.ts`. The Electron shell under `apps/electron` and the browser runner under `packages/openducktor-web` both mount `@openducktor/frontend` through shell bridge adapters.
 
 Frontend/runtime orchestration must keep these rules true:
 
@@ -315,7 +315,7 @@ Catalog/query helpers, session-start UI, settings, and diagnostics consumers may
 
 ### 4. Session persistence and hydration
 
-Persistence and hydration live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the host session document/store types in `apps/desktop/src-tauri/crates/host-domain/src/document.rs` and `apps/desktop/src-tauri/crates/host-infra-beads/src/store/session_ops.rs`.
+Persistence and hydration live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the TypeScript host session document/store services under `packages/host/src/application` and `packages/host/src/infrastructure/beads`.
 
 This layer must ensure that:
 
@@ -326,7 +326,7 @@ This layer must ensure that:
 
 ### 5. Host integration
 
-Host-visible runtime support is anchored by the shared TypeScript contracts, the TypeScript host runtime registry, and the legacy Rust/Tauri runtime modules that still expose equivalent shapes for the Tauri shell.
+Host-visible runtime support is anchored by the shared TypeScript contracts and the TypeScript host runtime registry.
 
 Current TypeScript host anchors:
 
@@ -338,16 +338,9 @@ Current TypeScript host anchors:
 - `packages/host/src/infrastructure/process/process-command-launch.ts`
 - `packages/host/src/application/runtimes/runtime-orchestrator-service.ts`
 
-Legacy Tauri/Rust anchors:
-
-- `apps/desktop/src-tauri/crates/host-domain/src/runtime/`
-- `apps/desktop/src-tauri/src/commands/runtime.rs`
-- `apps/desktop/src-tauri/src/commands/build.rs`
-- `apps/desktop/src-tauri/crates/host-application/src/app_service/`
-
 Host integration work includes:
 
-- adding the runtime kind to descriptors and registration data. Rust `AgentRuntimeKind` is a string wrapper, not an enum, so new kinds are registered through runtime definitions rather than enum variants,
+- adding the runtime kind to descriptors and registration data,
 - adding the runtime definition to the host-visible runtime registry so default runtime config and startup validation know about it,
 - implementing runtime startup and registering it in the host registry with the correct default startup config,
 - ensuring runtime config defaults are derived from the same runtime definition set used by the host registry,
@@ -395,7 +388,7 @@ Before you consider a new runtime integrated, verify all of the following.
 
 ### Contracts
 
-- TypeScript and Rust schemas agree on descriptor, route, run summary, and persisted session fields.
+- TypeScript schemas cover descriptor, route, run summary, and persisted session fields.
 - `selectedModel.runtimeKind` survives round-trip through the host store.
 
 ### Frontend/runtime orchestration
@@ -435,14 +428,6 @@ bun run build
 ```
 
 Also run the focused typecheck/test commands for the touched runtime adapter packages. OpenCode-focused checks use `bun run --filter @openducktor/adapters-opencode-sdk typecheck` and `bun run --filter @openducktor/adapters-opencode-sdk test`; Codex-focused checks use `bun run --filter @openducktor/adapters-codex-app-server typecheck` and `bun run --filter @openducktor/adapters-codex-app-server test`; a new runtime package should expose equivalent scripts.
-
-When the legacy Tauri/Rust path is touched, also run focused Rust checks from `apps/desktop/src-tauri`:
-
-```sh
-cargo test -p host-domain
-cargo test -p host-infra-beads
-cargo test -p host-application
-```
 
 Add targeted tests for:
 
@@ -504,7 +489,5 @@ Start with these anchor references:
 - `packages/host/src/infrastructure/process/process-command-launch.ts`
 - `packages/host/src/adapters/codex/codex-workspace-runtime-starter.ts`
 - `packages/host/src/adapters/opencode/opencode-workspace-runtime-starter.ts`
-- `apps/desktop/src-tauri/src/commands/runtime.rs`
-- `apps/desktop/src-tauri/src/commands/build.rs`
 
 From there, follow the owning layer (`runtime_orchestrator`, `build_orchestrator`, runtime adapters, or session persistence) instead of treating this list as an exhaustive file inventory.

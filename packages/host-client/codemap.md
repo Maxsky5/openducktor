@@ -16,4 +16,4 @@ Typed invoke-based host client exposing shell-provided host commands for workspa
 ## Integration Points
 - `@openducktor/contracts` schemas and payload types
 - `@openducktor/core` planner/tool types
-- Shell-specific invoke bridges from Tauri, Electron, and Web hosts
+- Shell-specific invoke bridges from Electron and Web hosts

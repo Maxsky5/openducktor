@@ -1,6 +1,6 @@
 # OpenDucktor Web Runner
 
-The web runner lets OpenDucktor run in a browser without a desktop window. It uses the same shared React frontend as the desktop shells and the same TypeScript host boundary as the Electron shell.
+The web runner lets OpenDucktor run in a browser without a desktop window. It uses the same shared React frontend and TypeScript host boundary as the Electron shell.
 
 ## Command
 
@@ -19,12 +19,11 @@ Both commands start a loopback-only TypeScript host backend and serve the shared
 ## Architecture
 
 - `packages/frontend` owns the shared React app and shell bootstrap. It exposes `bootstrapOpenDucktorShell` and the `ShellBridge` contract types.
-- `apps/desktop/src` is a thin Tauri shell that implements the bridge with Tauri invoke/events.
 - `apps/electron` is a thin Electron shell that implements the bridge with Electron IPC/preload and delegates host behavior to `@openducktor/host`.
 - `packages/openducktor-web` is a browser shell and launcher. It implements the bridge with HTTP invoke calls and SSE subscriptions against the local TypeScript host backend.
 - `packages/openducktor-web/src/typescript-host-backend.ts` adapts `@openducktor/host` to the browser HTTP/SSE contract.
 
-Shared frontend code must not import `@tauri-apps/api`, `apps/desktop`, or `src-tauri`. The root `bun run frontend:boundary-guard` check enforces that boundary.
+Shared frontend code must not import shell internals directly. The root `bun run frontend:boundary-guard` check enforces that boundary.
 
 ## Control Plane
 
@@ -50,7 +49,7 @@ Workspace development mode (`bun run browser:dev`) runs the same launcher in `--
 
 The published package and workspace mode both fail fast if runtime config is missing, if the launcher cannot establish a session with the app token, or if a host command is unavailable.
 
-The web runner is currently intended for local development and local browser use. Platform behavior follows the TypeScript host and local runtime discovery behavior rather than the legacy Rust web-host binary path.
+The web runner is currently intended for local development and local browser use. Platform behavior follows the TypeScript host and local runtime discovery behavior.
 
 ## Verification
 
@@ -65,4 +64,4 @@ bun run --filter @openducktor/web typecheck
 bun run --filter @openducktor/web build
 ```
 
-Full release confidence also requires the root repo checks (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`) and a browser smoke against the live `bun run browser:dev` app. Desktop changes should be smoke-tested with the relevant desktop shell (`bun run electron:dev`, `bun run tauri:dev`, or a packaged desktop artifact) before publishing the draft release.
+Full release confidence also requires the root repo checks (`bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`) and a browser smoke against the live `bun run browser:dev` app. Desktop changes should be smoke-tested with `bun run electron:dev` or a packaged desktop artifact before publishing the draft release.

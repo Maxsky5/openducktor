@@ -516,13 +516,13 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "bash",
             toolType: "bash",
-            preview: "bun run test --filter @openducktor/desktop",
+            preview: "bun run test --filter @openducktor/frontend",
             title: "Run desktop tests",
             output: "completed shell execution",
           }),
           "",
         ),
-      ).toBe("bun run test --filter @openducktor/desktop");
+      ).toBe("bun run test --filter @openducktor/frontend");
 
       expect(
         buildToolSummary(
@@ -544,11 +544,11 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "glob",
             toolType: "generic" as const,
-            input: { pattern: "**/*.ts", path: "apps/desktop/src" },
+            input: { pattern: "**/*.ts", path: "packages/frontend/src" },
           }),
           "",
         ),
-      ).toBe("**/*.ts in apps/desktop/src");
+      ).toBe("**/*.ts in packages/frontend/src");
 
       expect(
         buildToolSummary(
@@ -566,11 +566,11 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "search",
             toolType: "generic" as const,
-            input: { path: "apps/desktop/src" },
+            input: { path: "packages/frontend/src" },
           }),
           "",
         ),
-      ).toBe("apps/desktop/src");
+      ).toBe("packages/frontend/src");
 
       expect(
         buildToolSummary(
@@ -601,7 +601,7 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "bash",
             toolType: "bash",
-            input: { command: "bun run test --filter @openducktor/desktop" },
+            input: { command: "bun run test --filter @openducktor/frontend" },
           }),
           "",
         ),

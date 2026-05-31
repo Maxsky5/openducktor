@@ -30,7 +30,7 @@ const createWorkspaceSettingsServiceFake = (
   service: Pick<WorkspaceSettingsService, "listWorkspaces">,
 ): WorkspaceSettingsService => service as unknown as WorkspaceSettingsService;
 describe("createTaskSyncService", () => {
-  test("publishes Tauri-compatible external task creation events", async () => {
+  test("publishes host-compatible external task creation events", async () => {
     const { eventBus, events } = createEventBus();
     const service = createTaskSyncServiceForTest({
       eventBus,

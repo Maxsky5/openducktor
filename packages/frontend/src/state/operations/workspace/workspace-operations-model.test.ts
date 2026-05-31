@@ -87,7 +87,7 @@ describe("workspace-operations-model", () => {
     expect(gitFailure.stage).toBe("branch_refresh");
 
     const runtimeUnavailable = classifyBranchProbeError(
-      new Error("Tauri runtime not available. Run inside the desktop shell."),
+      new Error("Host runtime not available. Run inside a supported shell."),
       "current_branch_probe",
     );
     expect(runtimeUnavailable.code).toBe("runtime_unavailable");

@@ -2,8 +2,9 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { parse as parseYaml } from "yaml";
 
-const tauriConfigPath = "apps/desktop/src-tauri/tauri.conf.json";
+const electronBuilderConfigPath = "apps/electron/electron-builder.yml";
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 const desktopDescription = "Task-first agentic development environment";
 const armArchCandidates = ["aarch64", "arm64"] as const;
@@ -17,13 +18,11 @@ const macosVersionSymbols: Record<string, string> = {
   "15": "sequoia",
 };
 
-type TauriConfig = {
+type ElectronBuilderConfig = {
   productName?: string;
-  identifier?: string;
-  bundle?: {
-    macOS?: {
-      minimumSystemVersion?: string;
-    };
+  appId?: string;
+  mac?: {
+    minimumSystemVersion?: string;
   };
 };
 
@@ -153,22 +152,22 @@ export function readDesktopReleaseMetadata(workspaceRoot = process.cwd()): {
   bundleIdentifier: string;
   minimumSystemVersion: string;
 } {
-  const absolutePath = resolve(workspaceRoot, tauriConfigPath);
-  const parsed = JSON.parse(readFileSync(absolutePath, "utf8")) as TauriConfig;
+  const absolutePath = resolve(workspaceRoot, electronBuilderConfigPath);
+  const parsed = parseYaml(readFileSync(absolutePath, "utf8")) as ElectronBuilderConfig;
   const productName = parsed.productName?.trim();
-  const bundleIdentifier = parsed.identifier?.trim();
-  const minimumSystemVersion = parsed.bundle?.macOS?.minimumSystemVersion?.trim();
+  const bundleIdentifier = parsed.appId?.trim();
+  const minimumSystemVersion = parsed.mac?.minimumSystemVersion?.trim();
 
   if (!productName) {
-    throw new Error(`Missing productName in ${tauriConfigPath}`);
+    throw new Error(`Missing productName in ${electronBuilderConfigPath}`);
   }
 
   if (!bundleIdentifier) {
-    throw new Error(`Missing identifier in ${tauriConfigPath}`);
+    throw new Error(`Missing appId in ${electronBuilderConfigPath}`);
   }
 
   if (!minimumSystemVersion) {
-    throw new Error(`Missing bundle.macOS.minimumSystemVersion in ${tauriConfigPath}`);
+    throw new Error(`Missing mac.minimumSystemVersion in ${electronBuilderConfigPath}`);
   }
 
   return {

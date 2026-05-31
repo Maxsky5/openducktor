@@ -203,7 +203,7 @@ describe("createOdtMcpBridgeService", () => {
       { type: "listTasks", input: { repoPath: "/repo" } },
     ]);
   });
-  test("publishes a Tauri-compatible task event after external task creation", async () => {
+  test("publishes a host-compatible task event after external task creation", async () => {
     const events: unknown[] = [];
     const taskService = createTaskService({
       createTask(input: unknown) {

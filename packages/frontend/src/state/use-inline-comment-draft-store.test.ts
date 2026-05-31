@@ -32,7 +32,7 @@ describe("use-inline-comment-draft-store", () => {
     Date.now = () => 1_700_000_000_000;
 
     const firstId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "uncommitted",
       startLine: 10,
       endLine: 10,
@@ -42,7 +42,7 @@ describe("use-inline-comment-draft-store", () => {
       language: "ts",
     });
     const secondId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "target",
       startLine: 20,
       endLine: 22,
@@ -54,15 +54,15 @@ describe("use-inline-comment-draft-store", () => {
 
     const addedState = useInlineCommentDraftStore.getState();
     expect(addedState.getDraftCount()).toBe(2);
-    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(2);
-    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts", "uncommitted")).toBe(1);
-    expect(addedState.getFileDraftCount("apps/desktop/src/file-a.ts", "target")).toBe(1);
+    expect(addedState.getFileDraftCount("packages/frontend/src/file-a.ts")).toBe(2);
+    expect(addedState.getFileDraftCount("packages/frontend/src/file-a.ts", "uncommitted")).toBe(1);
+    expect(addedState.getFileDraftCount("packages/frontend/src/file-a.ts", "target")).toBe(1);
     expect(
-      addedState.getDraftsForFile("apps/desktop/src/file-a.ts").map((draft) => draft.id),
+      addedState.getDraftsForFile("packages/frontend/src/file-a.ts").map((draft) => draft.id),
     ).toEqual([secondId, firstId]);
     expect(
       addedState
-        .getDraftsForFile("apps/desktop/src/file-a.ts", "uncommitted")
+        .getDraftsForFile("packages/frontend/src/file-a.ts", "uncommitted")
         .map((draft) => draft.id),
     ).toEqual([firstId]);
 
@@ -86,7 +86,7 @@ describe("use-inline-comment-draft-store", () => {
 
     const submittedState = useInlineCommentDraftStore.getState();
     expect(submittedState.getDraftCount()).toBe(0);
-    expect(submittedState.getFileDraftCount("apps/desktop/src/file-a.ts")).toBe(0);
+    expect(submittedState.getFileDraftCount("packages/frontend/src/file-a.ts")).toBe(0);
     expect(submittedState.drafts).toEqual([]);
   });
 
@@ -94,7 +94,7 @@ describe("use-inline-comment-draft-store", () => {
     Date.now = () => 1_700_000_000_000;
 
     const firstId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "uncommitted",
       startLine: 10,
       endLine: 10,
@@ -104,7 +104,7 @@ describe("use-inline-comment-draft-store", () => {
       language: "ts",
     });
     useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-b.ts",
+      filePath: "packages/frontend/src/file-b.ts",
       diffScope: "target",
       startLine: 20,
       endLine: 20,
@@ -133,12 +133,14 @@ describe("use-inline-comment-draft-store", () => {
 
     const drafts = useInlineCommentDraftStore.getState().drafts;
     expect(drafts.find((draft) => draft.id === firstId)?.status).toBe("pending");
-    expect(drafts.some((draft) => draft.filePath === "apps/desktop/src/file-b.ts")).toBe(false);
+    expect(drafts.some((draft) => draft.filePath === "packages/frontend/src/file-b.ts")).toBe(
+      false,
+    );
   });
 
   test("rejects editing or removing a comment while that exact draft is being sent", () => {
     const draftId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "uncommitted",
       startLine: 1,
       endLine: 1,
@@ -167,7 +169,7 @@ describe("use-inline-comment-draft-store", () => {
 
   test("excludes submitting drafts from new pending batches and clears submitting locks per batch", () => {
     const firstId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "uncommitted",
       startLine: 1,
       endLine: 1,
@@ -177,7 +179,7 @@ describe("use-inline-comment-draft-store", () => {
       language: "ts",
     });
     const secondId = useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-b.ts",
+      filePath: "packages/frontend/src/file-b.ts",
       diffScope: "target",
       startLine: 2,
       endLine: 2,
@@ -236,7 +238,7 @@ describe("use-inline-comment-draft-store", () => {
     Date.now = () => 1_700_000_000_000;
 
     useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/beta.ts",
+      filePath: "packages/frontend/src/beta.ts",
       diffScope: "target",
       startLine: 30,
       endLine: 30,
@@ -249,7 +251,7 @@ describe("use-inline-comment-draft-store", () => {
       language: "ts",
     });
     useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/alpha.ts",
+      filePath: "packages/frontend/src/alpha.ts",
       diffScope: "uncommitted",
       startLine: 12,
       endLine: 15,
@@ -267,7 +269,7 @@ describe("use-inline-comment-draft-store", () => {
         "## Git Diff Comments",
         "",
         "### Comment 1",
-        "File: `apps/desktop/src/alpha.ts`",
+        "File: `packages/frontend/src/alpha.ts`",
         "Diff: uncommitted changes",
         "Change: removed",
         "Lines: 12-15",
@@ -279,7 +281,7 @@ describe("use-inline-comment-draft-store", () => {
         "Instruction: Alpha range comment",
         "",
         "### Comment 2",
-        "File: `apps/desktop/src/beta.ts`",
+        "File: `packages/frontend/src/beta.ts`",
         "Diff: branch changes",
         "Change: added",
         "Lines: 30",
@@ -294,7 +296,7 @@ describe("use-inline-comment-draft-store", () => {
 
   test("formats multiline instructions inline while keeping selected-line-only context", () => {
     useInlineCommentDraftStore.getState().addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "target",
       startLine: 5,
       endLine: 5,
@@ -320,7 +322,7 @@ describe("use-inline-comment-draft-store", () => {
 
     store.resetForContext("draft-1");
     store.addDraft({
-      filePath: "apps/desktop/src/file-a.ts",
+      filePath: "packages/frontend/src/file-a.ts",
       diffScope: "uncommitted",
       startLine: 3,
       endLine: 3,

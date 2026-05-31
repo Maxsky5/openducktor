@@ -5,7 +5,7 @@ This folder contains the project documentation for OpenDucktor's current archite
 ## Read This First
 
 - [../README.md](../README.md): public project overview, install guide, and contribution entry point.
-- [architecture-overview.md](architecture-overview.md): high-level map of the shared frontend, Electron/Tauri/browser shells, TypeScript host, legacy Rust host path, Beads persistence, and runtime data flows.
+- [architecture-overview.md](architecture-overview.md): high-level map of the shared frontend, Electron/browser shells, TypeScript host, Beads persistence, and runtime data flows.
 - [cli-tool-discovery.md](cli-tool-discovery.md): host-owned CLI discovery architecture, descriptor source order, distribution-mode boundaries, and the checklist for adding new tools.
 - [effect.md](effect.md): current Effect conventions for host ports, services, adapters, lifecycle, testing, and public boundaries.
 - [tanstack-query-cache-strategy.md](tanstack-query-cache-strategy.md): frontend cache strategy and the boundary between Query-owned reads and host/runtime execution.
@@ -33,4 +33,4 @@ This folder contains the project documentation for OpenDucktor's current archite
 
 - [mcp-runtime-security.md](mcp-runtime-security.md): current MCP transport and threat assumptions.
 - [dependency-hygiene.md](dependency-hygiene.md): dependency update and audit policy.
-- [release-process.md](release-process.md): Tauri/Electron desktop, MCP, web package, Homebrew, version sync, and draft publishing steps.
+- [release-process.md](release-process.md): Electron desktop, MCP, web package, Homebrew, version sync, and draft publishing steps.

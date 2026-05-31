@@ -13,4 +13,4 @@ Public schema surface for runtime descriptors, routes, session records, task/wor
 
 ## Integration Points
 - Re-exported by `src/index.ts`
-- Consumed by `apps/desktop/src-tauri`, `packages/adapters-*`, `packages/openducktor-mcp`, and `packages/openducktor-web`
+- Consumed by `packages/host`, `apps/electron`, `packages/adapters-*`, `packages/openducktor-mcp`, and `packages/openducktor-web`

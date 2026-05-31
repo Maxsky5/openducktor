@@ -10,26 +10,15 @@ Thanks for contributing. This project is public, but it is still early and the c
 
 ## Current Product Constraints
 
-Please keep these constraints in mind when proposing or implementing changes:
-
-- OpenDucktor currently focuses on macOS only.
-- The only supported agent runtime today is OpenCode (`opencode`).
-- Codex is the next planned runtime, but it is not implemented yet.
-- OpenDucktor will support open-source agent runtimes only.
+- OpenDucktor is macOS-first, with Windows and Linux Electron builds treated as experimental.
 - Beads is the V1 source of truth for tasks.
+- OpenCode and Codex are the supported local agent runtimes.
+- OpenDucktor will support open-source agent runtimes only.
 
 ## Quick Start
 
-For most contributors, the recommended local setup is the CEF path. Release builds use CEF, and it avoids the WebKit issues we have seen during development.
-
-1. Install the core tooling: Bun `1.3.11`, Rust stable, Xcode Command Line Tools, `git`, `bd`, and `opencode`.
-2. Install the CEF prerequisites:
-
-```sh
-brew install cmake ninja
-```
-
-3. Install workspace dependencies from the repository root:
+1. Install the core tooling: Bun `1.3.11`, Xcode Command Line Tools, `git`, `bd`, and at least one supported runtime (`opencode` or `codex`).
+2. Install workspace dependencies from the repository root:
 
 ```sh
 bun install
@@ -37,43 +26,31 @@ bun install
 
 That install also activates the repository's shared local Git hooks through the root `prepare` script.
 
-4. Use a dedicated development config directory so your local contributor data stays separate from your regular app data:
+3. Use a dedicated development config directory so your local contributor data stays separate from your regular app data:
 
 ```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"
+export OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"
 ```
 
-5. Bootstrap the CEF toolchain:
+4. Start the Electron desktop app:
 
 ```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:setup:cef
+bun run electron:dev
 ```
 
-6. Start the desktop app with CEF:
+Useful alternative:
 
-```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:dev:cef
-```
-
-Useful alternatives:
-
-- Faster fallback for local iteration without CEF parity: `bun run tauri:dev`
-- Browser mode if you want agents to access it with tools like `agent-browser`: `bun run browser:dev`. This now routes through the `@openducktor/web` launcher and the dedicated `openducktor-web-host` binary instead of the desktop app binary.
+- Browser mode if you want agents to access it with tools like `agent-browser`: `bun run browser:dev`.
 
 ## Local Tooling Reference
 
 Core tooling:
 
 - Bun `1.3.11`
-- Rust stable
 - Xcode Command Line Tools
 - `git`
 - `bd`
-- `opencode`
-
-Additional tooling:
-
-- `cmake` and `ninja` for the recommended CEF flow, packaging, and release work
+- `opencode` or `codex`
 
 Notes:
 
@@ -84,80 +61,21 @@ Notes:
 
 ## Main Development Commands
 
-Recommended for local development: keep contributor data isolated with `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` in your shell session or prefixed on commands.
+Recommended for local development: keep contributor data isolated with `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` in your shell session.
 
-Recommended desktop flow with CEF:
-
-```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:dev:cef
-```
-
-Fallback desktop flow with WebKit:
+Electron desktop:
 
 ```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:dev
+bun run electron:dev
 ```
 
 Browser mode for UI validation against the real backend:
 
 ```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run browser:dev
+bun run browser:dev
 ```
 
-This command starts the Rust web host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must not import Tauri APIs directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
-
-## CEF Development And Build Flow
-
-This section covers the recommended contributor setup and the release build path.
-
-This section assumes `cmake` and `ninja` are already installed, as shown in Quick Start.
-
-Bootstrap the CEF toolchain:
-
-```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:setup:cef
-```
-
-That command:
-
-- requires `cmake` and `ninja` to already be available on `PATH`
-- installs `cargo-tauri` from the exact Tauri `feat/cef` revision locked in `apps/desktop/src-tauri/Cargo.lock`
-- exports CEF into a shared OpenDucktor cache directory versioned by the resolved `cef` crate version
-- clears the macOS quarantine attribute from the downloaded CEF bundle
-
-By default, worktrees share the same local cache under `~/.openducktor/cache/`, so you do not need to rerun the full bootstrap for every git worktree.
-
-Default shared cache locations:
-
-- `cargo-tauri`: `~/.openducktor/cache/cargo-tools/tauri-feat-cef/<tauri-revision-prefix>/`
-- `export-cef-dir`: `~/.openducktor/cache/cargo-tools/export-cef-dir/<cef-version>/`
-- exported CEF bundle: `~/.openducktor/cache/cef/<cef-version>/`
-
-Start the desktop app with the CEF runtime:
-
-```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:dev:cef
-```
-
-Build a macOS CEF bundle:
-
-```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:build:cef
-```
-
-Environment variables:
-
-- `OPENDUCKTOR_CARGO_TOOLS_ROOT` sets the install root for the shared `cargo-tauri` and `export-cef-dir` binaries.
-- `OPENDUCKTOR_CEF_PATH` sets the exported CEF bundle directory used by the setup, dev, and build wrappers.
-- `CEF_PATH` is still honored for upstream compatibility when `OPENDUCKTOR_CEF_PATH` is unset.
-
-On macOS, `tauri:dev:cef` uses `apps/desktop/src-tauri/tauri.cef-dev.conf.json`, so it runs as a separate app identity from the packaged CEF build:
-
-- app bundle name: `OpenDucktor CEF Dev.app`
-- bundle identifier: `dev.openducktor.desktop.cefdev`
-- main window title: `OpenDucktor CEF Dev`
-
-If you run Cargo directly for CEF checks, use `--no-default-features --features cef` so upstream Tauri does not enable both `wry` and `cef` at the same time.
+The browser command starts the TypeScript host on `127.0.0.1`, serves the shared frontend with Vite, and requires the web shell to use the explicit local-host HTTP/SSE bridge. Shared frontend code must use the shell bridge instead of importing shell internals directly; run `bun run frontend:boundary-guard` after shell-boundary changes.
 
 ## Verification Commands
 
@@ -168,41 +86,26 @@ bun run lint
 bun run typecheck
 bun run test
 bun run build
-bun run check:rust
-bun run test:rust
 ```
-
-`bun run test` also includes the disposable-clone Git hook verification coverage, so it is slower than the workspace-only test pass.
 
 Useful focused commands:
 
 ```sh
 bun run --filter @openducktor/core test
-bun run --filter @openducktor/desktop test
-bun run --filter @openducktor/desktop typecheck
-bun run --filter @openducktor/desktop lint
+bun run --filter @openducktor/electron test
+bun run --filter @openducktor/electron typecheck
+bun run --filter @openducktor/electron lint
 bun run --filter @openducktor/frontend test
-bun run --filter @openducktor/web test
-cd apps/desktop/src-tauri && cargo test -p host-domain
-cd apps/desktop/src-tauri && cargo test -p host-infra-beads
-cd apps/desktop/src-tauri && cargo test -p host-application
-```
-
-Additional Rust verification when needed:
-
-```sh
-cd apps/desktop/src-tauri && cargo fmt --all --check
-cd apps/desktop/src-tauri && cargo clippy --workspace --all-targets -- -D warnings
+bun run --filter @openducktor/host test
 ```
 
 ## Local Git Hooks
 
 Shared local Git hooks run on every commit once you have run `bun install`.
 
-- `pre-commit` runs `bun run lint`, `bun run typecheck`, and `bun run check:rust` in that order.
+- `pre-commit` runs `bun run lint` and `bun run typecheck` in that order.
 - `commit-msg` enforces Conventional Commits.
-- `bun run test` includes the disposable-clone hook integration test for this workflow, but it still does not run during `pre-commit`.
-- `bun run test`, `bun run test:rust`, and `bun run build` are intentionally not part of the per-commit hook.
+- `bun run test` does not run during `pre-commit`.
 - `git commit --no-verify` still bypasses local hooks; this repository does not try to prevent that.
 
 If you used `bun install --ignore-scripts`, cloned with dependencies already present but hooks inactive, or local Git hook wiring stopped working, reinstall the tracked hooks from the repository root:
@@ -222,18 +125,6 @@ Example commit messages:
 OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
 
 For local development, it is recommended to use a separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` so contributor state, Beads data, and runtime caches stay isolated from your normal app usage.
-
-You can either export it for your shell session:
-
-```sh
-export OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"
-```
-
-Or prefix individual commands:
-
-```sh
-OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev" bun run tauri:dev:cef
-```
 
 Important paths:
 
@@ -255,7 +146,7 @@ OpenDucktor uses one shared Dolt server per config root and keeps repository-spe
 
 - Add or update tests for non-trivial behavior changes.
 - Frontend behavior changes should include frontend tests.
-- Core, adapters, MCP, and Rust host changes should include targeted tests in the touched area.
+- Core, adapters, MCP, and host changes should include targeted tests in the touched area.
 - Run the relevant checks before opening a pull request.
 
 ## Pull Requests
