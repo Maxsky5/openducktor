@@ -125,6 +125,7 @@ export const createTaskFullResetUseCase = ({
               worktreePath,
               force: true,
               managedWorktreeBasePath,
+              missingOutsideManagedRootPathPolicy: "skip",
             },
           );
           removedWorktrees.push(worktreePath);

@@ -125,6 +125,7 @@ export const createTaskDeleteUseCase = ({
               worktreePath,
               force: true,
               managedWorktreeBasePath,
+              missingOutsideManagedRootPathPolicy: "skip",
             },
           );
           removedWorktrees.push(worktreePath);

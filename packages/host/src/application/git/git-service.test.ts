@@ -503,7 +503,10 @@ const createFakeGitPort = ({
       });
     },
   }) as GitPort as unknown as GitPort;
-const createFakeSettingsConfig = (config: GlobalConfig | null): SettingsConfigPort => ({
+const createFakeSettingsConfig = (
+  config: GlobalConfig | null,
+  existingPaths?: Set<string>,
+): SettingsConfigPort => ({
   readConfig() {
     return Effect.tryPromise({
       try: async () => {
@@ -550,8 +553,8 @@ const createFakeSettingsConfig = (config: GlobalConfig | null): SettingsConfigPo
         }),
     });
   },
-  pathExists() {
-    return Effect.succeed(true);
+  pathExists(path) {
+    return Effect.succeed(existingPaths === undefined || existingPaths.has(path));
   },
   join(...paths) {
     return paths.join("/");
@@ -1187,6 +1190,31 @@ describe("createGitService", () => {
       ),
     ).rejects.toThrow("outside managed roots");
     expect(calls).toEqual(["removeWorktree:/canonical/repo|/outside/task-1|true"]);
+  });
+  test("rejects missing forced stranded worktree cleanup outside managed roots", async () => {
+    const calls: string[] = [];
+    const service = createGitService({
+      gitPort: createFakeGitPort({
+        canonicalPaths: { "/repo": "/canonical/repo" },
+        gitRepositories: ["/canonical/repo"],
+        calls,
+        removeWorktreeErrors: {
+          "/canonical/repo|/legacy/repo/task-1|true": new Error("fatal: is not a working tree"),
+        },
+      }),
+      settingsConfig: createFakeSettingsConfig(createConfig(), new Set(["/canonical/repo"])),
+      worktreeFiles: createFakeWorktreeFiles(calls),
+    });
+    await expect(
+      Effect.runPromise(
+        service.removeWorktree({
+          repoPath: "/repo",
+          worktreePath: "/legacy/repo/task-1",
+          force: true,
+        }),
+      ),
+    ).rejects.toThrow("outside managed roots");
+    expect(calls).toEqual(["removeWorktree:/canonical/repo|/legacy/repo/task-1|true"]);
   });
   test("resets a worktree selection after validating the current snapshot", async () => {
     const statusData: GitWorktreeStatusData = {
