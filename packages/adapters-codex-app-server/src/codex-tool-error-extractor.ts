@@ -187,7 +187,11 @@ export const codexDynamicToolErrorFromResult = (
   resultPayload: unknown,
   item: Record<string, unknown>,
 ): string | null => {
-  return dynamicToolErrorFromValue(resultPayload) ?? dynamicToolErrorFromValue(item);
+  return (
+    dynamicToolErrorFromValue(resultPayload) ??
+    dynamicToolErrorFromValue(item.result) ??
+    dynamicToolErrorFromValue(item)
+  );
 };
 
 export const codexDynamicToolResultPayload = (item: Record<string, unknown>): unknown =>

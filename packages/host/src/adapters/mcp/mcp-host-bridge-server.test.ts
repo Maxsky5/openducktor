@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 
 import path from "node:path";
 
-import { ODT_MCP_TOOL_NAMES, type RepoConfig } from "@openducktor/contracts";
+import {
+  ODT_MCP_TOOL_NAMES,
+  type OdtHostBridgeReady,
+  type RepoConfig,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { OdtMcpBridgeService } from "../../application/mcp/odt-mcp-bridge-service";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
@@ -250,6 +254,53 @@ describe("createMcpHostBridgeServer", () => {
       await rm(tempDir, { force: true, recursive: true });
     }
   });
+
+  test("returns a bridge error when a response payload cannot be serialized", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
+    const bridge = createMcpHostBridgeServer({
+      discoveryPath: path.join(tempDir, "runtime", "mcp-bridge.json"),
+      token: "token-1",
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      bridgeService: createBridgeService({
+        ready() {
+          return Effect.succeed({
+            bridgeVersion: 1,
+            toolNames: [...ODT_MCP_TOOL_NAMES],
+            invalid: 1n,
+          } as unknown as OdtHostBridgeReady);
+        },
+        getWorkspaces() {
+          return Effect.succeed({ workspaces: [] });
+        },
+        invoke() {
+          return Effect.dieMessage("unexpected scoped tool invocation");
+        },
+      } as OdtMcpBridgeService),
+    });
+    try {
+      const connection = await Effect.runPromise(bridge.ensureConnection({ repoPath: "/repo" }));
+      const response = await requestJson(`${connection.hostUrl}/invoke/odt_mcp_ready`, {
+        method: "POST",
+        headers: {
+          "x-openducktor-app-token": "token-1",
+        },
+        body: {},
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        ok: false,
+        error: {
+          code: "ODT_HOST_BRIDGE_ERROR",
+          message: expect.stringContaining("BigInt"),
+        },
+      });
+    } finally {
+      await Effect.runPromise(bridge.close());
+      await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+
   test("deduplicates concurrent startup requests", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "openducktor-mcp-discovery-"));
     const discoveryPath = path.join(tempDir, "runtime", "mcp-bridge.json");

@@ -157,11 +157,18 @@ const bridgeErrorResponse = (error: unknown): BridgeHttpResponse =>
   bridgeHttpResponse(400, bridgeErrorPayload(error, errorMessage(error)));
 
 const sendJson = (response: ServerResponse, { statusCode, payload }: BridgeHttpResponse): void => {
+  if (response.headersSent || response.writableEnded || response.destroyed) {
+    return;
+  }
+  const body = JSON.stringify(payload);
+  if (response.headersSent || response.writableEnded || response.destroyed) {
+    return;
+  }
   response.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
   });
-  response.end(JSON.stringify(payload));
+  response.end(body);
 };
 
 const errorMessage = (error: unknown): string =>
