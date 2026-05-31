@@ -183,19 +183,16 @@ export const codexMcpToolErrorFromResult = (
   return mcpToolErrorFromValue(result) ?? (item ? mcpToolErrorFromValue(item) : null);
 };
 
-export const codexDynamicToolErrorFromResult = (
-  resultPayload: unknown,
-  item: Record<string, unknown>,
-): string | null => {
+export const codexDynamicToolDisplayPayload = (item: Record<string, unknown>): unknown =>
+  item.contentItems ?? item.content_items ?? item.result;
+
+export const codexDynamicToolErrorFromItem = (item: Record<string, unknown>): string | null => {
   return (
-    dynamicToolErrorFromValue(resultPayload) ??
+    dynamicToolErrorFromValue(codexDynamicToolDisplayPayload(item)) ??
     dynamicToolErrorFromValue(item.result) ??
     dynamicToolErrorFromValue(item)
   );
 };
-
-export const codexDynamicToolResultPayload = (item: Record<string, unknown>): unknown =>
-  item.contentItems ?? item.content_items ?? item.result;
 
 export const codexFileChangeErrorFromItem = (item: Record<string, unknown>): string | null => {
   const explicitError = errorMessageFromValue(item.error) ?? extractStringField(item, ["stderr"]);
