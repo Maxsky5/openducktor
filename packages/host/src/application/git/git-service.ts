@@ -284,6 +284,7 @@ export const createGitService = (input: GitPort | CreateGitServiceInput): GitSer
             repoPath: canonicalRepoPath,
             worktreePath,
             force,
+            missingOutsideManagedRootPathPolicy: "fail",
           },
         );
         return { ok: true };

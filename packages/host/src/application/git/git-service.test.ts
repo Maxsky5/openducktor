@@ -1191,7 +1191,7 @@ describe("createGitService", () => {
     ).rejects.toThrow("outside managed roots");
     expect(calls).toEqual(["removeWorktree:/canonical/repo|/outside/task-1|true"]);
   });
-  test("skips filesystem cleanup for missing stranded worktrees outside managed roots", async () => {
+  test("rejects missing forced stranded worktree cleanup outside managed roots", async () => {
     const calls: string[] = [];
     const service = createGitService({
       gitPort: createFakeGitPort({
@@ -1213,7 +1213,7 @@ describe("createGitService", () => {
           force: true,
         }),
       ),
-    ).resolves.toEqual({ ok: true });
+    ).rejects.toThrow("outside managed roots");
     expect(calls).toEqual(["removeWorktree:/canonical/repo|/legacy/repo/task-1|true"]);
   });
   test("resets a worktree selection after validating the current snapshot", async () => {

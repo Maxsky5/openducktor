@@ -252,6 +252,7 @@ export const rollbackFailedBuildWorktree = (
           repoPath,
           worktreePath,
           force: true,
+          missingOutsideManagedRootPathPolicy: "fail",
         },
       ),
     );

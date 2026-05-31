@@ -7,6 +7,7 @@ import { findRepoConfigByPath, isDefinitiveNonWorktreeGitError } from "./git-ser
 export type RemoveWorktreeAndFilesystemPathInput = {
   force: boolean;
   managedWorktreeBasePath?: string;
+  missingOutsideManagedRootPathPolicy: "fail" | "skip";
   repoPath: string;
   worktreePath: string;
 };
@@ -23,7 +24,10 @@ const managedWorktreeBasePath = (settingsConfig: SettingsConfigPort, canonicalRe
   );
 const resolveForcedFilesystemCleanup = (
   { settingsConfig, worktreeFiles }: RemoveWorktreeAndFilesystemPathDependencies,
-  input: Pick<RemoveWorktreeAndFilesystemPathInput, "managedWorktreeBasePath" | "repoPath">,
+  input: Pick<
+    RemoveWorktreeAndFilesystemPathInput,
+    "managedWorktreeBasePath" | "missingOutsideManagedRootPathPolicy" | "repoPath"
+  >,
   effectiveWorktreePath: string,
   cause: unknown,
 ) =>
@@ -39,7 +43,10 @@ const resolveForcedFilesystemCleanup = (
     if (insideRepo || insideManagedBase) {
       return "cleanup-filesystem-path" as const;
     }
-    if (!(yield* settingsConfig.pathExists(effectiveWorktreePath))) {
+    if (
+      input.missingOutsideManagedRootPathPolicy === "skip" &&
+      !(yield* settingsConfig.pathExists(effectiveWorktreePath))
+    ) {
       return "skip-filesystem-cleanup" as const;
     }
     return yield* Effect.fail(

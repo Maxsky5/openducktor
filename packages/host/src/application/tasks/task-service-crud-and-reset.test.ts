@@ -850,6 +850,92 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
+  test("deletes tasks when a stale outside-root worktree path is already missing", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks(input) {
+        return Effect.sync(() => {
+          calls.push({ type: "list", input });
+          return [
+            task({
+              id: "task-1",
+              status: "closed",
+              agentSessions: [
+                createAgentSessionRecord({ workingDirectory: "/legacy/repo/task-1" }),
+              ],
+            }),
+          ];
+        });
+      },
+      deleteTask(input) {
+        return Effect.sync(() => {
+          calls.push({ type: "delete", input });
+          return true;
+        });
+      },
+    };
+    const taskActivityGuard: TaskActivityGuardPort = {
+      ensureNoActiveTaskDeleteRuns(input) {
+        return Effect.sync(() => {
+          calls.push({ type: "activityGuard", input });
+        });
+      },
+      ensureNoActiveTaskResetActivity() {
+        return Effect.dieMessage("unexpected reset activity guard");
+      },
+    };
+    await expect(
+      Effect.runPromise(
+        createTaskService({
+          devServerService: createDirectMergeDevServerService(calls),
+          gitPort: createDirectMergeGitPort({
+            calls,
+            branches: {
+              "/repo": [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+            },
+            removeWorktreeErrors: {
+              "/repo|/legacy/repo/task-1|true": new Error(
+                "fatal: '/legacy/repo/task-1' is not a working tree",
+              ),
+            },
+          }),
+          settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+          taskActivityGuard,
+          taskStore,
+          worktreeFiles: createCleanupWorktreeFiles(calls),
+          workspaceSettingsService: createBuildWorkspaceSettingsService({
+            workspaceId: "repo",
+            repoPath: "/repo",
+            hooks: { preStart: [], postComplete: [] },
+          }),
+        }).deleteTask({ repoPath: "/repo", taskId: "task-1", deleteSubtasks: false }),
+      ),
+    ).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([
+      { type: "list", input: { repoPath: "/repo" } },
+      {
+        type: "activityGuard",
+        input: {
+          repoPath: "/repo",
+          taskIds: ["task-1"],
+          tasks: [expect.objectContaining({ id: "task-1" })],
+        },
+      },
+      { type: "listBranches", workingDir: "/repo" },
+      { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
+      {
+        type: "removeWorktree",
+        repoPath: "/repo",
+        worktreePath: "/legacy/repo/task-1",
+        force: true,
+      },
+      { type: "deleteLocalBranch", repoPath: "/repo", branch: "odt/task-1", force: true },
+      {
+        type: "delete",
+        input: { repoPath: "/repo", taskId: "task-1", deleteSubtasks: false },
+      },
+    ]);
+  });
   test("fails fast when task deletion needs live activity checks but no guard is configured", async () => {
     const taskStore: TaskStorePort = {
       listTasks() {
