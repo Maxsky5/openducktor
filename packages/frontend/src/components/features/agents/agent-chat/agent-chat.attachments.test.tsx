@@ -12,8 +12,10 @@ const buildModel = () => ({
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
+    chatSettings: {
+      showThinkingMessages: false,
+      expandFileDiffsByDefault: true,
+    },
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,

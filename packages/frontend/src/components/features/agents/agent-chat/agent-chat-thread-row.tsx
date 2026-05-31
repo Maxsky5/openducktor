@@ -13,7 +13,6 @@ type AgentChatWindowRowProps = {
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
   sessionRuntimeId?: AgentSessionState["runtimeId"] | null | undefined;
-  expandFileDiffsByDefault: boolean;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
@@ -27,7 +26,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   sessionWorkingDirectory,
   sessionRuntimeKind,
   sessionRuntimeId,
-  expandFileDiffsByDefault,
   subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
@@ -48,7 +46,6 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             sessionWorkingDirectory={sessionWorkingDirectory}
             sessionRuntimeKind={sessionRuntimeKind}
             sessionRuntimeId={sessionRuntimeId}
-            expandFileDiffsByDefault={expandFileDiffsByDefault}
             subagentPendingApprovals={subagentPendingApprovals}
             subagentPendingApprovalCount={subagentPendingApprovalCount}
             subagentPendingQuestions={subagentPendingQuestions}

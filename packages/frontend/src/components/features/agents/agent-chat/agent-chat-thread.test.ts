@@ -20,8 +20,10 @@ import { AgentChatThread } from "./agent-chat-thread";
 
 const buildBaseModel = () => ({
   isSessionWorking: false,
-  showThinkingMessages: false,
-  expandFileDiffsByDefault: true,
+  chatSettings: {
+    showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
+  },
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
   isWaitingForRuntimeReadiness: false,
@@ -277,7 +279,6 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          showThinkingMessages: false,
           session: buildSession({
             status: "stopped",
             messages: [
@@ -300,7 +301,6 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          showThinkingMessages: false,
           session: buildSession({
             status: "stopped",
             messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],

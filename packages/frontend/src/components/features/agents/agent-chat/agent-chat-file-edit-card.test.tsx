@@ -1,9 +1,11 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { FileEditData } from "./agent-chat-message-card-model";
 
 let AgentChatFileEditCard: typeof import("./agent-chat-file-edit-card").AgentChatFileEditCard;
+let AgentChatSettingsProvider: typeof import("./agent-chat-settings-context").AgentChatSettingsProvider;
 
 const preloaderMock = mock(({ filePath }: { patch: string; filePath: string }) => (
   <div data-testid="pierre-diff-preloader">{filePath}</div>
@@ -35,6 +37,23 @@ const buildFileEditData = (overrides: Partial<FileEditData> = {}): FileEditData 
   ...overrides,
 });
 
+const buildChatSettings = (expandFileDiffsByDefault: boolean) => ({
+  showThinkingMessages: false,
+  expandFileDiffsByDefault,
+});
+
+const fileEditCardElement = (
+  data: FileEditData,
+  expandFileDiffsByDefault: boolean,
+): ReactElement => (
+  <AgentChatSettingsProvider value={buildChatSettings(expandFileDiffsByDefault)}>
+    <AgentChatFileEditCard data={data} />
+  </AgentChatSettingsProvider>
+);
+
+const renderFileEditCard = (data: FileEditData, expandFileDiffsByDefault: boolean) =>
+  render(fileEditCardElement(data, expandFileDiffsByDefault));
+
 beforeEach(async () => {
   reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,6 +63,7 @@ beforeEach(async () => {
   }));
 
   ({ AgentChatFileEditCard } = await import("./agent-chat-file-edit-card"));
+  ({ AgentChatSettingsProvider } = await import("./agent-chat-settings-context"));
 });
 
 afterEach(() => {
@@ -71,7 +91,7 @@ afterEach(async () => {
 
 describe("AgentChatFileEditCard", () => {
   test("does not mount the hidden diff preloader while collapsed", () => {
-    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={false} />);
+    renderFileEditCard(buildFileEditData(), false);
 
     expect(screen.queryByTestId("pierre-diff-preloader")).toBeNull();
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
@@ -80,7 +100,7 @@ describe("AgentChatFileEditCard", () => {
   });
 
   test("renders the visible diff viewer immediately when diffs expand by default", () => {
-    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={true} />);
+    renderFileEditCard(buildFileEditData(), true);
 
     const viewer = screen.getByTestId("pierre-diff-viewer");
     expect(viewer.getAttribute("data-file-path")).toBe("src/example.ts");
@@ -91,7 +111,7 @@ describe("AgentChatFileEditCard", () => {
   });
 
   test("renders the visible diff viewer after expansion with the existing split view props", () => {
-    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={false} />);
+    renderFileEditCard(buildFileEditData(), false);
 
     fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
 
@@ -104,7 +124,7 @@ describe("AgentChatFileEditCard", () => {
   });
 
   test("collapses an expanded diff card without changing metadata", () => {
-    render(<AgentChatFileEditCard data={buildFileEditData()} expandFileDiffsByDefault={true} />);
+    renderFileEditCard(buildFileEditData(), true);
 
     expect(screen.getByTestId("pierre-diff-viewer")).toBeDefined();
 
@@ -116,13 +136,11 @@ describe("AgentChatFileEditCard", () => {
 
   test("syncs default expansion changes until the user toggles the card", async () => {
     const data = buildFileEditData();
-    const { rerender } = render(
-      <AgentChatFileEditCard data={data} expandFileDiffsByDefault={true} />,
-    );
+    const { rerender } = renderFileEditCard(data, true);
 
     expect(screen.getByTestId("pierre-diff-viewer")).toBeDefined();
 
-    rerender(<AgentChatFileEditCard data={data} expandFileDiffsByDefault={false} />);
+    rerender(fileEditCardElement(data, false));
 
     await waitFor(() => {
       expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
@@ -131,13 +149,11 @@ describe("AgentChatFileEditCard", () => {
 
   test("keeps the user's manual collapsed state when defaults change", () => {
     const data = buildFileEditData();
-    const { rerender } = render(
-      <AgentChatFileEditCard data={data} expandFileDiffsByDefault={true} />,
-    );
+    const { rerender } = renderFileEditCard(data, true);
 
     fireEvent.click(screen.getByRole("button", { name: /example\.ts/i }));
-    rerender(<AgentChatFileEditCard data={data} expandFileDiffsByDefault={false} />);
-    rerender(<AgentChatFileEditCard data={data} expandFileDiffsByDefault={true} />);
+    rerender(fileEditCardElement(data, false));
+    rerender(fileEditCardElement(data, true));
 
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
   });
@@ -146,16 +162,14 @@ describe("AgentChatFileEditCard", () => {
     true,
     false,
   ])("keeps no-diff cards on the metadata-only path when expandFileDiffsByDefault is %p", (expandFileDiffsByDefault) => {
-    render(
-      <AgentChatFileEditCard
-        data={buildFileEditData({
-          diff: null,
-          filePath: "src/no-diff.ts",
-          additions: 0,
-          deletions: 0,
-        })}
-        expandFileDiffsByDefault={expandFileDiffsByDefault}
-      />,
+    renderFileEditCard(
+      buildFileEditData({
+        diff: null,
+        filePath: "src/no-diff.ts",
+        additions: 0,
+        deletions: 0,
+      }),
+      expandFileDiffsByDefault,
     );
 
     expect(screen.getByRole("button", { name: /no-diff\.ts/i })).toBeDefined();

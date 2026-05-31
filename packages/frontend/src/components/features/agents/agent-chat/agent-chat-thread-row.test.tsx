@@ -9,7 +9,6 @@ const baseProps = {
   isStreamingAssistantMessage: false,
   sessionAgentColors: {},
   sessionWorkingDirectory: "/repo",
-  expandFileDiffsByDefault: true,
 };
 
 describe("AgentChatThreadRow", () => {

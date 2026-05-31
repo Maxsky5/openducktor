@@ -4,10 +4,10 @@ import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewe
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
+import { useAgentChatSettings } from "./agent-chat-settings-context";
 
 type AgentChatFileEditCardProps = {
   data: FileEditData;
-  expandFileDiffsByDefault: boolean;
 };
 
 const STATUS_CONFIG: Record<string, { icon: typeof FileText; color: string; badge: string }> = {
@@ -34,8 +34,8 @@ const DEFAULT_CONFIG = {
 
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
-  expandFileDiffsByDefault,
 }: AgentChatFileEditCardProps): ReactElement {
+  const { expandFileDiffsByDefault } = useAgentChatSettings();
   const hasDiff = Boolean(data.diff);
   const [isExpanded, setIsExpanded] = useState(() => hasDiff && expandFileDiffsByDefault);
   const userToggledRef = useRef(false);

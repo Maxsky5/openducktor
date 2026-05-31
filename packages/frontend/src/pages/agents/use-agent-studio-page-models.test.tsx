@@ -345,7 +345,7 @@ describe("useAgentStudioPageModels", () => {
     });
     expect(state.agentChatModel.thread.readinessState).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
-    expect(state.agentChatModel.thread.showThinkingMessages).toBe(false);
+    expect(state.agentChatModel.thread.chatSettings.showThinkingMessages).toBe(false);
 
     state.agentChatModel.thread.onRefreshChecks();
     await state.agentChatModel.composer.onSend(createComposerDraft("message"));
@@ -941,7 +941,7 @@ describe("useAgentStudioPageModels", () => {
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(nextState.agentChatModel.thread.showThinkingMessages).toBe(true);
+    expect(nextState.agentChatModel.thread.chatSettings.showThinkingMessages).toBe(true);
 
     await harness.unmount();
   });
@@ -979,7 +979,7 @@ describe("useAgentStudioPageModels", () => {
     const nextState = harness.getLatest();
     expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(nextState.agentChatModel.thread.expandFileDiffsByDefault).toBe(false);
+    expect(nextState.agentChatModel.thread.chatSettings.expandFileDiffsByDefault).toBe(false);
 
     await harness.unmount();
   });

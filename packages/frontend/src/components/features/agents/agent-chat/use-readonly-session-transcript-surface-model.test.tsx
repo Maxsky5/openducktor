@@ -286,8 +286,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
           thread: {
             session: args.session ?? null,
             isSessionWorking: false,
-            showThinkingMessages: Boolean(args.showThinkingMessages),
-            expandFileDiffsByDefault: Boolean(args.expandFileDiffsByDefault),
+            chatSettings: args.chatSettings,
             isSessionViewLoading: false,
             isSessionHistoryLoading: false,
             isWaitingForRuntimeReadiness: false,
@@ -371,8 +370,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       const session = latestSurfaceModelArgs?.session as AgentSessionState;
       expect(session.externalSessionId).toBe("session-subagent-1");
       expect(session.messages).toBeTruthy();
-      expect(latestSurfaceModelArgs?.showThinkingMessages).toBe(false);
-      expect(latestSurfaceModelArgs?.expandFileDiffsByDefault).toBe(true);
+      expect(latestSurfaceModelArgs?.chatSettings).toEqual({
+        showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
+      });
     } finally {
       await harness.unmount();
     }
@@ -403,9 +404,19 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => latestSurfaceModelArgs?.expandFileDiffsByDefault === false);
+      await harness.waitFor(
+        () =>
+          (
+            latestSurfaceModelArgs?.chatSettings as
+              | { expandFileDiffsByDefault?: boolean }
+              | undefined
+          )?.expandFileDiffsByDefault === false,
+      );
 
-      expect(latestSurfaceModelArgs?.expandFileDiffsByDefault).toBe(false);
+      expect(latestSurfaceModelArgs?.chatSettings).toEqual({
+        showThinkingMessages: false,
+        expandFileDiffsByDefault: false,
+      });
     } finally {
       await harness.unmount();
     }

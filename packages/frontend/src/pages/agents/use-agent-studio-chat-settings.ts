@@ -9,21 +9,16 @@ import {
 } from "@/state/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-const DEFAULT_SHOW_THINKING_MESSAGES = DEFAULT_CHAT_SETTINGS.showThinkingMessages;
-const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault;
 const DEFAULT_REUSABLE_PROMPTS: ReusablePrompt[] = [];
 
 type AgentStudioChatSettings = {
-  showThinkingMessages: boolean;
-  expandFileDiffsByDefault: boolean;
+  chatSettings: ChatSettings;
   reusablePrompts: ReusablePrompt[];
 };
 
 const readAgentStudioChatSettings = (snapshot: SettingsSnapshot): AgentStudioChatSettings => {
-  const chat: ChatSettings = readChatSettingsFromSnapshot(snapshot);
   return {
-    showThinkingMessages: chat.showThinkingMessages,
-    expandFileDiffsByDefault: chat.expandFileDiffsByDefault,
+    chatSettings: readChatSettingsFromSnapshot(snapshot),
     reusablePrompts: snapshot.reusablePrompts,
   };
 };
@@ -36,8 +31,7 @@ const createChatSettingsLoadError = (workspaceRepoPath: string, cause: unknown):
 };
 
 export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorkspace | null }): {
-  showThinkingMessages: boolean;
-  expandFileDiffsByDefault: boolean;
+  chatSettings: ChatSettings;
   reusablePrompts: ReusablePrompt[];
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: () => void;
@@ -67,12 +61,9 @@ export function useAgentStudioChatSettings(args: { activeWorkspace: ActiveWorksp
     activeRepoPath && error ? createChatSettingsLoadError(activeRepoPath, error) : null;
 
   return {
-    showThinkingMessages: activeWorkspace
-      ? (chatSettings?.showThinkingMessages ?? DEFAULT_SHOW_THINKING_MESSAGES)
-      : DEFAULT_SHOW_THINKING_MESSAGES,
-    expandFileDiffsByDefault: activeWorkspace
-      ? (chatSettings?.expandFileDiffsByDefault ?? DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT)
-      : DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT,
+    chatSettings: activeWorkspace
+      ? (chatSettings?.chatSettings ?? DEFAULT_CHAT_SETTINGS)
+      : DEFAULT_CHAT_SETTINGS,
     reusablePrompts: activeWorkspace
       ? (chatSettings?.reusablePrompts ?? DEFAULT_REUSABLE_PROMPTS)
       : DEFAULT_REUSABLE_PROMPTS,

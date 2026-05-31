@@ -248,7 +248,6 @@ type RegularToolMessageProps = {
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  expandFileDiffsByDefault: boolean;
 };
 
 export const RegularToolMessage = ({
@@ -258,7 +257,6 @@ export const RegularToolMessage = ({
   timeLabel,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  expandFileDiffsByDefault,
 }: RegularToolMessageProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const summary = buildToolSummary(meta, messageContent, sessionWorkingDirectory);
@@ -389,11 +387,7 @@ export const RegularToolMessage = ({
           const allFileEditData = extractAllFileEditData(meta, sessionWorkingDirectory);
           return allFileEditData.length > 0
             ? allFileEditData.map((data) => (
-                <AgentChatFileEditCard
-                  key={data.filePath}
-                  data={data}
-                  expandFileDiffsByDefault={expandFileDiffsByDefault}
-                />
+                <AgentChatFileEditCard key={data.filePath} data={data} />
               ))
             : null;
         })()}

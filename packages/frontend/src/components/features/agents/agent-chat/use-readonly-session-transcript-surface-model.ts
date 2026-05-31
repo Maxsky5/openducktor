@@ -23,8 +23,6 @@ import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
-const DEFAULT_SHOW_THINKING_MESSAGES = DEFAULT_CHAT_SETTINGS.showThinkingMessages;
-const DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT = DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault;
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
 
@@ -553,12 +551,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     session: runtimeData.session,
     isTaskHydrating: isResolvingTranscript,
     isSessionSelectionResolving: false,
-    showThinkingMessages: activeWorkspace
-      ? chatSettings.showThinkingMessages
-      : DEFAULT_SHOW_THINKING_MESSAGES,
-    expandFileDiffsByDefault: activeWorkspace
-      ? chatSettings.expandFileDiffsByDefault
-      : DEFAULT_EXPAND_FILE_DIFFS_BY_DEFAULT,
+    chatSettings: activeWorkspace ? chatSettings : DEFAULT_CHAT_SETTINGS,
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,

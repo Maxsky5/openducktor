@@ -663,7 +663,6 @@ type MessageBodyProps = {
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  expandFileDiffsByDefault: boolean;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
@@ -680,7 +679,6 @@ export const MessageBody = ({
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  expandFileDiffsByDefault,
   subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
@@ -712,7 +710,6 @@ export const MessageBody = ({
         timeLabel={timeLabel}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
-        expandFileDiffsByDefault={expandFileDiffsByDefault}
       />
     );
   }

@@ -135,11 +135,11 @@ describe("useAgentStudioChatSettings", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.showThinkingMessages === true);
+    await harness.waitFor((state) => state.chatSettings.showThinkingMessages === true);
 
     expect(hostMock.workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(1);
-    expect(harness.getLatest().showThinkingMessages).toBe(true);
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(true);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().reusablePrompts).toEqual([
       {
         id: "prompt-1",
@@ -165,8 +165,8 @@ describe("useAgentStudioChatSettings", () => {
     await harness.mount();
     await harness.waitFor((state) => state.reusablePrompts.length === 1);
 
-    expect(harness.getLatest().showThinkingMessages).toBe(false);
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(false);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
 
     await harness.unmount();
   });
@@ -184,7 +184,7 @@ describe("useAgentStudioChatSettings", () => {
     await harness.mount();
     await harness.waitFor((state) => state.reusablePrompts.length === 1);
 
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(false);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(false);
 
     await harness.unmount();
   });
@@ -202,8 +202,8 @@ describe("useAgentStudioChatSettings", () => {
     await harness.mount();
 
     await harness.waitFor((state) => state.chatSettingsLoadError !== null);
-    expect(harness.getLatest().showThinkingMessages).toBe(false);
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(false);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().chatSettingsLoadError?.message).toMatch(
       /snapshot\.chat\.showThinkingMessages|undefined/,
     );
@@ -231,15 +231,15 @@ describe("useAgentStudioChatSettings", () => {
 
     await harness.mount();
     await harness.waitFor((state) => state.chatSettingsLoadError !== null);
-    expect(harness.getLatest().showThinkingMessages).toBe(false);
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(false);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().chatSettingsLoadError?.message).toContain("settings read failed");
 
     await harness.run((state) => {
       state.retryChatSettingsLoad();
     });
 
-    await harness.waitFor((state) => state.showThinkingMessages === true);
+    await harness.waitFor((state) => state.chatSettings.showThinkingMessages === true);
     expect(hostMock.workspaceGetSettingsSnapshot).toHaveBeenCalledTimes(2);
     expect(harness.getLatest().chatSettingsLoadError).toBeNull();
 
@@ -257,14 +257,14 @@ describe("useAgentStudioChatSettings", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.showThinkingMessages === true);
-    expect(harness.getLatest().showThinkingMessages).toBe(true);
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+    await harness.waitFor((state) => state.chatSettings.showThinkingMessages === true);
+    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(true);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
 
     await harness.update({ workspaceRepoPath: null });
 
-    expect(harness.getLatest().showThinkingMessages).toBe(false);
-    expect(harness.getLatest().expandFileDiffsByDefault).toBe(true);
+    expect(harness.getLatest().chatSettings.showThinkingMessages).toBe(false);
+    expect(harness.getLatest().chatSettings.expandFileDiffsByDefault).toBe(true);
     expect(harness.getLatest().reusablePrompts).toEqual([]);
 
     await harness.unmount();

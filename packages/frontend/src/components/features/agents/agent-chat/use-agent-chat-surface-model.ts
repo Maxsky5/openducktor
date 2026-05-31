@@ -1,4 +1,5 @@
 import type {
+  ChatSettings,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
   RuntimeKind,
@@ -174,8 +175,7 @@ type UseAgentChatSurfaceModelArgs = {
   session: AgentSessionState | null;
   isTaskHydrating: boolean;
   isSessionSelectionResolving: boolean;
-  showThinkingMessages: boolean;
-  expandFileDiffsByDefault: boolean;
+  chatSettings: ChatSettings;
   isSessionWorking: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -198,8 +198,7 @@ export function useAgentChatSurfaceModel({
   session,
   isTaskHydrating,
   isSessionSelectionResolving,
-  showThinkingMessages,
-  expandFileDiffsByDefault,
+  chatSettings,
   isSessionWorking,
   isSessionHistoryLoading,
   isWaitingForRuntimeReadiness,
@@ -272,8 +271,7 @@ export function useAgentChatSurfaceModel({
     () => ({
       session: threadSession,
       isSessionWorking,
-      showThinkingMessages,
-      expandFileDiffsByDefault,
+      chatSettings,
       isSessionViewLoading: isContextSwitching,
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness,
@@ -318,7 +316,7 @@ export function useAgentChatSurfaceModel({
       composer?.isSending,
       composer?.isStarting,
       emptyState,
-      expandFileDiffsByDefault,
+      chatSettings,
       handleToggleTodoPanel,
       isContextSwitching,
       isComposerInteractionEnabled,
@@ -332,7 +330,6 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
       sessionRuntimeDataError,
-      showThinkingMessages,
       subagentPendingApprovalsByExternalSessionId,
       subagentPendingApprovalCountByExternalSessionId,
       subagentPendingQuestionsByExternalSessionId,

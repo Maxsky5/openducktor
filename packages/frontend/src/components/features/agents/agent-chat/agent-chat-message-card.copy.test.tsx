@@ -12,12 +12,8 @@ enableReactActEnvironment();
 
 const createElement = (
   type: typeof AgentChatMessageCard,
-  props: Omit<React.ComponentProps<typeof AgentChatMessageCard>, "expandFileDiffsByDefault">,
-) =>
-  createReactElement(type, {
-    expandFileDiffsByDefault: true,
-    ...props,
-  });
+  props: React.ComponentProps<typeof AgentChatMessageCard>,
+) => createReactElement(type, props);
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;

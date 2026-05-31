@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { AgentChatModel, AgentChatSurfaceModel } from "./agent-chat.types";
 import { AgentChatComposer, type AgentChatComposerHandle } from "./agent-chat-composer";
+import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { AgentChatThread } from "./agent-chat-thread";
 
 const MemoizedAgentChatThread = memo(AgentChatThread);
@@ -198,10 +199,12 @@ export function AgentChatSurface({
               </div>
             </div>
           ) : null}
-          <MemoizedAgentChatThread model={model.thread} />
-          {supportsComposer && composerModel ? (
-            <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />
-          ) : null}
+          <AgentChatSettingsProvider value={model.thread.chatSettings}>
+            <MemoizedAgentChatThread model={model.thread} />
+            {supportsComposer && composerModel ? (
+              <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />
+            ) : null}
+          </AgentChatSettingsProvider>
         </div>
       </div>
     </div>
