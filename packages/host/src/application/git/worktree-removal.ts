@@ -21,7 +21,7 @@ const managedWorktreeBasePath = (settingsConfig: SettingsConfigPort, canonicalRe
       ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
       : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId),
   );
-const assertForcedCleanupAllowed = (
+const resolveForcedFilesystemCleanup = (
   { settingsConfig, worktreeFiles }: RemoveWorktreeAndFilesystemPathDependencies,
   input: Pick<RemoveWorktreeAndFilesystemPathInput, "managedWorktreeBasePath" | "repoPath">,
   effectiveWorktreePath: string,
@@ -36,14 +36,18 @@ const assertForcedCleanupAllowed = (
       managedBase,
       effectiveWorktreePath,
     );
-    if (!insideRepo && !insideManagedBase) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          message: `Refusing forced worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
-          cause,
-        }),
-      );
+    if (insideRepo || insideManagedBase) {
+      return "cleanup-filesystem-path" as const;
     }
+    if (!(yield* settingsConfig.pathExists(effectiveWorktreePath))) {
+      return "skip-filesystem-cleanup" as const;
+    }
+    return yield* Effect.fail(
+      new HostValidationError({
+        message: `Refusing forced worktree cleanup outside managed roots for ${effectiveWorktreePath}`,
+        cause,
+      }),
+    );
   });
 export const removeWorktreeAndFilesystemPath = (
   dependencies: RemoveWorktreeAndFilesystemPathDependencies,
@@ -55,17 +59,23 @@ export const removeWorktreeAndFilesystemPath = (
     const effectiveWorktreePath = worktreeFiles.resolveWorktreePath(repoPath, worktreePath);
     if (yield* worktreeFiles.pathIsWithinRoot(effectiveWorktreePath, repoPath)) {
       return yield* Effect.fail(
-        new HostValidationError({ message: "worktree path cannot be the repository root" }),
+        new HostValidationError({
+          message: "worktree path cannot be the repository root",
+        }),
       );
     }
-    yield* gitPort.removeWorktree(repoPath, worktreePath, force).pipe(
+    const filesystemCleanup = yield* gitPort.removeWorktree(repoPath, worktreePath, force).pipe(
+      Effect.as("cleanup-filesystem-path" as const),
       Effect.catchAll((error) => {
         if (!force || !isDefinitiveNonWorktreeGitError(error)) {
           return Effect.fail(error);
         }
-        return assertForcedCleanupAllowed(dependencies, input, effectiveWorktreePath, error);
+        return resolveForcedFilesystemCleanup(dependencies, input, effectiveWorktreePath, error);
       }),
     );
+    if (filesystemCleanup === "skip-filesystem-cleanup") {
+      return;
+    }
     yield* worktreeFiles.removePathIfPresent(effectiveWorktreePath).pipe(
       Effect.mapError(
         (error) =>
