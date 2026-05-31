@@ -1,7 +1,15 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 const FRONTEND_ROOT = "packages/frontend/src";
+const ELECTRON_RENDERER_ROOT = "apps/electron/src/renderer";
+
+const ALLOWED_ELECTRON_RENDERER_FILES = new Set([
+  "electron-api.d.ts",
+  "electron-shell-bridge.test.ts",
+  "electron-shell-bridge.ts",
+  "main.tsx",
+]);
 
 const SHARED_FRONTEND_BANNED_PATTERNS = [
   {
@@ -76,7 +84,18 @@ const findSharedFrontendViolations = (): Violation[] => {
   return violations;
 };
 
-const violations = findSharedFrontendViolations();
+const findElectronRendererShellViolations = (): Violation[] => {
+  return walkFiles(ELECTRON_RENDERER_ROOT)
+    .filter((filePath) => !ALLOWED_ELECTRON_RENDERER_FILES.has(relative(ELECTRON_RENDERER_ROOT, filePath)))
+    .map((filePath) => ({
+      filePath,
+      line: 1,
+      message: "Electron renderer source must stay a thin shell. Move shared UI/runtime code to packages/frontend/src.",
+      snippet: "",
+    }));
+};
+
+const violations = [...findSharedFrontendViolations(), ...findElectronRendererShellViolations()];
 
 if (violations.length > 0) {
   console.error(`[frontend-boundary-guard] Found ${violations.length} frontend boundary violation(s).`);
@@ -88,4 +107,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("[frontend-boundary-guard] Shared frontend shell boundaries are clean.");
+console.log("[frontend-boundary-guard] Shared frontend and Electron renderer shell boundaries are clean.");
