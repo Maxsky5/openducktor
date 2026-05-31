@@ -217,6 +217,7 @@ const historyPartToChatMessage = (
           ...(part.agent ? { agent: part.agent } : {}),
           ...(part.prompt ? { prompt: part.prompt } : {}),
           ...(part.description ? { description: part.description } : {}),
+          ...(part.error ? { error: part.error } : {}),
           ...(part.externalSessionId ? { externalSessionId: part.externalSessionId } : {}),
           ...(part.executionMode ? { executionMode: part.executionMode } : {}),
           ...(part.metadata ? { metadata: part.metadata } : {}),

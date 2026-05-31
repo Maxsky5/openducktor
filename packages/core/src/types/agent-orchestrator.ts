@@ -349,6 +349,7 @@ export type AgentStreamPart =
       agent?: string;
       prompt?: string;
       description?: string;
+      error?: string;
       externalSessionId?: ExternalSessionId;
       executionMode?: AgentSubagentExecutionMode;
       metadata?: Record<string, unknown>;

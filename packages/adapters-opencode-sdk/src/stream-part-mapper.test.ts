@@ -202,13 +202,56 @@ describe("stream-part-mapper", () => {
       status: "error",
       agent: "planner",
       prompt: "Inspect the tests",
-      description: "Task failed",
+      description: "Inspect the tests",
+      error: "Task failed",
       externalSessionId: "session-child-error-1",
       metadata: {
         externalSessionId: "session-child-error-1",
       },
       startedAtMs: 10,
       endedAtMs: 25,
+    });
+  });
+
+  test("preserves direct runtime subagent tool errors", () => {
+    const part = createToolPart({
+      id: "tool-subagent-direct-error-1",
+      tool: "task",
+      status: "failed",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read the file at ~/maxsky5.omp.json",
+        description: "Read the file at ~/maxsky5.omp.json",
+      },
+      error: "Timed out after 5m while waiting for permission.",
+      metadata: {
+        externalSessionId: "session-child-timeout-1",
+      },
+      time: {
+        start: 10,
+        end: 300_010,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-tool-subagent-direct-error-1",
+      partId: "tool-subagent-direct-error-1",
+      correlationKey:
+        "spawn:assistant-tool-subagent-direct-error-1:explorer:Read the file at ~/maxsky5.omp.json",
+      status: "error",
+      agent: "explorer",
+      prompt: "Read the file at ~/maxsky5.omp.json",
+      description: "Read the file at ~/maxsky5.omp.json",
+      error: "Timed out after 5m while waiting for permission.",
+      externalSessionId: "session-child-timeout-1",
+      metadata: {
+        externalSessionId: "session-child-timeout-1",
+      },
+      startedAtMs: 10,
+      endedAtMs: 300_010,
     });
   });
 

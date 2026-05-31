@@ -562,6 +562,7 @@ const SubagentMessage = ({
   subagentPendingQuestionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
+  const error = meta.status === "error" ? meta.error?.trim() : undefined;
   const isRunning = meta.status === "running";
   const isWaitingForInput = Boolean(
     meta.externalSessionId &&
@@ -611,13 +612,14 @@ const SubagentMessage = ({
             </div>
           </div>
           <div className="flex items-start justify-between gap-3">
-            {summary ? (
-              <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                {summary}
-              </p>
-            ) : (
-              <div />
-            )}
+            <div className="min-w-0 flex-1 space-y-1">
+              {summary ? (
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{summary}</p>
+              ) : null}
+              {error ? (
+                <p className="whitespace-pre-wrap text-sm font-medium text-destructive">{error}</p>
+              ) : null}
+            </div>
             <SubagentTranscriptButton
               sessionRuntimeKind={sessionRuntimeKind ?? null}
               sessionRuntimeId={sessionRuntimeId ?? null}

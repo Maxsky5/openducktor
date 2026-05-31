@@ -321,6 +321,7 @@ const buildSubagentStreamPart = (input: {
   agent?: string;
   prompt?: string;
   description?: string;
+  error?: string;
   externalSessionId?: string;
   executionMode?: SubagentStreamPart["executionMode"];
   metadata?: Record<string, unknown>;
@@ -344,6 +345,7 @@ const buildSubagentStreamPart = (input: {
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
     ...(input.description ? { description: input.description } : {}),
+    ...(input.error ? { error: input.error } : {}),
     ...(input.externalSessionId ? { externalSessionId: input.externalSessionId } : {}),
     ...(input.executionMode ? { executionMode: input.executionMode } : {}),
     ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -401,15 +403,16 @@ const buildSubagentFromToolPart = (
   const externalSessionId = resolveSubagentExternalSessionId(metadata, input, outputIdentity);
   const agent = resolveSubagentAgent(input, metadata, output);
   const prompt = resolveSubagentPrompt(input, metadata, output);
+  const directError = toDisplayText(readUnknownProp(toolState, "error"));
+  const error = structuredError ?? directError;
+  const preview = deriveToolPreview({
+    tool: part.tool,
+    rawInput,
+    rawOutput,
+    ...(metadata ? { metadata } : {}),
+  });
   const description =
-    structuredError ??
-    resolveSubagentDescription(input, output, metadata) ??
-    deriveToolPreview({
-      tool: part.tool,
-      rawInput,
-      rawOutput,
-      ...(metadata ? { metadata } : {}),
-    });
+    resolveSubagentDescription(input, output, metadata) ?? (error ? (prompt ?? preview) : preview);
 
   return buildSubagentStreamPart({
     messageId: part.messageID,
@@ -418,6 +421,7 @@ const buildSubagentFromToolPart = (
     ...(agent ? { agent } : {}),
     ...(prompt ? { prompt } : {}),
     ...(description ? { description } : {}),
+    ...(error ? { error } : {}),
     ...(externalSessionId ? { externalSessionId } : {}),
     executionMode: resolveSubagentExecutionMode(metadata, input, output),
     ...(metadata ? { metadata } : {}),

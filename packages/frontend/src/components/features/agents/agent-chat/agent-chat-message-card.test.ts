@@ -880,6 +880,34 @@ describe("AgentChatMessageCard tool duration", () => {
     expect(html).toContain("1m59s");
   });
 
+  test("renders failed subagent cards with runtime error details", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatMessageCard, {
+        message: buildMessage("system", "Subagent (explorer): read file", {
+          id: "subagent-error-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-error-1",
+            correlationKey: "part:assistant-task-tool-error:subtask-error",
+            status: "error",
+            agent: "explorer",
+            description: "Read the file at ~/maxsky5.omp.json",
+            error: "Timed out after 5m while waiting for permission.",
+            externalSessionId: "session-child-error",
+            startedAtMs: 1_000,
+            endedAtMs: 301_000,
+          },
+        }),
+        sessionAgentColors: {},
+      }),
+    );
+
+    expect(html).toContain("Failed");
+    expect(html).toContain("Read the file at ~/maxsky5.omp.json");
+    expect(html).toContain("Timed out after 5m while waiting for permission.");
+  });
+
   test("renders reasoning rows as inline thinking transcript text without disclosure chrome", async () => {
     const html = await renderToHtml(
       createElement(AgentChatMessageCard, {

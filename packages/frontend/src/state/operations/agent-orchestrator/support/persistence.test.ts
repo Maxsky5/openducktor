@@ -627,6 +627,50 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(subagent.content).toContain("Cancelled by user");
   });
 
+  test("preserves hydrated subagent error details", () => {
+    const messages = historyToChatMessages(
+      [
+        {
+          messageId: "m-assistant",
+          role: "assistant",
+          timestamp: "2026-02-22T08:00:02.000Z",
+          text: "",
+          parts: [
+            {
+              kind: "subagent",
+              messageId: "m-assistant",
+              partId: "p-subagent-error",
+              correlationKey: "spawn:m-assistant:explorer:Read the file at ~/maxsky5.omp.json",
+              status: "error",
+              agent: "explorer",
+              prompt: "Read the file at ~/maxsky5.omp.json",
+              description: "Read the file at ~/maxsky5.omp.json",
+              error: "Timed out after 5m while waiting for permission.",
+              startedAtMs: 100,
+              endedAtMs: 300_100,
+            },
+          ],
+        },
+      ],
+      {
+        role: "build",
+        selectedModel: null,
+      },
+    );
+
+    const subagent = messages.find(
+      (entry) => entry.role === "system" && entry.meta?.kind === "subagent",
+    );
+    if (!subagent || subagent.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent message with subagent meta");
+    }
+
+    expect(subagent.meta.status).toBe("error");
+    expect(subagent.meta.error).toBe("Timed out after 5m while waiting for permission.");
+    expect(subagent.meta.endedAtMs).toBe(300_100);
+    expect(subagent.content).toContain("Read the file at ~/maxsky5.omp.json");
+  });
+
   test("preserves unresolved hydrated subagent history rows when no child session link exists", () => {
     const messages = historyToChatMessages(
       [
