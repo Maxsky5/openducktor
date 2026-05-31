@@ -25,7 +25,7 @@
     "@openducktor/host-client": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
-    "@pierre/diffs": "^1.2.3",
+    "@pierre/diffs": "^1.2.5",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dismissable-layer": "^1.1.11",
@@ -46,12 +46,12 @@
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4",
-    "react-router-dom": "^7.15.1",
+    "react-router-dom": "^7.16.0",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
-    "zustand": "^5.0.13"
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.9.0",
