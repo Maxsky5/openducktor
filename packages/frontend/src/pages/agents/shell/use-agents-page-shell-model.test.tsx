@@ -11,6 +11,7 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
+import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 
@@ -97,6 +98,7 @@ type OrchestrationState = {
     rightPanelToggleModel: { label: string };
   };
 };
+type OrchestrationControllerArgs = Parameters<typeof useAgentStudioOrchestrationController>[0];
 
 type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
@@ -274,6 +276,7 @@ let orchestrationState: OrchestrationState = {
     rightPanelToggleModel,
   },
 };
+let orchestrationControllerArgs: OrchestrationControllerArgs[] = [];
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const mockedModuleResets = [
@@ -365,7 +368,10 @@ const registerModuleMocks = (): void => {
   }));
 
   mock.module("../use-agent-studio-orchestration-controller", () => ({
-    useAgentStudioOrchestrationController: () => orchestrationState,
+    useAgentStudioOrchestrationController: (args: OrchestrationControllerArgs) => {
+      orchestrationControllerArgs.push(args);
+      return orchestrationState;
+    },
   }));
 
   mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
@@ -508,6 +514,7 @@ beforeEach(async () => {
       rightPanelToggleModel,
     },
   };
+  orchestrationControllerArgs = [];
 });
 
 afterEach(async () => {
@@ -620,6 +627,32 @@ describe("useAgentsPageShellModel", () => {
       expect(state.hasSelectedTask).toBe(false);
       expect(state.isRightPanelVisible).toBe(true);
       expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetRef.current).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps orchestration selection identity stable when inputs do not change", async () => {
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+      const firstSelection = orchestrationControllerArgs.at(-1)?.selection;
+      expect(firstSelection).toBeDefined();
+
+      await harness.update(undefined);
+      const secondSelection = orchestrationControllerArgs.at(-1)?.selection;
+      expect(secondSelection).toBe(firstSelection);
+
+      tasksState = {
+        ...tasksState,
+        isForegroundLoadingTasks: true,
+      };
+
+      await harness.update(undefined);
+      const thirdSelection = orchestrationControllerArgs.at(-1)?.selection;
+      expect(thirdSelection).not.toBe(firstSelection);
+      expect(thirdSelection?.isLoadingTasks).toBe(true);
     } finally {
       await harness.unmount();
     }

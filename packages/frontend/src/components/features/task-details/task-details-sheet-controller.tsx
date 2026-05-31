@@ -60,11 +60,13 @@ export function TaskDetailsSheetController({
     () => (taskId ? (allTasks.find((entry) => entry.id === taskId) ?? null) : null),
     [allTasks, taskId],
   );
+  // Reset during render so React discards this stale task pass instead of committing it.
   if (taskId && !task) {
     setTaskId(null);
   }
   const open = task !== null;
 
+  // The handle only captures React's stable state dispatch.
   useImperativeHandle(
     ref,
     () => ({

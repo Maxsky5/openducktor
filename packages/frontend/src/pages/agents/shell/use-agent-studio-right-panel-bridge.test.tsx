@@ -109,4 +109,26 @@ describe("useAgentStudioRightPanelBridge", () => {
       await harness.unmount();
     }
   });
+
+  test("reports the panel as hidden when the selected panel is closed", async () => {
+    const harness = createHookHarness(
+      createArgs({
+        panel: createPanelState({
+          panelKind: "build_tools",
+          isPanelOpen: false,
+        }),
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const state = harness.getLatest();
+      expect(state.isRightPanelVisible).toBe(false);
+      expect(state.rightPanelBridge?.rightPanel.panelKind).toBe("build_tools");
+      expect(state.rightPanelBridge?.rightPanel.isPanelOpen).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });
