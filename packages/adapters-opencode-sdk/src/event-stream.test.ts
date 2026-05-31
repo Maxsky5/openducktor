@@ -1823,12 +1823,12 @@ describe("event-stream", () => {
         > => part.kind === "subagent",
       );
 
-    expect(subagentParts).toHaveLength(4);
+    expect(subagentParts).toHaveLength(6);
 
     const runningParts = subagentParts.filter((part) => part.status === "running");
     const completedParts = subagentParts.filter((part) => part.status === "completed");
 
-    expect(runningParts).toHaveLength(2);
+    expect(runningParts).toHaveLength(4);
     expect(completedParts).toHaveLength(2);
 
     const runningKeys = runningParts.map((part) => part.correlationKey);
@@ -1836,6 +1836,14 @@ describe("event-stream", () => {
     expect(runningKeys).toEqual([
       "part:assistant-subagent-collision:subtask-a",
       "part:assistant-subagent-collision:subtask-b",
+      "part:assistant-subagent-collision:subtask-a",
+      "part:assistant-subagent-collision:subtask-b",
+    ]);
+    expect(runningParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      undefined,
+      "child-a",
+      "child-b",
     ]);
 
     expect(completedParts.map((part) => part.correlationKey)).toEqual([
@@ -1936,7 +1944,7 @@ describe("event-stream", () => {
         > => part.kind === "subagent",
       );
 
-    expect(subagentParts).toHaveLength(4);
+    expect(subagentParts).toHaveLength(6);
 
     const runningParts = subagentParts.filter((part) => part.status === "running");
     const completedParts = subagentParts.filter((part) => part.status === "completed");
@@ -1944,6 +1952,14 @@ describe("event-stream", () => {
     expect(runningParts.map((part) => part.correlationKey)).toEqual([
       "part:assistant-subagent-out-of-order:subtask-a",
       "part:assistant-subagent-out-of-order:subtask-b",
+      "part:assistant-subagent-out-of-order:subtask-a",
+      "part:assistant-subagent-out-of-order:subtask-b",
+    ]);
+    expect(runningParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      undefined,
+      "child-a",
+      "child-b",
     ]);
     expect(completedParts.map((part) => part.correlationKey)).toEqual([
       "part:assistant-subagent-out-of-order:subtask-b",
@@ -2165,6 +2181,40 @@ describe("event-stream", () => {
     ).toEqual(["child-a", "child-b"]);
   });
 
+  test("emits a linked subagent update when child session creation binds a running card", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-session-created"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-session-created",
+        partId: "subtask-a",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: "Starting A",
+      }),
+      makeChildSessionCreatedEvent({
+        childSessionId: "external-child-session",
+        parentExternalSessionId: "external-session-1",
+      }),
+    ]);
+
+    const subagentParts = emitted
+      .filter(
+        (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
+          event.type === "assistant_part" && event.part.kind === "subagent",
+      )
+      .map((event) => event.part as Extract<AgentEvent, { type: "assistant_part" }>["part"]);
+
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-subagent-session-created:subtask-a",
+      "part:assistant-subagent-session-created:subtask-a",
+    ]);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      "external-child-session",
+    ]);
+  });
+
   test("defers ambiguous task tool updates until child sessions bind to spawned cards", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-ambiguous-deferred"),
@@ -2230,15 +2280,17 @@ describe("event-stream", () => {
         event.type === "assistant_part" && event.part.kind === "subagent",
     );
 
-    expect(subagentParts).toHaveLength(3);
+    expect(subagentParts).toHaveLength(4);
     expect(
       subagentParts.map((event) => (event.part as { correlationKey: string }).correlationKey),
     ).toEqual([
       "part:assistant-subagent-ambiguous-deferred:subtask-a",
       "part:assistant-subagent-ambiguous-deferred:subtask-b",
+      "part:assistant-subagent-ambiguous-deferred:subtask-a",
       "part:assistant-subagent-ambiguous-deferred:subtask-b",
     ]);
     expect(subagentParts.map((event) => (event.part as { status: string }).status)).toEqual([
+      "running",
       "running",
       "running",
       "completed",
@@ -2247,7 +2299,7 @@ describe("event-stream", () => {
       subagentParts.map(
         (event) => (event.part as { externalSessionId?: string }).externalSessionId,
       ),
-    ).toEqual([undefined, undefined, "child-b"]);
+    ).toEqual([undefined, undefined, "child-a", "child-b"]);
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {

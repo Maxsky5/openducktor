@@ -4,6 +4,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { buildMessage } from "./agent-chat-test-fixtures";
 import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
@@ -204,5 +205,77 @@ describe("AgentSessionTranscriptDialogHost", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => expect(removeAgentSession).not.toHaveBeenCalled());
+  });
+
+  test("opens a linked subagent transcript from the visible subagent card", async () => {
+    const { AgentSessionTranscriptDialogHost } = await import(
+      "./use-agent-session-transcript-dialog"
+    );
+    const { AgentChatMessageCard } = await import("./agent-chat-message-card");
+    const pendingApproval = {
+      requestId: "permission-1",
+      requestType: "permission_grant" as const,
+      title: "Approve permission: read",
+      summary: "Approval request for read.",
+      affectedPaths: ["~/maxsky5.omp.json"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryProvider useIsolatedClient>
+        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
+      </QueryProvider>
+    );
+
+    render(
+      <AgentChatMessageCard
+        message={buildMessage("system", "Subagent (build): read file", {
+          id: "subagent-running-1",
+          timestamp: "2026-02-22T10:49:37.000Z",
+          meta: {
+            kind: "subagent",
+            partId: "part-subagent-running-1",
+            correlationKey: "part:assistant-task-tool-running:subtask-b",
+            status: "running",
+            agent: "build",
+            description: "Read the file at ~/maxsky5.omp.json",
+            externalSessionId: "session-child-1",
+            startedAtMs: 1_000,
+          },
+        })}
+        sessionAgentColors={{}}
+        sessionRuntimeKind="opencode"
+        sessionRuntimeId="runtime-1"
+        sessionWorkingDirectory="/repo-a"
+        subagentPendingApprovals={[pendingApproval]}
+        subagentPendingApprovalCount={1}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("Waiting for input")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
+
+    await waitFor(() => {
+      expect(latestDialogProps).toMatchObject({
+        externalSessionId: "session-child-1",
+        source: {
+          runtimeKind: "opencode",
+          runtimeId: "runtime-1",
+          workingDirectory: "/repo-a",
+          isLive: true,
+          pendingApprovals: [pendingApproval],
+        },
+        title: "Subagent activity",
+        description: "View what this subagent did.",
+      });
+    });
   });
 });

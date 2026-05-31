@@ -88,6 +88,45 @@ export const flushPendingSubagentPartEmissionsForSession = (
   }
 };
 
+export const emitSubagentSessionLinkUpdate = (
+  runtime: EventStreamRuntime,
+  externalSessionId: string,
+): boolean => {
+  const correlationKey = runtime.subagentCorrelationKeyByExternalSessionId.get(externalSessionId);
+  if (!correlationKey) {
+    return false;
+  }
+
+  const linkedPartId = Array.from(runtime.subagentCorrelationKeyByPartId.entries()).find(
+    ([, candidateCorrelationKey]) => candidateCorrelationKey === correlationKey,
+  )?.[0];
+  if (!linkedPartId) {
+    return false;
+  }
+
+  const part = runtime.partsById.get(linkedPartId);
+  if (!part) {
+    return false;
+  }
+
+  const mapped = mapPartToAgentStreamPart(part);
+  if (mapped?.kind !== "subagent") {
+    return false;
+  }
+
+  runtime.emit(runtime.externalSessionId, {
+    type: "assistant_part",
+    externalSessionId: runtime.externalSessionId,
+    timestamp: runtime.now(),
+    part: {
+      ...mapped,
+      correlationKey,
+      externalSessionId,
+    },
+  });
+  return true;
+};
+
 export const emitKnownAssistantPartsForMessage = (
   runtime: EventStreamRuntime,
   messageId: string,

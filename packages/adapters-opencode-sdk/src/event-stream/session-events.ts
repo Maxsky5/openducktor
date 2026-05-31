@@ -4,6 +4,7 @@ import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-transl
 import { readStringProp } from "../guards";
 import { normalizeTodoList } from "../todo-normalizers";
 import {
+  emitSubagentSessionLinkUpdate,
   flushPendingSubagentPartEmissionsForSession,
   reconcileUserMessageQueuedStates,
 } from "./message-events";
@@ -262,7 +263,15 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     normalizedChildExternalSessionId,
   );
   if (existingCorrelationKey && !existingCorrelationKey.startsWith("session:")) {
-    flushPendingSubagentPartEmissionsForSession(runtime, normalizedChildExternalSessionId);
+    const hasPendingPartEmissions = Boolean(
+      runtime.pendingSubagentPartEmissionsByExternalSessionId.get(normalizedChildExternalSessionId)
+        ?.length,
+    );
+    if (hasPendingPartEmissions) {
+      flushPendingSubagentPartEmissionsForSession(runtime, normalizedChildExternalSessionId);
+    } else {
+      emitSubagentSessionLinkUpdate(runtime, normalizedChildExternalSessionId);
+    }
     flushPendingSubagentInputEventsForSession(runtime, normalizedChildExternalSessionId);
     return true;
   }
@@ -301,7 +310,14 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     runtime.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, nextCorrelationKey);
     runtime.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
     removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
-    flushPendingSubagentPartEmissionsForSession(runtime, externalSessionId);
+    const hasPendingPartEmissions = Boolean(
+      runtime.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId)?.length,
+    );
+    if (hasPendingPartEmissions) {
+      flushPendingSubagentPartEmissionsForSession(runtime, externalSessionId);
+    } else {
+      emitSubagentSessionLinkUpdate(runtime, externalSessionId);
+    }
     flushPendingSubagentInputEventsForSession(runtime, externalSessionId);
   }
   return true;

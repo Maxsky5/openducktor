@@ -7,7 +7,10 @@ import {
 import { handleMessageUpdatedEvent } from "./message-events/updated";
 import type { EventStreamRuntime } from "./shared";
 
-export { flushPendingSubagentPartEmissionsForSession } from "./message-events/assistant";
+export {
+  emitSubagentSessionLinkUpdate,
+  flushPendingSubagentPartEmissionsForSession,
+} from "./message-events/assistant";
 export { reconcileUserMessageQueuedStates } from "./message-events/user";
 
 export const handleMessageEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
