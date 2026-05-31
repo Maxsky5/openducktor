@@ -73,6 +73,25 @@ describe("useRuntimeTranscriptSourceResolution", () => {
     }
   });
 
+  test("does not query runtimes when a transcript source is selected but lookup is disabled", async () => {
+    const runtimeList = mock(async () => [createRuntime()]);
+    host.runtimeList = runtimeList;
+    const harness = createHookHarness({
+      isOpen: false,
+      workspaceRepoPath: "/repo-a",
+      source: createSource(),
+    });
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest()).toEqual({ isPending: false, error: null, runtimeId: null });
+      expect(runtimeList).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("resolves the matching live runtime id", async () => {
     const runtimeList = mock(async () => [createRuntime()]);
     host.runtimeList = runtimeList;
@@ -109,7 +128,9 @@ describe("useRuntimeTranscriptSourceResolution", () => {
     try {
       await harness.mount();
       await harness.waitFor((state) => state.error !== null);
-      expect(harness.getLatest().error).toBe("No opencode runtime is attached for runtime-1.");
+      expect(harness.getLatest().error).toBe(
+        "No opencode runtime instance is attached for runtime-1.",
+      );
 
       runtimeList.mockImplementationOnce(async () => [createRuntime(), createRuntime()]);
       await harness.update({
@@ -120,7 +141,7 @@ describe("useRuntimeTranscriptSourceResolution", () => {
       await harness.waitFor((state) => state.error?.startsWith("Multiple") === true);
 
       expect(harness.getLatest().error).toBe(
-        "Multiple opencode runtime is attached for runtime-1.",
+        "Multiple opencode runtime instances are attached for runtime-1.",
       );
     } finally {
       await harness.unmount();

@@ -7,8 +7,8 @@ type RuntimeSessionTranscriptSourceBase = {
   workingDirectory: string;
   externalSessionId?: string;
   isLive?: boolean;
-  pendingApprovals?: AgentApprovalRequest[] | undefined;
-  pendingQuestions?: AgentQuestionRequest[] | undefined;
+  pendingApprovals?: AgentApprovalRequest[];
+  pendingQuestions?: AgentQuestionRequest[];
 };
 
 export type RuntimeSessionTranscriptSource = RuntimeSessionTranscriptSourceBase;

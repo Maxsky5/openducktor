@@ -44,7 +44,8 @@ export function useSessionTranscriptSurfaceModel({
     replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
-  const liveSession = useAgentSession(requestedExternalSessionId ?? null);
+  const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
+  const liveSession = useAgentSession(isOpen ? externalSessionId : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     activeWorkspace,
   });
@@ -72,7 +73,6 @@ export function useSessionTranscriptSurfaceModel({
     workspaceRepoPath,
     source,
   });
-  const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
   const sessionHydration = useRuntimeTranscriptSessionHydration({
     isOpen,
     activeWorkspace,

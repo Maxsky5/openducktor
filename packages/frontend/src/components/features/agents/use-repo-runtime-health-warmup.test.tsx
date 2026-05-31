@@ -45,6 +45,7 @@ describe("useRepoRuntimeHealthWarmup", () => {
   test("skips warmup while unavailable, loading, or already cached", async () => {
     const refreshRepoRuntimeHealthForRepo = mock(async () => ({}));
     const hasCachedRepoRuntimeHealth = mock(() => true);
+    const hasNoCachedRepoRuntimeHealth = mock(() => false);
     const harness = createHookHarness(
       createBaseArgs({
         workspaceRepoPath: null,
@@ -58,14 +59,14 @@ describe("useRepoRuntimeHealthWarmup", () => {
       await harness.update(
         createBaseArgs({
           runtimeDefinitions: [],
-          hasCachedRepoRuntimeHealth,
+          hasCachedRepoRuntimeHealth: hasNoCachedRepoRuntimeHealth,
           refreshRepoRuntimeHealthForRepo,
         }),
       );
       await harness.update(
         createBaseArgs({
           isLoadingChecks: true,
-          hasCachedRepoRuntimeHealth,
+          hasCachedRepoRuntimeHealth: hasNoCachedRepoRuntimeHealth,
           refreshRepoRuntimeHealthForRepo,
         }),
       );
@@ -76,6 +77,7 @@ describe("useRepoRuntimeHealthWarmup", () => {
         }),
       );
 
+      expect(hasNoCachedRepoRuntimeHealth).not.toHaveBeenCalled();
       expect(refreshRepoRuntimeHealthForRepo).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();

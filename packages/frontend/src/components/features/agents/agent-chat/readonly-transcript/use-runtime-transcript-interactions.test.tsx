@@ -197,6 +197,43 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
+  test("blocks approval replies when the active session id does not match the transcript target", async () => {
+    const replyAgentApproval = mock(
+      async (
+        _externalSessionId: string,
+        _requestId: string,
+        _outcome: RuntimeApprovalReplyOutcome,
+      ) => {},
+    );
+    const pendingApproval = createApprovalRequest("approval-1");
+    const harness = createHookHarness(
+      createBaseArgs({
+        externalSessionId: "session-requested",
+        source: createSource({ pendingApprovals: [pendingApproval] }),
+        session: createAgentSessionFixture({
+          externalSessionId: "session-other",
+          repoPath: "/repo-a",
+          runtimeId: "runtime-1",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        }),
+        replyAgentApproval,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().approvals.canReply).toBe(false);
+      await harness.run(async (state) => {
+        await state.approvals.onReply("approval-1", "approve_once");
+      });
+      expect(replyAgentApproval).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("tracks question submission and hides answered questions", async () => {
     const deferredAnswer = createDeferred<void>();
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
@@ -274,7 +311,7 @@ describe("useRuntimeTranscriptInteractions", () => {
           pendingApprovals: [createApprovalRequest("approval-1")],
           pendingQuestions: [createQuestionRequest("question-1")],
         }),
-        sourceResolution: resolvedSource({ error: "No runtime is attached." }),
+        sourceResolution: resolvedSource({ error: "No runtime instance is attached." }),
       }),
     );
 

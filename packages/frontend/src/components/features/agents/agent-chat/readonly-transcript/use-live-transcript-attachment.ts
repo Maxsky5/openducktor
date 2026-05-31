@@ -3,6 +3,7 @@ import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-o
 import type { ActiveWorkspace, AgentOperationsContextValue } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
+import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
 import type { RuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
 
 type UseLiveTranscriptAttachmentArgs = {
@@ -39,10 +40,7 @@ export function useLiveTranscriptAttachment({
     isAttachingLiveTranscript: false,
     liveTranscriptAttachError: null,
   });
-  const transcriptIdentityKey =
-    externalSessionId || source?.runtimeId
-      ? [externalSessionId ?? "", source?.runtimeId ?? ""].join("\u0000")
-      : null;
+  const transcriptIdentityKey = getRuntimeTranscriptIdentityKey({ externalSessionId, source });
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -128,10 +126,11 @@ export function useLiveTranscriptAttachment({
     }
 
     attachedLiveTranscriptKeyRef.current = liveTranscriptAttachKey;
-    setState({
+    setState((current) => ({
+      ...current,
       isAttachingLiveTranscript: true,
       liveTranscriptAttachError: null,
-    });
+    }));
 
     void attachRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,

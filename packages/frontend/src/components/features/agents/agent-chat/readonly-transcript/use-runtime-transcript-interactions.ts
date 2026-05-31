@@ -7,6 +7,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
 import {
   mergeRuntimePendingApprovals,
   mergeRuntimePendingQuestions,
@@ -69,10 +70,7 @@ export function useRuntimeTranscriptInteractions({
   const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
     Record<string, boolean>
   >({});
-  const transcriptIdentityKey =
-    externalSessionId || source?.runtimeId
-      ? [externalSessionId ?? "", source?.runtimeId ?? ""].join("\u0000")
-      : null;
+  const transcriptIdentityKey = getRuntimeTranscriptIdentityKey({ externalSessionId, source });
   const previousTranscriptIdentityKeyRef = useRef<string | null>(transcriptIdentityKey);
 
   useEffect(() => {
@@ -113,6 +111,8 @@ export function useRuntimeTranscriptInteractions({
   }, [session, visiblePendingApprovals, visiblePendingQuestions]);
 
   const activeApprovalSessionId = sessionWithPendingRequests?.externalSessionId ?? null;
+  const approvalSessionMatchesTranscript =
+    activeApprovalSessionId !== null && activeApprovalSessionId === externalSessionId;
   const pendingApprovalRequests: readonly AgentApprovalRequest[] =
     sessionWithPendingRequests?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const replyTranscriptApproval = useCallback(
@@ -138,7 +138,7 @@ export function useRuntimeTranscriptInteractions({
   );
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeExternalSessionId: activeApprovalSessionId,
+      activeExternalSessionId: approvalSessionMatchesTranscript ? activeApprovalSessionId : null,
       pendingApprovals: pendingApprovalRequests,
       agentStudioReady: isRuntimeReady,
       replyAgentApproval: replyTranscriptApproval,
@@ -196,7 +196,7 @@ export function useRuntimeTranscriptInteractions({
         isRuntimeReady &&
         !sourceResolution.isPending &&
         !sourceResolution.error &&
-        activeApprovalSessionId !== null &&
+        approvalSessionMatchesTranscript &&
         pendingApprovalRequests.length > 0,
       isSubmittingByRequestId: isSubmittingApprovalByRequestId,
       errorByRequestId: approvalReplyErrorByRequestId,

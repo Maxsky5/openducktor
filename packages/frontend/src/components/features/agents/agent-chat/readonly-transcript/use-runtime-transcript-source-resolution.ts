@@ -32,15 +32,16 @@ export function useRuntimeTranscriptSourceResolution({
   workspaceRepoPath,
   source,
 }: UseRuntimeTranscriptSourceResolutionArgs): RuntimeTranscriptSourceResolution {
+  const queryEnabled = Boolean(isOpen && workspaceRepoPath && source);
   const runtimeListQuery = useQuery({
     ...runtimeListQueryOptions(
       source?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
       workspaceRepoPath ?? "",
     ),
-    enabled: Boolean(isOpen && workspaceRepoPath && source),
+    enabled: queryEnabled,
   });
 
-  if (!source) {
+  if (!source || !queryEnabled) {
     return { isPending: false, error: null, runtimeId: null };
   }
   if (runtimeListQuery.isPending) {
@@ -62,21 +63,18 @@ export function useRuntimeTranscriptSourceResolution({
   );
   if (matches.length !== 1) {
     const errorPrefix = matches.length === 0 ? "No" : "Multiple";
+    const runtimeSubject =
+      matches.length === 0
+        ? `${source.runtimeKind} runtime instance is`
+        : `${source.runtimeKind} runtime instances are`;
     return {
       isPending: false,
-      error: `${errorPrefix} ${source.runtimeKind} runtime is attached for ${source.runtimeId}.`,
+      error: `${errorPrefix} ${runtimeSubject} attached for ${source.runtimeId}.`,
       runtimeId: null,
     };
   }
 
-  const [runtime] = matches;
-  if (!runtime) {
-    return {
-      isPending: false,
-      error: `No ${source.runtimeKind} runtime is attached for ${source.runtimeId}.`,
-      runtimeId: null,
-    };
-  }
+  const [runtime] = matches as [RuntimeInstanceSummary];
 
   return {
     isPending: false,

@@ -11,6 +11,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createChatSettingsFixture,
+  createDeferred,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -50,14 +51,6 @@ let originalHostRuntimeList: typeof import("@/state/operations/host").host.runti
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
-  return {
-    runtimeKind: "opencode",
-    runtimeId: "runtime-1",
-    workingDirectory: "/repo-a",
-  };
-}
-
-function makeTranscriptSourceWithRuntimeIdOnly(): RuntimeSessionTranscriptSource {
   return {
     runtimeKind: "opencode",
     runtimeId: "runtime-1",
@@ -366,6 +359,45 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("uses the transcript source session id before the requested session id", async () => {
+    const transcriptSource = {
+      ...makeTranscriptSource(),
+      externalSessionId: "session-source",
+    };
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-requested",
+        source: transcriptSource,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(useAgentSessionMock).toHaveBeenCalledWith("session-source");
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        "/repo-a",
+        "opencode",
+        "/repo-a",
+        "session-source",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not load history while the dialog is closed", async () => {
     const transcriptSource = makeTranscriptSource();
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -391,6 +423,87 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("shows the default empty state when opened without a transcript source", async () => {
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: null,
+        source: null,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Select a repository and session to view the conversation.",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("exposes the history loading state while transcript history is pending", async () => {
+    const deferredHistory = createDeferred<AgentSessionHistoryMessage[]>();
+    readSessionHistory.mockImplementationOnce(async () => deferredHistory.promise);
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: makeTranscriptSource(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(harness.getLatest().model.thread.isSessionViewLoading).toBe(true);
+      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(true);
+      expect(harness.getLatest().model.thread.emptyState).toBe(null);
+
+      await harness.run(async () => {
+        deferredHistory.resolve([
+          {
+            messageId: "message-user-1",
+            role: "user" as const,
+            timestamp: "2026-02-22T12:00:00.000Z",
+            text: "Inspect this",
+            displayParts: [],
+            state: "read" as const,
+            parts: [],
+          },
+        ]);
+        await deferredHistory.promise;
+      });
+      await harness.waitFor((state) => state.model.thread.isSessionHistoryLoading === false);
+    } finally {
+      deferredHistory.resolve([]);
       await harness.unmount();
     }
   });
@@ -744,7 +857,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces an unavailable state when the source runtime is not attached", async () => {
-    const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
+    const transcriptSource = makeTranscriptSource();
     runtimeList = [];
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
@@ -759,7 +872,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithRuntimeIdOnly,
+        source: transcriptSource,
       },
       { wrapper },
     );
@@ -773,7 +886,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
       expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(false);
       await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
       expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title: "Failed to load conversation: No opencode runtime is attached for runtime-1.",
+        title:
+          "Failed to load conversation: No opencode runtime instance is attached for runtime-1.",
       });
       expect(replyAgentApproval).not.toHaveBeenCalled();
     } finally {
@@ -782,7 +896,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces runtime list failures without converting them to missing runtimes", async () => {
-    const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
+    const transcriptSource = makeTranscriptSource();
     runtimeListError = new Error("runtime registry unavailable");
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
@@ -797,7 +911,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithRuntimeIdOnly,
+        source: transcriptSource,
       },
       { wrapper },
     );
@@ -817,7 +931,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces an ambiguous runtime attachment as unresolved and blocks approval replies", async () => {
-    const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
+    const transcriptSource = makeTranscriptSource();
     runtimeList = [makeRuntime(), makeRuntime()];
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
@@ -832,7 +946,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithRuntimeIdOnly,
+        source: transcriptSource,
       },
       { wrapper },
     );
@@ -845,7 +959,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
       expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(false);
       await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
       expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title: "Failed to load conversation: Multiple opencode runtime is attached for runtime-1.",
+        title:
+          "Failed to load conversation: Multiple opencode runtime instances are attached for runtime-1.",
       });
       expect(replyAgentApproval).not.toHaveBeenCalled();
     } finally {
