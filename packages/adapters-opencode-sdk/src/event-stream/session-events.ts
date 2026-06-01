@@ -93,6 +93,36 @@ const bindChildSessionFromPendingInputEvent = (
   return correlationKey;
 };
 
+const bindSinglePendingSubagentInputEvent = (
+  runtime: EventStreamRuntime,
+  childExternalSessionId: string,
+): string | undefined => {
+  if (
+    childExternalSessionId === runtime.externalSessionId ||
+    runtime.subagentCorrelationKeyByExternalSessionId.has(childExternalSessionId) ||
+    runtime.pendingSubagentCorrelationKeys.length !== 1
+  ) {
+    return undefined;
+  }
+
+  const [correlationKey] = runtime.pendingSubagentCorrelationKeys;
+  if (!correlationKey) {
+    return undefined;
+  }
+
+  bindSubagentExternalSession(
+    runtime,
+    childExternalSessionId,
+    correlationKey,
+    runtime.subagentPartIdByCorrelationKey.get(correlationKey),
+  );
+  runtime.pendingSubagentSessionsByExternalSessionId.delete(childExternalSessionId);
+  removePendingSubagentCorrelationKey(runtime, correlationKey);
+  emitSubagentPartsForSession(runtime, childExternalSessionId);
+  flushPendingSubagentInputEventsForSession(runtime, childExternalSessionId);
+  return correlationKey;
+};
+
 const resolveLocalSubagentInputLink = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,
@@ -118,6 +148,17 @@ const resolveLocalSubagentInputLink = (
   if (runtime.pendingSubagentSessionsByExternalSessionId.has(childExternalSessionId)) {
     return {
       parentExternalSessionId: runtime.externalSessionId,
+    };
+  }
+
+  const singlePendingCorrelationKey = bindSinglePendingSubagentInputEvent(
+    runtime,
+    childExternalSessionId,
+  );
+  if (singlePendingCorrelationKey) {
+    return {
+      parentExternalSessionId: runtime.externalSessionId,
+      subagentCorrelationKey: singlePendingCorrelationKey,
     };
   }
 

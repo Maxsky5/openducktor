@@ -1765,6 +1765,46 @@ describe("event-stream", () => {
     ).toBe(false);
   });
 
+  test("treats same-directory child input events as relevant when one subagent input candidate is pending", () => {
+    const parentSubscriber = {
+      externalSessionId: "external-parent-session",
+      input: makeSessionInput(),
+    };
+    const childPermissionEvent = {
+      type: "permission.asked",
+      properties: {
+        sessionID: "external-child-session",
+        directory: "/repo",
+        id: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    } as unknown as Event;
+    const otherDirectoryChildPermissionEvent = {
+      type: "permission.asked",
+      properties: {
+        sessionID: "external-child-session",
+        directory: "/other-repo",
+        id: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    } as unknown as Event;
+
+    expect(
+      isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent, {
+        hasSinglePendingSubagentInputCandidate: (externalSessionId) =>
+          externalSessionId === "external-child-session",
+      }),
+    ).toBe(true);
+    expect(
+      isRelevantSubscriberEvent(parentSubscriber, otherDirectoryChildPermissionEvent, {
+        hasSinglePendingSubagentInputCandidate: (externalSessionId) =>
+          externalSessionId === "external-child-session",
+      }),
+    ).toBe(false);
+  });
+
   test("applies queued part delta with append semantics", async () => {
     const emitted = await runEventStream([
       assistantRoleEvent("assistant-message-2"),

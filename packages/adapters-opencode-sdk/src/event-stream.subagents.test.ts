@@ -87,6 +87,33 @@ const makeChildPermissionAskedEvent = (input: {
     },
   }) as unknown as Event;
 
+const makeChildQuestionAskedEvent = (input: {
+  childSessionId: string;
+  parentExternalSessionId?: string;
+  requestId?: string;
+}): Event =>
+  ({
+    type: "question.asked",
+    properties: {
+      sessionID: input.childSessionId,
+      ...(input.parentExternalSessionId
+        ? {
+            info: {
+              parentID: input.parentExternalSessionId,
+            },
+          }
+        : {}),
+      id: input.requestId ?? "question-child-1",
+      questions: [
+        {
+          id: "scope",
+          label: "Scope",
+          options: ["current file", "whole repo"],
+        },
+      ],
+    },
+  }) as unknown as Event;
+
 const makeSubagentToolPartUpdatedEvent = (input: {
   messageId: string;
   partId: string;
@@ -391,7 +418,7 @@ describe("event-stream subagent correlation", () => {
     );
   });
 
-  test("does not guess child permission ownership without a parent hint", async () => {
+  test("binds child permission events to the single running subagent card without a parent hint", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-permission"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -403,15 +430,60 @@ describe("event-stream subagent correlation", () => {
     ]);
 
     const subagentParts = readSubagentParts(emitted);
-    expect(subagentParts).toHaveLength(1);
-    expect(subagentParts[0]).toMatchObject({
-      correlationKey: "part:assistant-subagent-permission:subtask-a",
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      "external-child-session",
+    ]);
+    expect(subagentParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-subagent-permission:subtask-a",
+      "part:assistant-subagent-permission:subtask-a",
+    ]);
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(1);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-permission:subtask-a",
     });
-    expect(subagentParts[0]).not.toHaveProperty("externalSessionId");
-    expect(emitted.filter((event) => event.type === "approval_required")).toHaveLength(0);
     expect(
-      sessionRecord.subagentCorrelationKeyByExternalSessionId.has("external-child-session"),
-    ).toBe(false);
+      sessionRecord.subagentPartIdByCorrelationKey.get(
+        "part:assistant-subagent-permission:subtask-a",
+      ),
+    ).toBe("subtask-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
+      "subtask-a",
+    );
+  });
+
+  test("binds child question events to the single running subagent card without a parent hint", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-question"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-question",
+        partId: "subtask-a",
+        description: "Ask for scope",
+      }),
+      makeChildQuestionAskedEvent({ childSessionId: "external-child-session" }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-subagent-question:subtask-a",
+      externalSessionId: "external-child-session",
+    });
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-question:subtask-a",
+    });
   });
 
   test("does not guess child permission ownership when multiple subagent cards are pending", async () => {

@@ -57,6 +57,7 @@ type LogEventInput = {
 
 type RelevantSubscriberEventOptions = {
   isKnownChildExternalSessionId?: (externalSessionId: string) => boolean;
+  hasSinglePendingSubagentInputCandidate?: (externalSessionId: string) => boolean;
 };
 
 type GlobalEventStream = {
@@ -215,6 +216,14 @@ export const isRelevantSubscriberEvent = (
       return true;
     }
 
+    if (
+      (event.type === "permission.asked" || event.type === "question.asked") &&
+      options?.hasSinglePendingSubagentInputCandidate?.(eventExternalSessionId) &&
+      isEventDirectoryScopedToSubscriber(subscriber, event)
+    ) {
+      return true;
+    }
+
     return false;
   }
 
@@ -236,6 +245,14 @@ export const subscribeOpencodeEvents = async (
         session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId),
     );
   };
+  const hasSinglePendingSubagentInputCandidate = (externalSessionId: string): boolean => {
+    if (externalSessionId === input.context.externalSessionId) {
+      return false;
+    }
+
+    const session = input.getSession(input.context.externalSessionId);
+    return Boolean(session && session.pendingSubagentCorrelationKeys.length === 1);
+  };
   return subscribeGlobalEvents({
     client: input.client,
     controller: input.controller,
@@ -246,7 +263,7 @@ export const subscribeOpencodeEvents = async (
           input: input.context.input,
         },
         event,
-        { isKnownChildExternalSessionId },
+        { isKnownChildExternalSessionId, hasSinglePendingSubagentInputCandidate },
       );
       logStreamEvent({
         subscriber: {
