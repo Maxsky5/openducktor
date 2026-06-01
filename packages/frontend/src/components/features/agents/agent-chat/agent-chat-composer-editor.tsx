@@ -139,15 +139,6 @@ const buildComposerContentMarkup = (segments: AgentChatComposerSegments): string
     .join("");
 };
 
-const shouldRenderTextSegment = (segments: AgentChatComposerSegments, index: number): boolean => {
-  const segment = segments[index];
-  if (segment?.kind !== "text") {
-    return false;
-  }
-
-  return true;
-};
-
 const readExpectedTextSegmentClassName = (
   segments: AgentChatComposerSegments,
   index: number,
@@ -177,16 +168,7 @@ const syncComposerDomInPlace = (
   const domNodes = Array.from(root.childNodes).filter(
     (node) => !(node instanceof Text && (node.textContent ?? "").length === 0),
   );
-  const renderableSegments = segments.reduce<
-    Array<{ segment: AgentChatComposerSegments[number]; draftIndex: number }>
-  >((currentSegments, segment, draftIndex) => {
-    if (segment.kind === "text" && !shouldRenderTextSegment(segments, draftIndex)) {
-      return currentSegments;
-    }
-
-    currentSegments.push({ segment, draftIndex });
-    return currentSegments;
-  }, []);
+  const renderableSegments = segments.map((segment, draftIndex) => ({ segment, draftIndex }));
 
   return (
     domNodes.length === renderableSegments.length &&
