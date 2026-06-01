@@ -92,12 +92,17 @@ export function useAgentsPageOrchestrationShellModel({
     ],
   );
 
-  const orchestrationSelection = {
-    ...selection,
-    contextSwitchVersion,
-    isSessionSelectionResolving,
-    isLoadingTasks: isForegroundLoadingTasks,
-  };
+  const orchestrationSelection = useMemo<
+    AgentsPageOrchestrationShellModel["orchestrationSelection"]
+  >(
+    () => ({
+      ...selection,
+      isLoadingTasks: isForegroundLoadingTasks,
+      contextSwitchVersion,
+      isSessionSelectionResolving,
+    }),
+    [contextSwitchVersion, isForegroundLoadingTasks, isSessionSelectionResolving, selection],
+  );
 
   const orchestration = useAgentStudioOrchestrationController({
     activeWorkspace,

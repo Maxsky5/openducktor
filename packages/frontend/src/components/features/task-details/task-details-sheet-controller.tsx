@@ -1,13 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import {
-  type ReactElement,
-  type Ref,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useState,
-} from "react";
+import { type ReactElement, type Ref, useImperativeHandle, useMemo, useState } from "react";
 import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
@@ -27,7 +20,7 @@ type TaskDetailsSheetControllerProps = Omit<
   allTasks: TaskCard[];
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
-  onOpenSession: (
+  onOpenSession?: (
     taskId: string,
     role: AgentRole,
     options?: { externalSessionId?: string | null },
@@ -67,8 +60,13 @@ export function TaskDetailsSheetController({
     () => (taskId ? (allTasks.find((entry) => entry.id === taskId) ?? null) : null),
     [allTasks, taskId],
   );
+  // Reset during render so React discards this stale task pass instead of committing it.
+  if (taskId && !task) {
+    setTaskId(null);
+  }
   const open = task !== null;
 
+  // The handle only captures React's stable state dispatch.
   useImperativeHandle(
     ref,
     () => ({
@@ -82,15 +80,10 @@ export function TaskDetailsSheetController({
     [],
   );
 
-  useEffect(() => {
-    if (taskId && !task) {
-      setTaskId(null);
-    }
-  }, [task, taskId]);
-
-  const selectedTaskSessions = taskId ? (taskSessionsByTaskId.get(taskId) ?? []) : [];
-  const selectedActiveSessionContext = taskId
-    ? activeTaskSessionContextByTaskId.get(taskId)
+  const activeTaskId = task ? taskId : null;
+  const selectedTaskSessions = activeTaskId ? (taskSessionsByTaskId.get(activeTaskId) ?? []) : [];
+  const selectedActiveSessionContext = activeTaskId
+    ? activeTaskSessionContextByTaskId.get(activeTaskId)
     : undefined;
 
   return (
@@ -117,7 +110,7 @@ export function TaskDetailsSheetController({
       {...(onQaStart ? { onQaStart } : {})}
       {...(onQaOpen ? { onQaOpen } : {})}
       {...(onBuild ? { onBuild } : {})}
-      onOpenSession={onOpenSession}
+      {...(onOpenSession ? { onOpenSession } : {})}
       {...(onDelegate ? { onDelegate } : {})}
       {...(onEdit ? { onEdit } : {})}
       {...(onDefer ? { onDefer } : {})}

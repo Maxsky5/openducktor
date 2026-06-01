@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { createElement, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
+import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
@@ -10,6 +11,9 @@ import {
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
+import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
+import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
+import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-panel-bridge";
 
 enableReactActEnvironment();
 
@@ -80,7 +84,7 @@ type OrchestrationState = {
   repoSettings: null;
   chatSettingsLoadError: Error | null;
   retryChatSettingsLoad: typeof retryChatSettingsLoad;
-  humanReviewFeedbackModal: { kind: string };
+  humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
   startSessionRequest: (request: unknown) => Promise<string | undefined>;
   activeTabValue: string;
@@ -94,12 +98,7 @@ type OrchestrationState = {
     rightPanelToggleModel: { label: string };
   };
 };
-
-type RightPanelState = {
-  isRightPanelVisible: boolean;
-  rightPanelModel: { kind: string };
-  refreshWorktree: (mode?: "hard" | "soft" | "scheduled") => Promise<void>;
-};
+type OrchestrationControllerArgs = Parameters<typeof useAgentStudioOrchestrationController>[0];
 
 type AgentsPageShellModelState = {
   activeWorkspace: WorkspaceStateContextValue["activeWorkspace"];
@@ -109,11 +108,8 @@ type AgentsPageShellModelState = {
   onRetryChatSettingsLoad: () => void;
   hasSelectedTask: boolean;
   isRightPanelVisible: boolean;
-  rightPanelContent: ReactElement | null;
-  sessionStartModal: ReactElement | null;
-  mergedPullRequestModal: ReactElement | null;
-  humanReviewFeedbackModal: ReactElement;
-  taskDetailsSheet: ReactElement;
+  rightPanelBridge: AgentStudioRightPanelBridgeModel | null;
+  modalContent: AgentsPageModalContentModel;
 };
 
 let workspaceState = {
@@ -224,7 +220,15 @@ let readinessState: ReadinessState = {
   refreshChecks: async () => undefined,
 };
 const rightPanelToggleModel = { label: "Toggle panel" };
-const rightPanelModel = { kind: "documents" };
+const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
+  open: true,
+  taskId: "task-1",
+  message: "Please address review feedback.",
+  isSubmitting: false,
+  onOpenChange: mock((_open: boolean) => {}),
+  onMessageChange: mock((_message: string) => {}),
+  onConfirm: mock(async () => undefined),
+};
 const baseSessionStartModal: SessionStartModalModel = {
   open: true,
   title: "Start Planner Session",
@@ -258,7 +262,7 @@ let orchestrationState: OrchestrationState = {
   repoSettings: null,
   chatSettingsLoadError: new Error("chat settings failed"),
   retryChatSettingsLoad,
-  humanReviewFeedbackModal: { kind: "feedback" },
+  humanReviewFeedbackModal: { ...baseHumanReviewFeedbackModal },
   sessionStartModal: { ...baseSessionStartModal },
   startSessionRequest: async () => undefined,
   activeTabValue: "task-1",
@@ -272,13 +276,7 @@ let orchestrationState: OrchestrationState = {
     rightPanelToggleModel,
   },
 };
-const refreshWorktreeMock = mock(async (_mode?: "hard" | "soft" | "scheduled") => {});
-let rightPanelState: RightPanelState = {
-  isRightPanelVisible: true,
-  rightPanelModel,
-  refreshWorktree: refreshWorktreeMock,
-};
-
+let orchestrationControllerArgs: OrchestrationControllerArgs[] = [];
 let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const mockedModuleResets = [
@@ -303,7 +301,6 @@ const mockedModuleResets = [
     "../use-agent-studio-rebase-conflict-resolution",
     () => import("../use-agent-studio-rebase-conflict-resolution"),
   ],
-  ["./agents-page-right-panel-runtime", () => import("./agents-page-right-panel-runtime")],
 ] as const;
 
 const registerModuleMocks = (): void => {
@@ -371,22 +368,16 @@ const registerModuleMocks = (): void => {
   }));
 
   mock.module("../use-agent-studio-orchestration-controller", () => ({
-    useAgentStudioOrchestrationController: () => orchestrationState,
+    useAgentStudioOrchestrationController: (args: OrchestrationControllerArgs) => {
+      orchestrationControllerArgs.push(args);
+      return orchestrationState;
+    },
   }));
 
   mock.module("../use-agent-studio-rebase-conflict-resolution", () => ({
     useAgentStudioRebaseConflictResolution: () => ({
       handleResolveRebaseConflict,
     }),
-  }));
-
-  mock.module("./agents-page-right-panel-runtime", () => ({
-    AgentsPageBuildWorktreeRefreshRuntime: (): null => null,
-    AgentsPageRightPanelRuntime: (props: Record<string, unknown>): ReactElement =>
-      createElement("mock-agent-studio-right-panel", {
-        ...props,
-        model: rightPanelState.rightPanelModel,
-      }),
   }));
 };
 
@@ -505,7 +496,9 @@ beforeEach(async () => {
     repoSettings: null,
     chatSettingsLoadError: new Error("chat settings failed"),
     retryChatSettingsLoad,
-    humanReviewFeedbackModal: { kind: "feedback" },
+    humanReviewFeedbackModal: {
+      ...baseHumanReviewFeedbackModal,
+    },
     sessionStartModal: {
       ...baseSessionStartModal,
     },
@@ -521,12 +514,7 @@ beforeEach(async () => {
       rightPanelToggleModel,
     },
   };
-  rightPanelState = {
-    isRightPanelVisible: true,
-    rightPanelModel,
-    refreshWorktree: refreshWorktreeMock,
-  };
-  refreshWorktreeMock.mockClear();
+  orchestrationControllerArgs = [];
 });
 
 afterEach(async () => {
@@ -537,7 +525,7 @@ const createHookHarness = () =>
   createSharedHookHarness((_: undefined) => useAgentsPageShellModel(), undefined);
 
 describe("useAgentsPageShellModel", () => {
-  test("surfaces hook state and wires modal/controller elements", async () => {
+  test("surfaces hook state and wires modal/controller models", async () => {
     tasksState = {
       ...tasksState,
       pendingMergedPullRequest: {
@@ -568,20 +556,20 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelContent).not.toBeNull();
-      expect(
-        (state.sessionStartModal as ReactElement<{ model: unknown }> | null)?.props.model,
-      ).toBe(orchestrationState.sessionStartModal);
-      expect((state.taskDetailsSheet as ReactElement<{ allTasks: unknown }>).props.allTasks).toBe(
+      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe(selectionState.viewTaskId);
+      expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(
+        orchestrationState.agentStudioWorkspaceSidebarModel,
+      );
+      expect(state.modalContent.sessionStartModal).toBe(orchestrationState.sessionStartModal);
+      expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetProps.allTasks).toBe(
         tasksState.tasks,
       );
-      expect((state.humanReviewFeedbackModal as ReactElement<{ model: unknown }>).props.model).toBe(
+      expect(state.modalContent.humanReviewFeedbackModal).toBe(
         orchestrationState.humanReviewFeedbackModal,
       );
-      expect(
-        (state.mergedPullRequestModal as ReactElement<{ pullRequest: unknown }> | null)?.props
-          .pullRequest,
-      ).toEqual(tasksState.pendingMergedPullRequest?.pullRequest ?? null);
+      expect(state.modalContent.mergedPullRequestModal?.pullRequest).toEqual(
+        tasksState.pendingMergedPullRequest?.pullRequest ?? null,
+      );
     } finally {
       await harness.unmount();
     }
@@ -605,8 +593,8 @@ describe("useAgentsPageShellModel", () => {
 
       const state = harness.getLatest();
       expect(state.hasSelectedTask).toBe(false);
-      expect(state.sessionStartModal).toBeNull();
-      expect(state.mergedPullRequestModal).toBeNull();
+      expect(state.modalContent.sessionStartModal).toBeNull();
+      expect(state.modalContent.mergedPullRequestModal).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -638,7 +626,33 @@ describe("useAgentsPageShellModel", () => {
       expect(state.activeWorkspace?.repoPath).toBe("/repo");
       expect(state.hasSelectedTask).toBe(false);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.taskDetailsSheet).not.toBeNull();
+      expect(state.modalContent.taskDetailsLauncher.taskDetailsSheetRef.current).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps orchestration selection identity stable when inputs do not change", async () => {
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+      const firstSelection = orchestrationControllerArgs.at(-1)?.selection;
+      expect(firstSelection).toBeDefined();
+
+      await harness.update(undefined);
+      const secondSelection = orchestrationControllerArgs.at(-1)?.selection;
+      expect(secondSelection).toBe(firstSelection);
+
+      tasksState = {
+        ...tasksState,
+        isForegroundLoadingTasks: true,
+      };
+
+      await harness.update(undefined);
+      const thirdSelection = orchestrationControllerArgs.at(-1)?.selection;
+      expect(thirdSelection).not.toBe(firstSelection);
+      expect(thirdSelection?.isLoadingTasks).toBe(true);
     } finally {
       await harness.unmount();
     }
