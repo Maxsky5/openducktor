@@ -11,25 +11,6 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRightPanelBridge>[0];
 
-const task = createTaskCardFixture({ id: "task-1", title: "Task 1" });
-const activeSession = createAgentSessionFixture({
-  externalSessionId: "session-1",
-  taskId: "task-1",
-  role: "build",
-  status: "running",
-  workingDirectory: "/repo/worktrees/task-1",
-});
-const documentsModel: HookArgs["documentsModel"] = {
-  activeDocument: null,
-};
-const repoSettings: HookArgs["repoSettings"] = null;
-
-const activeWorkspace: HookArgs["activeWorkspace"] = {
-  workspaceId: "workspace-repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
-};
-
 const createPanelState = (
   panel: HookArgs["panel"] = {
     panelKind: "build_tools",
@@ -38,19 +19,31 @@ const createPanelState = (
 ): HookArgs["panel"] => panel;
 
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace,
+  activeWorkspace: {
+    workspaceId: "workspace-repo",
+    workspaceName: "Repo",
+    repoPath: "/repo",
+  },
   branches: [],
   activeBranch: null,
   selection: {
     viewRole: "build",
     viewTaskId: "task-1",
-    viewSelectedTask: task,
-    viewActiveSession: activeSession,
+    viewSelectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
+    viewActiveSession: createAgentSessionFixture({
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      role: "build",
+      status: "running",
+      workingDirectory: "/repo/worktrees/task-1",
+    }),
     isViewSessionHistoryHydrating: false,
   },
   panel: createPanelState(),
-  documentsModel,
-  repoSettings,
+  documentsModel: {
+    activeDocument: null,
+  },
+  repoSettings: null,
   worktreeRecoverySignal: 3,
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
@@ -65,19 +58,22 @@ const createHookHarness = (initialProps: HookArgs) =>
 
 describe("useAgentStudioRightPanelBridge", () => {
   test("builds the right-panel bridge model from orchestration selection", async () => {
-    const harness = createHookHarness(createArgs());
+    const args = createArgs();
+    const harness = createHookHarness(args);
 
     try {
       await harness.mount();
 
       const state = harness.getLatest();
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelBridge?.rightPanel.activeWorkspace).toBe(activeWorkspace);
+      expect(state.rightPanelBridge?.rightPanel.activeWorkspace).toBe(args.activeWorkspace);
       expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe("task-1");
       expect(state.rightPanelBridge?.rightPanel.viewRole).toBe("build");
-      expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(documentsModel);
-      expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(repoSettings);
-      expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(activeSession);
+      expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
+      expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(
+        args.selection.viewActiveSession,
+      );
       expect(state.rightPanelBridge?.rightPanel.session).toEqual({
         role: "build",
         status: "running",
