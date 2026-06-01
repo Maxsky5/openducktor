@@ -19,7 +19,7 @@ const collectRuntimeRoutes = (runtimeRegistry: RuntimeRegistryPort, repoPath: st
   Effect.gen(function* () {
     const normalizedRepoPath = normalizePathForComparison(repoPath);
     const routesByKind = new Map<string, RuntimeRoute>();
-    for (const runtime of yield* runtimeRegistry.listRuntimes()) {
+    for (const runtime of yield* runtimeRegistry.listRuntimesByRepo({ repoPath })) {
       if (!isWorkspaceRepoRuntime(runtime, normalizedRepoPath)) {
         continue;
       }

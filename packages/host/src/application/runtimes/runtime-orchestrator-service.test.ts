@@ -89,6 +89,19 @@ const createTaskStore = (
       });
     },
   }) as Pick<TaskStorePort, "getTaskMetadata"> as unknown as TaskStorePort;
+const waitForCondition = async (
+  predicate: () => boolean,
+  message: string,
+  timeoutMs = 1_000,
+): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(message);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+};
 const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},
 ): RuntimeInstanceSummary => ({
@@ -141,8 +154,20 @@ const createRegistry = (
           }),
       });
     },
+    findRuntimeById(runtimeId) {
+      return Effect.succeed(entries.get(runtimeId) ?? null);
+    },
     listRuntimes() {
       return Effect.succeed([...entries.values()]);
+    },
+    listRuntimesByRepo(input) {
+      return Effect.succeed(
+        [...entries.values()].filter(
+          (runtime) =>
+            runtime.repoPath === input.repoPath &&
+            (!input.runtimeKind || runtime.kind === input.runtimeKind),
+        ),
+      );
     },
     stopRuntime(runtimeId) {
       return Effect.tryPromise({
@@ -233,6 +258,28 @@ describe("createRuntimeOrchestratorService", () => {
       Effect.runPromise(service.runtimeList({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toEqual([runtime]);
   });
+  test("uses keyed repository lookup for repo-scoped runtime lists", async () => {
+    const runtime = createRuntime();
+    const keyedLookups: unknown[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([runtime], {
+        listRuntimes() {
+          return Effect.dieMessage("unexpected full runtime list");
+        },
+        listRuntimesByRepo(input) {
+          keyedLookups.push(input);
+          return Effect.succeed([runtime]);
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(service.runtimeList({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toEqual([runtime]);
+    expect(keyedLookups).toEqual([{ repoPath: "/canonical/repo", runtimeKind: "opencode" }]);
+  });
   test("reports ready startup status for a registered workspace runtime", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({
@@ -252,6 +299,33 @@ describe("createRuntimeOrchestratorService", () => {
       runtime,
       startedAt: runtime.startedAt,
     });
+  });
+  test("uses keyed repository lookup for runtime startup status", async () => {
+    const runtime = createRuntime();
+    const keyedLookups: unknown[] = [];
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([runtime], {
+        listRuntimes() {
+          return Effect.dieMessage("unexpected full runtime list");
+        },
+        listRuntimesByRepo(input) {
+          keyedLookups.push(input);
+          return Effect.succeed([runtime]);
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(
+        service.runtimeStartupStatus({ runtimeKind: "opencode", repoPath: "/repo" }),
+      ),
+    ).resolves.toMatchObject({
+      stage: "runtime_ready",
+      runtime,
+    });
+    expect(keyedLookups).toEqual([{ repoPath: "/canonical/repo", runtimeKind: "opencode" }]);
   });
   test("reports waiting startup status while runtime ensure is in flight", async () => {
     let resolveEnsure: (runtime: RuntimeInstanceSummary) => void = () => {};
@@ -658,10 +732,35 @@ describe("createRuntimeOrchestratorService", () => {
       Effect.runPromise(service.runtimeList({ runtimeKind: "opencode" })),
     ).resolves.toEqual([]);
   });
+  test("uses runtime id lookup before stopping a registered runtime", async () => {
+    const runtime = createRuntime();
+    const idLookups: string[] = [];
+    const registry = createRegistry([runtime], {
+      findRuntimeById(runtimeId) {
+        idLookups.push(runtimeId);
+        return Effect.succeed(runtime);
+      },
+      listRuntimes() {
+        return Effect.dieMessage("unexpected full runtime list");
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: registry,
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(service.runtimeStop({ runtimeId: runtime.runtimeId })),
+    ).resolves.toEqual({
+      ok: true,
+    });
+    expect(idLookups).toEqual([runtime.runtimeId]);
+  });
   test("stops persisted agent sessions through the matching runtime route", async () => {
     const calls: unknown[] = [];
     const runtime = createRuntime({ workingDirectory: "/canonical/repo/worktree" });
-    const registry = createRegistry([], {
+    const registry = createRegistry([runtime], {
       ensureWorkspaceRuntime() {
         return Effect.tryPromise({
           try: async () => {
@@ -674,9 +773,6 @@ describe("createRuntimeOrchestratorService", () => {
               cause: cause,
             }),
         });
-      },
-      listRuntimes() {
-        return Effect.succeed([runtime]);
       },
       stopRuntime() {
         return Effect.tryPromise({
@@ -703,6 +799,14 @@ describe("createRuntimeOrchestratorService", () => {
               cause: cause,
             }),
         });
+      },
+      probeSessionStatus() {
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.effect",
+            message: "unexpected session probe",
+          }),
+        );
       },
     });
     const service = createRuntimeOrchestratorService({
@@ -740,7 +844,7 @@ describe("createRuntimeOrchestratorService", () => {
       runtimeRoute: { type: "stdio", identity: "runtime-codex-1" },
       descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
     });
-    const registry = createRegistry([], {
+    const registry = createRegistry([runtime], {
       ensureWorkspaceRuntime() {
         return Effect.fail(
           new HostOperationError({
@@ -749,13 +853,18 @@ describe("createRuntimeOrchestratorService", () => {
           }),
         );
       },
-      listRuntimes() {
-        return Effect.succeed([runtime]);
-      },
       stopSession(input) {
         return Effect.sync(() => {
           calls.push(input);
         });
+      },
+      probeSessionStatus() {
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.effect",
+            message: "unexpected session probe",
+          }),
+        );
       },
     });
     const service = createRuntimeOrchestratorService({
@@ -804,5 +913,176 @@ describe("createRuntimeOrchestratorService", () => {
     ).rejects.toThrow(
       "Agent session with externalSessionId external-session-1 runtime kind mismatch",
     );
+  });
+  test("probes candidate session stop routes with bounded concurrency", async () => {
+    type DeferredProbe = {
+      resolve(value: { supported: boolean; hasLiveSession: boolean }): void;
+    };
+    const deferredProbes: DeferredProbe[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const startedRoutes: string[] = [];
+    const completedRoutes: string[] = [];
+    const runtimes = Array.from({ length: 6 }, (_, index) =>
+      createRuntime({
+        runtimeId: `runtime-${index + 1}`,
+        workingDirectory: `/canonical/repo/other-${index + 1}`,
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: `http://127.0.0.1:${4100 + index}`,
+        },
+      }),
+    );
+    const expectedLiveRoute = runtimes[4]?.runtimeRoute;
+    if (!expectedLiveRoute) {
+      throw new Error("Expected a live route candidate for the concurrency test");
+    }
+    const registry = createRegistry(runtimes, {
+      probeSessionStatus(input) {
+        return Effect.tryPromise({
+          try: async () => {
+            const endpoint =
+              input.runtimeRoute.type === "local_http"
+                ? input.runtimeRoute.endpoint
+                : input.runtimeRoute.identity;
+            startedRoutes.push(endpoint);
+            inFlight += 1;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            const probe = await new Promise<{ supported: boolean; hasLiveSession: boolean }>(
+              (resolve) => {
+                deferredProbes.push({ resolve });
+              },
+            );
+            inFlight -= 1;
+            completedRoutes.push(endpoint);
+            return probe;
+          },
+          catch: (cause) =>
+            new HostOperationError({
+              operation: "test.effect",
+              message: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+      },
+      stopSession(input) {
+        return Effect.sync(() => {
+          expect(input.runtimeRoute).toEqual(expectedLiveRoute);
+        });
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: registry,
+      taskReader: createTaskStore(),
+    });
+    const stop = Effect.runPromise(
+      service.agentSessionStop({
+        repoPath: "/repo",
+        taskId: "task-1",
+        externalSessionId: "external-session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/canonical/repo/worktree",
+      }),
+    );
+    await waitForCondition(
+      () => startedRoutes.length >= 4,
+      "Expected first bounded probe batch to start",
+    );
+    expect(startedRoutes).toHaveLength(4);
+    expect(completedRoutes).toHaveLength(0);
+    expect(maxInFlight).toBe(4);
+    deferredProbes.splice(0, 4).forEach((probe) => {
+      probe.resolve({ supported: true, hasLiveSession: false });
+    });
+    await waitForCondition(
+      () => startedRoutes.length >= 6,
+      "Expected remaining probe batch to start",
+    );
+    expect(maxInFlight).toBeLessThanOrEqual(4);
+    deferredProbes.splice(0, 2).forEach((probe, index) => {
+      probe.resolve({ supported: true, hasLiveSession: index === 0 });
+    });
+    await expect(stop).resolves.toEqual({ ok: true });
+    expect(startedRoutes).toHaveLength(6);
+  });
+  test("fails session stop after all probes when multiple repo routes are live", async () => {
+    const probeCalls: string[] = [];
+    const runtimes = [1, 2, 3].map((index) =>
+      createRuntime({
+        runtimeId: `runtime-${index}`,
+        workingDirectory: `/canonical/repo/other-${index}`,
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: `http://127.0.0.1:${4200 + index}`,
+        },
+      }),
+    );
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(runtimes, {
+        probeSessionStatus(input) {
+          return Effect.sync(() => {
+            if (input.runtimeRoute.type === "local_http") {
+              probeCalls.push(input.runtimeRoute.endpoint);
+            }
+            return { supported: true, hasLiveSession: true };
+          });
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(
+        service.agentSessionStop({
+          repoPath: "/repo",
+          taskId: "task-1",
+          externalSessionId: "external-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/canonical/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("Multiple live runtime routes matched externalSessionId external-session-1");
+    expect(probeCalls).toHaveLength(3);
+  });
+  test("propagates session route probe failures instead of treating them as inactive", async () => {
+    const runtimes = [1, 2].map((index) =>
+      createRuntime({
+        runtimeId: `runtime-${index}`,
+        workingDirectory: `/canonical/repo/other-${index}`,
+        runtimeRoute: {
+          type: "local_http" as const,
+          endpoint: `http://127.0.0.1:${4300 + index}`,
+        },
+      }),
+    );
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry(runtimes, {
+        probeSessionStatus() {
+          return Effect.fail(
+            new HostOperationError({
+              operation: "runtimeRegistry.probeSessionStatus",
+              message: "probe transport failed",
+            }),
+          );
+        },
+      }),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(
+        service.agentSessionStop({
+          repoPath: "/repo",
+          taskId: "task-1",
+          externalSessionId: "external-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/canonical/repo/worktree",
+        }),
+      ),
+    ).rejects.toThrow("probe transport failed");
   });
 });

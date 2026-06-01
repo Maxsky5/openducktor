@@ -32,6 +32,8 @@ import {
   validateSessionStopTarget,
 } from "./runtime-orchestrator-model";
 
+const SESSION_STOP_ROUTE_PROBE_CONCURRENCY = 4;
+
 export type {
   RuntimeListInput,
   RuntimeOrchestratorLogger,
@@ -63,9 +65,10 @@ export const createRuntimeOrchestratorService = ({
     session: AgentSessionRecord,
   ) =>
     Effect.gen(function* () {
-      const runtimes = (yield* runtimeRegistry.listRuntimes()).filter(
-        (runtime) => runtime.kind === request.runtimeKind && runtime.repoPath === repoPath,
-      );
+      const runtimes = yield* runtimeRegistry.listRuntimesByRepo({
+        repoPath,
+        runtimeKind: request.runtimeKind,
+      });
       const normalizedWorkingDirectory = normalizePathForComparison(request.workingDirectory);
       const exactRoutes = uniqueRuntimeRoutes(
         runtimes
@@ -100,18 +103,22 @@ export const createRuntimeOrchestratorService = ({
           }),
         );
       }
-      const matchingRoutes: RuntimeRoute[] = [];
-      for (const runtimeRoute of repoRoutes) {
-        const probe = yield* runtimeRegistry.probeSessionStatus({
-          runtimeKind: request.runtimeKind,
-          runtimeRoute,
-          externalSessionId: session.externalSessionId,
-          workingDirectory: request.workingDirectory,
-        });
-        if (probe.supported && probe.hasLiveSession) {
-          matchingRoutes.push(runtimeRoute);
-        }
-      }
+      const probeResults = yield* Effect.forEach(
+        repoRoutes,
+        (runtimeRoute) =>
+          runtimeRegistry
+            .probeSessionStatus({
+              runtimeKind: request.runtimeKind,
+              runtimeRoute,
+              externalSessionId: session.externalSessionId,
+              workingDirectory: request.workingDirectory,
+            })
+            .pipe(Effect.map((probe) => ({ runtimeRoute, probe }))),
+        { concurrency: SESSION_STOP_ROUTE_PROBE_CONCURRENCY },
+      );
+      const matchingRoutes = probeResults
+        .filter(({ probe }) => probe.supported && probe.hasLiveSession)
+        .map(({ runtimeRoute }) => runtimeRoute);
       if (matchingRoutes.length === 1) {
         return matchingRoutes[0] as RuntimeRoute;
       }
@@ -137,7 +144,12 @@ export const createRuntimeOrchestratorService = ({
       const { runtimeKind, repoPath } = input;
       yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = repoPath ? yield* resolveRepoPath(gitPort, repoPath) : undefined;
-      const runtimes = yield* runtimeRegistry.listRuntimes();
+      const runtimes = canonicalRepoPath
+        ? yield* runtimeRegistry.listRuntimesByRepo({
+            repoPath: canonicalRepoPath,
+            runtimeKind,
+          })
+        : yield* runtimeRegistry.listRuntimes();
       return runtimes
         .filter((runtime) => runtime.kind === runtimeKind)
         .filter((runtime) => !canonicalRepoPath || runtime.repoPath === canonicalRepoPath)
@@ -149,7 +161,10 @@ export const createRuntimeOrchestratorService = ({
       yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
       const runtime = findWorkspaceRuntime(
-        yield* runtimeRegistry.listRuntimes(),
+        yield* runtimeRegistry.listRuntimesByRepo({
+          repoPath: canonicalRepoPath,
+          runtimeKind,
+        }),
         runtimeKind,
         canonicalRepoPath,
       );
@@ -242,9 +257,7 @@ export const createRuntimeOrchestratorService = ({
     runtimeStop(input) {
       return Effect.gen(function* () {
         const { runtimeId } = input;
-        const runtime = (yield* runtimeRegistry.listRuntimes()).find(
-          (entry) => entry.runtimeId === runtimeId,
-        );
+        const runtime = yield* runtimeRegistry.findRuntimeById(runtimeId);
         const ok = yield* runtimeRegistry.stopRuntime(runtimeId);
         if (runtime) {
           runtimeStartupStatuses.delete(startupStatusKey(runtime.kind, runtime.repoPath));

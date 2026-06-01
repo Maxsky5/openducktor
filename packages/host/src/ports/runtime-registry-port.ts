@@ -65,7 +65,12 @@ export type RuntimeRegistryPort = {
   ensureWorkspaceRuntime(
     input: RuntimeEnsureWorkspaceInput,
   ): Effect.Effect<RuntimeInstanceSummary, RuntimeRegistryError>;
+  findRuntimeById(runtimeId: string): Effect.Effect<RuntimeInstanceSummary | null, never>;
   listRuntimes(): Effect.Effect<RuntimeInstanceSummary[], never>;
+  listRuntimesByRepo(input: {
+    repoPath: string;
+    runtimeKind?: string;
+  }): Effect.Effect<RuntimeInstanceSummary[], never>;
   stopRuntime(runtimeId: string): Effect.Effect<boolean, HostOperationError | HostResourceError>;
   stopAllRuntimes(): Effect.Effect<
     RuntimeInstanceSummary[],
