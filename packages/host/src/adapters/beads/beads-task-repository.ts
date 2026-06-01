@@ -1,9 +1,4 @@
-import { Cause, Clock, Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
-import {
-  defaultRunBd,
-  defaultRunBdJson,
-} from "../../infrastructure/beads/task-store/beads-command-runner";
+import { Clock, Effect } from "effect";
 import { diagnoseRepoStoreWithBd } from "../../infrastructure/beads/task-store/beads-documents";
 import {
   clearAgentSessionsByRolesWithBd,
@@ -18,7 +13,6 @@ import {
 import type {
   BeadsTaskRepository,
   CreateBeadsTaskRepositoryInput,
-  ResolveBeadsCliContext,
 } from "../../infrastructure/beads/task-store/beads-raw-issue";
 import {
   createTaskWithBd,
@@ -30,22 +24,10 @@ import {
   transitionTaskWithBd,
   updateTaskWithBd,
 } from "../../infrastructure/beads/task-store/beads-task-commands";
-import type { TaskStoreError } from "../../ports/task-repository-ports";
-import {
-  type BeadsCliContext,
-  resolveBeadsCliContext,
-  stopOwnedSharedDoltServer,
-} from "./beads-cli-context";
-import {
-  awaitBeadsCliContextFlight,
-  type BeadsCliContextFlight,
-  makeBeadsCliContextFlight,
-  resolveBeadsCliContextFlight,
-} from "./beads-cli-context-flight";
-import { createBeadsCliContextRequestResolver } from "./beads-cli-context-request";
+import { createBdCommandProvider } from "./bd-command-provider";
+import { createBeadsCliContextManager } from "./beads-cli-context-manager";
 import { cloneTasks, createTaskListCache } from "./beads-task-list-cache";
 import { mapTaskStoreErrors } from "./beads-task-store-errors";
-import { createBeadsToolPathResolver, createSharedDoltToolPathResolver } from "./beads-tool-paths";
 
 export type { BeadsTaskRepository } from "../../infrastructure/beads/task-store/beads-raw-issue";
 
@@ -54,157 +36,27 @@ export const createBeadsTaskRepository = ({
   processEnv = process.env,
   runBd,
   runBdJson,
-  resolveCliContext = resolveBeadsCliContext,
+  resolveCliContext,
   resolveWorkspaceIdForRepoPath,
-  stopSharedDoltServer = stopOwnedSharedDoltServer,
+  stopSharedDoltServer,
   toolDiscovery,
 }: CreateBeadsTaskRepositoryInput): BeadsTaskRepository => {
-  const ownedSharedDoltServers = new Map<string, BeadsCliContext["sharedServer"]>();
-  const cliContextFlights = new Set<BeadsCliContextFlight>();
-  const readyCliContexts = new Map<string, BeadsCliContextFlight>();
   const taskListCache = createTaskListCache();
-  let closing = false;
-  const resolveBeadsToolPaths = createBeadsToolPathResolver(toolDiscovery);
-  const resolveSharedDoltToolPaths = createSharedDoltToolPathResolver(toolDiscovery);
-  const resolveContextRequest = createBeadsCliContextRequestResolver({
-    isClosing: () => closing,
+  const cliContextManager = createBeadsCliContextManager({
     processEnv,
-    resolveBeadsToolPaths,
-    resolveSharedDoltToolPaths,
+    toolDiscovery,
+    ...(resolveCliContext === undefined ? {} : { resolveCliContext }),
+    ...(stopSharedDoltServer === undefined ? {} : { stopSharedDoltServer }),
     ...(resolveWorkspaceIdForRepoPath === undefined ? {} : { resolveWorkspaceIdForRepoPath }),
   });
-  const trackOwnedSharedServer = (context: BeadsCliContext): BeadsCliContext => {
-    if (context.sharedServer?.ownerPid === process.pid) {
-      ownedSharedDoltServers.set(context.serverStatePath, context.sharedServer);
-    }
-    return context;
-  };
-  const trackCliContextResolution = (
-    contextEffect: Effect.Effect<BeadsCliContext, TaskStoreError>,
-  ): Effect.Effect<BeadsCliContext, TaskStoreError> =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
-        const flight = yield* Effect.sync(() => {
-          const nextFlight = makeBeadsCliContextFlight();
-          cliContextFlights.add(nextFlight);
-          return nextFlight;
-        });
-        yield* Effect.forkDaemon(
-          resolveBeadsCliContextFlight({
-            flight,
-            releaseReservation: Effect.sync(() => cliContextFlights.delete(flight)),
-            rememberOwnedContext: trackOwnedSharedServer,
-            resolveContext: contextEffect,
-          }),
-        );
-        return yield* restore(awaitBeadsCliContextFlight(flight));
-      }),
-    );
-  const resolveEffectiveCliContext: ResolveBeadsCliContext = (repoPath, options = {}) =>
-    Effect.gen(function* () {
-      const request = yield* resolveContextRequest(repoPath, options);
-      if (request.options.requireSharedServer !== true) {
-        return yield* trackCliContextResolution(
-          resolveCliContext(request.repoPath, request.options),
-        );
-      }
-      const sharedServerOptions = request.options;
-      return yield* Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const reservation = yield* Effect.sync(() => {
-            const cached = readyCliContexts.get(request.cacheKey);
-            if (cached) {
-              return { _tag: "existing" as const, flight: cached };
-            }
-            const flight = makeBeadsCliContextFlight();
-            cliContextFlights.add(flight);
-            readyCliContexts.set(request.cacheKey, flight);
-            return { _tag: "created" as const, flight };
-          });
-          if (reservation._tag === "existing") {
-            return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
-          }
-          yield* Effect.forkDaemon(
-            resolveBeadsCliContextFlight({
-              evictCachedContext: Effect.sync(() => {
-                if (readyCliContexts.get(request.cacheKey) === reservation.flight) {
-                  readyCliContexts.delete(request.cacheKey);
-                }
-              }),
-              flight: reservation.flight,
-              releaseReservation: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
-              rememberOwnedContext: trackOwnedSharedServer,
-              resolveContext: resolveCliContext(request.repoPath, sharedServerOptions),
-            }),
-          );
-          return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
-        }),
-      );
-    }).pipe(
-      Effect.mapError((cause) =>
-        toHostOperationError(cause, "beadsTaskRepository.resolveEffectiveCliContext", {
-          repoPath,
-          requireSharedServer: options.requireSharedServer === true,
-        }),
-      ),
-    );
-  const effectiveRunBd = runBd ?? defaultRunBd(resolveEffectiveCliContext);
-  const effectiveRunBdJson = runBdJson ?? defaultRunBdJson(resolveEffectiveCliContext);
-  const runBdJsonForRepo = (repoPath: string) =>
-    Effect.gen(function* () {
-      if (runBdJson) {
-        return effectiveRunBdJson;
-      }
-      const context = yield* resolveEffectiveCliContext(repoPath, { requireSharedServer: true });
-      return (commandRepoPath: string, args: string[]) =>
-        effectiveRunBdJson(commandRepoPath, args, context);
-    });
-  const runBdForRepo = (repoPath: string) =>
-    Effect.gen(function* () {
-      if (runBd) {
-        return effectiveRunBd;
-      }
-      const context = yield* resolveEffectiveCliContext(repoPath, { requireSharedServer: true });
-      return (commandRepoPath: string, args: string[]) =>
-        effectiveRunBd(commandRepoPath, args, context);
-    });
+  const commandProvider = createBdCommandProvider({
+    resolveCliContext: cliContextManager.resolveCliContext,
+    ...(runBd === undefined ? {} : { runBd }),
+    ...(runBdJson === undefined ? {} : { runBdJson }),
+  });
   const repository: BeadsTaskRepository = {
     close() {
-      return Effect.gen(function* () {
-        closing = true;
-        yield* Effect.forEach(
-          [...cliContextFlights],
-          (flight) => Effect.either(awaitBeadsCliContextFlight(flight)),
-          { concurrency: "unbounded" },
-        );
-        const errors: string[] = [];
-        let stoppedSharedDoltServers = 0;
-        for (const [serverStatePath, sharedServer] of ownedSharedDoltServers) {
-          if (!sharedServer) {
-            continue;
-          }
-          const stopResult = yield* Effect.exit(
-            stopSharedDoltServer(sharedServer, serverStatePath),
-          );
-          if (stopResult._tag === "Success") {
-            stoppedSharedDoltServers += 1;
-            ownedSharedDoltServers.delete(serverStatePath);
-          } else {
-            const message = Cause.pretty(stopResult.cause);
-            errors.push(`Failed stopping shared Dolt server ${sharedServer.pid}: ${message}`);
-          }
-        }
-        if (errors.length > 0) {
-          return yield* Effect.fail(
-            new HostOperationError({
-              operation: "beadsTaskRepository.close",
-              message: errors.join("\n"),
-              details: { failures: errors },
-            }),
-          );
-        }
-        return { stoppedSharedDoltServers };
-      });
+      return cliContextManager.close();
     },
     listTasks({ repoPath, doneVisibleDays }) {
       return Effect.gen(function* () {
@@ -217,7 +69,7 @@ export const createBeadsTaskRepository = ({
         if (cached.tasks) {
           return cached.tasks;
         }
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const tasks = yield* listTasksWithBd(runBdJsonForOperation, now, repoPath, doneVisibleDays);
         taskListCache.cacheTaskListIfGeneration(
           repoPath,
@@ -231,35 +83,35 @@ export const createBeadsTaskRepository = ({
     },
     getTask({ repoPath, taskId }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         return yield* getTaskWithBd(runBdJsonForOperation, repoPath, taskId);
       });
     },
     getTaskMetadata({ repoPath, taskId }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         return yield* getTaskMetadataWithBd(runBdJsonForOperation, repoPath, taskId);
       });
     },
     diagnoseRepoStore({ repoPath, prepare = false }) {
       return Effect.gen(function* () {
         return yield* diagnoseRepoStoreWithBd(
-          effectiveRunBdJson,
+          commandProvider.runBdJson,
           repoPath,
-          resolveEffectiveCliContext,
+          commandProvider.resolveCliContext,
           prepare,
         );
       });
     },
     listPullRequestSyncCandidates({ repoPath }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         return yield* listPullRequestSyncCandidatesWithBd(runBdJsonForOperation, now, repoPath);
       });
     },
     setSpecDocument({ repoPath, taskId, markdown }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const document = yield* writeDocumentWithBd(
           runBdJsonForOperation,
           now,
@@ -274,7 +126,7 @@ export const createBeadsTaskRepository = ({
     },
     setPlanDocument({ repoPath, taskId, markdown }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const document = yield* writeDocumentWithBd(
           runBdJsonForOperation,
           now,
@@ -289,7 +141,7 @@ export const createBeadsTaskRepository = ({
     },
     recordQaOutcome({ repoPath, taskId, status, markdown, verdict }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const task = yield* recordQaOutcomeWithBd(
           runBdJsonForOperation,
           now,
@@ -305,7 +157,7 @@ export const createBeadsTaskRepository = ({
     },
     upsertAgentSession({ repoPath, taskId, session }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* upsertAgentSessionWithBd(
           runBdJsonForOperation,
           repoPath,
@@ -318,7 +170,7 @@ export const createBeadsTaskRepository = ({
     },
     setPullRequest({ repoPath, taskId, pullRequest }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* setPullRequestWithBd(
           runBdJsonForOperation,
           repoPath,
@@ -331,7 +183,7 @@ export const createBeadsTaskRepository = ({
     },
     setDirectMerge({ repoPath, taskId, directMerge }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* setDirectMergeWithBd(
           runBdJsonForOperation,
           repoPath,
@@ -344,7 +196,7 @@ export const createBeadsTaskRepository = ({
     },
     clearAgentSessionsByRoles({ repoPath, taskId, roles }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* clearAgentSessionsByRolesWithBd(
           runBdJsonForOperation,
           repoPath,
@@ -357,7 +209,7 @@ export const createBeadsTaskRepository = ({
     },
     clearWorkflowDocuments({ repoPath, taskId }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* clearWorkflowDocumentsWithBd(
           runBdJsonForOperation,
           repoPath,
@@ -369,7 +221,7 @@ export const createBeadsTaskRepository = ({
     },
     clearQaReports({ repoPath, taskId }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* clearQaReportsWithBd(runBdJsonForOperation, repoPath, taskId);
         taskListCache.invalidateTaskListCache(repoPath);
         return updated;
@@ -377,7 +229,7 @@ export const createBeadsTaskRepository = ({
     },
     createTask({ repoPath, task }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const created = yield* createTaskWithBd(runBdJsonForOperation, repoPath, task);
         taskListCache.invalidateTaskListCache(repoPath);
         return created;
@@ -385,7 +237,7 @@ export const createBeadsTaskRepository = ({
     },
     updateTask({ repoPath, taskId, patch }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* updateTaskWithBd(runBdJsonForOperation, repoPath, taskId, patch);
         taskListCache.invalidateTaskListCache(repoPath);
         return updated;
@@ -393,7 +245,7 @@ export const createBeadsTaskRepository = ({
     },
     transitionTask({ repoPath, taskId, status }) {
       return Effect.gen(function* () {
-        const runBdJsonForOperation = yield* runBdJsonForRepo(repoPath);
+        const runBdJsonForOperation = yield* commandProvider.runBdJsonForRepo(repoPath);
         const updated = yield* transitionTaskWithBd(
           runBdJsonForOperation,
           repoPath,
@@ -406,7 +258,7 @@ export const createBeadsTaskRepository = ({
     },
     deleteTask({ repoPath, taskId, deleteSubtasks }) {
       return Effect.gen(function* () {
-        const runBdForOperation = yield* runBdForRepo(repoPath);
+        const runBdForOperation = yield* commandProvider.runBdForRepo(repoPath);
         const deleted = yield* deleteTaskWithBd(
           runBdForOperation,
           repoPath,
