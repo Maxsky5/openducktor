@@ -792,6 +792,7 @@ export const startTypescriptHostBackend = (
   options: TypescriptHostBackendOptions,
 ): Promise<TypescriptHostBackend> => Effect.runPromise(startTypescriptHostBackendEffect(options));
 
+/** @internal Test-only seams for backend lifecycle coverage. */
 export const __typescriptHostBackendTestInternals = {
   BufferedHostEventBus,
   stopTypescriptHostBackendServices,

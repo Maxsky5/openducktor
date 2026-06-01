@@ -125,5 +125,6 @@ export const toPromiseHostCommandRouter = (router: EffectHostCommandRouter): Hos
   },
 });
 
+/** @internal Test-only low-level router seam; production uses node router composition. */
 export const createHostCommandRouter = (input: CreateHostCommandRouterInput): HostCommandRouter =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));

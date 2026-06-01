@@ -88,6 +88,7 @@ const claimDiscoveryForRemoval = (discoveryPath: string): Effect.Effect<string |
   );
 };
 
+/** @internal Test-only seam for discovery file parsing. */
 export const readMcpBridgeDiscoveryFile = (
   discoveryPath: string,
 ): Effect.Effect<McpBridgeDiscoveryFile | null, unknown> =>

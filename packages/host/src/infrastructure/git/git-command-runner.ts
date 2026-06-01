@@ -238,16 +238,6 @@ export const createDefaultGitRunner = (
       );
     });
 };
-export const requireNonEmpty = (value: string, label: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new HostValidationError({
-      message: `git ${label} cannot be empty`,
-      field: label,
-    });
-  }
-  return trimmed;
-};
 export const requireNonEmptyEffect = (
   value: string,
   label: string,

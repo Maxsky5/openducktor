@@ -48,14 +48,6 @@ export const optionalNonNegativeInteger = (value: unknown, label: string): numbe
   return value;
 };
 
-export const requirePositiveInteger = (value: unknown, label: string): number => {
-  if (!Number.isInteger(value) || typeof value !== "number" || value <= 0) {
-    throw invalidInput(`${label} must be a positive integer.`, label);
-  }
-
-  return value;
-};
-
 export const parseCreateInput = (value: unknown): TaskCreateInput => {
   const parsed = taskCreateInputSchema.safeParse(value);
   if (parsed.success) {

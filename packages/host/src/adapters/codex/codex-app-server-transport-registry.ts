@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import {
   HostInvariantError,
   HostResourceError,
@@ -11,7 +11,6 @@ import type {
   CodexAppServerRequestResult,
   CodexAppServerRespondInput,
 } from "../../ports/codex-app-server-port";
-import { CodexAppServerPortTag } from "../../ports/codex-app-server-port";
 import type { CodexAppServerClientRequest } from "../../ports/codex-app-server-protocol";
 import {
   parseLoadedThreadListResponse,
@@ -146,8 +145,3 @@ export const createCodexAppServerTransportRegistry = (): CodexAppServerTransport
     },
   };
 };
-
-export const CodexAppServerPortLive = Layer.sync(
-  CodexAppServerPortTag,
-  createCodexAppServerTransportRegistry,
-);

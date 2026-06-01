@@ -1,13 +1,9 @@
 import { access, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
-import {
-  type FilesystemDirectoryEntry,
-  type FilesystemPort,
-  FilesystemPortTag,
-} from "../../ports/filesystem-port";
+import type { FilesystemDirectoryEntry, FilesystemPort } from "../../ports/filesystem-port";
 
 export const createFilesystemAdapter = (): FilesystemPort => ({
   homeDirectory() {
@@ -69,5 +65,3 @@ export const createFilesystemAdapter = (): FilesystemPort => ({
     return parentPath === inputPath ? null : parentPath;
   },
 });
-
-export const FilesystemPortLive = Layer.succeed(FilesystemPortTag, createFilesystemAdapter());

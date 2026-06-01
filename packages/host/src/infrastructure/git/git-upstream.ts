@@ -24,8 +24,6 @@ const gitResourceError = (
   resource: string,
 ): HostResourceError => new HostResourceError({ message, operation, resource });
 export const upstreamTargetBranch = "@{upstream}";
-export const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-export const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
 export const rebaseConflictOutputUnavailable =
   "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
 export const rebaseConflictTargetUnavailable = "current rebase target";

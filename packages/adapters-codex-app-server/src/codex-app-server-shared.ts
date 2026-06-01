@@ -214,14 +214,6 @@ export const searchInputFromCommand = (command: string): Record<string, unknown>
   return input;
 };
 
-export const patchTextFromUnknown = (value: unknown): string | null => {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.startsWith("*** Begin Patch") || trimmed.includes("\n@@") ? value : null;
-};
-
 export const codexNamespacedToolName = (namespace: string | null, tool: string): string => {
   return namespace ? `${namespace}.${tool}` : tool;
 };

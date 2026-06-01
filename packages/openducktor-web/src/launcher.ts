@@ -257,6 +257,7 @@ const keepProcessAliveDuring = async <T>(
   }
 };
 
+/** @internal Test-only seams for launcher lifecycle coverage. */
 export const __launcherTestInternals = {
   buildFrontendDisplayUrls,
   buildBrowserRuntimeConfigJson,

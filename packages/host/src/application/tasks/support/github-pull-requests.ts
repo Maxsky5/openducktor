@@ -270,11 +270,6 @@ const probeResolvedGithubAuthOrThrow = (
       }),
     );
   });
-export const probeGithubAuthOrThrow = (dependencies: GithubCommandDependencies, host: string) =>
-  Effect.gen(function* () {
-    const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
-    yield* probeResolvedGithubAuthOrThrow(githubCommand, host);
-  });
 export const requireGithubPullRequestContext = (
   dependencies: GithubRepositoryDependencies,
   repoPath: string,

@@ -10,7 +10,6 @@ import type {
   MarkdownDocumentInput,
   OptionalNoteInput,
   PullRequestLinkMergedInput,
-  PullRequestNumberInput,
   PullRequestUpsertInput,
   RepoPathInput,
   SetPlanInput,
@@ -34,7 +33,6 @@ import {
   parseTaskIdList,
   parseTransitionStatus,
   parseUpdatePatch,
-  requirePositiveInteger,
   requireRecord,
   requireString,
 } from "./task-command-parsing";
@@ -75,19 +73,6 @@ export const parseAgentSessionUpsertInput = (input: unknown): AgentSessionUpsert
     repoPath: requireString(record.repoPath, "repoPath"),
     taskId: requireString(record.taskId, "taskId"),
     session: compactAgentSessionForStorage(parseAgentSessionRecord(record.session)),
-  };
-};
-
-export const parsePullRequestNumberInput = (
-  input: unknown,
-  label: string,
-): PullRequestNumberInput => {
-  const record = requireRecord(input, label);
-  return {
-    repoPath: requireString(record.repoPath, "repoPath"),
-    taskId: requireString(record.taskId, "taskId"),
-    providerId: requireString(record.providerId, "providerId"),
-    number: requirePositiveInteger(record.number, "number"),
   };
 };
 

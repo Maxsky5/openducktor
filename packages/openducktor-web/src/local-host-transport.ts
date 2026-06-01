@@ -56,6 +56,7 @@ const readLocalHostErrorPayload = async (
   };
 };
 
+/** @internal Test-only seam for backend error body parsing. */
 export const readLocalHostErrorMessage = async (response: Response): Promise<string> => {
   const { message } = await readLocalHostErrorPayload(response);
   return message;
@@ -251,6 +252,7 @@ export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: 
   return `${baseUrl}/local-attachment-preview?${query.toString()}`;
 };
 
+/** @internal Test-only seams for local host transport session state. */
 export const __localHostTransportTestInternals = {
   resetSession() {
     sessionPromise = null;

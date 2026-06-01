@@ -311,6 +311,7 @@ export const sendUserMessage = async (input: {
   }
 };
 
+/** @internal Test-only seams for message execution request shaping. */
 export const __testExports = {
   toSlashCommandExecutionRequest,
 };

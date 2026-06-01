@@ -1,8 +1,4 @@
-import type {
-  CodexCanonicalEvent,
-  CodexMappingContext,
-  CodexMappingResult,
-} from "./codex-canonical-events";
+import type { CodexMappingContext, CodexMappingResult } from "./codex-canonical-events";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
 
 export type CodexLiveInput =
@@ -35,6 +31,3 @@ export interface CodexEventMapper<State extends CodexMapperState = undefined> {
 export type RegisteredCodexEventMapper = CodexEventMapper<CodexMapperState>;
 
 export const noCodexMapperState = (): undefined => undefined;
-
-export const mergeCodexMappingEvents = (results: CodexMappingResult[]): CodexCanonicalEvent[] =>
-  results.flatMap((result) => result.events);

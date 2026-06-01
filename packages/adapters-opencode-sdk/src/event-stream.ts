@@ -255,6 +255,7 @@ export const isRelevantSubscriberEvent = (
   return isEventDirectoryScopedToSubscriber(subscriber, event);
 };
 
+/** @internal Test-only seam for direct event stream subscription coverage. */
 export const subscribeOpencodeEvents = async (
   input: SubscribeOpencodeEventsInput,
 ): Promise<void> => {

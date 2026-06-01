@@ -57,6 +57,8 @@ Implementation notes:
 - Report-only implementation: `bunx knip --workspace='@openducktor/*' --include exports --no-exit-code`
 - Use the report-only command only for artifact generation where the workflow needs to publish findings even when unused exports exist. Do not use it for blocking local or CI gates.
 - Intentional public entry points or generated files should be excluded in Knip configuration with a short rationale next to the exclusion.
+- Test-only or otherwise internal exported seams must be marked with `@internal`; the export check ignores that tag so untagged unused exports remain blocking.
+- Exports already used inside their own source file are not treated as dead implementation. Remove the `export` keyword when the symbol does not need to be imported by another module.
 
 ## 4) Outdated Dependency Review
 

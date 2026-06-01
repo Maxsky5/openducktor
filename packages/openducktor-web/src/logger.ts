@@ -104,5 +104,4 @@ export const logSuccess = (message: string): void => {
   const line = `${DIM}${timestamp()}${RESET}  ${colorLevel("INFO")} ${colorSuccessMessage(message)}`;
   console.log(line);
 };
-export const logWarn = (message: string): void => writeLog("WARN", message, ORANGE);
 export const logError = (message: string): void => writeLog("ERROR", message, RED);
