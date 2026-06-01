@@ -53,6 +53,46 @@ const queueSubagentInputEvent = (runtime: EventStreamRuntime, event: PendingInpu
   runtime.pendingSubagentInputEventsByExternalSessionId.set(childExternalSessionId, next);
 };
 
+const bindChildSessionFromPendingInputEvent = (
+  runtime: EventStreamRuntime,
+  childExternalSessionId: string,
+  parentExternalSessionId: string | undefined,
+): string | undefined => {
+  if (
+    parentExternalSessionId !== runtime.externalSessionId ||
+    childExternalSessionId === runtime.externalSessionId
+  ) {
+    return undefined;
+  }
+
+  const existingCorrelationKey =
+    runtime.subagentCorrelationKeyByExternalSessionId.get(childExternalSessionId);
+  if (existingCorrelationKey) {
+    return existingCorrelationKey;
+  }
+
+  if (runtime.pendingSubagentCorrelationKeys.length !== 1) {
+    return undefined;
+  }
+
+  const [correlationKey] = runtime.pendingSubagentCorrelationKeys;
+  if (!correlationKey) {
+    return undefined;
+  }
+
+  bindSubagentExternalSession(
+    runtime,
+    childExternalSessionId,
+    correlationKey,
+    runtime.subagentPartIdByCorrelationKey.get(correlationKey),
+  );
+  runtime.pendingSubagentSessionsByExternalSessionId.delete(childExternalSessionId);
+  removePendingSubagentCorrelationKey(runtime, correlationKey);
+  emitSubagentPartsForSession(runtime, childExternalSessionId);
+  flushPendingSubagentInputEventsForSession(runtime, childExternalSessionId);
+  return correlationKey;
+};
+
 const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.status") {
     return false;
@@ -111,6 +151,9 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
   const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
+  const subagentCorrelationKey =
+    subagentLink?.subagentCorrelationKey ??
+    bindChildSessionFromPendingInputEvent(runtime, childExternalSessionId, parentExternalSessionId);
   const permissionEvent: Extract<AgentEvent, { type: "approval_required" }> = {
     type: "approval_required",
     externalSessionId: runtime.externalSessionId,
@@ -118,9 +161,9 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
     ...toAgentApprovalRequestFromOpenCodePermission(parsed),
     childExternalSessionId,
     ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
-    ...(subagentLink
+    ...(subagentCorrelationKey
       ? {
-          subagentCorrelationKey: subagentLink.subagentCorrelationKey,
+          subagentCorrelationKey,
         }
       : {}),
   };
@@ -146,6 +189,9 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
+  const subagentCorrelationKey =
+    subagentLink?.subagentCorrelationKey ??
+    bindChildSessionFromPendingInputEvent(runtime, childExternalSessionId, parentExternalSessionId);
   const questionEvent: Extract<AgentEvent, { type: "question_required" }> = {
     type: "question_required",
     externalSessionId: runtime.externalSessionId,
@@ -153,9 +199,9 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
     requestId: parsed.requestId,
     childExternalSessionId,
     ...(parentExternalSessionId ? { parentExternalSessionId } : {}),
-    ...(subagentLink
+    ...(subagentCorrelationKey
       ? {
-          subagentCorrelationKey: subagentLink.subagentCorrelationKey,
+          subagentCorrelationKey,
         }
       : {}),
     questions: parsed.questions.map((question) => ({

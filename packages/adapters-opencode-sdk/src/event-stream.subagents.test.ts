@@ -65,6 +65,24 @@ const makeChildSessionCreatedEvent = (input: {
     },
   }) as unknown as Event;
 
+const makeChildPermissionAskedEvent = (input: {
+  childSessionId: string;
+  parentExternalSessionId?: string;
+  requestId?: string;
+}): Event =>
+  ({
+    type: "permission.asked",
+    properties: {
+      sessionID: input.childSessionId,
+      info: {
+        parentID: input.parentExternalSessionId ?? "external-session-1",
+      },
+      id: input.requestId ?? "permission-child-1",
+      permission: "read",
+      patterns: ["omp.json"],
+    },
+  }) as unknown as Event;
+
 const makeSubagentToolPartUpdatedEvent = (input: {
   messageId: string;
   partId: string;
@@ -362,6 +380,46 @@ describe("event-stream subagent correlation", () => {
     expect(
       sessionRecord.subagentPartIdByCorrelationKey.get(
         "part:assistant-subagent-session-created:subtask-a",
+      ),
+    ).toBe("subtask-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
+      "subtask-a",
+    );
+  });
+
+  test("binds child permission events to the running subagent card when no session-created event arrives", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-permission"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-permission",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+      makeChildPermissionAskedEvent({ childSessionId: "external-child-session" }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      "external-child-session",
+    ]);
+    expect(subagentParts.map((part) => part.correlationKey)).toEqual([
+      "part:assistant-subagent-permission:subtask-a",
+      "part:assistant-subagent-permission:subtask-a",
+    ]);
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(1);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-permission:subtask-a",
+    });
+    expect(
+      sessionRecord.subagentPartIdByCorrelationKey.get(
+        "part:assistant-subagent-permission:subtask-a",
       ),
     ).toBe("subtask-a");
     expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(

@@ -2205,7 +2205,7 @@ describe("event-stream", () => {
     expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
   });
 
-  test("re-emits unresolved child question events after subagent correlation binds", async () => {
+  test("correlates child question events immediately when a pending subagent key exists", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2245,14 +2245,8 @@ describe("event-stream", () => {
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(2);
+    expect(questionEvents).toHaveLength(1);
     expect(questionEvents[0]).toMatchObject({
-      requestId: "question-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-    });
-    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
-    expect(questionEvents[1]).toMatchObject({
       requestId: "question-child-1",
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
@@ -2260,7 +2254,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("re-emits unresolved child question events when message parts bind the child session", async () => {
+  test("correlates child question events with the running subagent card before completion arrives", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-question-bind"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -2313,14 +2307,22 @@ describe("event-stream", () => {
     ]);
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(2);
-    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
-    expect(questionEvents[1]).toMatchObject({
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
       requestId: "question-child-1",
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-subagent-question-bind:subtask-a",
     });
+
+    const subagentParts = emitted.flatMap((event) =>
+      event.type === "assistant_part" && event.part.kind === "subagent" ? [event.part] : [],
+    );
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      "external-child-session",
+      "external-child-session",
+    ]);
   });
 
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
