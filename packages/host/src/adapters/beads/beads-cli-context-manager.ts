@@ -36,6 +36,59 @@ export type BeadsCliContextManager = {
   resolveCliContext: ResolveBeadsCliContext;
 };
 
+type BeadsCliContextFlightReservation =
+  | { _tag: "existing"; flight: BeadsCliContextFlight }
+  | { _tag: "created"; flight: BeadsCliContextFlight };
+
+const createTrackedCliContextFlight = (
+  cliContextFlights: Set<BeadsCliContextFlight>,
+): BeadsCliContextFlight => {
+  const flight = makeBeadsCliContextFlight();
+  cliContextFlights.add(flight);
+  return flight;
+};
+
+const reserveReadyCliContextFlight = ({
+  cacheKey,
+  cliContextFlights,
+  readyCliContexts,
+}: {
+  cacheKey: string;
+  cliContextFlights: Set<BeadsCliContextFlight>;
+  readyCliContexts: Map<string, BeadsCliContextFlight>;
+}): BeadsCliContextFlightReservation => {
+  const cached = readyCliContexts.get(cacheKey);
+  if (cached) {
+    return { _tag: "existing", flight: cached };
+  }
+  const flight = createTrackedCliContextFlight(cliContextFlights);
+  readyCliContexts.set(cacheKey, flight);
+  return { _tag: "created", flight };
+};
+
+const forkCliContextFlightResolution = ({
+  cliContextFlights,
+  evictCachedContext,
+  flight,
+  rememberOwnedContext,
+  resolveContext,
+}: {
+  cliContextFlights: Set<BeadsCliContextFlight>;
+  evictCachedContext?: Effect.Effect<void>;
+  flight: BeadsCliContextFlight;
+  rememberOwnedContext: (context: BeadsCliContext) => BeadsCliContext;
+  resolveContext: Effect.Effect<BeadsCliContext, TaskStoreError>;
+}): Effect.Effect<void> =>
+  Effect.forkDaemon(
+    resolveBeadsCliContextFlight({
+      ...(evictCachedContext === undefined ? {} : { evictCachedContext }),
+      flight,
+      releaseReservation: Effect.sync(() => cliContextFlights.delete(flight)),
+      rememberOwnedContext,
+      resolveContext,
+    }),
+  ).pipe(Effect.asVoid);
+
 export const createBeadsCliContextManager = ({
   processEnv = process.env,
   resolveCliContext = resolveBeadsCliContext,
@@ -67,19 +120,13 @@ export const createBeadsCliContextManager = ({
   ): Effect.Effect<BeadsCliContext, TaskStoreError> =>
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const flight = yield* Effect.sync(() => {
-          const nextFlight = makeBeadsCliContextFlight();
-          cliContextFlights.add(nextFlight);
-          return nextFlight;
+        const flight = yield* Effect.sync(() => createTrackedCliContextFlight(cliContextFlights));
+        yield* forkCliContextFlightResolution({
+          cliContextFlights,
+          flight,
+          rememberOwnedContext,
+          resolveContext: contextEffect,
         });
-        yield* Effect.forkDaemon(
-          resolveBeadsCliContextFlight({
-            flight,
-            releaseReservation: Effect.sync(() => cliContextFlights.delete(flight)),
-            rememberOwnedContext,
-            resolveContext: contextEffect,
-          }),
-        );
         return yield* restore(awaitBeadsCliContextFlight(flight));
       }),
     );
@@ -94,32 +141,27 @@ export const createBeadsCliContextManager = ({
       const sharedServerOptions = request.options;
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const reservation = yield* Effect.sync(() => {
-            const cached = readyCliContexts.get(request.cacheKey);
-            if (cached) {
-              return { _tag: "existing" as const, flight: cached };
-            }
-            const flight = makeBeadsCliContextFlight();
-            cliContextFlights.add(flight);
-            readyCliContexts.set(request.cacheKey, flight);
-            return { _tag: "created" as const, flight };
-          });
+          const reservation = yield* Effect.sync(() =>
+            reserveReadyCliContextFlight({
+              cacheKey: request.cacheKey,
+              cliContextFlights,
+              readyCliContexts,
+            }),
+          );
           if (reservation._tag === "existing") {
             return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
           }
-          yield* Effect.forkDaemon(
-            resolveBeadsCliContextFlight({
-              evictCachedContext: Effect.sync(() => {
-                if (readyCliContexts.get(request.cacheKey) === reservation.flight) {
-                  readyCliContexts.delete(request.cacheKey);
-                }
-              }),
-              flight: reservation.flight,
-              releaseReservation: Effect.sync(() => cliContextFlights.delete(reservation.flight)),
-              rememberOwnedContext,
-              resolveContext: resolveCliContext(request.repoPath, sharedServerOptions),
+          yield* forkCliContextFlightResolution({
+            cliContextFlights,
+            evictCachedContext: Effect.sync(() => {
+              if (readyCliContexts.get(request.cacheKey) === reservation.flight) {
+                readyCliContexts.delete(request.cacheKey);
+              }
             }),
-          );
+            flight: reservation.flight,
+            rememberOwnedContext,
+            resolveContext: resolveCliContext(request.repoPath, sharedServerOptions),
+          });
           return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
         }),
       );
