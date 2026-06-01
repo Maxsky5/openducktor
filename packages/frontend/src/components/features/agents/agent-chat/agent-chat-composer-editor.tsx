@@ -3,7 +3,7 @@ import type {
   AgentSkillReference,
   AgentSlashCommand,
 } from "@openducktor/core";
-import { type ReactElement, useLayoutEffect, useState } from "react";
+import { type ReactElement, useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge-variants";
 import { cn } from "@/lib/utils";
@@ -76,6 +76,7 @@ type ComposerFileReferenceTooltipState = {
   top: number;
   side: "top" | "bottom";
 };
+type AgentChatComposerSegments = AgentChatComposerDraft["segments"];
 
 const readComposerFileReferenceChipElement = (target: EventTarget | null): HTMLElement | null => {
   if (!(target instanceof Element)) {
@@ -109,8 +110,8 @@ const readComposerFileReferenceTooltipState = (
   };
 };
 
-const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
-  return draft.segments
+const buildComposerContentMarkup = (segments: AgentChatComposerSegments): string => {
+  return segments
     .map((segment, index) => {
       if (segment.kind === "file_reference") {
         return buildComposerFileReferenceChipMarkup(segment.file, segment.id);
@@ -129,7 +130,7 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
         )}">/${escapeHtml(segment.command.trigger)}</span>`;
       }
 
-      const className = readExpectedTextSegmentClassName(draft, index);
+      const className = readExpectedTextSegmentClassName(segments, index);
 
       return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${escapeHtml(
         renderEditableTextContent(segment.text),
@@ -138,18 +139,21 @@ const buildComposerContentMarkup = (draft: AgentChatComposerDraft): string => {
     .join("");
 };
 
-const shouldRenderTextSegment = (draft: AgentChatComposerDraft, index: number): boolean => {
-  const segment = draft.segments[index];
-  if (!segment || segment.kind !== "text") {
+const shouldRenderTextSegment = (segments: AgentChatComposerSegments, index: number): boolean => {
+  const segment = segments[index];
+  if (segment?.kind !== "text") {
     return false;
   }
 
   return true;
 };
 
-const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: number): string => {
-  const segment = draft.segments[index];
-  if (!segment || segment.kind !== "text") {
+const readExpectedTextSegmentClassName = (
+  segments: AgentChatComposerSegments,
+  index: number,
+): string => {
+  const segment = segments[index];
+  if (segment?.kind !== "text") {
     throw new Error("Expected composer text segment when reading class name.");
   }
 
@@ -158,7 +162,7 @@ const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: 
   const isEmptyAdjacentToChip =
     segmentText.length === 0 &&
     !hasTrailingBlankLine &&
-    (draft.segments[index - 1]?.kind !== "text" || draft.segments[index + 1]?.kind !== "text");
+    (segments[index - 1]?.kind !== "text" || segments[index + 1]?.kind !== "text");
   return cn(
     COMPOSER_TEXT_SEGMENT_BASE_CLASS_NAME,
     isEmptyAdjacentToChip ? "inline-block min-w-[1px]" : "inline",
@@ -166,19 +170,22 @@ const readExpectedTextSegmentClassName = (draft: AgentChatComposerDraft, index: 
   );
 };
 
-const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDraft): boolean => {
+const syncComposerDomInPlace = (
+  root: HTMLDivElement,
+  segments: AgentChatComposerSegments,
+): boolean => {
   const domNodes = Array.from(root.childNodes).filter(
     (node) => !(node instanceof Text && (node.textContent ?? "").length === 0),
   );
-  const renderableSegments = draft.segments.reduce<
-    Array<{ segment: AgentChatComposerDraft["segments"][number]; draftIndex: number }>
-  >((segments, segment, draftIndex) => {
-    if (segment.kind === "text" && !shouldRenderTextSegment(draft, draftIndex)) {
-      return segments;
+  const renderableSegments = segments.reduce<
+    Array<{ segment: AgentChatComposerSegments[number]; draftIndex: number }>
+  >((currentSegments, segment, draftIndex) => {
+    if (segment.kind === "text" && !shouldRenderTextSegment(segments, draftIndex)) {
+      return currentSegments;
     }
 
-    segments.push({ segment, draftIndex });
-    return segments;
+    currentSegments.push({ segment, draftIndex });
+    return currentSegments;
   }, []);
 
   return (
@@ -190,7 +197,7 @@ const syncComposerDomInPlace = (root: HTMLDivElement, draft: AgentChatComposerDr
       }
 
       if (segment.kind === "text") {
-        const expectedClassName = readExpectedTextSegmentClassName(draft, draftIndex);
+        const expectedClassName = readExpectedTextSegmentClassName(segments, draftIndex);
 
         if (node.className !== expectedClassName) {
           node.className = expectedClassName;
@@ -331,15 +338,19 @@ export function AgentChatComposerEditor({
     skills,
     searchFiles,
   });
-  const composerContentMarkup = buildComposerContentMarkup(draft);
+  const draftSegments = draft.segments;
+  const composerContentMarkup = useMemo(
+    () => buildComposerContentMarkup(draftSegments),
+    [draftSegments],
+  );
 
   useLayoutEffect(() => {
     const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
-    if (!editor || syncComposerDomInPlace(editor, draft)) {
+    if (!editor || syncComposerDomInPlace(editor, draftSegments)) {
       return;
     }
     editor.innerHTML = composerContentMarkup;
-  }, [composerContentMarkup, draft, editorRef]);
+  }, [composerContentMarkup, draftSegments, editorRef]);
 
   useLayoutEffect(() => {
     if (!composerFileReferenceTooltip) {

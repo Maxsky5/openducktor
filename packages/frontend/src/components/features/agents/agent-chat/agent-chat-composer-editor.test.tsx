@@ -15,13 +15,13 @@ import { buildFileSearchResult, createComposerDraft } from "./agent-chat-test-fi
 let AgentChatComposerEditor: typeof import("./agent-chat-composer-editor").AgentChatComposerEditor;
 let actualComposerSelectionModule: typeof import("./agent-chat-composer-selection");
 const COMPOSER_WAIT_TIMEOUT_MS = 1000;
-const renderMockEditableTextContent = (text: string): string => {
+const renderMockEditableTextContent = mock((text: string): string => {
   if (text.length === 0) {
     return "\u200B";
   }
 
   return text.endsWith("\n") ? `${text}\u200B` : text;
-};
+});
 
 const readMockEditableTextContent = (element: HTMLElement): string => {
   return (element.textContent ?? "").replace(/\u200B/g, "");
@@ -516,6 +516,36 @@ describe("AgentChatComposerEditor", () => {
       const editable = rendered.container.querySelector("[data-text-segment-id]");
       expect(editable?.textContent).toBe("abc");
     });
+  });
+
+  test("does not rebuild composer markup for unchanged draft segments", async () => {
+    const initialDraft: AgentChatComposerDraft = {
+      segments: [createTextSegment("hello", "text-1")],
+      attachments: [],
+    };
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={initialDraft}
+      />,
+    );
+
+    await expectComposerText(rendered.container, "hello");
+    renderMockEditableTextContent.mockClear();
+
+    rendered.rerender(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError="Slash commands unavailable."
+        initialDraft={initialDraft}
+      />,
+    );
+
+    expect(renderMockEditableTextContent).not.toHaveBeenCalled();
+    expect(rendered.container.querySelector("[data-composer-content-root]")?.textContent).toBe(
+      "hello",
+    );
   });
 
   test("pastes website content as raw text", async () => {
