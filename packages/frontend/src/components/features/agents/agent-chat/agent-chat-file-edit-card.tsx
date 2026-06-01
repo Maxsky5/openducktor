@@ -37,7 +37,8 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
 }: AgentChatFileEditCardProps): ReactElement {
   const { expandFileDiffsByDefault } = useAgentChatSettings();
   const hasDiff = Boolean(data.diff);
-  const [isExpanded, setIsExpanded] = useState(() => hasDiff && expandFileDiffsByDefault);
+  const [isExpanded, setIsExpanded] = useState(hasDiff && expandFileDiffsByDefault);
+  const hasSyncedInitialDefaultRef = useRef(false);
   const userToggledRef = useRef(false);
 
   const status = inferStatus(data);
@@ -46,6 +47,11 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
 
   useEffect(() => {
+    if (!hasSyncedInitialDefaultRef.current) {
+      hasSyncedInitialDefaultRef.current = true;
+      return;
+    }
+
     if (userToggledRef.current) {
       return;
     }
