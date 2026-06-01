@@ -59,7 +59,63 @@ const childPermissionEvent = (childSessionId: string): Event =>
     },
   }) as unknown as Event;
 
+const childSessionCreatedEvent = (childSessionId: string): Event =>
+  ({
+    type: "session.created",
+    properties: {
+      parentID: "external-session-1",
+      info: {
+        id: childSessionId,
+        time: {
+          created: Date.parse("2026-02-22T12:00:10.000Z"),
+        },
+      },
+    },
+  }) as unknown as Event;
+
 describe("session registry runtime event transport", () => {
+  test("routes top-level parent child session creation to the single pending subagent card", async () => {
+    const client = makeClientWithEvents([
+      assistantRoleEvent("assistant-subagent-session-created"),
+      assistantSubtaskEvent({
+        messageId: "assistant-subagent-session-created",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+      childSessionCreatedEvent("external-child-session"),
+    ]);
+    const sessions = new Map<string, SessionRecord>();
+    const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
+    const emitted: AgentEvent[] = [];
+
+    registerSession({
+      sessions,
+      runtimeEventTransports,
+      createClient: () => client,
+      runtimeEndpoint: "http://127.0.0.1:12345",
+      externalSessionId: "external-session-1",
+      sessionInput: makeSessionInput(),
+      client,
+      startedAt: "2026-02-22T12:00:00.000Z",
+      startedMessage: "Started",
+      emitStartedEvent: false,
+      now: () => "2026-02-22T12:00:00.000Z",
+      emit: (_externalSessionId, event) => {
+        emitted.push(event);
+      },
+    });
+
+    await runtimeEventTransports.get("http://127.0.0.1:12345")?.streamDone;
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-subagent-session-created:subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+  });
+
   test("routes same-directory child permission events to the single pending subagent card", async () => {
     const client = makeClientWithEvents([
       assistantRoleEvent("assistant-subagent-permission"),

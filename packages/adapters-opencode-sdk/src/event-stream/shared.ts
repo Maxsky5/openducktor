@@ -74,6 +74,13 @@ export const readParentExternalSessionId = (info: unknown): string | undefined =
   return undefined;
 };
 
+export const readEventParentExternalSessionId = (properties: unknown): string | undefined => {
+  return (
+    readParentExternalSessionId(readRecordProp(properties, "info")) ??
+    readParentExternalSessionId(properties)
+  );
+};
+
 export const flushPendingSubagentInputEventsForSession = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,
@@ -273,6 +280,10 @@ export const readEventSessionId = (event: Event): string | undefined => {
     const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
     if (infoSessionId) {
       return infoSessionId;
+    }
+
+    if (event.type === "session.created" || event.type === "session.updated") {
+      return readStringProp(info, ["id"]);
     }
   }
 

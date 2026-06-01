@@ -20,8 +20,8 @@ import {
   flushPendingSubagentInputEventsForSession,
   markSessionActive,
   markSessionIdle,
+  readEventParentExternalSessionId,
   readEventSessionId,
-  readParentExternalSessionId,
   removePendingSubagentCorrelationKey,
 } from "./shared";
 
@@ -222,7 +222,7 @@ const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): 
   const subagentLink =
     runtime.resolveSubagentSessionLink?.(childExternalSessionId) ??
     resolveLocalSubagentInputLink(runtime, childExternalSessionId);
-  const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
+  const eventParentExternalSessionId = readEventParentExternalSessionId(properties);
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
   const subagentCorrelationKey =
@@ -262,7 +262,7 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   const subagentLink =
     runtime.resolveSubagentSessionLink?.(childExternalSessionId) ??
     resolveLocalSubagentInputLink(runtime, childExternalSessionId);
-  const eventParentExternalSessionId = readParentExternalSessionId(readEventInfo(properties));
+  const eventParentExternalSessionId = readEventParentExternalSessionId(properties);
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
   const subagentCorrelationKey =
@@ -348,7 +348,7 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
         : {}) as Record<string, unknown>,
       ["sessionID", "sessionId", "session_id"],
     ) ?? readStringProp(info, ["id", "sessionID", "sessionId", "session_id"]);
-  const parentExternalSessionId = readParentExternalSessionId(info);
+  const parentExternalSessionId = readEventParentExternalSessionId(properties);
 
   if (
     typeof childExternalSessionId !== "string" ||

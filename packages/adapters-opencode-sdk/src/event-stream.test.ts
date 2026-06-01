@@ -9,6 +9,8 @@ import {
 import {
   type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
+  readEventParentExternalSessionId,
+  readEventSessionId,
   readParentExternalSessionId,
 } from "./event-stream/shared";
 import {
@@ -61,6 +63,42 @@ test("readParentExternalSessionId accepts OpenCode parent id spellings", () => {
   expect(readParentExternalSessionId({ parentID: "   " })).toBeUndefined();
   expect(readParentExternalSessionId({ parentID: 123 })).toBeUndefined();
   expect(readParentExternalSessionId(undefined)).toBeUndefined();
+});
+
+test("readEventParentExternalSessionId accepts parent ids from event properties and info", () => {
+  expect(readEventParentExternalSessionId({ parentID: "external-parent-session" })).toBe(
+    "external-parent-session",
+  );
+  expect(
+    readEventParentExternalSessionId({
+      info: { parentID: "external-parent-session" },
+    }),
+  ).toBe("external-parent-session");
+  expect(
+    readEventParentExternalSessionId({
+      parentID: "event-parent-session",
+      info: { parentID: "info-parent-session" },
+    }),
+  ).toBe("info-parent-session");
+});
+
+test("readEventSessionId accepts info.id only for session lifecycle events", () => {
+  expect(
+    readEventSessionId({
+      type: "session.created",
+      properties: {
+        info: { id: "external-child-session" },
+      },
+    } as unknown as Event),
+  ).toBe("external-child-session");
+  expect(
+    readEventSessionId({
+      type: "message.updated",
+      properties: {
+        info: { id: "message-1" },
+      },
+    } as unknown as Event),
+  ).toBeUndefined();
 });
 
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
@@ -1765,6 +1803,29 @@ describe("event-stream", () => {
     ).toBe(false);
   });
 
+  test("treats child session creation with top-level parent id as relevant to the parent subscriber", () => {
+    const childSessionCreatedEvent = {
+      type: "session.created",
+      properties: {
+        parentID: "external-parent-session",
+        info: {
+          id: "external-child-session",
+        },
+      },
+    } as unknown as Event;
+    const parentSubscriber = {
+      externalSessionId: "external-parent-session",
+      input: makeSessionInput(),
+    };
+    const otherSubscriber = {
+      externalSessionId: "other-parent-session",
+      input: makeSessionInput(),
+    };
+
+    expect(isRelevantSubscriberEvent(parentSubscriber, childSessionCreatedEvent)).toBe(true);
+    expect(isRelevantSubscriberEvent(otherSubscriber, childSessionCreatedEvent)).toBe(false);
+  });
+
   test("treats same-directory child input events as relevant when one subagent input candidate is pending", () => {
     const parentSubscriber = {
       externalSessionId: "external-parent-session",
@@ -2215,9 +2276,7 @@ describe("event-stream", () => {
           type: "question.asked",
           properties: {
             sessionID: "external-child-session",
-            info: {
-              parentID: "external-session-1",
-            },
+            parentID: "external-session-1",
             id: "question-child-1",
             questions: [
               {
@@ -2408,9 +2467,7 @@ describe("event-stream", () => {
           type: "permission.asked",
           properties: {
             sessionID: "external-child-session",
-            info: {
-              parentID: "external-session-1",
-            },
+            parentID: "external-session-1",
             id: "perm-child-1",
             permission: "read",
             patterns: ["src/**"],

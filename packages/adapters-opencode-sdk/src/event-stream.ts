@@ -6,8 +6,8 @@ import type { SubagentSessionLink } from "./event-stream/shared";
 import {
   isRelevantEvent,
   readEventDirectory,
+  readEventParentExternalSessionId,
   readEventSessionId,
-  readParentExternalSessionId,
 } from "./event-stream/shared";
 import type {
   EventStreamSubscriber,
@@ -195,11 +195,7 @@ export const isRelevantSubscriberEvent = (
   const eventExternalSessionId = readEventSessionId(event);
   if (eventExternalSessionId) {
     const properties = "properties" in event ? event.properties : undefined;
-    const info =
-      properties && typeof properties === "object" && properties !== null && "info" in properties
-        ? (properties as { info?: unknown }).info
-        : undefined;
-    const parentExternalSessionId = readParentExternalSessionId(info);
+    const parentExternalSessionId = readEventParentExternalSessionId(properties);
 
     if (event.type === "question.asked" && parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;

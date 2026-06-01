@@ -49,21 +49,26 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
 const makeChildSessionCreatedEvent = (input: {
   childSessionId: string;
   parentExternalSessionId?: string;
+  parentPlacement?: "info" | "properties";
   createdAtMs?: number;
-}): Event =>
-  ({
+}): Event => {
+  const parentExternalSessionId = input.parentExternalSessionId ?? "external-session-1";
+  const parentPlacement = input.parentPlacement ?? "info";
+  return {
     type: "session.created",
     properties: {
       sessionID: input.childSessionId,
+      ...(parentPlacement === "properties" ? { parentID: parentExternalSessionId } : {}),
       info: {
         id: input.childSessionId,
-        parentID: input.parentExternalSessionId ?? "external-session-1",
+        ...(parentPlacement === "info" ? { parentID: parentExternalSessionId } : {}),
         time: {
           created: input.createdAtMs ?? Date.parse("2026-02-22T12:00:10.000Z"),
         },
       },
     },
-  }) as unknown as Event;
+  } as unknown as Event;
+};
 
 const makeChildPermissionAskedEvent = (input: {
   childSessionId: string;
@@ -413,6 +418,35 @@ describe("event-stream subagent correlation", () => {
         "part:assistant-subagent-session-created:subtask-a",
       ),
     ).toBe("subtask-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
+      "subtask-a",
+    );
+  });
+
+  test("binds child session creation when the parent id is on event properties", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-top-level-parent"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-top-level-parent",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+      makeChildSessionCreatedEvent({
+        childSessionId: "external-child-session",
+        parentPlacement: "properties",
+      }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      "external-child-session",
+    ]);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-subagent-top-level-parent:subtask-a",
+      status: "running",
+    });
     expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
       "subtask-a",
     );
