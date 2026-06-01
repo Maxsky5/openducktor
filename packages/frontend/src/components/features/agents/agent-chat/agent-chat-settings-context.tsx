@@ -1,5 +1,5 @@
 import type { ChatSettings } from "@openducktor/contracts";
-import { createContext, type ReactElement, type ReactNode, useContext } from "react";
+import { createContext, type ReactElement, type ReactNode, use } from "react";
 
 const AgentChatSettingsContext = createContext<ChatSettings | null>(null);
 
@@ -16,7 +16,7 @@ export function AgentChatSettingsProvider({
 }
 
 export function useAgentChatSettings(): ChatSettings {
-  const settings = useContext(AgentChatSettingsContext);
+  const settings = use(AgentChatSettingsContext);
   if (!settings) {
     throw new Error("Agent chat settings are unavailable outside AgentChatSettingsProvider.");
   }

@@ -6,16 +6,16 @@ import { buildModelSelection, buildSession, buildTodoItem } from "./agent-chat-t
 
 const buildModel = () => ({
   mode: "interactive" as const,
+  chatSettings: {
+    showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
+  },
   thread: {
     session: buildSession({
       status: "running" as const,
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    chatSettings: {
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: true,
-    },
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,
@@ -125,6 +125,7 @@ describe("AgentChat", () => {
       createElement(AgentChatSurface, {
         model: {
           mode: "non_interactive",
+          chatSettings: interactiveModel.chatSettings,
           thread: {
             ...interactiveModel.thread,
             isInteractionEnabled: false,

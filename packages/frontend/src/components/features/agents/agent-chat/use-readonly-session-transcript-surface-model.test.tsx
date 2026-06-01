@@ -1,5 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
+import {
+  DEFAULT_AGENT_RUNTIMES,
+  type RuntimeInstanceSummary,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -29,21 +33,20 @@ const answerAgentQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
   (_externalSessionId: string | null): AgentSessionState | null => null,
 );
-let latestSurfaceModelArgs: Record<string, unknown> | null = null;
 let settingsChat = {
   showThinkingMessages: false,
   expandFileDiffsByDefault: true,
 };
+let settingsSnapshotError: Error | null = null;
 let runtimeList: RuntimeInstanceSummary[] = [];
 let runtimeListError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
-let actualWorkspaceQueries: Awaited<typeof import("@/state/queries/workspace")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("./use-repo-runtime-readiness")>;
 let actualRuntimeData: Awaited<typeof import("./use-agent-chat-session-runtime-data")>;
-let actualSurfaceModel: Awaited<typeof import("./use-agent-chat-surface-model")>;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
+let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
   return {
@@ -153,6 +156,30 @@ function makeRuntime(): RuntimeInstanceSummary {
   } satisfies RuntimeInstanceSummary;
 }
 
+function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {
+  return {
+    theme: "light",
+    git: {
+      defaultMergeMethod: "merge_commit",
+    },
+    general: {
+      openAgentStudioTabOnBackgroundSessionStart: true,
+    },
+    chat,
+    reusablePrompts: [],
+    kanban: {
+      doneVisibleDays: 1,
+      emptyColumnDisplay: "show",
+    },
+    autopilot: {
+      rules: [],
+    },
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    workspaces: {},
+    globalPromptOverrides: {},
+  };
+}
+
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
   <QueryProvider useIsolatedClient>{children}</QueryProvider>
 );
@@ -163,20 +190,17 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       actualAppStateProvider,
       actualAppStateContexts,
       actualHostOperations,
-      actualWorkspaceQueries,
       actualRepoRuntimeReadiness,
       actualRuntimeData,
-      actualSurfaceModel,
     ] = await Promise.all([
       import("@/state/app-state-provider"),
       import("@/state/app-state-contexts"),
       import("@/state/operations/host"),
-      import("@/state/queries/workspace"),
       import("./use-repo-runtime-readiness"),
       import("./use-agent-chat-session-runtime-data"),
-      import("./use-agent-chat-surface-model"),
     ]);
     originalHostRuntimeList = actualHostOperations.host.runtimeList;
+    originalWorkspaceGetSettingsSnapshot = actualHostOperations.host.workspaceGetSettingsSnapshot;
   });
 
   beforeEach(() => {
@@ -204,11 +228,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     useAgentSessionMock.mockImplementation(
       (_externalSessionId: string | null): AgentSessionState | null => null,
     );
-    latestSurfaceModelArgs = null;
     settingsChat = {
       showThinkingMessages: false,
       expandFileDiffsByDefault: true,
     };
+    settingsSnapshotError = null;
     runtimeList = [makeRuntime()];
     runtimeListError = null;
     actualHostOperations.host.runtimeList = async () => {
@@ -216,6 +240,12 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         throw runtimeListError;
       }
       return runtimeList;
+    };
+    actualHostOperations.host.workspaceGetSettingsSnapshot = async () => {
+      if (settingsSnapshotError) {
+        throw settingsSnapshotError;
+      }
+      return makeSettingsSnapshot();
     };
 
     mock.module("@/state/app-state-provider", () => ({
@@ -252,15 +282,6 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       }),
     }));
 
-    mock.module("@/state/queries/workspace", () => ({
-      settingsSnapshotQueryOptions: () => ({
-        queryKey: ["workspace", "settings-snapshot"],
-        queryFn: async () => ({
-          chat: settingsChat,
-        }),
-      }),
-    }));
-
     mock.module("./use-repo-runtime-readiness", () => ({
       useRepoRuntimeReadiness: () => ({
         readinessState: "ready" as const,
@@ -277,57 +298,17 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         runtimeDataError: null,
       }),
     }));
-
-    mock.module("./use-agent-chat-surface-model", () => ({
-      useAgentChatSurfaceModel: (args: Record<string, unknown>) => {
-        latestSurfaceModelArgs = args;
-        return {
-          mode: "non_interactive" as const,
-          thread: {
-            session: args.session ?? null,
-            isSessionWorking: false,
-            chatSettings: args.chatSettings,
-            isSessionViewLoading: false,
-            isSessionHistoryLoading: false,
-            isWaitingForRuntimeReadiness: false,
-            readinessState: "ready" as const,
-            isInteractionEnabled: false,
-            blockedReason: null,
-            isLoadingChecks: false,
-            onRefreshChecks: () => {},
-            emptyState: args.emptyState ?? null,
-            isStarting: false,
-            isSending: false,
-            sessionAgentColors: {},
-            canSubmitQuestionAnswers: false,
-            isSubmittingQuestionByRequestId: {},
-            onSubmitQuestionAnswers: async () => {},
-            canReplyToApprovals: false,
-            isSubmittingApprovalByRequestId: {},
-            approvalReplyErrorByRequestId: {},
-            onReplyApproval: async () => {},
-            sessionRuntimeDataError: null,
-            todoPanelCollapsed: true,
-            onToggleTodoPanel: () => {},
-            messagesContainerRef: { current: null },
-            scrollToBottomOnSendRef: { current: null },
-            syncBottomAfterComposerLayoutRef: { current: null },
-          },
-        };
-      },
-    }));
   });
 
   afterEach(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
-      ["@/state/queries/workspace", () => Promise.resolve(actualWorkspaceQueries)],
       ["./use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
       ["./use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
-      ["./use-agent-chat-surface-model", () => Promise.resolve(actualSurfaceModel)],
     ]);
     actualHostOperations.host.runtimeList = originalHostRuntimeList;
+    actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
   test("loads a runtime transcript without task-owned session records", async () => {
@@ -356,10 +337,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     try {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
-      await harness.waitFor(() => {
-        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return session?.externalSessionId === "session-subagent-1";
-      });
+      await harness.waitFor(
+        (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
+      );
 
       expect(readSessionHistory).toHaveBeenCalledWith(
         "/repo-a",
@@ -367,10 +347,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         "/repo-a/worktree",
         "session-subagent-1",
       );
-      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      const session = harness.getLatest().model.thread.session as AgentSessionState;
       expect(session.externalSessionId).toBe("session-subagent-1");
       expect(session.messages).toBeTruthy();
-      expect(latestSurfaceModelArgs?.chatSettings).toEqual({
+      expect(harness.getLatest().model.chatSettings).toEqual({
         showThinkingMessages: false,
         expandFileDiffsByDefault: true,
       });
@@ -404,16 +384,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(
-        () =>
-          (
-            latestSurfaceModelArgs?.chatSettings as
-              | { expandFileDiffsByDefault?: boolean }
-              | undefined
-          )?.expandFileDiffsByDefault === false,
-      );
+      await harness.waitFor((state) => state.model.chatSettings.expandFileDiffsByDefault === false);
 
-      expect(latestSurfaceModelArgs?.chatSettings).toEqual({
+      expect(harness.getLatest().model.chatSettings).toEqual({
         showThinkingMessages: false,
         expandFileDiffsByDefault: false,
       });
@@ -534,10 +507,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
 
-      expect(latestSurfaceModelArgs?.session).toEqual(liveSession);
-      expect(latestSurfaceModelArgs?.isTaskHydrating).toBe(false);
-      expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
-      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: true });
+      const model = harness.getLatest().model;
+      expect(model.thread.session).toEqual(liveSession);
+      expect(model.thread.isSessionViewLoading).toBe(false);
+      expect(model.thread.isSessionHistoryLoading).toBe(false);
+      expect(model.thread.canReplyToApprovals).toBe(true);
     } finally {
       resolveAttachCallbacks[0]?.();
       await harness.unmount();
@@ -567,14 +541,11 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => {
-        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return session?.pendingApprovals.length === 1;
-      });
+      await harness.waitFor((state) => state.model.thread.session?.pendingApprovals.length === 1);
 
-      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      const session = harness.getLatest().model.thread.session as AgentSessionState;
       expect(session.pendingApprovals).toEqual([pendingApproval]);
-      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: true });
+      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(true);
     } finally {
       await harness.unmount();
     }
@@ -602,16 +573,10 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => {
-        const approvals = latestSurfaceModelArgs?.approvals as { canReply: boolean } | undefined;
-        return approvals?.canReply === true;
-      });
+      await harness.waitFor((state) => state.model.thread.canReplyToApprovals === true);
 
-      const approvals = latestSurfaceModelArgs?.approvals as {
-        onReply: (requestId: string, reply: RuntimeApprovalReplyOutcome) => Promise<void>;
-      };
       await harness.run(async () => {
-        await approvals.onReply("permission-1", "approve_once");
+        await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
       });
 
       expect(replyAgentApproval).toHaveBeenCalledWith(
@@ -619,10 +584,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
         "permission-1",
         "approve_once",
       );
-      await harness.waitFor(() => {
-        const session = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return session?.pendingApprovals.length === 0;
-      });
+      await harness.waitFor((state) => state.model.thread.session?.pendingApprovals.length === 0);
     } finally {
       await harness.unmount();
     }
@@ -651,27 +613,16 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => {
-        const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as
-          | { canSubmit: boolean }
-          | undefined;
-        return pendingQuestions?.canSubmit === true;
-      });
+      await harness.waitFor((state) => state.model.thread.canSubmitQuestionAnswers === true);
 
-      const session = latestSurfaceModelArgs?.session as AgentSessionState;
+      const session = harness.getLatest().model.thread.session as AgentSessionState;
       expect(session.pendingQuestions).toEqual([pendingQuestion]);
-      const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as {
-        onSubmit: (requestId: string, answers: string[][]) => Promise<void>;
-      };
       await harness.run(async () => {
-        await pendingQuestions.onSubmit("question-1", [["A"]]);
+        await harness.getLatest().model.thread.onSubmitQuestionAnswers("question-1", [["A"]]);
       });
 
       expect(answerAgentQuestion).toHaveBeenCalledWith("session-subagent-1", "question-1", [["A"]]);
-      await harness.waitFor(() => {
-        const nextSession = latestSurfaceModelArgs?.session as AgentSessionState | null | undefined;
-        return nextSession?.pendingQuestions.length === 0;
-      });
+      await harness.waitFor((state) => state.model.thread.session?.pendingQuestions.length === 0);
     } finally {
       await harness.unmount();
     }
@@ -703,17 +654,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => {
-        const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as
-          | { canSubmit: boolean }
-          | undefined;
-        return pendingQuestions !== undefined;
-      });
+      await harness.waitFor((state) => state.model.thread.session !== null);
 
-      const pendingQuestions = latestSurfaceModelArgs?.pendingQuestions as {
-        canSubmit: boolean;
-      };
-      expect(pendingQuestions.canSubmit).toBe(false);
+      expect(harness.getLatest().model.thread.canSubmitQuestionAnswers).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -755,6 +698,42 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("surfaces a failed empty state when chat settings cannot load", async () => {
+    settingsSnapshotError = new Error("settings unavailable");
+    const { useReadonlySessionTranscriptSurfaceModel } = await import(
+      "./use-readonly-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useReadonlySessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: makeTranscriptSource(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.model.thread.emptyState !== null);
+
+      expect(harness.getLatest().model.thread.emptyState).toEqual({
+        title: "Failed to load conversation: Failed to load chat settings: settings unavailable",
+      });
+      expect(harness.getLatest().model.chatSettings).toEqual({
+        showThinkingMessages: false,
+        expandFileDiffsByDefault: true,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces an unavailable state when the source runtime is not attached", async () => {
     const transcriptSourceWithRuntimeIdOnly = makeTranscriptSourceWithRuntimeIdOnly();
     runtimeList = [];
@@ -781,13 +760,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
-      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: false });
-      await (
-        latestSurfaceModelArgs?.approvals as {
-          onReply: (requestId: string, reply: RuntimeApprovalReplyOutcome) => Promise<void>;
-        }
-      ).onReply("permission-1", "approve_once");
+      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(false);
+      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(false);
+      await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: No opencode runtime is attached for runtime-1.",
       });
@@ -823,7 +798,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(latestSurfaceModelArgs?.isSessionHistoryLoading).toBe(false);
+      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(false);
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: runtime registry unavailable",
       });
@@ -858,12 +833,8 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(latestSurfaceModelArgs?.approvals).toMatchObject({ canReply: false });
-      await (
-        latestSurfaceModelArgs?.approvals as {
-          onReply: (requestId: string, reply: RuntimeApprovalReplyOutcome) => Promise<void>;
-        }
-      ).onReply("permission-1", "approve_once");
+      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(false);
+      await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: Multiple opencode runtime is attached for runtime-1.",
       });

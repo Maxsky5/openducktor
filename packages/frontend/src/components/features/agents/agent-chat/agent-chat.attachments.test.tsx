@@ -6,16 +6,16 @@ import { buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   mode: "interactive" as const,
+  chatSettings: {
+    showThinkingMessages: false,
+    expandFileDiffsByDefault: true,
+  },
   thread: {
     session: buildSession({
       status: "running" as const,
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    chatSettings: {
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: true,
-    },
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,

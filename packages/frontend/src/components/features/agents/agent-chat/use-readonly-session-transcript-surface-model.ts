@@ -1,4 +1,5 @@
 import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
+import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -11,7 +12,6 @@ import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchest
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
 import {
-  DEFAULT_CHAT_SETTINGS,
   readChatSettingsFromSnapshot,
   settingsSnapshotQueryOptions,
 } from "@/state/queries/workspace";
@@ -170,7 +170,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
       isMountedRef.current = false;
     };
   }, []);
-  const { data: chatSettings = DEFAULT_CHAT_SETTINGS } = useQuery({
+  const chatSettingsQuery = useQuery({
     ...settingsSnapshotQueryOptions(),
     enabled: activeWorkspace !== null,
     select: readChatSettingsFromSnapshot,
@@ -476,8 +476,16 @@ export function useReadonlySessionTranscriptSurfaceModel({
     Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
     runtimeData.session === null &&
     (resolvedSource.isPending || isTranscriptLoading);
+  const chatSettingsLoadError =
+    activeWorkspace && chatSettingsQuery.error
+      ? `Failed to load chat settings: ${errorMessageFromUnknown(
+          chatSettingsQuery.error,
+          "Settings read failed.",
+        )}`
+      : null;
   const loadError =
     resolvedSource.error ??
+    chatSettingsLoadError ??
     liveTranscriptAttachError ??
     (historyQuery.error
       ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
@@ -551,7 +559,9 @@ export function useReadonlySessionTranscriptSurfaceModel({
     session: runtimeData.session,
     isTaskHydrating: isResolvingTranscript,
     isSessionSelectionResolving: false,
-    chatSettings: activeWorkspace ? chatSettings : DEFAULT_CHAT_SETTINGS,
+    chatSettings: activeWorkspace
+      ? (chatSettingsQuery.data ?? DEFAULT_CHAT_SETTINGS)
+      : DEFAULT_CHAT_SETTINGS,
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,

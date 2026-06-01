@@ -271,7 +271,6 @@ export function useAgentChatSurfaceModel({
     () => ({
       session: threadSession,
       isSessionWorking,
-      chatSettings,
       isSessionViewLoading: isContextSwitching,
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness,
@@ -316,7 +315,6 @@ export function useAgentChatSurfaceModel({
       composer?.isSending,
       composer?.isStarting,
       emptyState,
-      chatSettings,
       handleToggleTodoPanel,
       isContextSwitching,
       isComposerInteractionEnabled,
@@ -581,9 +579,10 @@ export function useAgentChatSurfaceModel({
   return useMemo(
     () => ({
       mode,
+      chatSettings,
       thread: threadModel,
       ...(composerModel ? { composer: composerModel } : {}),
     }),
-    [composerModel, mode, threadModel],
+    [chatSettings, composerModel, mode, threadModel],
   );
 }

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
@@ -508,7 +509,6 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
-    chatSettings,
     isSessionViewLoading,
     isSessionHistoryLoading,
     isWaitingForRuntimeReadiness,
@@ -541,7 +541,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     scrollToBottomOnSendRef,
     syncBottomAfterComposerLayoutRef,
   } = model;
-  const { showThinkingMessages } = chatSettings;
+  const { showThinkingMessages } = useAgentChatSettings();
   const activeExternalSessionId = session?.externalSessionId ?? null;
   const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
     activeExternalSessionId,

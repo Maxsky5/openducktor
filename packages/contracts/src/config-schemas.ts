@@ -12,7 +12,7 @@ const DEFAULT_SOFT_GUARDRAILS = {
   backoffSeconds: 30,
 } as const;
 
-const DEFAULT_CHAT_SETTINGS = {
+export const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
   expandFileDiffsByDefault: true,
 } as const;

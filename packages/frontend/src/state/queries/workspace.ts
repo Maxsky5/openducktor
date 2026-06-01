@@ -18,8 +18,6 @@ const SETTINGS_SNAPSHOT_STALE_TIME_MS = 15 * 60_000;
 const REPO_CONFIG_STALE_TIME_MS = 10 * 60_000;
 const WORKSPACE_LIST_STALE_TIME_MS = 5 * 60_000;
 
-export const DEFAULT_CHAT_SETTINGS = chatSettingsSchema.parse({});
-
 export const workspaceQueryKeys = {
   all: ["workspace"] as const,
   settingsSnapshot: () => [...workspaceQueryKeys.all, "settings-snapshot"] as const,

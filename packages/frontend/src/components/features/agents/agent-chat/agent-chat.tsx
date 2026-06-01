@@ -199,7 +199,7 @@ export function AgentChatSurface({
               </div>
             </div>
           ) : null}
-          <AgentChatSettingsProvider value={model.thread.chatSettings}>
+          <AgentChatSettingsProvider value={model.chatSettings}>
             <MemoizedAgentChatThread model={model.thread} />
             {supportsComposer && composerModel ? (
               <MemoizedAgentChatComposer ref={composerRef} model={composerModel} />

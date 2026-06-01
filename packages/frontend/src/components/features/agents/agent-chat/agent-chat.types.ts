@@ -33,7 +33,6 @@ export type AgentChatEmptyStateModel = {
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
   isSessionWorking: boolean;
-  chatSettings: ChatSettings;
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -122,6 +121,7 @@ export type AgentChatComposerModel = {
 
 export type AgentChatSurfaceModel = {
   mode: AgentChatMode;
+  chatSettings: ChatSettings;
   thread: AgentChatThreadModel;
   composer?: AgentChatComposerModel;
 };

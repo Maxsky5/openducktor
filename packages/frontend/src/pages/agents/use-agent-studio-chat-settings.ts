@@ -1,9 +1,13 @@
-import type { ChatSettings, ReusablePrompt, SettingsSnapshot } from "@openducktor/contracts";
+import {
+  type ChatSettings,
+  DEFAULT_CHAT_SETTINGS,
+  type ReusablePrompt,
+  type SettingsSnapshot,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { errorMessage } from "@/lib/errors";
 import {
-  DEFAULT_CHAT_SETTINGS,
   readChatSettingsFromSnapshot,
   settingsSnapshotQueryOptions,
 } from "@/state/queries/workspace";
