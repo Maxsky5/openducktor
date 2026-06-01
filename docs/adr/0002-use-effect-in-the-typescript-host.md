@@ -61,5 +61,4 @@ Pure domain policy code may stay synchronous and non-Effect when it has no I/O a
 Relevant references:
 
 - [Effect documentation](https://effect.website/docs)
-- [Host package map](../../packages/host/codemap.md)
 - [TanStack Query cache strategy](../tanstack-query-cache-strategy.md)
