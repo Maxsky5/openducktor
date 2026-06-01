@@ -21,6 +21,7 @@ import {
 } from "./assistant-turn-duration";
 import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { isFinalAssistantHistoryMessage } from "./history-finality";
+import { appendHydratedSubagentMessage } from "./hydrated-subagent-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { isWorkflowAgentSession } from "./session-purpose";
 import {
@@ -29,12 +30,7 @@ import {
   requireSelectedModelRuntimeKindForPersistence,
   requireSessionRuntimeKindForPersistence,
 } from "./session-runtime-metadata";
-import {
-  formatSubagentContent,
-  isSubagentMessage,
-  mergeSubagentMeta,
-  type SubagentMessage,
-} from "./subagent-messages";
+import { isSubagentMessage } from "./subagent-messages";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
@@ -46,8 +42,6 @@ type LegacySubtaskHistoryPart = {
   description: string;
 };
 type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
-
-type HydratedSubagentMessage = SubagentMessage;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   if (!isWorkflowAgentSession(session)) {
@@ -246,124 +240,6 @@ const historyPartToChatMessage = (
   }
 };
 
-const resolvePreferredHydratedCorrelationKey = (
-  existingMeta: HydratedSubagentMessage["meta"],
-  incomingMeta: HydratedSubagentMessage["meta"],
-): string => {
-  if (
-    existingMeta.correlationKey !== incomingMeta.correlationKey &&
-    incomingMeta.externalSessionId &&
-    !existingMeta.externalSessionId
-  ) {
-    return incomingMeta.correlationKey;
-  }
-  if (
-    existingMeta.correlationKey !== incomingMeta.correlationKey &&
-    existingMeta.externalSessionId &&
-    !incomingMeta.externalSessionId
-  ) {
-    return existingMeta.correlationKey;
-  }
-  if (existingMeta.correlationKey.startsWith("part:")) {
-    return existingMeta.correlationKey;
-  }
-  if (incomingMeta.correlationKey.startsWith("part:")) {
-    return incomingMeta.correlationKey;
-  }
-  if (existingMeta.correlationKey.startsWith("spawn:")) {
-    return existingMeta.correlationKey;
-  }
-  if (incomingMeta.correlationKey.startsWith("spawn:")) {
-    return incomingMeta.correlationKey;
-  }
-
-  return existingMeta.correlationKey;
-};
-
-const matchesHydratedSubagentMessage = (
-  existingMessage: HydratedSubagentMessage,
-  incomingMessage: HydratedSubagentMessage,
-): boolean => {
-  if (existingMessage.meta.correlationKey === incomingMessage.meta.correlationKey) {
-    return true;
-  }
-
-  const existingSessionId = existingMessage.meta.externalSessionId;
-  const incomingSessionId = incomingMessage.meta.externalSessionId;
-  if (existingSessionId && incomingSessionId) {
-    return existingSessionId === incomingSessionId;
-  }
-
-  return false;
-};
-
-const matchesHydratedSubagentActivity = (
-  existingMessage: HydratedSubagentMessage,
-  incomingMessage: HydratedSubagentMessage,
-): boolean => {
-  const existingAgent = existingMessage.meta.agent;
-  const incomingAgent = incomingMessage.meta.agent;
-  const existingPrompt = existingMessage.meta.prompt;
-  const incomingPrompt = incomingMessage.meta.prompt;
-
-  return (
-    existingMessage.timestamp === incomingMessage.timestamp &&
-    typeof existingAgent === "string" &&
-    typeof incomingAgent === "string" &&
-    existingAgent === incomingAgent &&
-    typeof existingPrompt === "string" &&
-    typeof incomingPrompt === "string" &&
-    existingPrompt === incomingPrompt
-  );
-};
-
-const shouldIgnoreIncomingHydratedSubagent = (
-  existingMessage: HydratedSubagentMessage,
-  incomingMessage: HydratedSubagentMessage,
-): boolean => {
-  return Boolean(
-    existingMessage.meta.externalSessionId &&
-      !incomingMessage.meta.externalSessionId &&
-      existingMessage.meta.correlationKey !== incomingMessage.meta.correlationKey &&
-      matchesHydratedSubagentActivity(existingMessage, incomingMessage),
-  );
-};
-
-const canMergeHydratedSubagentMessage = (
-  existingMessage: HydratedSubagentMessage,
-  incomingMessage: HydratedSubagentMessage,
-): boolean => {
-  if (matchesHydratedSubagentMessage(existingMessage, incomingMessage)) {
-    return true;
-  }
-
-  return Boolean(
-    incomingMessage.meta.externalSessionId &&
-      !existingMessage.meta.externalSessionId &&
-      matchesHydratedSubagentActivity(existingMessage, incomingMessage),
-  );
-};
-
-const mergeHydratedSubagentMessages = (
-  existingMessage: HydratedSubagentMessage,
-  incomingMessage: HydratedSubagentMessage,
-): HydratedSubagentMessage => {
-  const existingMeta = existingMessage.meta;
-  const incomingMeta = incomingMessage.meta;
-  const correlationKey = resolvePreferredHydratedCorrelationKey(existingMeta, incomingMeta);
-  const nextMeta = mergeSubagentMeta(existingMeta, {
-    ...incomingMeta,
-    correlationKey,
-  });
-
-  return {
-    ...existingMessage,
-    id: `subagent:${correlationKey}`,
-    content: formatSubagentContent(nextMeta),
-    meta: nextMeta,
-  };
-};
-
 export const historyToChatMessages = (
   history: AgentSessionHistoryMessage[],
   sessionContext: {
@@ -374,25 +250,6 @@ export const historyToChatMessages = (
   const next: AgentChatMessage[] = [];
   let userAnchorAtMs: number | undefined;
   let previousAssistantCompletedAtMs: number | undefined;
-  const findLastHydratedSubagentIndex = (
-    incomingMessage: HydratedSubagentMessage,
-    predicate: (
-      existingMessage: HydratedSubagentMessage,
-      incomingMessage: HydratedSubagentMessage,
-    ) => boolean,
-  ): number => {
-    for (let index = next.length - 1; index >= 0; index -= 1) {
-      const entry = next[index];
-      if (!isSubagentMessage(entry)) {
-        continue;
-      }
-      if (predicate(entry, incomingMessage)) {
-        return index;
-      }
-    }
-
-    return -1;
-  };
 
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
@@ -401,26 +258,7 @@ export const historyToChatMessages = (
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
         if (isSubagentMessage(partMessage)) {
-          const ignoredIndex = findLastHydratedSubagentIndex(
-            partMessage,
-            shouldIgnoreIncomingHydratedSubagent,
-          );
-          if (ignoredIndex >= 0) {
-            continue;
-          }
-
-          const existingIndex = findLastHydratedSubagentIndex(
-            partMessage,
-            canMergeHydratedSubagentMessage,
-          );
-          if (existingIndex >= 0) {
-            const existingMessage = next[existingIndex];
-            if (isSubagentMessage(existingMessage)) {
-              next[existingIndex] = mergeHydratedSubagentMessages(existingMessage, partMessage);
-              continue;
-            }
-          }
-          next.push(partMessage);
+          appendHydratedSubagentMessage(next, partMessage);
           continue;
         }
         next.push(partMessage);

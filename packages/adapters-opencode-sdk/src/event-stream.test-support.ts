@@ -55,6 +55,8 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   pendingDeltasByPartId: new Map(),
   subagentCorrelationKeyByPartId: new Map(),
   subagentCorrelationKeyByExternalSessionId: new Map(),
+  subagentPartIdByCorrelationKey: new Map(),
+  subagentPartIdByExternalSessionId: new Map(),
   pendingSubagentCorrelationKeysBySignature: new Map(),
   pendingSubagentCorrelationKeys: [],
   pendingSubagentSessionsByExternalSessionId: new Map(),

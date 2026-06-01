@@ -80,6 +80,8 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
       ["external-child-session", "part:assistant-1:subtask-1"],
     ]),
+    subagentPartIdByCorrelationKey: new Map<string, string>(),
+    subagentPartIdByExternalSessionId: new Map<string, string>(),
     pendingSubagentCorrelationKeysBySignature: new Map<string, string[]>(),
     pendingSubagentCorrelationKeys: [],
     pendingSubagentSessionsByExternalSessionId: new Map(),

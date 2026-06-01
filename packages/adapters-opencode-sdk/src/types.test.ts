@@ -49,10 +49,13 @@ describe("types", () => {
       pendingDeltasByPartId: new Map(),
       subagentCorrelationKeyByPartId: new Map(),
       subagentCorrelationKeyByExternalSessionId: new Map(),
+      subagentPartIdByCorrelationKey: new Map(),
+      subagentPartIdByExternalSessionId: new Map(),
       pendingSubagentCorrelationKeysBySignature: new Map(),
       pendingSubagentCorrelationKeys: [],
       pendingSubagentSessionsByExternalSessionId: new Map(),
       pendingSubagentPartEmissionsByExternalSessionId: new Map(),
+      pendingSubagentInputEventsByExternalSessionId: new Map(),
     };
     const status: McpServerStatus = { status: "connected" };
     const options: OpencodeSdkAdapterOptions = {

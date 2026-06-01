@@ -126,6 +126,8 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     pendingDeltasByPartId: session.pendingDeltasByPartId,
     subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
     subagentCorrelationKeyByExternalSessionId: session.subagentCorrelationKeyByExternalSessionId,
+    subagentPartIdByCorrelationKey: session.subagentPartIdByCorrelationKey,
+    subagentPartIdByExternalSessionId: session.subagentPartIdByExternalSessionId,
     pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
     pendingSubagentCorrelationKeys: session.pendingSubagentCorrelationKeys,
     pendingSubagentSessionsByExternalSessionId: session.pendingSubagentSessionsByExternalSessionId,

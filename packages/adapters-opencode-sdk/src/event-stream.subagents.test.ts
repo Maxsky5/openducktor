@@ -279,6 +279,12 @@ describe("event-stream subagent correlation", () => {
     expect(sessionRecord.subagentCorrelationKeyByExternalSessionId.get("child-a")).toBe(
       "part:assistant-task-tool-running:subtask-a",
     );
+    expect(
+      sessionRecord.subagentPartIdByCorrelationKey.get(
+        "part:assistant-task-tool-running:subtask-a",
+      ),
+    ).toBe("tool-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("child-a")).toBe("tool-a");
     expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual([]);
     expect(sessionRecord.pendingSubagentCorrelationKeysBySignature.size).toBe(0);
   });
@@ -333,7 +339,7 @@ describe("event-stream subagent correlation", () => {
   });
 
   test("emits a linked subagent update when child session creation binds a running card", async () => {
-    const { emitted } = await runEventStreamWithSession([
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-session-created"),
       makeAssistantSubtaskPartUpdatedEvent({
         messageId: "assistant-subagent-session-created",
@@ -353,10 +359,18 @@ describe("event-stream subagent correlation", () => {
       undefined,
       "external-child-session",
     ]);
+    expect(
+      sessionRecord.subagentPartIdByCorrelationKey.get(
+        "part:assistant-subagent-session-created:subtask-a",
+      ),
+    ).toBe("subtask-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
+      "subtask-a",
+    );
   });
 
   test("keeps a completed linked subagent completed when child session creation arrives later", async () => {
-    const { emitted } = await runEventStreamWithSession([
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-late-created"),
       makeAssistantSubtaskPartUpdatedEvent({
         messageId: "assistant-subagent-late-created",
@@ -382,6 +396,12 @@ describe("event-stream subagent correlation", () => {
       "child-a",
       "child-a",
     ]);
+    expect(
+      sessionRecord.subagentPartIdByCorrelationKey.get(
+        "part:assistant-subagent-late-created:subtask-a",
+      ),
+    ).toBe("tool-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("child-a")).toBe("tool-a");
   });
 
   test("defers ambiguous task tool updates until child sessions bind to spawned cards", async () => {

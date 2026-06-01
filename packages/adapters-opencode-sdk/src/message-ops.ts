@@ -14,6 +14,7 @@ import {
   toOpenCodePermissionReply,
 } from "./approval-translation";
 import { unwrapData } from "./data-utils";
+import { bindSubagentExternalSession, bindSubagentPartCorrelation } from "./event-stream/shared";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
@@ -304,6 +305,8 @@ const seedSubagentCorrelationFromHistory = (
     SessionRecord,
     | "subagentCorrelationKeyByPartId"
     | "subagentCorrelationKeyByExternalSessionId"
+    | "subagentPartIdByCorrelationKey"
+    | "subagentPartIdByExternalSessionId"
     | "pendingSubagentCorrelationKeysBySignature"
     | "pendingSubagentCorrelationKeys"
   >,
@@ -314,11 +317,13 @@ const seedSubagentCorrelationFromHistory = (
       continue;
     }
 
-    session.subagentCorrelationKeyByPartId.set(part.partId, part.correlationKey);
+    bindSubagentPartCorrelation(session, part.partId, part.correlationKey);
     if (part.externalSessionId) {
-      session.subagentCorrelationKeyByExternalSessionId.set(
+      bindSubagentExternalSession(
+        session,
         part.externalSessionId,
         part.correlationKey,
+        part.partId,
       );
     }
 
@@ -504,6 +509,8 @@ export const loadAndSeedSessionHistory = async (
       SessionRecord,
       | "subagentCorrelationKeyByPartId"
       | "subagentCorrelationKeyByExternalSessionId"
+      | "subagentPartIdByCorrelationKey"
+      | "subagentPartIdByExternalSessionId"
       | "pendingSubagentCorrelationKeysBySignature"
       | "pendingSubagentCorrelationKeys"
     >;

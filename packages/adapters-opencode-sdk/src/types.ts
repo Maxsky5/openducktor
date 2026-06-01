@@ -59,6 +59,8 @@ export type SessionRecord = {
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
   subagentCorrelationKeyByExternalSessionId: Map<string, string>;
+  subagentPartIdByCorrelationKey: Map<string, string>;
+  subagentPartIdByExternalSessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   pendingSubagentCorrelationKeys: string[];
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;

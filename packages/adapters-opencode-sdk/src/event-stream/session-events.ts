@@ -15,6 +15,7 @@ import {
 } from "./schemas";
 import type { EventStreamRuntime } from "./shared";
 import {
+  bindSubagentExternalSession,
   emitSessionIdle,
   flushPendingSubagentInputEventsForSession,
   markSessionActive,
@@ -259,6 +260,12 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
     normalizedChildExternalSessionId,
   );
   if (existingCorrelationKey && !existingCorrelationKey.startsWith("session:")) {
+    bindSubagentExternalSession(
+      runtime,
+      normalizedChildExternalSessionId,
+      existingCorrelationKey,
+      runtime.subagentPartIdByCorrelationKey.get(existingCorrelationKey),
+    );
     emitSubagentPartsForSession(runtime, normalizedChildExternalSessionId);
     flushPendingSubagentInputEventsForSession(runtime, normalizedChildExternalSessionId);
     return true;
@@ -295,7 +302,12 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
       continue;
     }
     const [externalSessionId] = pendingSession;
-    runtime.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, nextCorrelationKey);
+    bindSubagentExternalSession(
+      runtime,
+      externalSessionId,
+      nextCorrelationKey,
+      runtime.subagentPartIdByCorrelationKey.get(nextCorrelationKey),
+    );
     runtime.pendingSubagentSessionsByExternalSessionId.delete(externalSessionId);
     removePendingSubagentCorrelationKey(runtime, nextCorrelationKey);
     emitSubagentPartsForSession(runtime, externalSessionId);

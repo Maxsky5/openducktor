@@ -626,6 +626,12 @@ export class OpencodeSdkAdapter
       ] of primarySession.subagentCorrelationKeyByExternalSessionId) {
         session.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
       }
+      for (const [correlationKey, partId] of primarySession.subagentPartIdByCorrelationKey) {
+        session.subagentPartIdByCorrelationKey.set(correlationKey, partId);
+      }
+      for (const [externalSessionId, partId] of primarySession.subagentPartIdByExternalSessionId) {
+        session.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
+      }
       session.pendingSubagentCorrelationKeys.splice(
         0,
         session.pendingSubagentCorrelationKeys.length,

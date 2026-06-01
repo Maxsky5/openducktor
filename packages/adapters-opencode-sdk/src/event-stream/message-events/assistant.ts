@@ -45,18 +45,20 @@ export const emitAssistantPart = (
     return false;
   }
 
-  const mapped = mapPartToAgentStreamPart(part, {
-    ...(options.linkedSubagentExternalSessionId
-      ? { linkedSubagentExternalSessionId: options.linkedSubagentExternalSessionId }
-      : {}),
-  });
+  const mapped = mapPartToAgentStreamPart(part);
   if (!mapped) {
     return false;
   }
 
   const nextMapped =
     mapped.kind === "subagent"
-      ? normalizeLiveSubagentCorrelation(runtime, part, mapped, roleHint)
+      ? normalizeLiveSubagentCorrelation(
+          runtime,
+          part,
+          mapped,
+          roleHint,
+          options.linkedSubagentExternalSessionId,
+        )
       : mapped;
   if (!nextMapped) {
     return false;
@@ -94,7 +96,10 @@ const flushPendingSubagentPartEmissionsForSession = (
   runtime.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
   let emitted = false;
   for (const emission of pending) {
-    emitted = emitAssistantPart(runtime, emission.part, emission.roleHint) || emitted;
+    emitted =
+      emitAssistantPart(runtime, emission.part, emission.roleHint, true, {
+        linkedSubagentExternalSessionId: externalSessionId,
+      }) || emitted;
   }
   return emitted;
 };
@@ -103,14 +108,7 @@ const readLinkedSubagentPart = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
 ): Part | null => {
-  const correlationKey = runtime.subagentCorrelationKeyByExternalSessionId.get(externalSessionId);
-  if (!correlationKey) {
-    return null;
-  }
-
-  const linkedPartId = Array.from(runtime.subagentCorrelationKeyByPartId.entries())
-    .reverse()
-    .find(([, candidateCorrelationKey]) => candidateCorrelationKey === correlationKey)?.[0];
+  const linkedPartId = runtime.subagentPartIdByExternalSessionId.get(externalSessionId);
   if (!linkedPartId) {
     return null;
   }

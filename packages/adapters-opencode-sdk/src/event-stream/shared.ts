@@ -45,6 +45,8 @@ export type EventStreamState = {
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
   subagentCorrelationKeyByExternalSessionId: Map<string, string>;
+  subagentPartIdByCorrelationKey: Map<string, string>;
+  subagentPartIdByExternalSessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   pendingSubagentCorrelationKeys: string[];
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
@@ -121,6 +123,37 @@ export const removePendingSubagentCorrelationKey = (
 
     state.pendingSubagentCorrelationKeysBySignature.set(signature, nextPending);
   }
+};
+
+export const bindSubagentPartCorrelation = (
+  state: Pick<
+    EventStreamState,
+    "subagentCorrelationKeyByPartId" | "subagentPartIdByCorrelationKey"
+  >,
+  partId: string,
+  correlationKey: string,
+): void => {
+  state.subagentCorrelationKeyByPartId.set(partId, correlationKey);
+  state.subagentPartIdByCorrelationKey.set(correlationKey, partId);
+};
+
+export const bindSubagentExternalSession = (
+  state: Pick<
+    EventStreamState,
+    | "subagentCorrelationKeyByExternalSessionId"
+    | "subagentPartIdByCorrelationKey"
+    | "subagentPartIdByExternalSessionId"
+  >,
+  externalSessionId: string,
+  correlationKey: string,
+  partId?: string,
+): void => {
+  state.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
+  if (!partId) {
+    return;
+  }
+  state.subagentPartIdByCorrelationKey.set(correlationKey, partId);
+  state.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
 };
 
 export const setSessionActive = (session: SessionRecord | undefined): void => {
