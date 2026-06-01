@@ -1,11 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  type RepoConfig,
-  type SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 
 const createRepoConfig = (): RepoConfig => ({
   workspaceId: "repo",
@@ -33,26 +30,16 @@ const createRepoConfig = (): RepoConfig => ({
   agentDefaults: {},
 });
 
-const createSettingsSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-  chat: { showThinkingMessages: false },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
-  autopilot: { rules: [] },
-  globalPromptOverrides: {
-    "kickoff.spec_initial": {
-      template: "global kickoff {{task.id}}",
-      baseVersion: 1,
-      enabled: true,
+const createSettingsSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    globalPromptOverrides: {
+      "kickoff.spec_initial": {
+        template: "global kickoff {{task.id}}",
+        baseVersion: 1,
+        enabled: true,
+      },
     },
-  },
-});
+  });
 
 const workspaceGetRepoConfigMock = mock(
   async (_workspaceId: string): Promise<RepoConfig> => createRepoConfig(),

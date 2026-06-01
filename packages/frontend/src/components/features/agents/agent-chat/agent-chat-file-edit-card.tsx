@@ -1,11 +1,10 @@
 import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-react";
-import { memo, type ReactElement, useState } from "react";
+import { memo, type ReactElement, useEffect, useRef, useState } from "react";
 import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
-
-// ─── Config ────────────────────────────────────────────────────────────
+import { useAgentChatSettings } from "./agent-chat-settings-context";
 
 type AgentChatFileEditCardProps = {
   data: FileEditData;
@@ -18,8 +17,12 @@ const STATUS_CONFIG: Record<string, { icon: typeof FileText; color: string; badg
 };
 
 function inferStatus(data: FileEditData): string {
-  if (data.deletions === 0 && data.additions > 0) return "added";
-  if (data.additions === 0 && data.deletions > 0) return "deleted";
+  if (data.deletions === 0 && data.additions > 0) {
+    return "added";
+  }
+  if (data.additions === 0 && data.deletions > 0) {
+    return "deleted";
+  }
   return "modified";
 }
 
@@ -29,23 +32,46 @@ const DEFAULT_CONFIG = {
   badge: "M",
 } as const;
 
-// ─── Component ─────────────────────────────────────────────────────────
-
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
 }: AgentChatFileEditCardProps): ReactElement {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const { expandFileDiffsByDefault } = useAgentChatSettings();
+  const hasDiff = Boolean(data.diff);
+  const [isExpanded, setIsExpanded] = useState(hasDiff && expandFileDiffsByDefault);
+  const hasSyncedInitialDefaultRef = useRef(false);
+  const userToggledRef = useRef(false);
 
   const status = inferStatus(data);
   const config = STATUS_CONFIG[status] ?? DEFAULT_CONFIG;
   const Icon = config.icon;
+  const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
+
+  useEffect(() => {
+    if (!hasSyncedInitialDefaultRef.current) {
+      hasSyncedInitialDefaultRef.current = true;
+      return;
+    }
+
+    if (userToggledRef.current) {
+      return;
+    }
+
+    setIsExpanded(hasDiff && expandFileDiffsByDefault);
+  }, [expandFileDiffsByDefault, hasDiff]);
+
+  const handleToggle = (): void => {
+    if (!hasDiff) {
+      return;
+    }
+
+    userToggledRef.current = true;
+    setIsExpanded((prev) => !prev);
+  };
 
   const fileName = data.filePath.split("/").pop() ?? data.filePath;
   const dirName = data.filePath.includes("/")
     ? data.filePath.slice(0, data.filePath.lastIndexOf("/"))
     : "";
-
-  const hasDiff = Boolean(data.diff);
 
   return (
     <div
@@ -59,15 +85,9 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
           "flex w-full items-center gap-2 px-3 py-2 text-left cursor-pointer",
           isExpanded && "border-b border-border",
         )}
-        onClick={() => setIsExpanded((prev) => !prev)}
+        onClick={handleToggle}
       >
-        {hasDiff ? (
-          isExpanded ? (
-            <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-          )
-        ) : null}
+        {hasDiff ? <ExpandIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
         <Icon className={cn("size-3.5 shrink-0", config.color)} />
         <span className="flex-1 truncate font-mono text-[11px]">
           {dirName ? <span className="text-muted-foreground">{dirName}/</span> : null}
@@ -84,7 +104,6 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
         ) : null}
       </button>
 
-      {/* Diff — uses shared PierreDiffViewer, split view for inline chat */}
       {isExpanded && data.diff ? (
         <div className="overflow-auto max-h-[60vh]">
           <PierreDiffViewer patch={data.diff} filePath={data.filePath} diffStyle="split" />

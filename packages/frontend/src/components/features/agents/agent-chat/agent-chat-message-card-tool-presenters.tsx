@@ -1,15 +1,11 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import {
-  Bot,
   FileText,
   Folder,
   Globe,
   ListTodo,
   LoaderCircle,
   Search,
-  ShieldCheck,
-  Sparkles,
   Terminal,
   Wrench,
 } from "lucide-react";
@@ -31,19 +27,6 @@ import {
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { formatAgentDuration } from "./format-agent-duration";
 import { relativizeDisplayPathsInValue } from "./tool-path-utils";
-
-export const assistantRoleIcon = (role: AgentRole): ReactElement => {
-  if (role === "spec") {
-    return <Sparkles className="size-3" />;
-  }
-  if (role === "planner") {
-    return <Bot className="size-3" />;
-  }
-  if (role === "build") {
-    return <Wrench className="size-3" />;
-  }
-  return <ShieldCheck className="size-3" />;
-};
 
 const toolIcon = (meta: Pick<ToolMeta, "tool" | "toolType">): ReactElement => {
   const value = meta.toolType;

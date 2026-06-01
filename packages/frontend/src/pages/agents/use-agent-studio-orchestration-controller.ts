@@ -1,4 +1,5 @@
 import type {
+  ChatSettings,
   GitBranch,
   GitTargetBranch,
   RuntimeDescriptor,
@@ -155,9 +156,7 @@ type BuildAgentStudioPageModelsArgsInput = {
   tabs: AgentStudioPageModelsTabsContext;
   sessionActions: AgentStudioPageModelsSessionActionsContext;
   modelSelection: AgentStudioPageModelsModelSelectionContext;
-  chatSettings: {
-    showThinkingMessages: boolean;
-  };
+  chatSettings: ChatSettings;
   composer: AgentStudioOrchestrationComposerContext;
 };
 
@@ -283,7 +282,7 @@ export function useAgentStudioOrchestrationController({
   const { repoSettings } = useAgentStudioRepoSettings({
     activeWorkspace,
   });
-  const { showThinkingMessages, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
+  const { chatSettings, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
     useAgentStudioChatSettings({ activeWorkspace });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
@@ -523,9 +522,7 @@ export function useAgentStudioOrchestrationController({
       handleSelectModel,
       handleSelectVariant,
     },
-    chatSettings: {
-      showThinkingMessages,
-    },
+    chatSettings,
     composer: {
       draftStateKey,
     },

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   agentPromptTemplateIdValues,
   type BuildSessionBootstrap,
-  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RepoConfig,
   type RuntimeInstanceSummary,
@@ -10,6 +9,7 @@ import {
   type TaskWorktreeSummary,
 } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { createDeferred, withTimeout } from "../test-utils";
 import { createEnsureRuntime, loadRepoDefaultModel, loadRepoPromptOverrides } from "./runtime";
 
@@ -63,18 +63,10 @@ const createPromptOverrideRepoConfig = (
 
 const createPromptOverrideSettingsSnapshot = (
   globalPromptOverrides: SettingsSnapshot["globalPromptOverrides"],
-): SettingsSnapshot => ({
-  theme: "light",
-  git: { defaultMergeMethod: "merge_commit" },
-  general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
-  autopilot: { rules: [] },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-  globalPromptOverrides,
-});
+): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    globalPromptOverrides,
+  });
 
 describe("agent-orchestrator-runtime", () => {
   let runtimeHost: NonNullable<Parameters<typeof createEnsureRuntime>[0]["hostClient"]>;

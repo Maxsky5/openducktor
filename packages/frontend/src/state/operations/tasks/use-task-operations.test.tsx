@@ -11,6 +11,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import {
   type BeadsCheckFixtureOverrides,
   createBeadsCheckFixture as createSharedBeadsCheckFixture,
+  createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -55,16 +56,7 @@ const originalConsoleWarn = console.warn;
 const originalToastSuccess = toast.success;
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
-const createSettingsSnapshotFixture = () => ({
-  theme: "light" as const,
-  git: { defaultMergeMethod: "merge_commit" as const },
-  chat: { showThinkingMessages: false },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" as const },
-  autopilot: { rules: [] },
-  workspaces: {},
-  globalPromptOverrides: {},
-});
+const createSettingsSnapshotFixture = () => createSharedSettingsSnapshotFixture();
 
 const createDeferred = <T,>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;

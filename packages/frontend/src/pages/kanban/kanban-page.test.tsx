@@ -13,6 +13,7 @@ import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
@@ -49,28 +50,7 @@ const resumeDeferredTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
 const workspaceGetRepoConfigMock = mock(async (): Promise<RepoConfig> => createRepoConfigFixture());
-const workspaceGetSettingsSnapshotMock = mock(async () => ({
-  theme: "light" as const,
-  git: {
-    defaultMergeMethod: "merge_commit" as const,
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  workspaces: {},
-  globalPromptOverrides: {} as RepoPromptOverrides,
-}));
+const workspaceGetSettingsSnapshotMock = mock(async () => createSettingsSnapshotFixture());
 const tasksListMock = mock(async () => [currentTaskFixture]);
 const taskWorktreeGetMock = mock(async () => ({
   workingDirectory: "/repo/worktrees/task-1",
@@ -618,28 +598,9 @@ describe("KanbanPage session start modal flow", () => {
     taskWorktreeGetMock.mockClear();
     loadRepoRuntimeCatalogMock.mockClear();
     workspaceGetRepoConfigMock.mockImplementation(async () => createRepoConfigFixture());
-    workspaceGetSettingsSnapshotMock.mockImplementation(async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show",
-      },
-      autopilot: {
-        rules: [],
-      },
-      workspaces: {},
-      globalPromptOverrides: {},
-    }));
+    workspaceGetSettingsSnapshotMock.mockImplementation(async () =>
+      createSettingsSnapshotFixture(),
+    );
     tasksListMock.mockImplementation(async () => [currentTaskFixture]);
   });
 

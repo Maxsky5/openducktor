@@ -137,6 +137,7 @@ const baseArgs: BuildArgs = {
   },
   chatSettings: {
     showThinkingMessages: true,
+    expandFileDiffsByDefault: false,
   },
   composer: {
     draftStateKey: "draft-1",
@@ -165,6 +166,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.modelSelection.onSelectModel).toBe(handleSelectModel);
     expect(mapped.modelSelection.onSelectVariant).toBe(handleSelectVariant);
     expect(mapped.chatSettings.showThinkingMessages).toBe(true);
+    expect(mapped.chatSettings.expandFileDiffsByDefault).toBe(false);
     expect(mapped.composer.draftStateKey).toBe("draft-1");
   });
 

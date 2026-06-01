@@ -189,6 +189,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
   "chatSettingsSchema",
+  "DEFAULT_CHAT_SETTINGS",
   "DEFAULT_GENERAL_SETTINGS",
   "DEFAULT_AGENT_RUNTIMES",
   "REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER",

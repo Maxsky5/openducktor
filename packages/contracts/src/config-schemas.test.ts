@@ -152,7 +152,46 @@ describe("config-schemas", () => {
   test("keeps chat settings scoped to chat display", () => {
     const parsed = chatSettingsSchema.parse({ showThinkingMessages: true });
 
-    expect(parsed).toEqual({ showThinkingMessages: true });
+    expect(parsed).toEqual({
+      showThinkingMessages: true,
+      expandFileDiffsByDefault: true,
+    });
+  });
+
+  test("defaults file diff expansion for older chat settings", () => {
+    const parsed = chatSettingsSchema.parse({ showThinkingMessages: false });
+
+    expect(parsed).toEqual({
+      showThinkingMessages: false,
+      expandFileDiffsByDefault: true,
+    });
+  });
+
+  test("roundtrips explicit file diff expansion settings", () => {
+    const parsedSnapshot = settingsSnapshotSchema.parse({
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      chat: { showThinkingMessages: true, expandFileDiffsByDefault: false },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+    const parsedGlobalConfig = globalConfigSchema.parse({
+      version: 2,
+      theme: "light",
+      git: { defaultMergeMethod: "merge_commit" },
+      chat: { showThinkingMessages: false, expandFileDiffsByDefault: false },
+      workspaces: {},
+      globalPromptOverrides: {},
+    });
+
+    expect(parsedSnapshot.chat).toEqual({
+      showThinkingMessages: true,
+      expandFileDiffsByDefault: false,
+    });
+    expect(parsedGlobalConfig.chat).toEqual({
+      showThinkingMessages: false,
+      expandFileDiffsByDefault: false,
+    });
   });
 
   test("defaults reusable prompts to an empty array", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type WorkspaceRecord } from "@openducktor/contracts";
+import type { WorkspaceRecord } from "@openducktor/contracts";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   AgentStateContextValue,
   ChecksStateContextValue,
@@ -56,29 +57,7 @@ describe("app-state-context-values", () => {
         agentDefaults: { spec: null, planner: null, build: null, qa: null },
       }),
       saveRepoSettings: async () => {},
-      loadSettingsSnapshot: async () => ({
-        theme: "light" as const,
-        git: {
-          defaultMergeMethod: "merge_commit",
-        },
-        general: {
-          openAgentStudioTabOnBackgroundSessionStart: true,
-        },
-        chat: {
-          showThinkingMessages: false,
-        },
-        reusablePrompts: [],
-        kanban: {
-          doneVisibleDays: 1,
-          emptyColumnDisplay: "show",
-        },
-        autopilot: {
-          rules: [],
-        },
-        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-        workspaces: {},
-        globalPromptOverrides: {},
-      }),
+      loadSettingsSnapshot: async () => createSettingsSnapshotFixture(),
       detectGithubRepository: async () => null,
       saveGlobalGitConfig: async () => {},
       saveSettingsSnapshot: async () => {},

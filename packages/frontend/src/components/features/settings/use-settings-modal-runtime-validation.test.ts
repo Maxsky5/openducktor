@@ -5,58 +5,44 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { buildRuntimeAvailabilityValidationState } from "./use-settings-modal-runtime-validation";
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: createDefaultAutopilotSettings(),
-  agentRuntimes: {
-    opencode: { enabled: true },
-    codex: { enabled: false },
-  },
-  workspaces: {
-    repo: {
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "codex",
-      worktreeBasePath: undefined,
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {
-        build: {
-          runtimeKind: "codex",
-          providerId: "codex",
-          modelId: "gpt-5.4",
-          variant: "medium",
-          profileId: "",
+const createSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    autopilot: createDefaultAutopilotSettings(),
+    agentRuntimes: {
+      opencode: { enabled: true },
+      codex: { enabled: false },
+    },
+    workspaces: {
+      repo: {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "codex",
+        worktreeBasePath: undefined,
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {
+          build: {
+            runtimeKind: "codex",
+            providerId: "codex",
+            modelId: "gpt-5.4",
+            variant: "medium",
+            profileId: "",
+          },
         },
       },
     },
-  },
-  globalPromptOverrides: {},
-});
+  });
 
 describe("settings runtime availability validation", () => {
   test("reports disabled repo default and role runtimes", () => {

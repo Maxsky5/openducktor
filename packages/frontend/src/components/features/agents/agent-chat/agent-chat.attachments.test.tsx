@@ -1,18 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
 import { buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   mode: "interactive" as const,
+  chatSettings: createChatSettingsFixture(),
   thread: {
     session: buildSession({
       status: "running" as const,
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    showThinkingMessages: false,
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,

@@ -1,18 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat, AgentChatSurface } from "./agent-chat";
 import { buildModelSelection, buildSession, buildTodoItem } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   mode: "interactive" as const,
+  chatSettings: createChatSettingsFixture(),
   thread: {
     session: buildSession({
       status: "running" as const,
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    showThinkingMessages: false,
     isSessionViewLoading: false,
     isSessionHistoryLoading: false,
     isWaitingForRuntimeReadiness: false,
@@ -122,6 +123,7 @@ describe("AgentChat", () => {
       createElement(AgentChatSurface, {
         model: {
           mode: "non_interactive",
+          chatSettings: interactiveModel.chatSettings,
           thread: {
             ...interactiveModel.thread,
             isInteractionEnabled: false,

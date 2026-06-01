@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
@@ -16,44 +17,25 @@ type HookArgs = {
   initialSnapshot: SettingsSnapshot;
 };
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  chat: {
-    showThinkingMessages: false,
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {},
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {
-    repo: {
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
+const createSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    workspaces: {
+      repo: {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
     },
-  },
-});
+  });
 
 const useDirtyDraftActionsHarness = ({ selectedWorkspaceId, initialSnapshot }: HookArgs) => {
   const [snapshotDraft, setSnapshotDraft] = useState<SettingsSnapshot | null>(initialSnapshot);

@@ -6,6 +6,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { documentQueryKeys } from "@/state/queries/documents";
 import { taskQueryKeys } from "@/state/queries/tasks";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { useSpecOperations } from "./use-spec-operations";
@@ -25,16 +26,7 @@ type LegacyHookArgs = {
 const createEmptyDocument = () => ({ markdown: "", updatedAt: null as string | null });
 const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
 
-const createSettingsSnapshotFixture = () => ({
-  theme: "light" as const,
-  git: { defaultMergeMethod: "merge_commit" as const },
-  chat: { showThinkingMessages: false },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" as const },
-  autopilot: { rules: [] },
-  workspaces: {},
-  globalPromptOverrides: {},
-});
+const createSettingsSnapshotFixture = () => createSharedSettingsSnapshotFixture();
 
 type TaskDocumentSection = "spec" | "plan" | "qa";
 

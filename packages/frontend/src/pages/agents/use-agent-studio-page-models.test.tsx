@@ -2,12 +2,15 @@ import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import { AgentChatComposer } from "@/components/features/agents/agent-chat/agent-chat-composer";
+import { AgentChatSettingsProvider } from "@/components/features/agents/agent-chat/agent-chat-settings-context";
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -233,10 +236,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     onReplyApproval: async () => {},
     ...overrides.approvals,
   };
-  const chatSettings = {
-    showThinkingMessages: false,
-    ...overrides.chatSettings,
-  };
+  const chatSettings = createChatSettingsFixture(overrides.chatSettings);
   const composer = {
     draftStateKey: "draft-1",
     ...overrides.composer,
@@ -283,6 +283,13 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioPageModels, initialProps);
+
+const createAgentChatThreadElement = (model: AgentChatModel) =>
+  createElement(
+    AgentChatSettingsProvider,
+    { value: model.chatSettings },
+    createElement(AgentChatThread, { model: model.thread }),
+  );
 
 describe("useAgentStudioPageModels", () => {
   test("keeps the interactive composer model available before a task is selected", async () => {
@@ -344,7 +351,7 @@ describe("useAgentStudioPageModels", () => {
     });
     expect(state.agentChatModel.thread.readinessState).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
-    expect(state.agentChatModel.thread.showThinkingMessages).toBe(false);
+    expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
 
     state.agentChatModel.thread.onRefreshChecks();
     await state.agentChatModel.composer.onSend(createComposerDraft("message"));
@@ -519,7 +526,9 @@ describe("useAgentStudioPageModels", () => {
 
     const thread = harness.getLatest().agentChatModel.thread;
     expect(thread.isSessionHistoryLoading).toBe(false);
-    const html = renderToStaticMarkup(createElement(AgentChatThread, { model: thread }));
+    const html = renderToStaticMarkup(
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
+    );
     expect(html).toContain("Cached transcript");
     expect(html).not.toContain("Loading session");
 
@@ -769,9 +778,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
     const html = renderToStaticMarkup(
-      createElement(AgentChatThread, {
-        model: harness.getLatest().agentChatModel.thread,
-      }),
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
 
     expect(html).toContain("Approve once");
@@ -907,7 +914,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("updates thread model when showThinkingMessages changes without rebuilding composer", async () => {
+  test("updates chat settings when showThinkingMessages changes without rebuilding thread or composer", async () => {
     const session = createSession("session-1", "external-1");
     const baseProps = createHookArgs({
       selectedSessionCore: {
@@ -917,9 +924,7 @@ describe("useAgentStudioPageModels", () => {
       composer: {
         draftStateKey: "draft-thinking-toggle",
       },
-      chatSettings: {
-        showThinkingMessages: false,
-      },
+      chatSettings: createChatSettingsFixture(),
     });
     const harness = createHookHarness(baseProps);
 
@@ -930,15 +935,45 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update({
       ...baseProps,
-      chatSettings: {
-        showThinkingMessages: true,
-      },
+      chatSettings: createChatSettingsFixture({ showThinkingMessages: true }),
     });
 
     const nextState = harness.getLatest();
-    expect(nextState.agentChatModel.thread).not.toBe(initialThreadModel);
+    expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
     expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
-    expect(nextState.agentChatModel.thread.showThinkingMessages).toBe(true);
+    expect(nextState.agentChatModel.chatSettings.showThinkingMessages).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("updates chat settings when file diff expansion default changes without rebuilding thread or composer", async () => {
+    const session = createSession("session-1", "external-1");
+    const baseProps = createHookArgs({
+      selectedSessionCore: {
+        activeSession: session,
+        sessionsForTask: [session],
+      },
+      composer: {
+        draftStateKey: "draft-diff-toggle",
+      },
+      chatSettings: createChatSettingsFixture(),
+    });
+    const harness = createHookHarness(baseProps);
+
+    await harness.mount();
+    const initialState = harness.getLatest();
+    const initialThreadModel = initialState.agentChatModel.thread;
+    const initialComposerModel = initialState.agentChatModel.composer;
+
+    await harness.update({
+      ...baseProps,
+      chatSettings: createChatSettingsFixture({ expandFileDiffsByDefault: false }),
+    });
+
+    const nextState = harness.getLatest();
+    expect(nextState.agentChatModel.thread).toBe(initialThreadModel);
+    expect(nextState.agentChatModel.composer).toBe(initialComposerModel);
+    expect(nextState.agentChatModel.chatSettings.expandFileDiffsByDefault).toBe(false);
 
     await harness.unmount();
   });

@@ -10,7 +10,7 @@ import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app
 import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
-import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
+import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
@@ -19,7 +19,6 @@ import { useAgentChatSurfaceModel } from "./use-agent-chat-surface-model";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
 
-const DEFAULT_SHOW_THINKING_MESSAGES = false;
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
 
@@ -167,10 +166,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
       isMountedRef.current = false;
     };
   }, []);
-  const { data: showThinkingMessages = DEFAULT_SHOW_THINKING_MESSAGES } = useQuery({
-    ...settingsSnapshotQueryOptions(),
-    enabled: activeWorkspace !== null,
-    select: (snapshot) => snapshot.chat.showThinkingMessages,
+  const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
+    activeWorkspace,
   });
 
   const runtimeListQuery = useQuery({
@@ -473,8 +470,16 @@ export function useReadonlySessionTranscriptSurfaceModel({
     Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
     runtimeData.session === null &&
     (resolvedSource.isPending || isTranscriptLoading);
+  const chatSettingsLoadError =
+    activeWorkspace && chatSettingsError
+      ? `Failed to load chat settings: ${errorMessageFromUnknown(
+          chatSettingsError,
+          "Settings read failed.",
+        )}`
+      : null;
   const loadError =
     resolvedSource.error ??
+    chatSettingsLoadError ??
     liveTranscriptAttachError ??
     (historyQuery.error
       ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
@@ -548,7 +553,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     session: runtimeData.session,
     isTaskHydrating: isResolvingTranscript,
     isSessionSelectionResolving: false,
-    showThinkingMessages: activeWorkspace ? showThinkingMessages : DEFAULT_SHOW_THINKING_MESSAGES,
+    chatSettings,
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,

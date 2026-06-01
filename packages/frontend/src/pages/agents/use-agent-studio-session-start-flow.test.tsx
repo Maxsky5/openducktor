@@ -8,6 +8,7 @@ import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
   createBeadsCheckFixture,
@@ -313,29 +314,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         },
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
-    host.workspaceGetSettingsSnapshot = async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit",
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show",
-      },
-      autopilot: {
-        rules: [],
-      },
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-      workspaces: {},
-      globalPromptOverrides: {},
-    });
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
     host.taskWorktreeGet = async () => ({
       workingDirectory: "/repo/worktrees/task-1",
       source: "builder_session",

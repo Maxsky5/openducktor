@@ -12,8 +12,9 @@ const DEFAULT_SOFT_GUARDRAILS = {
   backoffSeconds: 30,
 } as const;
 
-const DEFAULT_CHAT_SETTINGS = {
+export const DEFAULT_CHAT_SETTINGS = {
   showThinkingMessages: false,
+  expandFileDiffsByDefault: true,
 } as const;
 export const DEFAULT_GENERAL_SETTINGS = {
   openAgentStudioTabOnBackgroundSessionStart: true,
@@ -225,6 +226,7 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 
 export const chatSettingsSchema = z.object({
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
+  expandFileDiffsByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault),
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 

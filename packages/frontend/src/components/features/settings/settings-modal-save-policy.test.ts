@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   buildPromptValidationSaveError,
   buildRepoScriptValidationSaveError,
@@ -11,29 +12,7 @@ import {
 } from "./settings-modal-save-policy";
 import { EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {},
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-});
+const createSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
 
 describe("settings-modal-save-policy", () => {
   test("derives dirty and global-git-only save modes", () => {

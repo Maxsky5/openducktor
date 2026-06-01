@@ -1,4 +1,10 @@
-import type { RepoConfig, SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
+import {
+  type ChatSettings,
+  chatSettingsSchema,
+  type RepoConfig,
+  type SettingsSnapshot,
+  type WorkspaceRecord,
+} from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { normalizeTargetBranch } from "@/lib/target-branch";
 import type { RepoSettingsInput } from "@/types/state-slices";
@@ -75,6 +81,9 @@ export const settingsSnapshotQueryOptions = (hostClient: SettingsSnapshotQueryHo
     queryFn: () => hostClient.workspaceGetSettingsSnapshot(),
     staleTime: SETTINGS_SNAPSHOT_STALE_TIME_MS,
   });
+
+export const readChatSettingsFromSnapshot = (snapshot: SettingsSnapshot): ChatSettings =>
+  chatSettingsSchema.parse(snapshot.chat);
 
 export const repoConfigQueryOptions = (
   workspaceId: string,

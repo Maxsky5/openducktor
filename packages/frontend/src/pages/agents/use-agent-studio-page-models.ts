@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { ChatSettings, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { useEffect, useMemo, useRef } from "react";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -89,9 +89,7 @@ type AgentStudioComposerContext = {
   draftStateKey: string;
 };
 
-type AgentStudioChatSettingsContext = {
-  showThinkingMessages: boolean;
-};
+type AgentStudioChatSettingsContext = ChatSettings;
 
 type UseAgentStudioPageModelsArgs = {
   activeTabValue: string;
@@ -396,7 +394,7 @@ export function useAgentStudioPageModels({
     session: selectedSession.activeSession,
     isTaskHydrating: selectedSession.runtime.isTaskHydrating,
     isSessionSelectionResolving: selectedSession.runtime.isSessionSelectionResolving,
-    showThinkingMessages: chatSettings.showThinkingMessages,
+    chatSettings,
     isSessionWorking: sessionActions.isSessionWorking,
     isSessionHistoryLoading: isSessionHistoryBlockingRender,
     isWaitingForRuntimeReadiness: selectedSession.runtime.isWaitingForRuntimeReadiness,

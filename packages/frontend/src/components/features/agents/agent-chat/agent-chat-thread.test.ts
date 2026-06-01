@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   buildApprovalRequest,
   buildMessage,
@@ -10,7 +12,7 @@ import {
   buildSession,
   buildTodoItem,
 } from "./agent-chat-test-fixtures";
-import { AgentChatThread } from "./agent-chat-thread";
+import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
 
 (
   globalThis as typeof globalThis & {
@@ -20,7 +22,6 @@ import { AgentChatThread } from "./agent-chat-thread";
 
 const buildBaseModel = () => ({
   isSessionWorking: false,
-  showThinkingMessages: false,
   isSessionViewLoading: false,
   isSessionHistoryLoading: false,
   isWaitingForRuntimeReadiness: false,
@@ -50,6 +51,15 @@ const buildBaseModel = () => ({
   scrollToBottomOnSendRef: { current: null } as { current: (() => void) | null },
   syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
+
+const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+
+const AgentChatThread = (props: Parameters<typeof AgentChatThreadComponent>[0]) =>
+  createElement(
+    AgentChatSettingsProvider,
+    { value: DEFAULT_TEST_CHAT_SETTINGS },
+    createElement(AgentChatThreadComponent, props),
+  );
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -276,7 +286,6 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          showThinkingMessages: false,
           session: buildSession({
             status: "stopped",
             messages: [
@@ -299,7 +308,6 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          showThinkingMessages: false,
           session: buildSession({
             status: "stopped",
             messages: [buildMessage("thinking", "Reasoning trace", { id: "thinking-1" })],

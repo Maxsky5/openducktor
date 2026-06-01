@@ -3,7 +3,9 @@ import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openduckto
 import { type ComponentProps, createElement as createReactElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
+import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage } from "./agent-chat-test-fixtures";
 
 const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
@@ -20,17 +22,27 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
   loadRepoRuntimeFileSearch: async () => [],
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
+const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+
+type AgentChatMessageCardTestProps = ComponentProps<typeof AgentChatMessageCard> & {
+  chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
+};
+
 const createElement = (
   _type: typeof AgentChatMessageCard,
-  props: React.ComponentProps<typeof AgentChatMessageCard>,
+  { chatSettings = DEFAULT_TEST_CHAT_SETTINGS, ...props }: AgentChatMessageCardTestProps,
 ) => {
   return createReactElement(
     RuntimeDefinitionsContext.Provider,
     { value: TEST_RUNTIME_DEFINITIONS_CONTEXT },
-    createReactElement(AgentChatMessageCard, {
-      sessionRuntimeKind: "opencode",
-      ...props,
-    }),
+    createReactElement(
+      AgentChatSettingsProvider,
+      { value: chatSettings },
+      createReactElement(AgentChatMessageCard, {
+        sessionRuntimeKind: "opencode",
+        ...props,
+      }),
+    ),
   );
 };
 
@@ -398,6 +410,10 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
+        chatSettings: {
+          ...DEFAULT_TEST_CHAT_SETTINGS,
+          expandFileDiffsByDefault: false,
+        },
       }),
     );
 

@@ -1,4 +1,4 @@
-import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
+import type { ChatSettings, RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -33,7 +33,6 @@ export type AgentChatEmptyStateModel = {
 export type AgentChatThreadModel = {
   session: AgentSessionState | null;
   isSessionWorking: boolean;
-  showThinkingMessages: boolean;
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -122,6 +121,7 @@ export type AgentChatComposerModel = {
 
 export type AgentChatSurfaceModel = {
   mode: AgentChatMode;
+  chatSettings: ChatSettings;
   thread: AgentChatThreadModel;
   composer?: AgentChatComposerModel;
 };

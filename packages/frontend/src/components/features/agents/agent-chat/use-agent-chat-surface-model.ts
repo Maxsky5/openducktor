@@ -1,4 +1,5 @@
 import type {
+  ChatSettings,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
   RuntimeKind,
@@ -174,7 +175,7 @@ type UseAgentChatSurfaceModelArgs = {
   session: AgentSessionState | null;
   isTaskHydrating: boolean;
   isSessionSelectionResolving: boolean;
-  showThinkingMessages: boolean;
+  chatSettings: ChatSettings;
   isSessionWorking: boolean;
   isSessionHistoryLoading: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -197,7 +198,7 @@ export function useAgentChatSurfaceModel({
   session,
   isTaskHydrating,
   isSessionSelectionResolving,
-  showThinkingMessages,
+  chatSettings,
   isSessionWorking,
   isSessionHistoryLoading,
   isWaitingForRuntimeReadiness,
@@ -270,7 +271,6 @@ export function useAgentChatSurfaceModel({
     () => ({
       session: threadSession,
       isSessionWorking,
-      showThinkingMessages,
       isSessionViewLoading: isContextSwitching,
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness,
@@ -328,7 +328,6 @@ export function useAgentChatSurfaceModel({
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
       sessionRuntimeDataError,
-      showThinkingMessages,
       subagentPendingApprovalsByExternalSessionId,
       subagentPendingApprovalCountByExternalSessionId,
       subagentPendingQuestionsByExternalSessionId,
@@ -580,9 +579,10 @@ export function useAgentChatSurfaceModel({
   return useMemo(
     () => ({
       mode,
+      chatSettings,
       thread: threadModel,
       ...(composerModel ? { composer: composerModel } : {}),
     }),
-    [composerModel, mode, threadModel],
+    [chatSettings, composerModel, mode, threadModel],
   );
 }
