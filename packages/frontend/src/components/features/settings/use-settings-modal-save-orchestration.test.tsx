@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { EMPTY_PROMPT_VALIDATION_STATE } from "./settings-modal-controller.types";
 import { type DirtySections, EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orchestration";
@@ -15,45 +16,25 @@ type HookArgs = Parameters<typeof useSettingsModalSaveOrchestration>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSettingsModalSaveOrchestration, initialProps);
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {},
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {
-    repo: {
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
+const createSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    workspaces: {
+      repo: {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
     },
-  },
-});
+  });
 
 const createArgs = (
   overrides: Partial<HookArgs> = {},

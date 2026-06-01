@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   createAgentSessionFixture,
+  createChatSettingsFixture,
+  createSettingsSnapshotFixture,
   createTaskCardFixture,
   TEST_EXTERNAL_SESSION_IDS,
 } from "./shared-test-fixtures";
@@ -59,5 +61,28 @@ describe("shared test fixtures", () => {
 
   test("createAgentSessionFixture uses the canonical external id by default", () => {
     expect(createAgentSessionFixture().externalSessionId).toBe(TEST_EXTERNAL_SESSION_IDS.default);
+  });
+
+  test("createChatSettingsFixture derives from canonical defaults", () => {
+    expect(createChatSettingsFixture({ expandFileDiffsByDefault: false })).toEqual({
+      showThinkingMessages: false,
+      expandFileDiffsByDefault: false,
+    });
+  });
+
+  test("createSettingsSnapshotFixture returns isolated nested objects", () => {
+    const first = createSettingsSnapshotFixture();
+    const second = createSettingsSnapshotFixture();
+
+    first.chat.showThinkingMessages = true;
+    first.reusablePrompts.push({
+      id: "prompt-1",
+      name: "review",
+      description: "Review",
+      content: "Review this.",
+    });
+
+    expect(second.chat.showThinkingMessages).toBe(false);
+    expect(second.reusablePrompts).toEqual([]);
   });
 });

@@ -7,6 +7,7 @@ import { act } from "react";
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
   createTaskCardFixture,
@@ -101,14 +102,7 @@ const buildMockedHost = () => ({
   planGet: async () => ({ markdown: "", updatedAt: null }),
   qaGetReport: async () => ({ markdown: "", updatedAt: null }),
   workspaceGetRepoConfig: async () => ({ promptOverrides: {} }),
-  workspaceGetSettingsSnapshot: async () => ({
-    theme: "light" as const,
-    git: { defaultMergeMethod: "merge_commit" as const },
-    chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
-    reusablePrompts: [],
-    repos: {},
-    globalPromptOverrides: {},
-  }),
+  workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
 });
 
 const HOST_METHOD_NAMES = [

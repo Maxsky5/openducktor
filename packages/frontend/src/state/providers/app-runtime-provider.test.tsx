@@ -1,42 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type SettingsSnapshot,
-} from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR, type SettingsSnapshot } from "@openducktor/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useRuntimeDefinitionsContext } from "../app-state-contexts";
 import { host } from "../operations/host";
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 import { AppRuntimeProvider } from "./app-runtime-provider";
 
-const createSettingsSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-  globalPromptOverrides: {},
-});
+const createSettingsSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
 
 const createWrapper = ({ children }: PropsWithChildren): ReactElement =>
   createElement(

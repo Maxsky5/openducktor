@@ -1,27 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
-  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsModalContent } from "./settings-modal-content";
 
-const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot => ({
-  theme: "light",
-  git: { defaultMergeMethod: "merge_commit" },
-  general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
-  autopilot: { rules: [] },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-  globalPromptOverrides: {},
-  ...overrides,
-});
+const createMockSnapshot = (overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot =>
+  createSettingsSnapshotFixture(overrides);
 
 const createMockController = (snapshot: SettingsSnapshot) => ({
   isLoadingSettings: false,

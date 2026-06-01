@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
 
 enableReactActEnvironment();
@@ -13,77 +14,58 @@ type HookArgs = Parameters<typeof useSettingsModalPromptValidation>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSettingsModalPromptValidation, initialProps);
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {
-    "system.role.spec.base": {
-      template: "invalid {{task.bad}}",
-      baseVersion: 1,
-      enabled: true,
-    },
-  },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {
-    "repo-a": {
-      workspaceId: "repo-a",
-      workspaceName: "Repo A",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode",
-      worktreeBasePath: "/tmp/a",
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
+const createSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    globalPromptOverrides: {
+      "system.role.spec.base": {
+        template: "invalid {{task.bad}}",
+        baseVersion: 1,
+        enabled: true,
       },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {
-        "kickoff.build_implementation_start": {
-          template: "invalid {{unknown.value}}",
-          baseVersion: 1,
-          enabled: true,
+    },
+    workspaces: {
+      "repo-a": {
+        workspaceId: "repo-a",
+        workspaceName: "Repo A",
+        repoPath: "/repo-a",
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: "/tmp/a",
+        branchPrefix: "obp",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
         },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {
+          "kickoff.build_implementation_start": {
+            template: "invalid {{unknown.value}}",
+            baseVersion: 1,
+            enabled: true,
+          },
+        },
+        agentDefaults: {},
       },
-      agentDefaults: {},
-    },
-    "repo-b": {
-      workspaceId: "repo-b",
-      workspaceName: "Repo B",
-      repoPath: "/repo-b",
-      defaultRuntimeKind: "opencode",
-      worktreeBasePath: "/tmp/b",
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
+      "repo-b": {
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repo-b",
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: "/tmp/b",
+        branchPrefix: "obp",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
       },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
     },
-  },
-});
+  });
 
 describe("useSettingsModalPromptValidation", () => {
   test("returns empty validation state when snapshot is missing", async () => {

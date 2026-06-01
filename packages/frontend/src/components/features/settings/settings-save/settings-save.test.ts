@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentPromptTemplateId,
   agentPromptTemplateIdValues,
-  DEFAULT_AGENT_RUNTIMES,
   type RepoConfig,
   type RepoPromptOverrides,
 } from "@openducktor/contracts";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { preparePromptOverridesForSave } from "./prompt-overrides";
 import { prepareRepoConfigForSave } from "./repo-config";
@@ -314,45 +314,31 @@ describe("settings save transforms", () => {
   });
 
   test("normalizes snapshot workspace map and global prompt overrides", () => {
-    const snapshot = prepareSettingsSnapshotForSave({
-      theme: "light",
-      git: {
-        defaultMergeMethod: "merge_commit",
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: true,
-        expandFileDiffsByDefault: true,
-      },
-      reusablePrompts: [
-        {
-          id: " prompt-1 ",
-          name: " review ",
-          description: " Review context ",
-          content: " Review this. ",
+    const snapshot = prepareSettingsSnapshotForSave(
+      createSettingsSnapshotFixture({
+        chat: {
+          showThinkingMessages: true,
         },
-      ],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show" as const,
-      },
-      autopilot: {
-        rules: [],
-      },
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-      workspaces: {
-        "repo-a": createRepoConfig(),
-      },
-      globalPromptOverrides: {
-        "kickoff.spec_initial": {
-          template: " global ",
-          baseVersion: 2,
-          enabled: false,
+        reusablePrompts: [
+          {
+            id: " prompt-1 ",
+            name: " review ",
+            description: " Review context ",
+            content: " Review this. ",
+          },
+        ],
+        workspaces: {
+          "repo-a": createRepoConfig(),
         },
-      },
-    });
+        globalPromptOverrides: {
+          "kickoff.spec_initial": {
+            template: " global ",
+            baseVersion: 2,
+            enabled: false,
+          },
+        },
+      }),
+    );
 
     expect(snapshot.workspaces["repo-a"]?.hooks.preStart).toEqual(["npm ci"]);
     expect(snapshot.workspaces["repo-a"]?.devServers).toEqual([

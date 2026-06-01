@@ -10,6 +10,7 @@ import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-c
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -235,11 +236,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     onReplyApproval: async () => {},
     ...overrides.approvals,
   };
-  const chatSettings = {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-    ...overrides.chatSettings,
-  };
+  const chatSettings = createChatSettingsFixture(overrides.chatSettings);
   const composer = {
     draftStateKey: "draft-1",
     ...overrides.composer,
@@ -927,10 +924,7 @@ describe("useAgentStudioPageModels", () => {
       composer: {
         draftStateKey: "draft-thinking-toggle",
       },
-      chatSettings: {
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      },
+      chatSettings: createChatSettingsFixture(),
     });
     const harness = createHookHarness(baseProps);
 
@@ -941,10 +935,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update({
       ...baseProps,
-      chatSettings: {
-        showThinkingMessages: true,
-        expandFileDiffsByDefault: true,
-      },
+      chatSettings: createChatSettingsFixture({ showThinkingMessages: true }),
     });
 
     const nextState = harness.getLatest();
@@ -965,10 +956,7 @@ describe("useAgentStudioPageModels", () => {
       composer: {
         draftStateKey: "draft-diff-toggle",
       },
-      chatSettings: {
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      },
+      chatSettings: createChatSettingsFixture(),
     });
     const harness = createHookHarness(baseProps);
 
@@ -979,10 +967,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.update({
       ...baseProps,
-      chatSettings: {
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: false,
-      },
+      chatSettings: createChatSettingsFixture({ expandFileDiffsByDefault: false }),
     });
 
     const nextState = harness.getLatest();

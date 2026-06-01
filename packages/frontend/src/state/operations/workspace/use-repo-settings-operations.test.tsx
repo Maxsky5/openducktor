@@ -1,12 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
-import {
-  agentPromptTemplateIdValues,
-  DEFAULT_AGENT_RUNTIMES,
-  type SettingsSnapshot,
-} from "@openducktor/contracts";
+import { agentPromptTemplateIdValues, type SettingsSnapshot } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { IsolatedQueryWrapper } from "@/test-utils/isolated-query-wrapper";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { host } from "../shared/host";
 import { useRepoSettingsOperations } from "./use-repo-settings-operations";
@@ -69,30 +66,7 @@ const createWorkspaceRecord = (path = "/repo-a") => ({
   effectiveWorktreeBasePath: "/tmp/worktrees",
 });
 
-const createSettingsSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-  globalPromptOverrides: {},
-});
+const createSettingsSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
 
 const createRepoConfig = () => ({
   workspaceId: "repo-a",
@@ -596,7 +570,6 @@ describe("use-repo-settings-operations", () => {
     const workspaceSaveSettingsSnapshot = mock(async () => [createWorkspaceRecord()]);
     const normalizedSnapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -622,7 +595,6 @@ describe("use-repo-settings-operations", () => {
     });
     const snapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
       workspaces: {
         "repo-a": {
           ...createRepoConfig(),
@@ -687,27 +659,7 @@ describe("use-repo-settings-operations", () => {
         },
       ]),
     );
-    const snapshot = {
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit" as const,
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show" as const,
-      },
-      autopilot: {
-        rules: [],
-      },
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    const snapshot = createSettingsSnapshotFixture({
       workspaces: {
         "repo-a": {
           workspaceId: "repo-a",
@@ -728,7 +680,7 @@ describe("use-repo-settings-operations", () => {
         },
       },
       globalPromptOverrides,
-    };
+    });
 
     try {
       await harness.mount();

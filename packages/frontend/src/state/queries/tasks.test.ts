@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import {
-  type AgentSessionRecord,
-  DEFAULT_AGENT_RUNTIMES,
-  type SettingsSnapshot,
-  type TaskCard,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { documentQueryKeys } from "./documents";
 import { refreshRepoTaskViewsFromQuery } from "./task-view-sync";
 import {
@@ -22,18 +18,9 @@ import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "./workspace";
 
 const DONE_VISIBLE_DAYS = 1;
 
-const settingsSnapshotFixture: SettingsSnapshot = {
-  theme: "light",
-  git: { defaultMergeMethod: "merge_commit" },
-  general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
-  reusablePrompts: [],
-  kanban: { doneVisibleDays: DONE_VISIBLE_DAYS, emptyColumnDisplay: "show" },
-  autopilot: { rules: [] },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-  globalPromptOverrides: {},
-};
+const settingsSnapshotFixture: SettingsSnapshot = createSettingsSnapshotFixture({
+  kanban: { doneVisibleDays: DONE_VISIBLE_DAYS },
+});
 
 const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;

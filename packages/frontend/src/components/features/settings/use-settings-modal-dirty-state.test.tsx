@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 
 enableReactActEnvironment();
@@ -13,30 +14,7 @@ type HookArgs = Parameters<typeof useSettingsModalDirtyState>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSettingsModalDirtyState, initialProps);
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {},
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {},
-});
+const createSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
 
 describe("useSettingsModalDirtyState", () => {
   test("marks sections dirty and resets when the modal closes", async () => {

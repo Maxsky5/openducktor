@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createHookHarness as createSharedHookHarness,
@@ -11,30 +12,7 @@ const actualHostOperationsModule = await import("@/state/operations/host");
 
 const hostMock = {
   workspaceGetSettingsSnapshot: mock(
-    async (): Promise<SettingsSnapshot> => ({
-      theme: "light",
-      git: {
-        defaultMergeMethod: "merge_commit",
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show",
-      },
-      autopilot: {
-        rules: [],
-      },
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-      workspaces: {},
-      globalPromptOverrides: {},
-    }),
+    async (): Promise<SettingsSnapshot> => createSettingsSnapshotFixture(),
   ),
 };
 
@@ -82,24 +60,7 @@ const createSettingsSnapshot = (
   expandFileDiffsByDefault: boolean | undefined = true,
   includeChat = true,
 ): SettingsSnapshot => {
-  const snapshot = {
-    theme: "light",
-    git: {
-      defaultMergeMethod: "merge_commit",
-    },
-    general: {
-      openAgentStudioTabOnBackgroundSessionStart: true,
-    },
-    kanban: {
-      doneVisibleDays: 1,
-      emptyColumnDisplay: "show",
-    },
-    autopilot: {
-      rules: [],
-    },
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    workspaces: {},
-    globalPromptOverrides: {},
+  const snapshot = createSettingsSnapshotFixture({
     reusablePrompts: [
       {
         id: "prompt-1",
@@ -108,13 +69,15 @@ const createSettingsSnapshot = (
         content: "Review this.",
       },
     ],
-  } as Omit<SettingsSnapshot, "chat"> & { chat?: unknown };
+  }) as Omit<SettingsSnapshot, "chat"> & { chat?: unknown };
 
   if (includeChat) {
     snapshot.chat = {
       showThinkingMessages,
       ...(typeof expandFileDiffsByDefault === "boolean" ? { expandFileDiffsByDefault } : {}),
     };
+  } else {
+    delete snapshot.chat;
   }
 
   return snapshot as SettingsSnapshot;

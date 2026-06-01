@@ -1,4 +1,13 @@
-import type { BeadsCheck, TaskCard } from "@openducktor/contracts";
+import {
+  type BeadsCheck,
+  type ChatSettings,
+  DEFAULT_AGENT_RUNTIMES,
+  DEFAULT_CHAT_SETTINGS,
+  DEFAULT_GENERAL_SETTINGS,
+  DEFAULT_KANBAN_SETTINGS,
+  type SettingsSnapshot,
+  type TaskCard,
+} from "@openducktor/contracts";
 import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -42,6 +51,18 @@ export type RepoRuntimeHealthFixtureOverrides = Omit<
 > & {
   runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
   mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
+};
+
+export type ChatSettingsFixtureOverrides = Partial<ChatSettings>;
+
+export type SettingsSnapshotFixtureOverrides = Omit<
+  Partial<SettingsSnapshot>,
+  "chat" | "general" | "git" | "kanban"
+> & {
+  chat?: ChatSettingsFixtureOverrides;
+  general?: Partial<SettingsSnapshot["general"]>;
+  git?: Partial<SettingsSnapshot["git"]>;
+  kanban?: Partial<SettingsSnapshot["kanban"]>;
 };
 
 const BASE_TASK_CARD_FIXTURE: TaskCard = {
@@ -133,6 +154,42 @@ const BASE_REPO_RUNTIME_MCP_FIXTURE: NonNullable<RepoRuntimeHealthCheck["mcp"]> 
   toolIds: [],
   detail: null,
   failureKind: null,
+};
+
+export const createChatSettingsFixture = (
+  overrides: ChatSettingsFixtureOverrides = {},
+): ChatSettings => structuredClone({ ...DEFAULT_CHAT_SETTINGS, ...overrides });
+
+export const createSettingsSnapshotFixture = (
+  overrides: SettingsSnapshotFixtureOverrides = {},
+): SettingsSnapshot => {
+  const { chat, general, git, kanban, ...snapshotOverrides } = overrides;
+  const merged = {
+    theme: "light",
+    git: {
+      defaultMergeMethod: "merge_commit",
+      ...git,
+    },
+    general: {
+      ...DEFAULT_GENERAL_SETTINGS,
+      ...general,
+    },
+    chat: createChatSettingsFixture(chat),
+    reusablePrompts: [],
+    kanban: {
+      ...DEFAULT_KANBAN_SETTINGS,
+      ...kanban,
+    },
+    autopilot: {
+      rules: [],
+    },
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    workspaces: {},
+    globalPromptOverrides: {},
+    ...snapshotOverrides,
+  } satisfies SettingsSnapshot;
+
+  return structuredClone(merged);
 };
 
 export const createDeferred = <T>() => {

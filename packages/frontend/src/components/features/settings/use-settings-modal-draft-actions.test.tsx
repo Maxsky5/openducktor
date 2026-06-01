@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import { useState } from "react";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 
 enableReactActEnvironment();
@@ -14,48 +15,28 @@ type HarnessArgs = {
   initialSnapshot: SettingsSnapshot;
 };
 
-const createInitialSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {},
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {
-    "repo-a": {
-      workspaceId: "repo-a",
-      workspaceName: "Repo A",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode",
-      worktreeBasePath: "/tmp/a",
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
+const createInitialSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    workspaces: {
+      "repo-a": {
+        workspaceId: "repo-a",
+        workspaceName: "Repo A",
+        repoPath: "/repo-a",
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: "/tmp/a",
+        branchPrefix: "obp",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
       },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
     },
-  },
-});
+  });
 
 const useDraftActionsHarness = ({ selectedWorkspaceId, initialSnapshot }: HarnessArgs) => {
   const [snapshotDraft, setSnapshotDraft] = useState<SettingsSnapshot | null>(initialSnapshot);

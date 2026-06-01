@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
   buildApprovalRequest,
@@ -51,10 +52,7 @@ const buildBaseModel = () => ({
   syncBottomAfterComposerLayoutRef: { current: null } as { current: (() => void) | null },
 });
 
-const DEFAULT_TEST_CHAT_SETTINGS = {
-  showThinkingMessages: false,
-  expandFileDiffsByDefault: true,
-};
+const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
 
 const AgentChatThread = (props: Parameters<typeof AgentChatThreadComponent>[0]) =>
   createElement(

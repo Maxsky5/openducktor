@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ChatSettings } from "@openducktor/contracts";
 import { cleanup, render, screen } from "@testing-library/react";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { SettingsChatSection } from "./settings-chat-section";
 
-const createChatSettings = (overrides: Partial<ChatSettings> = {}): ChatSettings => ({
-  showThinkingMessages: false,
-  expandFileDiffsByDefault: true,
-  ...overrides,
-});
+const createChatSettings = (overrides: Partial<ChatSettings> = {}): ChatSettings =>
+  createChatSettingsFixture(overrides);
 
 const renderSettingsChatSection = (chat: ChatSettings, disabled = false): void => {
   render(<SettingsChatSection chat={chat} disabled={disabled} onUpdateChat={() => chat} />);

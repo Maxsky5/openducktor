@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  type RepoConfig,
-  type SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { chooseInitialSettingsWorkspaceId } from "./settings-workspace-selection";
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
@@ -28,30 +25,8 @@ const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   ...overrides,
 });
 
-const createSnapshot = (workspaces: SettingsSnapshot["workspaces"]): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces,
-  globalPromptOverrides: {},
-});
+const createSnapshot = (workspaces: SettingsSnapshot["workspaces"]): SettingsSnapshot =>
+  createSettingsSnapshotFixture({ workspaces });
 
 describe("settings workspace selection", () => {
   test("selects initial repo using active repo when available", () => {

@@ -1,7 +1,8 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
-import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { host } from "../shared/host";
 import { createAgentSessionPresenceSnapshotFixture } from "./test-utils";
 import { createWorktreeRuntimeFixture } from "./use-agent-orchestrator-operations.test-fixtures";
@@ -48,30 +49,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
       promptOverrides: {},
       agentDefaults: {},
     }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
-  host.workspaceGetSettingsSnapshot = async () => ({
-    theme: "light" as const,
-    git: {
-      defaultMergeMethod: "merge_commit",
-    },
-    general: {
-      openAgentStudioTabOnBackgroundSessionStart: true,
-    },
-    chat: {
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: true,
-    },
-    reusablePrompts: [],
-    kanban: {
-      doneVisibleDays: 1,
-      emptyColumnDisplay: "show" as const,
-    },
-    autopilot: {
-      rules: [],
-    },
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    workspaces: {},
-    globalPromptOverrides: {},
-  });
+  host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   host.runtimeList = async () => [createWorktreeRuntimeFixture()];
   host.runtimeEnsure = async (repoPath, runtimeKind) => ({
     kind: runtimeKind,

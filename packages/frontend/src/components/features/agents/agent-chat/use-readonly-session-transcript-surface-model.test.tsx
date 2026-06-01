@@ -1,14 +1,18 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import {
-  DEFAULT_AGENT_RUNTIMES,
-  type RuntimeInstanceSummary,
-  type SettingsSnapshot,
+import type {
+  ChatSettings,
+  RuntimeInstanceSummary,
+  SettingsSnapshot,
 } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import {
+  createChatSettingsFixture,
+  createSettingsSnapshotFixture,
+} from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
@@ -33,10 +37,7 @@ const answerAgentQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
   (_externalSessionId: string | null): AgentSessionState | null => null,
 );
-let settingsChat = {
-  showThinkingMessages: false,
-  expandFileDiffsByDefault: true,
-};
+let settingsChat: ChatSettings = createChatSettingsFixture();
 let settingsSnapshotError: Error | null = null;
 let runtimeList: RuntimeInstanceSummary[] = [];
 let runtimeListError: Error | null = null;
@@ -157,27 +158,7 @@ function makeRuntime(): RuntimeInstanceSummary {
 }
 
 function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {
-  return {
-    theme: "light",
-    git: {
-      defaultMergeMethod: "merge_commit",
-    },
-    general: {
-      openAgentStudioTabOnBackgroundSessionStart: true,
-    },
-    chat,
-    reusablePrompts: [],
-    kanban: {
-      doneVisibleDays: 1,
-      emptyColumnDisplay: "show",
-    },
-    autopilot: {
-      rules: [],
-    },
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    workspaces: {},
-    globalPromptOverrides: {},
-  };
+  return createSettingsSnapshotFixture({ chat });
 }
 
 const wrapper = ({ children }: PropsWithChildren): ReactElement => (
@@ -228,10 +209,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
     useAgentSessionMock.mockImplementation(
       (_externalSessionId: string | null): AgentSessionState | null => null,
     );
-    settingsChat = {
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: true,
-    };
+    settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
     runtimeList = [makeRuntime()];
     runtimeListError = null;
@@ -350,20 +328,14 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       const session = harness.getLatest().model.thread.session as AgentSessionState;
       expect(session.externalSessionId).toBe("session-subagent-1");
       expect(session.messages).toBeTruthy();
-      expect(harness.getLatest().model.chatSettings).toEqual({
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      });
+      expect(harness.getLatest().model.chatSettings).toEqual(createChatSettingsFixture());
     } finally {
       await harness.unmount();
     }
   });
 
   test("passes explicit file diff expansion settings into the read-only chat surface", async () => {
-    settingsChat = {
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: false,
-    };
+    settingsChat = createChatSettingsFixture({ expandFileDiffsByDefault: false });
     const { useReadonlySessionTranscriptSurfaceModel } = await import(
       "./use-readonly-session-transcript-surface-model"
     );
@@ -386,10 +358,9 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor((state) => state.model.chatSettings.expandFileDiffsByDefault === false);
 
-      expect(harness.getLatest().model.chatSettings).toEqual({
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: false,
-      });
+      expect(harness.getLatest().model.chatSettings).toEqual(
+        createChatSettingsFixture({ expandFileDiffsByDefault: false }),
+      );
     } finally {
       await harness.unmount();
     }
@@ -725,10 +696,7 @@ describe("useReadonlySessionTranscriptSurfaceModel", () => {
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: Failed to load chat settings: settings unavailable",
       });
-      expect(harness.getLatest().model.chatSettings).toEqual({
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      });
+      expect(harness.getLatest().model.chatSettings).toEqual(createChatSettingsFixture());
     } finally {
       await harness.unmount();
     }

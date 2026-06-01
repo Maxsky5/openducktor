@@ -13,6 +13,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
   createBeadsCheckFixture,
@@ -267,30 +268,7 @@ describe("useAgentStudioSessionActions", () => {
         repoPath: "/repo",
         promptOverrides: {},
       }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
-    host.workspaceGetSettingsSnapshot = async () => ({
-      theme: "light" as const,
-      git: {
-        defaultMergeMethod: "merge_commit",
-      },
-      general: {
-        openAgentStudioTabOnBackgroundSessionStart: true,
-      },
-      chat: {
-        showThinkingMessages: false,
-        expandFileDiffsByDefault: true,
-      },
-      reusablePrompts: [],
-      kanban: {
-        doneVisibleDays: 1,
-        emptyColumnDisplay: "show",
-      },
-      autopilot: {
-        rules: [],
-      },
-      agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-      workspaces: {},
-      globalPromptOverrides: {},
-    });
+    host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   });
 
   afterEach(() => {

@@ -1,5 +1,4 @@
 import type { RuntimeApprovalReplyOutcome, RuntimeInstanceSummary } from "@openducktor/contracts";
-import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
@@ -11,10 +10,7 @@ import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app
 import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import { runtimeListQueryOptions } from "@/state/queries/runtime";
-import {
-  readChatSettingsFromSnapshot,
-  settingsSnapshotQueryOptions,
-} from "@/state/queries/workspace";
+import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
@@ -170,10 +166,8 @@ export function useReadonlySessionTranscriptSurfaceModel({
       isMountedRef.current = false;
     };
   }, []);
-  const chatSettingsQuery = useQuery({
-    ...settingsSnapshotQueryOptions(),
-    enabled: activeWorkspace !== null,
-    select: readChatSettingsFromSnapshot,
+  const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
+    activeWorkspace,
   });
 
   const runtimeListQuery = useQuery({
@@ -477,9 +471,9 @@ export function useReadonlySessionTranscriptSurfaceModel({
     runtimeData.session === null &&
     (resolvedSource.isPending || isTranscriptLoading);
   const chatSettingsLoadError =
-    activeWorkspace && chatSettingsQuery.error
+    activeWorkspace && chatSettingsError
       ? `Failed to load chat settings: ${errorMessageFromUnknown(
-          chatSettingsQuery.error,
+          chatSettingsError,
           "Settings read failed.",
         )}`
       : null;
@@ -559,9 +553,7 @@ export function useReadonlySessionTranscriptSurfaceModel({
     session: runtimeData.session,
     isTaskHydrating: isResolvingTranscript,
     isSessionSelectionResolving: false,
-    chatSettings: activeWorkspace
-      ? (chatSettingsQuery.data ?? DEFAULT_CHAT_SETTINGS)
-      : DEFAULT_CHAT_SETTINGS,
+    chatSettings,
     isSessionWorking,
     isSessionHistoryLoading: isTranscriptLoading,
     isWaitingForRuntimeReadiness: false,

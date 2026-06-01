@@ -1,4 +1,4 @@
-import type { GlobalConfig, RepoConfig } from "@openducktor/contracts";
+import { DEFAULT_CHAT_SETTINGS, type GlobalConfig, type RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
@@ -29,7 +29,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   theme: "light",
   git: { defaultMergeMethod: "merge_commit" },
   general: { openAgentStudioTabOnBackgroundSessionStart: true },
-  chat: { showThinkingMessages: false, expandFileDiffsByDefault: true },
+  chat: DEFAULT_CHAT_SETTINGS,
   reusablePrompts: [],
   kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show" },
   autopilot: {

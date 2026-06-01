@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES } from "@openducktor/contracts";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -101,30 +101,7 @@ beforeEach(() => {
       repoPath: "/repo",
       promptOverrides: {},
     }) as Awaited<ReturnType<typeof host.workspaceGetRepoConfig>>;
-  host.workspaceGetSettingsSnapshot = async () => ({
-    theme: "light" as const,
-    git: {
-      defaultMergeMethod: "merge_commit",
-    },
-    general: {
-      openAgentStudioTabOnBackgroundSessionStart: true,
-    },
-    chat: {
-      showThinkingMessages: false,
-      expandFileDiffsByDefault: true,
-    },
-    reusablePrompts: [],
-    kanban: {
-      doneVisibleDays: 1,
-      emptyColumnDisplay: "show",
-    },
-    autopilot: {
-      rules: [],
-    },
-    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-    workspaces: {},
-    globalPromptOverrides: {},
-  });
+  host.workspaceGetSettingsSnapshot = async () => createSettingsSnapshotFixture();
   host.taskWorktreeGet = async () => ({
     workingDirectory: "/repo/worktrees/task-1",
     source: "builder_session",

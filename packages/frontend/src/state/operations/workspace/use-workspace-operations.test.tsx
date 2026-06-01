@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-  DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SettingsSnapshot,
   type WorkspaceRecord,
@@ -11,6 +10,7 @@ import { act, createElement, type PropsWithChildren, useEffect, useRef, useState
 import { toast } from "sonner";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 import { useWorkspaceOperations } from "./use-workspace-operations";
@@ -274,53 +274,33 @@ const workspace = (repoPath: string, isActive = false): WorkspaceRecord => ({
   effectiveWorktreeBasePath: "/tmp/default-worktrees",
 });
 
-const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: Object.fromEntries(
-    repoPaths.map((repoPath) => [
-      repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
-      {
-        workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
-        workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-        repoPath,
-        defaultRuntimeKind: "opencode" as const,
-        branchPrefix: "odt",
-        defaultTargetBranch: { remote: "origin", branch: "main" },
-        git: {
-          providers: {},
+const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    workspaces: Object.fromEntries(
+      repoPaths.map((repoPath) => [
+        repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
+        {
+          workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-") || "repo",
+          workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
+          repoPath,
+          defaultRuntimeKind: "opencode" as const,
+          branchPrefix: "odt",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          git: {
+            providers: {},
+          },
+          hooks: {
+            preStart: [],
+            postComplete: [],
+          },
+          devServers: [],
+          worktreeCopyPaths: [],
+          promptOverrides: {},
+          agentDefaults: {},
         },
-        hooks: {
-          preStart: [],
-          postComplete: [],
-        },
-        devServers: [],
-        worktreeCopyPaths: [],
-        promptOverrides: {},
-        agentDefaults: {},
-      },
-    ]),
-  ),
-  globalPromptOverrides: {},
-});
+      ]),
+    ),
+  });
 
 describe("use-workspace-operations", () => {
   test("hydrates branches when startup activates the persisted repository", async () => {

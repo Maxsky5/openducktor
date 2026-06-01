@@ -19,67 +19,52 @@ import {
 } from "@/state/app-state-contexts";
 import { repoBranchesQueryOptions } from "@/state/queries/git";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalController } from "./use-settings-modal-controller";
 
 enableReactActEnvironment();
 
-const createSettingsSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: createDefaultAutopilotSettings(),
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {
-    repo: {
-      workspaceId: "repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-      defaultRuntimeKind: "opencode",
-      worktreeBasePath: undefined,
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
+const createSettingsSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    autopilot: createDefaultAutopilotSettings(),
+    agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+    workspaces: {
+      repo: {
+        workspaceId: "repo",
+        workspaceName: "Repo",
+        repoPath: "/repo",
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: undefined,
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
       },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    },
-    "repo-two": {
-      workspaceId: "repo-two",
-      workspaceName: "Repo Two",
-      repoPath: "/repo-two",
-      defaultRuntimeKind: "opencode",
-      worktreeBasePath: undefined,
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
+      "repo-two": {
+        workspaceId: "repo-two",
+        workspaceName: "Repo Two",
+        repoPath: "/repo-two",
+        defaultRuntimeKind: "opencode",
+        worktreeBasePath: undefined,
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: {
+          providers: {},
+        },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
       },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
     },
-  },
-  globalPromptOverrides: {},
-});
+  });
 
 const loadSettingsSnapshot = mock(async (): Promise<SettingsSnapshot> => createSettingsSnapshot());
 

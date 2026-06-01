@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_AGENT_RUNTIMES, type SettingsSnapshot } from "@openducktor/contracts";
+import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
+import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { useSettingsModalRepoScriptValidation } from "./use-settings-modal-repo-script-validation";
 
 enableReactActEnvironment();
@@ -13,73 +14,53 @@ type HookArgs = Parameters<typeof useSettingsModalRepoScriptValidation>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSettingsModalRepoScriptValidation, initialProps);
 
-const createSnapshot = (): SettingsSnapshot => ({
-  theme: "light",
-  git: {
-    defaultMergeMethod: "merge_commit",
-  },
-  general: {
-    openAgentStudioTabOnBackgroundSessionStart: true,
-  },
-  chat: {
-    showThinkingMessages: false,
-    expandFileDiffsByDefault: true,
-  },
-  reusablePrompts: [],
-  kanban: {
-    doneVisibleDays: 1,
-    emptyColumnDisplay: "show",
-  },
-  autopilot: {
-    rules: [],
-  },
-  globalPromptOverrides: {},
-  agentRuntimes: DEFAULT_AGENT_RUNTIMES,
-  workspaces: {
-    "repo-a": {
-      workspaceId: "repo-a",
-      workspaceName: "Repo A",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
+const createSnapshot = (): SettingsSnapshot =>
+  createSettingsSnapshotFixture({
+    workspaces: {
+      "repo-a": {
+        workspaceId: "repo-a",
+        workspaceName: "Repo A",
+        repoPath: "/repo-a",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [{ id: "frontend", name: "", command: "bun run dev" }],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
+      "repo-b": {
+        workspaceId: "repo-b",
+        workspaceName: "Repo B",
+        repoPath: "/repo-b",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [{ id: "backend", name: "", command: "bun run api" }],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
+      "repo-c": {
+        workspaceId: "repo-c",
+        workspaceName: "Repo C",
+        repoPath: "/repo-c",
+        defaultRuntimeKind: "opencode",
+        branchPrefix: "odt",
+        defaultTargetBranch: { remote: "origin", branch: "main" },
+        git: { providers: {} },
+        hooks: { preStart: [], postComplete: [] },
+        devServers: [{ id: "", name: "", command: "   " }],
+        worktreeCopyPaths: [],
+        promptOverrides: {},
+        agentDefaults: {},
+      },
     },
-    "repo-b": {
-      workspaceId: "repo-b",
-      workspaceName: "Repo B",
-      repoPath: "/repo-b",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [{ id: "backend", name: "", command: "bun run api" }],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    },
-    "repo-c": {
-      workspaceId: "repo-c",
-      workspaceName: "Repo C",
-      repoPath: "/repo-c",
-      defaultRuntimeKind: "opencode",
-      branchPrefix: "odt",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: { providers: {} },
-      hooks: { preStart: [], postComplete: [] },
-      devServers: [{ id: "", name: "", command: "   " }],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    },
-  },
-});
+  });
 
 describe("useSettingsModalRepoScriptValidation", () => {
   test("returns selected repo errors and aggregate error counts across repositories", async () => {
