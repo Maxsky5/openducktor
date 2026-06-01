@@ -11,6 +11,7 @@ import {
 import {
   appendSessionMessage,
   findLastSessionMessageByRole,
+  getSessionMessagesSlice,
   upsertSessionMessage,
 } from "../support/messages";
 import {
@@ -112,11 +113,35 @@ const resolvePermissionPolicyRole = (
   return context.store.sessionsRef.current[context.store.externalSessionId]?.role ?? undefined;
 };
 
+const resolveSubagentMessageForSessionLink = (
+  current: AgentSessionState,
+  event: ApprovalRequiredEvent | QuestionRequiredEvent,
+) => {
+  if (event.subagentCorrelationKey) {
+    return findLastSessionMessageByRole(
+      current,
+      "system",
+      (message) =>
+        message.meta?.kind === "subagent" &&
+        message.meta.correlationKey === event.subagentCorrelationKey,
+    );
+  }
+
+  const candidates = getSessionMessagesSlice(current, 0).filter(
+    (message) =>
+      message.role === "system" &&
+      message.meta?.kind === "subagent" &&
+      !message.meta.externalSessionId &&
+      (message.meta.status === "pending" || message.meta.status === "running"),
+  );
+  return candidates.length === 1 ? candidates[0] : undefined;
+};
+
 const patchParentSubagentSessionLink = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent | QuestionRequiredEvent,
 ): void => {
-  if (!event.parentExternalSessionId || !event.subagentCorrelationKey) {
+  if (!event.parentExternalSessionId) {
     return;
   }
   const childExternalSessionId = event.childExternalSessionId?.trim();
@@ -127,13 +152,7 @@ const patchParentSubagentSessionLink = (
   context.store.updateSession(
     event.parentExternalSessionId,
     (current) => {
-      const subagentMessage = findLastSessionMessageByRole(
-        current,
-        "system",
-        (message) =>
-          message.meta?.kind === "subagent" &&
-          message.meta.correlationKey === event.subagentCorrelationKey,
-      );
+      const subagentMessage = resolveSubagentMessageForSessionLink(current, event);
       if (subagentMessage?.meta?.kind !== "subagent") {
         return current;
       }
