@@ -233,6 +233,130 @@ describe("agent-orchestrator session permissions and questions", () => {
     ]);
   });
 
+  test("deduplicates child permissions when subagent correlation arrives after the prompt", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const subagentCorrelationKey = "part:assistant-parent:subtask-delayed-permission";
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-parent-session": buildSession({
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${subagentCorrelationKey}`,
+              role: "system",
+              content: "Subagent (build): Read omp.json file",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-delayed-permission",
+                correlationKey: subagentCorrelationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Read omp.json file",
+              },
+            },
+          ],
+        }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    const childPermission = {
+      type: "approval_required" as const,
+      externalSessionId: "external-parent-session",
+      requestId: "perm-child-delayed",
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["omp.json"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+    };
+
+    handleEvent(childPermission);
+    handleEvent({
+      ...childPermission,
+      subagentCorrelationKey,
+    });
+
+    expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
+    expect(
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
+        "external-child-session"
+      ],
+    ).toEqual([
+      {
+        requestId: "perm-child-delayed",
+        requestType: "permission_grant",
+        title: `Approve permission: ${"read"}`,
+        summary: `Approval request for ${"read"}.`,
+        affectedPaths: ["omp.json"],
+        action: { name: "read" },
+        mutation: "read_only",
+        supportedReplyOutcomes: [
+          "approve_once" as const,
+          "approve_session" as const,
+          "reject" as const,
+        ],
+      },
+    ]);
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
+    expect(parentSubagentMessage?.meta).toMatchObject({
+      kind: "subagent",
+      correlationKey: subagentCorrelationKey,
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+  });
+
   test("patches the parent subagent row with the child external id when handled from parent context", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {

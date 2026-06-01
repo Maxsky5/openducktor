@@ -3,7 +3,6 @@ import type { EventStreamRuntime } from "../shared";
 import {
   bindSubagentExternalSession,
   bindSubagentPartCorrelation,
-  flushPendingSubagentInputEventsForSession,
   removePendingSubagentCorrelationKey,
 } from "../shared";
 import type { MappedSubagentPart } from "./helpers";
@@ -77,6 +76,38 @@ const queuePendingSubagentPartEmission = (
   runtime.pendingSubagentPartEmissionsByExternalSessionId.set(externalSessionId, pending);
 };
 
+const readSinglePendingSessionForCorrelation = (
+  runtime: EventStreamRuntime,
+  correlationKey: string,
+): string | undefined => {
+  if (runtime.pendingSubagentCorrelationKeys.length !== 1) {
+    return undefined;
+  }
+
+  const [pendingCorrelationKey] = runtime.pendingSubagentCorrelationKeys;
+  if (pendingCorrelationKey !== correlationKey) {
+    return undefined;
+  }
+
+  const pendingSessions = [...runtime.pendingSubagentSessionsByExternalSessionId.keys()].filter(
+    (externalSessionId) => {
+      const existingCorrelationKey =
+        runtime.subagentCorrelationKeyByExternalSessionId.get(externalSessionId);
+      return !existingCorrelationKey || existingCorrelationKey.startsWith("session:");
+    },
+  );
+  if (pendingSessions.length !== 1) {
+    return undefined;
+  }
+
+  const [externalSessionId] = pendingSessions;
+  if (!externalSessionId) {
+    return undefined;
+  }
+
+  return externalSessionId;
+};
+
 export const normalizeLiveSubagentCorrelation = (
   runtime: EventStreamRuntime,
   rawPart: Part,
@@ -96,7 +127,6 @@ export const normalizeLiveSubagentCorrelation = (
         rawPart.id,
       );
       removePendingSubagentCorrelationKey(runtime, existingCorrelationKey);
-      flushPendingSubagentInputEventsForSession(runtime, effectiveExternalSessionId);
     }
     return {
       ...part,
@@ -116,16 +146,18 @@ export const normalizeLiveSubagentCorrelation = (
     if (signature) {
       enqueuePendingSubagentCorrelationKey(runtime, signature, correlationKey);
     }
-    if (effectiveExternalSessionId) {
-      bindSubagentExternalSession(runtime, effectiveExternalSessionId, correlationKey, rawPart.id);
+    const linkedExternalSessionId =
+      effectiveExternalSessionId ?? readSinglePendingSessionForCorrelation(runtime, correlationKey);
+    if (linkedExternalSessionId) {
+      bindSubagentExternalSession(runtime, linkedExternalSessionId, correlationKey, rawPart.id);
+      runtime.pendingSubagentSessionsByExternalSessionId.delete(linkedExternalSessionId);
       removePendingSubagentCorrelationKey(runtime, correlationKey);
-      flushPendingSubagentInputEventsForSession(runtime, effectiveExternalSessionId);
     }
 
     return {
       ...part,
       correlationKey,
-      ...(effectiveExternalSessionId ? { externalSessionId: effectiveExternalSessionId } : {}),
+      ...(linkedExternalSessionId ? { externalSessionId: linkedExternalSessionId } : {}),
     };
   }
 
@@ -160,7 +192,6 @@ export const normalizeLiveSubagentCorrelation = (
   if (effectiveExternalSessionId) {
     bindSubagentExternalSession(runtime, effectiveExternalSessionId, correlationKey, rawPart.id);
     removePendingSubagentCorrelationKey(runtime, correlationKey);
-    flushPendingSubagentInputEventsForSession(runtime, effectiveExternalSessionId);
   }
 
   return {

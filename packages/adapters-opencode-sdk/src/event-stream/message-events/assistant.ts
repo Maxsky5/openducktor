@@ -7,7 +7,11 @@ import {
 } from "../../message-normalizers";
 import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { EventStreamRuntime } from "../shared";
-import { emitSessionIdle, markSessionActive } from "../shared";
+import {
+  emitSessionIdle,
+  flushPendingSubagentInputEventsForSession,
+  markSessionActive,
+} from "../shared";
 import {
   getKnownMessageParts,
   hasTerminalStopSignalInParts,
@@ -82,6 +86,9 @@ export const emitAssistantPart = (
     timestamp: runtime.now(),
     part: nextMapped,
   });
+  if (nextMapped.kind === "subagent" && nextMapped.externalSessionId) {
+    flushPendingSubagentInputEventsForSession(runtime, nextMapped.externalSessionId);
+  }
   return true;
 };
 

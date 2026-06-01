@@ -74,9 +74,13 @@ const makeChildPermissionAskedEvent = (input: {
     type: "permission.asked",
     properties: {
       sessionID: input.childSessionId,
-      info: {
-        parentID: input.parentExternalSessionId ?? "external-session-1",
-      },
+      ...(input.parentExternalSessionId
+        ? {
+            info: {
+              parentID: input.parentExternalSessionId,
+            },
+          }
+        : {}),
       id: input.requestId ?? "permission-child-1",
       permission: "read",
       patterns: ["omp.json"],
@@ -387,7 +391,7 @@ describe("event-stream subagent correlation", () => {
     );
   });
 
-  test("binds child permission events to the running subagent card when no session-created event arrives", async () => {
+  test("binds child permission events to the single running subagent card without a parent hint", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-permission"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -425,6 +429,105 @@ describe("event-stream subagent correlation", () => {
     expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
       "subtask-a",
     );
+  });
+
+  test("does not guess child permission ownership when multiple subagent cards are pending", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-ambiguous-permission"),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-ambiguous-permission",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-ambiguous-permission",
+        partId: "subtask-b",
+        description: "Read package.json file",
+      }),
+      makeChildPermissionAskedEvent({ childSessionId: "external-child-session" }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([undefined, undefined]);
+    expect(emitted.filter((event) => event.type === "approval_required")).toHaveLength(0);
+    expect(
+      sessionRecord.subagentCorrelationKeyByExternalSessionId.has("external-child-session"),
+    ).toBe(false);
+  });
+
+  test("binds a child session that is created before the parent subagent card appears", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-created-first"),
+      makeChildSessionCreatedEvent({ childSessionId: "external-child-session" }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-created-first",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+      makeChildPermissionAskedEvent({ childSessionId: "external-child-session" }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(1);
+    expect(subagentParts[0]).toMatchObject({
+      correlationKey: "part:assistant-subagent-created-first:subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(1);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-created-first:subtask-a",
+    });
+    expect(
+      sessionRecord.subagentPartIdByCorrelationKey.get(
+        "part:assistant-subagent-created-first:subtask-a",
+      ),
+    ).toBe("subtask-a");
+    expect(sessionRecord.subagentPartIdByExternalSessionId.get("external-child-session")).toBe(
+      "subtask-a",
+    );
+  });
+
+  test("keeps child permissions relevant when they arrive before the parent subagent card", async () => {
+    const { emitted } = await runEventStreamWithSession([
+      assistantRoleEvent("assistant-subagent-permission-first"),
+      makeChildSessionCreatedEvent({ childSessionId: "external-child-session" }),
+      makeChildPermissionAskedEvent({ childSessionId: "external-child-session" }),
+      makeAssistantSubtaskPartUpdatedEvent({
+        messageId: "assistant-subagent-permission-first",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(1);
+    expect(subagentParts[0]).toMatchObject({
+      correlationKey: "part:assistant-subagent-permission-first:subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(2);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(approvalEvents[0]).not.toHaveProperty("subagentCorrelationKey");
+    expect(approvalEvents[1]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-subagent-permission-first:subtask-a",
+    });
   });
 
   test("keeps a completed linked subagent completed when child session creation arrives later", async () => {

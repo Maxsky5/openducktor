@@ -99,10 +99,21 @@ const ensureRuntimeEventTransport = (input: {
     onEvent: (event) => {
       for (const subscriber of streamRecord.subscribers.values()) {
         const relevant = isRelevantSubscriberEvent(subscriber, event, {
-          isKnownChildExternalSessionId: (externalSessionId) =>
-            input.sessions
-              .get(subscriber.externalSessionId)
-              ?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ?? false,
+          isKnownChildExternalSessionId: (externalSessionId) => {
+            const session = input.sessions.get(subscriber.externalSessionId);
+            return Boolean(
+              session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ||
+                session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId),
+            );
+          },
+          hasPendingSubagentInputCandidate: (externalSessionId) => {
+            if (externalSessionId === subscriber.externalSessionId) {
+              return false;
+            }
+
+            const session = input.sessions.get(subscriber.externalSessionId);
+            return Boolean(session && session.pendingSubagentCorrelationKeys.length === 1);
+          },
         });
         logStreamEvent({
           subscriber,
