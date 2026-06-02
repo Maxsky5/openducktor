@@ -28,11 +28,11 @@ const rawTask = (overrides: RawTaskFixture = {}): RawTaskFixture => ({
   ...overrides,
 });
 const createTestBeadsTaskRepository = (
-  input: Omit<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery"> &
-    Partial<Pick<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery">>,
+  input: Omit<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery">,
+  toolDiscovery = createToolDiscoveryPort(),
 ) =>
   createBeadsTaskRepository({
-    toolDiscovery: createToolDiscoveryPort(),
+    toolDiscovery,
     ...input,
   });
 describe("createBeadsTaskRepository", () => {
@@ -411,35 +411,39 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(refreshed[0]?.title).toBe("Task 2");
   });
   test("resolves Dolt before context resolution for task commands that require the shared server", async () => {
-    const port = createTestBeadsTaskRepository({
-      toolDiscovery: createToolDiscoveryPort(["dolt"]),
-      resolveCliContext() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("Dolt preflight should run before context resolution.");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+    const port = createTestBeadsTaskRepository(
+      {
+        resolveCliContext() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("Dolt preflight should run before context resolution.");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
       },
-    });
+      createToolDiscoveryPort(["dolt"]),
+    );
     await expect(Effect.runPromise(port.listTasks({ repoPath: "/repo" }))).rejects.toThrow(
       "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
     );
   });
   test("diagnoses existing Beads store without requiring Dolt when preparation is disabled", async () => {
     const context = await createExistingBeadsCliContext();
-    const port = createTestBeadsTaskRepository({
-      toolDiscovery: createToolDiscoveryPort(["dolt"]),
-      resolveCliContext: () => Effect.succeed(context),
-      runBdJson() {
-        return Effect.succeed({ path: context.beadsDir });
+    const port = createTestBeadsTaskRepository(
+      {
+        resolveCliContext: () => Effect.succeed(context),
+        runBdJson() {
+          return Effect.succeed({ path: context.beadsDir });
+        },
       },
-    });
+      createToolDiscoveryPort(["dolt"]),
+    );
 
     await expect(
       Effect.runPromise(port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: false })),

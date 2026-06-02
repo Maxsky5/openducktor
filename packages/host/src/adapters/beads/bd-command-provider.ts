@@ -18,6 +18,7 @@ export type CreateBdCommandProviderInput = {
 
 export type BdCommandProvider = {
   runBdForRepo(repoPath: string): Effect.Effect<RunBd, TaskStoreError>;
+  /** Raw JSON runner accepting optional context; runBdJsonForRepo returns a repo-bound runner. */
   runBdJson: RunBdJson;
   runBdJsonForRepo(repoPath: string): Effect.Effect<RunBdJson, TaskStoreError>;
 };
@@ -37,7 +38,9 @@ export const createBdCommandProvider = ({
           return effectiveRunBd;
         }
         const context = yield* resolveCliContext(repoPath, { requireSharedServer: true });
-        return (commandRepoPath, args) => effectiveRunBd(commandRepoPath, args, context);
+        const boundRunBd: RunBd = (commandRepoPath, args, _callContext) =>
+          effectiveRunBd(commandRepoPath, args, context);
+        return boundRunBd;
       });
     },
     runBdJson: effectiveRunBdJson,
@@ -47,7 +50,9 @@ export const createBdCommandProvider = ({
           return effectiveRunBdJson;
         }
         const context = yield* resolveCliContext(repoPath, { requireSharedServer: true });
-        return (commandRepoPath, args) => effectiveRunBdJson(commandRepoPath, args, context);
+        const boundRunBdJson: RunBdJson = (commandRepoPath, args, _callContext) =>
+          effectiveRunBdJson(commandRepoPath, args, context);
+        return boundRunBdJson;
       });
     },
   };

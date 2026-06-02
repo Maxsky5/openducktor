@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Effect } from "effect";
 import type { BeadsSharedServerContext } from "./beads-cli-context";
 import { createBeadsCliContextManager } from "./beads-cli-context-manager";
@@ -7,6 +9,9 @@ import {
   createTestToolDiscoveryPort,
   testOperationError,
 } from "./test-support/beads-test-support";
+
+const missingRepoPath = () =>
+  path.join(tmpdir(), `odt-missing-repo-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
 describe("createBeadsCliContextManager", () => {
   test("deduplicates concurrent shared-server context resolution", async () => {
@@ -131,5 +136,61 @@ describe("createBeadsCliContextManager", () => {
         serverStatePath: "/config/beads/shared-server/server.json",
       },
     ]);
+  });
+
+  test("does not create non-shared context flights after close begins", async () => {
+    const context = await createExistingTestBeadsCliContext({
+      prefix: "odt-beads-manager-test-",
+    });
+    let contextResolutionAttempts = 0;
+    const manager = createBeadsCliContextManager({
+      processEnv: {},
+      toolDiscovery: createTestToolDiscoveryPort(),
+      resolveCliContext() {
+        contextResolutionAttempts += 1;
+        return Effect.succeed(context);
+      },
+    });
+    const repoPath = missingRepoPath();
+
+    const resolution = Effect.runPromise(manager.resolveCliContext(repoPath)).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await expect(Effect.runPromise(manager.close())).resolves.toEqual({
+      stoppedSharedDoltServers: 0,
+    });
+
+    expect(String(await resolution)).toContain("Beads task store is closing.");
+    expect(contextResolutionAttempts).toBe(0);
+  });
+
+  test("does not reserve shared-server context flights after close begins", async () => {
+    const context = await createExistingTestBeadsCliContext({
+      prefix: "odt-beads-manager-test-",
+    });
+    let contextResolutionAttempts = 0;
+    const manager = createBeadsCliContextManager({
+      processEnv: {},
+      toolDiscovery: createTestToolDiscoveryPort(),
+      resolveCliContext() {
+        contextResolutionAttempts += 1;
+        return Effect.succeed(context);
+      },
+    });
+    const repoPath = missingRepoPath();
+
+    const resolution = Effect.runPromise(
+      manager.resolveCliContext(repoPath, { requireSharedServer: true }),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await expect(Effect.runPromise(manager.close())).resolves.toEqual({
+      stoppedSharedDoltServers: 0,
+    });
+
+    expect(String(await resolution)).toContain("Beads task store is closing.");
+    expect(contextResolutionAttempts).toBe(0);
   });
 });

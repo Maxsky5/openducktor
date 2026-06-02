@@ -1,5 +1,9 @@
 import { Cause, Effect } from "effect";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostResourceError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import type {
   BeadsTaskRepositoryShutdownResult,
   ResolveBeadsCliContext,
@@ -100,6 +104,32 @@ export const createBeadsCliContextManager = ({
   const cliContextFlights = new Set<BeadsCliContextFlight>();
   const readyCliContexts = new Map<string, BeadsCliContextFlight>();
   let closing = false;
+  const closingError = () =>
+    new HostResourceError({
+      resource: "beadsTaskStore",
+      operation: "beadsCliContextManager.resolveCliContext",
+      message: "Beads task store is closing.",
+    });
+  const reserveTrackedCliContextFlight = (): Effect.Effect<BeadsCliContextFlight, TaskStoreError> =>
+    Effect.suspend(() =>
+      closing
+        ? Effect.fail(closingError())
+        : Effect.succeed(createTrackedCliContextFlight(cliContextFlights)),
+    );
+  const reserveReadyCliContextFlightIfOpen = (
+    cacheKey: string,
+  ): Effect.Effect<BeadsCliContextFlightReservation, TaskStoreError> =>
+    Effect.suspend(() =>
+      closing
+        ? Effect.fail(closingError())
+        : Effect.succeed(
+            reserveReadyCliContextFlight({
+              cacheKey,
+              cliContextFlights,
+              readyCliContexts,
+            }),
+          ),
+    );
   const resolveBeadsToolPaths = createBeadsToolPathResolver(toolDiscovery);
   const resolveSharedDoltToolPaths = createSharedDoltToolPathResolver(toolDiscovery);
   const resolveContextRequest = createBeadsCliContextRequestResolver({
@@ -116,16 +146,16 @@ export const createBeadsCliContextManager = ({
     return context;
   };
   const trackCliContextResolution = (
-    contextEffect: Effect.Effect<BeadsCliContext, TaskStoreError>,
+    resolveContext: () => Effect.Effect<BeadsCliContext, TaskStoreError>,
   ): Effect.Effect<BeadsCliContext, TaskStoreError> =>
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const flight = yield* Effect.sync(() => createTrackedCliContextFlight(cliContextFlights));
+        const flight = yield* reserveTrackedCliContextFlight();
         yield* forkCliContextFlightResolution({
           cliContextFlights,
           flight,
           rememberOwnedContext,
-          resolveContext: contextEffect,
+          resolveContext: resolveContext(),
         });
         return yield* restore(awaitBeadsCliContextFlight(flight));
       }),
@@ -134,20 +164,15 @@ export const createBeadsCliContextManager = ({
     Effect.gen(function* () {
       const request = yield* resolveContextRequest(repoPath, options);
       if (request.options.requireSharedServer !== true) {
-        return yield* trackCliContextResolution(
-          resolveCliContext(request.repoPath, request.options),
+        const optionalServerOptions = request.options;
+        return yield* trackCliContextResolution(() =>
+          resolveCliContext(request.repoPath, optionalServerOptions),
         );
       }
       const sharedServerOptions = request.options;
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const reservation = yield* Effect.sync(() =>
-            reserveReadyCliContextFlight({
-              cacheKey: request.cacheKey,
-              cliContextFlights,
-              readyCliContexts,
-            }),
-          );
+          const reservation = yield* reserveReadyCliContextFlightIfOpen(request.cacheKey);
           if (reservation._tag === "existing") {
             return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
           }
