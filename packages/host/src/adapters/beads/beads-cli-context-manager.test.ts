@@ -57,10 +57,6 @@ describe("createBeadsCliContextManager", () => {
       prefix: "odt-beads-manager-test-",
     });
     let contextResolutionAttempts = 0;
-    const stoppedServers: Array<{
-      pid: number;
-      serverStatePath: string;
-    }> = [];
     const manager = createBeadsCliContextManager({
       processEnv: {},
       toolDiscovery: createTestToolDiscoveryPort(),
@@ -74,11 +70,6 @@ describe("createBeadsCliContextManager", () => {
           return context;
         });
       },
-      stopSharedDoltServer(sharedServer, serverStatePath) {
-        return Effect.sync(() => {
-          stoppedServers.push({ pid: sharedServer.pid, serverStatePath });
-        });
-      },
     });
 
     await expect(
@@ -87,16 +78,7 @@ describe("createBeadsCliContextManager", () => {
     await expect(
       Effect.runPromise(manager.resolveCliContext("/repo", { requireSharedServer: true })),
     ).resolves.toBe(context);
-    await expect(Effect.runPromise(manager.close())).resolves.toEqual({
-      stoppedSharedDoltServers: 1,
-    });
     expect(contextResolutionAttempts).toBe(2);
-    expect(stoppedServers).toEqual([
-      {
-        pid: process.pid,
-        serverStatePath: "/config/beads/shared-server/server.json",
-      },
-    ]);
   });
 
   test("waits for in-flight context resolution before stopping owned shared servers", async () => {

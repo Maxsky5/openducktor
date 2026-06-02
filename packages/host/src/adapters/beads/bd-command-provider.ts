@@ -17,8 +17,6 @@ export type CreateBdCommandProviderInput = {
 };
 
 export type BdCommandProvider = {
-  resolveCliContext: ResolveBeadsCliContext;
-  runBd: RunBd;
   runBdForRepo(repoPath: string): Effect.Effect<RunBd, TaskStoreError>;
   runBdJson: RunBdJson;
   runBdJsonForRepo(repoPath: string): Effect.Effect<RunBdJson, TaskStoreError>;
@@ -33,8 +31,6 @@ export const createBdCommandProvider = ({
   const effectiveRunBdJson = runBdJson ?? defaultRunBdJson(resolveCliContext);
 
   return {
-    resolveCliContext,
-    runBd: effectiveRunBd,
     runBdForRepo(repoPath) {
       return Effect.gen(function* () {
         if (runBd) {

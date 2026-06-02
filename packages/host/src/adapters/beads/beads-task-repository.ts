@@ -98,7 +98,7 @@ export const createBeadsTaskRepository = ({
         return yield* diagnoseRepoStoreWithBd(
           commandProvider.runBdJson,
           repoPath,
-          commandProvider.resolveCliContext,
+          cliContextManager.resolveCliContext,
           prepare,
         );
       });
