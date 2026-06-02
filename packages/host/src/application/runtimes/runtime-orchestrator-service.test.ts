@@ -6,7 +6,10 @@ import {
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type {
+  RuntimeRegistryPort,
+  RuntimeSessionStatusProbeInput,
+} from "../../ports/runtime-registry-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createRuntimeOrchestratorService as createEffectRuntimeOrchestratorService } from "./runtime-orchestrator-service";
 
@@ -101,6 +104,65 @@ const waitForCondition = async (
     }
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+};
+type SessionProbeResult = {
+  supported: boolean;
+  hasLiveSession: boolean;
+};
+const describeProbeRoute = (input: RuntimeSessionStatusProbeInput): string =>
+  input.runtimeRoute.type === "local_http"
+    ? input.runtimeRoute.endpoint
+    : input.runtimeRoute.identity;
+const createDeferredProbeController = () => {
+  const pendingProbes: Array<{
+    resolve(value: SessionProbeResult): void;
+  }> = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const startedRoutes: string[] = [];
+  const completedRoutes: string[] = [];
+  return {
+    startedRoutes,
+    completedRoutes,
+    get maxInFlight() {
+      return maxInFlight;
+    },
+    probe(input: RuntimeSessionStatusProbeInput) {
+      return Effect.tryPromise({
+        try: async () => {
+          const route = describeProbeRoute(input);
+          startedRoutes.push(route);
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          const result = await new Promise<SessionProbeResult>((resolve) => {
+            pendingProbes.push({ resolve });
+          });
+          inFlight -= 1;
+          completedRoutes.push(route);
+          return result;
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+    },
+    resolveNext(results: SessionProbeResult[]) {
+      const probes = pendingProbes.splice(0, results.length);
+      if (probes.length !== results.length) {
+        throw new Error(`Expected ${results.length} pending probes, found ${probes.length}`);
+      }
+      probes.forEach((probe, index) => {
+        const result = results[index];
+        if (!result) {
+          throw new Error(`Missing probe result at index ${index}`);
+        }
+        probe.resolve(result);
+      });
+    },
+  };
 };
 const createRuntime = (
   overrides: Partial<RuntimeInstanceSummary> = {},
@@ -915,14 +977,7 @@ describe("createRuntimeOrchestratorService", () => {
     );
   });
   test("probes candidate session stop routes with bounded concurrency", async () => {
-    type DeferredProbe = {
-      resolve(value: { supported: boolean; hasLiveSession: boolean }): void;
-    };
-    const deferredProbes: DeferredProbe[] = [];
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const startedRoutes: string[] = [];
-    const completedRoutes: string[] = [];
+    const probes = createDeferredProbeController();
     const runtimes = Array.from({ length: 6 }, (_, index) =>
       createRuntime({
         runtimeId: `runtime-${index + 1}`,
@@ -939,31 +994,7 @@ describe("createRuntimeOrchestratorService", () => {
     }
     const registry = createRegistry(runtimes, {
       probeSessionStatus(input) {
-        return Effect.tryPromise({
-          try: async () => {
-            const endpoint =
-              input.runtimeRoute.type === "local_http"
-                ? input.runtimeRoute.endpoint
-                : input.runtimeRoute.identity;
-            startedRoutes.push(endpoint);
-            inFlight += 1;
-            maxInFlight = Math.max(maxInFlight, inFlight);
-            const probe = await new Promise<{ supported: boolean; hasLiveSession: boolean }>(
-              (resolve) => {
-                deferredProbes.push({ resolve });
-              },
-            );
-            inFlight -= 1;
-            completedRoutes.push(endpoint);
-            return probe;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
+        return probes.probe(input);
       },
       stopSession(input) {
         return Effect.sync(() => {
@@ -987,25 +1018,29 @@ describe("createRuntimeOrchestratorService", () => {
       }),
     );
     await waitForCondition(
-      () => startedRoutes.length >= 4,
+      () => probes.startedRoutes.length >= 4,
       "Expected first bounded probe batch to start",
     );
-    expect(startedRoutes).toHaveLength(4);
-    expect(completedRoutes).toHaveLength(0);
-    expect(maxInFlight).toBe(4);
-    deferredProbes.splice(0, 4).forEach((probe) => {
-      probe.resolve({ supported: true, hasLiveSession: false });
-    });
+    expect(probes.startedRoutes).toHaveLength(4);
+    expect(probes.completedRoutes).toHaveLength(0);
+    expect(probes.maxInFlight).toBe(4);
+    probes.resolveNext([
+      { supported: true, hasLiveSession: false },
+      { supported: true, hasLiveSession: false },
+      { supported: true, hasLiveSession: false },
+      { supported: true, hasLiveSession: false },
+    ]);
     await waitForCondition(
-      () => startedRoutes.length >= 6,
+      () => probes.startedRoutes.length >= 6,
       "Expected remaining probe batch to start",
     );
-    expect(maxInFlight).toBeLessThanOrEqual(4);
-    deferredProbes.splice(0, 2).forEach((probe, index) => {
-      probe.resolve({ supported: true, hasLiveSession: index === 0 });
-    });
+    expect(probes.maxInFlight).toBeLessThanOrEqual(4);
+    probes.resolveNext([
+      { supported: true, hasLiveSession: true },
+      { supported: true, hasLiveSession: false },
+    ]);
     await expect(stop).resolves.toEqual({ ok: true });
-    expect(startedRoutes).toHaveLength(6);
+    expect(probes.startedRoutes).toHaveLength(6);
   });
   test("fails session stop after all probes when multiple repo routes are live", async () => {
     const probeCalls: string[] = [];
