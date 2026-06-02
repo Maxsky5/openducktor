@@ -47,7 +47,6 @@ export function useRuntimeTranscriptSessionHydration({
       activeWorkspace &&
       externalSessionId &&
       source &&
-      source.isLive !== true &&
       !sourceResolution.error &&
       !sourceResolution.isPending &&
       liveSession === null,
@@ -76,9 +75,6 @@ export function useRuntimeTranscriptSessionHydration({
     if (liveSession) {
       return liveSession;
     }
-    if (source?.isLive === true) {
-      return null;
-    }
     if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
       return null;
     }
@@ -90,7 +86,7 @@ export function useRuntimeTranscriptSessionHydration({
       runtimeId: sourceResolution.runtimeId,
       workingDirectory: source.workingDirectory,
       history: historyQuery.data,
-      isLive: false,
+      isLive: source.isLive === true,
       pendingApprovals: [],
       pendingQuestions: [],
     });

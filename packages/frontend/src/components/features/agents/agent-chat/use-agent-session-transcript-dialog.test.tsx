@@ -226,6 +226,16 @@ describe("AgentSessionTranscriptDialogHost", () => {
         "reject" as const,
       ],
     };
+    const pendingQuestion = {
+      requestId: "question-1",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Which file should the subagent inspect?",
+          options: [{ label: "omp.json", description: "Use the requested config file" }],
+        },
+      ],
+    };
 
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryProvider useIsolatedClient>
@@ -243,7 +253,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             partId: "part-subagent-running-1",
             correlationKey: "part:assistant-task-tool-running:subtask-b",
             status: "running",
-            agent: "build",
+            agent: "explorer",
             description: "Read the file at ~/maxsky5.omp.json",
             externalSessionId: "session-child-1",
             startedAtMs: 1_000,
@@ -255,6 +265,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
         sessionWorkingDirectory="/repo-a"
         subagentPendingApprovals={[pendingApproval]}
         subagentPendingApprovalCount={1}
+        subagentPendingQuestions={[pendingQuestion]}
+        subagentPendingQuestionCount={1}
       />,
       { wrapper },
     );
@@ -272,6 +284,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
           workingDirectory: "/repo-a",
           isLive: true,
           pendingApprovals: [pendingApproval],
+          pendingQuestions: [pendingQuestion],
         },
         title: "Subagent activity",
         description: "View what this subagent did.",

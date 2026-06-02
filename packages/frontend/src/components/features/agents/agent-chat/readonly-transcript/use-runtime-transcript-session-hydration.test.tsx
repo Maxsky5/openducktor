@@ -94,7 +94,7 @@ describe("useRuntimeTranscriptSessionHydration", () => {
     }
   });
 
-  test("does not load history for live transcript sources", async () => {
+  test("hydrates existing history for live transcript sources until the live session is attached", async () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     const harness = createHookHarness(
       createBaseArgs({
@@ -105,13 +105,18 @@ describe("useRuntimeTranscriptSessionHydration", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
 
-      expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest()).toEqual({
-        session: null,
-        isHistoryLoading: false,
-        historyError: null,
-      });
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        "/repo-a",
+        "opencode",
+        "/repo-a/worktree",
+        "session-1",
+      );
+      const session = harness.getLatest().session;
+      expect(session?.externalSessionId).toBe("session-1");
+      expect(session?.status).toBe("running");
+      expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
     } finally {
       await harness.unmount();
     }

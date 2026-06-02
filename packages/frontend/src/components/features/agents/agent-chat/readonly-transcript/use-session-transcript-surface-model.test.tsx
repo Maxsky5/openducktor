@@ -508,7 +508,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("attaches live runtime transcripts to the session event stream without polling", async () => {
+  test("hydrates existing history while attaching live runtime transcripts", async () => {
     const liveTranscriptSource = makeLiveTranscriptSource();
     const pendingApproval = makePendingApproval();
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -546,7 +546,16 @@ describe("useSessionTranscriptSurfaceModel", () => {
         pendingQuestions: [makePendingQuestion()],
         workingDirectory: "/repo-a",
       });
-      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        "/repo-a",
+        "opencode",
+        "/repo-a",
+        "session-subagent-1",
+      );
+      await harness.waitFor(
+        (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
+      );
+      expect(harness.getLatest().model.thread.session?.status).toBe("running");
     } finally {
       await harness.unmount();
     }
