@@ -37,8 +37,6 @@ jobs:
         uses: millionco/react-doctor@2d1ab245f0cbaa87529067e6e3ed9ac08362d1fc # main
         with:
           project: "@openducktor/frontend,@openducktor/electron"
-          diff: ${{ github.base_ref }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           fail-on: warning
 
   typescript-workspace-quality:
