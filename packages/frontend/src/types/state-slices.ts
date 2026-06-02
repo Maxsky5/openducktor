@@ -12,6 +12,7 @@ import type {
   RuntimeCheck,
   RuntimeInstanceSummary,
   RuntimeKind,
+  RuntimeRef,
   SettingsSnapshot,
   TaskCard,
   TaskCreateInput,
@@ -209,8 +210,7 @@ export type AgentStateContextValue = {
   attachRuntimeTranscriptSession: (input: {
     repoPath: string;
     externalSessionId: string;
-    runtimeKind: RuntimeKind;
-    runtimeId?: string;
+    runtimeRef: RuntimeRef;
     workingDirectory: string;
     pendingApprovals?: AgentSessionState["pendingApprovals"];
     pendingQuestions?: AgentSessionState["pendingQuestions"];

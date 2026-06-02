@@ -101,6 +101,9 @@ export function useSessionTranscriptSurfaceModel({
     visiblePendingQuestions: transcriptInteractions.visiblePendingQuestions,
     attachRuntimeTranscriptSession,
   });
+  const canUseLiveTranscriptSession =
+    source?.isLive !== true ||
+    (!liveAttachment.isAttachingLiveTranscript && !liveAttachment.liveTranscriptAttachError);
 
   const runtimeData = useAgentChatSessionRuntimeData({
     session: transcriptInteractions.session,
@@ -162,8 +165,14 @@ export function useSessionTranscriptSurfaceModel({
     sessionRuntimeDataError: runtimeData.runtimeDataError ?? loadError,
     runtimeReadiness,
     emptyState,
-    pendingQuestions: transcriptInteractions.pendingQuestions,
-    approvals: transcriptInteractions.approvals,
+    pendingQuestions: {
+      ...transcriptInteractions.pendingQuestions,
+      canSubmit: transcriptInteractions.pendingQuestions.canSubmit && canUseLiveTranscriptSession,
+    },
+    approvals: {
+      ...transcriptInteractions.approvals,
+      canReply: transcriptInteractions.approvals.canReply && canUseLiveTranscriptSession,
+    },
   });
 
   return {

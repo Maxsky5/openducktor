@@ -94,8 +94,7 @@ describe("useLiveTranscriptAttachment", () => {
       expect(attachRuntimeTranscriptSession).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         externalSessionId: "session-1",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
         workingDirectory: "/repo-a",
         pendingApprovals: [pendingApproval],
         pendingQuestions: [pendingQuestion],

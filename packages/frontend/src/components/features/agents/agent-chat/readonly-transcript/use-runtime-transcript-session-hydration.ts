@@ -88,8 +88,7 @@ export function useRuntimeTranscriptSessionHydration({
     return createRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
       externalSessionId,
-      runtimeKind: source.runtimeRef.kind,
-      runtimeId: sourceResolution.runtimeId,
+      runtimeRef: { kind: source.runtimeRef.kind, runtimeId: sourceResolution.runtimeId },
       workingDirectory: source.workingDirectory,
       history: historyQuery.data,
       isLive: source.isLive === true,

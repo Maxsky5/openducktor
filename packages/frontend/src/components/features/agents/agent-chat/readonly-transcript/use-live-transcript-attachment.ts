@@ -137,8 +137,7 @@ export function useLiveTranscriptAttachment({
     void attachRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
       externalSessionId,
-      runtimeKind: source.runtimeRef.kind,
-      runtimeId,
+      runtimeRef: { kind: source.runtimeRef.kind, runtimeId },
       workingDirectory: source.workingDirectory,
       pendingApprovals: visiblePendingApprovalsRef.current,
       pendingQuestions: visiblePendingQuestionsRef.current,

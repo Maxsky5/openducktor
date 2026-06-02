@@ -539,8 +539,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       expect(attachRuntimeTranscriptSession).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         externalSessionId: "session-subagent-1",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
         pendingApprovals: [pendingApproval],
         pendingQuestions: [makePendingQuestion()],
         workingDirectory: "/repo-a",
@@ -644,7 +643,13 @@ describe("useSessionTranscriptSurfaceModel", () => {
       expect(model.thread.session).toEqual(liveSession);
       expect(model.thread.isSessionViewLoading).toBe(false);
       expect(model.thread.isSessionHistoryLoading).toBe(false);
-      expect(model.thread.canReplyToApprovals).toBe(true);
+      expect(model.thread.canReplyToApprovals).toBe(false);
+
+      await harness.run(async () => {
+        resolveAttachCallbacks[0]?.();
+      });
+      await harness.waitFor((state) => state.model.thread.canReplyToApprovals === true);
+      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(true);
     } finally {
       resolveAttachCallbacks[0]?.();
       await harness.unmount();

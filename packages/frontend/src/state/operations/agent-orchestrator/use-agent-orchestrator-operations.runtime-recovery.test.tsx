@@ -325,8 +325,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
           await harness.getLatest().operations.attachRuntimeTranscriptSession({
             repoPath: "/tmp/repo",
             externalSessionId: "external-subagent",
-            runtimeKind: "opencode",
-            runtimeId: "runtime-1",
+            runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
             workingDirectory: "/tmp/repo/worktree",
           });
         }),
@@ -338,8 +337,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().operations.attachRuntimeTranscriptSession({
           repoPath: "/tmp/repo",
           externalSessionId: "external-subagent",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
           workingDirectory: "/tmp/repo/worktree",
         });
       });
@@ -425,8 +423,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         attachPromise = harness.getLatest().operations.attachRuntimeTranscriptSession({
           repoPath: "/tmp/repo",
           externalSessionId: "external-subagent",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
           workingDirectory: "/tmp/repo/worktree",
         });
         await Promise.resolve();
@@ -621,8 +618,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         await harness.getLatest().operations.attachRuntimeTranscriptSession({
           repoPath: "/tmp/repo",
           externalSessionId: "external-subagent",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
           workingDirectory: "/tmp/repo/worktree",
         });
       });
@@ -702,8 +698,7 @@ describe("use-agent-orchestrator-operations runtime recovery", () => {
         attachPromise = harness.getLatest().operations.attachRuntimeTranscriptSession({
           repoPath: "/tmp/repo",
           externalSessionId: "external-subagent",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
           workingDirectory: "/tmp/repo/worktree",
         });
         await Promise.resolve();

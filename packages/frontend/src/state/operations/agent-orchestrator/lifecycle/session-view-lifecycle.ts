@@ -51,9 +51,8 @@ export const deriveAgentSessionViewLifecycle = ({
   const historyHydrationState = getAgentSessionHistoryHydrationState(session);
   const hasTranscript = getSessionMessageCount(session) > 0;
   const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
-  const shouldRefreshRunningAttachedSession =
+  const shouldRefreshRunningSession =
     repoReadinessState === "ready" &&
-    hasRuntimeAttachment &&
     session.status === "running" &&
     !hasPendingOutboundSend(session);
 
@@ -89,7 +88,7 @@ export const deriveAgentSessionViewLifecycle = ({
       isWaitingForRuntimeReadiness: false,
       isHydratingHistory: false,
       isHistoryHydrationFailed: false,
-      shouldEnsureReadyForView: shouldRefreshRunningAttachedSession,
+      shouldEnsureReadyForView: shouldRefreshRunningSession,
     };
   }
 
@@ -149,6 +148,6 @@ export const deriveAgentSessionViewLifecycle = ({
     isWaitingForRuntimeReadiness: false,
     isHydratingHistory: false,
     isHistoryHydrationFailed: false,
-    shouldEnsureReadyForView: false,
+    shouldEnsureReadyForView: shouldRefreshRunningSession,
   };
 };
