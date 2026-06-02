@@ -2213,7 +2213,6 @@ describe("event-stream", () => {
     });
     expect(permissionEvents[0].childExternalSessionId).toBe("external-session-1");
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
-    expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
     expect(questionEvents[0].childExternalSessionId).toBe("external-session-1");
     expect(questionEvents[0].parentExternalSessionId).toBeUndefined();

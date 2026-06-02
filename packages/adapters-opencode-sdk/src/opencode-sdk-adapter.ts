@@ -110,6 +110,34 @@ const requireSessionPresenceRuntimeId = (runtimeId: string | null | undefined): 
   throw new Error("Runtime session presence requires a live runtime id.");
 };
 
+const copySubagentCorrelationState = (source: SessionRecord, target: SessionRecord): void => {
+  for (const [partId, correlationKey] of source.subagentCorrelationKeyByPartId) {
+    target.subagentCorrelationKeyByPartId.set(partId, correlationKey);
+  }
+  for (const [
+    externalSessionId,
+    correlationKey,
+  ] of source.subagentCorrelationKeyByExternalSessionId) {
+    target.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
+  }
+  for (const [correlationKey, partId] of source.subagentPartIdByCorrelationKey) {
+    target.subagentPartIdByCorrelationKey.set(correlationKey, partId);
+  }
+  for (const [externalSessionId, partId] of source.subagentPartIdByExternalSessionId) {
+    target.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
+  }
+
+  target.pendingSubagentCorrelationKeys.splice(
+    0,
+    target.pendingSubagentCorrelationKeys.length,
+    ...source.pendingSubagentCorrelationKeys,
+  );
+  target.pendingSubagentCorrelationKeysBySignature.clear();
+  for (const [signature, pending] of source.pendingSubagentCorrelationKeysBySignature) {
+    target.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending]);
+  }
+};
+
 export class OpencodeSdkAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -576,25 +604,19 @@ export class OpencodeSdkAdapter
     const runtimeClientInput = await this.resolveRuntimeClientInput(input, "load session history", {
       requireLive: true,
     });
-    const preservedDisplayPartsByMessageId = new Map(
-      [...this.sessions.values()]
-        .filter(
-          (session) =>
-            session.externalSessionId === input.externalSessionId &&
-            session.eventTransportKey === runtimeClientInput.runtimeEndpoint,
-        )
-        .flatMap((session) =>
-          [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
-            metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],
-          ),
-        ),
-    );
-
     const matchingSessions = [...this.sessions.values()].filter(
       (session) =>
         session.externalSessionId === input.externalSessionId &&
         session.eventTransportKey === runtimeClientInput.runtimeEndpoint,
     );
+    const preservedDisplayPartsByMessageId = new Map(
+      matchingSessions.flatMap((session) =>
+        [...session.messageMetadataById.entries()].flatMap(([messageId, metadata]) =>
+          metadata.displayParts ? [[messageId, metadata.displayParts] as const] : [],
+        ),
+      ),
+    );
+
     const historyInput = {
       ...runtimeClientInput,
       externalSessionId: input.externalSessionId,
@@ -617,30 +639,7 @@ export class OpencodeSdkAdapter
     });
 
     for (const session of otherSessions) {
-      for (const [partId, correlationKey] of primarySession.subagentCorrelationKeyByPartId) {
-        session.subagentCorrelationKeyByPartId.set(partId, correlationKey);
-      }
-      for (const [
-        externalSessionId,
-        correlationKey,
-      ] of primarySession.subagentCorrelationKeyByExternalSessionId) {
-        session.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
-      }
-      for (const [correlationKey, partId] of primarySession.subagentPartIdByCorrelationKey) {
-        session.subagentPartIdByCorrelationKey.set(correlationKey, partId);
-      }
-      for (const [externalSessionId, partId] of primarySession.subagentPartIdByExternalSessionId) {
-        session.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
-      }
-      session.pendingSubagentCorrelationKeys.splice(
-        0,
-        session.pendingSubagentCorrelationKeys.length,
-        ...primarySession.pendingSubagentCorrelationKeys,
-      );
-      session.pendingSubagentCorrelationKeysBySignature.clear();
-      for (const [signature, pending] of primarySession.pendingSubagentCorrelationKeysBySignature) {
-        session.pendingSubagentCorrelationKeysBySignature.set(signature, [...pending]);
-      }
+      copySubagentCorrelationState(primarySession, session);
     }
 
     return history;

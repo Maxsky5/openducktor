@@ -110,9 +110,14 @@ export function useRuntimeTranscriptInteractions({
     };
   }, [session, visiblePendingApprovals, visiblePendingQuestions]);
 
-  const activeApprovalSessionId = sessionWithPendingRequests?.externalSessionId ?? null;
-  const approvalSessionMatchesTranscript =
-    activeApprovalSessionId !== null && activeApprovalSessionId === externalSessionId;
+  const activeSessionId = sessionWithPendingRequests?.externalSessionId ?? null;
+  const sessionMatchesTranscript =
+    activeSessionId !== null && activeSessionId === externalSessionId;
+  const canReplyToRuntimeRequest =
+    isRuntimeReady &&
+    !sourceResolution.isPending &&
+    !sourceResolution.error &&
+    sessionMatchesTranscript;
   const pendingApprovalRequests: readonly AgentApprovalRequest[] =
     sessionWithPendingRequests?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const replyTranscriptApproval = useCallback(
@@ -138,18 +143,17 @@ export function useRuntimeTranscriptInteractions({
   );
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeExternalSessionId: approvalSessionMatchesTranscript ? activeApprovalSessionId : null,
+      activeExternalSessionId: sessionMatchesTranscript ? activeSessionId : null,
       pendingApprovals: pendingApprovalRequests,
       agentStudioReady: isRuntimeReady,
       replyAgentApproval: replyTranscriptApproval,
     });
 
-  const activeQuestionSessionId = sessionWithPendingRequests?.externalSessionId ?? null;
   const pendingQuestionRequests: readonly AgentQuestionRequest[] =
     sessionWithPendingRequests?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const replyTranscriptQuestion = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeQuestionSessionId) {
+      if (!activeSessionId) {
         throw new Error("Runtime transcript question target is unavailable.");
       }
       setIsSubmittingQuestionByRequestId((current) => ({
@@ -157,7 +161,7 @@ export function useRuntimeTranscriptInteractions({
         [requestId]: true,
       }));
       try {
-        await answerAgentQuestion(activeQuestionSessionId, requestId, answers);
+        await answerAgentQuestion(activeSessionId, requestId, answers);
         setRepliedRuntimeQuestionRequestIds((current) => {
           if (current.has(requestId)) {
             return current;
@@ -174,7 +178,7 @@ export function useRuntimeTranscriptInteractions({
         });
       }
     },
-    [activeQuestionSessionId, answerAgentQuestion],
+    [activeSessionId, answerAgentQuestion],
   );
 
   return {
@@ -182,22 +186,12 @@ export function useRuntimeTranscriptInteractions({
     visiblePendingApprovals,
     visiblePendingQuestions,
     pendingQuestions: {
-      canSubmit:
-        isRuntimeReady &&
-        !sourceResolution.isPending &&
-        !sourceResolution.error &&
-        activeQuestionSessionId === externalSessionId &&
-        pendingQuestionRequests.length > 0,
+      canSubmit: canReplyToRuntimeRequest && pendingQuestionRequests.length > 0,
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: replyTranscriptQuestion,
     },
     approvals: {
-      canReply:
-        isRuntimeReady &&
-        !sourceResolution.isPending &&
-        !sourceResolution.error &&
-        approvalSessionMatchesTranscript &&
-        pendingApprovalRequests.length > 0,
+      canReply: canReplyToRuntimeRequest && pendingApprovalRequests.length > 0,
       isSubmittingByRequestId: isSubmittingApprovalByRequestId,
       errorByRequestId: approvalReplyErrorByRequestId,
       onReply: onReplyApproval,

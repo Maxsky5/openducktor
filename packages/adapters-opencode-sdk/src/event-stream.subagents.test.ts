@@ -111,9 +111,9 @@ const makeChildQuestionAskedEvent = (input: {
       id: input.requestId ?? "question-child-1",
       questions: [
         {
-          id: "scope",
-          label: "Scope",
-          options: ["current file", "whole repo"],
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "Current file", description: "Inspect only the requested file" }],
         },
       ],
     },
@@ -517,6 +517,13 @@ describe("event-stream subagent correlation", () => {
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-subagent-question:subtask-a",
+      questions: [
+        {
+          header: "Scope",
+          question: "Pick target",
+          options: [{ label: "Current file", description: "Inspect only the requested file" }],
+        },
+      ],
     });
   });
 
