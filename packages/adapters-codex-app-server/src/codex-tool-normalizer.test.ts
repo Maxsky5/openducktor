@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toStreamPart } from "./codex-app-server-transcript";
-import {
-  canonicalCodexToolName,
-  codexToolType,
-  normalizeCodexToolInvocation,
-} from "./codex-tool-normalizer";
+import { normalizeCodexToolInvocation } from "./codex-tool-normalizer";
 
 describe("Codex tool normalization", () => {
   test.each([
@@ -30,7 +26,14 @@ describe("Codex tool normalization", () => {
     ["functions.todo_write", undefined, "todo_write"],
     ["functions.write_stdin", undefined, null],
   ])("maps %s to %s", (rawToolName, input, expected) => {
-    expect(canonicalCodexToolName(rawToolName, input)).toBe(expected);
+    const part = normalizeCodexToolInvocation({
+      messageId: "message-1",
+      partId: "part-1",
+      callId: "call-1",
+      rawToolName,
+      input,
+    });
+    expect(part?.tool ?? null).toBe(expected);
   });
 
   test.each([
@@ -46,7 +49,14 @@ describe("Codex tool normalization", () => {
     ["custom_tool", undefined, "generic"],
     ["functions.write_stdin", undefined, null],
   ])("maps %s to tool type %s", (rawToolName, input, expected) => {
-    expect(codexToolType(rawToolName, input)).toBe(expected);
+    const part = normalizeCodexToolInvocation({
+      messageId: "message-1",
+      partId: "part-1",
+      callId: "call-1",
+      rawToolName,
+      input,
+    });
+    expect(part?.toolType ?? null).toBe(expected);
   });
 
   test("normalizes ODT tool display identity", () => {

@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
-import {
-  isRelevantSubscriberEvent,
-  processOpencodeEvent,
-  subscribeOpencodeEvents,
-} from "./event-stream";
+import { isRelevantSubscriberEvent, processOpencodeEvent } from "./event-stream";
 import {
   type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
@@ -1746,39 +1742,32 @@ describe("event-stream", () => {
   });
 
   test("forwards every raw sdk event to logEvent before relevance filtering", async () => {
-    const client = makeClientWithEvents([
-      {
-        type: "todo.updated",
-        properties: {
-          sessionID: "external-other-session",
-          todos: [{ content: "ignored" }],
-        },
-      } as unknown as Event,
-      {
-        type: "todo.updated",
-        properties: {
-          sessionID: "external-session-1",
-          todos: [{ content: "handled" }],
-        },
-      } as unknown as Event,
-    ]);
-    const sessionRecord = makeSessionRecord(client);
     const logs: Array<{ type: string; relevant: boolean }> = [];
 
-    await subscribeOpencodeEvents({
-      context: {
-        externalSessionId: "external-session-1",
-        input: makeSessionInput(),
+    await runEventStreamWithSession(
+      [
+        {
+          type: "todo.updated",
+          properties: {
+            sessionID: "external-other-session",
+            todos: [{ content: "ignored" }],
+          },
+        } as unknown as Event,
+        {
+          type: "todo.updated",
+          properties: {
+            sessionID: "external-session-1",
+            todos: [{ content: "handled" }],
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      {
+        logEvent: (entry) => {
+          logs.push({ type: entry.event.type, relevant: entry.relevant });
+        },
       },
-      client,
-      controller: new AbortController(),
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: () => undefined,
-      getSession: () => sessionRecord,
-      logEvent: (entry) => {
-        logs.push({ type: entry.event.type, relevant: entry.relevant });
-      },
-    });
+    );
 
     expect(logs).toEqual([
       { type: "todo.updated", relevant: false },
@@ -2228,7 +2217,7 @@ describe("event-stream", () => {
     expect(questionEvents[0].questions[0]?.header).toBe("Scope");
   });
 
-  test("subscribeOpencodeEvents forwards known child question events to parent subscribers", async () => {
+  test("runtime event transport forwards known child question events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2246,15 +2235,12 @@ describe("event-stream", () => {
           },
         } as unknown as Event,
       ],
-      undefined,
-      (childExternalSessionId) =>
-        childExternalSessionId === "external-child-session"
-          ? {
-              parentExternalSessionId: "external-session-1",
-              childExternalSessionId,
-              subagentCorrelationKey: "part:assistant-1:subtask-1",
-            }
-          : undefined,
+      (session) => {
+        session.subagentCorrelationKeyByExternalSessionId.set(
+          "external-child-session",
+          "part:assistant-1:subtask-1",
+        );
+      },
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -2289,7 +2275,6 @@ describe("event-stream", () => {
         } as unknown as Event,
       ],
       undefined,
-      () => undefined,
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -2340,7 +2325,6 @@ describe("event-stream", () => {
       (session) => {
         session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
       },
-      () => undefined,
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -2378,7 +2362,6 @@ describe("event-stream", () => {
       (session) => {
         session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
       },
-      () => undefined,
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
@@ -2466,7 +2449,7 @@ describe("event-stream", () => {
     ]);
   });
 
-  test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
+  test("runtime event transport forwards known child permission events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2479,15 +2462,12 @@ describe("event-stream", () => {
           },
         } as unknown as Event,
       ],
-      undefined,
-      (childExternalSessionId) =>
-        childExternalSessionId === "external-child-session"
-          ? {
-              parentExternalSessionId: "external-session-1",
-              childExternalSessionId,
-              subagentCorrelationKey: "part:assistant-1:subtask-1",
-            }
-          : undefined,
+      (session) => {
+        session.subagentCorrelationKeyByExternalSessionId.set(
+          "external-child-session",
+          "part:assistant-1:subtask-1",
+        );
+      },
     );
 
     const permissionEvents = emitted.filter((event) => event.type === "approval_required");
@@ -2502,7 +2482,7 @@ describe("event-stream", () => {
     });
   });
 
-  test("subscribeOpencodeEvents forwards known child permission resolved events to parent subscribers", async () => {
+  test("runtime event transport forwards known child permission resolved events to parent subscribers", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2514,15 +2494,12 @@ describe("event-stream", () => {
           },
         } as unknown as Event,
       ],
-      undefined,
-      (childExternalSessionId) =>
-        childExternalSessionId === "external-child-session"
-          ? {
-              parentExternalSessionId: "external-session-1",
-              childExternalSessionId,
-              subagentCorrelationKey: "part:assistant-1:subtask-1",
-            }
-          : undefined,
+      (session) => {
+        session.subagentCorrelationKeyByExternalSessionId.set(
+          "external-child-session",
+          "part:assistant-1:subtask-1",
+        );
+      },
     );
 
     const resolvedEvents = emitted.filter((event) => event.type === "approval_resolved");
@@ -2552,7 +2529,6 @@ describe("event-stream", () => {
         } as unknown as Event,
       ],
       undefined,
-      () => undefined,
     );
 
     const permissionEvents = emitted.filter((event) => event.type === "approval_required");
@@ -2567,7 +2543,7 @@ describe("event-stream", () => {
     expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
   });
 
-  test("subscribeOpencodeEvents ignores child permission links for other parents", async () => {
+  test("runtime event transport ignores child permission links for other parents", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2581,14 +2557,6 @@ describe("event-stream", () => {
         } as unknown as Event,
       ],
       undefined,
-      (childExternalSessionId) =>
-        childExternalSessionId === "external-child-session"
-          ? {
-              parentExternalSessionId: "other-external-parent",
-              childExternalSessionId,
-              subagentCorrelationKey: "part:assistant-1:subtask-1",
-            }
-          : undefined,
     );
 
     expect(emitted.filter((event) => event.type === "approval_required")).toHaveLength(0);

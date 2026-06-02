@@ -16,10 +16,6 @@ import {
 import { todoMapper } from "./todo";
 
 export {
-  /** @internal Test-only seam for compaction mapper parity coverage. */
-  compactionMapper,
-} from "./lifecycle";
-export {
   type CodexTodoUpdate,
   codexTodosFromThreadRead,
   todoMapper,

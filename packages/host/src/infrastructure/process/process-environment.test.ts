@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
-  buildLoginShellPathProbeArgs,
   createProcessEnvironment,
-  mergePathValues,
   normalizeProcessEnvironment,
-  parsePathFromLoginShellOutput,
-  pathEnvironmentKey,
   pathEnvironmentValue,
 } from "./process-environment";
 
@@ -69,10 +68,30 @@ describe("createProcessEnvironment", () => {
       },
     });
 
-    expect(pathEnvironmentKey(baseEnv, "win32")).toBe("PATH");
     expect(pathEnvironmentValue(baseEnv, "win32")).toBe("C:\\Tools\\bin");
     expect(env).toMatchObject({ Path: "C:\\Tools\\bin" });
     expect(env.PATH).toBeUndefined();
+  });
+
+  test("reads and merges PATH from the current user's login shell", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-path-"));
+    const shellPath = path.join(root, "fake-shell");
+    try {
+      await writeFile(
+        shellPath,
+        "#!/bin/sh\nprintf 'profile noise\\0__OPENDUCKTOR_ENV_START__\\0USER=max\\0PATH=/opt/bin:/usr/bin\\0'\n",
+      );
+      await chmod(shellPath, 0o755);
+
+      const env = createProcessEnvironment({
+        baseEnv: { SHELL: shellPath, PATH: "/usr/bin:/bin" },
+        platform: "darwin",
+      });
+
+      expect(env.PATH?.split(":")).toEqual(["/opt/bin", "/usr/bin", "/bin"]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });
 
@@ -88,32 +107,5 @@ describe("normalizeProcessEnvironment", () => {
         "win32",
       ),
     ).toEqual({ Path: "C:\\Tools" });
-  });
-});
-
-describe("mergePathValues", () => {
-  test("keeps first occurrence of duplicate PATH entries", () => {
-    expect(mergePathValues("/opt/bin:/usr/bin", "/usr/bin:/bin", ":")).toBe(
-      "/opt/bin:/usr/bin:/bin",
-    );
-  });
-});
-
-describe("parsePathFromLoginShellOutput", () => {
-  test("extracts PATH after the shell output marker", () => {
-    const output = Buffer.from(
-      "profile noise\0__OPENDUCKTOR_ENV_START__\0USER=max\0PATH=/opt/bin:/usr/bin\0",
-    );
-
-    expect(parsePathFromLoginShellOutput(output)).toBe("/opt/bin:/usr/bin");
-  });
-});
-
-describe("buildLoginShellPathProbeArgs", () => {
-  test("does not request an interactive shell that can take terminal job control", () => {
-    const args = buildLoginShellPathProbeArgs();
-
-    expect(args).toEqual(["-c", "printf '__OPENDUCKTOR_ENV_START__\\0'; /usr/bin/env -0"]);
-    expect(args).not.toContain("-i");
   });
 });

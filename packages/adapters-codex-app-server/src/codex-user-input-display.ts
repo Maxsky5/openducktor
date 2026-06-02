@@ -29,9 +29,7 @@ export const toDisplayParts = (parts: AgentUserMessagePart[]): AgentUserMessageD
     .map(toDisplayPart)
     .filter((part): part is AgentUserMessageDisplayPart => Boolean(part));
 };
-
-/** @internal Test-only seam for Codex user input display rendering. */
-export const userInputText = (input: CodexUserInput): string => {
+const userInputText = (input: CodexUserInput): string => {
   if (input.type === "text") {
     return input.text;
   }

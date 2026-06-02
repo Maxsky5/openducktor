@@ -42,24 +42,8 @@ import {
 import { readSharedServerState, writeSharedServerState } from "./beads-shared-dolt-state";
 
 export type { SharedDoltServerError } from "./beads-shared-dolt-errors";
-export {
-  pathExists,
-  runCommandAllowFailure,
-  /** @internal Test-only seam for shared Dolt health checks. */
-  serverStateIsHealthy,
-} from "./beads-shared-dolt-health";
-export {
-  /** @internal Test-only seam for Dolt YAML config file rendering. */
-  writeDoltConfigFile,
-  /** @internal Test-only seam for Dolt YAML config quoting. */
-  yamlQuotePath,
-} from "./beads-shared-dolt-startup";
-
-export {
-  readSharedServerState,
-  /** @internal Test-only seam for shared Dolt state persistence. */
-  writeSharedServerState,
-} from "./beads-shared-dolt-state";
+export { pathExists, runCommandAllowFailure } from "./beads-shared-dolt-health";
+export { readSharedServerState } from "./beads-shared-dolt-state";
 
 const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
   Effect.gen(function* () {

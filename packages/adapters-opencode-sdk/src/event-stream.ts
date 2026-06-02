@@ -35,20 +35,6 @@ type SubscribeGlobalEventsInput = {
   onEvent: (event: Event) => void | Promise<void>;
 };
 
-type SubscribeOpencodeEventsInput = {
-  context: {
-    externalSessionId: string;
-    input: SessionInput;
-  };
-  client: OpencodeClient;
-  controller: AbortController;
-  now: () => string;
-  emit: (sessionId: string, event: AgentEvent) => void;
-  getSession: (sessionId: string) => SessionRecord | undefined;
-  logEvent?: OpencodeEventLogger;
-  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined;
-};
-
 type LogEventInput = {
   subscriber: EventStreamSubscriber;
   event: Event;
@@ -253,54 +239,4 @@ export const isRelevantSubscriberEvent = (
   }
 
   return isEventDirectoryScopedToSubscriber(subscriber, event);
-};
-
-/** @internal Test-only seam for direct event stream subscription coverage. */
-export const subscribeOpencodeEvents = async (
-  input: SubscribeOpencodeEventsInput,
-): Promise<void> => {
-  const isKnownChildExternalSessionId = (externalSessionId: string): boolean => {
-    const link = input.resolveSubagentSessionLink?.(externalSessionId);
-    if (link && link.parentExternalSessionId === input.context.externalSessionId) {
-      return true;
-    }
-
-    const session = input.getSession(input.context.externalSessionId);
-    return Boolean(
-      session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ||
-        session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId),
-    );
-  };
-  return subscribeGlobalEvents({
-    client: input.client,
-    controller: input.controller,
-    onEvent: (event) => {
-      const subscriber = {
-        externalSessionId: input.context.externalSessionId,
-        input: input.context.input,
-      };
-      const relevant = isRelevantSubscriberEvent(subscriber, event, {
-        isKnownChildExternalSessionId,
-      });
-      logStreamEvent({
-        subscriber,
-        event,
-        relevant,
-        ...(input.logEvent ? { logEvent: input.logEvent } : {}),
-      });
-      if (!relevant) {
-        return;
-      }
-      processOpencodeEvent({
-        context: input.context,
-        event,
-        now: input.now,
-        emit: input.emit,
-        getSession: input.getSession,
-        ...(input.resolveSubagentSessionLink
-          ? { resolveSubagentSessionLink: input.resolveSubagentSessionLink }
-          : {}),
-      });
-    },
-  });
 };

@@ -1,12 +1,10 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { HostValidationError } from "../effect/host-errors";
-import {
-  DEFAULT_CONFIG_DIR_NAME,
-  OPENDUCKTOR_CONFIG_DIR_ENV,
-  resolveOpenDucktorBaseDir,
-  resolveUserPath,
-} from "./openducktor-config-dir";
+import { resolveOpenDucktorBaseDir, resolveUserPath } from "./openducktor-config-dir";
+
+const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
+const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
 
 describe("OpenDucktor config directory resolution", () => {
   test("uses the default config directory under the user home", () => {

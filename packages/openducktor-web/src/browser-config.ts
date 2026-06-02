@@ -10,11 +10,6 @@ export const configureBrowserRuntimeConfig = (config: BrowserRuntimeConfig): voi
   browserRuntimeConfig = config;
 };
 
-/** @internal Test-only reset for module-level browser runtime config. */
-export const resetBrowserRuntimeConfig = (): void => {
-  browserRuntimeConfig = undefined;
-};
-
 const readBrowserEnv = (): BrowserEnv =>
   (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ??
   (typeof process !== "undefined" ? process.env : undefined);

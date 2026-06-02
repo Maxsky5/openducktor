@@ -1,8 +1,16 @@
 import { Effect } from "effect";
 import type { LocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createLocalAttachmentCommandHandlers } from "./local-attachment-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createRecordingLocalAttachmentService = () => {
   const calls: Array<{

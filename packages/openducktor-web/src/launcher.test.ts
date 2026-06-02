@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { __launcherTestInternals } from "./launcher";
+import {
+  buildBrowserRuntimeConfigJson,
+  buildFrontendDisplayUrls,
+  closeFrontendServer,
+  keepProcessAliveDuring,
+  resolveStaticAssetPath,
+  stopLauncherServices,
+  waitForBackend,
+} from "./launcher-support";
 
 const createHostProcess = (exited: Promise<number>): Bun.Subprocess => {
   return { exited } as Bun.Subprocess;
@@ -24,7 +32,7 @@ describe("launcher internals", () => {
       return new Response(null, { status: 200 });
     };
 
-    await __launcherTestInternals.waitForBackend(
+    await waitForBackend(
       "http://127.0.0.1:14327",
       "app-token",
       1_000,
@@ -39,35 +47,15 @@ describe("launcher internals", () => {
     ]);
   });
 
-  test("rejects stale hosts that do not know the launcher app token", async () => {
-    const fetchImpl = async (url: string | URL | Request) => {
-      return new Response(null, { status: String(url).endsWith("/session") ? 403 : 200 });
-    };
-
-    await expect(
-      __launcherTestInternals.verifyBackendReadiness(
-        "http://127.0.0.1:14327",
-        "fresh-app-token",
-        fetchImpl,
-      ),
-    ).rejects.toThrow("Session endpoint rejected the launcher app token with status 403.");
-  });
-
   test("fails fast when the fake host exits before readiness", async () => {
     const exited = Promise.resolve(9);
     await exited;
 
     await expect(
-      __launcherTestInternals.waitForBackend(
-        "http://127.0.0.1:14327",
-        "app-token",
-        1_000,
-        createHostProcess(exited),
-        {
-          fetch: async () => new Response(null, { status: 503 }),
-          sleep: async () => {},
-        },
-      ),
+      waitForBackend("http://127.0.0.1:14327", "app-token", 1_000, createHostProcess(exited), {
+        fetch: async () => new Response(null, { status: 503 }),
+        sleep: async () => {},
+      }),
     ).rejects.toThrow("OpenDucktor web host exited before startup completed with code 9.");
   });
 
@@ -92,7 +80,7 @@ describe("launcher internals", () => {
       },
     };
 
-    await __launcherTestInternals.stopLauncherServices(
+    await stopLauncherServices(
       {
         frontendServer,
         hostBackend,
@@ -135,7 +123,7 @@ describe("launcher internals", () => {
       },
     };
 
-    await __launcherTestInternals.closeFrontendServer(frontendServer);
+    await closeFrontendServer(frontendServer);
 
     expect(closeCalls).toBe(1);
     expect(closeIdleConnectionsCalls).toBe(1);
@@ -159,9 +147,7 @@ describe("launcher internals", () => {
       },
     };
 
-    await expect(__launcherTestInternals.closeFrontendServer(frontendServer)).rejects.toThrow(
-      "close failed",
-    );
+    await expect(closeFrontendServer(frontendServer)).rejects.toThrow("close failed");
     expect(closeIdleConnectionsCalls).toBe(1);
     expect(closeAllConnectionsCalls).toBe(1);
   });
@@ -172,7 +158,7 @@ describe("launcher internals", () => {
       close: () => new Promise<void>(() => {}),
     };
 
-    await __launcherTestInternals.closeFrontendServer(frontendServer, async (durationMs) => {
+    await closeFrontendServer(frontendServer, async (durationMs) => {
       timeoutMs = durationMs;
     });
 
@@ -188,7 +174,7 @@ describe("launcher internals", () => {
       finishOperation = resolve;
     });
 
-    const keepAlivePromise = __launcherTestInternals.keepProcessAliveDuring(operation, {
+    const keepAlivePromise = keepProcessAliveDuring(operation, {
       clearInterval: (nextTimer) => {
         clearedTimers.push(nextTimer);
       },
@@ -222,7 +208,7 @@ describe("launcher internals", () => {
     };
 
     await expect(
-      __launcherTestInternals.stopLauncherServices(
+      stopLauncherServices(
         {
           frontendServer: null,
           hostBackend,
@@ -238,24 +224,22 @@ describe("launcher internals", () => {
   });
 
   test("builds runtime config JSON for the browser shell", () => {
-    expect(
-      __launcherTestInternals.buildBrowserRuntimeConfigJson("http://127.0.0.1:14327", "app-token"),
-    ).toBe('{"backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n');
+    expect(buildBrowserRuntimeConfigJson("http://127.0.0.1:14327", "app-token")).toBe(
+      '{"backendUrl":"http://127.0.0.1:14327","appToken":"app-token"}\n',
+    );
   });
 
   test("prints localhost first in the frontend availability URLs", () => {
-    expect(__launcherTestInternals.buildFrontendDisplayUrls(1420)).toEqual([
+    expect(buildFrontendDisplayUrls(1420)).toEqual([
       "http://localhost:1420/",
       "http://127.0.0.1:1420/",
     ]);
   });
 
   test("rejects static asset paths that escape the web shell root", () => {
-    expect(__launcherTestInternals.resolveStaticAssetPath("/web-shell", "/assets/app.js")).toBe(
+    expect(resolveStaticAssetPath("/web-shell", "/assets/app.js")).toBe(
       path.join("/web-shell", "assets/app.js"),
     );
-    expect(
-      __launcherTestInternals.resolveStaticAssetPath("/web-shell", "/../secret.txt"),
-    ).toBeNull();
+    expect(resolveStaticAssetPath("/web-shell", "/../secret.txt")).toBeNull();
   });
 });

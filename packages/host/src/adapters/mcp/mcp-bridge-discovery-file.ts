@@ -87,26 +87,6 @@ const claimDiscoveryForRemoval = (discoveryPath: string): Effect.Effect<string |
     ),
   );
 };
-
-/** @internal Test-only seam for discovery file parsing. */
-export const readMcpBridgeDiscoveryFile = (
-  discoveryPath: string,
-): Effect.Effect<McpBridgeDiscoveryFile | null, unknown> =>
-  Effect.tryPromise({
-    try: () => readFile(discoveryPath, "utf8"),
-    catch: (error) => error,
-  }).pipe(
-    Effect.flatMap((payload) =>
-      Effect.try({
-        try: () => parseDiscoveryFile(payload, discoveryPath),
-        catch: (error) => error,
-      }),
-    ),
-    Effect.catchAll((error) =>
-      isFsErrorCode(error, "ENOENT") ? Effect.succeed(null) : Effect.fail(error),
-    ),
-  );
-
 export const writeMcpBridgeDiscoveryFile = (
   discoveryPath: string,
   discovery: McpBridgeDiscoveryFile,

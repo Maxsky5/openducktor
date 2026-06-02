@@ -1,22 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { HostValidationError } from "../../effect/host-errors";
-import {
-  buildWindowsBatchCommandLine,
-  quoteWindowsBatchArgument,
-} from "./process-windows-command-line";
-
-describe("quoteWindowsBatchArgument", () => {
-  test("quotes one argv value while preserving percent and bang literals", () => {
-    expect(quoteWindowsBatchArgument('path=%APPDATA% caret=foo^bar bang=!value! quote="x"')).toBe(
-      '"path=%APPDATA% caret=foo^^bar bang=!value! quote=^"x^""',
-    );
-  });
-
-  test("rejects carriage returns and newlines", () => {
-    expect(() => quoteWindowsBatchArgument("safe\nunsafe")).toThrow(HostValidationError);
-    expect(() => quoteWindowsBatchArgument("safe\runsafe")).toThrow(HostValidationError);
-  });
-});
+import { buildWindowsBatchCommandLine } from "./process-windows-command-line";
 
 describe("buildWindowsBatchCommandLine", () => {
   test("builds the single cmd.exe /c payload for a batch command", () => {
@@ -34,5 +18,14 @@ describe("buildWindowsBatchCommandLine", () => {
 
   test("rejects carriage returns and newlines in commands", () => {
     expect(() => buildWindowsBatchCommandLine("tool.cmd\nwhoami", [])).toThrow(HostValidationError);
+  });
+
+  test("rejects carriage returns and newlines in arguments", () => {
+    expect(() => buildWindowsBatchCommandLine("tool.cmd", ["safe\nunsafe"])).toThrow(
+      HostValidationError,
+    );
+    expect(() => buildWindowsBatchCommandLine("tool.cmd", ["safe\runsafe"])).toThrow(
+      HostValidationError,
+    );
   });
 });

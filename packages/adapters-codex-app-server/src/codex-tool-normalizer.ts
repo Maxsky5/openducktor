@@ -111,9 +111,7 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
 
   return null;
 };
-
-/** @internal Test-only seam for Codex tool family classification. */
-export const codexToolType = (
+const codexToolType = (
   rawToolName: string,
   input?: Record<string, unknown>,
 ): AgentToolType | null => {
@@ -169,9 +167,7 @@ export const codexToolType = (
   }
   return "generic";
 };
-
-/** @internal Test-only seam for Codex raw tool name canonicalization. */
-export const canonicalCodexToolName = (rawToolName: string): string | null => {
+const canonicalCodexToolName = (rawToolName: string): string | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
   }

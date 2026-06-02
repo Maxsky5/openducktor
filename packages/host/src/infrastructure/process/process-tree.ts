@@ -66,9 +66,7 @@ const assertValidPid = (pid: number, label: string): void => {
     });
   }
 };
-
-/** @internal Test-only seam for process-tree signaling strategy. */
-export const signalProcessTree = (
+const signalProcessTree = (
   pid: number,
   signal: NodeJS.Signals,
   dependencies: SignalProcessTreeDependencies = defaultSignalProcessTreeDependencies(),

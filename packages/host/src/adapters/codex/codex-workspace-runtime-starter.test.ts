@@ -13,10 +13,7 @@ import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribut
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createCodexAppServerTransportRegistry as createEffectCodexAppServerTransportRegistry } from "./codex-app-server-transport-registry";
-import {
-  buildCodexMcpConfigArgs,
-  createCodexWorkspaceRuntimeStarter as createEffectCodexWorkspaceRuntimeStarter,
-} from "./codex-workspace-runtime-starter";
+import { createCodexWorkspaceRuntimeStarter as createEffectCodexWorkspaceRuntimeStarter } from "./codex-workspace-runtime-starter";
 
 type CodexWorkspaceRuntimeStarterInput = Parameters<
   typeof createEffectCodexWorkspaceRuntimeStarter
@@ -222,18 +219,6 @@ const processIsAlive = (pid: number): boolean => {
 };
 
 describe("createCodexWorkspaceRuntimeStarter", () => {
-  test("builds Codex MCP config args for OpenDucktor tools", () => {
-    expect(buildCodexMcpConfigArgs(["mcp-bin", "--stdio"])).toEqual([
-      "--config",
-      'mcp_servers.openducktor.command="mcp-bin"',
-      "--config",
-      'mcp_servers.openducktor.args=["--stdio"]',
-      "--config",
-      'mcp_servers.openducktor.env_vars=["ODT_WORKSPACE_ID", "ODT_HOST_URL", "ODT_HOST_TOKEN", "ODT_FORBID_WORKSPACE_ID_INPUT", "ODT_ALLOWED_TOOLS"]',
-      "--config",
-      "mcp_servers.openducktor.enabled=true",
-    ]);
-  });
   test("fails fast when the MCP bridge connection is not configured", async () => {
     const starter = createCodexWorkspaceRuntimeStarter({
       systemCommands: createSystemCommands(),
@@ -324,6 +309,18 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       });
       expect(capture.env.ODT_ALLOWED_TOOLS).toContain("odt_read_task");
       expect(capture.initializeVersion).toBe("0.3.1-test");
+      expect(capture.args).toEqual(
+        expect.arrayContaining([
+          "--config",
+          `mcp_servers.openducktor.command=${JSON.stringify(process.execPath)}`,
+          "--config",
+          expect.stringContaining("mcp_servers.openducktor.args="),
+          "--config",
+          'mcp_servers.openducktor.env_vars=["ODT_WORKSPACE_ID", "ODT_HOST_URL", "ODT_HOST_TOKEN", "ODT_FORBID_WORKSPACE_ID_INPUT", "ODT_ALLOWED_TOOLS"]',
+          "--config",
+          "mcp_servers.openducktor.enabled=true",
+        ]),
+      );
       expect(capture.args).toContain("app-server");
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
       await expect(

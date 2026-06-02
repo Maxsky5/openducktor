@@ -4,7 +4,6 @@ import path from "node:path";
 import { Effect } from "effect";
 import {
   type McpBridgeDiscoveryFile,
-  readMcpBridgeDiscoveryFile,
   removeMcpBridgeDiscoveryFile,
   resolveMcpBridgeDiscoveryPath,
   writeMcpBridgeDiscoveryFile,
@@ -71,8 +70,8 @@ describe("MCP bridge discovery file", () => {
       await Effect.runPromise(writeMcpBridgeDiscoveryFile(discoveryPath, newer));
       await Effect.runPromise(removeMcpBridgeDiscoveryFile(discoveryPath, expected));
 
-      await expect(Effect.runPromise(readMcpBridgeDiscoveryFile(discoveryPath))).resolves.toEqual(
-        newer,
+      await expect(readFile(discoveryPath, "utf8")).resolves.toBe(
+        `${JSON.stringify(newer, null, 2)}\n`,
       );
     } finally {
       await rm(tempDir, { force: true, recursive: true });
@@ -86,9 +85,9 @@ describe("MCP bridge discovery file", () => {
       await mkdir(path.dirname(discoveryPath), { recursive: true });
       await writeFile(discoveryPath, "{not-json");
 
-      await expect(Effect.runPromise(readMcpBridgeDiscoveryFile(discoveryPath))).rejects.toThrow(
-        "JSON Parse error",
-      );
+      await expect(
+        Effect.runPromise(removeMcpBridgeDiscoveryFile(discoveryPath, discovery())),
+      ).rejects.toThrow("JSON Parse error");
     } finally {
       await rm(tempDir, { force: true, recursive: true });
     }

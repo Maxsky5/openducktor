@@ -310,8 +310,3 @@ export const sendUserMessage = async (input: {
     throw toOpenCodeRequestError("prompt session", error);
   }
 };
-
-/** @internal Test-only seams for message execution request shaping. */
-export const __testExports = {
-  toSlashCommandExecutionRequest,
-};

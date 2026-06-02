@@ -58,8 +58,10 @@ const originalEventSource = globalThis.EventSource;
 const originalFetch = globalThis.fetch;
 const originalBackendUrl = process.env.VITE_ODT_BROWSER_BACKEND_URL;
 const originalAuthToken = process.env.VITE_ODT_BROWSER_AUTH_TOKEN;
+let localHostTransportImportId = 0;
+let localHostTransportImportPath = "./local-host-transport.ts?test=0";
 
-const loadLocalHostTransport = () => import("./local-host-transport");
+const loadLocalHostTransport = () => import(localHostTransportImportPath);
 
 const waitForEventSourceInstance = async (index = 0): Promise<FakeEventSource> => {
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -74,13 +76,13 @@ const waitForEventSourceInstance = async (index = 0): Promise<FakeEventSource> =
 };
 
 beforeEach(async () => {
+  localHostTransportImportId += 1;
+  localHostTransportImportPath = `./local-host-transport.ts?test=${localHostTransportImportId}`;
   FakeEventSource.reset();
   process.env.VITE_ODT_BROWSER_BACKEND_URL = "http://127.0.0.1:14327";
   process.env.VITE_ODT_BROWSER_AUTH_TOKEN = "app-token";
   // @ts-expect-error test shim
   globalThis.EventSource = FakeEventSource;
-  const { __localHostTransportTestInternals } = await loadLocalHostTransport();
-  __localHostTransportTestInternals.resetSession();
 });
 
 afterEach(() => {
@@ -98,37 +100,44 @@ afterEach(() => {
   }
 });
 
-describe("readLocalHostErrorMessage", () => {
+describe("readLocalHostErrorPayload", () => {
   test("preserves plain-text backend error bodies", async () => {
-    const { readLocalHostErrorMessage } = await loadLocalHostTransport();
+    const { readLocalHostErrorPayload } = await import("./local-host-errors");
     const response = new Response("Plain backend error", {
       status: 500,
       headers: { "content-type": "text/plain" },
     });
 
-    await expect(readLocalHostErrorMessage(response)).resolves.toBe("Plain backend error");
+    await expect(readLocalHostErrorPayload(response)).resolves.toMatchObject({
+      message: "Plain backend error",
+      payload: null,
+    });
   });
 
   test("returns the structured error field from JSON bodies", async () => {
-    const { readLocalHostErrorMessage } = await loadLocalHostTransport();
+    const { readLocalHostErrorPayload } = await import("./local-host-errors");
     const response = new Response(JSON.stringify({ error: "Structured backend error" }), {
       status: 500,
       headers: { "content-type": "application/json" },
     });
 
-    await expect(readLocalHostErrorMessage(response)).resolves.toBe("Structured backend error");
+    await expect(readLocalHostErrorPayload(response)).resolves.toMatchObject({
+      message: "Structured backend error",
+      payload: { error: "Structured backend error" },
+    });
   });
 
   test("returns the host status message when the body is empty", async () => {
-    const { readLocalHostErrorMessage } = await loadLocalHostTransport();
+    const { readLocalHostErrorPayload } = await import("./local-host-errors");
     const response = new Response("", {
       status: 502,
       headers: { "content-type": "text/plain" },
     });
 
-    await expect(readLocalHostErrorMessage(response)).resolves.toBe(
-      "OpenDucktor web host request failed with status 502.",
-    );
+    await expect(readLocalHostErrorPayload(response)).resolves.toMatchObject({
+      message: "OpenDucktor web host request failed with status 502.",
+      payload: null,
+    });
   });
 });
 

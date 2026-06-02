@@ -1,8 +1,16 @@
 import { Effect } from "effect";
 import type { TaskWorktreeService } from "../../application/tasks/worktrees/task-worktree-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createTaskWorktreeCommandHandlers } from "./task-worktree-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createTaskWorktreeServiceFake = (service: TaskWorktreeService): TaskWorktreeService =>
   service as TaskWorktreeService;

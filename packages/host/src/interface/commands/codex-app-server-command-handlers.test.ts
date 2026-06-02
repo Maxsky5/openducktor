@@ -2,8 +2,16 @@ import { Effect } from "effect";
 import type { CodexAppServerService } from "../../application/runtimes/codex-app-server-service";
 import { HostOperationError } from "../../effect/host-errors";
 import type { CodexAppServerProtocolMessage } from "../../ports/codex-app-server-port";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createCodexAppServerCommandHandlers } from "./codex-app-server-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const codexStatusNotification = {
   method: "thread/status/changed",

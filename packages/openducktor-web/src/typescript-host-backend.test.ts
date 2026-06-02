@@ -4,14 +4,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createSourceRuntimeDistribution } from "@openducktor/host";
 import { Effect } from "effect";
+import {
+  stopTypescriptHostBackendServices,
+  validateWebFrontendOrigin,
+} from "./typescript-host-backend-support";
 
 const nativeResponse = await Bun.fetch("data:,");
 (globalThis as typeof globalThis & { Response: typeof Response }).Response =
   nativeResponse.constructor as typeof Response;
 
-const { __typescriptHostBackendTestInternals, startTypescriptHostBackend } = await import(
-  "./typescript-host-backend"
-);
+const { startTypescriptHostBackend } = await import("./typescript-host-backend");
 
 const APP_TOKEN = "app-token";
 const CONTROL_TOKEN = "control-token";
@@ -90,8 +92,6 @@ describe("TypeScript web host backend", () => {
   }, 5_000);
 
   test("rejects invalid browser frontend origins before opening a host port", () => {
-    const { validateWebFrontendOrigin } = __typescriptHostBackendTestInternals;
-
     expect(() => validateWebFrontendOrigin("https://127.0.0.1:1420")).toThrow(
       "browser frontend origin must use http",
     );
@@ -101,7 +101,6 @@ describe("TypeScript web host backend", () => {
   });
 
   test("keeps the backend server alive until host disposal finishes", async () => {
-    const { stopTypescriptHostBackendServices } = __typescriptHostBackendTestInternals;
     const calls: string[] = [];
     let releaseDispose: () => void = () => {};
     const disposeReleased = new Promise<void>((resolve) => {

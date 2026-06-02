@@ -3,7 +3,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { createDefaultGitRunner, createGitEnvironment } from "./git-command-runner";
+import { createDefaultGitRunner } from "./git-command-runner";
 
 const withFakeGitCommand = async (run: (root: string, command: string) => Promise<void>) => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-git-runner-"));
@@ -12,9 +12,12 @@ const withFakeGitCommand = async (run: (root: string, command: string) => Promis
       process.platform === "win32" ? path.join(root, "git.cmd") : path.join(root, "git");
 
     if (process.platform === "win32") {
-      await writeFile(command, "@echo off\r\necho fake-git:%~1:%~2\r\n");
+      await writeFile(command, "@echo off\r\necho fake-git:%~1:%~2:%GIT_TERMINAL_PROMPT%\r\n");
     } else {
-      await writeFile(command, '#!/bin/sh\nprintf \'fake-git:%s:%s\\n\' "$1" "$2"\n');
+      await writeFile(
+        command,
+        '#!/bin/sh\nprintf \'fake-git:%s:%s:%s\\n\' "$1" "$2" "$GIT_TERMINAL_PROMPT"\n',
+      );
       await chmod(command, 0o755);
     }
 
@@ -23,23 +26,6 @@ const withFakeGitCommand = async (run: (root: string, command: string) => Promis
     await rm(root, { force: true, recursive: true });
   }
 };
-
-describe("createGitEnvironment", () => {
-  test("deduplicates Windows PATH keys before running Git", () => {
-    expect(
-      createGitEnvironment(
-        {
-          Path: "C:\\Windows",
-          PATH: "C:\\Tools",
-        },
-        "win32",
-      ),
-    ).toEqual({
-      GIT_TERMINAL_PROMPT: "0",
-      Path: "C:\\Tools",
-    });
-  });
-});
 
 describe("createDefaultGitRunner", () => {
   test("runs an explicit Git command through the platform launch path", async () => {
@@ -52,7 +38,9 @@ describe("createDefaultGitRunner", () => {
       await expect(Effect.runPromise(runner(root, ["one", "two words"]))).resolves.toMatchObject({
         ok: true,
         stdout:
-          process.platform === "win32" ? "fake-git:one:two words\r\n" : "fake-git:one:two words\n",
+          process.platform === "win32"
+            ? "fake-git:one:two words:0\r\n"
+            : "fake-git:one:two words:0\n",
       });
     });
   });

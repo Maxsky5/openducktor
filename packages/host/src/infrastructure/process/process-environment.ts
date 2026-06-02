@@ -32,9 +32,7 @@ const uniquePathEntries = (entries: Iterable<string>): string[] => {
 
   return nextEntries;
 };
-
-/** @internal Test-only seam for PATH merging behavior. */
-export const mergePathValues = (
+const mergePathValues = (
   primaryPath: string,
   secondaryPath: string | undefined,
   pathDelimiter = delimiter,
@@ -43,9 +41,7 @@ export const mergePathValues = (
     ...primaryPath.split(pathDelimiter),
     ...(secondaryPath ?? "").split(pathDelimiter),
   ]).join(pathDelimiter);
-
-/** @internal Test-only seam for platform PATH key selection. */
-export const pathEnvironmentKey = (
+const pathEnvironmentKey = (
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string => {
@@ -128,15 +124,11 @@ const minimalLoginShellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.Pro
   TERM: "dumb",
   USER: env.USER,
 });
-
-/** @internal Test-only seam for login shell PATH probing. */
-export const buildLoginShellPathProbeArgs = (): string[] => [
+const buildLoginShellPathProbeArgs = (): string[] => [
   "-c",
   `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`,
 ];
-
-/** @internal Test-only seam for login shell PATH parsing. */
-export const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
+const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
   const marker = Buffer.from(LOGIN_SHELL_ENV_MARKER);
   const markerIndex = stdout.indexOf(marker);
   if (markerIndex < 0) {

@@ -31,8 +31,7 @@ export type GitCommandRunner = (
   },
   GitCommandError
 >;
-/** @internal Test-only seam for Git environment normalization. */
-export const createGitEnvironment = (
+const createGitEnvironment = (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv => ({

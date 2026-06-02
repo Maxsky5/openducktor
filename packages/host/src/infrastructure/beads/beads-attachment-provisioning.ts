@@ -220,9 +220,7 @@ const ensureRepoReadyAfterRecovery = (
       ),
     );
   });
-
-/** @internal Test-only seam for attachment initialization failure coverage. */
-export const initializeMissingAttachment = (
+const initializeMissingAttachment = (
   runCommand: BeadsCommandRunner,
   context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
@@ -299,14 +297,10 @@ const provisionAttachment = (
       toBeadsAttachmentProvisioningError(cause, "beads.attachment.provision"),
     ),
   );
-
-/** @internal Test-only seam for injecting Beads command behavior. */
 export const createBeadsAttachmentProvisioner =
   (runCommand: BeadsCommandRunner = runCommandAllowFailure): EnsureBeadsAttachment =>
   (context) =>
     provisionAttachment(runCommand, context);
-
-export const defaultEnsureBeadsAttachment = createBeadsAttachmentProvisioner();
 
 export const sharedServerHealthFromContext = (
   context: BeadsCliContext,

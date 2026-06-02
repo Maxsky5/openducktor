@@ -2,8 +2,16 @@ import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { RuntimeOrchestratorService } from "../../application/runtimes/runtime-orchestrator-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createRuntimeOrchestratorCommandHandlers } from "./runtime-orchestrator-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createRuntimeOrchestratorServiceFake = (
   service: RuntimeOrchestratorService,

@@ -957,8 +957,7 @@ export const toFileDiffs = (value: unknown): FileDiff[] => {
     ];
   });
 };
-/** @internal Test-only seam for user input conversion coverage. */
-export const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
+const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   if (part.kind === "text") {
     return { type: "text", text: part.text };
   }

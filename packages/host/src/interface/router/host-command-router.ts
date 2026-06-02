@@ -124,7 +124,3 @@ export const toPromiseHostCommandRouter = (router: EffectHostCommandRouter): Hos
     return runBoundary(router.invoke(command, args));
   },
 });
-
-/** @internal Test-only low-level router seam; production uses node router composition. */
-export const createHostCommandRouter = (input: CreateHostCommandRouterInput): HostCommandRouter =>
-  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
