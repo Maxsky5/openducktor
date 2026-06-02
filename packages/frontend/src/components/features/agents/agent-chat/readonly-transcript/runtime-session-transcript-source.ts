@@ -3,7 +3,7 @@ import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-o
 
 type RuntimeSessionTranscriptSourceBase = {
   runtimeKind: RuntimeKind;
-  runtimeId: string;
+  runtimeId?: string;
   workingDirectory: string;
   externalSessionId?: string;
   isLive?: boolean;

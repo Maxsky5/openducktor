@@ -58,14 +58,14 @@ const buildTranscriptSource = ({
   const runtimeId = sessionRuntimeId?.trim() || null;
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
 
-  if (!sessionRuntimeKind || !runtimeId || !workingDirectory) {
+  if (!sessionRuntimeKind || !workingDirectory) {
     return null;
   }
 
   return {
     runtimeKind: sessionRuntimeKind,
-    runtimeId,
     workingDirectory,
+    ...(runtimeId ? { runtimeId } : {}),
     ...(isLive ? { isLive: true } : {}),
     ...(pendingApprovals ? { pendingApprovals } : {}),
     ...(pendingQuestions ? { pendingQuestions } : {}),

@@ -24,7 +24,10 @@ const matchesSourceRuntime = (
   if (runtime.kind !== source.runtimeKind) {
     return false;
   }
-  return runtime.runtimeId === source.runtimeId;
+  if (source.runtimeId) {
+    return runtime.runtimeId === source.runtimeId;
+  }
+  return runtime.workingDirectory === source.workingDirectory;
 };
 
 export function useRuntimeTranscriptSourceResolution({
@@ -69,7 +72,7 @@ export function useRuntimeTranscriptSourceResolution({
         : `${source.runtimeKind} runtime instances are`;
     return {
       isPending: false,
-      error: `${errorPrefix} ${runtimeSubject} attached for ${source.runtimeId}.`,
+      error: `${errorPrefix} ${runtimeSubject} attached for ${source.runtimeId ?? source.workingDirectory}.`,
       runtimeId: null,
     };
   }

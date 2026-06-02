@@ -160,10 +160,44 @@ describe("SubagentTranscriptButton", () => {
     expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
   });
 
-  test("does not render when runtime identity is unavailable", () => {
+  test("opens a live transcript request when only the runtime working directory is known", () => {
+    const onOpenTranscript = mock(() => {});
+
     render(
       <SubagentTranscriptButton
         sessionRuntimeKind="opencode"
+        sessionWorkingDirectory="/repo-a"
+        meta={createSubagentMeta()}
+        onOpenTranscript={onOpenTranscript}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
+
+    expect(onOpenTranscript).toHaveBeenCalledWith({
+      externalSessionId: "session-child-1",
+      title: "Subagent activity",
+      description: "View what this subagent did.",
+      source: {
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+      },
+    });
+  });
+
+  test("does not render when runtime kind or working directory is unavailable", () => {
+    const { rerender } = render(
+      <SubagentTranscriptButton
+        sessionRuntimeKind="opencode"
+        meta={createSubagentMeta()}
+        onOpenTranscript={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
+
+    rerender(
+      <SubagentTranscriptButton
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}

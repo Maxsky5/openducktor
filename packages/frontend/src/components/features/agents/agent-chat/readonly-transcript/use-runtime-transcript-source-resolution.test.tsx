@@ -116,6 +116,31 @@ describe("useRuntimeTranscriptSourceResolution", () => {
     }
   });
 
+  test("resolves runtime id by working directory when source has no runtime id", async () => {
+    const runtimeList = mock(async () => [createRuntime({ runtimeId: "runtime-planner" })]);
+    host.runtimeList = runtimeList;
+    const { runtimeId: _runtimeId, ...sourceWithoutRuntimeId } = createSource();
+    const harness = createHookHarness({
+      isOpen: true,
+      workspaceRepoPath: "/repo-a",
+      source: sourceWithoutRuntimeId,
+    });
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isPending);
+
+      expect(runtimeList).toHaveBeenCalledWith("/repo-a", "opencode");
+      expect(harness.getLatest()).toEqual({
+        isPending: false,
+        error: null,
+        runtimeId: "runtime-planner",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces missing and ambiguous runtime attachments", async () => {
     const runtimeList = mock(async () => [createRuntime({ runtimeId: "runtime-other" })]);
     host.runtimeList = runtimeList;
