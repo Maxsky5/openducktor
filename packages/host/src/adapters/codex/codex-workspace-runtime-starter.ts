@@ -66,6 +66,7 @@ const tomlString = (value: string): string => JSON.stringify(value);
 const tomlStringArray = (values: readonly string[]): string =>
   `[${values.map((value) => tomlString(value)).join(", ")}]`;
 
+/** @internal Test-only seam for MCP command argument shaping. */
 export const buildCodexMcpConfigArgs = (mcpCommand: string[]): string[] => {
   const [mcpBinary, ...mcpArgs] = mcpCommand;
   if (!mcpBinary) {

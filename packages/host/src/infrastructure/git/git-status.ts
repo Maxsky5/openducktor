@@ -61,7 +61,7 @@ export const parseAheadBehind = (output: string): CommitsAheadBehind => {
   }
   return { ahead, behind };
 };
-export const porcelainCharToStatus = (value: string): string => {
+const porcelainCharToStatus = (value: string): string => {
   switch (value) {
     case "M":
       return "modified";
@@ -82,12 +82,12 @@ export const porcelainCharToStatus = (value: string): string => {
   }
 };
 
-export const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
+const isUnmergedStatusPair = (index: string, worktree: string): boolean => {
   const pair = `${index}${worktree}`;
   return unmergedStatusPairs.has(pair);
 };
 
-export const parseStatusPorcelain = (output: string): FileStatus[] =>
+const parseStatusPorcelain = (output: string): FileStatus[] =>
   output.split(/\r?\n/).flatMap((line): FileStatus[] => {
     if (line.length < 4) {
       return [];

@@ -69,6 +69,7 @@ const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
 
 type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
+/** @internal Test-only seam for OpenCode MCP config rendering. */
 export const buildOpenCodeConfigContent = (
   bridge: OpenCodeMcpBridgeConnection,
   mcpCommand: string[],

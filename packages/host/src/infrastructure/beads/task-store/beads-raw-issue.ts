@@ -23,8 +23,8 @@ export const ODT_SET_SPEC_SOURCE_TOOL = "odt_set_spec";
 export const ODT_SET_PLAN_SOURCE_TOOL = "odt_set_plan";
 export const ODT_QA_APPROVED_SOURCE_TOOL = "odt_qa_approved";
 export const ODT_QA_REJECTED_SOURCE_TOOL = "odt_qa_rejected";
-export const VALID_ISSUE_TYPES = "task, feature, bug, epic";
-export const VALID_TASK_STATUSES =
+const VALID_ISSUE_TYPES = "task, feature, bug, epic";
+const VALID_TASK_STATUSES =
   "open, spec_ready, ready_for_dev, in_progress, blocked, ai_review, human_review, deferred, closed";
 export type RawDependency = {
   dependencyType: string;
@@ -103,7 +103,7 @@ export type BeadsTaskRepository = TaskStorePort & {
 };
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
-export const requireStringField = (
+const requireStringField = (
   record: Record<string, unknown>,
   field: string,
   context: string,
@@ -118,7 +118,7 @@ export const requireStringField = (
   }
   return value;
 };
-export const stringFieldWithDefault = (
+const stringFieldWithDefault = (
   record: Record<string, unknown>,
   field: string,
   defaultValue: string,
@@ -137,7 +137,7 @@ export const stringFieldWithDefault = (
   }
   return value;
 };
-export const optionalStringField = (
+const optionalStringField = (
   record: Record<string, unknown>,
   field: string,
   context: string,
@@ -155,7 +155,7 @@ export const optionalStringField = (
   }
   return value;
 };
-export const optionalNumberField = (
+const optionalNumberField = (
   record: Record<string, unknown>,
   field: string,
   defaultValue: number,
@@ -174,7 +174,7 @@ export const optionalNumberField = (
   }
   return value;
 };
-export const stringArrayFieldWithDefault = (
+const stringArrayFieldWithDefault = (
   record: Record<string, unknown>,
   field: string,
   context: string,
@@ -201,7 +201,7 @@ export const stringArrayFieldWithDefault = (
     return entry;
   });
 };
-export const parseRawDependency = (value: unknown, context: string): RawDependency => {
+const parseRawDependency = (value: unknown, context: string): RawDependency => {
   if (!isRecord(value)) {
     throw new HostValidationError({
       message: `${context} must be an object`,

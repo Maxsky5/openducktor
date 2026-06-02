@@ -138,7 +138,7 @@ export const parseTaskIdList = (value: unknown, label: string): string[] => {
   return value.map((entry, index) => requireString(entry, `${label}[${index}]`));
 };
 
-export const normalizeAgentSessionInput = (value: unknown): unknown => {
+const normalizeAgentSessionInput = (value: unknown): unknown => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return value;
   }

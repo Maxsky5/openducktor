@@ -112,7 +112,7 @@ export const resolveGitWorkingDirectory = (
     }
     return canonicalWorkingDir;
   });
-export const requireGlobalConfig = (
+const requireGlobalConfig = (
   payload: GlobalConfig | null,
 ): Effect.Effect<GlobalConfig, HostValidationError> => {
   if (payload === null) {

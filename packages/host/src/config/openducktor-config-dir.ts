@@ -3,7 +3,9 @@ import path from "node:path";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
 
+/** @internal Test-only seam for config directory environment behavior. */
 export const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
+/** @internal Test-only seam for config directory default behavior. */
 export const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
 
 const resolveHomeDirectory = (): string => {

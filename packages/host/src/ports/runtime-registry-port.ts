@@ -89,7 +89,7 @@ export type RuntimeRegistryPort = {
   ): Effect.Effect<RuntimeMcpStatusProbeResult, RuntimeRegistryError>;
 };
 
-export class RuntimeRegistryPortTag extends Context.Tag("@openducktor/host/RuntimeRegistryPort")<
+class RuntimeRegistryPortTag extends Context.Tag("@openducktor/host/RuntimeRegistryPort")<
   RuntimeRegistryPortTag,
   RuntimeRegistryPort
 >() {}

@@ -181,12 +181,12 @@ const makeNodeHostDefaultPortContext = (
     ),
   );
 
-export const createNodeHostDefaultPortsLayer = (
+const createNodeHostDefaultPortsLayer = (
   input: CreateNodeHostDefaultPortsInput,
 ): Layer.Layer<NodeHostDefaultPortServices> =>
   Layer.effectContext(makeNodeHostDefaultPortContext(input));
 
-export const createNodeHostDefaultPortsEffect: Effect.Effect<
+const createNodeHostDefaultPortsEffect: Effect.Effect<
   NodeHostDefaultPorts,
   never,
   NodeHostDefaultPortsTag

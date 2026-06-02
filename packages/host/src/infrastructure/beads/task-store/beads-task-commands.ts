@@ -53,7 +53,7 @@ export const createTaskWithBd = (runBdJson: RunBdJson, repoPath: string, input: 
     const issue = yield* showRawIssue(runBdJson, repoPath, createdIssue.id);
     return parseTaskCard(issue);
   });
-export const appendLabelUpdateArgs = (
+const appendLabelUpdateArgs = (
   runBdJson: RunBdJson,
   repoPath: string,
   taskId: string,
@@ -76,7 +76,7 @@ export const appendLabelUpdateArgs = (
     }
     return undefined;
   });
-export const updateMetadata = (
+const updateMetadata = (
   runBdJson: RunBdJson,
   repoPath: string,
   taskId: string,
@@ -201,7 +201,7 @@ export const listTasksWithBd = (
     }
     return finalizeTaskCards(tasks);
   });
-export const isPullRequestSyncCandidate = (task: TaskCard): boolean =>
+const isPullRequestSyncCandidate = (task: TaskCard): boolean =>
   task.status !== "closed" &&
   task.status !== "deferred" &&
   (task.pullRequest?.state === "open" || task.pullRequest?.state === "draft");

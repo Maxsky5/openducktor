@@ -686,7 +686,7 @@ const stopTypescriptHostBackendServices = ({
     }),
   );
 
-export const startTypescriptHostBackendEffect = ({
+const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
   controlToken,

@@ -238,7 +238,7 @@ export const rebaseAbort = (
       output,
     };
   });
-export const conflictAbortArgs = (operation: GitConflictOperation): string[] => {
+const conflictAbortArgs = (operation: GitConflictOperation): string[] => {
   if (operation === "direct_merge_merge_commit") {
     return ["merge", "--abort"];
   }

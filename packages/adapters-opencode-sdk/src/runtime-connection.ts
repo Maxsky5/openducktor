@@ -15,7 +15,7 @@ const normalizeRepoPathForComparison = (repoPath: string): string => {
   return trimmed.length > 1 ? trimmed.replace(/\/+$/, "") : trimmed;
 };
 
-export const requireOpencodeRuntimeEndpoint = (
+const requireOpencodeRuntimeEndpoint = (
   runtime: RuntimeInstanceSummary,
   input: Pick<OpencodeRuntimeResolutionInput, "repoPath" | "runtimeKind">,
   action: string,

@@ -48,7 +48,7 @@ export const deleteReference = (runner: GitCommandRunner, repoPath: string, refe
     const targetReference = yield* requireNonEmptyEffect(reference, "reference");
     yield* runGit(runner, repoPath, ["update-ref", "-d", targetReference]);
   });
-export const collectFailedBranchConfigCleanup = (
+const collectFailedBranchConfigCleanup = (
   runner: GitCommandRunner,
   repoPath: string,
   keys: string[],
@@ -64,9 +64,9 @@ export const collectFailedBranchConfigCleanup = (
       }
     }
   });
-export const formatCleanupErrors = (cleanupErrors: string[]): string =>
+const formatCleanupErrors = (cleanupErrors: string[]): string =>
   cleanupErrors.length === 0 ? "" : `\n${cleanupErrors.join("\n")}`;
-export const cleanupFailedUpstreamSetup = (
+const cleanupFailedUpstreamSetup = (
   runner: GitCommandRunner,
   repoPath: string,
   branchRemoteKey: string,

@@ -1,7 +1,7 @@
 import type { TaskCard, TaskStatus } from "@openducktor/contracts";
 import { TaskPolicyError } from "./task-policy-error";
 
-export const canSkipSpecAndPlanning = (task: TaskCard): boolean =>
+const canSkipSpecAndPlanning = (task: TaskCard): boolean =>
   task.issueType === "task" || task.issueType === "bug";
 
 export const isOpenState = (status: TaskStatus): boolean =>

@@ -64,7 +64,7 @@ export type RuntimeOrchestratorLogger = {
 export const isoFromMillis = (millis: number): string => new Date(millis).toISOString();
 export const ACTIVE_MCP_PROBE_ATTEMPTS = 20;
 export const ACTIVE_MCP_PROBE_RETRY_DELAY_MS = 250;
-export const activeMcpReadinessProbeSchedule = (attempts: number, retryDelayMs: number) =>
+const activeMcpReadinessProbeSchedule = (attempts: number, retryDelayMs: number) =>
   Schedule.addDelay(Schedule.recurs(Math.max(1, attempts) - 1), () => `${retryDelayMs} millis`);
 export type BuildHealthStatusOptions = {
   mcpProbeAttempts?: number;
@@ -124,7 +124,7 @@ export const resolveRepoPath = (gitPort: GitPort, repoPath: string) =>
     }
     return canonicalRepoPath;
   });
-export const runtimeRouteKey = (runtimeRoute: RuntimeRoute): string => JSON.stringify(runtimeRoute);
+const runtimeRouteKey = (runtimeRoute: RuntimeRoute): string => JSON.stringify(runtimeRoute);
 export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute): string => {
   if (runtimeRoute.type === "local_http") {
     return runtimeRoute.endpoint;
@@ -418,7 +418,7 @@ export const buildHealthStatus = (
       }),
     );
   });
-export const probeMcpStatusWithRetry = (
+const probeMcpStatusWithRetry = (
   runtimeRegistry: RuntimeRegistryPort,
   input: RuntimeMcpStatusProbeInput,
   attempts: number,

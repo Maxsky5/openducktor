@@ -135,7 +135,7 @@ export const extractOptionalObject = (
   return isPlainObject(candidate) ? candidate : undefined;
 };
 
-export const CODEX_CONTEXTUAL_USER_FRAGMENT_MARKERS = [
+const CODEX_CONTEXTUAL_USER_FRAGMENT_MARKERS = [
   ["# AGENTS.md instructions for ", "</INSTRUCTIONS>"],
   ["<environment_context>", "</environment_context>"],
   ["<skill>", "</skill>"],
@@ -144,7 +144,7 @@ export const CODEX_CONTEXTUAL_USER_FRAGMENT_MARKERS = [
   ["<subagent_notification>", "</subagent_notification>"],
 ] as const;
 
-export const textMatchesCodexMarkedContextFragment = (
+const textMatchesCodexMarkedContextFragment = (
   text: string,
   start: string,
   end: string,
@@ -157,20 +157,19 @@ export const textMatchesCodexMarkedContextFragment = (
   return startsWithMarker && endsWithMarker;
 };
 
-export const isCodexHookPromptFragment = (text: string): boolean => {
+const isCodexHookPromptFragment = (text: string): boolean => {
   const trimmed = text.trim();
   return /^<hook_prompt\s+[^>]*hook_run_id="[^"]+"[^>]*>[\s\S]*<\/hook_prompt>$/.test(trimmed);
 };
 
-export const isCodexContextualUserTextFragment = (text: string): boolean =>
+const isCodexContextualUserTextFragment = (text: string): boolean =>
   isCodexHookPromptFragment(text) ||
   CODEX_CONTEXTUAL_USER_FRAGMENT_MARKERS.some(([start, end]) =>
     textMatchesCodexMarkedContextFragment(text, start, end),
   );
 
-export const codexMessageContentItems = (
-  payload: Record<string, unknown>,
-): Record<string, unknown>[] => arrayFromUnknown(payload.content).filter(isPlainObject);
+const codexMessageContentItems = (payload: Record<string, unknown>): Record<string, unknown>[] =>
+  arrayFromUnknown(payload.content).filter(isPlainObject);
 
 export const isCodexContextualUserMessage = (payload: Record<string, unknown>): boolean => {
   const role = extractStringField(payload, ["role"]);
@@ -187,7 +186,7 @@ export const isCodexContextualUserMessage = (payload: Record<string, unknown>): 
   );
 };
 
-export const stripShellQuotes = (value: string): string =>
+const stripShellQuotes = (value: string): string =>
   value.replace(/^[']|^["]/, "").replace(/[']$|["]$/, "");
 
 export const readPathFromCommand = (command: string): string | null => {
@@ -218,12 +217,12 @@ export const codexNamespacedToolName = (namespace: string | null, tool: string):
   return namespace ? `${namespace}.${tool}` : tool;
 };
 
-export const codexToolLeafName = (toolName: string): string => {
+const codexToolLeafName = (toolName: string): string => {
   const segments = toolName.split(".").filter((segment) => segment.length > 0);
   return segments.at(-1) ?? toolName;
 };
 
-export const isCodexToolNamed = (toolName: string, leafName: string): boolean => {
+const isCodexToolNamed = (toolName: string, leafName: string): boolean => {
   return codexToolLeafName(toolName) === leafName;
 };
 

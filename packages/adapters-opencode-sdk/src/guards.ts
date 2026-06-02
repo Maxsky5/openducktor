@@ -2,13 +2,13 @@ import { isUnknownRecord as isCoreUnknownRecord, type UnknownRecord } from "@ope
 
 export type { UnknownRecord };
 
-export const isUnknownRecord = isCoreUnknownRecord;
+const isUnknownRecord = isCoreUnknownRecord;
 
 export const asUnknownRecord = (value: unknown): UnknownRecord | undefined => {
   return isUnknownRecord(value) ? value : undefined;
 };
 
-export const safeProp = <T>(
+const safeProp = <T>(
   source: unknown,
   key: string,
   guard: (value: unknown) => value is T,

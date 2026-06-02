@@ -29,7 +29,7 @@ const gitValidationError = (message: string, field: string): HostValidationError
 type GitDiffError = HostOperationError | HostResourceError | HostValidationError;
 const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
-export const normalizeNumstatFilePath = (file: string): string => {
+const normalizeNumstatFilePath = (file: string): string => {
   let normalized = file.trim();
   while (true) {
     const start = normalized.indexOf("{");
@@ -61,7 +61,7 @@ export const normalizeNumstatFilePath = (file: string): string => {
   }
   return normalized;
 };
-export const parseNumstat = (
+const parseNumstat = (
   output: string,
 ): Map<
   string,
@@ -124,7 +124,7 @@ export const parseDiffGitHeaderToken = (
   }
   return { token: trimmed.slice(0, tokenEnd), remaining: trimmed.slice(tokenEnd) };
 };
-export const parseDiffGitNewPath = (line: string): string | undefined => {
+const parseDiffGitNewPath = (line: string): string | undefined => {
   const rest = line.slice("diff --git ".length);
   const oldPath = parseDiffGitHeaderToken(rest);
   if (!oldPath) {
@@ -133,7 +133,7 @@ export const parseDiffGitNewPath = (line: string): string | undefined => {
   const newPath = parseDiffGitHeaderToken(oldPath.remaining);
   return newPath?.token.startsWith("b/") ? newPath.token.slice(2) : undefined;
 };
-export const splitDiffByFile = (
+const splitDiffByFile = (
   fullDiff: string,
 ): Array<{
   file: string;
@@ -161,7 +161,7 @@ export const splitDiffByFile = (
   }
   return results;
 };
-export const inferDiffType = (diff: string): string => {
+const inferDiffType = (diff: string): string => {
   for (const line of diff.split(/\r?\n/)) {
     if (line.startsWith("new file mode")) {
       return "added";
@@ -175,7 +175,7 @@ export const inferDiffType = (diff: string): string => {
   }
   return "modified";
 };
-export const ensureNoIndexDiffOutput = (
+const ensureNoIndexDiffOutput = (
   result: GitCommandResult & {
     ok: boolean;
   },
@@ -191,7 +191,7 @@ export const ensureNoIndexDiffOutput = (
     ),
   );
 };
-export const loadNoIndexDiffPayload = (
+const loadNoIndexDiffPayload = (
   runner: GitCommandRunner,
   workingDirectory: string,
   filePath: string,
@@ -226,7 +226,7 @@ export const loadNoIndexDiffPayload = (
       diff: yield* ensureNoIndexDiffOutput(diffResult, `git diff --no-index /dev/null ${filePath}`),
     };
   });
-export const expandUntrackedStatusPaths = (
+const expandUntrackedStatusPaths = (
   runner: GitCommandRunner,
   workingDirectory: string,
   statusPath: string,
@@ -388,7 +388,7 @@ export const loadDiffPayload = (
     }
     return { numstat: numstatResult.stdout, diff: diffResult.stdout };
   });
-export const emptyTreeOid = (
+const emptyTreeOid = (
   runner: GitCommandRunner,
   workingDirectory: string,
 ): Effect.Effect<string, HostOperationError | HostValidationError> =>
@@ -410,7 +410,7 @@ export const emptyTreeOid = (
       ),
     );
   });
-export const resolveBranchDiffBase = (
+const resolveBranchDiffBase = (
   runner: GitCommandRunner,
   workingDirectory: string,
   targetBranch: string,

@@ -270,6 +270,7 @@ const discoverDescriptorToolPath = ({
     return yield* Effect.fail(missingToolError(descriptor, checked));
   });
 
+/** @internal Test-only seam for tool path discovery coverage. */
 export const discoverToolPath = (
   toolId: ToolDiscoveryId,
   systemCommands: SystemCommandPort,

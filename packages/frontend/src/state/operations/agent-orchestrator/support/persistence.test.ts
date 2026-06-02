@@ -742,9 +742,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = messages.find(
-      (entry) => entry.role === "assistant" && entry.content === "Reviewed the changes",
-    );
+    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
     if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }

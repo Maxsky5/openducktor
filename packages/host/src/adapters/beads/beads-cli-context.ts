@@ -28,6 +28,7 @@ import {
 } from "../../infrastructure/beads/beads-shared-dolt-server";
 
 export {
+  /** @internal Test-only seam for Beads attachment provisioning coverage. */
   createBeadsAttachmentProvisioner,
   sharedServerHealthFromContext,
 } from "../../infrastructure/beads/beads-attachment-provisioning";

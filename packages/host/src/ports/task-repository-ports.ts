@@ -134,7 +134,7 @@ export type TaskStorePort = AgentSessionRepository &
   TaskWriter &
   WorkflowDocumentRepository;
 
-export class TaskStorePortTag extends Context.Tag("@openducktor/host/TaskStorePort")<
+class TaskStorePortTag extends Context.Tag("@openducktor/host/TaskStorePort")<
   TaskStorePortTag,
   TaskStorePort
 >() {}

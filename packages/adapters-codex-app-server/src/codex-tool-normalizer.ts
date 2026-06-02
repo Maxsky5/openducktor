@@ -112,6 +112,7 @@ const canonicalOdtToolName = (rawToolName: string): string | null => {
   return null;
 };
 
+/** @internal Test-only seam for Codex tool family classification. */
 export const codexToolType = (
   rawToolName: string,
   input?: Record<string, unknown>,
@@ -169,6 +170,7 @@ export const codexToolType = (
   return "generic";
 };
 
+/** @internal Test-only seam for Codex raw tool name canonicalization. */
 export const canonicalCodexToolName = (rawToolName: string): string | null => {
   if (isCodexWriteStdinTool(rawToolName)) {
     return null;
@@ -183,7 +185,7 @@ export const canonicalCodexToolName = (rawToolName: string): string | null => {
     : rawToolName;
 };
 
-export const questionPromptFromInput = (input: Record<string, unknown>): string | undefined => {
+const questionPromptFromInput = (input: Record<string, unknown>): string | undefined => {
   const questions = arrayFromUnknown(input.questions).filter(isPlainObject);
   for (const question of questions) {
     const prompt = extractStringField(question, ["question", "prompt", "header", "title"]);
@@ -194,7 +196,7 @@ export const questionPromptFromInput = (input: Record<string, unknown>): string 
   return undefined;
 };
 
-export const toolPreviewFromInput = (
+const toolPreviewFromInput = (
   toolType: AgentToolType,
   input?: Record<string, unknown>,
 ): string | undefined => {
@@ -225,7 +227,7 @@ export const toolPreviewFromInput = (
   return path ?? query ?? command ?? undefined;
 };
 
-export const codexExecCommandInput = (
+const codexExecCommandInput = (
   input: Record<string, unknown>,
   tool: string,
 ): Record<string, unknown> | undefined => {

@@ -10,6 +10,7 @@ import {
   subscribeLocalHostTaskEvents,
 } from "./local-host-transport";
 
+/** @internal Test-only seam for browser shell URL validation. */
 export const validateExternalBrowserUrl = (url: string): string => {
   const trimmedUrl = url.trim();
   let parsedUrl: URL;

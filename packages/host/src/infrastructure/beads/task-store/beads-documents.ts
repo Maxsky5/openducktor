@@ -33,7 +33,7 @@ export const documentsMetadata = (
   const documents = namespace?.documents;
   return isRecord(documents) ? documents : undefined;
 };
-export const decodeMarkdownPayload = (payload: string, encoding: string): string => {
+const decodeMarkdownPayload = (payload: string, encoding: string): string => {
   if (encoding !== DOCUMENT_ENCODING_GZIP_BASE64_V1) {
     throw new HostValidationError({
       message: `Unsupported document encoding: ${encoding}`,
@@ -43,16 +43,16 @@ export const decodeMarkdownPayload = (payload: string, encoding: string): string
   }
   return gunzipSync(Buffer.from(payload, "base64")).toString("utf8");
 };
-export const documentDecodeError = (path: string, error: unknown): string => {
+const documentDecodeError = (path: string, error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
   return `Failed to decode ${path}: ${message}`;
 };
-export const unavailableSharedServer = (): RepoStoreHealth["sharedServer"] => ({
+const unavailableSharedServer = (): RepoStoreHealth["sharedServer"] => ({
   host: null,
   port: null,
   ownershipState: "unavailable",
 });
-export const repoStoreHealth = ({
+const repoStoreHealth = ({
   category,
   status,
   detail,
@@ -77,7 +77,7 @@ export const repoStoreHealth = ({
   },
   sharedServer: sharedServer ?? unavailableSharedServer(),
 });
-export const degradedRepoStoreHealth = (
+const degradedRepoStoreHealth = (
   detail: string,
   context: BeadsCliContext | null = null,
 ): RepoStoreHealth =>
@@ -89,7 +89,7 @@ export const degradedRepoStoreHealth = (
     databaseName: context?.databaseName ?? null,
     sharedServer: context ? sharedServerHealthFromContext(context) : undefined,
   });
-export const parseBdWherePayload = (payload: unknown): RawBdWherePayload => {
+const parseBdWherePayload = (payload: unknown): RawBdWherePayload => {
   if (!isRecord(payload)) {
     throw new HostValidationError({
       message: "bd where payload must be an object",
@@ -101,7 +101,7 @@ export const parseBdWherePayload = (payload: unknown): RawBdWherePayload => {
     error: payload.error,
   };
 };
-export const repoStoreHealthFromBdWherePayload = (
+const repoStoreHealthFromBdWherePayload = (
   payload: unknown,
   context: BeadsCliContext,
 ): RepoStoreHealth => {
@@ -143,7 +143,7 @@ export const repoStoreHealthFromBdWherePayload = (
     context,
   );
 };
-export const pathExists = (inputPath: string) =>
+const pathExists = (inputPath: string) =>
   Effect.tryPromise({
     try: () => access(inputPath),
     catch: (cause) => toHostOperationError(cause, "beads.pathExists"),
@@ -207,13 +207,13 @@ export const diagnoseRepoStoreWithBd = (
     }
     return repoStoreHealthFromBdWherePayload(whereResult.right, context);
   });
-export const optionalDocumentRevision = (entry: Record<string, unknown>): number | undefined => {
+const optionalDocumentRevision = (entry: Record<string, unknown>): number | undefined => {
   const revision = entry.revision;
   return typeof revision === "number" && Number.isInteger(revision) && revision > 0
     ? revision
     : undefined;
 };
-export const readMarkdownDocumentEntry = (
+const readMarkdownDocumentEntry = (
   entry: unknown,
   metadataPath: string,
   index: number,
@@ -314,7 +314,7 @@ export const readLatestQaDocument = (
     error: document.error ?? verdictError,
   };
 };
-export const documentPresence = (value: unknown): boolean => {
+const documentPresence = (value: unknown): boolean => {
   if (value === undefined) {
     return false;
   }
@@ -344,18 +344,18 @@ export const documentPresence = (value: unknown): boolean => {
   }
   return payload.trim().length > 0;
 };
-export const latestEntry = (value: unknown): Record<string, unknown> | undefined => {
+const latestEntry = (value: unknown): Record<string, unknown> | undefined => {
   if (!Array.isArray(value)) {
     return undefined;
   }
   const entry = value.at(-1);
   return isRecord(entry) ? entry : undefined;
 };
-export const latestUpdatedAt = (value: unknown): string | undefined => {
+const latestUpdatedAt = (value: unknown): string | undefined => {
   const entry = latestEntry(value);
   return typeof entry?.updatedAt === "string" ? entry.updatedAt : undefined;
 };
-export const latestQaVerdict = (value: unknown): QaWorkflowVerdict => {
+const latestQaVerdict = (value: unknown): QaWorkflowVerdict => {
   const entry = latestEntry(value);
   if (entry?.verdict === "approved" || entry?.verdict === "rejected") {
     return entry.verdict;

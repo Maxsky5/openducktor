@@ -23,6 +23,7 @@ const escapeWindowsBatchCharacter = (character: string): string => {
   }
 };
 
+/** @internal Test-only seam for Windows batch quoting. */
 export const quoteWindowsBatchArgument = (value: string): string => {
   assertNoWindowsBatchNewlines(value, "argument");
   return `"${value.replace(WINDOWS_BATCH_ESCAPE_PATTERN, escapeWindowsBatchCharacter)}"`;

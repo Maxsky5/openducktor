@@ -52,7 +52,7 @@ export type CodexThreadSnapshot = {
   status: CodexThreadStatusSnapshot;
 };
 
-export const codexTimestampFromUnknownSeconds = (value: unknown): string =>
+const codexTimestampFromUnknownSeconds = (value: unknown): string =>
   typeof value === "number" ? new Date(value * 1000).toISOString() : new Date().toISOString();
 
 export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSnapshot => {
@@ -88,7 +88,7 @@ export const codexThreadStatusSnapshot = (status: unknown): CodexThreadStatusSna
   return { classification: "idle", status: { type: "idle" }, agentSessionStatus: "idle" };
 };
 
-export const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
+const codexThreadSnapshot = (thread: unknown): CodexThreadSnapshot | null => {
   if (!isPlainObject(thread)) {
     return null;
   }
@@ -127,7 +127,7 @@ export const codexLoadedThreadIds = (response: unknown): Set<string> =>
       )
     : new Set();
 
-export const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
+const threadSnapshotFromReadResponse = (response: unknown): CodexThreadSnapshot | null =>
   isPlainObject(response) ? codexThreadSnapshot(response.thread) : null;
 
 export const requireThreadSnapshotFromReadResponse = (

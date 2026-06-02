@@ -166,6 +166,7 @@ const tempIconOutputPath = (appLabel: string, extension: string): string => {
   );
 };
 
+/** @internal Test-only seam for macOS iconset selection scoring. */
 export const iconsetRepresentationScore = (iconName: string): number | null => {
   const stem = iconName.endsWith(".png") ? iconName.slice(0, -".png".length) : null;
   if (!stem?.startsWith("icon_")) {

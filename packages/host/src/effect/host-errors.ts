@@ -9,7 +9,7 @@ export class HostValidationError extends Data.TaggedError("HostValidationError")
   readonly details?: HostErrorDetails | undefined;
 }> {}
 
-export class HostCommandError extends Data.TaggedError("HostCommandError")<{
+class HostCommandError extends Data.TaggedError("HostCommandError")<{
   readonly message: string;
   readonly command?: string | undefined;
   readonly details?: HostErrorDetails | undefined;
@@ -83,15 +83,15 @@ export const isHostError = (cause: unknown): cause is HostError =>
 export const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-export const nodeErrorCode = (cause: unknown): string | null =>
+const nodeErrorCode = (cause: unknown): string | null =>
   typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string"
     ? cause.code
     : null;
 
-export const isPathNotFoundError = (cause: unknown): boolean =>
+const isPathNotFoundError = (cause: unknown): boolean =>
   nodeErrorCode(cause) === "ENOENT" || nodeErrorCode(cause) === "ENOTDIR";
 
-export const toHostPathAccessError = (
+const toHostPathAccessError = (
   cause: unknown,
   operation: string,
   path: string,

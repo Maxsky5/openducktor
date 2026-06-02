@@ -24,7 +24,7 @@ type OpencodeLiveSessionPendingInputBySessionId = Record<
   }
 >;
 
-export const toLiveAgentSessionStatus = (status: unknown): LiveAgentSessionSummary["status"] => {
+const toLiveAgentSessionStatus = (status: unknown): LiveAgentSessionSummary["status"] => {
   if (status === undefined || status === null) {
     return {
       type: "idle",
@@ -72,7 +72,7 @@ export const toLiveAgentSessionStatus = (status: unknown): LiveAgentSessionSumma
   throw new Error(`Unsupported Opencode live agent session status type: ${String(type)}`);
 };
 
-export const toLiveAgentSessionStatusMap = (
+const toLiveAgentSessionStatusMap = (
   payload: unknown,
   directory: string,
 ): Record<string, unknown> => {
@@ -98,7 +98,7 @@ export const normalizeSessionDirectory = (directory: unknown): string | undefine
   return normalized.length > 0 ? normalized : undefined;
 };
 
-export const requireSessionDirectory = (directory: unknown, sessionId: string): string => {
+const requireSessionDirectory = (directory: unknown, sessionId: string): string => {
   const normalized = normalizeSessionDirectory(directory);
   if (normalized !== undefined) {
     return normalized;
@@ -106,7 +106,7 @@ export const requireSessionDirectory = (directory: unknown, sessionId: string): 
   throw new Error(`Malformed Opencode session payload for '${sessionId}': missing directory.`);
 };
 
-export const requireSessionTitle = (title: unknown, sessionId: string): string => {
+const requireSessionTitle = (title: unknown, sessionId: string): string => {
   if (typeof title === "string") {
     return title;
   }

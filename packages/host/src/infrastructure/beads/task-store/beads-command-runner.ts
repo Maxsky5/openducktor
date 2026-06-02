@@ -19,7 +19,7 @@ import {
 
 type BdChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
-export const argsWithJson = (args: string[]): string[] => {
+const argsWithJson = (args: string[]): string[] => {
   const delimiterIndex = args.indexOf("--");
   if (delimiterIndex >= 0) {
     return [...args.slice(0, delimiterIndex), "--json", "--", ...args.slice(delimiterIndex + 1)];
@@ -32,7 +32,7 @@ const toBeadsSpawnError = (cause: unknown, args: string[], repoPath: string): Ta
   }
   return toHostOperationError(cause, "beads.spawn", { args, repoPath });
 };
-export const spawnBd = (
+const spawnBd = (
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => string,
@@ -41,7 +41,7 @@ export const spawnBd = (
 ): Effect.Effect<string, TaskStoreError> =>
   spawnBdWithParser(repoPath, args, onSuccess, context, resolveCliContext);
 
-export const spawnBdJson = (
+const spawnBdJson = (
   repoPath: string,
   args: string[],
   onSuccess: (stdout: string) => BeadsCommandJsonOutput,

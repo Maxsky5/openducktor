@@ -11,7 +11,8 @@ import {
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../process/process-command-launch";
 import { normalizeProcessEnvironment } from "../process/process-environment";
-export const execFileAsync = promisify(execFile);
+
+const execFileAsync = promisify(execFile);
 export type GitCommandResult = {
   stdout: string;
   stderr: string;
@@ -30,6 +31,7 @@ export type GitCommandRunner = (
   },
   GitCommandError
 >;
+/** @internal Test-only seam for Git environment normalization. */
 export const createGitEnvironment = (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
@@ -66,7 +68,7 @@ const createGitCommandResolver = (options: GitCommandLaunchOptions): ResolveGitC
   };
 };
 
-export const runSpawnedGit = (
+const runSpawnedGit = (
   workingDirectory: string,
   args: string[],
   options: {

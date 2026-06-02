@@ -186,7 +186,7 @@ type SessionIdleEmitter = {
   now: () => string;
 };
 
-export const emitIdleForSession = (
+const emitIdleForSession = (
   session: SessionRecord | undefined,
   emitter: SessionIdleEmitter,
 ): boolean => {

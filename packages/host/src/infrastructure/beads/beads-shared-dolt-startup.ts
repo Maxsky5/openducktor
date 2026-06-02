@@ -61,6 +61,7 @@ export const wrapPortCandidate = (base: number, offset: number): number => {
   return SHARED_DOLT_PORT_RANGE_START + ((normalizedBase + offset) % SHARED_DOLT_PORT_RANGE_LEN);
 };
 
+/** @internal Test-only seam for Dolt YAML config quoting. */
 export const yamlQuotePath = (inputPath: string): string => `'${inputPath.replaceAll("'", "''")}'`;
 
 export const writeDoltConfigFile = (

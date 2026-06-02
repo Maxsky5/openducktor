@@ -31,7 +31,7 @@ const gitResourceError = (
 ): HostResourceError => new HostResourceError({ message, operation, resource });
 const gitValidationError = (message: string, field: string): HostValidationError =>
   new HostValidationError({ message, field });
-export const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff => {
+const findFileDiff = (fileDiffs: FileDiff[], filePath: string): FileDiff => {
   const fileDiff = fileDiffs.find((diff) => diff.file === filePath);
   if (!fileDiff) {
     throw gitResourceError(
@@ -78,11 +78,7 @@ const findMatchingCachedHunkEffect = (
         ? cause
         : gitValidationError(cause instanceof Error ? cause.message : String(cause), "patch"),
   });
-export const isTrackedPath = (
-  runner: GitCommandRunner,
-  workingDirectory: string,
-  filePath: string,
-) =>
+const isTrackedPath = (runner: GitCommandRunner, workingDirectory: string, filePath: string) =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "ls-files",
@@ -99,7 +95,7 @@ export const isTrackedPath = (
     }
     return yield* Effect.fail(gitOperationError(output, "git.ls-files"));
   });
-export const runGitApplyReverse = (
+const runGitApplyReverse = (
   runner: GitCommandRunner,
   workingDirectory: string,
   patch: string,
@@ -122,11 +118,7 @@ export const runGitApplyReverse = (
       );
     }
   });
-export const loadCachedPatch = (
-  runner: GitCommandRunner,
-  workingDirectory: string,
-  filePath: string,
-) =>
+const loadCachedPatch = (runner: GitCommandRunner, workingDirectory: string, filePath: string) =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, [
       "diff",
@@ -141,11 +133,7 @@ export const loadCachedPatch = (
       gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.cached"),
     );
   });
-export const loadUnstagedPatch = (
-  runner: GitCommandRunner,
-  workingDirectory: string,
-  filePath: string,
-) =>
+const loadUnstagedPatch = (runner: GitCommandRunner, workingDirectory: string, filePath: string) =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, ["diff", "--", filePath]);
     if (result.ok) {
@@ -155,7 +143,7 @@ export const loadUnstagedPatch = (
       gitOperationError(combineOutput(result.stdout, result.stderr), "git.diff.unstaged"),
     );
   });
-export const resetRenamedFileSelection = (
+const resetRenamedFileSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   renamePaths: RenamePaths,
@@ -204,7 +192,7 @@ export const resetRenamedFileSelection = (
     });
     return { affectedPaths: [renamePaths.oldPath, renamePaths.newPath] };
   });
-export const resetFileSelection = (
+const resetFileSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   fileDiffs: FileDiff[],
@@ -242,7 +230,7 @@ export const resetFileSelection = (
     }
     return { affectedPaths: [normalizedFile] };
   });
-export const resetHunkSelection = (
+const resetHunkSelection = (
   runner: GitCommandRunner,
   workingDirectory: string,
   fileDiffs: FileDiff[],

@@ -62,7 +62,7 @@ export const hasTerminalStopSignalInParts = (
   );
 };
 
-export const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
+const hasTerminalStopSignalInRawParts = (parts: unknown[]): boolean => {
   return parts.some((part) => {
     const record = asUnknownRecord(part);
     return (
