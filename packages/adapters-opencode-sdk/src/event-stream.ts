@@ -253,19 +253,16 @@ export const subscribeOpencodeEvents = async (
     client: input.client,
     controller: input.controller,
     onEvent: (event) => {
-      const relevant = isRelevantSubscriberEvent(
-        {
-          externalSessionId: input.context.externalSessionId,
-          input: input.context.input,
-        },
-        event,
-        { isKnownChildExternalSessionId, hasSinglePendingSubagentInputCandidate },
-      );
+      const subscriber = {
+        externalSessionId: input.context.externalSessionId,
+        input: input.context.input,
+      };
+      const relevant = isRelevantSubscriberEvent(subscriber, event, {
+        isKnownChildExternalSessionId,
+        hasSinglePendingSubagentInputCandidate,
+      });
       logStreamEvent({
-        subscriber: {
-          externalSessionId: input.context.externalSessionId,
-          input: input.context.input,
-        },
+        subscriber,
         event,
         relevant,
         ...(input.logEvent ? { logEvent: input.logEvent } : {}),

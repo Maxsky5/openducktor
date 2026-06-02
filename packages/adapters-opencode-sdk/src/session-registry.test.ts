@@ -73,9 +73,36 @@ const childSessionCreatedEvent = (childSessionId: string): Event =>
     },
   }) as unknown as Event;
 
+const runRuntimeEventTransport = async (events: Event[]): Promise<AgentEvent[]> => {
+  const client = makeClientWithEvents(events);
+  const sessions = new Map<string, SessionRecord>();
+  const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
+  const emitted: AgentEvent[] = [];
+
+  registerSession({
+    sessions,
+    runtimeEventTransports,
+    createClient: () => client,
+    runtimeEndpoint: "http://127.0.0.1:12345",
+    externalSessionId: "external-session-1",
+    sessionInput: makeSessionInput(),
+    client,
+    startedAt: "2026-02-22T12:00:00.000Z",
+    startedMessage: "Started",
+    emitStartedEvent: false,
+    now: () => "2026-02-22T12:00:00.000Z",
+    emit: (_externalSessionId, event) => {
+      emitted.push(event);
+    },
+  });
+
+  await runtimeEventTransports.get("http://127.0.0.1:12345")?.streamDone;
+  return emitted;
+};
+
 describe("session registry runtime event transport", () => {
   test("routes top-level parent child session creation to the single pending subagent card", async () => {
-    const client = makeClientWithEvents([
+    const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-subagent-session-created"),
       assistantSubtaskEvent({
         messageId: "assistant-subagent-session-created",
@@ -84,28 +111,6 @@ describe("session registry runtime event transport", () => {
       }),
       childSessionCreatedEvent("external-child-session"),
     ]);
-    const sessions = new Map<string, SessionRecord>();
-    const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
-    const emitted: AgentEvent[] = [];
-
-    registerSession({
-      sessions,
-      runtimeEventTransports,
-      createClient: () => client,
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      externalSessionId: "external-session-1",
-      sessionInput: makeSessionInput(),
-      client,
-      startedAt: "2026-02-22T12:00:00.000Z",
-      startedMessage: "Started",
-      emitStartedEvent: false,
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_externalSessionId, event) => {
-        emitted.push(event);
-      },
-    });
-
-    await runtimeEventTransports.get("http://127.0.0.1:12345")?.streamDone;
 
     const subagentParts = readSubagentParts(emitted);
     expect(subagentParts).toHaveLength(2);
@@ -117,7 +122,7 @@ describe("session registry runtime event transport", () => {
   });
 
   test("routes same-directory child permission events to the single pending subagent card", async () => {
-    const client = makeClientWithEvents([
+    const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-subagent-permission"),
       assistantSubtaskEvent({
         messageId: "assistant-subagent-permission",
@@ -126,28 +131,6 @@ describe("session registry runtime event transport", () => {
       }),
       childPermissionEvent("external-child-session"),
     ]);
-    const sessions = new Map<string, SessionRecord>();
-    const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
-    const emitted: AgentEvent[] = [];
-
-    registerSession({
-      sessions,
-      runtimeEventTransports,
-      createClient: () => client,
-      runtimeEndpoint: "http://127.0.0.1:12345",
-      externalSessionId: "external-session-1",
-      sessionInput: makeSessionInput(),
-      client,
-      startedAt: "2026-02-22T12:00:00.000Z",
-      startedMessage: "Started",
-      emitStartedEvent: false,
-      now: () => "2026-02-22T12:00:00.000Z",
-      emit: (_externalSessionId, event) => {
-        emitted.push(event);
-      },
-    });
-
-    await runtimeEventTransports.get("http://127.0.0.1:12345")?.streamDone;
 
     const subagentParts = readSubagentParts(emitted);
     expect(subagentParts).toHaveLength(2);

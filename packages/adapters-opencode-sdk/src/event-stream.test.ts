@@ -11,7 +11,6 @@ import {
   flushPendingSubagentInputEventsForSession,
   readEventParentExternalSessionId,
   readEventSessionId,
-  readParentExternalSessionId,
 } from "./event-stream/shared";
 import {
   makeClientWithEvents,
@@ -52,28 +51,23 @@ const buildQueuedSignature = (message: string, model?: AgentModelSelection | nul
   return buildQueuedRequestSignature(parts, model ?? undefined);
 };
 
-test("readParentExternalSessionId accepts OpenCode parent id spellings", () => {
+test("readEventParentExternalSessionId accepts OpenCode parent id spellings", () => {
   for (const key of ["parentID", "parentId", "parent_id"] as const) {
-    expect(readParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
+    expect(readEventParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
+      "external-parent-session",
+    );
+    expect(readEventParentExternalSessionId({ info: { [key]: "external-parent-session" } })).toBe(
       "external-parent-session",
     );
   }
 
-  expect(readParentExternalSessionId({ parentID: "" })).toBeUndefined();
-  expect(readParentExternalSessionId({ parentID: "   " })).toBeUndefined();
-  expect(readParentExternalSessionId({ parentID: 123 })).toBeUndefined();
-  expect(readParentExternalSessionId(undefined)).toBeUndefined();
+  expect(readEventParentExternalSessionId({ parentID: "" })).toBeUndefined();
+  expect(readEventParentExternalSessionId({ parentID: "   " })).toBeUndefined();
+  expect(readEventParentExternalSessionId({ parentID: 123 })).toBeUndefined();
+  expect(readEventParentExternalSessionId(undefined)).toBeUndefined();
 });
 
-test("readEventParentExternalSessionId accepts parent ids from event properties and info", () => {
-  expect(readEventParentExternalSessionId({ parentID: "external-parent-session" })).toBe(
-    "external-parent-session",
-  );
-  expect(
-    readEventParentExternalSessionId({
-      info: { parentID: "external-parent-session" },
-    }),
-  ).toBe("external-parent-session");
+test("readEventParentExternalSessionId prefers parent ids from event info", () => {
   expect(
     readEventParentExternalSessionId({
       parentID: "event-parent-session",

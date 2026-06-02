@@ -1,7 +1,6 @@
 import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
-import { readStringProp } from "../guards";
 import { normalizeTodoList } from "../todo-normalizers";
 import { emitSubagentPartsForSession, reconcileUserMessageQueuedStates } from "./message-events";
 import {
@@ -341,17 +340,11 @@ const bindChildSessionCorrelation = (event: Event, runtime: EventStreamRuntime):
 
   const properties = readEventProperties(event);
   const info = readEventInfo(properties);
-  const childExternalSessionId =
-    readStringProp(
-      (properties && typeof properties === "object" && properties !== null
-        ? properties
-        : {}) as Record<string, unknown>,
-      ["sessionID", "sessionId", "session_id"],
-    ) ?? readStringProp(info, ["id", "sessionID", "sessionId", "session_id"]);
+  const childExternalSessionId = readEventSessionId(event);
   const parentExternalSessionId = readEventParentExternalSessionId(properties);
 
   if (
-    typeof childExternalSessionId !== "string" ||
+    !childExternalSessionId ||
     childExternalSessionId.trim().length === 0 ||
     parentExternalSessionId !== runtime.externalSessionId
   ) {

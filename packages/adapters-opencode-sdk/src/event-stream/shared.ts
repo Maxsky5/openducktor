@@ -57,9 +57,11 @@ export type EventStreamState = {
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
 const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as const;
+const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"] as const;
+const NESTED_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id"] as const;
 
-export const readParentExternalSessionId = (info: unknown): string | undefined => {
-  const record = asUnknownRecord(info);
+const readParentExternalSessionIdFromRecord = (source: unknown): string | undefined => {
+  const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
   }
@@ -76,8 +78,8 @@ export const readParentExternalSessionId = (info: unknown): string | undefined =
 
 export const readEventParentExternalSessionId = (properties: unknown): string | undefined => {
   return (
-    readParentExternalSessionId(readRecordProp(properties, "info")) ??
-    readParentExternalSessionId(properties)
+    readParentExternalSessionIdFromRecord(readRecordProp(properties, "info")) ??
+    readParentExternalSessionIdFromRecord(properties)
   );
 };
 
@@ -257,19 +259,14 @@ export const readEventSessionId = (event: Event): string | undefined => {
     return undefined;
   }
 
-  const directSessionId = readStringProp(properties, [
-    "sessionID",
-    "sessionId",
-    "session_id",
-    "session",
-  ]);
+  const directSessionId = readStringProp(properties, EVENT_SESSION_ID_KEYS);
   if (directSessionId) {
     return directSessionId;
   }
 
   const part = readRecordProp(properties, "part");
   if (part) {
-    const partSessionId = readStringProp(part, ["sessionID", "sessionId", "session_id"]);
+    const partSessionId = readStringProp(part, NESTED_SESSION_ID_KEYS);
     if (partSessionId) {
       return partSessionId;
     }
@@ -277,7 +274,7 @@ export const readEventSessionId = (event: Event): string | undefined => {
 
   const info = readRecordProp(properties, "info");
   if (info) {
-    const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
+    const infoSessionId = readStringProp(info, NESTED_SESSION_ID_KEYS);
     if (infoSessionId) {
       return infoSessionId;
     }
