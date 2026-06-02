@@ -129,6 +129,45 @@ describe("createRuntimeRegistry", () => {
       },
     ]);
   });
+  test("removes replaced runtime ids from their previous repo index", async () => {
+    const originalRuntime = createRuntime({
+      runtimeId: "runtime-1",
+      repoPath: "/old-repo",
+      workingDirectory: "/old-repo",
+    });
+    const replacementRuntime = createRuntime({
+      runtimeId: "runtime-1",
+      repoPath: "/new-repo",
+      workingDirectory: "/new-repo",
+    });
+    const registry = createRuntimeRegistry({
+      runtimes: [originalRuntime],
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          return Effect.succeed({
+            runtime: replacementRuntime,
+            stop: () => Effect.succeed(undefined),
+          });
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.ensureWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: "/new-repo",
+          workingDirectory: "/new-repo",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      ),
+    ).resolves.toEqual(replacementRuntime);
+    await expect(
+      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "/old-repo" })),
+    ).resolves.toEqual([]);
+    await expect(
+      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "/new-repo" })),
+    ).resolves.toEqual([replacementRuntime]);
+  });
   test("deduplicates parallel workspace runtime ensure calls", async () => {
     let starts = 0;
     let resolveStart: (runtime: RuntimeInstanceSummary) => void = () => {};

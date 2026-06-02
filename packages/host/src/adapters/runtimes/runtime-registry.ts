@@ -110,7 +110,7 @@ export const createRuntimeRegistry = ({
     for (const runtimeId of ids) {
       const runtime = entries.get(runtimeId);
       if (!runtime) {
-        continue;
+        throw new Error(`Runtime registry repo index referenced missing runtime: ${runtimeId}`);
       }
       if (runtimeKind && runtime.kind !== runtimeKind) {
         continue;
@@ -244,7 +244,7 @@ export const createRuntimeRegistry = ({
       return Effect.succeed(entries.get(runtimeId) ?? null);
     },
     listRuntimesByRepo(input) {
-      return Effect.succeed(readRuntimesForRepo(input));
+      return Effect.sync(() => readRuntimesForRepo(input));
     },
     stopRuntime(runtimeId) {
       return Effect.as(stopRegisteredRuntime(runtimeId), true);
