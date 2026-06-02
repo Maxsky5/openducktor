@@ -532,6 +532,7 @@ describe("createElectronHostCommandRouter", () => {
       },
       runtimeRegistry: {
         ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
+        findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
         listRuntimes: () =>
           Effect.succeed([
             {
@@ -546,6 +547,7 @@ describe("createElectronHostCommandRouter", () => {
               descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
             },
           ]),
+        listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
         stopRuntime: (runtimeId) =>
           Effect.sync(() => {
             stoppedRuntimes.push(runtimeId);
@@ -569,6 +571,8 @@ describe("createElectronHostCommandRouter", () => {
             ] satisfies RuntimeInstanceSummary[];
           }),
         stopSession: () => Effect.succeed(undefined),
+        probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
+        probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
       },
       settingsConfig: createSettingsConfig(),
     });

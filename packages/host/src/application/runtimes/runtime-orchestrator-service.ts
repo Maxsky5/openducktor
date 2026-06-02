@@ -149,11 +149,8 @@ export const createRuntimeOrchestratorService = ({
             repoPath: canonicalRepoPath,
             runtimeKind,
           })
-        : yield* runtimeRegistry.listRuntimes();
-      return runtimes
-        .filter((runtime) => runtime.kind === runtimeKind)
-        .filter((runtime) => !canonicalRepoPath || runtime.repoPath === canonicalRepoPath)
-        .map((runtime) => runtimeInstanceSummarySchema.parse(runtime));
+        : (yield* runtimeRegistry.listRuntimes()).filter((runtime) => runtime.kind === runtimeKind);
+      return runtimes.map((runtime) => runtimeInstanceSummarySchema.parse(runtime));
     });
   const runtimeStartupStatus: RuntimeOrchestratorService["runtimeStartupStatus"] = (input) =>
     Effect.gen(function* () {

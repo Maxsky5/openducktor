@@ -70,6 +70,18 @@ describe("createRuntimeOrchestratorService", () => {
     ).resolves.toEqual([runtime]);
     expect(keyedLookups).toEqual([{ repoPath: "/canonical/repo", runtimeKind: "opencode" }]);
   });
+  test("keeps runtimes returned by normalized repository lookup", async () => {
+    const runtime = createRuntime({ repoPath: "/canonical/repo/." });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([runtime]),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(service.runtimeList({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toEqual([runtime]);
+  });
   test("reports ready startup status for a registered workspace runtime", async () => {
     const runtime = createRuntime();
     const service = createRuntimeOrchestratorService({

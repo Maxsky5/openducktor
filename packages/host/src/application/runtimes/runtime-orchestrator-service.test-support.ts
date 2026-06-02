@@ -4,6 +4,7 @@ import {
   type RuntimeInstanceSummary,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostOperationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
@@ -153,10 +154,11 @@ export const createRegistry = (
       return Effect.succeed([...entries.values()]);
     },
     listRuntimesByRepo(input) {
+      const normalizedInput = normalizePathForComparison(input.repoPath);
       return Effect.succeed(
         [...entries.values()].filter(
           (runtime) =>
-            runtime.repoPath === input.repoPath &&
+            normalizePathForComparison(runtime.repoPath) === normalizedInput &&
             (!input.runtimeKind || runtime.kind === input.runtimeKind),
         ),
       );
