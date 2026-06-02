@@ -1,10 +1,13 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { PropsWithChildren, ReactElement } from "react";
+import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { buildMessage } from "./agent-chat-test-fixtures";
+import type { AgentChatThreadModel } from "./agent-chat.types";
+import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
+import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
 import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
@@ -20,10 +23,42 @@ let latestDialogProps: {
 } | null = null;
 
 const transcriptSource: RuntimeSessionTranscriptSource = {
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
+  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
   workingDirectory: "/repo-a",
 };
+
+const createThreadModel = (
+  overrides: Partial<AgentChatThreadModel> = {},
+): AgentChatThreadModel => ({
+  session: buildSession(),
+  isSessionWorking: false,
+  isSessionViewLoading: false,
+  isSessionHistoryLoading: false,
+  isWaitingForRuntimeReadiness: false,
+  readinessState: "ready",
+  isInteractionEnabled: true,
+  blockedReason: null,
+  isLoadingChecks: false,
+  onRefreshChecks: () => {},
+  isStarting: false,
+  isSending: false,
+  sessionAgentColors: {},
+  canSubmitQuestionAnswers: true,
+  isSubmittingQuestionByRequestId: {},
+  onSubmitQuestionAnswers: async () => {},
+  canReplyToApprovals: true,
+  runtimeSupportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
+  isSubmittingApprovalByRequestId: {},
+  approvalReplyErrorByRequestId: {},
+  onReplyApproval: async () => {},
+  sessionRuntimeDataError: null,
+  todoPanelCollapsed: false,
+  onToggleTodoPanel: () => {},
+  messagesContainerRef: createRef<HTMLDivElement>(),
+  scrollToBottomOnSendRef: { current: null },
+  syncBottomAfterComposerLayoutRef: { current: null },
+  ...overrides,
+});
 
 describe("AgentSessionTranscriptDialogHost", () => {
   beforeAll(async () => {
@@ -261,7 +296,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         })}
         sessionAgentColors={{}}
         sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={{ kind: "opencode", runtimeId: "runtime-1" }}
         sessionWorkingDirectory="/repo-a"
         subagentPendingApprovals={[pendingApproval]}
         subagentPendingApprovalCount={1}
@@ -279,12 +314,73 @@ describe("AgentSessionTranscriptDialogHost", () => {
       expect(latestDialogProps).toMatchObject({
         externalSessionId: "session-child-1",
         source: {
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
           workingDirectory: "/repo-a",
           isLive: true,
           pendingApprovals: [pendingApproval],
           pendingQuestions: [pendingQuestion],
+        },
+        title: "Subagent activity",
+        description: "View what this subagent did.",
+      });
+    });
+  });
+
+  test("opens a linked subagent transcript from a Planner thread with its runtime ref", async () => {
+    const { AgentSessionTranscriptDialogHost } = await import(
+      "./use-agent-session-transcript-dialog"
+    );
+    const { AgentChatThread } = await import("./agent-chat-thread");
+
+    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
+      <QueryProvider useIsolatedClient>
+        <AgentSessionTranscriptDialogHost>
+          <AgentChatSettingsProvider value={createChatSettingsFixture()}>
+            {children}
+          </AgentChatSettingsProvider>
+        </AgentSessionTranscriptDialogHost>
+      </QueryProvider>
+    );
+
+    render(
+      <AgentChatThread
+        model={createThreadModel({
+          session: buildSession({
+            role: "planner",
+            runtimeKind: "opencode",
+            runtimeId: "runtime-planner-1",
+            workingDirectory: "/repo-a",
+            messages: [
+              buildMessage("system", "Subagent (explorer): read file", {
+                id: "subagent-planner-running-1",
+                timestamp: "2026-02-22T10:49:37.000Z",
+                meta: {
+                  kind: "subagent",
+                  partId: "part-subagent-planner-running-1",
+                  correlationKey: "part:assistant-task-tool-running:subtask-planner",
+                  status: "running",
+                  agent: "explorer",
+                  description: "Read omp.json file",
+                  externalSessionId: "session-child-planner-1",
+                  startedAtMs: 1_000,
+                },
+              }),
+            ],
+          }),
+        })}
+      />,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
+
+    await waitFor(() => {
+      expect(latestDialogProps).toMatchObject({
+        externalSessionId: "session-child-planner-1",
+        source: {
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-planner-1" },
+          workingDirectory: "/repo-a",
+          isLive: true,
         },
         title: "Subagent activity",
         description: "View what this subagent did.",

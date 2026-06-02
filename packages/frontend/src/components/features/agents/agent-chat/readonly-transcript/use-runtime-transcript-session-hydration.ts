@@ -56,7 +56,7 @@ export function useRuntimeTranscriptSessionHydration({
     ...(source && activeWorkspace && externalSessionId
       ? sessionHistoryQueryOptions(
           activeWorkspace.repoPath,
-          source.runtimeKind,
+          source.runtimeRef.kind,
           source.workingDirectory,
           externalSessionId,
           readSessionHistory,
@@ -75,14 +75,20 @@ export function useRuntimeTranscriptSessionHydration({
     if (liveSession) {
       return liveSession;
     }
-    if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
+    if (
+      !activeWorkspace ||
+      !source ||
+      !externalSessionId ||
+      !historyQuery.data ||
+      !sourceResolution.runtimeId
+    ) {
       return null;
     }
 
     return createRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
       externalSessionId,
-      runtimeKind: source.runtimeKind,
+      runtimeKind: source.runtimeRef.kind,
       runtimeId: sourceResolution.runtimeId,
       workingDirectory: source.workingDirectory,
       history: historyQuery.data,

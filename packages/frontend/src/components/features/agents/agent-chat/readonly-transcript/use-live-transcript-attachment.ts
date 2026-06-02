@@ -81,7 +81,8 @@ export function useLiveTranscriptAttachment({
       !source ||
       source.isLive !== true ||
       sourceResolution.error ||
-      sourceResolution.isPending
+      sourceResolution.isPending ||
+      !sourceResolution.runtimeId
     ) {
       return null;
     }
@@ -89,8 +90,8 @@ export function useLiveTranscriptAttachment({
     return [
       activeWorkspace.repoPath,
       externalSessionId,
-      source.runtimeKind,
-      sourceResolution.runtimeId ?? "",
+      source.runtimeRef.kind,
+      sourceResolution.runtimeId,
       source.workingDirectory,
     ].join("\u0000");
   }, [
@@ -118,7 +119,8 @@ export function useLiveTranscriptAttachment({
     if (!liveTranscriptAttachKey) {
       return;
     }
-    if (!activeWorkspace || !externalSessionId || !source) {
+    const runtimeId = sourceResolution.runtimeId;
+    if (!activeWorkspace || !externalSessionId || !source || !runtimeId) {
       return;
     }
     if (attachedLiveTranscriptKeyRef.current === liveTranscriptAttachKey) {
@@ -135,8 +137,8 @@ export function useLiveTranscriptAttachment({
     void attachRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
       externalSessionId,
-      runtimeKind: source.runtimeKind,
-      ...(sourceResolution.runtimeId ? { runtimeId: sourceResolution.runtimeId } : {}),
+      runtimeKind: source.runtimeRef.kind,
+      runtimeId,
       workingDirectory: source.workingDirectory,
       pendingApprovals: visiblePendingApprovalsRef.current,
       pendingQuestions: visiblePendingQuestionsRef.current,

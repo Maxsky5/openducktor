@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeRef } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -540,8 +540,7 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
-  sessionRuntimeKind?: RuntimeKind | null;
-  sessionRuntimeId?: string | null;
+  sessionRuntimeRef?: RuntimeRef | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
@@ -552,8 +551,7 @@ type SubagentMessageProps = {
 
 const SubagentMessage = ({
   meta,
-  sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   sessionWorkingDirectory,
   timeLabel,
   subagentPendingApprovals,
@@ -621,8 +619,7 @@ const SubagentMessage = ({
               ) : null}
             </div>
             <SubagentTranscriptButton
-              sessionRuntimeKind={sessionRuntimeKind ?? null}
-              sessionRuntimeId={sessionRuntimeId ?? null}
+              sessionRuntimeRef={sessionRuntimeRef ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
               pendingApprovals={subagentPendingApprovals}
               pendingQuestions={subagentPendingQuestions}
@@ -657,8 +654,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  sessionRuntimeKind?: RuntimeKind | null;
-  sessionRuntimeId?: string | null;
+  sessionRuntimeRef?: RuntimeRef | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
@@ -673,8 +669,7 @@ type MessageBodyProps = {
 
 export const MessageBody = ({
   message,
-  sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
@@ -720,8 +715,7 @@ export const MessageBody = ({
     return (
       <SubagentMessage
         meta={meta}
-        sessionRuntimeKind={sessionRuntimeKind ?? null}
-        sessionRuntimeId={sessionRuntimeId ?? null}
+        sessionRuntimeRef={sessionRuntimeRef ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
         subagentPendingApprovals={subagentPendingApprovals}

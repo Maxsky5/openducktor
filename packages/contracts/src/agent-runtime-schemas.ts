@@ -656,9 +656,12 @@ export const runtimeCapabilityClasses = {
   "optionalSurfaces.supportedSubagentExecutionModes": "optional_enhancement",
 } as const satisfies Record<RuntimeCapabilityKey, RuntimeCapabilityClass>;
 
-export const runtimeRefSchema = z.object({
-  kind: runtimeKindSchema,
-});
+export const runtimeRefSchema = z
+  .object({
+    kind: runtimeKindSchema,
+    runtimeId: z.string().trim().min(1),
+  })
+  .strict();
 export type RuntimeRef = z.infer<typeof runtimeRefSchema>;
 
 export const repoRuntimeRefSchema = z

@@ -50,8 +50,7 @@ const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
 const createSource = (
   overrides: Partial<RuntimeSessionTranscriptSource> = {},
 ): RuntimeSessionTranscriptSource => ({
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
+  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
   workingDirectory: "/repo-a",
   ...overrides,
 });

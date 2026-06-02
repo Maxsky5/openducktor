@@ -21,13 +21,10 @@ const matchesSourceRuntime = (
   runtime: RuntimeInstanceSummary,
   source: RuntimeSessionTranscriptSource,
 ): boolean => {
-  if (runtime.kind !== source.runtimeKind) {
+  if (runtime.kind !== source.runtimeRef.kind) {
     return false;
   }
-  if (source.runtimeId) {
-    return runtime.runtimeId === source.runtimeId;
-  }
-  return runtime.workingDirectory === source.workingDirectory;
+  return runtime.runtimeId === source.runtimeRef.runtimeId;
 };
 
 export function useRuntimeTranscriptSourceResolution({
@@ -38,7 +35,7 @@ export function useRuntimeTranscriptSourceResolution({
   const queryEnabled = Boolean(isOpen && workspaceRepoPath && source);
   const runtimeListQuery = useQuery({
     ...runtimeListQueryOptions(
-      source?.runtimeKind ?? DEFAULT_RUNTIME_KIND,
+      source?.runtimeRef.kind ?? DEFAULT_RUNTIME_KIND,
       workspaceRepoPath ?? "",
     ),
     enabled: queryEnabled,
@@ -55,7 +52,7 @@ export function useRuntimeTranscriptSourceResolution({
       isPending: false,
       error: errorMessageFromUnknown(
         runtimeListQuery.error,
-        `Failed to load ${source.runtimeKind} runtimes.`,
+        `Failed to load ${source.runtimeRef.kind} runtimes.`,
       ),
       runtimeId: null,
     };
@@ -68,11 +65,11 @@ export function useRuntimeTranscriptSourceResolution({
     const errorPrefix = matches.length === 0 ? "No" : "Multiple";
     const runtimeSubject =
       matches.length === 0
-        ? `${source.runtimeKind} runtime instance is`
-        : `${source.runtimeKind} runtime instances are`;
+        ? `${source.runtimeRef.kind} runtime instance is`
+        : `${source.runtimeRef.kind} runtime instances are`;
     return {
       isPending: false,
-      error: `${errorPrefix} ${runtimeSubject} attached for ${source.runtimeId ?? source.workingDirectory}.`,
+      error: `${errorPrefix} ${runtimeSubject} attached for ${source.runtimeRef.runtimeId}.`,
       runtimeId: null,
     };
   }

@@ -23,8 +23,7 @@ const createHookHarness = (initialProps: HookArgs) =>
 const createSource = (
   overrides: Partial<RuntimeSessionTranscriptSource> = {},
 ): RuntimeSessionTranscriptSource => ({
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
+  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
   workingDirectory: "/repo-a",
   ...overrides,
 });
@@ -110,31 +109,6 @@ describe("useRuntimeTranscriptSourceResolution", () => {
         isPending: false,
         error: null,
         runtimeId: "runtime-1",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("resolves runtime id by working directory when source has no runtime id", async () => {
-    const runtimeList = mock(async () => [createRuntime({ runtimeId: "runtime-planner" })]);
-    host.runtimeList = runtimeList;
-    const { runtimeId: _runtimeId, ...sourceWithoutRuntimeId } = createSource();
-    const harness = createHookHarness({
-      isOpen: true,
-      workspaceRepoPath: "/repo-a",
-      source: sourceWithoutRuntimeId,
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => !state.isPending);
-
-      expect(runtimeList).toHaveBeenCalledWith("/repo-a", "opencode");
-      expect(harness.getLatest()).toEqual({
-        isPending: false,
-        error: null,
-        runtimeId: "runtime-planner",
       });
     } finally {
       await harness.unmount();

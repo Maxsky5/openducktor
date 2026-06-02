@@ -25,8 +25,7 @@ const activeWorkspace: ActiveWorkspace = {
 const createSource = (
   overrides: Partial<RuntimeSessionTranscriptSource> = {},
 ): RuntimeSessionTranscriptSource => ({
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
+  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
   workingDirectory: "/repo-a",
   isLive: true,
   ...overrides,
@@ -173,7 +172,7 @@ describe("useLiveTranscriptAttachment", () => {
       await harness.update({
         ...baseArgs,
         externalSessionId: "session-2",
-        source: createSource({ runtimeId: "runtime-2" }),
+        source: createSource({ runtimeRef: { kind: "opencode", runtimeId: "runtime-2" } }),
         sourceResolution: resolvedSource({ runtimeId: "runtime-2" }),
       });
       await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 2);

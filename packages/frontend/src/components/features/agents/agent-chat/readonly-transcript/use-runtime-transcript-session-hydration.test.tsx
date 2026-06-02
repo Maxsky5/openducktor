@@ -32,8 +32,7 @@ const activeWorkspace: ActiveWorkspace = {
 const createSource = (
   overrides: Partial<RuntimeSessionTranscriptSource> = {},
 ): RuntimeSessionTranscriptSource => ({
-  runtimeKind: "opencode",
-  runtimeId: "runtime-1",
+  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
   workingDirectory: "/repo-a/worktree",
   ...overrides,
 });

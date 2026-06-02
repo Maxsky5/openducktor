@@ -52,8 +52,7 @@ let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host
 
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
   return {
-    runtimeKind: "opencode",
-    runtimeId: "runtime-1",
+    runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
     workingDirectory: "/repo-a",
   };
 }
