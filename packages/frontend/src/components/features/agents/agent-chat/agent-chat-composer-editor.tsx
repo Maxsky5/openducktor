@@ -3,7 +3,7 @@ import type {
   AgentSkillReference,
   AgentSlashCommand,
 } from "@openducktor/core";
-import { type ReactElement, useLayoutEffect, useMemo, useState } from "react";
+import { type ReactElement, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { badgeVariants } from "@/components/ui/badge-variants";
 import { cn } from "@/lib/utils";
@@ -321,18 +321,14 @@ export function AgentChatComposerEditor({
     searchFiles,
   });
   const draftSegments = draft.segments;
-  const composerContentMarkup = useMemo(
-    () => buildComposerContentMarkup(draftSegments),
-    [draftSegments],
-  );
 
   useLayoutEffect(() => {
     const editor = editorRef.current?.querySelector<HTMLDivElement>("[data-composer-content-root]");
     if (!editor || syncComposerDomInPlace(editor, draftSegments)) {
       return;
     }
-    editor.innerHTML = composerContentMarkup;
-  }, [composerContentMarkup, draftSegments, editorRef]);
+    editor.innerHTML = buildComposerContentMarkup(draftSegments);
+  }, [draftSegments, editorRef]);
 
   useLayoutEffect(() => {
     if (!composerFileReferenceTooltip) {

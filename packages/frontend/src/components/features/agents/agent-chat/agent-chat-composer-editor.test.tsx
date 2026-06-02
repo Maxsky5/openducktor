@@ -548,6 +548,16 @@ describe("AgentChatComposerEditor", () => {
     );
   });
 
+  test("does not build replacement markup when typed text syncs in place", async () => {
+    const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
+
+    renderMockEditableTextContent.mockClear();
+    typeIntoEditor(rendered.container, "hello");
+
+    await expectComposerText(rendered.container, "hello");
+    expect(renderMockEditableTextContent).not.toHaveBeenCalled();
+  });
+
   test("pastes website content as raw text", async () => {
     const rendered = render(<EditorHarness slashCommands={COMMANDS} slashCommandsError={null} />);
 
