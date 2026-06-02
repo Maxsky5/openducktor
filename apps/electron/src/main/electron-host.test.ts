@@ -1259,12 +1259,24 @@ describe("createElectronHostCommandRouter", () => {
     };
     const sessionRuntimeRegistry: RuntimeRegistryPort = {
       ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime ensure"),
+      findRuntimeById: (runtimeId) =>
+        Effect.succeed(runtimeId === sessionRuntime.runtimeId ? sessionRuntime : null),
       listRuntimes: () => Effect.succeed([sessionRuntime]),
+      listRuntimesByRepo: (input) =>
+        Effect.succeed(
+          sessionRuntime.repoPath === input.repoPath &&
+            (!input.runtimeKind || sessionRuntime.kind === input.runtimeKind)
+            ? [sessionRuntime]
+            : [],
+        ),
       stopRuntime: () => Effect.dieMessage("unexpected runtime stop"),
+      stopAllRuntimes: () => Effect.succeed([]),
       stopSession: (input) =>
         Effect.sync(() => {
           stoppedSessions.push(input);
         }),
+      probeSessionStatus: () => Effect.dieMessage("unexpected session probe"),
+      probeMcpStatus: () => Effect.dieMessage("unexpected MCP probe"),
     };
     const sessionTaskStore = createTaskStore();
     const sessionStopRouter = createElectronHostCommandRouter({
