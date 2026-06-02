@@ -8,7 +8,7 @@ import type {
   RunBdJson,
 } from "../../infrastructure/beads/task-store/beads-raw-issue";
 import { createBdCommandProvider } from "./bd-command-provider";
-import { createExistingTestBeadsCliContext, createFakeBd } from "./beads-test-support";
+import { createExistingTestBeadsCliContext, createFakeBd } from "./test-support/beads-test-support";
 
 describe("createBdCommandProvider", () => {
   test("binds default JSON runners to one prepared shared-server context per repo operation", async () => {

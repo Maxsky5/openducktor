@@ -12,7 +12,7 @@ import {
   createExistingTestBeadsCliContext as createExistingBeadsCliContext,
   createFakeBd,
   createTestToolDiscoveryPort as createToolDiscoveryPort,
-} from "./beads-test-support";
+} from "./test-support/beads-test-support";
 
 const encodedMarkdown = (markdown: string): string => gzipSync(markdown).toString("base64");
 type RawTaskFixture = { [key in string]?: BeadsCommandJsonOutput };

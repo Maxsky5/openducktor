@@ -6,7 +6,7 @@ import {
   createExistingTestBeadsCliContext,
   createTestToolDiscoveryPort,
   testOperationError,
-} from "./beads-test-support";
+} from "./test-support/beads-test-support";
 
 describe("createBeadsCliContextManager", () => {
   test("deduplicates concurrent shared-server context resolution", async () => {
@@ -50,6 +50,53 @@ describe("createBeadsCliContextManager", () => {
 
     await expect(Promise.all([first, second])).resolves.toEqual([context, context]);
     expect(contextResolutionAttempts).toBe(1);
+  });
+
+  test("evicts failed shared-server context flights before retrying", async () => {
+    const context = await createExistingTestBeadsCliContext({
+      prefix: "odt-beads-manager-test-",
+    });
+    let contextResolutionAttempts = 0;
+    const stoppedServers: Array<{
+      pid: number;
+      serverStatePath: string;
+    }> = [];
+    const manager = createBeadsCliContextManager({
+      processEnv: {},
+      toolDiscovery: createTestToolDiscoveryPort(),
+      resolveCliContext(_repoPath, options) {
+        return Effect.gen(function* () {
+          expect(options.requireSharedServer).toBe(true);
+          contextResolutionAttempts += 1;
+          if (contextResolutionAttempts === 1) {
+            return yield* Effect.fail(testOperationError(new Error("first context failed")));
+          }
+          return context;
+        });
+      },
+      stopSharedDoltServer(sharedServer, serverStatePath) {
+        return Effect.sync(() => {
+          stoppedServers.push({ pid: sharedServer.pid, serverStatePath });
+        });
+      },
+    });
+
+    await expect(
+      Effect.runPromise(manager.resolveCliContext("/repo", { requireSharedServer: true })),
+    ).rejects.toThrow("first context failed");
+    await expect(
+      Effect.runPromise(manager.resolveCliContext("/repo", { requireSharedServer: true })),
+    ).resolves.toBe(context);
+    await expect(Effect.runPromise(manager.close())).resolves.toEqual({
+      stoppedSharedDoltServers: 1,
+    });
+    expect(contextResolutionAttempts).toBe(2);
+    expect(stoppedServers).toEqual([
+      {
+        pid: process.pid,
+        serverStatePath: "/config/beads/shared-server/server.json",
+      },
+    ]);
   });
 
   test("waits for in-flight context resolution before stopping owned shared servers", async () => {

@@ -2,9 +2,9 @@ import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
-import { HostOperationError } from "../../effect/host-errors";
-import { createToolDiscoveryAdapter } from "../system/tool-discovery";
-import type { BeadsSharedServerContext } from "./beads-cli-context";
+import { HostOperationError } from "../../../effect/host-errors";
+import { createToolDiscoveryAdapter } from "../../system/tool-discovery";
+import type { BeadsSharedServerContext } from "../beads-cli-context";
 
 export const createTestToolDiscoveryPort = (missingCommands: string[] = []) =>
   createToolDiscoveryAdapter({
