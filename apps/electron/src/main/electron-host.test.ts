@@ -521,6 +521,17 @@ describe("createElectronHostCommandRouter", () => {
   test("disposes registered runtimes on host shutdown", async () => {
     const stoppedRuntimes: string[] = [];
     const lifecycleLogs: string[] = [];
+    const registeredRuntime = {
+      kind: "opencode",
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/repo",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
+      startedAt: "2026-05-13T00:00:00Z",
+      descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
+    } satisfies RuntimeInstanceSummary;
     const router = createElectronHostCommandRouter({
       lifecycleLogger: {
         info(message) {
@@ -533,20 +544,7 @@ describe("createElectronHostCommandRouter", () => {
       runtimeRegistry: {
         ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
         findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
-        listRuntimes: () =>
-          Effect.succeed([
-            {
-              kind: "opencode",
-              runtimeId: "runtime-1",
-              repoPath: "/repo",
-              taskId: null,
-              role: "workspace",
-              workingDirectory: "/repo",
-              runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
-              startedAt: "2026-05-13T00:00:00Z",
-              descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
-            },
-          ]),
+        listRuntimes: () => Effect.succeed([registeredRuntime]),
         listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
         stopRuntime: (runtimeId) =>
           Effect.sync(() => {
@@ -556,19 +554,7 @@ describe("createElectronHostCommandRouter", () => {
         stopAllRuntimes: () =>
           Effect.sync(() => {
             stoppedRuntimes.push("runtime-1");
-            return [
-              {
-                kind: "opencode",
-                runtimeId: "runtime-1",
-                repoPath: "/repo",
-                taskId: null,
-                role: "workspace",
-                workingDirectory: "/repo",
-                runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
-                startedAt: "2026-05-13T00:00:00Z",
-                descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
-              },
-            ] satisfies RuntimeInstanceSummary[];
+            return [registeredRuntime];
           }),
         stopSession: () => Effect.succeed(undefined),
         probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),

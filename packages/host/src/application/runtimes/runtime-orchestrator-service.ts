@@ -144,12 +144,16 @@ export const createRuntimeOrchestratorService = ({
       const { runtimeKind, repoPath } = input;
       yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
       const canonicalRepoPath = repoPath ? yield* resolveRepoPath(gitPort, repoPath) : undefined;
-      const runtimes = canonicalRepoPath
-        ? yield* runtimeRegistry.listRuntimesByRepo({
-            repoPath: canonicalRepoPath,
-            runtimeKind,
-          })
-        : (yield* runtimeRegistry.listRuntimes()).filter((runtime) => runtime.kind === runtimeKind);
+      let runtimes: RuntimeInstanceSummary[];
+      if (canonicalRepoPath) {
+        runtimes = yield* runtimeRegistry.listRuntimesByRepo({
+          repoPath: canonicalRepoPath,
+          runtimeKind,
+        });
+      } else {
+        const registeredRuntimes = yield* runtimeRegistry.listRuntimes();
+        runtimes = registeredRuntimes.filter((runtime) => runtime.kind === runtimeKind);
+      }
       return runtimes.map((runtime) => runtimeInstanceSummarySchema.parse(runtime));
     });
   const runtimeStartupStatus: RuntimeOrchestratorService["runtimeStartupStatus"] = (input) =>
