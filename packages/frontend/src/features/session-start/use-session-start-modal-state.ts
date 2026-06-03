@@ -118,6 +118,7 @@ export function useSessionStartModalState({
     existingSessionOptions,
     initializeStartState,
     resetStartState,
+    reuseSelection,
     selectedSourceSessionId,
     selectedStartMode,
     handleSelectSourceSession,
@@ -131,6 +132,7 @@ export function useSessionStartModalState({
   });
 
   const {
+    resolvedSelection,
     resetSelection,
     initializeSelection,
     handleSelectAgent,
@@ -142,10 +144,13 @@ export function useSessionStartModalState({
     catalog,
     intentSelectedModel: intent?.selectedModel ?? null,
     repoSettings,
+    selection,
     selectedRuntimeKind,
     selectedStartMode,
     setSelection,
   });
+
+  const visibleSelection = selectedStartMode === "reuse" ? reuseSelection : resolvedSelection;
 
   const closeStartModal = useCallback(() => {
     setIntent(null);
@@ -162,7 +167,8 @@ export function useSessionStartModalState({
         roleDefaultSelectionFor(repoSettings, nextIntent.role)?.runtimeKind ??
         repoSettings?.defaultRuntimeKind ??
         null;
-      const initialStartMode = initializeStartState(nextIntent);
+      const initialStartState = initializeStartState(nextIntent);
+      const initialStartMode = initialStartState.selectedStartMode;
       const initialRuntimeKind = resolveRuntimeKindSelection({
         runtimeDefinitions: filterRuntimeDefinitionsForStartMode(
           runtimeDefinitions,
@@ -170,7 +176,9 @@ export function useSessionStartModalState({
         ),
         requestedRuntimeKind,
       });
-      setRequestedRuntimeKind(requestedRuntimeKind);
+      if (initialStartMode !== "reuse") {
+        setRequestedRuntimeKind(requestedRuntimeKind);
+      }
       setSelectedStartModeForRuntime(initialStartMode);
       setIntent(nextIntent);
       setSelectedTargetBranch(
@@ -181,7 +189,9 @@ export function useSessionStartModalState({
           ),
         ),
       );
-      initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
+      if (initialStartMode !== "reuse") {
+        initializeSelection(nextIntent.role, initialRuntimeKind, nextIntent.selectedModel ?? null);
+      }
     },
     [
       initializeSelection,
@@ -222,15 +232,17 @@ export function useSessionStartModalState({
   );
 
   const selectedModelEntry = useMemo(() => {
-    if (!catalog || !selection) {
+    if (!catalog || !visibleSelection) {
       return null;
     }
     return (
       catalog.models.find(
-        (entry) => entry.providerId === selection.providerId && entry.modelId === selection.modelId,
+        (entry) =>
+          entry.providerId === visibleSelection.providerId &&
+          entry.modelId === visibleSelection.modelId,
       ) ?? null
     );
-  }, [catalog, selection]);
+  }, [catalog, visibleSelection]);
 
   const agentOptions = useMemo<ComboboxOption[]>(() => {
     const options = toPrimaryAgentOptions(catalog);
@@ -238,7 +250,7 @@ export function useSessionStartModalState({
       return options;
     }
 
-    const fallbackAgent = selection?.profileId;
+    const fallbackAgent = visibleSelection?.profileId;
     if (!fallbackAgent) {
       return [];
     }
@@ -251,7 +263,7 @@ export function useSessionStartModalState({
         ...(accentColor ? { accentColor } : {}),
       },
     ];
-  }, [catalog, selection?.profileId]);
+  }, [catalog, visibleSelection?.profileId]);
 
   const modelOptions = useMemo<ComboboxOption[]>(() => {
     const options = toModelOptions(catalog);
@@ -259,18 +271,18 @@ export function useSessionStartModalState({
       return options;
     }
 
-    if (!selection?.providerId || !selection.modelId) {
+    if (!visibleSelection?.providerId || !visibleSelection.modelId) {
       return [];
     }
 
     return [
       {
-        value: `${selection.providerId}/${selection.modelId}`,
-        label: selection.modelId,
-        description: `${selection.providerId} (saved default model)`,
+        value: `${visibleSelection.providerId}/${visibleSelection.modelId}`,
+        label: visibleSelection.modelId,
+        description: `${visibleSelection.providerId} (saved default model)`,
       },
     ];
-  }, [catalog, selection]);
+  }, [catalog, visibleSelection]);
 
   const modelGroups = useMemo<ComboboxGroup[]>(() => {
     return toModelGroupsByProvider(catalog);
@@ -284,12 +296,12 @@ export function useSessionStartModalState({
       }));
     }
 
-    if (!selection?.variant) {
+    if (!visibleSelection?.variant) {
       return [];
     }
 
-    return [{ value: selection.variant, label: selection.variant }];
-  }, [selectedModelEntry, selection?.variant]);
+    return [{ value: visibleSelection.variant, label: visibleSelection.variant }];
+  }, [selectedModelEntry, visibleSelection?.variant]);
 
   const orderedStartModes = useMemo<AgentSessionStartMode[]>(() => {
     return orderStartModesForDisplay(availableStartModes);
@@ -329,7 +341,7 @@ export function useSessionStartModalState({
   return {
     intent,
     isOpen: intent !== null,
-    selection,
+    selection: visibleSelection,
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,

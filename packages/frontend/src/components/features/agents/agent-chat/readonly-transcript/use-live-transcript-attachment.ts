@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentOperationsContextValue } from "@/types/state-slices";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
@@ -22,6 +22,121 @@ type LiveTranscriptAttachmentState = {
   liveTranscriptAttachError: string | null;
 };
 
+type LiveTranscriptAttachmentLocalState = LiveTranscriptAttachmentState & {
+  transcriptIdentityKey: string | null;
+  liveTranscriptAttachKey: string | null;
+};
+
+type LiveTranscriptAttachmentAction =
+  | {
+      type: "attachStarted";
+      transcriptIdentityKey: string | null;
+      liveTranscriptAttachKey: string;
+    }
+  | {
+      type: "attachFailed";
+      transcriptIdentityKey: string | null;
+      liveTranscriptAttachKey: string;
+      error: string;
+    }
+  | {
+      type: "attachFinished";
+      transcriptIdentityKey: string | null;
+      liveTranscriptAttachKey: string;
+    };
+
+const createLiveTranscriptAttachmentState = ({
+  transcriptIdentityKey,
+  liveTranscriptAttachKey,
+}: {
+  transcriptIdentityKey: string | null;
+  liveTranscriptAttachKey: string | null;
+}): LiveTranscriptAttachmentLocalState => ({
+  transcriptIdentityKey,
+  liveTranscriptAttachKey,
+  isAttachingLiveTranscript: liveTranscriptAttachKey !== null,
+  liveTranscriptAttachError: null,
+});
+
+const getLiveTranscriptAttachmentStateForKeys = (
+  state: LiveTranscriptAttachmentLocalState,
+  keys: {
+    transcriptIdentityKey: string | null;
+    liveTranscriptAttachKey: string | null;
+  },
+): LiveTranscriptAttachmentLocalState => {
+  if (
+    state.transcriptIdentityKey === keys.transcriptIdentityKey &&
+    state.liveTranscriptAttachKey === keys.liveTranscriptAttachKey
+  ) {
+    return state;
+  }
+
+  return createLiveTranscriptAttachmentState(keys);
+};
+
+const liveTranscriptAttachmentReducer = (
+  state: LiveTranscriptAttachmentLocalState,
+  action: LiveTranscriptAttachmentAction,
+): LiveTranscriptAttachmentLocalState => {
+  const currentState = getLiveTranscriptAttachmentStateForKeys(state, {
+    transcriptIdentityKey: action.transcriptIdentityKey,
+    liveTranscriptAttachKey: action.liveTranscriptAttachKey,
+  });
+
+  switch (action.type) {
+    case "attachStarted":
+      return {
+        ...currentState,
+        isAttachingLiveTranscript: true,
+        liveTranscriptAttachError: null,
+      };
+    case "attachFailed":
+      return {
+        ...currentState,
+        isAttachingLiveTranscript: false,
+        liveTranscriptAttachError: action.error,
+      };
+    case "attachFinished":
+      return { ...currentState, isAttachingLiveTranscript: false };
+  }
+};
+
+const getLiveTranscriptAttachKey = ({
+  activeWorkspace,
+  externalSessionId,
+  isOpen,
+  source,
+  sourceResolution,
+}: {
+  activeWorkspace: ActiveWorkspace | null;
+  externalSessionId: string | null;
+  isOpen: boolean;
+  source: RuntimeSessionTranscriptSource | null;
+  sourceResolution: RuntimeTranscriptSourceResolution;
+}): string | null => {
+  if (
+    !isOpen ||
+    !activeWorkspace ||
+    !externalSessionId ||
+    !source ||
+    source.isLive !== true ||
+    sourceResolution.error ||
+    sourceResolution.isPending ||
+    !sourceResolution.runtimeId
+  ) {
+    return null;
+  }
+
+  return [
+    activeWorkspace.repoPath,
+    externalSessionId,
+    source.runtimeRef.kind,
+    sourceResolution.runtimeId,
+    source.workingDirectory,
+  ].join("\u0000");
+};
+
 export function useLiveTranscriptAttachment({
   isOpen,
   activeWorkspace,
@@ -36,11 +151,24 @@ export function useLiveTranscriptAttachment({
   const attachedLiveTranscriptKeyRef = useRef<string | null>(null);
   const visiblePendingApprovalsRef = useRef<AgentApprovalRequest[]>([]);
   const visiblePendingQuestionsRef = useRef<AgentQuestionRequest[]>([]);
-  const [state, setState] = useState<LiveTranscriptAttachmentState>({
-    isAttachingLiveTranscript: false,
-    liveTranscriptAttachError: null,
-  });
   const transcriptIdentityKey = getRuntimeTranscriptIdentityKey({ externalSessionId, source });
+
+  const liveTranscriptAttachKey = getLiveTranscriptAttachKey({
+    activeWorkspace,
+    externalSessionId,
+    isOpen,
+    source,
+    sourceResolution,
+  });
+  const [state, dispatchState] = useReducer(
+    liveTranscriptAttachmentReducer,
+    { transcriptIdentityKey, liveTranscriptAttachKey },
+    createLiveTranscriptAttachmentState,
+  );
+  const currentState = getLiveTranscriptAttachmentStateForKeys(state, {
+    transcriptIdentityKey,
+    liveTranscriptAttachKey,
+  });
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -49,71 +177,14 @@ export function useLiveTranscriptAttachment({
     };
   }, []);
 
-  useEffect(() => {
-    visiblePendingApprovalsRef.current = Array.from(visiblePendingApprovals);
-  }, [visiblePendingApprovals]);
+  visiblePendingApprovalsRef.current = Array.from(visiblePendingApprovals);
+  visiblePendingQuestionsRef.current = Array.from(visiblePendingQuestions);
 
   useEffect(() => {
-    visiblePendingQuestionsRef.current = Array.from(visiblePendingQuestions);
-  }, [visiblePendingQuestions]);
-
-  useEffect(() => {
-    if (transcriptIdentityKey === null) {
+    if (transcriptIdentityKey === null || liveTranscriptAttachKey === null) {
       attachedLiveTranscriptKeyRef.current = null;
-      setState({
-        isAttachingLiveTranscript: false,
-        liveTranscriptAttachError: null,
-      });
-      return;
     }
-    attachedLiveTranscriptKeyRef.current = null;
-    setState((current) => ({
-      ...current,
-      liveTranscriptAttachError: null,
-    }));
-  }, [transcriptIdentityKey]);
-
-  const liveTranscriptAttachKey = useMemo(() => {
-    if (
-      !isOpen ||
-      !activeWorkspace ||
-      !externalSessionId ||
-      !source ||
-      source.isLive !== true ||
-      sourceResolution.error ||
-      sourceResolution.isPending ||
-      !sourceResolution.runtimeId
-    ) {
-      return null;
-    }
-
-    return [
-      activeWorkspace.repoPath,
-      externalSessionId,
-      source.runtimeRef.kind,
-      sourceResolution.runtimeId,
-      source.workingDirectory,
-    ].join("\u0000");
-  }, [
-    activeWorkspace,
-    externalSessionId,
-    isOpen,
-    source,
-    sourceResolution.error,
-    sourceResolution.isPending,
-    sourceResolution.runtimeId,
-  ]);
-
-  useEffect(() => {
-    if (liveTranscriptAttachKey !== null) {
-      return;
-    }
-    attachedLiveTranscriptKeyRef.current = null;
-    setState((current) => ({
-      ...current,
-      isAttachingLiveTranscript: false,
-    }));
-  }, [liveTranscriptAttachKey]);
+  }, [liveTranscriptAttachKey, transcriptIdentityKey]);
 
   useEffect(() => {
     if (!liveTranscriptAttachKey) {
@@ -128,11 +199,11 @@ export function useLiveTranscriptAttachment({
     }
 
     attachedLiveTranscriptKeyRef.current = liveTranscriptAttachKey;
-    setState((current) => ({
-      ...current,
-      isAttachingLiveTranscript: true,
-      liveTranscriptAttachError: null,
-    }));
+    dispatchState({
+      type: "attachStarted",
+      transcriptIdentityKey,
+      liveTranscriptAttachKey,
+    });
 
     void attachRuntimeTranscriptSession({
       repoPath: activeWorkspace.repoPath,
@@ -149,13 +220,12 @@ export function useLiveTranscriptAttachment({
         ) {
           return;
         }
-        setState((current) => ({
-          ...current,
-          liveTranscriptAttachError: errorMessageFromUnknown(
-            error,
-            "Failed to attach live transcript.",
-          ),
-        }));
+        dispatchState({
+          type: "attachFailed",
+          transcriptIdentityKey,
+          liveTranscriptAttachKey,
+          error: errorMessageFromUnknown(error, "Failed to attach live transcript."),
+        });
       })
       .finally(() => {
         if (
@@ -164,10 +234,11 @@ export function useLiveTranscriptAttachment({
         ) {
           return;
         }
-        setState((current) => ({
-          ...current,
-          isAttachingLiveTranscript: false,
-        }));
+        dispatchState({
+          type: "attachFinished",
+          transcriptIdentityKey,
+          liveTranscriptAttachKey,
+        });
       });
   }, [
     activeWorkspace,
@@ -176,7 +247,11 @@ export function useLiveTranscriptAttachment({
     liveTranscriptAttachKey,
     source,
     sourceResolution.runtimeId,
+    transcriptIdentityKey,
   ]);
 
-  return state;
+  return {
+    isAttachingLiveTranscript: currentState.isAttachingLiveTranscript,
+    liveTranscriptAttachError: currentState.liveTranscriptAttachError,
+  };
 }

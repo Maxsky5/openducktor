@@ -5,8 +5,33 @@ import type { PierreDiffStyle } from "@/components/features/agents/pierre-diff-v
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DiffScope } from "@/features/agent-studio-git";
 import { cn } from "@/lib/utils";
+import {
+  type InlineCommentDraft,
+  useInlineCommentDraftStore,
+} from "@/state/use-inline-comment-draft-store";
 import { DiffPreloadQueue } from "./diff-preload-queue";
 import { FileDiffEntryWithMemo } from "./file-diff-entry";
+
+const EMPTY_INLINE_COMMENTS: InlineCommentDraft[] = [];
+
+const groupInlineCommentsByFile = (
+  drafts: InlineCommentDraft[],
+  diffScope: DiffScope,
+): Map<string, InlineCommentDraft[]> => {
+  const grouped = new Map<string, InlineCommentDraft[]>();
+  for (const draft of drafts) {
+    if (draft.diffScope !== diffScope) {
+      continue;
+    }
+    const existing = grouped.get(draft.filePath);
+    if (existing) {
+      existing.push(draft);
+      continue;
+    }
+    grouped.set(draft.filePath, [draft]);
+  }
+  return grouped;
+};
 
 type FileDiffListProps = {
   fileDiffs: FileDiff[];
@@ -84,6 +109,11 @@ export const FileDiffList = memo(function FileDiffList({
     }
     return { totalAdditions: additions, totalDeletions: deletions };
   }, [fileDiffs]);
+  const inlineCommentDrafts = useInlineCommentDraftStore((store) => store.drafts);
+  const inlineCommentsByFile = useMemo(
+    () => groupInlineCommentsByFile(inlineCommentDrafts, diffScope),
+    [diffScope, inlineCommentDrafts],
+  );
   const reserveConflictSlot = conflictedFiles.size > 0;
 
   return (
@@ -126,6 +156,7 @@ export const FileDiffList = memo(function FileDiffList({
           key={diff.file}
           diff={diff}
           diffScope={diffScope}
+          fileComments={inlineCommentsByFile.get(diff.file) ?? EMPTY_INLINE_COMMENTS}
           viewState={{
             isConflicted: conflictedFiles.has(diff.file),
             reserveConflictSlot,

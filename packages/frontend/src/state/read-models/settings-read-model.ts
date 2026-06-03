@@ -47,7 +47,7 @@ export const createReusablePromptDraft = (): ReusablePrompt => {
   };
 };
 
-export const isValidReusablePromptName = (name: string): boolean =>
+const isValidReusablePromptName = (name: string): boolean =>
   REUSABLE_PROMPT_TRIGGER_PATTERN.test(name.trim());
 
 export const buildReusablePromptValidationErrors = (

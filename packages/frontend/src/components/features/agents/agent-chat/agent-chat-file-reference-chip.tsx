@@ -29,7 +29,7 @@ type AgentChatFileReferenceChipProps = {
   tooltip?: boolean;
 };
 
-export function AgentChatInlineFileReferenceChip({
+function AgentChatInlineFileReferenceChip({
   file,
   label,
   className,

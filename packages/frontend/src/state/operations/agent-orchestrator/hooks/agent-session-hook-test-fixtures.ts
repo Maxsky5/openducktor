@@ -30,9 +30,7 @@ export const createTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard =
   ...overrides,
 });
 
-export const createSessionRecord = (
-  overrides: Partial<AgentSessionRecord> = {},
-): AgentSessionRecord => ({
+const createSessionRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   role: "build",

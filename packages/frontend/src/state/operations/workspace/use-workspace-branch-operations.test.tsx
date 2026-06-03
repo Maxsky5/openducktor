@@ -1,15 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { useRef } from "react";
 import { toast } from "sonner";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations";
-import {
-  createDeferred,
-  createWorkspaceHostClient,
-  flush,
-  IsolatedQueryWrapper,
-} from "./workspace-hook-test-utils";
-import type { PreparedRepoSwitch } from "./workspace-operations-types";
+import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
+import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
 
 let workspaceHost = createWorkspaceHostClient();
 
@@ -26,11 +20,9 @@ const createBranchHarness = (initialArgs: BranchHarnessArgs) => {
   let currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: BranchHarnessArgs }) => {
-    const preparedRepoSwitchRef = useRef<PreparedRepoSwitch | null>(null);
     latest = useWorkspaceBranchOperations({
       activeRepo: args.activeRepo,
       hostClient: workspaceHost,
-      preparedRepoSwitchRef,
       clearBranchSyncDegraded: () => {},
     });
     return null;

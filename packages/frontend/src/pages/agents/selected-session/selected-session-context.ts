@@ -183,7 +183,7 @@ export const keepStablePendingInputCounts = (
   return next;
 };
 
-export const buildSubagentPendingApprovalCountByExternalSessionId = (
+const buildSubagentPendingApprovalCountByExternalSessionId = (
   sessions: AgentSessionSummary[],
   subagentPendingApprovalsByExternalSessionId:
     | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
@@ -211,7 +211,7 @@ export const buildSubagentPendingApprovalCountByExternalSessionId = (
   return Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS;
 };
 
-export const buildSubagentPendingQuestionCountByExternalSessionId = (
+const buildSubagentPendingQuestionCountByExternalSessionId = (
   sessions: AgentSessionSummary[],
   subagentPendingQuestionsByExternalSessionId:
     | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]

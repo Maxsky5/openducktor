@@ -6,10 +6,8 @@ import { act, createElement, type ReactNode, useEffect, useState } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import { filesystemQueryKeys } from "@/state/queries/filesystem";
-import {
-  RepositoryConfigurationSection,
-  resolveFolderPickerInitialPath,
-} from "./settings-repository-configuration-section";
+import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
+import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
 enableReactActEnvironment();
 

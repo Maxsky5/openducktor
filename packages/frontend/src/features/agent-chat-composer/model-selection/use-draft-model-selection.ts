@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { isSameSelection } from "@/features/session-start";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveDraftModelSelection } from "./model-selection-preferences";
@@ -36,8 +36,12 @@ export const useAgentStudioDraftModelSelectionState = ({
     roleDefaultSelection: AgentModelSelection | null;
   }) => void;
 } => {
-  const previousWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
-  const previousWorkspaceRepoPathForDefaultsRef = useRef<string | null>(workspaceRepoPath);
+  const [draftWorkspaceRepoPath, setDraftWorkspaceRepoPath] = useState<string | null>(
+    workspaceRepoPath,
+  );
+  const [defaultsWorkspaceRepoPath, setDefaultsWorkspaceRepoPath] = useState<string | null>(
+    workspaceRepoPath,
+  );
   const [
     isAwaitingRepoSettingsForWorkspaceRepoPath,
     setIsAwaitingRepoSettingsForWorkspaceRepoPath,
@@ -48,30 +52,23 @@ export const useAgentStudioDraftModelSelectionState = ({
     Record<AgentRole, boolean>
   >(emptyDraftSelectionTouchedByRole);
 
-  useEffect(() => {
-    if (previousWorkspaceRepoPathRef.current === workspaceRepoPath) {
-      return;
-    }
-    previousWorkspaceRepoPathRef.current = workspaceRepoPath;
+  const hasDraftSelectionForWorkspaceRepoPath = draftWorkspaceRepoPath === workspaceRepoPath;
+
+  if (!hasDraftSelectionForWorkspaceRepoPath) {
+    setDraftWorkspaceRepoPath(workspaceRepoPath);
     setDraftSelectionByRole(emptyDraftSelections());
     setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
-  }, [workspaceRepoPath]);
+  }
 
-  useEffect(() => {
-    if (previousWorkspaceRepoPathForDefaultsRef.current !== workspaceRepoPath) {
-      previousWorkspaceRepoPathForDefaultsRef.current = workspaceRepoPath;
-      setIsAwaitingRepoSettingsForWorkspaceRepoPath(
-        Boolean(workspaceRepoPath) && repoSettings == null,
-      );
-      return;
-    }
-    if (isAwaitingRepoSettingsForWorkspaceRepoPath && repoSettings != null) {
-      setIsAwaitingRepoSettingsForWorkspaceRepoPath(false);
-    }
-  }, [workspaceRepoPath, isAwaitingRepoSettingsForWorkspaceRepoPath, repoSettings]);
+  if (defaultsWorkspaceRepoPath !== workspaceRepoPath) {
+    setDefaultsWorkspaceRepoPath(workspaceRepoPath);
+    setIsAwaitingRepoSettingsForWorkspaceRepoPath(
+      Boolean(workspaceRepoPath) && repoSettings == null,
+    );
+  } else if (isAwaitingRepoSettingsForWorkspaceRepoPath && repoSettings != null) {
+    setIsAwaitingRepoSettingsForWorkspaceRepoPath(false);
+  }
 
-  const hasDraftSelectionForWorkspaceRepoPath =
-    previousWorkspaceRepoPathRef.current === workspaceRepoPath;
   const isDraftSelectionTouched = hasDraftSelectionForWorkspaceRepoPath
     ? draftSelectionTouchedByRole[role]
     : false;

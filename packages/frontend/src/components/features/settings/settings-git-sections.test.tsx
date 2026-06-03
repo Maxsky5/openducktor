@@ -379,6 +379,9 @@ describe("settings git sections", () => {
       await waitFor(() => {
         expect(rendered?.container.textContent).toContain(detectedMessage);
       });
+      const detectButton = screen.getByRole("button", { name: /detect from origin/i });
+      expect(detectButton).toBeInstanceOf(HTMLButtonElement);
+      expect((detectButton as HTMLButtonElement).disabled).toBe(false);
     } finally {
       rendered?.unmount();
     }

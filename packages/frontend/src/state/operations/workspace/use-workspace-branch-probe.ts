@@ -47,7 +47,11 @@ export function useWorkspaceBranchProbe({
   const activeRepoPath =
     activeWorkspace?.repoPath ?? branchProbeController.currentWorkspaceRepoPathRef.current;
   const queryClient = useQueryClient();
-  const probeGateRef = useRef(createProbeGateController());
+  const probeGateRef = useRef<ReturnType<typeof createProbeGateController> | null>(null);
+  if (probeGateRef.current === null) {
+    probeGateRef.current = createProbeGateController();
+  }
+  const probeGate = probeGateRef.current;
   const lastProbeErrorToastAtRef = useRef<number | null>(null);
   const lastProbeErrorSignatureRef = useRef<string | null>(null);
   const previousWorkspaceRepoPathRef = useRef(activeRepoPath);
@@ -67,10 +71,10 @@ export function useWorkspaceBranchProbe({
     }
 
     previousWorkspaceRepoPathRef.current = activeRepoPath;
-    probeGateRef.current.reset();
+    probeGate.reset();
     lastProbeErrorToastAtRef.current = null;
     lastProbeErrorSignatureRef.current = null;
-  }, [activeRepoPath]);
+  }, [activeRepoPath, probeGate]);
 
   const reportBranchProbeError = useCallback((error: BranchProbeError): void => {
     const nowMs = Date.now();
@@ -104,7 +108,7 @@ export function useWorkspaceBranchProbe({
         isSwitchingWorkspace: probeGatesRef.current.isSwitchingWorkspace,
         isSwitchingBranch: probeGatesRef.current.isSwitchingBranch,
         isLoadingBranches: probeGatesRef.current.isLoadingBranches,
-        isSyncInFlight: probeGateRef.current.isInFlight(),
+        isSyncInFlight: probeGate.isInFlight(),
       })
     ) {
       return {
@@ -120,7 +124,7 @@ export function useWorkspaceBranchProbe({
       };
     }
 
-    const probeToken = probeGateRef.current.begin();
+    const probeToken = probeGate.begin();
 
     try {
       await queryClient.invalidateQueries({
@@ -130,49 +134,49 @@ export function useWorkspaceBranchProbe({
       });
 
       const current = await loadCurrentBranchFromQuery(queryClient, repoPath, hostClient);
-
+      let outcome: BranchProbeOutcome;
       if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
-        return {
+        outcome = {
           status: "skipped",
           reason: "repo_changed",
         };
-      }
+      } else {
+        const hasChanged = hasBranchIdentityChanged(
+          current,
+          branchProbeController.lastKnownBranchNameRef.current,
+          branchProbeController.lastKnownDetachedRef.current,
+          branchProbeController.lastKnownRevisionRef.current,
+        );
 
-      const hasChanged = hasBranchIdentityChanged(
-        current,
-        branchProbeController.lastKnownBranchNameRef.current,
-        branchProbeController.lastKnownDetachedRef.current,
-        branchProbeController.lastKnownRevisionRef.current,
-      );
+        if (!hasChanged) {
+          outcome = { status: "unchanged" };
+        } else {
+          try {
+            await branchProbeController.refreshBranchesForRepo(repoPath);
 
-      if (hasChanged) {
-        try {
-          await branchProbeController.refreshBranchesForRepo(repoPath);
-
-          if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
-            return {
-              status: "skipped",
-              reason: "repo_changed",
-            };
+            outcome =
+              branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath
+                ? {
+                    status: "skipped",
+                    reason: "repo_changed",
+                  }
+                : { status: "synced" };
+          } catch (error) {
+            outcome =
+              branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath
+                ? {
+                    status: "skipped",
+                    reason: "repo_changed",
+                  }
+                : {
+                    status: "degraded",
+                    error: classifyBranchProbeError(error, "branch_refresh"),
+                  };
           }
-
-          return { status: "synced" };
-        } catch (error) {
-          if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
-            return {
-              status: "skipped",
-              reason: "repo_changed",
-            };
-          }
-
-          return {
-            status: "degraded",
-            error: classifyBranchProbeError(error, "branch_refresh"),
-          };
         }
       }
 
-      return { status: "unchanged" };
+      return outcome;
     } catch (error) {
       if (branchProbeController.currentWorkspaceRepoPathRef.current !== repoPath) {
         return {
@@ -186,9 +190,9 @@ export function useWorkspaceBranchProbe({
         error: classifyBranchProbeError(error, "current_branch_probe"),
       };
     } finally {
-      probeGateRef.current.finish(probeToken);
+      probeGate.finish(probeToken);
     }
-  }, [branchProbeController, hostClient, queryClient]);
+  }, [branchProbeController, hostClient, probeGate, queryClient]);
 
   const syncExternalBranchChange = useCallback(async (): Promise<void> => {
     const outcome = await probeExternalBranchChange();

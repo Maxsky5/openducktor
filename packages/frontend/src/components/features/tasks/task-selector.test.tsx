@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { createTaskCardFixture } from "@/pages/agents/agent-studio-test-utils";
-import { buildTaskSelectorOptions } from "./task-selector";
+import { buildTaskSelectorOptions } from "./task-selector-model";
 
 const tasks: TaskCard[] = [
   createTaskCardFixture({

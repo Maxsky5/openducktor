@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FileDiff } from "@openducktor/contracts";
-import { buildDiffPreloadEntries } from "./diff-preload-queue";
+import { buildDiffPreloadEntries } from "./diff-preload-queue-model";
 
 const buildDiff = (file: string, diff: string): FileDiff => ({
   file,

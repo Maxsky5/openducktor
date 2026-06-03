@@ -229,16 +229,23 @@ const confirmSessionStartModal = async ({
 }): Promise<void> => {
   await waitForSessionStartModal(harness);
 
-  await harness.run((state) => {
-    if (startMode !== "reuse") {
+  if (startMode !== "reuse") {
+    await harness.run((state) => {
       state.sessionStartModal?.onSelectAgent(agent);
+    });
+    await harness.run((state) => {
       state.sessionStartModal?.onSelectModel(modelId);
+    });
+    await harness.run((state) => {
       state.sessionStartModal?.onSelectVariant(variant);
-    }
-    if (startMode !== "fresh" && sourceExternalSessionId) {
+    });
+  }
+
+  if (startMode !== "fresh" && sourceExternalSessionId) {
+    await harness.run((state) => {
       state.sessionStartModal?.onSelectSourceSession(sourceExternalSessionId);
-    }
-  });
+    });
+  }
 
   await harness.waitFor((state) => {
     const modal = state.sessionStartModal;
@@ -663,6 +670,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.mount();
+    await harness.waitFor((state) => state !== null);
     await harness.run(async (state) => {
       state.handleCreateSession({
         id: "build:build_after_qa_rejected:fresh",
@@ -723,6 +731,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.mount();
+    await harness.waitFor((state) => state !== null);
     await harness.run(async (state) => {
       state.handleCreateSession({
         id: "build:build_after_human_request_changes:fresh",

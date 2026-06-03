@@ -99,8 +99,16 @@ export function useAgentStudioDocuments({
     : undefined;
 
   const documentContextKey = `${taskId}:${activeSession?.externalSessionId ?? ""}`;
-  const processedDocumentToolEventsRef = useRef(new Set<string>());
-  const refreshedTaskVersionsRef = useRef(new Set<string>());
+  const processedDocumentToolEventsRef = useRef<Set<string> | null>(null);
+  if (processedDocumentToolEventsRef.current === null) {
+    processedDocumentToolEventsRef.current = new Set<string>();
+  }
+  const processedDocumentToolEvents = processedDocumentToolEventsRef.current;
+  const refreshedTaskVersionsRef = useRef<Set<string> | null>(null);
+  if (refreshedTaskVersionsRef.current === null) {
+    refreshedTaskVersionsRef.current = new Set<string>();
+  }
+  const refreshedTaskVersions = refreshedTaskVersionsRef.current;
   const previousSessionIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
@@ -123,12 +131,17 @@ export function useAgentStudioDocuments({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Context key intentionally controls reset boundary.
   useEffect(() => {
-    processedDocumentToolEventsRef.current.clear();
-    refreshedTaskVersionsRef.current.clear();
+    processedDocumentToolEvents.clear();
+    refreshedTaskVersions.clear();
     previousSessionIdRef.current = null;
     previousMessagesRef.current = null;
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
-  }, [documentContextKey]);
+  }, [
+    documentContextKey,
+    processedDocumentToolEvents,
+    refreshedTaskVersions,
+    workflowAliasMetadataReady,
+  ]);
 
   useEffect(() => {
     const previousWorkflowAliasMetadataReady = previousWorkflowAliasMetadataReadyRef.current;
@@ -150,15 +163,15 @@ export function useAgentStudioDocuments({
       return;
     }
 
-    if (refreshedTaskVersionsRef.current.has(taskDocumentVersionKey)) {
+    if (refreshedTaskVersions.has(taskDocumentVersionKey)) {
       return;
     }
 
     const accepted = [reloadDocument("spec"), reloadDocument("plan"), reloadDocument("qa")];
     if (accepted.every(Boolean)) {
-      refreshedTaskVersionsRef.current.add(taskDocumentVersionKey);
+      refreshedTaskVersions.add(taskDocumentVersionKey);
     }
-  }, [reloadDocument, taskDocumentVersionKey, taskId]);
+  }, [refreshedTaskVersions, reloadDocument, taskDocumentVersionKey, taskId]);
 
   useEffect(() => {
     if (!activeSession || !taskId || !workspaceRepoPath) {
@@ -184,7 +197,7 @@ export function useAgentStudioDocuments({
 
     forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
       const eventKey = `${activeSession.externalSessionId}:${message.id}`;
-      if (processedDocumentToolEventsRef.current.has(eventKey)) {
+      if (processedDocumentToolEvents.has(eventKey)) {
         return;
       }
 
@@ -233,7 +246,7 @@ export function useAgentStudioDocuments({
       }
 
       if (reloadDocument(target.section)) {
-        processedDocumentToolEventsRef.current.add(eventKey);
+        processedDocumentToolEvents.add(eventKey);
       }
     });
 
@@ -243,6 +256,7 @@ export function useAgentStudioDocuments({
     workspaceRepoPath,
     activeSession,
     applyDocumentUpdate,
+    processedDocumentToolEvents,
     planDoc,
     qaDoc,
     reloadDocument,

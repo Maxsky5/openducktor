@@ -11,22 +11,11 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { AgentStudioSessionSelectorModel } from "./agent-studio-header.types";
+import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
 
 type SessionHistoryMenuProps = {
   selector: AgentStudioSessionSelectorModel;
   agentStudioReady: boolean;
-};
-
-export const deriveSessionHistorySelectionFocusBehavior = (params: {
-  currentValue: string;
-  nextValue: string;
-  shouldAutofocusComposerForValue: (value: string) => boolean;
-}): "composer" | "trigger" | "none" => {
-  if (params.nextValue === params.currentValue) {
-    return "none";
-  }
-
-  return params.shouldAutofocusComposerForValue(params.nextValue) ? "composer" : "trigger";
 };
 
 export function SessionHistoryMenu({

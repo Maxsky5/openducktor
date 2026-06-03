@@ -19,7 +19,6 @@ export {
   createWorktreeRuntimeFixture,
   persistedSessionFixture,
   taskFixture,
-  taskFixture2,
   taskFixture2WithPersistedBuildSession,
   taskFixtureWithPersistedBuildSession,
 } from "./use-agent-orchestrator-operations.test-fixtures";

@@ -86,6 +86,8 @@ export function useAgentChatHistoryWindow({
   const latestTurnStart = getLatestTurnStart();
   const shouldUsePendingLatestTurnStart = pendingLatestResetRef.current && rows.length > 0;
   const didSessionChange = previousSessionIdRef.current !== activeExternalSessionId;
+  const shouldFlagPendingLatestReset = isSessionViewLoading && rows.length === 0;
+  const shouldClampToLatestTurnStart = rows.length > 0 && turnStartRef.current > latestTurnStart;
   const effectiveTurnStart = resolveAgentChatEffectiveTurnStart({
     activeExternalSessionId,
     previousSessionId: previousSessionIdRef.current,
@@ -199,17 +201,33 @@ export function useAgentChatHistoryWindow({
     });
   }, [messagesContainerRef, revealOlderTurns, userScrolledRef]);
 
+  const cancelScheduledFrames = useCallback(() => {
+    if (fillFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(fillFrameRef.current);
+      fillFrameRef.current = null;
+    }
+    if (continuationFrameRef.current !== null) {
+      globalThis.cancelAnimationFrame(continuationFrameRef.current);
+      continuationFrameRef.current = null;
+    }
+  }, []);
+
   // Intentionally runs after every commit so pending scroll restoration and
   // deferred-session latest-turn rebasing happen on the very next DOM update.
   useLayoutEffect(() => {
     if (didSessionChange) {
       previousSessionIdRef.current = activeExternalSessionId;
-      pendingLatestResetRef.current = isSessionViewLoading && rows.length === 0;
+      pendingLatestResetRef.current = shouldFlagPendingLatestReset;
+    } else if (shouldFlagPendingLatestReset) {
+      pendingLatestResetRef.current = true;
     } else if (shouldUsePendingLatestTurnStart) {
       pendingLatestResetRef.current = false;
     }
 
-    if ((didSessionChange || shouldUsePendingLatestTurnStart) && turnStart !== latestTurnStart) {
+    if (
+      (didSessionChange || shouldUsePendingLatestTurnStart || shouldClampToLatestTurnStart) &&
+      turnStart !== latestTurnStart
+    ) {
       setTurnStartState(latestTurnStart);
     }
 
@@ -249,22 +267,6 @@ export function useAgentChatHistoryWindow({
   });
 
   useEffect(() => {
-    if (isSessionViewLoading && rows.length === 0) {
-      pendingLatestResetRef.current = true;
-    }
-  }, [isSessionViewLoading, rows.length]);
-
-  useEffect(() => {
-    if (rows.length === 0) {
-      return;
-    }
-
-    if (turnStartRef.current > latestTurnStart) {
-      setTurnStartState(latestTurnStart);
-    }
-  }, [latestTurnStart, rows.length, setTurnStartState]);
-
-  useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
@@ -302,16 +304,7 @@ export function useAgentChatHistoryWindow({
     scheduleFill();
   });
 
-  useEffect(() => {
-    return () => {
-      if (fillFrameRef.current !== null) {
-        globalThis.cancelAnimationFrame(fillFrameRef.current);
-      }
-      if (continuationFrameRef.current !== null) {
-        globalThis.cancelAnimationFrame(continuationFrameRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => cancelScheduledFrames, [cancelScheduledFrames]);
 
   const windowStart = turns[effectiveTurnStart]?.start ?? 0;
   const windowedRows = useMemo(() => rows.slice(windowStart), [rows, windowStart]);

@@ -316,7 +316,7 @@ export const buildDiagnosticsToastIssues = ({
   }, []);
 };
 
-export const hasRuntimeHealthTimeoutIssue = (
+const hasRuntimeHealthTimeoutIssue = (
   runtimeDefinitions: RuntimeDescriptor[],
   runtimeHealthByRuntime: RepoRuntimeHealthMap,
 ): boolean => {

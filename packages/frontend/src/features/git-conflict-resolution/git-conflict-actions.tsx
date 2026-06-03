@@ -1,22 +1,7 @@
 import { LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
 import { memo, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import type { GitConflictAction, GitConflictOperation } from "@/features/agent-studio-git";
-import { getGitConflictCopy } from "./conflict-copy";
-
-export type GitConflictActionsModel = {
-  isDisabled: boolean;
-  abort: {
-    isPending: boolean;
-    label: string;
-    onClick: () => void;
-  };
-  askBuilder: {
-    isPending: boolean;
-    label: string;
-    onClick: () => void;
-  };
-};
+import type { GitConflictActionsModel } from "./git-conflict-actions-model";
 
 type GitConflictActionsProps = {
   actions: GitConflictActionsModel;
@@ -25,35 +10,6 @@ type GitConflictActionsProps = {
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
 };
-
-export const createGitConflictActionsModel = ({
-  operation,
-  isHandlingConflict,
-  conflictAction,
-  onAbort,
-  onAskBuilder,
-}: {
-  operation: GitConflictOperation;
-  isHandlingConflict: boolean;
-  conflictAction: GitConflictAction | undefined;
-  onAbort: () => void;
-  onAskBuilder: () => void;
-}): GitConflictActionsModel => ({
-  isDisabled: isHandlingConflict,
-  abort: {
-    isPending: conflictAction === "abort",
-    label: conflictAction === "abort" ? "Aborting..." : getGitConflictCopy(operation).abortLabel,
-    onClick: onAbort,
-  },
-  askBuilder: {
-    isPending: conflictAction === "ask_builder",
-    label:
-      conflictAction === "ask_builder"
-        ? "Sending to Builder..."
-        : getGitConflictCopy(operation).askBuilderLabel,
-    onClick: onAskBuilder,
-  },
-});
 
 export const GitConflictActions = memo(function GitConflictActions({
   actions,

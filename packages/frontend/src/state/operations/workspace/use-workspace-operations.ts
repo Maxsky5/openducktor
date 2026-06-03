@@ -6,7 +6,6 @@ import { useWorkspaceBranchOperations } from "./use-workspace-branch-operations"
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
 import type {
-  PreparedRepoSwitch,
   UseWorkspaceOperationsResult,
   WorkspaceOperationsHostClient,
 } from "./workspace-operations-types";
@@ -27,11 +26,25 @@ export function useWorkspaceOperations({
   hostClient = host,
 }: UseWorkspaceOperationsArgs): UseWorkspaceOperationsResult {
   const activeRepo = activeWorkspace?.repoPath ?? null;
-  const [branchSyncDegraded, setBranchSyncDegraded] = useState(false);
-  const preparedRepoSwitchRef = useRef<PreparedRepoSwitch | null>(null);
+  const activeRepoRef = useRef(activeRepo);
+  const [branchSyncDegradedState, setBranchSyncDegradedState] = useState<{
+    repoPath: string | null;
+    value: boolean;
+  }>({
+    repoPath: activeRepo,
+    value: false,
+  });
+  activeRepoRef.current = activeRepo;
+
+  const setBranchSyncDegraded = useCallback((value: boolean): void => {
+    const repoPath = activeRepoRef.current;
+    setBranchSyncDegradedState((current) =>
+      current.repoPath === repoPath && current.value === value ? current : { repoPath, value },
+    );
+  }, []);
   const clearBranchSyncDegraded = useCallback((): void => {
     setBranchSyncDegraded(false);
-  }, []);
+  }, [setBranchSyncDegraded]);
 
   const {
     branches,
@@ -45,7 +58,6 @@ export function useWorkspaceOperations({
   } = useWorkspaceBranchOperations({
     activeRepo,
     hostClient,
-    preparedRepoSwitchRef,
     clearBranchSyncDegraded,
   });
 
@@ -65,13 +77,15 @@ export function useWorkspaceOperations({
     clearActiveBeadsCheck,
     clearBranchData,
     hostClient,
-    preparedRepoSwitchRef,
   });
 
   const resolvedActiveWorkspace = useMemo<WorkspaceRecord | null>(
     () => workspaces.find((workspace) => workspace.repoPath === activeRepo) ?? null,
     [activeRepo, workspaces],
   );
+
+  const branchSyncDegraded =
+    branchSyncDegradedState.repoPath === activeRepo ? branchSyncDegradedState.value : false;
 
   useWorkspaceBranchProbe({
     activeWorkspace: resolvedActiveWorkspace,

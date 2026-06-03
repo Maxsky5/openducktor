@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { useRef } from "react";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceSelectionOperations } from "./use-workspace-selection-operations";
@@ -7,10 +6,9 @@ import {
   createDeferred,
   createWorkspaceHostClient,
   createWorkspaceRuntimeSummary,
-  IsolatedQueryWrapper,
   workspace,
-} from "./workspace-hook-test-utils";
-import type { PreparedRepoSwitch } from "./workspace-operations-types";
+} from "./workspace-hook-test-fixtures";
+import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
 
 type EmptyObject = Record<string, never>;
 
@@ -59,7 +57,7 @@ const normalizeSelectionArgs = ({
   ...rest
 }: SelectionHarnessArgs): Omit<
   Parameters<typeof useWorkspaceSelectionOperations>[0],
-  "hostClient" | "preparedRepoSwitchRef"
+  "hostClient"
 > => ({
   ...rest,
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
@@ -75,11 +73,9 @@ const createSelectionHarness = (initialArgs: SelectionHarnessArgs) => {
   const currentArgs = initialArgs;
 
   const Harness = ({ args }: { args: SelectionHarnessArgs }) => {
-    const preparedRepoSwitchRef = useRef<PreparedRepoSwitch | null>(null);
     latest = useWorkspaceSelectionOperations({
       ...normalizeSelectionArgs(args),
       hostClient: workspaceHost,
-      preparedRepoSwitchRef,
     });
     return null;
   };

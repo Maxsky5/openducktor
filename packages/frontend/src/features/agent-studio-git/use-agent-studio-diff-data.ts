@@ -4,7 +4,10 @@ import type { DiffDataState, UseAgentStudioDiffDataInput } from "./contracts";
 import { useAgentStudioDiffController } from "./loading/use-diff-controller";
 import type { DiffRefreshContext } from "./refresh/refresh-types";
 import { useAgentStudioDiffPolling } from "./refresh/use-diff-polling";
-import { useAgentStudioDiffRefreshController } from "./refresh/use-diff-refresh-controller";
+import {
+  useAgentStudioDiffRefreshController,
+  useAgentStudioDiffRefreshUiState,
+} from "./refresh/use-diff-refresh-controller";
 
 export function useAgentStudioDiffData({
   repoPath,
@@ -31,6 +34,8 @@ export function useAgentStudioDiffData({
       branchIdentityKey ?? ""
     }`;
   }, [branchIdentityKey, effectiveRepoPath, targetBranch, worktreePath, worktreeResolutionTaskId]);
+  const refreshContextKey = requestContextKey;
+  const refreshUi = useAgentStudioDiffRefreshUiState(refreshContextKey);
 
   const {
     activeScopeState,
@@ -46,6 +51,7 @@ export function useAgentStudioDiffData({
     workingDir: worktreePath,
     requestContextKey,
     shouldBlockDiffLoading: shouldBlockDiffLoading || preconditionError != null,
+    onLoadApplied: refreshUi.clearRefreshErrorForContext,
   });
   const refreshContext = useMemo<DiffRefreshContext | null>(() => {
     if (requestContextKey == null || effectiveRepoPath == null) {
@@ -60,18 +66,15 @@ export function useAgentStudioDiffData({
       scope: diffScope,
     };
   }, [diffScope, effectiveRepoPath, requestContextKey, targetBranch, worktreePath]);
-  const refreshContextKey = refreshContext?.requestContextKey ?? null;
-  const { refresh, refreshError, isRefreshing } = useAgentStudioDiffRefreshController({
+  const { refresh } = useAgentStudioDiffRefreshController({
     refreshContext,
-    refreshContextKey,
     preconditionError,
     shouldBlockDiffLoading,
     worktreeResolutionError,
     retryWorktreeResolution,
-    isControllerLoading: state.isLoading,
-    activeScopeError: activeScopeState.error,
     refreshActiveScope,
     refreshActiveScopeSummary,
+    refreshUi,
   });
   const scheduledPoll = useCallback(() => {
     void refresh("scheduled");
@@ -85,8 +88,11 @@ export function useAgentStudioDiffData({
   });
 
   const displayError =
-    preconditionError ?? worktreeResolutionError ?? refreshError ?? activeScopeState.error;
-  const isLoading = state.isLoading || isWorktreeResolutionResolving || isRefreshing;
+    preconditionError ??
+    worktreeResolutionError ??
+    refreshUi.refreshError ??
+    activeScopeState.error;
+  const isLoading = state.isLoading || isWorktreeResolutionResolving || refreshUi.isRefreshing;
 
   return useMemo<DiffDataState>(
     () => ({

@@ -9,7 +9,7 @@ import {
   useActiveWorkspaceContext,
   useRuntimeAvailabilityContext,
 } from "../app-state-contexts";
-import { useChecks } from "../operations";
+import { useChecks } from "../operations/workspace/use-checks";
 
 type ChecksStateProviderProps = PropsWithChildren<{
   checkRepoRuntimeHealth: (

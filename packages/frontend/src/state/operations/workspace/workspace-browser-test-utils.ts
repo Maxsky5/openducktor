@@ -1,6 +1,6 @@
 import { mock } from "bun:test";
 import { act } from "react";
-import { flush } from "./workspace-hook-test-utils";
+import { flush } from "./workspace-hook-test-fixtures";
 
 export const createBrowserListenerHarness = (
   visibilityState: DocumentVisibilityState = "visible",

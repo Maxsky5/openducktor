@@ -1,8 +1,6 @@
-export const KANBAN_LANE_WIDTH_PX = 328;
+const KANBAN_LANE_WIDTH_PX = 328;
 export const KANBAN_LANE_WIDTH_CLASS = "w-[328px] min-w-[328px]";
-export const KANBAN_LANE_HEADER_HEIGHT_PX = 72;
 export const KANBAN_LANE_HEADER_HEIGHT_CLASS = "h-[72px]";
-export const KANBAN_COLLAPSED_LANE_WIDTH_PX = 36;
 export const KANBAN_COLLAPSED_LANE_WIDTH_CLASS = "w-[36px] min-w-[36px]";
 
 const KANBAN_LANE_BORDER_PX = 1;

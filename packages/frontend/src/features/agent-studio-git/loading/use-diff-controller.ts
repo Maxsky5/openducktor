@@ -20,6 +20,7 @@ type UseAgentStudioDiffControllerArgs = {
   workingDir: string | null;
   requestContextKey: string | null;
   shouldBlockDiffLoading: boolean;
+  onLoadApplied?: (requestContextKey: string) => void;
 };
 
 type UseAgentStudioDiffControllerResult = {
@@ -42,6 +43,7 @@ export function useAgentStudioDiffController({
   workingDir,
   requestContextKey,
   shouldBlockDiffLoading,
+  onLoadApplied,
 }: UseAgentStudioDiffControllerArgs): UseAgentStudioDiffControllerResult {
   const queryClient = useQueryClient();
   const [diffScope, setDiffScope] = useState<DiffScope>("uncommitted");
@@ -107,9 +109,26 @@ export function useAgentStudioDiffController({
     clearScopeInvalidation,
     finishRequest,
     markScopeInvalidated,
+    onLoadApplied,
     setBatchLoading,
     shouldApplyResult,
   });
+
+  const [resetContextKey, setResetContextKey] = useState<string | null>(requestContextKey);
+
+  if (!repoPath) {
+    if (resetContextKey !== null) {
+      setResetContextKey(null);
+      resetToDefaultScope();
+      resetControllerState();
+    }
+  } else if (resetContextKey === null) {
+    setResetContextKey(requestContextKey);
+  } else if (resetContextKey !== requestContextKey) {
+    setResetContextKey(requestContextKey);
+    resetToDefaultScope();
+    resetControllerState();
+  }
 
   useEffect(() => {
     if (!pendingFullReload) {
@@ -128,7 +147,7 @@ export function useAgentStudioDiffController({
     });
   }, [consumePendingFullReload, loadData, pendingFullReload]);
 
-  useEffect(() => {
+  const syncDiffRequestContext = useCallback(() => {
     const previousContextKey = requestContextKeyRef.current;
     const hasContextChanged =
       previousContextKey !== null && previousContextKey !== requestContextKey;
@@ -136,18 +155,11 @@ export function useAgentStudioDiffController({
 
     if (!repoPath) {
       requestContextKeyRef.current = null;
-      resetToDefaultScope();
-      resetControllerState();
       return;
     }
 
     const scope = hasContextChanged ? "uncommitted" : diffScopeRef.current;
     const shouldHydrateFromCache = previousContextKey === null || hasContextChanged;
-
-    if (hasContextChanged) {
-      resetToDefaultScope();
-      resetControllerState();
-    }
 
     if (!shouldBlockDiffLoading) {
       void loadData(true, {
@@ -155,20 +167,13 @@ export function useAgentStudioDiffController({
         targetBranch,
         workingDir,
         scope,
+        requestContextKey,
         force: hasContextChanged,
         hydrateCachedFullLoad: shouldHydrateFromCache,
       });
     }
-  }, [
-    loadData,
-    repoPath,
-    requestContextKey,
-    resetControllerState,
-    resetToDefaultScope,
-    shouldBlockDiffLoading,
-    targetBranch,
-    workingDir,
-  ]);
+  }, [loadData, repoPath, requestContextKey, shouldBlockDiffLoading, targetBranch, workingDir]);
+  useEffect(syncDiffRequestContext, [syncDiffRequestContext]);
 
   useEffect(() => {
     if (!repoPath || shouldBlockDiffLoading) {
@@ -186,6 +191,7 @@ export function useAgentStudioDiffController({
       targetBranch,
       workingDir,
       scope: diffScope,
+      requestContextKey,
       force: shouldForce,
     });
   }, [
@@ -193,6 +199,7 @@ export function useAgentStudioDiffController({
     isScopeInvalidated,
     loadData,
     repoPath,
+    requestContextKey,
     shouldBlockDiffLoading,
     state.loadedByScope,
     targetBranch,

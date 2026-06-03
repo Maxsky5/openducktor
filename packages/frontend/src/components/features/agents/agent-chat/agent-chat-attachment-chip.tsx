@@ -152,6 +152,7 @@ export function AgentChatAttachmentChip(
               ) : showPreviewVideo ? (
                 <video
                   src={resolvedPreviewSrc ?? undefined}
+                  aria-label={`Preview video ${attachment.name}`}
                   className="h-full w-full object-cover"
                   muted
                   playsInline
@@ -205,6 +206,7 @@ export function AgentChatAttachmentChip(
               ) : (
                 <video
                   src={resolvedPreviewSrc}
+                  aria-label={`Preview video ${attachment.name}`}
                   className="max-h-[75vh] w-full object-contain"
                   controls
                   autoPlay

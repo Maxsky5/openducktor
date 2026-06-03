@@ -13,6 +13,7 @@ import {
   buildDevServerDraftValidationMap,
   parseHookLines,
 } from "@/state/read-models/settings-read-model";
+import { resolveFolderPickerInitialPath } from "./settings-repository-configuration-section-model";
 
 type RepositoryConfigurationSectionProps = {
   selectedRepoConfig: RepoConfig | null;
@@ -33,18 +34,6 @@ type RepositoryConfigurationSectionProps = {
 };
 
 type UpdateSelectedRepoConfig = RepositoryConfigurationSectionProps["onUpdateSelectedRepoConfig"];
-
-export function resolveFolderPickerInitialPath(
-  selectedRepoConfig: RepoConfig,
-  selectedRepoEffectiveWorktreeBasePath: string | null,
-): string | undefined {
-  const configuredPath = selectedRepoConfig.worktreeBasePath?.trim();
-  if (configuredPath) {
-    return configuredPath;
-  }
-
-  return selectedRepoEffectiveWorktreeBasePath ?? undefined;
-}
 
 export function RepositoryConfigurationSection({
   selectedRepoConfig,

@@ -1,5 +1,5 @@
 import type { DevServerScriptState } from "@openducktor/contracts";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { selectDefaultDevServerTab } from "./use-agent-studio-dev-server-panel-helpers";
 
 type SelectedScriptMemory = Map<string, string>;
@@ -22,13 +22,15 @@ export const useAgentStudioDevServerPanelSelection = ({
   scripts,
   syncSelectedScriptTerminalBuffer,
 }: UseAgentStudioDevServerPanelSelectionArgs): UseAgentStudioDevServerPanelSelectionResult => {
-  const selectionMemoryRef = useRef<SelectedScriptMemory>(new Map());
+  const selectionMemoryRef = useRef<SelectedScriptMemory | null>(null);
+  if (selectionMemoryRef.current === null) {
+    selectionMemoryRef.current = new Map();
+  }
+  const selectionMemory = selectionMemoryRef.current;
   const selectedScriptIdRef = useRef<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
 
-  const rememberedScriptId = taskMemoryKey
-    ? (selectionMemoryRef.current.get(taskMemoryKey) ?? null)
-    : null;
+  const rememberedScriptId = taskMemoryKey ? (selectionMemory.get(taskMemoryKey) ?? null) : null;
 
   const effectiveSelectedScriptId = useMemo(() => {
     return selectDefaultDevServerTab(scripts, selectedScriptId ?? rememberedScriptId);
@@ -37,26 +39,21 @@ export const useAgentStudioDevServerPanelSelection = ({
   useLayoutEffect(() => {
     selectedScriptIdRef.current = effectiveSelectedScriptId;
     syncSelectedScriptTerminalBuffer(effectiveSelectedScriptId);
-  }, [effectiveSelectedScriptId, syncSelectedScriptTerminalBuffer]);
 
-  useEffect(() => {
     if (!taskMemoryKey) {
       return;
     }
 
     if (effectiveSelectedScriptId) {
-      selectionMemoryRef.current.set(taskMemoryKey, effectiveSelectedScriptId);
-      if (selectedScriptId !== effectiveSelectedScriptId) {
-        setSelectedScriptId(effectiveSelectedScriptId);
-      }
-      return;
+      selectionMemory.set(taskMemoryKey, effectiveSelectedScriptId);
+    } else {
+      selectionMemory.delete(taskMemoryKey);
     }
 
-    selectionMemoryRef.current.delete(taskMemoryKey);
-    if (selectedScriptId !== null) {
-      setSelectedScriptId(null);
-    }
-  }, [effectiveSelectedScriptId, selectedScriptId, taskMemoryKey]);
+    setSelectedScriptId((current) =>
+      current === effectiveSelectedScriptId ? current : effectiveSelectedScriptId,
+    );
+  }, [effectiveSelectedScriptId, selectionMemory, syncSelectedScriptTerminalBuffer, taskMemoryKey]);
 
   const onSelectScript = useCallback(
     (scriptId: string): void => {
@@ -64,10 +61,10 @@ export const useAgentStudioDevServerPanelSelection = ({
         return;
       }
 
-      selectionMemoryRef.current.set(taskMemoryKey, scriptId);
+      selectionMemory.set(taskMemoryKey, scriptId);
       setSelectedScriptId(scriptId);
     },
-    [taskMemoryKey],
+    [selectionMemory, taskMemoryKey],
   );
 
   const resetSelectedScript = useCallback((): void => {

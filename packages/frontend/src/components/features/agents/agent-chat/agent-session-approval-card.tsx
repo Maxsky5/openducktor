@@ -3,6 +3,7 @@ import { CircleSlash2, ShieldAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
+import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
 
 const APPROVAL_OUTCOME_LABELS: Partial<Record<RuntimeApprovalReplyOutcome, string>> = {
   approve_once: "Approve once",
@@ -33,31 +34,6 @@ type AgentSessionApprovalCardProps = {
   isSubmitting?: boolean;
   errorMessage?: string | undefined;
   onReply: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
-};
-
-export const resolveApprovalReplyOutcomes = ({
-  requestSupportedReplyOutcomes,
-  runtimeSupportedReplyOutcomes,
-}: {
-  requestSupportedReplyOutcomes?: readonly RuntimeApprovalReplyOutcome[] | undefined;
-  runtimeSupportedReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
-}): RuntimeApprovalReplyOutcome[] => {
-  if (!runtimeSupportedReplyOutcomes) {
-    return [];
-  }
-
-  const requestOutcomes = requestSupportedReplyOutcomes ?? runtimeSupportedReplyOutcomes;
-  const runtimeOutcomeSet = new Set(runtimeSupportedReplyOutcomes);
-  const effectiveOutcomeSet = new Set<RuntimeApprovalReplyOutcome>();
-  const effectiveOutcomes: RuntimeApprovalReplyOutcome[] = [];
-  for (const outcome of requestOutcomes) {
-    if (!runtimeOutcomeSet.has(outcome) || effectiveOutcomeSet.has(outcome)) {
-      continue;
-    }
-    effectiveOutcomeSet.add(outcome);
-    effectiveOutcomes.push(outcome);
-  }
-  return effectiveOutcomes;
 };
 
 export function AgentSessionApprovalCard({

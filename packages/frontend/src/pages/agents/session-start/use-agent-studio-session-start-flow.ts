@@ -109,7 +109,11 @@ export function useAgentStudioSessionStartFlow({
     ] ?? 0) > 0;
 
   const previousRepoForSessionRefs = useRef<string | null>(workspaceRepoPath);
-  const startingSessionByTaskRef = useRef(new Map<string, Promise<string | undefined>>());
+  const startingSessionByTaskRef = useRef<Map<string, Promise<string | undefined>> | null>(null);
+  if (startingSessionByTaskRef.current === null) {
+    startingSessionByTaskRef.current = new Map<string, Promise<string | undefined>>();
+  }
+  const startingSessionByTask = startingSessionByTaskRef.current;
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
       activeWorkspace,
@@ -123,8 +127,8 @@ export function useAgentStudioSessionStartFlow({
     }
 
     previousRepoForSessionRefs.current = workspaceRepoPath;
-    startingSessionByTaskRef.current.clear();
-  }, [workspaceRepoPath]);
+    startingSessionByTask.clear();
+  }, [startingSessionByTask, workspaceRepoPath]);
 
   const executeRequestedSessionStart = useCallback(
     async <T>(
@@ -171,7 +175,7 @@ export function useAgentStudioSessionStartFlow({
     sendAgentMessage,
     ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     setStartingActivityCountByContext,
-    startingSessionByTaskRef,
+    startingSessionByTask,
     updateQuery,
     onPostStartActionError: (action, error) => {
       const message =
@@ -288,7 +292,7 @@ export function useAgentStudioSessionStartFlow({
     updateQuery,
     ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
     setStartingActivityCountByContext,
-    startingSessionByTaskRef,
+    startingSessionByTask,
     executeRequestedSessionStart,
   });
 
@@ -335,7 +339,7 @@ export function useAgentStudioSessionStartFlow({
         role: option.role,
         launchActionId: option.launchActionId,
       });
-      if (startingSessionByTaskRef.current.has(startKey)) {
+      if (startingSessionByTask.has(startKey)) {
         return;
       }
 
@@ -352,11 +356,11 @@ export function useAgentStudioSessionStartFlow({
           ? { initialSourceExternalSessionId: option.initialSourceExternalSessionId }
           : {}),
       });
-      startingSessionByTaskRef.current.set(startKey, startPromise);
+      startingSessionByTask.set(startKey, startPromise);
       void startPromise
         .finally(() => {
-          if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
-            startingSessionByTaskRef.current.delete(startKey);
+          if (startingSessionByTask.get(startKey) === startPromise) {
+            startingSessionByTask.delete(startKey);
           }
         })
         .catch(() => {});
@@ -366,6 +370,7 @@ export function useAgentStudioSessionStartFlow({
       isActiveTaskHydrated,
       isSessionWorking,
       openHumanReviewFeedback,
+      startingSessionByTask,
       startSessionRequest,
       taskId,
     ],

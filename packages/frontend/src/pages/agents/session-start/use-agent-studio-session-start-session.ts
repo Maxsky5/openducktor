@@ -1,7 +1,7 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
+import { type Dispatch, type SetStateAction, useCallback } from "react";
 import type {
   ResolvedSessionStartDecision,
   SessionLaunchActionId,
@@ -36,7 +36,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
-  startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
+  startingSessionByTask: Map<string, Promise<string | undefined>>;
   updateQuery: (updates: QueryUpdate) => void;
   onPostStartActionError?: (action: SessionStartPostAction, error: Error) => void;
   executeRequestedSessionStart: <T>(
@@ -58,7 +58,7 @@ export function useAgentStudioSessionStartSession({
   sendAgentMessage,
   setTaskTargetBranch,
   setStartingActivityCountByContext,
-  startingSessionByTaskRef,
+  startingSessionByTask,
   updateQuery,
   onPostStartActionError,
   executeRequestedSessionStart,
@@ -163,7 +163,7 @@ export function useAgentStudioSessionStartSession({
         role,
         launchActionId,
       });
-      const inFlightSessionStart = startingSessionByTaskRef.current.get(startKey);
+      const inFlightSessionStart = startingSessionByTask.get(startKey);
       if (inFlightSessionStart) {
         return inFlightSessionStart.then((externalSessionId) =>
           externalSessionId === undefined
@@ -178,15 +178,15 @@ export function useAgentStudioSessionStartSession({
       const startPromise = startRequestedSession(params);
       const externalSessionIdPromise = startPromise.then((workflow) => workflow?.externalSessionId);
 
-      startingSessionByTaskRef.current.set(startKey, externalSessionIdPromise);
+      startingSessionByTask.set(startKey, externalSessionIdPromise);
       void startPromise
         .finally(() => {
-          const currentStartPromise = startingSessionByTaskRef.current.get(startKey);
+          const currentStartPromise = startingSessionByTask.get(startKey);
           if (currentStartPromise === undefined) {
             return;
           }
           if (currentStartPromise === externalSessionIdPromise) {
-            startingSessionByTaskRef.current.delete(startKey);
+            startingSessionByTask.delete(startKey);
           }
         })
         .catch(() => {});
@@ -200,7 +200,7 @@ export function useAgentStudioSessionStartSession({
       selectedTask,
       launchActionId,
       startRequestedSession,
-      startingSessionByTaskRef,
+      startingSessionByTask,
       taskId,
     ],
   );

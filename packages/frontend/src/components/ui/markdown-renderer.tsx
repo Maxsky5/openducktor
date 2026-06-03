@@ -25,7 +25,7 @@ const REMARK_PLUGINS = [remarkGfm];
 const MARKDOWN_URL_TRANSFORM: UrlTransform = (url) => defaultUrlTransform(url);
 
 const SHARED_COMPONENTS: Components = {
-  a: ({ node: _node, className, href, ...props }) => (
+  a: ({ node: _node, children, className, href, ...props }) => (
     <a
       {...props}
       href={href}
@@ -35,7 +35,9 @@ const SHARED_COMPONENTS: Components = {
         "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
         className,
       )}
-    />
+    >
+      {children}
+    </a>
   ),
 };
 

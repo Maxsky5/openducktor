@@ -15,7 +15,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
-  useState,
+  useRef,
 } from "react";
 import type {
   PierreDiffSelection,
@@ -47,6 +47,7 @@ const DIFF_BODY_CONTAINER_STYLE = {
 type FileDiffEntryProps = {
   diff: FileDiff;
   diffScope: DiffScope;
+  fileComments: InlineCommentDraft[];
   viewState: {
     isConflicted: boolean;
     reserveConflictSlot: boolean;
@@ -251,6 +252,7 @@ function FileDiffEntryHeader({
 function FileDiffEntry({
   diff,
   diffScope,
+  fileComments,
   viewState,
   onToggle,
   diffStyle,
@@ -263,16 +265,6 @@ function FileDiffEntry({
   const { canReset, isResetDisabled } = resetState;
   const StatusIcon = FILE_STATUS_ICON[diff.type] ?? FileText;
   const statusColor = FILE_STATUS_COLOR[diff.type] ?? "text-muted-foreground";
-  const fileCommentStateKey = useInlineCommentDraftStore(
-    useCallback(
-      (store) =>
-        store
-          .getDraftsForFile(diff.file, diffScope)
-          .map((comment) => `${comment.id}:${comment.revision}:${comment.status}`)
-          .join("|"),
-      [diff.file, diffScope],
-    ),
-  );
   const addDraft = useInlineCommentDraftStore((store) => store.addDraft);
   const updateDraft = useInlineCommentDraftStore((store) => store.updateDraft);
   const removeDraft = useInlineCommentDraftStore((store) => store.removeDraft);
@@ -281,8 +273,6 @@ function FileDiffEntry({
   const dirName = diff.file.includes("/") ? diff.file.slice(0, diff.file.lastIndexOf("/")) : "";
   const hasDiffContent = diff.diff.trim().length > 0;
   const diffResetKey = `${diffScope}:${diff.diff}`;
-  void fileCommentStateKey;
-  const fileComments = useInlineCommentDraftStore.getState().getDraftsForFile(diff.file, diffScope);
   const fileCommentCount = fileComments.length;
   const commentsById = useMemo(
     () => new Map(fileComments.map((comment) => [comment.id, comment])),
@@ -292,7 +282,7 @@ function FileDiffEntry({
   // Keep diff subtrees mounted after first expand in production for cheap reopen,
   // but reset them in tests so assertions stay deterministic.
   const shouldPersistMountedDiffBody = process.env.NODE_ENV !== "test";
-  const [hasMountedDiffBody, setHasMountedDiffBody] = useState(false);
+  const hasMountedDiffBodyRef = useRef(false);
   const [annotationState, dispatchAnnotation] = useReducer(fileDiffAnnotationReducer, {
     selectedLines: null,
     pendingSelection: null,
@@ -300,37 +290,24 @@ function FileDiffEntry({
   });
   const { selectedLines, pendingSelection, editingCommentId } = annotationState;
 
-  useEffect(() => {
-    if (isExpanded && hasDiffContent) {
-      setHasMountedDiffBody(true);
-      return;
-    }
-
-    if (!shouldPersistMountedDiffBody) {
-      setHasMountedDiffBody(false);
-    }
-  }, [hasDiffContent, isExpanded, shouldPersistMountedDiffBody]);
+  if (shouldPersistMountedDiffBody && isExpanded && hasDiffContent) {
+    hasMountedDiffBodyRef.current = true;
+  } else if (!shouldPersistMountedDiffBody) {
+    hasMountedDiffBodyRef.current = false;
+  }
 
   useEffect(() => {
     void diffResetKey;
     dispatchAnnotation({ type: "reset" });
   }, [diffResetKey]);
 
-  useEffect(() => {
-    if (editingCommentId == null) {
-      return;
-    }
-
-    const editingComment = fileComments.find((comment) => comment.id === editingCommentId);
-    if (editingComment?.status === "submitting") {
-      dispatchAnnotation({ type: "editingCanceled" });
-    }
-  }, [fileComments, editingCommentId]);
-
   const shouldRenderPersistedDiffBody =
-    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBody;
+    hasDiffContent && shouldPersistMountedDiffBody && hasMountedDiffBodyRef.current;
   const shouldRenderDiffBody = isExpanded || shouldRenderPersistedDiffBody;
-  const hasOpenAnnotationForm = pendingSelection != null || editingCommentId != null;
+  const editingComment =
+    editingCommentId === null ? null : (commentsById.get(editingCommentId) ?? null);
+  const activeEditingCommentId = editingComment?.status === "submitting" ? null : editingCommentId;
+  const hasOpenAnnotationForm = pendingSelection != null || activeEditingCommentId != null;
 
   const clearPendingSelection = useCallback(() => {
     dispatchAnnotation({ type: "selectionCleared" });
@@ -431,7 +408,7 @@ function FileDiffEntry({
         <DiffAnnotationShell>
           <DraftCommentCard
             comment={comment}
-            isEditing={editingCommentId === comment.id}
+            isEditing={activeEditingCommentId === comment.id}
             onStartEditing={handleStartEditing}
             onCancelEditing={handleCancelEditing}
             onSaveEditing={handleSaveEditing}
@@ -443,7 +420,7 @@ function FileDiffEntry({
     [
       clearPendingSelection,
       commentsById,
-      editingCommentId,
+      activeEditingCommentId,
       handleCancelEditing,
       handleSaveEditing,
       handleSaveNewComment,
@@ -524,5 +501,6 @@ export const FileDiffEntryWithMemo = memo(
     previous.onRequestFileReset === next.onRequestFileReset &&
     previous.onRequestHunkReset === next.onRequestHunkReset &&
     previous.onToggle === next.onToggle &&
+    previous.fileComments === next.fileComments &&
     areFileDiffsEqual(previous.diff, next.diff),
 );

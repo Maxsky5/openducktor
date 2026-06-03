@@ -161,18 +161,16 @@ const hydrateRecordHistory = async ({
     getRepoPromptOverrides,
     subagentPendingInputMode,
   });
-  if (isStaleRepoOperation()) {
-    return;
-  }
+  if (!isStaleRepoOperation()) {
+    updateSession(
+      record.externalSessionId,
+      (current) => applyHydratedRecordHistory(current, hydratedHistory),
+      { persist: false },
+    );
 
-  updateSession(
-    record.externalSessionId,
-    (current) => applyHydratedRecordHistory(current, hydratedHistory),
-    { persist: false },
-  );
-
-  if (hydratedHistory.hydratedSubagentPendingInputByExternalSessionId.hydrationError) {
-    throw hydratedHistory.hydratedSubagentPendingInputByExternalSessionId.hydrationError;
+    if (hydratedHistory.hydratedSubagentPendingInputByExternalSessionId.hydrationError) {
+      throw hydratedHistory.hydratedSubagentPendingInputByExternalSessionId.hydrationError;
+    }
   }
 };
 
@@ -193,43 +191,37 @@ const hydrateSessionRecord = async ({
     return;
   }
   const runtimeResolution = await runtimePlanner.resolveHydrationRuntime(record);
-  if (isStaleRepoOperation()) {
-    return;
+  if (!isStaleRepoOperation()) {
+    if (!runtimeResolution.ok) {
+      applyMissingHydrationRuntime({
+        record,
+        runtimeResolution,
+        shouldHydrateHistory,
+        failOnRuntimeResolutionError,
+        updateSession,
+      });
+    } else if (!shouldHydrateHistory) {
+      await hydrateRuntimeOnlyRecord({
+        updateSession,
+        isStaleRepoOperation,
+        record,
+        runtimeResolution,
+      });
+    } else {
+      await hydrateRecordHistory({
+        repoPath,
+        adapter,
+        updateSession,
+        isStaleRepoOperation,
+        record,
+        runtimeResolution,
+        runtimePlanner,
+        promptAssembler,
+        getRepoPromptOverrides,
+        subagentPendingInputMode,
+      });
+    }
   }
-
-  if (!runtimeResolution.ok) {
-    applyMissingHydrationRuntime({
-      record,
-      runtimeResolution,
-      shouldHydrateHistory,
-      failOnRuntimeResolutionError,
-      updateSession,
-    });
-    return;
-  }
-
-  if (!shouldHydrateHistory) {
-    await hydrateRuntimeOnlyRecord({
-      updateSession,
-      isStaleRepoOperation,
-      record,
-      runtimeResolution,
-    });
-    return;
-  }
-
-  await hydrateRecordHistory({
-    repoPath,
-    adapter,
-    updateSession,
-    isStaleRepoOperation,
-    record,
-    runtimeResolution,
-    runtimePlanner,
-    promptAssembler,
-    getRepoPromptOverrides,
-    subagentPendingInputMode,
-  });
 };
 
 export const hydrateSessionRecordsStage = async ({

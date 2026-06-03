@@ -4,7 +4,7 @@ import type {
   AgentSlashCommand,
 } from "@openducktor/core";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type {
   AgentChatComposerDraft,
   AgentChatFileTriggerMatch,
@@ -83,7 +83,7 @@ const filterSlashCommands = (commands: AgentSlashCommand[], query: string): Agen
 
 const filterSkills = (skills: AgentSkillReference[], query: string): AgentSkillReference[] => {
   const normalizedQuery = query.trim().toLowerCase();
-  const sortedSkills = [...skills].sort((left, right) => {
+  const sortedSkills = skills.toSorted((left, right) => {
     const leftLabel = left.displayName ?? left.title ?? left.name;
     const rightLabel = right.displayName ?? right.title ?? right.name;
     return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });
@@ -170,7 +170,41 @@ export const useAgentChatComposerEditorAutocomplete = ({
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
   const [fileMenuState, setFileMenuState] = useState<FileMenuState | null>(null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [availabilitySnapshot, setAvailabilitySnapshot] = useState({
+    disabled,
+    supportsFileSearch,
+    supportsSkillReferences,
+    supportsSlashCommands,
+  });
   const fileSearchRequestIdRef = useRef(0);
+
+  if (
+    availabilitySnapshot.disabled !== disabled ||
+    availabilitySnapshot.supportsFileSearch !== supportsFileSearch ||
+    availabilitySnapshot.supportsSkillReferences !== supportsSkillReferences ||
+    availabilitySnapshot.supportsSlashCommands !== supportsSlashCommands
+  ) {
+    setAvailabilitySnapshot({
+      disabled,
+      supportsFileSearch,
+      supportsSkillReferences,
+      supportsSlashCommands,
+    });
+
+    if (disabled || !supportsSlashCommands) {
+      setActiveSlashIndex(0);
+      setSlashMenuState(null);
+    }
+    if (disabled || !supportsFileSearch) {
+      fileSearchRequestIdRef.current += 1;
+      setActiveFileIndex(0);
+      setFileMenuState(null);
+    }
+    if (disabled || !supportsSkillReferences) {
+      setActiveSkillIndex(0);
+      setSkillMenuState(null);
+    }
+  }
 
   const filteredSlashCommands = useMemo(() => {
     if (!slashMenuState) {
@@ -386,27 +420,6 @@ export const useAgentChatComposerEditorAutocomplete = ({
     },
     [filteredSkills],
   );
-
-  useEffect(() => {
-    if (!disabled && supportsSlashCommands) {
-      return;
-    }
-    setSlashMenuState(null);
-  }, [disabled, supportsSlashCommands]);
-
-  useEffect(() => {
-    if (!disabled && supportsFileSearch) {
-      return;
-    }
-    closeFileMenu();
-  }, [closeFileMenu, disabled, supportsFileSearch]);
-
-  useEffect(() => {
-    if (!disabled && supportsSkillReferences) {
-      return;
-    }
-    closeSkillMenu();
-  }, [closeSkillMenu, disabled, supportsSkillReferences]);
 
   return {
     slashMenuState,

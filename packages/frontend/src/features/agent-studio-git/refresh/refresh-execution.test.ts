@@ -37,10 +37,10 @@ const createExecutionDeps = ({
   return {
     deps: {
       getCurrentRefreshContextKey: () => currentContextKey,
-      setIsRefreshing: (isRefreshing: boolean) => {
+      setIsRefreshing: (_contextKey: string, isRefreshing: boolean) => {
         loadingStates.push(isRefreshing);
       },
-      setRefreshError: (error: string | null) => {
+      setRefreshError: (_contextKey: string, error: string | null) => {
         refreshErrors.push(error);
       },
       scheduledFetchAtByContext,

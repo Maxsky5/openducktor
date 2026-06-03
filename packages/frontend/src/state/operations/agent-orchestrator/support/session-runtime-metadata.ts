@@ -50,7 +50,7 @@ const missingSessionRuntimeKindMessage = (externalSessionId: string): string =>
 const missingSelectedModelRuntimeKindMessage = (externalSessionId: string): string =>
   `Session '${externalSessionId}' selected model is missing runtime kind metadata.`;
 
-export const startSessionRuntimeKindRequiredMessage = (role: AgentSessionState["role"]): string =>
+const startSessionRuntimeKindRequiredMessage = (role: AgentSessionState["role"]): string =>
   `Runtime kind is required to start ${role} sessions. Select an explicit runtime before starting a session.`;
 
 export const readPersistedRuntimeKind = ({
@@ -118,10 +118,4 @@ export const requireSelectedModelRuntimeKindForPersistence = (
   }
 
   return runtimeKind;
-};
-
-export const isSessionRuntimeMetadataError = (
-  error: unknown,
-): error is SessionRuntimeMetadataError => {
-  return error instanceof SessionRuntimeMetadataError;
 };

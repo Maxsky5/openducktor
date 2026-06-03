@@ -1,4 +1,4 @@
-import { DEFAULT_KANBAN_SETTINGS } from "@openducktor/contracts";
+import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +25,8 @@ type UseKanbanPageModelsArgs = {
   onOpenDetails: (taskId: string) => void;
   onCloseDetails: () => void;
 };
+
+const EMPTY_KANBAN_TASKS = Object.freeze([]) as unknown as TaskCard[];
 
 export const isKanbanForegroundLoading = (args: {
   hasActiveWorkspace: boolean;
@@ -103,7 +105,8 @@ export function useKanbanPageModels({
     });
   }, [settingsSnapshotQuery.error, settingsSnapshotQuery.isError]);
 
-  const kanbanTasks = workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : [];
+  const kanbanTasks =
+    workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,

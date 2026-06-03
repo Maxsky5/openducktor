@@ -1,7 +1,7 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronUp, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useReducer } from "react";
+import { type ReactElement, useEffect, useMemo, useReducer, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -247,6 +247,8 @@ export function FolderPickerDialog({
   onConfirm,
 }: FolderPickerDialogProps): ReactElement {
   const [state, dispatch] = useReducer(folderPickerReducer, initialPath, initialFolderPickerState);
+  const previousOpenRef = useRef(open);
+  const previousInitialPathRef = useRef(initialPath);
   const {
     requestedPath,
     manualPath,
@@ -257,14 +259,14 @@ export function FolderPickerDialog({
     isSubmitting,
   } = state;
 
-  useEffect(() => {
-    if (!open) {
-      dispatch({ type: "closed" });
-      return;
-    }
+  const hasOpenBoundaryChanged = previousOpenRef.current !== open;
+  const hasOpenInitialPathChanged = open && previousInitialPathRef.current !== initialPath;
+  previousOpenRef.current = open;
+  previousInitialPathRef.current = initialPath;
 
-    dispatch({ type: "opened", initialPath });
-  }, [initialPath, open]);
+  if (hasOpenBoundaryChanged || hasOpenInitialPathChanged) {
+    dispatch(open ? { type: "opened", initialPath } : { type: "closed" });
+  }
 
   const directoryQuery = useQuery({
     ...directoryListingQueryOptions(requestedPath),

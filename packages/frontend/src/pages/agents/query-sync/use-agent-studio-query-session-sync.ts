@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -20,6 +20,73 @@ type UseAgentStudioQuerySessionSyncArgs = {
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
 };
 
+type ResolveAgentStudioQuerySessionUpdateArgs = Omit<
+  UseAgentStudioQuerySessionSyncArgs,
+  "scheduleQueryUpdate"
+>;
+
+const resolveAgentStudioQuerySessionUpdate = ({
+  isRepoNavigationBoundaryPending,
+  isLoadingTasks,
+  tasks,
+  taskIdParam,
+  sessionParam,
+  selectedSessionById,
+  taskId,
+  activeSession,
+  roleFromQuery,
+  isActiveTaskHydrated,
+}: ResolveAgentStudioQuerySessionUpdateArgs): AgentStudioQueryUpdate | null => {
+  if (isRepoNavigationBoundaryPending) {
+    return null;
+  }
+
+  if (
+    !isLoadingTasks &&
+    taskIdParam &&
+    !sessionParam &&
+    !selectedSessionById &&
+    !tasks.some((entry) => entry.id === taskIdParam)
+  ) {
+    return {
+      [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
+      [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
+    };
+  }
+
+  const updates: AgentStudioQueryUpdate = {};
+
+  if (selectedSessionById && !taskIdParam) {
+    updates[AGENT_STUDIO_QUERY_KEYS.task] = selectedSessionById.taskId;
+  }
+
+  const shouldClearSessionParam =
+    Boolean(sessionParam) && taskId.length > 0 && isActiveTaskHydrated && !selectedSessionById;
+
+  if (sessionParam) {
+    if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.task] = selectedSessionById.taskId;
+    } else if (shouldClearSessionParam) {
+      updates[AGENT_STUDIO_QUERY_KEYS.session] = undefined;
+    }
+  }
+
+  if (sessionParam && !shouldClearSessionParam && isWorkflowAgentSession(activeSession)) {
+    if (taskIdParam !== activeSession.taskId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.task] = activeSession.taskId;
+    }
+    if (sessionParam !== activeSession.externalSessionId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.session] = activeSession.externalSessionId;
+    }
+    if (roleFromQuery !== activeSession.role) {
+      updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;
+    }
+  }
+
+  return Object.keys(updates).length === 0 ? null : updates;
+};
+
 export function useAgentStudioQuerySessionSync({
   isRepoNavigationBoundaryPending,
   isLoadingTasks,
@@ -33,103 +100,39 @@ export function useAgentStudioQuerySessionSync({
   isActiveTaskHydrated,
   scheduleQueryUpdate,
 }: UseAgentStudioQuerySessionSyncArgs): void {
-  useEffect(() => {
-    if (isRepoNavigationBoundaryPending) {
-      return;
-    }
-    if (isLoadingTasks) {
-      return;
-    }
-    if (!taskIdParam || sessionParam || selectedSessionById) {
-      return;
-    }
-    if (tasks.some((entry) => entry.id === taskIdParam)) {
-      return;
-    }
-    scheduleQueryUpdate({
-      [AGENT_STUDIO_QUERY_KEYS.task]: undefined,
-      [AGENT_STUDIO_QUERY_KEYS.session]: undefined,
-      [AGENT_STUDIO_QUERY_KEYS.agent]: undefined,
-    });
-  }, [
-    isLoadingTasks,
-    isRepoNavigationBoundaryPending,
-    scheduleQueryUpdate,
-    selectedSessionById,
-    sessionParam,
-    taskIdParam,
-    tasks,
-  ]);
+  const queryUpdate = useMemo(
+    () =>
+      resolveAgentStudioQuerySessionUpdate({
+        isRepoNavigationBoundaryPending,
+        isLoadingTasks,
+        tasks,
+        taskIdParam,
+        sessionParam,
+        selectedSessionById,
+        taskId,
+        activeSession,
+        roleFromQuery,
+        isActiveTaskHydrated,
+      }),
+    [
+      activeSession,
+      isActiveTaskHydrated,
+      isLoadingTasks,
+      isRepoNavigationBoundaryPending,
+      roleFromQuery,
+      selectedSessionById,
+      sessionParam,
+      taskId,
+      taskIdParam,
+      tasks,
+    ],
+  );
 
   useEffect(() => {
-    if (isRepoNavigationBoundaryPending) {
-      return;
-    }
-    if (!selectedSessionById || taskIdParam) {
-      return;
-    }
-    scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.task]: selectedSessionById.taskId });
-  }, [isRepoNavigationBoundaryPending, scheduleQueryUpdate, selectedSessionById, taskIdParam]);
-
-  useEffect(() => {
-    if (isRepoNavigationBoundaryPending) {
-      return;
-    }
-    if (!sessionParam) {
-      return;
-    }
-    if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
-      scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.task]: selectedSessionById.taskId });
-      return;
-    }
-    if (!taskId || !isActiveTaskHydrated) {
-      return;
-    }
-    if (selectedSessionById && selectedSessionById.taskId === taskId) {
-      return;
-    }
-    scheduleQueryUpdate({ [AGENT_STUDIO_QUERY_KEYS.session]: undefined });
-  }, [
-    isActiveTaskHydrated,
-    isRepoNavigationBoundaryPending,
-    scheduleQueryUpdate,
-    selectedSessionById,
-    sessionParam,
-    taskId,
-  ]);
-
-  useEffect(() => {
-    if (isRepoNavigationBoundaryPending) {
-      return;
-    }
-    if (!isWorkflowAgentSession(activeSession)) {
-      return;
-    }
-    if (!sessionParam) {
+    if (!queryUpdate) {
       return;
     }
 
-    const updates: AgentStudioQueryUpdate = {};
-    if (taskIdParam !== activeSession.taskId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.task] = activeSession.taskId;
-    }
-    if (sessionParam !== activeSession.externalSessionId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.session] = activeSession.externalSessionId;
-    }
-    if (roleFromQuery !== activeSession.role) {
-      updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return;
-    }
-    scheduleQueryUpdate(updates);
-  }, [
-    activeSession,
-    isRepoNavigationBoundaryPending,
-    roleFromQuery,
-    scheduleQueryUpdate,
-    sessionParam,
-    taskIdParam,
-  ]);
+    scheduleQueryUpdate(queryUpdate);
+  }, [queryUpdate, scheduleQueryUpdate]);
 }

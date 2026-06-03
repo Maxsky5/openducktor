@@ -1,5 +1,5 @@
 import type { DirectoryListing } from "@openducktor/contracts";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { queryOptions } from "@tanstack/react-query";
 import { host } from "@/state/operations/host";
 
 type FilesystemQueryHost = Pick<typeof host, "filesystemListDirectory">;
@@ -22,10 +22,3 @@ export const directoryListingQueryOptions = (
     queryFn: (): Promise<DirectoryListing> => hostClient.filesystemListDirectory(path),
     staleTime: DIRECTORY_LISTING_STALE_TIME_MS,
   });
-
-export const loadDirectoryListingFromQuery = (
-  queryClient: QueryClient,
-  path?: string,
-  hostClient?: FilesystemQueryHost,
-): Promise<DirectoryListing> =>
-  queryClient.fetchQuery(directoryListingQueryOptions(path, hostClient));

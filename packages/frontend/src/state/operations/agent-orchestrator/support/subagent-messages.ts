@@ -16,7 +16,7 @@ export const isSubagentMessage = (
   return message?.role === "system" && message.meta?.kind === "subagent";
 };
 
-export const resolveSubagentStatus = (
+const resolveSubagentStatus = (
   existingStatus: SubagentMeta["status"] | undefined,
   incomingStatus: SubagentMeta["status"],
 ): SubagentMeta["status"] => {

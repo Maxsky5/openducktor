@@ -152,14 +152,14 @@ describe("useRepoNavigationPersistence", () => {
   test("treats the first render after a repo change as boundary-pending before effects run", () => {
     expect(
       resolveRepoNavigationBoundaryPhase({
-        activeWorkspace: createActiveWorkspace("/repo-b"),
+        activeWorkspaceId: "repo-b",
         lastWorkspaceId: "repo-a",
         boundaryWorkspaceId: null,
       }),
     ).toBe("detecting");
     expect(
       resolveRepoNavigationBoundaryPhase({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        activeWorkspaceId: "repo-a",
         lastWorkspaceId: "repo-a",
         boundaryWorkspaceId: null,
       }),

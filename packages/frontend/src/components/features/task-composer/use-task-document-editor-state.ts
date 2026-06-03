@@ -122,27 +122,22 @@ export function useTaskDocumentEditorState({
     [],
   );
 
-  useEffect(() => {
-    const contextChanged =
-      previousContext.current?.open !== open || previousContext.current?.taskId !== taskId;
-    if (!contextChanged) {
-      return;
-    }
-
+  const contextChanged =
+    previousContext.current?.open !== open || previousContext.current?.taskId !== taskId;
+  if (contextChanged) {
     previousContext.current = { open, taskId };
     loadSequence.current += 1;
-    if (!open) {
-      return;
+    if (open) {
+      const initialDocuments = createInitialDocumentState();
+      documentsRef.current = initialDocuments;
+      setDocuments(initialDocuments);
+      setViews(createInitialViewState());
+      inFlightSections.current = {
+        spec: false,
+        plan: false,
+      };
     }
-    const initialDocuments = createInitialDocumentState();
-    documentsRef.current = initialDocuments;
-    setDocuments(initialDocuments);
-    setViews(createInitialViewState());
-    inFlightSections.current = {
-      spec: false,
-      plan: false,
-    };
-  }, [open, taskId]);
+  }
 
   const loadSection = useCallback(
     async (section: TaskDocumentSection, force = false): Promise<void> => {
@@ -168,31 +163,27 @@ export function useTaskDocumentEditorState({
           section === "spec" ? loadSpecDocument(taskId) : loadPlanDocument(taskId),
           loadTimeoutMs,
         );
-        if (sequence !== loadSequence.current) {
-          return;
+        if (sequence === loadSequence.current) {
+          inFlightSections.current[section] = false;
+          transitionDocumentSection(section, () => ({
+            serverMarkdown: payload.markdown,
+            draftMarkdown: payload.markdown,
+            updatedAt: payload.updatedAt,
+            isLoading: false,
+            loaded: true,
+            error: payload.error ?? null,
+          }));
         }
-
-        inFlightSections.current[section] = false;
-        transitionDocumentSection(section, () => ({
-          serverMarkdown: payload.markdown,
-          draftMarkdown: payload.markdown,
-          updatedAt: payload.updatedAt,
-          isLoading: false,
-          loaded: true,
-          error: payload.error ?? null,
-        }));
       } catch (reason) {
-        if (sequence !== loadSequence.current) {
-          return;
+        if (sequence === loadSequence.current) {
+          inFlightSections.current[section] = false;
+          transitionDocumentSection(section, (currentSection) => ({
+            ...currentSection,
+            isLoading: false,
+            loaded: false,
+            error: toErrorMessage(reason),
+          }));
         }
-
-        inFlightSections.current[section] = false;
-        transitionDocumentSection(section, (currentSection) => ({
-          ...currentSection,
-          isLoading: false,
-          loaded: false,
-          error: toErrorMessage(reason),
-        }));
       }
     },
     [loadPlanDocument, loadSpecDocument, loadTimeoutMs, open, taskId, transitionDocumentSection],

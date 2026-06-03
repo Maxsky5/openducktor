@@ -3,11 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TEST_ROLE_OPTIONS } from "./agent-chat/agent-chat-test-fixtures";
-import {
-  AgentStudioHeader,
-  deriveSessionHistorySelectionFocusBehavior,
-} from "./agent-studio-header";
+import { AgentStudioHeader } from "./agent-studio-header";
 import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
+import { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history-model";
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -670,6 +668,7 @@ describe("AgentStudioHeader", () => {
   test("disables git conflict quick action when the conflict handler is missing", async () => {
     const html = renderToStaticMarkup(
       createElement(QuickActionsMenu, {
+        canOpenActionsMenu: true,
         isOpen: true,
         onOpenChange: () => {},
         agentStudioReady: true,

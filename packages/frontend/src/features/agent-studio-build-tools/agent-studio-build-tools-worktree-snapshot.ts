@@ -24,7 +24,7 @@ export const resolveBuildToolsSelectedTaskId = ({
   return viewTaskId.trim().length > 0 ? viewTaskId : null;
 };
 
-export const isNonRepoWorktreePath = (repoPath: string | null, path: string | null): boolean => {
+const isNonRepoWorktreePath = (repoPath: string | null, path: string | null): boolean => {
   if (!path || path.trim().length === 0) {
     return false;
   }
@@ -41,7 +41,7 @@ export const resolveDirectBuildWorktreePath = ({
 }): string | null =>
   isNonRepoWorktreePath(repoPath, sessionWorkingDirectory) ? sessionWorkingDirectory : null;
 
-export const buildWorktreeResolutionError = (taskId: string, reason?: string): string => {
+const buildWorktreeResolutionError = (taskId: string, reason?: string): string => {
   const baseMessage = `Failed to resolve task worktree path for task ${taskId}`;
   const retryMessage = "Use Refresh to retry.";
   const normalizedReason = reason?.trim() ?? "";

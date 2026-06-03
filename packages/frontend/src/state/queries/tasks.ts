@@ -36,7 +36,7 @@ export const loadRepoTaskDataFromQuery = (
 ): Promise<RepoTaskData> =>
   queryClient.fetchQuery(repoTaskDataQueryOptions(repoPath, doneVisibleDays));
 
-export const invalidateRepoTaskDataQueries = (
+const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
   repoPath: string,
   options?: {
@@ -103,7 +103,7 @@ export const refreshCachedKanbanQueries = async (
   );
 };
 
-export const invalidateRepoTaskListQueries = (
+const invalidateRepoTaskListQueries = (
   queryClient: QueryClient,
   repoPath: string,
   options?: {

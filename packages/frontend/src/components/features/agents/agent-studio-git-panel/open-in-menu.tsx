@@ -10,7 +10,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { errorMessage } from "@/lib/errors";
 import { openInToolsQueryOptions, refreshOpenInToolsFromQuery } from "@/state/queries/system";
 import { persistPreferredOpenInTool, readPreferredOpenInTool } from "./open-in-preferences";
-import { getOpenInToolLabel, OpenInToolIcon } from "./open-in-tool-metadata";
+import { OpenInToolIcon } from "./open-in-tool-metadata";
+import { getOpenInToolLabel } from "./open-in-tool-metadata-model";
 
 function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): ReactElement {
   return (

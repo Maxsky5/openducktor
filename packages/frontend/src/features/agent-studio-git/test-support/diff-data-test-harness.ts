@@ -20,7 +20,7 @@ if (typeof document === "undefined") {
 export const taskWorktreeEntriesMock = mock(
   async (): Promise<Array<{ taskId: string; worktreePath: string }>> => [],
 );
-export const taskWorktreeGetMock = mock(async (_repoPath: string, taskId: string) => {
+const taskWorktreeGetMock = mock(async (_repoPath: string, taskId: string) => {
   const runs = await taskWorktreeEntriesMock();
   const matchingRun = runs.find((run) => run.taskId === taskId) ?? null;
   return matchingRun ? { workingDirectory: matchingRun.worktreePath } : null;

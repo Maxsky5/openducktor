@@ -69,7 +69,7 @@ export const resolvePreferredActiveSession = (
   return session ?? null;
 };
 
-export const resolveLatestHistoricalSessionByRole = (
+const resolveLatestHistoricalSessionByRole = (
   task: TaskCard,
   role: AgentRole,
 ): NonNullable<TaskCard["agentSessions"]>[number] | null => {

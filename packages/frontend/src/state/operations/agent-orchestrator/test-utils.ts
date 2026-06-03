@@ -33,7 +33,7 @@ export const withTimeout = async <T>(
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(ORCHESTRATOR_TASK_CARD_DEFAULTS, overrides);
 
-export const createLiveAgentSessionSnapshotFixture = (
+const createLiveAgentSessionSnapshotFixture = (
   overrides: Partial<LiveAgentSessionSnapshot> = {},
 ): LiveAgentSessionSnapshot => {
   const externalSessionId = overrides.externalSessionId ?? "external-1";

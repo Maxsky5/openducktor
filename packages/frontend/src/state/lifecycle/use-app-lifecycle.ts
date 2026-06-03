@@ -80,7 +80,11 @@ export function useAppLifecycle({
   const activeWorkspaceRef = useRef(activeWorkspace);
   const refreshTaskDataRef = useRef(refreshTaskData);
   const runtimeKindsKey = runtimeDefinitions.map((definition) => definition.kind).join(",");
-  const processedTaskEventIdsRef = useRef(new Set<string>());
+  const processedTaskEventIdsRef = useRef<Set<string> | null>(null);
+  if (processedTaskEventIdsRef.current === null) {
+    processedTaskEventIdsRef.current = new Set<string>();
+  }
+  const processedTaskEventIds = processedTaskEventIdsRef.current;
   const processedTaskEventOrderRef = useRef<string[]>([]);
   const lastExternalTaskSyncFailureToastRef = useRef<{
     repoPath: string;
@@ -203,7 +207,7 @@ export function useAppLifecycle({
 
         if (
           !rememberProcessedExternalTaskEvent(
-            processedTaskEventIdsRef.current,
+            processedTaskEventIds,
             processedTaskEventOrderRef.current,
             parsed.data.eventId,
           )
@@ -268,7 +272,7 @@ export function useAppLifecycle({
       disposed = true;
       unsubscribe?.();
     };
-  }, []);
+  }, [processedTaskEventIds]);
 
   useEffect(() => {
     const activeRepoPath = activeWorkspace?.repoPath ?? null;

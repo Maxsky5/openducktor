@@ -27,7 +27,7 @@ type RenderedTerminalState = {
 type TerminalRenderController = {
   bindingRef: { current: TerminalBinding | null };
   renderedStateRef: { current: RenderedTerminalState };
-  renderQueueRef: { current: Promise<void> };
+  renderQueueRef: { current: Promise<void> | null };
   renderGenerationRef: { current: number };
 };
 
@@ -134,7 +134,7 @@ const resetRenderedTerminalState = (renderedStateRef: { current: RenderedTermina
 
 const resetTerminalRenderQueue = (
   renderedStateRef: { current: RenderedTerminalState },
-  renderQueueRef: { current: Promise<void> },
+  renderQueueRef: { current: Promise<void> | null },
   renderGenerationRef: { current: number },
 ): void => {
   resetRenderedTerminalState(renderedStateRef);
@@ -196,7 +196,7 @@ const createTerminalObserversCleanup = (
 const disposeTerminalBinding = (
   bindingRef: { current: TerminalBinding | null },
   renderedStateRef: { current: RenderedTerminalState },
-  renderQueueRef: { current: Promise<void> },
+  renderQueueRef: { current: Promise<void> | null },
   renderGenerationRef: { current: number },
 ): void => {
   bindingRef.current?.terminal.dispose();
@@ -272,7 +272,10 @@ export const useDevServerTerminalBinding = ({
     resetToken: null,
     lastSequence: null,
   });
-  const renderQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const renderQueueRef = useRef<Promise<void> | null>(null);
+  if (renderQueueRef.current === null) {
+    renderQueueRef.current = Promise.resolve();
+  }
   const renderGenerationRef = useRef(0);
 
   useEffect(() => {
@@ -323,7 +326,7 @@ export const useDevServerTerminalRendering = ({
     const renderGeneration = renderGenerationRef.current + 1;
     renderGenerationRef.current = renderGeneration;
 
-    renderQueueRef.current = renderQueueRef.current
+    renderQueueRef.current = (renderQueueRef.current ?? Promise.resolve())
       .catch(() => {})
       .then(async () => {
         const queuedBinding = bindingRef.current;
@@ -337,11 +340,9 @@ export const useDevServerTerminalRendering = ({
           terminalBuffer,
           renderedStateRef,
         });
-        if (!bindingRef.current || renderGeneration !== renderGenerationRef.current) {
-          return;
+        if (bindingRef.current && renderGeneration === renderGenerationRef.current) {
+          onRendererError(null);
         }
-
-        onRendererError(null);
       })
       .catch((error) => {
         if (renderGeneration === renderGenerationRef.current) {

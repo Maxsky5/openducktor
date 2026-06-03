@@ -44,13 +44,24 @@ const collectCompletedGitPanelRefreshToolKeys = (session: AgentSessionState): Se
   return keys;
 };
 
+const replaceSetContents = (target: Set<string>, source: Set<string>): void => {
+  target.clear();
+  for (const value of source) {
+    target.add(value);
+  }
+};
+
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
   isSessionHistoryHydrating,
   refreshWorktree,
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
-  const processedToolMessageKeysRef = useRef(new Set<string>());
+  const processedToolMessageKeysRef = useRef<Set<string> | null>(null);
+  if (processedToolMessageKeysRef.current === null) {
+    processedToolMessageKeysRef.current = new Set<string>();
+  }
+  const processedToolMessageKeys = processedToolMessageKeysRef.current;
   const previousSessionIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const wasSessionHistoryHydratingRef = useRef(false);
@@ -73,7 +84,7 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (previousSessionIdRef.current !== activeSession.externalSessionId) {
       previousSessionIdRef.current = activeSession.externalSessionId;
       previousMessagesRef.current = activeSession.messages;
-      processedToolMessageKeysRef.current = seedProcessedToolMessageKeys(activeSession);
+      replaceSetContents(processedToolMessageKeys, seedProcessedToolMessageKeys(activeSession));
       return;
     }
 
@@ -81,9 +92,10 @@ export function useAgentStudioBuildWorktreeRefresh({
       wasSessionHistoryHydratingRef.current = false;
       previousMessagesRef.current = activeSession.messages;
       const completedToolKeysBeforeHydration = completedToolKeysBeforeHydrationRef.current;
-      processedToolMessageKeysRef.current = completedToolKeysBeforeHydration
-        ? new Set(completedToolKeysBeforeHydration)
-        : seedProcessedToolMessageKeys(activeSession);
+      replaceSetContents(
+        processedToolMessageKeys,
+        completedToolKeysBeforeHydration ?? seedProcessedToolMessageKeys(activeSession),
+      );
       completedToolKeysBeforeHydrationRef.current = null;
       return;
     }
@@ -105,11 +117,11 @@ export function useAgentStudioBuildWorktreeRefresh({
       }
 
       const messageKey = `${activeSession.externalSessionId}:${message.id}`;
-      if (processedToolMessageKeysRef.current.has(messageKey)) {
+      if (processedToolMessageKeys.has(messageKey)) {
         return;
       }
 
-      processedToolMessageKeysRef.current.add(messageKey);
+      processedToolMessageKeys.add(messageKey);
       if (shouldRefreshGitPanelAfterToolCompletion(meta)) {
         shouldRefresh = true;
       }
@@ -120,5 +132,11 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (shouldRefresh) {
       void refreshWorktree("soft");
     }
-  }, [activeSession, isSessionHistoryHydrating, refreshWorktree, viewRole]);
+  }, [
+    activeSession,
+    isSessionHistoryHydrating,
+    processedToolMessageKeys,
+    refreshWorktree,
+    viewRole,
+  ]);
 }

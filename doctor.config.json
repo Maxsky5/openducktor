@@ -4,6 +4,46 @@
       {
         "files": ["src/components/features/agents/agent-chat/agent-chat-composer-editor.tsx"],
         "rules": ["react-doctor/prefer-tag-over-role", "jsx-a11y/prefer-tag-over-role"]
+      },
+      {
+        "files": [
+          "src/components/features/agents/agent-chat/readonly-transcript/use-live-transcript-attachment.ts",
+          "src/components/features/agents/agent-chat/use-agent-chat-session-hydration.ts",
+          "src/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh.ts",
+          "src/pages/agents/query-sync/use-navigation-url-sync.ts",
+          "src/pages/agents/query-sync/use-repo-navigation-persistence.ts",
+          "src/pages/agents/right-panel/use-agent-studio-dev-server-panel.ts",
+          "src/pages/agents/use-agent-studio-documents.ts",
+          "src/pages/agents/use-agent-studio-git-conflict-controller.ts",
+          "src/pages/agents/use-agent-studio-task-hydration.ts",
+          "src/pages/agents/use-agent-studio-task-tabs-persistence.ts",
+          "src/pages/agents/use-agent-studio-task-tabs-selection.ts",
+          "src/state/operations/tasks/use-task-query-read-model.ts",
+          "src/state/operations/tasks/use-task-read-flow.ts"
+        ],
+        "rules": ["react-doctor/no-event-handler"]
+      },
+      {
+        "files": [
+          "src/components/features/agents/use-repo-runtime-health-warmup.ts",
+          "src/features/agent-chat-composer/model-selection/use-active-session-model-selection-repair.ts",
+          "src/pages/agents/chat-composer/use-agent-studio-chat-composer.ts",
+          "src/pages/agents/query-sync/use-agent-studio-query-session-sync.ts",
+          "src/pages/agents/query-sync/use-navigation-url-sync.ts",
+          "src/pages/agents/query-sync/use-repo-navigation-persistence.ts",
+          "src/pages/agents/right-panel/use-agent-studio-dev-server-panel.ts",
+          "src/pages/agents/use-agent-studio-task-tabs-persistence.ts",
+          "src/pages/agents/use-agent-studio-task-tabs-selection.ts",
+          "src/state/operations/workspace/use-check-diagnostics-effects.ts"
+        ],
+        "rules": ["react-doctor/no-pass-data-to-parent"]
+      },
+      {
+        "files": ["src/pages/agents/query-sync/use-navigation-url-sync.ts"],
+        "rules": [
+          "react-doctor/no-derived-state",
+          "react-doctor/no-pass-live-state-to-parent"
+        ]
       }
     ]
   }

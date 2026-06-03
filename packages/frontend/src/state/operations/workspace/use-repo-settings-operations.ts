@@ -34,6 +34,8 @@ type UseRepoSettingsOperationsResult = {
   saveSettingsSnapshot: (snapshot: SettingsSnapshot) => Promise<void>;
 };
 
+const REPO_CONFIG_QUERY_KEY_PREFIX = [...workspaceQueryKeys.all, "repo-config"] as const;
+
 export function useRepoSettingsOperations({
   activeWorkspace,
   applyWorkspaceRecords,
@@ -41,7 +43,6 @@ export function useRepoSettingsOperations({
 }: UseRepoSettingsOperationsArgs): UseRepoSettingsOperationsResult {
   const queryClient = useQueryClient();
   const settingsSnapshotQueryKey = settingsSnapshotQueryOptions().queryKey;
-  const repoConfigQueryKeyPrefix = [...workspaceQueryKeys.all, "repo-config"] as const;
 
   const syncWorkspaceListRecord = useCallback(
     (workspace: WorkspaceRecord): void => {
@@ -175,13 +176,13 @@ export function useRepoSettingsOperations({
         queryClient.setQueryData(workspaceQueryKeys.repoConfig(workspaceId), repoConfig);
       }
       await queryClient.invalidateQueries({
-        queryKey: repoConfigQueryKeyPrefix,
+        queryKey: REPO_CONFIG_QUERY_KEY_PREFIX,
       });
       queryClient.setQueryData(settingsSnapshotQueryKey, normalizedSnapshot);
       queryClient.setQueryData(workspaceQueryKeys.list(), workspaces);
       applyWorkspaceRecords(workspaces);
     },
-    [applyWorkspaceRecords, queryClient, repoConfigQueryKeyPrefix, settingsSnapshotQueryKey],
+    [applyWorkspaceRecords, queryClient, settingsSnapshotQueryKey],
   );
 
   return {

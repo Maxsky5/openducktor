@@ -114,46 +114,43 @@ export function useTaskApprovalFlow({
             workspaceRepoPath,
             taskId,
           );
-          if (approvalRequestVersionRef.current !== requestVersion) {
-            return;
+          if (approvalRequestVersionRef.current === requestVersion) {
+            if (approvalContextResult.outcome === "missing_builder_worktree") {
+              dispatch({
+                type: "load_missing_builder_worktree",
+                taskId,
+                mode: effectiveMode,
+                pullRequestDraftMode,
+                title,
+                body,
+                errorMessage: openErrorMessage,
+              });
+            } else {
+              const approvalContext = approvalContextResult.approvalContext;
+              const updatedEffectiveMode = resolveTaskApprovalOpenMode({
+                cachedContext: approvalContext,
+                requestedMode: options?.mode,
+                task,
+              });
+              dispatch({
+                type: "load_succeeded",
+                taskId,
+                mode: updatedEffectiveMode,
+                pullRequestDraftMode,
+                title,
+                body,
+                errorMessage: openErrorMessage,
+                approvalContext,
+              });
+            }
           }
-          if (approvalContextResult.outcome === "missing_builder_worktree") {
-            dispatch({
-              type: "load_missing_builder_worktree",
-              taskId,
-              mode: effectiveMode,
-              pullRequestDraftMode,
-              title,
-              body,
-              errorMessage: openErrorMessage,
-            });
-            return;
-          }
-
-          const approvalContext = approvalContextResult.approvalContext;
-          const updatedEffectiveMode = resolveTaskApprovalOpenMode({
-            cachedContext: approvalContext,
-            requestedMode: options?.mode,
-            task,
-          });
-          dispatch({
-            type: "load_succeeded",
-            taskId,
-            mode: updatedEffectiveMode,
-            pullRequestDraftMode,
-            title,
-            body,
-            errorMessage: openErrorMessage,
-            approvalContext,
-          });
         } catch (error) {
-          if (approvalRequestVersionRef.current !== requestVersion) {
-            return;
+          if (approvalRequestVersionRef.current === requestVersion) {
+            reset();
+            toast.error("Failed to open approval flow", {
+              description: errorMessage(error),
+            });
           }
-          reset();
-          toast.error("Failed to open approval flow", {
-            description: errorMessage(error),
-          });
         }
       })();
     },

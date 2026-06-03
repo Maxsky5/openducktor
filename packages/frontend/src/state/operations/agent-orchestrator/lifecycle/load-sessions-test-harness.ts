@@ -24,7 +24,6 @@ import {
 } from "../test-utils";
 import { createLoadAgentSessions as createLoadAgentSessionsBase } from "./load-sessions";
 import type { SessionLifecycleAdapter } from "./load-sessions-stages";
-import { agentSessionPresenceLookupKey } from "./session-presence-cache";
 
 export type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
 
@@ -281,7 +280,6 @@ export type {
   SessionLifecycleAdapter,
 };
 export {
-  agentSessionPresenceLookupKey,
   createAgentSessionPresenceSnapshotFixture,
   createDeferred,
   findSessionMessageForTest,

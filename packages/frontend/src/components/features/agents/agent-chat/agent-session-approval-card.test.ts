@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  AgentSessionApprovalCard,
-  resolveApprovalReplyOutcomes,
-} from "./agent-session-approval-card";
+import { AgentSessionApprovalCard } from "./agent-session-approval-card";
+import { resolveApprovalReplyOutcomes } from "./agent-session-approval-card-model";
 
 const approvalRequest = {
   requestId: "approval-1",

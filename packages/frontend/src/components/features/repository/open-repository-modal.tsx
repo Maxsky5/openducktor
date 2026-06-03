@@ -1,5 +1,5 @@
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useReducer } from "react";
+import { type ReactElement, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -249,11 +249,18 @@ export function OpenRepositoryModal({
     error,
   } = state;
 
-  useEffect(() => {
-    if (!open) {
-      dispatch({ type: "reset" });
-    }
-  }, [open]);
+  if (
+    !open &&
+    (isFolderPickerOpen ||
+      selectedRepoPath !== null ||
+      workspaceName !== "" ||
+      workspaceId !== "" ||
+      hasEditedWorkspaceId ||
+      isCreatingWorkspace ||
+      error !== null)
+  ) {
+    dispatch({ type: "reset" });
+  }
 
   const isModalBusy = isSwitchingWorkspace || isCreatingWorkspace;
   const sortedRecent = useMemo(

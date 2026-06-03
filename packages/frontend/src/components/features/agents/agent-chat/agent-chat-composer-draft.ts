@@ -207,10 +207,6 @@ export const createEmptyComposerDraft = (): AgentChatComposerDraft => ({
   attachments: [],
 });
 
-export const isTextSegment = (
-  segment: AgentChatComposerSegment,
-): segment is AgentChatComposerTextSegment => segment.kind === "text";
-
 export const findTextSegment = (
   draft: AgentChatComposerDraft,
   segmentId: string,
@@ -341,21 +337,21 @@ const removeNonTextSegmentFromDraft = (
   };
 };
 
-export const removeSlashCommandSegmentFromDraft = (
+const removeSlashCommandSegmentFromDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
 ): AgentChatComposerDraftEditResult | null => {
   return removeNonTextSegmentFromDraft(draft, segmentId, "slash_command");
 };
 
-export const removeFileReferenceSegmentFromDraft = (
+const removeFileReferenceSegmentFromDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
 ): AgentChatComposerDraftEditResult | null => {
   return removeNonTextSegmentFromDraft(draft, segmentId, "file_reference");
 };
 
-export const removeSkillReferenceSegmentFromDraft = (
+const removeSkillReferenceSegmentFromDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
 ): AgentChatComposerDraftEditResult | null => {
@@ -442,7 +438,7 @@ const replaceTextRangeWithSegment = (
   };
 };
 
-export const replaceTextRangeWithSlashCommand = (
+const replaceTextRangeWithSlashCommand = (
   draft: AgentChatComposerDraft,
   textSegmentId: string,
   rangeStart: number,
@@ -473,7 +469,7 @@ export const replaceTextRangeWithSlashCommand = (
   );
 };
 
-export const replaceTextRangeWithFileReference = (
+const replaceTextRangeWithFileReference = (
   draft: AgentChatComposerDraft,
   textSegmentId: string,
   rangeStart: number,
@@ -489,7 +485,7 @@ export const replaceTextRangeWithFileReference = (
   );
 };
 
-export const replaceTextRangeWithSkillReference = (
+const replaceTextRangeWithSkillReference = (
   draft: AgentChatComposerDraft,
   textSegmentId: string,
   rangeStart: number,
@@ -565,7 +561,7 @@ export const applyComposerDraftEdit = (
   }
 };
 
-export const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessagePart[] => {
+const draftToUserMessageParts = (draft: AgentChatComposerDraft): AgentUserMessagePart[] => {
   const normalizedDraft = normalizeComposerDraft(draft);
   return [
     ...normalizedDraft.segments.flatMap<AgentUserMessagePart>((segment) => {
@@ -791,7 +787,7 @@ const textSegmentValueForTrigger = (
   return textOverride ?? segment.text;
 };
 
-export const readSlashTriggerMatch = (
+const readSlashTriggerMatch = (
   text: string,
   caretOffset: number,
 ): AgentChatSlashTriggerMatch | null => {
@@ -826,14 +822,14 @@ export const readSkillTriggerMatchForDraft = (
   return readSkillTriggerMatch(text, caretOffset);
 };
 
-export const readSkillTriggerMatch = (
+const readSkillTriggerMatch = (
   text: string,
   caretOffset: number,
 ): AgentChatSkillTriggerMatch | null => {
   return readTriggerMatch(text, caretOffset, "$", SKILL_QUERY_ALLOWED_PATTERN);
 };
 
-export const readFileTriggerMatch = (
+const readFileTriggerMatch = (
   text: string,
   caretOffset: number,
 ): AgentChatFileTriggerMatch | null => {

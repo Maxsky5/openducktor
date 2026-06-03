@@ -1,4 +1,12 @@
-import { type CSSProperties, type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   BORDER_RAY_DEFAULT_LENGTH_MAX,
   BORDER_RAY_DEFAULT_LENGTH_MIN,
@@ -7,7 +15,6 @@ import {
   BORDER_RAY_DEFAULT_TURN_DURATION_MS,
   type BorderRaySize,
   computeBorderRayLength,
-  DEFAULT_BORDER_RAY_PATH_METRICS,
   DEFAULT_BORDER_RAY_SIZE,
 } from "@/components/ui/border-ray-model";
 import { cn } from "@/lib/utils";
@@ -53,6 +60,31 @@ function parseCssLength(
   return numeric;
 }
 
+function readBorderRaySize(host: HTMLElement): BorderRaySize {
+  const rect = host.getBoundingClientRect();
+  const width = Math.max(rect.width, 1);
+  const height = Math.max(rect.height, 1);
+  const radius = Math.max(
+    parseCssLength(getComputedStyle(host).borderTopLeftRadius, host, width, height, 12),
+    0,
+  );
+  const borderWidth = Math.max(
+    parseCssLength(getComputedStyle(host).borderTopWidth, host, width, height, 1),
+    0,
+  );
+
+  return { width, height, radius, borderWidth };
+}
+
+function areBorderRaySizesClose(left: BorderRaySize, right: BorderRaySize): boolean {
+  return (
+    Math.abs(left.width - right.width) < 0.25 &&
+    Math.abs(left.height - right.height) < 0.25 &&
+    Math.abs(left.radius - right.radius) < 0.25 &&
+    Math.abs(left.borderWidth - right.borderWidth) < 0.1
+  );
+}
+
 export function BorderRay({
   className,
   color,
@@ -63,81 +95,34 @@ export function BorderRay({
   rayLengthMin = BORDER_RAY_DEFAULT_LENGTH_MIN,
   rayLengthMax = BORDER_RAY_DEFAULT_LENGTH_MAX,
 }: BorderRayProps): ReactElement {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const pathRef = useRef<SVGPathElement | null>(null);
+  const hostRef = useRef<HTMLElement | null>(null);
   const [size, setSize] = useState<BorderRaySize>(DEFAULT_BORDER_RAY_SIZE);
-  const [pathMetrics, setPathMetrics] = useState(DEFAULT_BORDER_RAY_PATH_METRICS);
+
+  const updateFromHost = useCallback((host: HTMLElement): void => {
+    const nextSize = readBorderRaySize(host);
+    setSize((current) => (areBorderRaySizesClose(current, nextSize) ? current : nextSize));
+  }, []);
+
+  const setSvgNode = useCallback(
+    (node: SVGSVGElement | null): void => {
+      const host = node?.parentElement ?? null;
+      hostRef.current = host instanceof HTMLElement ? host : null;
+      if (hostRef.current) {
+        updateFromHost(hostRef.current);
+      }
+    },
+    [updateFromHost],
+  );
 
   useEffect(() => {
-    const node = svgRef.current;
-    if (!node) {
+    const host = hostRef.current;
+    if (!host) {
       return;
     }
-
-    const host = node.parentElement;
-    if (!(host instanceof HTMLElement)) {
-      return;
-    }
-
-    const updateFromRect = (
-      nextWidth: number,
-      nextHeight: number,
-      nextRadius: number,
-      nextBorderWidth: number,
-    ): void => {
-      const safeWidth = Math.max(nextWidth, 1);
-      const safeHeight = Math.max(nextHeight, 1);
-      const safeRadius = Math.max(nextRadius, 0);
-      const safeBorderWidth = Math.max(nextBorderWidth, 0);
-      setSize((current) => {
-        if (
-          Math.abs(current.width - safeWidth) < 0.25 &&
-          Math.abs(current.height - safeHeight) < 0.25 &&
-          Math.abs(current.radius - safeRadius) < 0.25 &&
-          Math.abs(current.borderWidth - safeBorderWidth) < 0.1
-        ) {
-          return current;
-        }
-        return {
-          width: safeWidth,
-          height: safeHeight,
-          radius: safeRadius,
-          borderWidth: safeBorderWidth,
-        };
-      });
-    };
-
-    const readRadius = (containerWidth: number, containerHeight: number): number => {
-      return parseCssLength(
-        getComputedStyle(host).borderTopLeftRadius,
-        host,
-        containerWidth,
-        containerHeight,
-        12,
-      );
-    };
-
-    const readBorderWidth = (containerWidth: number, containerHeight: number): number => {
-      return parseCssLength(
-        getComputedStyle(host).borderTopWidth,
-        host,
-        containerWidth,
-        containerHeight,
-        1,
-      );
-    };
 
     const syncRect = (): void => {
-      const rect = host.getBoundingClientRect();
-      updateFromRect(
-        rect.width,
-        rect.height,
-        readRadius(rect.width, rect.height),
-        readBorderWidth(rect.width, rect.height),
-      );
+      updateFromHost(host);
     };
-
-    syncRect();
 
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", syncRect);
@@ -151,26 +136,25 @@ export function BorderRay({
       if (!entry) {
         return;
       }
-      updateFromRect(
-        entry.contentRect.width,
-        entry.contentRect.height,
-        readRadius(entry.contentRect.width, entry.contentRect.height),
-        readBorderWidth(entry.contentRect.width, entry.contentRect.height),
-      );
+      updateFromHost(host);
     });
     observer.observe(host);
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [updateFromHost]);
 
+  const measuredSize = size;
   const rayGeometry = useMemo(() => {
-    const inset = Math.max(size.borderWidth / 2, 0.5) + insetOffset;
-    const width = Math.max(size.width, 1);
-    const height = Math.max(size.height, 1);
+    const inset = Math.max(measuredSize.borderWidth / 2, 0.5) + insetOffset;
+    const width = Math.max(measuredSize.width, 1);
+    const height = Math.max(measuredSize.height, 1);
     const drawWidth = Math.max(width - inset * 2, 1);
     const drawHeight = Math.max(height - inset * 2, 1);
-    const radius = Math.max(0, Math.min(size.radius - inset, drawWidth / 2, drawHeight / 2));
+    const radius = Math.max(
+      0,
+      Math.min(measuredSize.radius - inset, drawWidth / 2, drawHeight / 2),
+    );
 
     const left = inset;
     const top = inset;
@@ -190,48 +174,26 @@ export function BorderRay({
       "Z",
     ].join(" ");
 
+    const perimeter = Math.max(1, 2 * (drawWidth + drawHeight - 4 * radius) + 2 * Math.PI * radius);
+    const rayLength = computeBorderRayLength(perimeter, rayLengthRatio, rayLengthMin, rayLengthMax);
+
     return {
       path,
       width,
       height,
+      perimeter,
+      rayLength,
     };
-  }, [insetOffset, size.borderWidth, size.height, size.radius, size.width]);
-
-  useEffect(() => {
-    if (rayGeometry.path.length === 0) {
-      return;
-    }
-
-    const pathNode = pathRef.current;
-    if (!pathNode) {
-      return;
-    }
-
-    let perimeter = 0;
-    try {
-      perimeter = pathNode.getTotalLength();
-    } catch {
-      return;
-    }
-
-    if (!Number.isFinite(perimeter) || perimeter <= 0) {
-      return;
-    }
-
-    const rayLength = computeBorderRayLength(perimeter, rayLengthRatio, rayLengthMin, rayLengthMax);
-    setPathMetrics((current) => {
-      if (
-        Math.abs(current.perimeter - perimeter) < 0.1 &&
-        Math.abs(current.rayLength - rayLength) < 0.1
-      ) {
-        return current;
-      }
-      return {
-        perimeter,
-        rayLength,
-      };
-    });
-  }, [rayGeometry.path, rayLengthMax, rayLengthMin, rayLengthRatio]);
+  }, [
+    insetOffset,
+    measuredSize.borderWidth,
+    measuredSize.height,
+    measuredSize.radius,
+    measuredSize.width,
+    rayLengthMax,
+    rayLengthMin,
+    rayLengthRatio,
+  ]);
 
   const rayStyle: CSSProperties = {
     position: "absolute",
@@ -241,22 +203,22 @@ export function BorderRay({
     pointerEvents: "none",
     zIndex: 2,
     ["--odt-border-ray-turn-duration" as string]: `${Math.max(turnDurationMs, 1)}ms`,
-    ["--odt-border-ray-perimeter" as string]: `${pathMetrics.perimeter}px`,
-    ["--odt-border-ray-length" as string]: `${pathMetrics.rayLength}px`,
+    ["--odt-border-ray-perimeter" as string]: `${rayGeometry.perimeter}px`,
+    ["--odt-border-ray-length" as string]: `${rayGeometry.rayLength}px`,
     ["--odt-border-ray-stroke-width" as string]: `${Math.max(strokeWidth, 0.5)}`,
     ...(color ? { ["--odt-border-ray-color" as string]: color } : {}),
   };
 
   return (
     <svg
-      ref={svgRef}
+      ref={setSvgNode}
       aria-hidden="true"
       className={cn("odt-border-ray", className)}
       viewBox={`0 0 ${rayGeometry.width} ${rayGeometry.height}`}
       preserveAspectRatio="none"
       style={rayStyle}
     >
-      <path ref={pathRef} className="odt-border-ray-segment" d={rayGeometry.path} />
+      <path className="odt-border-ray-segment" d={rayGeometry.path} />
     </svg>
   );
 }

@@ -89,7 +89,7 @@ const readFileExtension = (name: string): string => {
   return lastDot >= 0 ? name.slice(lastDot).toLowerCase() : "";
 };
 
-export const readAttachmentNameFromPath = (path: string): string => {
+const readAttachmentNameFromPath = (path: string): string => {
   const normalized = path.replace(/\\/g, "/");
   const segments = normalized.split("/");
   return segments[segments.length - 1] ?? path;
@@ -213,7 +213,7 @@ export const isPreviewableAttachmentKind = (kind: AgentAttachmentKind): boolean 
   return kind === "image" || kind === "video";
 };
 
-export const readAttachmentValidationError = (
+const readAttachmentValidationError = (
   attachment: Pick<AgentChatComposerAttachment, "kind">,
   support: AgentModelAttachmentSupport | null | undefined,
 ): string | null => {

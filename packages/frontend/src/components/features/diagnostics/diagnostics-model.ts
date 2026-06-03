@@ -4,15 +4,6 @@ export type DiagnosticsSummary = {
   iconClass: string;
 };
 
-export const healthVariant = (
-  healthy: boolean | null,
-): "success" | "warning" | "danger" | "secondary" => {
-  if (healthy === null) {
-    return "secondary";
-  }
-  return healthy ? "success" : "danger";
-};
-
 export const buildDiagnosticsSummary = ({
   hasActiveWorkspace,
   isChecking,

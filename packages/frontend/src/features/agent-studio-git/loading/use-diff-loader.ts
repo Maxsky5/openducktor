@@ -20,6 +20,7 @@ export function useAgentStudioDiffLoader({
   clearScopeInvalidation,
   finishRequest,
   markScopeInvalidated,
+  onLoadApplied,
   setBatchLoading,
   shouldApplyResult,
 }: UseAgentStudioDiffLoaderArgs): UseAgentStudioDiffLoaderResult {
@@ -38,6 +39,7 @@ export function useAgentStudioDiffLoader({
     applySummaryResult,
     clearScopeInvalidation,
     markScopeInvalidated,
+    onLoadApplied,
     shouldApplyResult,
   });
   const loadData = useAgentStudioDiffLoadData({

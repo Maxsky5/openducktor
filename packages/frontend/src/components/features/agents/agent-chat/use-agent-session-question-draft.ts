@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentQuestionRequest } from "@/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
@@ -55,14 +55,16 @@ export const useQuestionDraft = ({ request }: UseQuestionDraftArgs): UseQuestion
     draft: createAgentQuestionDraft(request),
   }));
   const [submitError, setSubmitErrorState] = useState<string | null>(null);
+  const [draftRequest, setDraftRequest] = useState(request);
 
-  useEffect(() => {
+  if (draftRequest !== request) {
+    setDraftRequest(request);
     setUiState({
       activeTabId: "0",
       draft: createAgentQuestionDraft(request),
     });
     setSubmitErrorState(null);
-  }, [request]);
+  }
 
   const normalizedDraft = useMemo(
     () => normalizeAgentQuestionDraft(request, uiState.draft),

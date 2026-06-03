@@ -8,8 +8,8 @@ type FetchRemoteResult = {
 
 type RunDiffRefreshRequestDeps = {
   getCurrentRefreshContextKey: () => string | null;
-  setIsRefreshing: (isRefreshing: boolean) => void;
-  setRefreshError: (error: string | null) => void;
+  setIsRefreshing: (contextKey: string, isRefreshing: boolean) => void;
+  setRefreshError: (contextKey: string, error: string | null) => void;
   scheduledFetchAtByContext: Map<string, number>;
   nowMs: () => number;
   fetchRemote: (context: DiffRefreshContext) => Promise<FetchRemoteResult>;
@@ -105,7 +105,7 @@ export const runDiffRefreshRequest = async (
   }
 
   if (showLoading) {
-    deps.setIsRefreshing(true);
+    deps.setIsRefreshing(context.requestContextKey, true);
   }
 
   try {
@@ -115,13 +115,13 @@ export const runDiffRefreshRequest = async (
         return false;
       }
 
-      deps.setRefreshError(null);
+      deps.setRefreshError(context.requestContextKey, null);
       await deps.refreshActiveScope(context);
       return true;
     }
 
     if (request.mode === "soft") {
-      deps.setRefreshError(null);
+      deps.setRefreshError(context.requestContextKey, null);
       await deps.refreshActiveScope(context);
       return true;
     }
@@ -144,23 +144,23 @@ export const runDiffRefreshRequest = async (
       return false;
     }
 
-    deps.setRefreshError(scheduledFetchError);
+    deps.setRefreshError(context.requestContextKey, scheduledFetchError);
     try {
       await deps.refreshActiveScopeSummary(context);
     } catch (error) {
       if (hasSameRefreshContext(context, deps)) {
-        deps.setRefreshError(scheduledFetchError ?? String(error));
+        deps.setRefreshError(context.requestContextKey, scheduledFetchError ?? String(error));
       }
     }
     return true;
   } catch (error) {
     if (hasSameRefreshContext(context, deps)) {
-      deps.setRefreshError(String(error));
+      deps.setRefreshError(context.requestContextKey, String(error));
     }
     return true;
   } finally {
     if (showLoading && hasSameRefreshContext(context, deps)) {
-      deps.setIsRefreshing(false);
+      deps.setIsRefreshing(context.requestContextKey, false);
     }
   }
 };

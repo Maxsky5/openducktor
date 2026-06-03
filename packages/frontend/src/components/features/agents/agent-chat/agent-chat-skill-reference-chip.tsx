@@ -19,7 +19,7 @@ type AgentChatSkillReferenceChipProps = {
   className?: string;
 };
 
-export function AgentChatInlineSkillReferenceChip({
+function AgentChatInlineSkillReferenceChip({
   skill,
   className,
   title,

@@ -117,58 +117,57 @@ export const useRuntimeTranscriptAttachment = ({
         const summary = await summaryPromise;
         if (!isCurrentTranscriptRequest()) {
           await detachRuntimeSessionIfPresent();
-          return;
-        }
-
-        const history = await agentEngine.loadSessionHistory({
-          repoPath: input.repoPath,
-          runtimeKind,
-          workingDirectory: input.workingDirectory,
-          externalSessionId: input.externalSessionId,
-        });
-        if (!isCurrentTranscriptRequest()) {
-          await detachRuntimeSessionIfPresent();
-          return;
-        }
-        const hydratedSession = createRuntimeTranscriptSession({
-          repoPath: input.repoPath,
-          externalSessionId: input.externalSessionId,
-          runtimeRef: input.runtimeRef,
-          workingDirectory: input.workingDirectory,
-          history,
-          isLive: true,
-          pendingApprovals: input.pendingApprovals ?? [],
-          pendingQuestions: input.pendingQuestions ?? [],
-        });
-
-        updateSession(
-          input.externalSessionId,
-          (current) => {
-            const messages =
-              getSessionMessageCount(current) === 0
-                ? hydratedSession.messages
-                : mergeHydratedMessages(
-                    input.externalSessionId,
-                    hydratedSession.messages,
-                    current.messages,
-                  );
-
-            return {
-              ...current,
-              startedAt: summary?.startedAt ?? hydratedSession.startedAt,
-              status: summary?.status ?? current.status,
-              runtimeKind,
-              runtimeId,
+        } else {
+          const history = await agentEngine.loadSessionHistory({
+            repoPath: input.repoPath,
+            runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.externalSessionId,
+          });
+          if (!isCurrentTranscriptRequest()) {
+            await detachRuntimeSessionIfPresent();
+          } else {
+            const hydratedSession = createRuntimeTranscriptSession({
+              repoPath: input.repoPath,
+              externalSessionId: input.externalSessionId,
+              runtimeRef: input.runtimeRef,
               workingDirectory: input.workingDirectory,
-              historyHydrationState: "hydrated",
-              runtimeRecoveryState: "idle",
-              pendingApprovals: current.pendingApprovals,
-              pendingQuestions: current.pendingQuestions,
-              messages,
-            };
-          },
-          { persist: false },
-        );
+              history,
+              isLive: true,
+              pendingApprovals: input.pendingApprovals ?? [],
+              pendingQuestions: input.pendingQuestions ?? [],
+            });
+
+            updateSession(
+              input.externalSessionId,
+              (current) => {
+                const messages =
+                  getSessionMessageCount(current) === 0
+                    ? hydratedSession.messages
+                    : mergeHydratedMessages(
+                        input.externalSessionId,
+                        hydratedSession.messages,
+                        current.messages,
+                      );
+
+                return {
+                  ...current,
+                  startedAt: summary?.startedAt ?? hydratedSession.startedAt,
+                  status: summary?.status ?? current.status,
+                  runtimeKind,
+                  runtimeId,
+                  workingDirectory: input.workingDirectory,
+                  historyHydrationState: "hydrated",
+                  runtimeRecoveryState: "idle",
+                  pendingApprovals: current.pendingApprovals,
+                  pendingQuestions: current.pendingQuestions,
+                  messages,
+                };
+              },
+              { persist: false },
+            );
+          }
+        }
       } catch (error) {
         if (attachedListener && !hadLocalSession) {
           unsubscribeTranscriptListener();

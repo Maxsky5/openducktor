@@ -49,7 +49,7 @@ const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
   rawSessionToken: null,
 });
 
-export const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
+const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
   revision: EMPTY_TRANSCRIPT_ROWS_REVISION,
   rows: EMPTY_ROWS,
   turns: [] as AgentChatWindowTurn[],
@@ -255,7 +255,11 @@ export const useAgentChatTranscriptRows = ({
   isTranscriptRowsMissing: boolean;
   isTranscriptRowsPending: boolean;
 } => {
-  const rowsCacheRef = useRef<Map<string, AgentChatWindowRowsCacheEntry>>(new Map());
+  const rowsCacheRef = useRef<Map<string, AgentChatWindowRowsCacheEntry> | null>(null);
+  if (rowsCacheRef.current === null) {
+    rowsCacheRef.current = new Map<string, AgentChatWindowRowsCacheEntry>();
+  }
+  const rowsCache = rowsCacheRef.current;
   const derivationTokenRef = useRef(0);
   const activeRevision = useMemo(
     () => buildTranscriptRowsRevision(session, showThinkingMessages),
@@ -280,7 +284,7 @@ export const useAgentChatTranscriptRows = ({
       return buildImmediateTranscriptRowsState({
         session,
         showThinkingMessages,
-        cache: rowsCacheRef.current,
+        cache: rowsCache,
       });
     },
   );
@@ -328,7 +332,7 @@ export const useAgentChatTranscriptRows = ({
     const reusableRowsState = peekReusableAgentChatWindowRowsState({
       session: currentSession,
       showThinkingMessages,
-      cache: rowsCacheRef.current,
+      cache: rowsCache,
     });
     if (reusableRowsState) {
       const nextTranscriptState = toTranscriptRowsState({
@@ -377,7 +381,7 @@ export const useAgentChatTranscriptRows = ({
           session: currentSession,
           showThinkingMessages,
           rowsState,
-          cache: rowsCacheRef.current,
+          cache: rowsCache,
         });
         const nextTranscriptState = toTranscriptRowsState({
           session: currentSession,
@@ -400,7 +404,7 @@ export const useAgentChatTranscriptRows = ({
         globalThis.clearTimeout(scheduledWorkId);
       }
     };
-  }, [activeRevisionKey, shouldPauseDerivation, showThinkingMessages]);
+  }, [activeRevisionKey, rowsCache, shouldPauseDerivation, showThinkingMessages]);
 
   const transcriptState = useMemo(() => {
     if (!hasRowsForActiveSession) {

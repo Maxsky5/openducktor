@@ -4,14 +4,7 @@ import type {
   AgentModelSelection,
   AgentSessionStartMode,
 } from "@openducktor/core";
-import {
-  type Dispatch,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type Dispatch, type SetStateAction, useCallback, useMemo, useState } from "react";
 import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
@@ -21,6 +14,8 @@ import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveLaunchStartMode } from "./session-start-mode";
 import { coerceVisibleSelectionToCatalog, isSameSelection } from "./session-start-selection";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
+
+const EMPTY_EXISTING_SESSION_OPTIONS: SessionStartExistingSessionOption[] = [];
 
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
@@ -141,8 +136,12 @@ type UseSessionStartModalReuseStateArgs = {
 type UseSessionStartModalReuseStateResult = {
   availableStartModes: AgentSessionStartMode[];
   existingSessionOptions: SessionStartExistingSessionOption[];
-  initializeStartState: (intent: SessionStartModalIntent) => AgentSessionStartMode;
+  initializeStartState: (intent: SessionStartModalIntent) => {
+    selectedSourceSessionId: string;
+    selectedStartMode: AgentSessionStartMode;
+  };
   resetStartState: () => void;
+  reuseSelection: AgentModelSelection | null;
   selectedSourceSessionId: string;
   selectedStartMode: AgentSessionStartMode;
   handleSelectSourceSession: (externalSessionId: string) => void;
@@ -165,36 +164,25 @@ export function useSessionStartModalReuseState({
     [intent],
   );
 
-  const existingSessionOptions = useMemo(
-    () => intent?.existingSessionOptions ?? [],
-    [intent?.existingSessionOptions],
-  );
+  const existingSessionOptions = intent?.existingSessionOptions ?? EMPTY_EXISTING_SESSION_OPTIONS;
+  const selectedStartModeHasSource = selectedStartMode === "reuse" || selectedStartMode === "fork";
+  const effectiveSelectedStartMode =
+    selectedStartModeHasSource &&
+    existingSessionOptions.length === 0 &&
+    availableStartModes.includes("fresh")
+      ? "fresh"
+      : selectedStartMode;
 
   const resetStartState = useCallback((): void => {
     setSelectedStartMode("fresh");
     setSelectedSourceSessionId("");
   }, []);
 
-  const initializeStartState = useCallback(
-    (nextIntent: SessionStartModalIntent): AgentSessionStartMode => {
-      const nextState = resolveInitialStartState({
-        launchActionId: nextIntent.launchActionId,
-        existingSessionOptions: nextIntent.existingSessionOptions ?? [],
-        initialStartMode: nextIntent.initialStartMode,
-        initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
-      });
-      setSelectedStartMode(nextState.selectedStartMode);
-      setSelectedSourceSessionId(nextState.selectedSourceSessionId);
-      return nextState.selectedStartMode;
-    },
-    [],
-  );
-
   const applyReuseSourceSelection = useCallback(
-    (sourceExternalSessionId: string): void => {
+    (sourceExternalSessionId: string, options = existingSessionOptions): void => {
       const nextDraft = buildReuseSelectionDraft({
         catalog,
-        options: existingSessionOptions,
+        options,
         runtimeDefinitions,
         sourceExternalSessionId,
       });
@@ -204,6 +192,59 @@ export function useSessionStartModalReuseState({
       );
     },
     [catalog, existingSessionOptions, runtimeDefinitions, setRequestedRuntimeKind, setSelection],
+  );
+
+  const initializeStartState = useCallback(
+    (
+      nextIntent: SessionStartModalIntent,
+    ): {
+      selectedSourceSessionId: string;
+      selectedStartMode: AgentSessionStartMode;
+    } => {
+      const nextState = resolveInitialStartState({
+        launchActionId: nextIntent.launchActionId,
+        existingSessionOptions: nextIntent.existingSessionOptions ?? [],
+        initialStartMode: nextIntent.initialStartMode,
+        initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
+      });
+      setSelectedStartMode(nextState.selectedStartMode);
+      setSelectedSourceSessionId(nextState.selectedSourceSessionId);
+      if (nextState.selectedStartMode === "reuse") {
+        applyReuseSourceSelection(
+          nextState.selectedSourceSessionId,
+          nextIntent.existingSessionOptions ?? [],
+        );
+      }
+      return nextState;
+    },
+    [applyReuseSourceSelection],
+  );
+
+  const effectiveSelectedSourceSessionId =
+    effectiveSelectedStartMode === "reuse"
+      ? resolveValidSourceSessionId(existingSessionOptions, selectedSourceSessionId)
+      : selectedSourceSessionId;
+
+  const reuseSelectionDraft = useMemo(
+    () =>
+      effectiveSelectedStartMode === "reuse" && effectiveSelectedSourceSessionId
+        ? buildReuseSelectionDraft({
+            catalog,
+            options: existingSessionOptions,
+            runtimeDefinitions,
+            sourceExternalSessionId: effectiveSelectedSourceSessionId,
+          })
+        : {
+            runtimeKind: null,
+            selection: null,
+          },
+    [
+      catalog,
+      effectiveSelectedSourceSessionId,
+      effectiveSelectedStartMode,
+      existingSessionOptions,
+      runtimeDefinitions,
+    ],
   );
 
   const handleSelectStartMode = useCallback(
@@ -238,7 +279,7 @@ export function useSessionStartModalReuseState({
         externalSessionId,
       );
       setSelectedSourceSessionId(nextSourceSessionId);
-      if (selectedStartMode !== "reuse") {
+      if (effectiveSelectedStartMode !== "reuse") {
         return;
       }
       if (!nextSourceSessionId) {
@@ -246,51 +287,17 @@ export function useSessionStartModalReuseState({
       }
       applyReuseSourceSelection(nextSourceSessionId);
     },
-    [applyReuseSourceSelection, existingSessionOptions, selectedStartMode],
+    [applyReuseSourceSelection, effectiveSelectedStartMode, existingSessionOptions],
   );
-
-  useEffect(() => {
-    if (selectedStartMode !== "reuse") {
-      return;
-    }
-    const nextSourceSessionId = resolveValidSourceSessionId(
-      existingSessionOptions,
-      selectedSourceSessionId,
-    );
-    if (!nextSourceSessionId) {
-      return;
-    }
-    if (nextSourceSessionId !== selectedSourceSessionId) {
-      setSelectedSourceSessionId(nextSourceSessionId);
-    }
-    applyReuseSourceSelection(nextSourceSessionId);
-  }, [
-    applyReuseSourceSelection,
-    existingSessionOptions,
-    selectedSourceSessionId,
-    selectedStartMode,
-  ]);
-
-  useEffect(() => {
-    if (selectedStartMode !== "reuse" && selectedStartMode !== "fork") {
-      return;
-    }
-    if (existingSessionOptions.length > 0) {
-      return;
-    }
-    if (!availableStartModes.includes("fresh")) {
-      return;
-    }
-    setSelectedStartMode("fresh");
-  }, [availableStartModes, existingSessionOptions, selectedStartMode]);
 
   return {
     availableStartModes,
     existingSessionOptions,
     initializeStartState,
     resetStartState,
-    selectedSourceSessionId,
-    selectedStartMode,
+    reuseSelection: reuseSelectionDraft.selection,
+    selectedSourceSessionId: effectiveSelectedSourceSessionId,
+    selectedStartMode: effectiveSelectedStartMode,
     handleSelectSourceSession,
     handleSelectStartMode,
   };

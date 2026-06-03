@@ -76,16 +76,39 @@ const createScopeInvalidationState = (): ScopeInvalidationState => ({
   uncommitted: false,
 });
 
+const readControllerRef = <T>(ref: { current: T | null }, label: string): T => {
+  if (ref.current === null) {
+    throw new Error(`Diff request controller ${label} ref was not initialized.`);
+  }
+
+  return ref.current;
+};
+
 export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequestControllerResult {
-  const versionByScopeAndModeRef = useRef(createVersionState());
+  const versionByScopeAndModeRef = useRef<RequestStatusByScopeAndMode | null>(null);
   const requestSequenceRef = useRef(0);
-  const inFlightScopeRequestRef = useRef(createInFlightState());
-  const queuedFullReloadByScopeRef = useRef(createQueuedFullReloadState());
-  const invalidatedFullReloadByScopeRef = useRef(createScopeInvalidationState());
+  const inFlightScopeRequestRef = useRef<InFlightRequestState | null>(null);
+  const queuedFullReloadByScopeRef = useRef<QueuedFullReloadState | null>(null);
+  const invalidatedFullReloadByScopeRef = useRef<ScopeInvalidationState | null>(null);
   const latestLoadingRequestSequenceRef = useRef<number | null>(null);
 
+  if (versionByScopeAndModeRef.current === null) {
+    versionByScopeAndModeRef.current = createVersionState();
+  }
+  if (inFlightScopeRequestRef.current === null) {
+    inFlightScopeRequestRef.current = createInFlightState();
+  }
+  if (queuedFullReloadByScopeRef.current === null) {
+    queuedFullReloadByScopeRef.current = createQueuedFullReloadState();
+  }
+  if (invalidatedFullReloadByScopeRef.current === null) {
+    invalidatedFullReloadByScopeRef.current = createScopeInvalidationState();
+  }
+
   const resetRequestTracking = useCallback((): void => {
-    versionByScopeAndModeRef.current = invalidateVersionState(versionByScopeAndModeRef.current);
+    const versionByScopeAndMode = readControllerRef(versionByScopeAndModeRef, "version state");
+
+    versionByScopeAndModeRef.current = invalidateVersionState(versionByScopeAndMode);
     inFlightScopeRequestRef.current = createInFlightState();
     queuedFullReloadByScopeRef.current = createQueuedFullReloadState();
     invalidatedFullReloadByScopeRef.current = {
@@ -104,21 +127,31 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
       scope,
       showLoading,
     }: BeginRequestArgs): BeginRequestResult => {
-      if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
+      const inFlightScopeRequest = readControllerRef(
+        inFlightScopeRequestRef,
+        "in-flight request state",
+      );
+      const queuedFullReloadByScope = readControllerRef(
+        queuedFullReloadByScopeRef,
+        "queued reload state",
+      );
+      const versionByScopeAndMode = readControllerRef(versionByScopeAndModeRef, "version state");
+
+      if (inFlightScopeRequest[scope][mode] === requestKey) {
         if (mode === "full" && replayIfInFlight) {
-          queuedFullReloadByScopeRef.current[scope] = {
-            force: (queuedFullReloadByScopeRef.current[scope]?.force ?? false) || force,
+          queuedFullReloadByScope[scope] = {
+            force: (queuedFullReloadByScope[scope]?.force ?? false) || force,
           };
         }
         return { kind: "skip" };
       }
 
-      if (mode === "summary" && inFlightScopeRequestRef.current[scope].full === requestKey) {
+      if (mode === "summary" && inFlightScopeRequest[scope].full === requestKey) {
         return { kind: "skip" };
       }
 
-      inFlightScopeRequestRef.current[scope][mode] = requestKey;
-      const version = ++versionByScopeAndModeRef.current[scope][mode];
+      inFlightScopeRequest[scope][mode] = requestKey;
+      const version = ++versionByScopeAndMode[scope][mode];
       const requestSequence = ++requestSequenceRef.current;
 
       if (showLoading) {
@@ -142,8 +175,17 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
       scope,
       showLoading,
     }: FinishRequestArgs): FinishRequestResult => {
-      if (inFlightScopeRequestRef.current[scope][mode] === requestKey) {
-        inFlightScopeRequestRef.current[scope][mode] = null;
+      const inFlightScopeRequest = readControllerRef(
+        inFlightScopeRequestRef,
+        "in-flight request state",
+      );
+      const queuedFullReloadByScope = readControllerRef(
+        queuedFullReloadByScopeRef,
+        "queued reload state",
+      );
+
+      if (inFlightScopeRequest[scope][mode] === requestKey) {
+        inFlightScopeRequest[scope][mode] = null;
       }
 
       const clearLoading =
@@ -152,7 +194,7 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
         latestLoadingRequestSequenceRef.current = null;
       }
 
-      const replayFullLoad = queuedFullReloadByScopeRef.current[scope];
+      const replayFullLoad = queuedFullReloadByScope[scope];
       if (mode !== "full" || replayFullLoad == null) {
         return {
           clearLoading,
@@ -160,7 +202,7 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
         };
       }
 
-      queuedFullReloadByScopeRef.current[scope] = null;
+      queuedFullReloadByScope[scope] = null;
 
       return {
         clearLoading,
@@ -172,20 +214,21 @@ export function useAgentStudioDiffRequestController(): UseAgentStudioDiffRequest
 
   const shouldApplyResult = useCallback(
     (scope: DiffScope, mode: LoadDataMode, version: number): boolean =>
-      versionByScopeAndModeRef.current[scope][mode] === version,
+      readControllerRef(versionByScopeAndModeRef, "version state")[scope][mode] === version,
     [],
   );
 
   const markScopeInvalidated = useCallback((scope: DiffScope): void => {
-    invalidatedFullReloadByScopeRef.current[scope] = true;
+    readControllerRef(invalidatedFullReloadByScopeRef, "scope invalidation state")[scope] = true;
   }, []);
 
   const clearScopeInvalidation = useCallback((scope: DiffScope): void => {
-    invalidatedFullReloadByScopeRef.current[scope] = false;
+    readControllerRef(invalidatedFullReloadByScopeRef, "scope invalidation state")[scope] = false;
   }, []);
 
   const isScopeInvalidated = useCallback(
-    (scope: DiffScope): boolean => invalidatedFullReloadByScopeRef.current[scope],
+    (scope: DiffScope): boolean =>
+      readControllerRef(invalidatedFullReloadByScopeRef, "scope invalidation state")[scope],
     [],
   );
 

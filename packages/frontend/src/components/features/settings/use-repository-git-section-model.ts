@@ -1,5 +1,5 @@
 import type { GitProviderRepository, RepoConfig, RuntimeCheck } from "@openducktor/contracts";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 type UseRepositoryGitSectionModelArgs = {
   selectedRepoPath: string | null;
@@ -16,36 +16,54 @@ export type GithubRepositoryDraft = {
   name: string;
 };
 
-type RepositoryGitSectionUiState = {
+type RepositoryGitSectionState = {
+  repoPath: string | null;
+  repositoryKey: string;
+  repositoryDraft: GithubRepositoryDraft;
   isManualConfigOpen: boolean;
   isDetecting: boolean;
   detectionMessage: string | null;
 };
 
-type RepositoryGitSectionUiAction =
+type RepositoryGitSectionContext = {
+  repoPath: string | null;
+  repository: GitProviderRepository | undefined;
+  hasRepositoryCoordinates: boolean;
+};
+
+type RepositoryGitSectionAction =
   | {
-      type: "reset_for_repo";
-      hasRepositoryCoordinates: boolean;
-      hasSelectedRepoPath: boolean;
+      type: "context_changed";
+      context: RepositoryGitSectionContext;
     }
   | {
-      type: "set_manual_config_open";
-      isManualConfigOpen: boolean;
+      type: "draft_committed";
+      draft: GithubRepositoryDraft;
     }
   | {
-      type: "toggle_manual_config_open";
+      type: "detection_failed";
+      manual: boolean;
+      reason: string;
+    }
+  | {
+      type: "detection_invalidated";
+      clearMessage: boolean;
+      keepManualConfigOpen: boolean;
+    }
+  | {
+      type: "detection_missing";
+      manual: boolean;
     }
   | {
       type: "detection_started";
     }
   | {
-      type: "detection_finished";
+      type: "detection_succeeded";
+      closeManualConfig: boolean;
+      repository: GitProviderRepository;
     }
   | {
-      type: "set_detection_result";
-      detectionMessage: string | null;
-      isManualConfigOpen?: boolean;
-      isDetecting?: boolean;
+      type: "manual_toggled";
     };
 
 type UseRepositoryGitSectionModelResult = {
@@ -75,56 +93,6 @@ const EMPTY_GITHUB_CONFIG = {
   repository: undefined,
 } as const;
 
-const INITIAL_REPOSITORY_GIT_SECTION_UI_STATE: RepositoryGitSectionUiState = {
-  isManualConfigOpen: false,
-  isDetecting: false,
-  detectionMessage: null,
-};
-
-const repositoryGitSectionUiReducer = (
-  state: RepositoryGitSectionUiState,
-  action: RepositoryGitSectionUiAction,
-): RepositoryGitSectionUiState => {
-  switch (action.type) {
-    case "reset_for_repo":
-      return {
-        ...state,
-        detectionMessage: null,
-        isDetecting: false,
-        isManualConfigOpen: action.hasSelectedRepoPath ? !action.hasRepositoryCoordinates : false,
-      };
-    case "set_manual_config_open":
-      return {
-        ...state,
-        isManualConfigOpen: action.isManualConfigOpen,
-      };
-    case "toggle_manual_config_open":
-      return {
-        ...state,
-        isManualConfigOpen: !state.isManualConfigOpen,
-      };
-    case "detection_started":
-      return {
-        ...state,
-        isDetecting: true,
-      };
-    case "detection_finished":
-      return {
-        ...state,
-        isDetecting: false,
-      };
-    case "set_detection_result":
-      return {
-        ...state,
-        detectionMessage: action.detectionMessage,
-        ...(typeof action.isDetecting === "boolean" ? { isDetecting: action.isDetecting } : {}),
-        ...(typeof action.isManualConfigOpen === "boolean"
-          ? { isManualConfigOpen: action.isManualConfigOpen }
-          : {}),
-      };
-  }
-};
-
 const buildGithubConfig = (
   repoConfig: RepoConfig,
   overrides: Partial<NonNullable<RepoConfig["git"]["providers"]["github"]>>,
@@ -141,6 +109,114 @@ const trimRepositoryDraft = (draft: GithubRepositoryDraft): GithubRepositoryDraf
   name: draft.name.trim(),
 });
 
+const buildRepositoryDraft = (
+  repository: GitProviderRepository | undefined,
+): GithubRepositoryDraft => ({
+  host: repository?.host ?? "github.com",
+  owner: repository?.owner ?? "",
+  name: repository?.name ?? "",
+});
+
+const toRepositoryKey = (repository: GitProviderRepository | undefined): string => {
+  if (!repository?.host || !repository.owner || !repository.name) {
+    return "";
+  }
+  return `${repository.host}:${repository.owner}:${repository.name}`;
+};
+
+const toRepositoryFromDraft = (draft: GithubRepositoryDraft): GitProviderRepository | undefined => {
+  const trimmedDraft = trimRepositoryDraft(draft);
+  return trimmedDraft.host && trimmedDraft.owner && trimmedDraft.name ? trimmedDraft : undefined;
+};
+
+const createRepositoryGitSectionState = ({
+  hasRepositoryCoordinates,
+  repoPath,
+  repository,
+}: RepositoryGitSectionContext): RepositoryGitSectionState => ({
+  repoPath,
+  repositoryKey: toRepositoryKey(repository),
+  repositoryDraft: buildRepositoryDraft(repository),
+  isManualConfigOpen: repoPath != null && !hasRepositoryCoordinates,
+  isDetecting: false,
+  detectionMessage: null,
+});
+
+const isStateForContext = (
+  state: RepositoryGitSectionState,
+  context: RepositoryGitSectionContext,
+): boolean =>
+  state.repoPath === context.repoPath &&
+  state.repositoryKey === toRepositoryKey(context.repository);
+
+const repositoryGitSectionReducer = (
+  state: RepositoryGitSectionState,
+  action: RepositoryGitSectionAction,
+): RepositoryGitSectionState => {
+  switch (action.type) {
+    case "context_changed":
+      return isStateForContext(state, action.context)
+        ? state
+        : createRepositoryGitSectionState(action.context);
+    case "draft_committed": {
+      const nextRepository = toRepositoryFromDraft(action.draft);
+      return {
+        ...state,
+        repositoryDraft: action.draft,
+        repositoryKey: toRepositoryKey(nextRepository),
+      };
+    }
+    case "detection_failed": {
+      return {
+        ...state,
+        detectionMessage: action.reason,
+        isDetecting: false,
+        ...(action.manual ? { isManualConfigOpen: true } : {}),
+      };
+    }
+    case "detection_invalidated": {
+      return {
+        ...state,
+        detectionMessage: action.clearMessage ? null : state.detectionMessage,
+        isDetecting: false,
+        isManualConfigOpen: action.keepManualConfigOpen ? true : state.isManualConfigOpen,
+      };
+    }
+    case "detection_missing": {
+      return {
+        ...state,
+        detectionMessage:
+          "No GitHub origin was detected for this repository. You can still configure it manually.",
+        isDetecting: false,
+        ...(action.manual ? { isManualConfigOpen: true } : {}),
+      };
+    }
+    case "detection_started": {
+      return {
+        ...state,
+        isDetecting: true,
+      };
+    }
+    case "detection_succeeded": {
+      const nextDraft = buildRepositoryDraft(action.repository);
+      return {
+        ...state,
+        detectionMessage: `Detected ${action.repository.owner}/${action.repository.name} from origin. Save settings to keep this mapping.`,
+        isDetecting: false,
+        isManualConfigOpen: action.closeManualConfig ? false : state.isManualConfigOpen,
+        repositoryDraft: nextDraft,
+        repositoryKey: toRepositoryKey(action.repository),
+      };
+    }
+    case "manual_toggled": {
+      return {
+        ...state,
+        isManualConfigOpen: !state.isManualConfigOpen,
+      };
+    }
+  }
+};
+
 export function useRepositoryGitSectionModel({
   disabled,
   onDetectGithubRepository,
@@ -149,25 +225,26 @@ export function useRepositoryGitSectionModel({
   selectedRepoConfig,
   selectedRepoPath,
 }: UseRepositoryGitSectionModelArgs): UseRepositoryGitSectionModelResult {
-  const attemptedAutoDetectByRepoRef = useRef<Set<string>>(new Set());
+  const initialGithubRepository = selectedRepoConfig?.git.providers.github?.repository;
+  const initialHasRepositoryCoordinates = Boolean(
+    initialGithubRepository?.host && initialGithubRepository.owner && initialGithubRepository.name,
+  );
+  const attemptedAutoDetectByRepoRef = useRef<Set<string> | null>(null);
+  if (attemptedAutoDetectByRepoRef.current === null) {
+    attemptedAutoDetectByRepoRef.current = new Set();
+  }
+  const attemptedAutoDetectByRepo = attemptedAutoDetectByRepoRef.current;
   const activeDetectionSequenceRef = useRef(0);
   const activeRepoPathRef = useRef<string | null>(selectedRepoPath);
-  const previousSelectedRepoPathRef = useRef<string | null>(null);
-  const hasInitializedRepoStateRef = useRef(false);
-  const repositoryDraftRef = useRef<GithubRepositoryDraft>({
-    host: "github.com",
-    owner: "",
-    name: "",
-  });
-  const [uiState, dispatchUiState] = useReducer(
-    repositoryGitSectionUiReducer,
-    INITIAL_REPOSITORY_GIT_SECTION_UI_STATE,
+  const [sectionState, dispatchSectionState] = useReducer(
+    repositoryGitSectionReducer,
+    {
+      hasRepositoryCoordinates: initialHasRepositoryCoordinates,
+      repository: initialGithubRepository,
+      repoPath: selectedRepoPath,
+    },
+    createRepositoryGitSectionState,
   );
-  const [repositoryDraft, setRepositoryDraft] = useState<GithubRepositoryDraft>({
-    host: "github.com",
-    owner: "",
-    name: "",
-  });
 
   const github = selectedRepoConfig?.git.providers.github ?? EMPTY_GITHUB_CONFIG;
   const githubEnabled = github.enabled ?? false;
@@ -203,7 +280,24 @@ export function useRepositoryGitSectionModel({
             : `GitHub pull requests are configured for ${githubHost}. Authentication for that host is validated during approval.`;
   const providerStatusLabel = githubEnabled ? "Pull requests enabled" : "Pull requests disabled";
   const cliStatusLabel = hasGithubCli ? "CLI installed" : "CLI missing";
-  const { detectionMessage, isDetecting, isManualConfigOpen } = uiState;
+  activeRepoPathRef.current = selectedRepoPath;
+  const repositorySectionContext = useMemo<RepositoryGitSectionContext>(
+    () => ({
+      hasRepositoryCoordinates,
+      repository: github.repository,
+      repoPath: selectedRepoPath,
+    }),
+    [github.repository, hasRepositoryCoordinates, selectedRepoPath],
+  );
+  const currentSectionState = isStateForContext(sectionState, repositorySectionContext)
+    ? sectionState
+    : createRepositoryGitSectionState(repositorySectionContext);
+  const { detectionMessage, isDetecting, isManualConfigOpen, repositoryDraft } =
+    currentSectionState;
+
+  useEffect(() => {
+    dispatchSectionState({ type: "context_changed", context: repositorySectionContext });
+  }, [repositorySectionContext]);
 
   const commitGithubRepositoryDraft = useCallback(
     (nextDraft: GithubRepositoryDraft): void => {
@@ -228,17 +322,27 @@ export function useRepositoryGitSectionModel({
     [onUpdateSelectedRepoConfig],
   );
 
+  const commitRepositoryDraft = useCallback(
+    (nextDraft: GithubRepositoryDraft): void => {
+      dispatchSectionState({
+        type: "draft_committed",
+        draft: nextDraft,
+      });
+      commitGithubRepositoryDraft(nextDraft);
+    },
+    [commitGithubRepositoryDraft],
+  );
+
   const invalidateActiveDetection = useCallback(
     (options: { clearMessage?: boolean; keepManualConfigOpen?: boolean } = {}): void => {
       activeDetectionSequenceRef.current += 1;
-      dispatchUiState({
-        type: "set_detection_result",
-        detectionMessage: options.clearMessage ? null : uiState.detectionMessage,
-        ...(options.keepManualConfigOpen ? { isManualConfigOpen: true } : {}),
-        isDetecting: false,
+      dispatchSectionState({
+        type: "detection_invalidated",
+        clearMessage: options.clearMessage === true,
+        keepManualConfigOpen: options.keepManualConfigOpen === true,
       });
     },
-    [uiState.detectionMessage],
+    [],
   );
 
   const handleGithubEnabledChange = useCallback(
@@ -263,14 +367,12 @@ export function useRepositoryGitSectionModel({
         invalidateActiveDetection({ clearMessage: true, keepManualConfigOpen: true });
       }
       const nextDraft = {
-        ...repositoryDraftRef.current,
+        ...repositoryDraft,
         [field]: value,
       };
-      repositoryDraftRef.current = nextDraft;
-      setRepositoryDraft(nextDraft);
-      commitGithubRepositoryDraft(nextDraft);
+      commitRepositoryDraft(nextDraft);
     },
-    [commitGithubRepositoryDraft, invalidateActiveDetection, isDetecting],
+    [commitRepositoryDraft, invalidateActiveDetection, isDetecting, repositoryDraft],
   );
 
   const runDetection = useCallback(
@@ -281,119 +383,50 @@ export function useRepositoryGitSectionModel({
 
       const detectionSequence = activeDetectionSequenceRef.current + 1;
       activeDetectionSequenceRef.current = detectionSequence;
-      dispatchUiState({ type: "detection_started" });
+      dispatchSectionState({
+        type: "detection_started",
+      });
 
+      const isActiveDetection = (): boolean =>
+        detectionSequence === activeDetectionSequenceRef.current &&
+        activeRepoPathRef.current === selectedRepoPath;
       try {
         const detected = await onDetectGithubRepository();
-        if (
-          detectionSequence !== activeDetectionSequenceRef.current ||
-          activeRepoPathRef.current !== selectedRepoPath
-        ) {
-          return;
+        if (isActiveDetection()) {
+          if (!detected) {
+            dispatchSectionState({
+              type: "detection_missing",
+              manual,
+            });
+          } else {
+            dispatchSectionState({
+              type: "detection_succeeded",
+              closeManualConfig: manual || !repositorySectionContext.hasRepositoryCoordinates,
+              repository: detected,
+            });
+            commitGithubRepositoryDraft(buildRepositoryDraft(detected));
+          }
         }
-
-        if (!detected) {
-          dispatchUiState({
-            type: "set_detection_result",
-            detectionMessage:
-              "No GitHub origin was detected for this repository. You can still configure it manually.",
-            ...(manual ? { isManualConfigOpen: true } : {}),
-          });
-          return;
-        }
-
-        const nextDraft = {
-          host: detected.host,
-          owner: detected.owner,
-          name: detected.name,
-        };
-        repositoryDraftRef.current = nextDraft;
-        setRepositoryDraft(nextDraft);
-        commitGithubRepositoryDraft(nextDraft);
-        dispatchUiState({
-          type: "set_detection_result",
-          detectionMessage: `Detected ${detected.owner}/${detected.name} from origin. Save settings to keep this mapping.`,
-          ...(manual || !hasRepositoryCoordinates ? { isManualConfigOpen: false } : {}),
-        });
       } catch (error) {
-        if (
-          detectionSequence !== activeDetectionSequenceRef.current ||
-          activeRepoPathRef.current !== selectedRepoPath
-        ) {
-          return;
-        }
-
-        const reason = error instanceof Error ? error.message : "Detection failed.";
-        dispatchUiState({
-          type: "set_detection_result",
-          detectionMessage: reason,
-          ...(manual ? { isManualConfigOpen: true } : {}),
-        });
-      } finally {
-        if (detectionSequence === activeDetectionSequenceRef.current) {
-          dispatchUiState({ type: "detection_finished" });
+        if (isActiveDetection()) {
+          const reason = error instanceof Error ? error.message : "Detection failed.";
+          dispatchSectionState({
+            type: "detection_failed",
+            manual,
+            reason,
+          });
         }
       }
     },
     [
       commitGithubRepositoryDraft,
-      hasRepositoryCoordinates,
       isDetecting,
       onDetectGithubRepository,
+      repositorySectionContext,
       selectedRepoConfig,
       selectedRepoPath,
     ],
   );
-
-  useEffect(() => {
-    activeRepoPathRef.current = selectedRepoPath;
-
-    const hasRepoChanged =
-      !hasInitializedRepoStateRef.current ||
-      previousSelectedRepoPathRef.current !== selectedRepoPath;
-    previousSelectedRepoPathRef.current = selectedRepoPath;
-    hasInitializedRepoStateRef.current = true;
-
-    if (hasRepoChanged) {
-      invalidateActiveDetection({ clearMessage: true });
-      dispatchUiState({
-        type: "reset_for_repo",
-        hasSelectedRepoPath: selectedRepoPath != null,
-        hasRepositoryCoordinates,
-      });
-      return;
-    }
-
-    if (selectedRepoPath == null) {
-      dispatchUiState({
-        type: "set_manual_config_open",
-        isManualConfigOpen: false,
-      });
-      return;
-    }
-
-    if (!hasRepositoryCoordinates && !uiState.isManualConfigOpen) {
-      dispatchUiState({
-        type: "set_manual_config_open",
-        isManualConfigOpen: true,
-      });
-    }
-  }, [
-    hasRepositoryCoordinates,
-    invalidateActiveDetection,
-    selectedRepoPath,
-    uiState.isManualConfigOpen,
-  ]);
-
-  useEffect(() => {
-    const nextDraft = {
-      host: github.repository?.host ?? "github.com",
-      owner: github.repository?.owner ?? "",
-      name: github.repository?.name ?? "",
-    };
-    repositoryDraftRef.current = nextDraft;
-    setRepositoryDraft(nextDraft);
-  }, [github.repository?.host, github.repository?.name, github.repository?.owner]);
 
   useEffect(() => {
     if (
@@ -405,13 +438,14 @@ export function useRepositoryGitSectionModel({
     ) {
       return;
     }
-    if (attemptedAutoDetectByRepoRef.current.has(selectedRepoPath)) {
+    if (attemptedAutoDetectByRepo.has(selectedRepoPath)) {
       return;
     }
 
-    attemptedAutoDetectByRepoRef.current.add(selectedRepoPath);
+    attemptedAutoDetectByRepo.add(selectedRepoPath);
     void runDetection(false);
   }, [
+    attemptedAutoDetectByRepo,
     disabled,
     hasRepositoryCoordinates,
     isDetecting,
@@ -441,7 +475,9 @@ export function useRepositoryGitSectionModel({
     handleGithubEnabledChange,
     handleRepositoryDraftFieldChange,
     handleToggleManualEdit: () => {
-      dispatchUiState({ type: "toggle_manual_config_open" });
+      dispatchSectionState({
+        type: "manual_toggled",
+      });
     },
   };
 }

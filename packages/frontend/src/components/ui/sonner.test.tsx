@@ -16,7 +16,7 @@ function BranchDismissHarness() {
     <>
       {open ? (
         <DismissableLayer onDismiss={() => setOpen(false)}>
-          <div role="dialog">Overlay stays open</div>
+          <dialog open>Overlay stays open</dialog>
         </DismissableLayer>
       ) : null}
       <DismissableLayerBranch>

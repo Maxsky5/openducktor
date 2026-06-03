@@ -196,6 +196,42 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
+  test("aligns missing task, stale session, and stale role in one query update", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const activeSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "ext-session-1",
+      taskId: "task-1",
+      role: "planner",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        taskIdParam: "",
+        sessionParam: "stale-session-id",
+        selectedSessionById: activeSession,
+        taskId: "task-1",
+        activeSession,
+        roleFromQuery: "spec",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
+      expect(scheduleQueryUpdate.mock.calls[0]).toEqual([
+        {
+          task: "task-1",
+          session: "ext-session-1",
+          agent: "planner",
+        },
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not repin session when query intentionally omits session", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const activeSession = createAgentSessionFixture({
