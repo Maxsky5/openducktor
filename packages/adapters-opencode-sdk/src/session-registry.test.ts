@@ -48,6 +48,36 @@ const assistantSubtaskEvent = (input: {
     },
   }) as unknown as Event;
 
+const assistantToolSubtaskEvent = (input: {
+  messageId: string;
+  partId: string;
+  description: string;
+}): Event =>
+  ({
+    type: "message.part.updated",
+    properties: {
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "tool",
+        callID: `call-${input.partId}`,
+        tool: "subtask",
+        state: {
+          status: "running",
+          input: {
+            description: input.description,
+            prompt: "Inspect repo",
+            subagent_type: "explorer",
+          },
+          time: {
+            start: Date.parse("2026-02-22T12:00:10.000Z"),
+          },
+        },
+      },
+    },
+  }) as unknown as Event;
+
 const childPermissionEvent = (childSessionId: string): Event =>
   ({
     type: "permission.asked",
@@ -224,6 +254,36 @@ describe("session registry runtime event transport", () => {
       correlationKey: "part:assistant-subagent-session-created:subtask-a",
       externalSessionId: "external-child-session",
       status: "running",
+    });
+  });
+
+  test("routes tool subtask child session creation to the pending subagent card", async () => {
+    const emitted = await runRuntimeEventTransport([
+      assistantRoleEvent("assistant-tool-subagent-session-created"),
+      assistantToolSubtaskEvent({
+        messageId: "assistant-tool-subagent-session-created",
+        partId: "tool-subtask-a",
+        description: "Read omp.json file",
+      }),
+      childSessionCreatedEvent("external-child-session"),
+      childPermissionEvent("external-child-session"),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-tool-subagent-session-created:tool-subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(1);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-tool-subagent-session-created:tool-subtask-a",
     });
   });
 

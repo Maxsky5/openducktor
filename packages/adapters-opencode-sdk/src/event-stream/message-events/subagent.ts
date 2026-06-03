@@ -108,6 +108,13 @@ const readSinglePendingSessionForCorrelation = (
   return externalSessionId;
 };
 
+const shouldTrackPendingSubagentPart = (
+  part: MappedSubagentPart,
+  externalSessionId: string | undefined,
+): boolean => {
+  return !externalSessionId && (part.status === "pending" || part.status === "running");
+};
+
 export const normalizeLiveSubagentCorrelation = (
   runtime: EventStreamRuntime,
   rawPart: Part,
@@ -137,7 +144,10 @@ export const normalizeLiveSubagentCorrelation = (
 
   const signature = buildSubagentSignature(part);
 
-  if (rawPart.type === "subtask") {
+  if (
+    rawPart.type === "subtask" ||
+    shouldTrackPendingSubagentPart(part, effectiveExternalSessionId)
+  ) {
     const correlationKey = buildPartScopedSubagentCorrelationKey(part, rawPart.id);
     bindSubagentPartCorrelation(runtime, rawPart.id, correlationKey);
     if (!runtime.pendingSubagentCorrelationKeys.includes(correlationKey)) {
