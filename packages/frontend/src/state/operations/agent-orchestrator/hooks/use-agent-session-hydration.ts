@@ -34,6 +34,10 @@ const withRuntimeRecoveryState = (
     : { ...session, runtimeRecoveryState };
 };
 
+const shouldAllowLiveResumeForView = (session: AgentSessionState): boolean => {
+  return session.status === "running" || session.status === "starting";
+};
+
 export const useAgentSessionHydration = ({
   loadAgentSessions,
   sessionsRef,
@@ -128,6 +132,7 @@ export const useAgentSessionHydration = ({
         taskId,
         externalSessionId,
         historyPolicy: requiresHydratedAgentSessionHistory(session) ? "requested_only" : "none",
+        allowLiveSessionResume: shouldAllowLiveResumeForView(session),
         ...(historyPreludeMode ? { historyPreludeMode } : {}),
         ...(persistedRecords ? { persistedRecords } : {}),
       });
