@@ -159,6 +159,21 @@ const makeSessionChild = (id: string, parentID: string): Session =>
     },
   }) as Session;
 
+const makeSessionChildWithParentId = (id: string, parentId: string): Session =>
+  ({
+    id,
+    slug: id,
+    projectID: "project-1",
+    directory: "/repo",
+    parentId,
+    title: "Subagent",
+    version: "1.0.0",
+    time: {
+      created: Date.parse("2026-02-22T12:00:10.000Z"),
+      updated: Date.parse("2026-02-22T12:00:10.000Z"),
+    },
+  }) as unknown as Session;
+
 const runRuntimeEventTransport = async (
   events: Event[],
   options?: {
@@ -247,6 +262,45 @@ describe("session registry runtime event transport", () => {
       {
         childrenBySessionId: {
           "external-session-1": [makeSessionChild("external-child-session", "external-session-1")],
+        },
+      },
+    );
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-sync-subagent-session-created:subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(1);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-sync-subagent-session-created:subtask-a",
+    });
+  });
+
+  test("resolves parentless child session events when session children use parentId", async () => {
+    const emitted = await runRuntimeEventTransport(
+      [
+        assistantRoleEvent("assistant-sync-subagent-session-created"),
+        syncAssistantSubtaskEvent({
+          messageId: "assistant-sync-subagent-session-created",
+          partId: "subtask-a",
+          description: "Read omp.json file",
+        }),
+        syncChildSessionCreatedEventWithoutParent("external-child-session"),
+        childPermissionEvent("external-child-session"),
+      ],
+      {
+        childrenBySessionId: {
+          "external-session-1": [
+            makeSessionChildWithParentId("external-child-session", "external-session-1"),
+          ],
         },
       },
     );

@@ -535,6 +535,57 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
+  test("renders Planner subagent waiting-input state", async () => {
+    const plannerSession = createSession("session-planner", "external-planner", {
+      role: "planner",
+      runtimeKind: "opencode",
+      runtimeId: "runtime-1",
+      workingDirectory: "/repo",
+      messages: [
+        {
+          id: "subagent-message",
+          role: "assistant",
+          content: "",
+          timestamp: "2026-02-22T08:00:05.000Z",
+          meta: {
+            kind: "subagent" as const,
+            partId: "subtask-a",
+            correlationKey: "part:assistant-message:subtask-a",
+            agent: "explorer",
+            description: "Read omp.json file",
+            prompt: "Read omp.json file",
+            status: "running" as const,
+            externalSessionId: "external-child",
+            startedAtMs: 1_000,
+          },
+        },
+      ],
+      subagentPendingApprovalsByExternalSessionId: {
+        "external-child": [createPendingApproval("perm-child", "read", ["/repo/omp.json"])],
+      },
+    });
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          role: "planner",
+          activeSession: plannerSession,
+          sessionsForTask: [toAgentSessionSummary(plannerSession)],
+          allSessionSummaries: [toAgentSessionSummary(plannerSession)],
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const html = renderToStaticMarkup(
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
+    );
+    expect(html).toContain("explorer");
+    expect(html).toContain("Waiting for input");
+
+    await harness.unmount();
+  });
+
   test("marks session history loading while hydration blocks transcript rendering", async () => {
     const pendingSession = createSession("session-pending", "external-pending", {
       messages: [],

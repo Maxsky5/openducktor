@@ -131,7 +131,8 @@ const hasConfirmedChildSession = (
 ): boolean => {
   return children.some(
     (child) =>
-      child.id === childExternalSessionId && child.parentID === subscriber.externalSessionId,
+      child.id === childExternalSessionId &&
+      readEventParentExternalSessionId(child) === subscriber.externalSessionId,
   );
 };
 
