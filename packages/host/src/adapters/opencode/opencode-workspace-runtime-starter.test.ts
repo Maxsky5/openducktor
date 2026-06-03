@@ -13,10 +13,7 @@ import { removeTestDirectory } from "../../test-support/temp-directory";
 import { createArtifactRuntimeDistribution } from "../runtimes/runtime-distribution";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
-import {
-  buildOpenCodeConfigContent,
-  createOpenCodeWorkspaceRuntimeStarter as createEffectOpenCodeWorkspaceRuntimeStarter,
-} from "./opencode-workspace-runtime-starter";
+import { createOpenCodeWorkspaceRuntimeStarter as createEffectOpenCodeWorkspaceRuntimeStarter } from "./opencode-workspace-runtime-starter";
 
 type OpenCodeWorkspaceRuntimeStarterInput = Parameters<
   typeof createEffectOpenCodeWorkspaceRuntimeStarter
@@ -139,7 +136,7 @@ const forceStopProcessTree = (pid: number) =>
 
 const createFakeOpenCode = async (
   root: string,
-  options: { childPidPath?: string } = {},
+  options: { childPidPath?: string; configCapturePath?: string } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "opencode.mjs");
   await writeFile(
@@ -158,6 +155,10 @@ if (Number(args[portFlagIndex + 1]) !== 43123) {
   process.exit(2);
 }
 const childPidPath = ${JSON.stringify(options.childPidPath ?? null)};
+const configCapturePath = ${JSON.stringify(options.configCapturePath ?? null)};
+if (configCapturePath) {
+  writeFileSync(configCapturePath, process.env.OPENCODE_CONFIG_CONTENT ?? "");
+}
 if (childPidPath) {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], {
     stdio: "ignore",
@@ -176,36 +177,6 @@ process.on("SIGINT", stop);
   return writeFakeRuntimeCommand(root, "opencode", "opencode.mjs");
 };
 describe("createOpenCodeWorkspaceRuntimeStarter", () => {
-  test("builds OpenCode config content for the host bridge MCP", () => {
-    expect(
-      JSON.parse(
-        buildOpenCodeConfigContent(
-          {
-            workspaceId: "repo",
-            hostUrl: "http://127.0.0.1:14327",
-            hostToken: "token-1",
-          },
-          ["mcp-bin", "--stdio"],
-        ),
-      ),
-    ).toEqual({
-      logLevel: "INFO",
-      mcp: {
-        openducktor: {
-          type: "local",
-          enabled: true,
-          command: ["mcp-bin", "--stdio"],
-          environment: {
-            ODT_WORKSPACE_ID: "repo",
-            ODT_HOST_URL: "http://127.0.0.1:14327",
-            ODT_HOST_TOKEN: "token-1",
-            ODT_FORBID_WORKSPACE_ID_INPUT: "true",
-            ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
-          },
-        },
-      },
-    });
-  });
   test("fails fast when the MCP bridge connection is not configured", async () => {
     const starter = createOpenCodeWorkspaceRuntimeStarter({
       systemCommands: createSystemCommands(),
@@ -225,8 +196,9 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
     const root = await mkdtemp(join(tmpdir(), "odt-opencode-starter-"));
     try {
       const repo = join(root, "repo");
+      const configCapturePath = join(root, "opencode-config.json");
       await mkdir(repo);
-      const opencodeBinary = await createFakeOpenCode(root);
+      const opencodeBinary = await createFakeOpenCode(root, { configCapturePath });
       const portProbeCalls: number[] = [];
       const starter = createOpenCodeWorkspaceRuntimeStarter({
         systemCommands: createSystemCommands(),
@@ -298,6 +270,24 @@ describe("createOpenCodeWorkspaceRuntimeStarter", () => {
         startedAt: "2026-05-10T10:00:00.000Z",
       });
       expect(portProbeCalls).toEqual([43123, 43123, 43123]);
+      await waitFor(() => existsSync(configCapturePath));
+      expect(JSON.parse(await readFile(configCapturePath, "utf8"))).toEqual({
+        logLevel: "INFO",
+        mcp: {
+          openducktor: {
+            type: "local",
+            enabled: true,
+            command: [process.execPath],
+            environment: {
+              ODT_WORKSPACE_ID: "repo",
+              ODT_HOST_URL: "http://127.0.0.1:14327",
+              ODT_HOST_TOKEN: "token-1",
+              ODT_FORBID_WORKSPACE_ID_INPUT: "true",
+              ODT_ALLOWED_TOOLS: ODT_WORKFLOW_AGENT_TOOL_NAMES.join(","),
+            },
+          },
+        },
+      });
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
     } finally {
       await removeTestDirectory(root);

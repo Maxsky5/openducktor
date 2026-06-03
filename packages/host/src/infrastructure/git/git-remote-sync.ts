@@ -24,19 +24,19 @@ const gitOperationError = (message: string, operation: string): HostOperationErr
 const gitValidationError = (message: string, field: string): HostValidationError =>
   new HostValidationError({ message, field });
 type GitRemoteSyncError = HostOperationError | HostValidationError;
-export const remoteNameFromTrackingRef = (targetRef: string): string | undefined => {
+const remoteNameFromTrackingRef = (targetRef: string): string | undefined => {
   const remainder = targetRef.startsWith("refs/remotes/")
     ? targetRef.slice("refs/remotes/".length)
     : undefined;
   const slash = remainder?.indexOf("/") ?? -1;
   return remainder && slash >= 0 ? remainder.slice(0, slash) : undefined;
 };
-export const isNonFastForwardPushRejection = (output: string): boolean =>
+const isNonFastForwardPushRejection = (output: string): boolean =>
   output
     .split(/\r?\n/)
     .some((line) => line.includes("[rejected]") && line.includes("non-fast-forward")) ||
   (output.includes("rejected") && output.includes("non-fast-forward"));
-export const resolvePushTrackingSyncRefs = (
+const resolvePushTrackingSyncRefs = (
   runner: GitCommandRunner,
   workingDirectory: string,
   remote: string,
@@ -74,7 +74,7 @@ export const resolvePushTrackingSyncRefs = (
       upstreamRef: resolveUpstreamRef(remote, localBranchRef),
     };
   });
-export const syncPushedRemoteTrackingRef = (
+const syncPushedRemoteTrackingRef = (
   runner: GitCommandRunner,
   workingDirectory: string,
   remote: string,
@@ -99,7 +99,7 @@ export const syncPushedRemoteTrackingRef = (
     }
     yield* runGit(runner, workingDirectory, ["update-ref", refs.upstreamRef, localBranchOid]);
   });
-export const listRemoteNames = (runner: GitCommandRunner, workingDirectory: string) =>
+const listRemoteNames = (runner: GitCommandRunner, workingDirectory: string) =>
   Effect.gen(function* () {
     const result = yield* runGitAllowFailure(runner, workingDirectory, ["remote"]);
     if (!result.ok) {
@@ -112,13 +112,13 @@ export const listRemoteNames = (runner: GitCommandRunner, workingDirectory: stri
     }
     return new Set(parseRemoteNames(result.stdout));
   });
-export const pushUniqueRemote = (remotes: string[], seen: Set<string>, remote: string): void => {
+const pushUniqueRemote = (remotes: string[], seen: Set<string>, remote: string): void => {
   if (!seen.has(remote)) {
     seen.add(remote);
     remotes.push(remote);
   }
 };
-export const pushFallbackRemoteForBranch = (
+const pushFallbackRemoteForBranch = (
   runner: GitCommandRunner,
   workingDirectory: string,
   branchName: string,
@@ -141,7 +141,7 @@ export const pushFallbackRemoteForBranch = (
     pushUniqueRemote(remotes, seen, remote);
     return true;
   });
-export const resolveCurrentBranchFetchRemote = (
+const resolveCurrentBranchFetchRemote = (
   runner: GitCommandRunner,
   workingDirectory: string,
   currentBranchName: string | undefined,
@@ -188,7 +188,7 @@ export const resolveCurrentBranchFetchRemote = (
         )
       : false;
   });
-export const resolveTargetRemoteName = (
+const resolveTargetRemoteName = (
   targetBranch: string,
   availableRemotes: Set<string>,
 ): string | undefined => {
@@ -217,7 +217,7 @@ export const resolveTargetRemoteName = (
   const remote = targetBranch.slice(0, slash);
   return availableRemotes.has(remote) ? remote : undefined;
 };
-export const resolveRefreshFetchRemotes = (
+const resolveRefreshFetchRemotes = (
   runner: GitCommandRunner,
   workingDirectory: string,
   targetBranch: string,

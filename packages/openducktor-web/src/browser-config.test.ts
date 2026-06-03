@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+  configureBrowserRuntimeConfig,
   getBrowserAuthToken,
   getBrowserBackendUrl,
-  resetBrowserRuntimeConfig,
 } from "./browser-config";
 
 type OriginValidationCase = {
@@ -19,7 +19,7 @@ const loadOriginValidationCases = async (): Promise<OriginValidationCase[]> =>
 
 describe("browser web host config", () => {
   beforeEach(() => {
-    resetBrowserRuntimeConfig();
+    configureBrowserRuntimeConfig({});
   });
 
   test("requires the launcher-injected backend URL", () => {

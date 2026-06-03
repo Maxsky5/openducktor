@@ -2,7 +2,7 @@ import type { AgentEvent } from "@openducktor/core";
 import type { CodexCanonicalEvent } from "./codex-canonical-events";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 
-export const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
+const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
   const timestamp = event.timestamp ?? new Date().toISOString();
   if (event.kind === "tool") {
     return {

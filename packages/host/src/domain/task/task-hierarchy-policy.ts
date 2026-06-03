@@ -1,7 +1,7 @@
 import type { TaskCard, TaskCreateInput, TaskUpdatePatch } from "@openducktor/contracts";
 import { TaskPolicyError } from "./task-policy-error";
 
-export const normalizedParentId = (task: TaskCreateInput): string | undefined => {
+const normalizedParentId = (task: TaskCreateInput): string | undefined => {
   const trimmed = task.parentId?.trim();
   return trimmed ? trimmed : undefined;
 };
@@ -31,10 +31,7 @@ export const validateParentRelationshipsForCreate = (
   }
 };
 
-export const nextParentIdForUpdate = (
-  current: TaskCard,
-  patch: TaskUpdatePatch,
-): string | undefined => {
+const nextParentIdForUpdate = (current: TaskCard, patch: TaskUpdatePatch): string | undefined => {
   if (patch.parentId === undefined) {
     return current.parentId;
   }

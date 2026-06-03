@@ -301,7 +301,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       createCompletedToolSession("apply_patch", "tool-transition"),
       0,
     );
-    if (baseCompletedMessage?.meta?.kind !== "tool") {
+    if (baseCompletedMessage === undefined || baseCompletedMessage.meta?.kind !== "tool") {
       throw new Error("Expected completed tool message fixture");
     }
 

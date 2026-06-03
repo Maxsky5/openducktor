@@ -29,14 +29,14 @@ export const enrichTask = (task: TaskCard, allTasks: TaskCard[]): TaskCard => ({
   availableActions: deriveAvailableActions(task, allTasks),
   agentWorkflows: deriveAgentWorkflows(task),
 });
-export const normalizeComparablePath = (value: string): string =>
+const normalizeComparablePath = (value: string): string =>
   value.replace(/\\/g, "/").replace(/\/+$/g, "");
-export const pathStartsWith = (child: string, parent: string): boolean => {
+const pathStartsWith = (child: string, parent: string): boolean => {
   const normalizedChild = normalizeComparablePath(child);
   const normalizedParent = normalizeComparablePath(parent);
   return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
 };
-export const tryCanonicalizePath = (
+const tryCanonicalizePath = (
   settingsConfig: SettingsConfigPort,
   rawPath: string | null | undefined,
 ) =>
@@ -48,7 +48,7 @@ export const tryCanonicalizePath = (
     const result = yield* Effect.either(settingsConfig.canonicalizePath(trimmed));
     return result._tag === "Right" ? result.right : undefined;
   });
-export const canonicalizeRequiredPath = (
+const canonicalizeRequiredPath = (
   settingsConfig: SettingsConfigPort,
   rawPath: string,
   errorMessage: string,

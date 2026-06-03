@@ -82,11 +82,11 @@ export const suggestedSquashCommitMessage = (
     ])).trim();
     return message.length > 0 ? message : undefined;
   });
-export const checkoutBranchFromTargetRef = (targetRef: string): string => {
+const checkoutBranchFromTargetRef = (targetRef: string): string => {
   const slash = targetRef.indexOf("/");
   return slash >= 0 ? targetRef.slice(slash + 1) : targetRef;
 };
-export const finishMergeBranchResult = (
+const finishMergeBranchResult = (
   runner: GitCommandRunner,
   workingDirectory: string,
   beforeHead: string,
@@ -105,7 +105,7 @@ export const finishMergeBranchResult = (
       output,
     };
   });
-export const mergeConflictOrError = (
+const mergeConflictOrError = (
   runner: GitCommandRunner,
   workingDirectory: string,
   commandName: string,
@@ -125,7 +125,7 @@ export const mergeConflictOrError = (
     }
     return yield* Effect.fail(gitOperationError(`${commandName} failed: ${detail}`, commandName));
   });
-export const mergeBranchWithCommit = (
+const mergeBranchWithCommit = (
   runner: GitCommandRunner,
   workingDirectory: string,
   sourceBranch: string,
@@ -144,7 +144,7 @@ export const mergeBranchWithCommit = (
     }
     return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, output);
   });
-export const mergeBranchWithSquash = (
+const mergeBranchWithSquash = (
   runner: GitCommandRunner,
   workingDirectory: string,
   sourceBranch: string,
@@ -199,7 +199,7 @@ export const mergeBranchWithSquash = (
           : `${output}\n${commitOutput}`;
     return yield* finishMergeBranchResult(runner, workingDirectory, beforeHead, mergedOutput);
   });
-export const mergeBranchWithRebase = (
+const mergeBranchWithRebase = (
   runner: GitCommandRunner,
   workingDirectory: string,
   sourceWorkingDirectory: string | undefined,

@@ -66,8 +66,7 @@ const assertValidPid = (pid: number, label: string): void => {
     });
   }
 };
-
-export const signalProcessTree = (
+const signalProcessTree = (
   pid: number,
   signal: NodeJS.Signals,
   dependencies: SignalProcessTreeDependencies = defaultSignalProcessTreeDependencies(),

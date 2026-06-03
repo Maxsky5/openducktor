@@ -8,7 +8,7 @@ import type { CodexTextElement, CodexUserInput } from "./types";
 type CodexTextInput = Extract<CodexUserInput, { type: "text" }>;
 type CodexSkillInput = Extract<CodexUserInput, { type: "skill" }>;
 
-export const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart | null => {
+const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart | null => {
   if (part.kind === "text") {
     return { kind: "text", text: part.text };
   }
@@ -29,8 +29,7 @@ export const toDisplayParts = (parts: AgentUserMessagePart[]): AgentUserMessageD
     .map(toDisplayPart)
     .filter((part): part is AgentUserMessageDisplayPart => Boolean(part));
 };
-
-export const userInputText = (input: CodexUserInput): string => {
+const userInputText = (input: CodexUserInput): string => {
   if (input.type === "text") {
     return input.text;
   }

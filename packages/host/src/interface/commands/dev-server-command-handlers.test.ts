@@ -1,8 +1,16 @@
 import { Effect } from "effect";
 import type { DevServerService } from "../../application/dev-servers/dev-server-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createDevServerCommandHandlers } from "./dev-server-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createDevServerServiceFake = (service: DevServerService): DevServerService =>
   service as DevServerService;

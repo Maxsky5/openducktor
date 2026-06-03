@@ -24,11 +24,9 @@ const gitResourceError = (
   resource: string,
 ): HostResourceError => new HostResourceError({ message, operation, resource });
 export const upstreamTargetBranch = "@{upstream}";
-export const emptyTreeSha1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-export const emptyTreeSha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
-export const rebaseConflictOutputUnavailable =
+const rebaseConflictOutputUnavailable =
   "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
-export const rebaseConflictTargetUnavailable = "current rebase target";
+const rebaseConflictTargetUnavailable = "current rebase target";
 export const normalizeMergeRef = (mergeRef: string): string =>
   mergeRef.startsWith("refs/") ? mergeRef : `refs/heads/${mergeRef}`;
 export type UpstreamTargetConfig = {
@@ -46,7 +44,7 @@ export const resolveUpstreamRef = (remote: string, mergeRef: string): string => 
     : normalizedMerge;
   return `refs/remotes/${remote}/${branchRef}`;
 };
-export const matchesRemoteBranchName = (remoteRef: string, branch: string): boolean => {
+const matchesRemoteBranchName = (remoteRef: string, branch: string): boolean => {
   const remainder = remoteRef.startsWith("refs/remotes/")
     ? remoteRef.slice("refs/remotes/".length)
     : undefined;
@@ -228,11 +226,7 @@ export const resolveUpstreamAheadBehind = (
       behind: result.counts.behind,
     };
   });
-export const resolveGitPath = (
-  runner: GitCommandRunner,
-  workingDirectory: string,
-  suffix: string,
-) =>
+const resolveGitPath = (runner: GitCommandRunner, workingDirectory: string, suffix: string) =>
   Effect.gen(function* () {
     const output = yield* runGit(runner, workingDirectory, [
       "rev-parse",
@@ -255,7 +249,7 @@ export const resolveGitPath = (
     }
     return gitPath;
   });
-export const readGitPathContentsIfExists = (
+const readGitPathContentsIfExists = (
   runner: GitCommandRunner,
   workingDirectory: string,
   suffix: string,
@@ -272,11 +266,11 @@ export const readGitPathContentsIfExists = (
     const trimmed = contents.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   });
-export const hasGitPath = (runner: GitCommandRunner, workingDirectory: string, suffix: string) =>
+const hasGitPath = (runner: GitCommandRunner, workingDirectory: string, suffix: string) =>
   Effect.gen(function* () {
     return yield* pathExists(yield* resolveGitPath(runner, workingDirectory, suffix));
   });
-export const normalizeHeadName = (value: string | undefined): string | undefined => {
+const normalizeHeadName = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim();
   if (!trimmed) {
     return undefined;

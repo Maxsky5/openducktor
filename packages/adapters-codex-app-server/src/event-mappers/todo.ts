@@ -56,7 +56,7 @@ const normalizePlanTextStatus = (value: string): AgentSessionTodoItem["status"] 
   return null;
 };
 
-export const codexTodoItemsFromPlanText = (text: string): Record<string, unknown>[] => {
+const codexTodoItemsFromPlanText = (text: string): Record<string, unknown>[] => {
   const todos: Record<string, unknown>[] = [];
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     const checkboxMatch = line.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)\[([ xX~-])\]\s+(.+?)\s*$/);
@@ -84,7 +84,7 @@ export const codexTodoItemsFromPlanText = (text: string): Record<string, unknown
   return todos;
 };
 
-export const codexTodoItemsFromPayload = (payload: Record<string, unknown>): unknown[] => {
+const codexTodoItemsFromPayload = (payload: Record<string, unknown>): unknown[] => {
   const todo = arrayFromUnknown(payload.todo);
   if (todo.length > 0) {
     return todo;
@@ -97,7 +97,7 @@ export const codexTodoItemsFromPayload = (payload: Record<string, unknown>): unk
   return text ? codexTodoItemsFromPlanText(text) : [];
 };
 
-export const codexTodoToolInputFromPayload = (
+const codexTodoToolInputFromPayload = (
   payload: Record<string, unknown>,
 ): Record<string, unknown> | null => {
   const rawTodos = codexTodoItemsFromPayload(payload);
@@ -118,9 +118,7 @@ export const codexTodoToolInputFromPayload = (
   };
 };
 
-export const codexTodoUpdateFromPayload = (
-  payload: Record<string, unknown>,
-): CodexTodoUpdate | null => {
+const codexTodoUpdateFromPayload = (payload: Record<string, unknown>): CodexTodoUpdate | null => {
   const rawTodos = codexTodoItemsFromPayload(payload);
   if (rawTodos.length === 0) {
     return null;
@@ -143,7 +141,7 @@ export const codexTodoUpdateFromPayload = (
   };
 };
 
-export const codexTodoUpdateFromToolCall = (
+const codexTodoUpdateFromToolCall = (
   toolName: string,
   input: Record<string, unknown> | null | undefined,
 ): CodexTodoUpdate | null => {

@@ -3,10 +3,10 @@ import {
   codexTurnItemsFromThreadRead,
   codexUserInputsFromItem,
   toCodexTurnInputList,
-  toCodexUserInput,
+  toCodexUserInputList,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
-import { codexUserInputListToText, userInputText } from "./codex-user-input-display";
+import { codexUserInputListToText } from "./codex-user-input-display";
 
 describe("Codex App Server transcript parsing", () => {
   test("maps skill message parts to structured Codex skill input", () => {
@@ -16,9 +16,9 @@ describe("Codex App Server transcript parsing", () => {
       path: "/skills/review/SKILL.md",
     };
 
-    const input = toCodexUserInput({ kind: "skill_mention", skill });
-    expect(input).toEqual({ type: "skill", name: "review", path: "/skills/review/SKILL.md" });
-    expect(userInputText(input)).toBe("$review");
+    const inputs = toCodexUserInputList([{ kind: "skill_mention", skill }]);
+    expect(inputs).toEqual([{ type: "skill", name: "review", path: "/skills/review/SKILL.md" }]);
+    expect(codexUserInputListToText(inputs)).toBe("$review");
   });
 
   test("keeps a text skill marker in Codex turn input for history hydration", () => {

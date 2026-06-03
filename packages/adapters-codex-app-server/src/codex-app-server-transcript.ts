@@ -32,15 +32,7 @@ import {
   codexUserInputsToDisplayParts,
   utf8ByteLength,
 } from "./codex-user-input-display";
-import {
-  type CodexTodoUpdate,
-  codexTodoItemsFromPayload,
-  codexTodosFromThreadRead,
-  codexTodoToolInputFromPayload,
-  codexTodoUpdateFromPayload,
-  codexTodoUpdateFromToolCall,
-  todoMapper,
-} from "./event-mappers";
+import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
 import type { CodexTextElement, CodexUserInput } from "./types";
 
 export type CodexTokenUsageTotals = {
@@ -88,21 +80,14 @@ export type CodexHistoryTokenUsageFields = {
 };
 
 export type { AgentToolStatus } from "./codex-tool-normalizer";
-export {
-  type CodexTodoUpdate,
-  codexTodoItemsFromPayload,
-  codexTodosFromThreadRead,
-  codexTodoToolInputFromPayload,
-  codexTodoUpdateFromPayload,
-  codexTodoUpdateFromToolCall,
-};
+export { type CodexTodoUpdate, codexTodosFromThreadRead };
 
 export const timestampFromCodexParams = (params: unknown): string => {
   const millis = extractNumberField(params, ["completedAtMs", "startedAtMs"]);
   return millis ? new Date(millis).toISOString() : new Date().toISOString();
 };
 
-export const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
+const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
   return seconds === null ? undefined : new Date(seconds * 1000).toISOString();
 };
 
@@ -110,7 +95,7 @@ export const codexItemId = (item: Record<string, unknown>, fallbackId: string): 
   return extractStringField(item, ["id", "itemId", "item_id"]) ?? fallbackId;
 };
 
-export const codexItemType = (item: Record<string, unknown>): string => {
+const codexItemType = (item: Record<string, unknown>): string => {
   return extractStringField(item, ["type", "kind", "itemType"]) ?? "";
 };
 
@@ -119,23 +104,23 @@ export const codexItemTypeMatches = (item: Record<string, unknown>, expected: st
   return normalize(codexItemType(item)) === normalize(expected);
 };
 
-export const codexAgentMessagePhase = (item: Record<string, unknown>): string | null => {
+const codexAgentMessagePhase = (item: Record<string, unknown>): string | null => {
   return extractStringField(item, ["phase"]);
 };
 
-export const isCodexFinalAnswerPhase = (phase: string | null): boolean => {
+const isCodexFinalAnswerPhase = (phase: string | null): boolean => {
   return phase === "final_answer" || phase === "finalAnswer" || phase === "final-answer";
 };
 
-export const isCodexCommentaryPhase = (phase: string | null): boolean => {
+const isCodexCommentaryPhase = (phase: string | null): boolean => {
   return phase === "commentary";
 };
 
-export const hasVisibleCodexAgentMessageText = (item: Record<string, unknown>): boolean => {
+const hasVisibleCodexAgentMessageText = (item: Record<string, unknown>): boolean => {
   return codexAgentMessageText(item).trim().length > 0;
 };
 
-export const codexAgentMessageText = (item: Record<string, unknown>): string => {
+const codexAgentMessageText = (item: Record<string, unknown>): string => {
   const directText = extractStringField(item, ["text", "message", "summary", "delta"]);
   if (directText) {
     return directText;
@@ -154,7 +139,7 @@ export const codexAgentMessageText = (item: Record<string, unknown>): string => 
   return contentText;
 };
 
-export const selectCodexFinalAgentMessage = (
+const selectCodexFinalAgentMessage = (
   items: Record<string, unknown>[],
 ): Record<string, unknown> | null => {
   const visibleAgentMessages = items.filter(
@@ -209,7 +194,7 @@ const codexTextElementsFromUnknown = (value: unknown): CodexTextElement[] =>
     .map(codexTextElementFromUnknown)
     .filter((entry): entry is CodexTextElement => Boolean(entry));
 
-export const codexUserInputFromUnknown = (entry: unknown): CodexUserInput | null => {
+const codexUserInputFromUnknown = (entry: unknown): CodexUserInput | null => {
   if (!isPlainObject(entry)) {
     return null;
   }
@@ -242,7 +227,7 @@ export const codexUserInputsFromItem = (item: Record<string, unknown>): CodexUse
     .filter((entry): entry is CodexUserInput => Boolean(entry));
 };
 
-export const codexTurnTimestampSeconds = (
+const codexTurnTimestampSeconds = (
   turn: Record<string, unknown>,
   keys: [string, string],
 ): number | null => {
@@ -396,7 +381,7 @@ export const codexTokenUsageHistoryFields = (
     : {}),
 });
 
-export const toHistoryParts = (
+const toHistoryParts = (
   item: Record<string, unknown>,
   messageId: string,
   fallbackText: string,
@@ -449,11 +434,11 @@ export const terminalHistoryPart = (
   ...(tokenUsage ? codexTokenUsageHistoryFields(tokenUsage) : {}),
 });
 
-export const firstPlainObject = (value: unknown): Record<string, unknown> | null => {
+const firstPlainObject = (value: unknown): Record<string, unknown> | null => {
   return arrayFromUnknown(value).find(isPlainObject) ?? null;
 };
 
-export const parseObjectString = (value: unknown): Record<string, unknown> | null => {
+const parseObjectString = (value: unknown): Record<string, unknown> | null => {
   if (typeof value !== "string") {
     return null;
   }
@@ -465,7 +450,7 @@ export const parseObjectString = (value: unknown): Record<string, unknown> | nul
   }
 };
 
-export const commandActionToolName = (action: Record<string, unknown> | null): string => {
+const commandActionToolName = (action: Record<string, unknown> | null): string => {
   if (!action) {
     return "bash";
   }
@@ -487,7 +472,7 @@ export const commandActionToolName = (action: Record<string, unknown> | null): s
   return "bash";
 };
 
-export const commandActionInput = (
+const commandActionInput = (
   action: Record<string, unknown> | null,
   command: string,
   cwd: string | null,
@@ -520,7 +505,7 @@ export const commandActionInput = (
   };
 };
 
-export const codexCommandText = (value: unknown): string | null => {
+const codexCommandText = (value: unknown): string | null => {
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
   }
@@ -536,7 +521,7 @@ export const codexCommandText = (value: unknown): string | null => {
   return parts.length > 0 ? parts.join(" ") : null;
 };
 
-export const codexObjectInput = (value: unknown): Record<string, unknown> | undefined => {
+const codexObjectInput = (value: unknown): Record<string, unknown> | undefined => {
   if (isPlainObject(value)) {
     return value;
   }
@@ -551,7 +536,7 @@ export const codexObjectInput = (value: unknown): Record<string, unknown> | unde
   }
 };
 
-export const codexToolResultText = (value: unknown): string | null => {
+const codexToolResultText = (value: unknown): string | null => {
   if (value === undefined || value === null) {
     return null;
   }
@@ -625,7 +610,7 @@ const webSearchInput = (value: Record<string, unknown>): Record<string, unknown>
   return webSearchActionInput(value.action);
 };
 
-export const fileChangeDiff = (changes: unknown[]): string | null => {
+const fileChangeDiff = (changes: unknown[]): string | null => {
   const diffs = changes
     .filter(isPlainObject)
     .map((change) => extractStringField(change, ["diff", "patch"]))
@@ -633,7 +618,7 @@ export const fileChangeDiff = (changes: unknown[]): string | null => {
   return diffs.length > 0 ? diffs.join("\n") : null;
 };
 
-export const fileChangeEntries = (value: Record<string, unknown>): unknown[] => {
+const fileChangeEntries = (value: Record<string, unknown>): unknown[] => {
   const changes = arrayFromUnknown(value.changes);
   const diffs = arrayFromUnknown(value.diffs);
   return changes.length > 0 ? changes : diffs;
@@ -678,7 +663,7 @@ const codexTokenUsagePayload = (
   return null;
 };
 
-export const syntheticToolPart = ({
+const syntheticToolPart = ({
   metadata,
   ...part
 }: Extract<AgentStreamPart, { kind: "tool" }>): Extract<AgentStreamPart, { kind: "tool" }> => ({
@@ -972,7 +957,7 @@ export const toFileDiffs = (value: unknown): FileDiff[] => {
     ];
   });
 };
-export const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
+const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   if (part.kind === "text") {
     return { type: "text", text: part.text };
   }

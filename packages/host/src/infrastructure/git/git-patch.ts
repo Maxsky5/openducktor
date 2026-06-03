@@ -30,7 +30,7 @@ const invalidPatch = (message: string, details?: Record<string, unknown>): HostV
     details,
   });
 
-export const parseHunkRange = (input: string): { start: number; count: number } => {
+const parseHunkRange = (input: string): { start: number; count: number } => {
   const trimmed = input.trim();
   const [startRaw, countRaw = "1"] = trimmed.split(",", 2);
   const start = Number.parseInt(startRaw ?? "", 10);
@@ -45,7 +45,7 @@ export const parseHunkRange = (input: string): { start: number; count: number } 
   return { start, count };
 };
 
-export const parseHunkSpec = (line: string): HunkSpec => {
+const parseHunkSpec = (line: string): HunkSpec => {
   const rest = line.startsWith("@@ -") ? line.slice("@@ -".length) : undefined;
   if (rest === undefined) {
     throw invalidPatch(`Invalid hunk header: ${line}`, { line });
@@ -72,7 +72,7 @@ export const parseHunkSpec = (line: string): HunkSpec => {
   };
 };
 
-export const parseRenamePaths = (header: string): RenamePaths | undefined => {
+const parseRenamePaths = (header: string): RenamePaths | undefined => {
   let oldPath: string | undefined;
   let newPath: string | undefined;
 
@@ -87,7 +87,7 @@ export const parseRenamePaths = (header: string): RenamePaths | undefined => {
   return oldPath && newPath ? { oldPath, newPath } : undefined;
 };
 
-export const parseRenamePathsFromDiffHeader = (header: string): RenamePaths | undefined => {
+const parseRenamePathsFromDiffHeader = (header: string): RenamePaths | undefined => {
   const diffLine = header.split(/\r?\n/).find((line) => line.startsWith("diff --git "));
   if (!diffLine) {
     return undefined;
@@ -151,7 +151,7 @@ export const parsePatchHunks = (patch: string): ParsedPatch => {
 export const combinePatchHunk = (header: string, hunk: ParsedHunk): string =>
   `${header}${hunk.text}`;
 
-export const rangesOverlap = (
+const rangesOverlap = (
   leftStart: number,
   leftCount: number,
   rightStart: number,
@@ -162,16 +162,16 @@ export const rangesOverlap = (
   return !(leftEnd < rightStart || rightEnd < leftStart);
 };
 
-export const hunkSpecsOverlap = (left: HunkSpec, right: HunkSpec): boolean =>
+const hunkSpecsOverlap = (left: HunkSpec, right: HunkSpec): boolean =>
   rangesOverlap(left.oldStart, left.oldCount, right.oldStart, right.oldCount) ||
   rangesOverlap(left.newStart, left.newCount, right.newStart, right.newCount);
 
-export const hunkBody = (text: string): string => {
+const hunkBody = (text: string): string => {
   const index = text.indexOf("\n");
   return index >= 0 ? text.slice(index + 1) : text;
 };
 
-export const hunkSpecsEqual = (left: HunkSpec, right: HunkSpec): boolean =>
+const hunkSpecsEqual = (left: HunkSpec, right: HunkSpec): boolean =>
   left.oldStart === right.oldStart &&
   left.oldCount === right.oldCount &&
   left.newStart === right.newStart &&

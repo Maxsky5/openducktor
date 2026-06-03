@@ -3,13 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import { initializeMissingAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
+import { createBeadsAttachmentProvisioner } from "../../infrastructure/beads/beads-attachment-provisioning";
 import { ensureSharedDoltServerRunning } from "../../infrastructure/beads/beads-shared-dolt-server";
 import {
   type BeadsCliContext,
   type BeadsSharedServerContext,
   type BeadsSharedServerPaths,
-  createBeadsAttachmentProvisioner,
   type EnsureSharedDoltServer,
   resolveBeadsCliContext,
   sharedServerHealthFromContext,
@@ -453,19 +452,35 @@ describe("createBeadsAttachmentProvisioner", () => {
     };
     const calls: Array<{ command: string; args: string[]; cwd?: string; env?: NodeJS.ProcessEnv }> =
       [];
-
-    await Effect.runPromise(
-      initializeMissingAttachment(
-        (input) =>
-          Effect.sync(() => {
-            calls.push(input);
-            return { ok: true, stdout: "", stderr: "" };
+    const provision = createBeadsAttachmentProvisioner((input) =>
+      Effect.tryPromise({
+        try: async () => {
+          calls.push(input);
+          if (input.args[0] === "init") {
+            await mkdir(context.beadsDir, { recursive: true });
+            await writeMetadata(context);
+            await writeFile(path.join(context.beadsDir, "config.yaml"), "json: true\n");
+          }
+          if (input.command === "dolt" && input.args.at(-1) === "show databases") {
+            return { ok: true, stdout: `| ${context.databaseName} |\n`, stderr: "" };
+          }
+          if (input.args[0] === "where") {
+            return { ok: true, stdout: JSON.stringify({ path: context.beadsDir }), stderr: "" };
+          }
+          return { ok: true, stdout: "", stderr: "" };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
           }),
-        context,
-      ),
+      }),
     );
 
-    expect(calls).toHaveLength(1);
+    await Effect.runPromise(provision(context));
+
+    expect(calls).toHaveLength(4);
     expect(calls[0]?.command).toBe("bd");
     expect(calls[0]?.cwd).toBe(context.attachmentRoot);
     expect(calls[0]?.env).toBe(context.env);

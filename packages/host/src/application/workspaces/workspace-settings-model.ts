@@ -57,27 +57,27 @@ export const loadGlobalConfig = (settingsConfig: SettingsConfigPort) =>
   Effect.gen(function* () {
     return (yield* settingsConfig.readConfig()) ?? createDefaultGlobalConfig();
   });
-export const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
+const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new HostValidationError({ message: `${label} must be an object.` });
   }
   return value as Record<string, unknown>;
 };
-export const requireString = (value: unknown, label: string): string => {
+const requireString = (value: unknown, label: string): string => {
   if (typeof value !== "string") {
     throw new HostValidationError({ message: `${label} must be a string.` });
   }
   return value;
 };
-export const requireStringArray = (value: unknown, label: string): string[] => {
+const requireStringArray = (value: unknown, label: string): string[] => {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
     throw new HostValidationError({ message: `${label} must be an array of strings.` });
   }
   return value;
 };
-export const hasOwn = (record: Record<string, unknown>, key: string): boolean =>
+const hasOwn = (record: Record<string, unknown>, key: string): boolean =>
   Object.hasOwn(record, key);
-export const optionalUpdateValue = <T>(
+const optionalUpdateValue = <T>(
   record: Record<string, unknown>,
   key: string,
   current: T,
@@ -88,21 +88,21 @@ export const optionalUpdateValue = <T>(
   const value = record[key];
   return value === null || value === undefined ? current : value;
 };
-export const normalizeOptionalNonEmptyString = (value: unknown): string | undefined => {
+const normalizeOptionalNonEmptyString = (value: unknown): string | undefined => {
   if (value === null || value === undefined) {
     return undefined;
   }
   const text = requireString(value, "Optional string value").trim();
   return text.length > 0 ? text : undefined;
 };
-export const normalizeHooks = (value: unknown): RepoHooks => {
+const normalizeHooks = (value: unknown): RepoHooks => {
   const hooks = repoHooksSchema.parse(value);
   return {
     preStart: hooks.preStart.map((command) => command.trim()).filter(Boolean),
     postComplete: hooks.postComplete.map((command) => command.trim()).filter(Boolean),
   };
 };
-export const normalizeDevServers = (value: unknown): RepoDevServerScript[] => {
+const normalizeDevServers = (value: unknown): RepoDevServerScript[] => {
   if (!Array.isArray(value)) {
     throw new HostValidationError({ message: "devServers must be an array." });
   }
@@ -115,11 +115,11 @@ export const normalizeDevServers = (value: unknown): RepoDevServerScript[] => {
     }))
     .filter((entry) => entry.command.length > 0);
 };
-export const normalizeWorktreeCopyPaths = (value: unknown): string[] =>
+const normalizeWorktreeCopyPaths = (value: unknown): string[] =>
   requireStringArray(value, "worktreeCopyPaths")
     .map((entry) => entry.trim())
     .filter(Boolean);
-export const normalizeRepoConfigInput = (input: Record<string, unknown>): RepoConfig => {
+const normalizeRepoConfigInput = (input: Record<string, unknown>): RepoConfig => {
   const rawWorktreeBasePath = normalizeOptionalNonEmptyString(input.worktreeBasePath);
   const rawBranchPrefix =
     typeof input.branchPrefix === "string"
@@ -148,7 +148,7 @@ export const touchRecentWorkspace = (config: LoadedGlobalConfig, workspaceId: st
     ...config.recentWorkspaces.filter((entry) => entry !== workspaceId),
   ].slice(0, 20);
 };
-export const sortedWorkspaceIds = (config: LoadedGlobalConfig): string[] => {
+const sortedWorkspaceIds = (config: LoadedGlobalConfig): string[] => {
   const orderedIds: string[] = [];
   const seenIds = new Set<string>();
   for (const workspaceId of config.workspaceOrder) {
@@ -171,7 +171,7 @@ export const sortedWorkspaceIds = (config: LoadedGlobalConfig): string[] => {
   }
   return orderedIds;
 };
-export const workspaceRecordFromRepo = (
+const workspaceRecordFromRepo = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
   workspaceId: string,
@@ -221,7 +221,7 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
     workspaces: config.workspaces,
     globalPromptOverrides: config.globalPromptOverrides,
   });
-export const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
+const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
   Effect.gen(function* () {
     if (!(yield* settingsConfig.pathExists(repoPath))) {
       return yield* Effect.fail(
@@ -293,7 +293,7 @@ export const ensureRepoPathAvailable = (
     });
   }
 };
-export const workspaceRecord = (
+const workspaceRecord = (
   settingsConfig: SettingsConfigPort,
   config: LoadedGlobalConfig,
   workspaceId: string,

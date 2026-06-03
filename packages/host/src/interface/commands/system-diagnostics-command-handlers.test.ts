@@ -1,8 +1,16 @@
 import { Effect } from "effect";
 import type { SystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createSystemDiagnosticsCommandHandlers } from "./system-diagnostics-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createDiagnosticsService = (): SystemDiagnosticsService =>
   ({

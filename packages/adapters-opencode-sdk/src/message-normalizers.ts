@@ -202,7 +202,7 @@ export const normalizeUserMessageDisplayParts = (parts: Part[]): AgentUserMessag
   return normalizedParts;
 };
 
-export const hasVisibleUserTextDisplayPart = (parts: AgentUserMessageDisplayPart[]): boolean => {
+const hasVisibleUserTextDisplayPart = (parts: AgentUserMessageDisplayPart[]): boolean => {
   return parts.some((part) => part.kind === "text" && !part.synthetic && part.text.length > 0);
 };
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { validateExternalBrowserUrl } from "./browser-shell-bridge";
+import { validateExternalBrowserUrl } from "./browser-url-validation";
 
 describe("browser shell bridge", () => {
   test("allows absolute http and https external URLs", () => {

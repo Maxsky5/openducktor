@@ -1,8 +1,16 @@
 import { Effect } from "effect";
 import type { GithubRepositoryDetectionService } from "../../application/git/github-repository-detection-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createGithubRepositoryDetectionCommandHandlers } from "./github-repository-detection-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createGithubRepositoryDetectionServiceFake = (
   service: GithubRepositoryDetectionService,

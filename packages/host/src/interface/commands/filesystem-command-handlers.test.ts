@@ -1,7 +1,15 @@
 import { Effect } from "effect";
 import type { FilesystemService } from "../../application/filesystem/filesystem-service";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createFilesystemCommandHandlers } from "./filesystem-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createFilesystemServiceFake = (service: FilesystemService): FilesystemService =>
   service as FilesystemService;

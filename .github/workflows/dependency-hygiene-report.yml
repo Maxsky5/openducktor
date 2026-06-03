@@ -37,7 +37,7 @@ jobs:
         run: bun run deps:outdated > outdated-report.txt
 
       - name: Generate unused exports report
-        run: bun run deps:unused:exports > unused-exports-report.txt
+        run: bun run deps:unused:exports:report > unused-exports-report.txt
 
       - name: Publish report artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

@@ -25,22 +25,13 @@ import {
 } from "./github-pull-request-model";
 
 export {
-  combinedCommandOutput,
-  GH_NON_INTERACTIVE_ENV,
   GITHUB_PROVIDER_ID,
   type GithubPullBranchRef,
   type GithubPullRequestContext,
   type GithubPullRequestSyncPolicy,
   type GithubPullResponse,
-  isEditablePullRequest,
-  normalizeGithubPullRequest,
-  parseGithubPullListResponse,
-  parseGithubPullResponse,
   pullRequestRecordsMatch,
   type ResolvedPullRequest,
-  repositoryKey,
-  requireGithubNumber,
-  requireGithubString,
 } from "./github-pull-request-model";
 
 export type GithubCommandDependencies = {
@@ -178,7 +169,7 @@ export const githubProviderStatus = (
       available: true,
     };
   });
-export const runGithubCommand = (
+const runGithubCommand = (
   dependencies: GithubCommandDependencies,
   repoPath: string,
   host: string,
@@ -206,7 +197,7 @@ export const runGithubCommand = (
       }),
     );
   });
-export const matchingGithubRemoteNames = (
+const matchingGithubRemoteNames = (
   gitPort: GitPort,
   repoPath: string,
   repository: GitProviderRepository,
@@ -218,7 +209,7 @@ export const matchingGithubRemoteNames = (
       return parsed !== null && repositoryKey(parsed) === expectedKey ? [remote.name] : [];
     });
   });
-export const requireSingleGithubRemoteName = (
+const requireSingleGithubRemoteName = (
   gitPort: GitPort,
   repoPath: string,
   repository: GitProviderRepository,
@@ -270,11 +261,6 @@ const probeResolvedGithubAuthOrThrow = (
       }),
     );
   });
-export const probeGithubAuthOrThrow = (dependencies: GithubCommandDependencies, host: string) =>
-  Effect.gen(function* () {
-    const githubCommand = yield* resolveGithubCommandDependencies(dependencies);
-    yield* probeResolvedGithubAuthOrThrow(githubCommand, host);
-  });
 export const requireGithubPullRequestContext = (
   dependencies: GithubRepositoryDependencies,
   repoPath: string,
@@ -310,7 +296,7 @@ export const requireGithubPullRequestContext = (
     );
     return { repository, remoteName };
   });
-export const selectGithubPullRequestForBranch = (
+const selectGithubPullRequestForBranch = (
   pullRequests: ResolvedPullRequest[],
   sourceBranch: string,
   state: "open" | "all",

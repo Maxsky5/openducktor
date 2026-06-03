@@ -23,7 +23,7 @@ export const publishTargetFromTargetBranch = (
   return normalized.remote ? normalized : undefined;
 };
 
-export const slugifyTitle = (value: string): string => {
+const slugifyTitle = (value: string): string => {
   let slug = "";
   for (const character of value) {
     if (/^[a-zA-Z0-9]$/.test(character)) {

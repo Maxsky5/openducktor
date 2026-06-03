@@ -1,14 +1,13 @@
 import { spawn } from "node:child_process";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
 import { resolveProcessCommandPath } from "../../infrastructure/process/process-command-resolution";
 import { normalizeProcessEnvironment } from "../../infrastructure/process/process-environment";
-import {
-  type SystemCommandPort,
-  SystemCommandPortTag,
-  type SystemCommandResolveOptions,
-  type SystemCommandRunResult,
+import type {
+  SystemCommandPort,
+  SystemCommandResolveOptions,
+  SystemCommandRunResult,
 } from "../../ports/system-command-port";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
@@ -203,8 +202,3 @@ export const createSystemCommandRunner = ({
     runCommandAllowFailure,
   };
 };
-
-export const SystemCommandPortLive = Layer.succeed(
-  SystemCommandPortTag,
-  createSystemCommandRunner(),
-);

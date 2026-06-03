@@ -310,7 +310,3 @@ export const sendUserMessage = async (input: {
     throw toOpenCodeRequestError("prompt session", error);
   }
 };
-
-export const __testExports = {
-  toSlashCommandExecutionRequest,
-};

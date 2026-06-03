@@ -2,7 +2,7 @@ import { access, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import {
   HostOperationError,
   type HostPathAccessError,
@@ -11,7 +11,7 @@ import {
   toHostOperationError,
   toHostPathStatError,
 } from "../../effect/host-errors";
-import { type OpenInToolsPort, OpenInToolsPortTag } from "../../ports/open-in-tools-port";
+import type { OpenInToolsPort } from "../../ports/open-in-tools-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "../system/system-command-runner";
 import { resolveMacOsAppIconDataUrl } from "./macos-open-in-icons";
@@ -433,5 +433,3 @@ export const createOpenInToolsAdapter = ({
     },
   };
 };
-
-export const OpenInToolsPortLive = Layer.sync(OpenInToolsPortTag, () => createOpenInToolsAdapter());

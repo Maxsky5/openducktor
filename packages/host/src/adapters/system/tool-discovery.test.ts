@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId } from "../../ports/tool-discovery-port";
 import { createSystemCommandRunner } from "./system-command-runner";
-import { createToolDiscoveryAdapter, discoverToolPath } from "./tool-discovery";
+import { createToolDiscoveryAdapter, type ToolDiscoveryPathOptions } from "./tool-discovery";
 
 const createSystemCommands = ({
   available = [],
@@ -62,10 +62,13 @@ const discoverBuiltInTool = ({
   toolId,
 }: {
   env?: NodeJS.ProcessEnv;
-  options?: Parameters<typeof discoverToolPath>[3];
+  options?: ToolDiscoveryPathOptions;
   systemCommands?: SystemCommandPort;
   toolId: ToolDiscoveryId;
-}) => Effect.runPromise(discoverToolPath(toolId, systemCommands, env, options));
+}) => {
+  const adapter = createToolDiscoveryAdapter({ env, options, systemCommands });
+  return Effect.runPromise(adapter.resolveToolPath(toolId));
+};
 
 describe("discoverToolPath", () => {
   test("uses a descriptor environment override before bundled, standard, and PATH", async () => {

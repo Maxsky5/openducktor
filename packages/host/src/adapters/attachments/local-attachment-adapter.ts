@@ -1,13 +1,9 @@
 import { mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { toHostOperationError, toHostPathStatError } from "../../effect/host-errors";
-import {
-  type LocalAttachmentEntry,
-  type LocalAttachmentPort,
-  LocalAttachmentPortTag,
-} from "../../ports/local-attachment-port";
+import type { LocalAttachmentEntry, LocalAttachmentPort } from "../../ports/local-attachment-port";
 
 const localAttachmentStageDirName = "openducktor-local-attachments";
 
@@ -83,8 +79,3 @@ export const createLocalAttachmentAdapter = (): LocalAttachmentPort => ({
     );
   },
 });
-
-export const LocalAttachmentPortLive = Layer.succeed(
-  LocalAttachmentPortTag,
-  createLocalAttachmentAdapter(),
-);

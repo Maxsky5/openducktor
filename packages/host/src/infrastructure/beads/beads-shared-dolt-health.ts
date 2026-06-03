@@ -29,7 +29,7 @@ export const pathExists = (inputPath: string) =>
     Effect.catchTag("HostPathNotFoundError", () => Effect.succeed(false)),
   );
 
-export const tcpProbe = (port: number): Effect.Effect<boolean> =>
+const tcpProbe = (port: number): Effect.Effect<boolean> =>
   Effect.async<boolean>((resume, signal) => {
     let socket: net.Socket;
     try {
@@ -66,7 +66,7 @@ export const tcpProbe = (port: number): Effect.Effect<boolean> =>
     socket.once("error", onError);
   });
 
-export const runDoltAllowFailure = (
+const runDoltAllowFailure = (
   doltCommand: string,
   args: string[],
   env: NodeJS.ProcessEnv,
@@ -188,7 +188,7 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
     child.once("close", onClose);
   });
 
-export const sqlProbe = (
+const sqlProbe = (
   port: number,
   env: NodeJS.ProcessEnv,
   doltCommand: string,

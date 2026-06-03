@@ -3,15 +3,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
+import { serverStateIsHealthy } from "./beads-shared-dolt-health";
 import {
   readSharedServerState,
   runCommandAllowFailure,
-  serverStateIsHealthy,
   stopOwnedSharedDoltServer,
-  writeDoltConfigFile,
-  writeSharedServerState,
-  yamlQuotePath,
 } from "./beads-shared-dolt-server";
+import { writeDoltConfigFile } from "./beads-shared-dolt-startup";
+import { writeSharedServerState } from "./beads-shared-dolt-state";
 
 const TEST_SHARED_DOLT_TOOL_PATHS = {
   dolt: "dolt",
@@ -64,6 +63,9 @@ const createStopState = (
   startedAt: "2026-05-16T00:00:00.000Z",
   ...overrides,
 });
+
+const expectedYamlQuotedPath = (inputPath: string): string =>
+  `'${inputPath.replaceAll("'", "''")}'`;
 
 describe("readSharedServerState", () => {
   test("preserves path-edge strings from valid server state", async () => {
@@ -187,18 +189,13 @@ describe("stopOwnedSharedDoltServer", () => {
 });
 
 describe("Dolt config YAML rendering", () => {
-  test("quotes filesystem paths with spaces, backslashes, drive-letter text, and single quotes", () => {
-    expect(yamlQuotePath("C:\\Users\\Max Sky\\Repo Name")).toBe("'C:\\Users\\Max Sky\\Repo Name'");
-    expect(yamlQuotePath("/tmp/OpenDucktor's Config")).toBe("'/tmp/OpenDucktor''s Config'");
-  });
-
   test("writes deterministic quoted paths and leaves no successful temp file", async () => {
     const paths = await createPaths();
     const quotedPaths = {
-      doltRoot: yamlQuotePath(paths.doltRoot),
-      cfgDir: yamlQuotePath(paths.cfgDir),
-      privilegeFile: yamlQuotePath(path.join(paths.cfgDir, "privileges.db")),
-      branchControlFile: yamlQuotePath(path.join(paths.cfgDir, "branch_control.db")),
+      doltRoot: expectedYamlQuotedPath(paths.doltRoot),
+      cfgDir: expectedYamlQuotedPath(paths.cfgDir),
+      privilegeFile: expectedYamlQuotedPath(path.join(paths.cfgDir, "privileges.db")),
+      branchControlFile: expectedYamlQuotedPath(path.join(paths.cfgDir, "branch_control.db")),
     };
 
     await Effect.runPromise(writeDoltConfigFile(paths, 36112));

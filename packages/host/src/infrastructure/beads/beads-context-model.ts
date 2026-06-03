@@ -169,7 +169,7 @@ export const sanitizeSlug = (input: string): string => {
   return trimmed.length > 0 ? trimmed : "repo";
 };
 
-export const sanitizeDatabaseIdentifier = (input: string): string => {
+const sanitizeDatabaseIdentifier = (input: string): string => {
   const sanitized = Array.from(input)
     .map((character) => (/^[a-z0-9]$/i.test(character) ? character.toLowerCase() : "_"))
     .join("");

@@ -1,0 +1,173 @@
+import type {
+  HostEventBusPort,
+  HostEventChannel,
+  HostEventListener,
+  HostEventUnsubscribe,
+} from "@openducktor/host";
+import { Cause, Effect } from "effect";
+import { logError } from "./logger";
+
+export type BufferedHostEvent = {
+  id: number;
+  payload: string;
+};
+type StopTypescriptHostBackendServicesInput = {
+  disposeHost: () => Effect.Effect<void, unknown>;
+  resolveExited: (exitCode: number) => void;
+  stopServer: () => void;
+};
+
+const EVENT_BUFFER_CAPACITY = 256;
+
+export const STREAM_PATH_TO_CHANNEL = new Map<string, HostEventChannel>([
+  ["events", "openducktor://run-event"],
+  ["dev-server-events", "openducktor://dev-server-event"],
+  ["task-events", "openducktor://task-event"],
+  ["codex-app-server-events", "openducktor://codex-app-server-event"],
+]);
+
+export class BufferedHostEventStream {
+  private nextId = 0;
+  private readonly recent: BufferedHostEvent[] = [];
+  private readonly listeners = new Set<(event: BufferedHostEvent) => void>();
+
+  constructor(private readonly capacity: number) {}
+
+  emit(payload: unknown): void {
+    this.nextId += 1;
+    const event = {
+      id: this.nextId,
+      payload: JSON.stringify(payload) ?? "null",
+    };
+    this.recent.push(event);
+    if (this.recent.length > this.capacity) {
+      this.recent.shift();
+    }
+    for (const listener of this.listeners) {
+      listener(event);
+    }
+  }
+
+  replayAfter(lastSeenId: number | null): BufferedHostEvent[] {
+    if (lastSeenId === null) {
+      return [];
+    }
+    return this.recent.filter((event) => event.id > lastSeenId);
+  }
+
+  subscribe(listener: (event: BufferedHostEvent) => void): HostEventUnsubscribe {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+}
+
+export class BufferedHostEventBus implements HostEventBusPort {
+  private readonly streams = new Map<HostEventChannel, BufferedHostEventStream>();
+  private readonly listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
+
+  publish(channel: string, payload: unknown): void {
+    const hostChannel = this.requireChannel(channel);
+    this.streamFor(hostChannel).emit(payload);
+    const listeners = this.listenersByChannel.get(hostChannel);
+    if (!listeners) {
+      return;
+    }
+    for (const listener of listeners) {
+      listener(payload);
+    }
+  }
+
+  subscribe(channel: string, listener: HostEventListener): HostEventUnsubscribe {
+    const hostChannel = this.requireChannel(channel);
+    const listeners = this.listenersByChannel.get(hostChannel) ?? new Set<HostEventListener>();
+    listeners.add(listener);
+    this.listenersByChannel.set(hostChannel, listeners);
+
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.listenersByChannel.delete(hostChannel);
+      }
+    };
+  }
+
+  streamFor(channel: HostEventChannel): BufferedHostEventStream {
+    const existing = this.streams.get(channel);
+    if (existing) {
+      return existing;
+    }
+    const stream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
+    this.streams.set(channel, stream);
+    return stream;
+  }
+
+  private requireChannel(channel: string): HostEventChannel {
+    for (const knownChannel of STREAM_PATH_TO_CHANNEL.values()) {
+      if (knownChannel === channel) {
+        return knownChannel;
+      }
+    }
+    throw new Error(`Unknown OpenDucktor host event channel: ${channel}`);
+  }
+}
+
+export const validateWebFrontendOrigin = (origin: string): string => {
+  const trimmed = origin.trim();
+  if (!trimmed) {
+    throw new Error("browser frontend origin cannot be empty");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch (error) {
+    throw new Error(`invalid browser frontend origin configured: ${trimmed}`, { cause: error });
+  }
+
+  if (parsed.protocol !== "http:") {
+    throw new Error("browser frontend origin must use http");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("browser frontend origin must not include credentials");
+  }
+  if (parsed.port.length === 0) {
+    throw new Error("browser frontend origin must include an explicit port");
+  }
+  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("browser frontend origin must not include a path, query string, or fragment");
+  }
+  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) {
+    throw new Error("browser frontend origin must target 127.0.0.1, localhost, or [::1]");
+  }
+
+  return parsed.origin;
+};
+
+export const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<string> => {
+  const parsed = new URL(frontendOrigin);
+  return new Set([
+    `http://127.0.0.1:${parsed.port}`,
+    `http://localhost:${parsed.port}`,
+    `http://[::1]:${parsed.port}`,
+  ]);
+};
+
+export const stopTypescriptHostBackendServices = ({
+  disposeHost,
+  resolveExited,
+  stopServer,
+}: StopTypescriptHostBackendServicesInput): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let exitCode = 0;
+      const disposeExit = yield* Effect.exit(disposeHost());
+      if (disposeExit._tag === "Failure") {
+        exitCode = 1;
+        logError(Cause.pretty(disposeExit.cause));
+      }
+      yield* Effect.sync(stopServer);
+      resolveExited(exitCode);
+    }),
+  );

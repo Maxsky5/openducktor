@@ -42,7 +42,7 @@ export const isMutatingCodexRequest = (request: CodexServerRequestRecord): boole
   ].some((needle) => haystack.includes(needle));
 };
 
-export const classifyApprovalRequestType = (
+const classifyApprovalRequestType = (
   request: CodexServerRequestRecord,
 ): RuntimeApprovalRequestType => {
   const haystack = `${request.method} ${JSON.stringify(request.params ?? {})}`.toLowerCase();

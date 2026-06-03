@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { GlobalConfig } from "@openducktor/contracts";
-import { Clock, Effect, Layer } from "effect";
+import { Clock, Effect } from "effect";
 import { parsePersistedGlobalConfig } from "../../config/global-config";
 import { resolveOpenDucktorBaseDir, resolveUserPath } from "../../config/openducktor-config-dir";
 import {
@@ -12,7 +12,7 @@ import {
   toHostPathStatError,
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
-import { type SettingsConfigPort, SettingsConfigPortTag } from "../../ports/settings-config-port";
+import type { SettingsConfigPort } from "../../ports/settings-config-port";
 
 const USER_SETTINGS_FILENAME = "config.json";
 
@@ -189,8 +189,3 @@ export const createSettingsConfigAdapter = ({
     },
   };
 };
-
-export const SettingsConfigPortLive = Layer.succeed(
-  SettingsConfigPortTag,
-  createSettingsConfigAdapter(),
-);

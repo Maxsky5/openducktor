@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { __testExports, sendUserMessage } from "./message-execution";
+import { sendUserMessage } from "./message-execution";
 import type { SessionRecord } from "./types";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
@@ -75,18 +75,6 @@ const createSession = (overrides?: {
 };
 
 describe("message-execution", () => {
-  test("normalizes a slash command token into a runtime execution request", () => {
-    expect(
-      __testExports.toSlashCommandExecutionRequest([
-        { kind: "slash_command", command: COMMAND },
-        { kind: "text", text: " summarize latest session " },
-      ]),
-    ).toEqual({
-      command: "compact",
-      arguments: "summarize latest session",
-    });
-  });
-
   test("routes slash command messages through the native command transport", async () => {
     const { session, command, promptAsync } = createSession();
 
@@ -601,25 +589,43 @@ describe("message-execution", () => {
     );
   });
 
-  test("fails explicitly when text appears before a slash command", () => {
-    expect(() =>
-      __testExports.toSlashCommandExecutionRequest([
-        { kind: "text", text: "before " },
-        { kind: "slash_command", command: COMMAND },
-      ]),
-    ).toThrow("OpenCode slash commands must be the first meaningful message segment.");
+  test("fails explicitly when text appears before a slash command", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          externalSessionId: "session-1",
+          parts: [
+            { kind: "text", text: "before " },
+            { kind: "slash_command", command: COMMAND },
+          ],
+        },
+        tools: {},
+      }),
+    ).rejects.toThrow("OpenCode slash commands must be the first meaningful message segment.");
   });
 
-  test("fails explicitly when a message contains multiple slash commands", () => {
-    expect(() =>
-      __testExports.toSlashCommandExecutionRequest([
-        { kind: "slash_command", command: COMMAND },
-        {
-          kind: "slash_command",
-          command: { ...COMMAND, id: "review", trigger: "review", title: "review" },
+  test("fails explicitly when a message contains multiple slash commands", async () => {
+    const { session } = createSession();
+
+    await expect(
+      sendUserMessage({
+        session,
+        request: {
+          externalSessionId: "session-1",
+          parts: [
+            { kind: "slash_command", command: COMMAND },
+            {
+              kind: "slash_command",
+              command: { ...COMMAND, id: "review", trigger: "review", title: "review" },
+            },
+          ],
         },
-      ]),
-    ).toThrow("OpenCode supports only one slash command token per message.");
+        tools: {},
+      }),
+    ).rejects.toThrow("OpenCode supports only one slash command token per message.");
   });
 
   test("preserves slash-command error context without wrapping it as a prompt failure", async () => {

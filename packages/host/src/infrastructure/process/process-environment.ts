@@ -32,8 +32,7 @@ const uniquePathEntries = (entries: Iterable<string>): string[] => {
 
   return nextEntries;
 };
-
-export const mergePathValues = (
+const mergePathValues = (
   primaryPath: string,
   secondaryPath: string | undefined,
   pathDelimiter = delimiter,
@@ -42,8 +41,7 @@ export const mergePathValues = (
     ...primaryPath.split(pathDelimiter),
     ...(secondaryPath ?? "").split(pathDelimiter),
   ]).join(pathDelimiter);
-
-export const pathEnvironmentKey = (
+const pathEnvironmentKey = (
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string => {
@@ -126,13 +124,11 @@ const minimalLoginShellEnv = (env: NodeJS.ProcessEnv, shell: string): NodeJS.Pro
   TERM: "dumb",
   USER: env.USER,
 });
-
-export const buildLoginShellPathProbeArgs = (): string[] => [
+const buildLoginShellPathProbeArgs = (): string[] => [
   "-c",
   `printf '${LOGIN_SHELL_ENV_MARKER_TEXT}\\0'; /usr/bin/env -0`,
 ];
-
-export const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
+const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => {
   const marker = Buffer.from(LOGIN_SHELL_ENV_MARKER);
   const markerIndex = stdout.indexOf(marker);
   if (markerIndex < 0) {
@@ -155,9 +151,7 @@ export const parsePathFromLoginShellOutput = (stdout: Buffer): string | null => 
   return null;
 };
 
-export const readCurrentUserLoginShellPath = (
-  env: NodeJS.ProcessEnv = process.env,
-): string | null => {
+const readCurrentUserLoginShellPath = (env: NodeJS.ProcessEnv = process.env): string | null => {
   const shell = currentUserShell(env);
   if (!shell) {
     return null;

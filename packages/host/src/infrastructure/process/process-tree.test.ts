@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import {
   type KillProcess,
   shouldStartDetachedProcessGroup,
-  signalProcessTree,
   terminateProcessTree,
 } from "./process-tree";
 
@@ -18,18 +17,27 @@ const noopSpawnSync = () => ({
 const processIsAlive = () => true;
 
 describe("process-tree", () => {
-  test("selects taskkill for Windows process trees without negative pids", () => {
+  test("selects taskkill for Windows process trees without negative pids", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
 
-    signalProcessTree(1234, "SIGTERM", {
-      platform: "win32",
-      kill: noopKill,
-      spawnSync: (command, args) => {
-        calls.push({ command, args });
-        return noopSpawnSync();
-      },
-      isAlive: processIsAlive,
-    });
+    await Effect.runPromise(
+      terminateProcessTree({
+        pid: 1234,
+        label: "windows runtime",
+        isClosed: () => false,
+        waitForExit: () => Effect.succeed(true),
+        stopTimeoutMs: 10,
+        signalDependencies: {
+          platform: "win32",
+          kill: noopKill,
+          spawnSync: (command, args) => {
+            calls.push({ command, args });
+            return noopSpawnSync();
+          },
+          isAlive: processIsAlive,
+        },
+      }),
+    );
 
     expect(calls).toEqual([
       {
@@ -122,18 +130,27 @@ describe("process-tree", () => {
     );
   });
 
-  test("treats already-exited Unix process groups as cleaned up", () => {
+  test("treats already-exited Unix process groups as cleaned up", async () => {
     const error = Object.assign(new Error("missing process"), { code: "ESRCH" });
 
-    expect(() =>
-      signalProcessTree(1234, "SIGTERM", {
-        platform: "linux",
-        kill: () => {
-          throw error;
-        },
-        spawnSync: noopSpawnSync,
-        isAlive: () => false,
-      }),
-    ).not.toThrow();
+    await expect(
+      Effect.runPromise(
+        terminateProcessTree({
+          pid: 1234,
+          label: "already exited",
+          isClosed: () => false,
+          waitForExit: () => Effect.succeed(true),
+          stopTimeoutMs: 10,
+          signalDependencies: {
+            platform: "linux",
+            kill: () => {
+              throw error;
+            },
+            spawnSync: noopSpawnSync,
+            isAlive: () => false,
+          },
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 });

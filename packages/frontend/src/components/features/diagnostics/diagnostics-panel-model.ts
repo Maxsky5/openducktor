@@ -402,14 +402,15 @@ const buildRuntimeSectionErrors = (
   runtimeLabel: string,
   runtimeHealth: RuntimeHealthState,
 ): string[] => {
-  if (runtimeHealth?.runtime.status !== "error") {
+  const runtime = runtimeHealth?.runtime;
+  if (runtime?.status !== "error") {
     return [];
   }
 
   return buildFailureMessages({
     label: `${runtimeLabel} runtime`,
-    detail: runtimeHealth.runtime.detail ?? `${runtimeLabel} runtime is unavailable.`,
-    failureKind: runtimeHealth.runtime.failureKind ?? "error",
+    detail: runtime.detail ?? `${runtimeLabel} runtime is unavailable.`,
+    failureKind: runtime.failureKind ?? "error",
   });
 };
 
@@ -417,18 +418,20 @@ const buildMcpSectionErrors = (
   runtimeLabel: string,
   runtimeHealth: RuntimeHealthState,
 ): string[] => {
-  if (runtimeHealth?.mcp?.status !== "error") {
+  const mcp = runtimeHealth?.mcp;
+  if (mcp?.status !== "error") {
     return [];
   }
 
-  if (runtimeHealth.runtime.status !== "ready") {
+  const runtime = runtimeHealth?.runtime;
+  if (runtime?.status !== "ready") {
     return [];
   }
 
   return buildFailureMessages({
     label: `${runtimeLabel} OpenDucktor MCP`,
-    detail: runtimeHealth.mcp.detail ?? `${runtimeLabel} OpenDucktor MCP is unavailable.`,
-    failureKind: runtimeHealth.mcp.failureKind ?? "error",
+    detail: mcp.detail ?? `${runtimeLabel} OpenDucktor MCP is unavailable.`,
+    failureKind: mcp.failureKind ?? "error",
   });
 };
 

@@ -22,8 +22,7 @@ const escapeWindowsBatchCharacter = (character: string): string => {
       return character;
   }
 };
-
-export const quoteWindowsBatchArgument = (value: string): string => {
+const quoteWindowsBatchArgument = (value: string): string => {
   assertNoWindowsBatchNewlines(value, "argument");
   return `"${value.replace(WINDOWS_BATCH_ESCAPE_PATTERN, escapeWindowsBatchCharacter)}"`;
 };

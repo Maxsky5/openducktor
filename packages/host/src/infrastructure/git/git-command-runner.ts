@@ -11,7 +11,8 @@ import {
 } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../process/process-command-launch";
 import { normalizeProcessEnvironment } from "../process/process-environment";
-export const execFileAsync = promisify(execFile);
+
+const execFileAsync = promisify(execFile);
 export type GitCommandResult = {
   stdout: string;
   stderr: string;
@@ -30,7 +31,7 @@ export type GitCommandRunner = (
   },
   GitCommandError
 >;
-export const createGitEnvironment = (
+const createGitEnvironment = (
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv => ({
@@ -66,7 +67,7 @@ const createGitCommandResolver = (options: GitCommandLaunchOptions): ResolveGitC
   };
 };
 
-export const runSpawnedGit = (
+const runSpawnedGit = (
   workingDirectory: string,
   args: string[],
   options: {
@@ -237,16 +238,6 @@ export const createDefaultGitRunner = (
         toHostOperationError(exit.left, "git.execFile", { args, workingDirectory }),
       );
     });
-};
-export const requireNonEmpty = (value: string, label: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new HostValidationError({
-      message: `git ${label} cannot be empty`,
-      field: label,
-    });
-  }
-  return trimmed;
 };
 export const requireNonEmptyEffect = (
   value: string,

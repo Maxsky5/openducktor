@@ -63,11 +63,7 @@ const toBeadsAttachmentProvisioningError = (
   return beadsOperationError(String(cause), operation, cause);
 };
 
-export const commandFailureReason = (
-  defaultMessage: string,
-  stdout: string,
-  stderr: string,
-): string => {
+const commandFailureReason = (defaultMessage: string, stdout: string, stderr: string): string => {
   const trimmedStderr = stderr.trim();
   if (trimmedStderr) {
     return trimmedStderr;
@@ -76,7 +72,7 @@ export const commandFailureReason = (
   return trimmedStdout || defaultMessage;
 };
 
-export const rewriteNoGitOpsLine = (line: string): string | null => {
+const rewriteNoGitOpsLine = (line: string): string | null => {
   const trimmed = line.trimStart();
   if (!trimmed.startsWith("no-git-ops:")) {
     return null;
@@ -91,7 +87,7 @@ export const rewriteNoGitOpsLine = (line: string): string | null => {
   return `${leadingWhitespace}no-git-ops: true${commentSuffix}`;
 };
 
-export const ensureNoGitOpsConfig = (config: string): string => {
+const ensureNoGitOpsConfig = (config: string): string => {
   let replaced = false;
   const lines: string[] = [];
   for (const line of config.split(/\r?\n/)) {
@@ -120,7 +116,7 @@ export const ensureNoGitOpsConfig = (config: string): string => {
   return `${lines.join("\n")}\n`;
 };
 
-export const ensureExistingAttachmentRunsWithoutGitOps = (
+const ensureExistingAttachmentRunsWithoutGitOps = (
   beadsDir: string,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
   Effect.gen(function* () {
@@ -141,7 +137,7 @@ export const ensureExistingAttachmentRunsWithoutGitOps = (
     yield* renamePath(tempPath, configPath, "beads.attachment.replace-config");
   });
 
-export const runBdForAttachment = (
+const runBdForAttachment = (
   runCommand: BeadsCommandRunner,
   context: BeadsCliContext,
   args: string[],
@@ -164,7 +160,7 @@ export const runBdForAttachment = (
     }
   });
 
-export const restoreSharedDatabaseFromAttachmentBackup = (
+const restoreSharedDatabaseFromAttachmentBackup = (
   runCommand: BeadsCommandRunner,
   context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
@@ -201,7 +197,7 @@ export const restoreSharedDatabaseFromAttachmentBackup = (
     }
   });
 
-export const ensureRepoReadyAfterRecovery = (
+const ensureRepoReadyAfterRecovery = (
   runCommand: BeadsCommandRunner,
   context: BeadsSharedServerContext,
   recoveryStep: string,
@@ -224,8 +220,7 @@ export const ensureRepoReadyAfterRecovery = (
       ),
     );
   });
-
-export const initializeMissingAttachment = (
+const initializeMissingAttachment = (
   runCommand: BeadsCommandRunner,
   context: BeadsSharedServerContext,
 ): Effect.Effect<void, BeadsAttachmentProvisioningError> =>
@@ -302,13 +297,10 @@ const provisionAttachment = (
       toBeadsAttachmentProvisioningError(cause, "beads.attachment.provision"),
     ),
   );
-
 export const createBeadsAttachmentProvisioner =
   (runCommand: BeadsCommandRunner = runCommandAllowFailure): EnsureBeadsAttachment =>
   (context) =>
     provisionAttachment(runCommand, context);
-
-export const defaultEnsureBeadsAttachment = createBeadsAttachmentProvisioner();
 
 export const sharedServerHealthFromContext = (
   context: BeadsCliContext,

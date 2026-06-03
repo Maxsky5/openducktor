@@ -21,7 +21,7 @@ export const requireModelSelection = (
   return model;
 };
 
-export const validateModelSelection = (
+const validateModelSelection = (
   catalog: CodexModelListResponse,
   model: AgentModelSelection,
 ): void => {

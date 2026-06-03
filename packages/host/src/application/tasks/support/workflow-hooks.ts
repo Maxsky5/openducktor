@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
-export const parseHookCommand = (hook: string): string[] => {
+
+const parseHookCommand = (hook: string): string[] => {
   const tokens: string[] = [];
   let current = "";
   let quote: "'" | '"' | null = null;

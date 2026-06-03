@@ -1,8 +1,16 @@
 import { Effect } from "effect";
 import type { OpenInToolsService } from "../../application/system/open-in-tools-service";
 import { HostOperationError } from "../../effect/host-errors";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createOpenInToolsCommandHandlers } from "./open-in-tools-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 const createRecordingService = () => {
   const calls: Array<{

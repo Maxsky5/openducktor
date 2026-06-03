@@ -1,8 +1,17 @@
 import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
-import { subscribeOpencodeEvents } from "./event-stream";
-import type { SubagentSessionLink } from "./event-stream/shared";
-import type { SessionInput, SessionRecord } from "./types";
+import { attachSessionToRuntimeEvents } from "./session-registry";
+import type {
+  OpencodeEventLogger,
+  RuntimeEventTransportRecord,
+  SessionInput,
+  SessionRecord,
+} from "./types";
+
+type RunEventStreamOptions = {
+  logEvent?: OpencodeEventLogger;
+  childrenBySessionId?: Record<string, Session[]>;
+};
 
 export const makeClientWithEvents = (
   events: Event[],
@@ -81,27 +90,35 @@ export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
 export const runEventStreamWithSession = async (
   events: Event[],
   configureSession?: (sessionRecord: SessionRecord) => void,
-  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined,
+  options: RunEventStreamOptions = {},
 ): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
-  const client = makeClientWithEvents(events);
+  const client = makeClientWithEvents(events, {
+    ...(options.childrenBySessionId ? { childrenBySessionId: options.childrenBySessionId } : {}),
+  });
   const emitted: AgentEvent[] = [];
   const sessionRecord = makeSessionRecord(client);
   configureSession?.(sessionRecord);
 
-  await subscribeOpencodeEvents({
-    context: {
-      externalSessionId: sessionRecord.externalSessionId,
-      input: sessionRecord.input,
-    },
-    client,
-    controller: new AbortController(),
+  const sessions = new Map([[sessionRecord.externalSessionId, sessionRecord]]);
+  const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
+  attachSessionToRuntimeEvents({
+    sessions,
+    runtimeEventTransports,
+    createClient: () => client,
+    runtimeEndpoint: sessionRecord.eventTransportKey,
+    externalSessionId: sessionRecord.externalSessionId,
+    sessionInput: sessionRecord.input,
     now: () => "2026-02-22T12:00:00.000Z",
-    emit: (_sessionId, event) => {
+    emit: (_externalSessionId, event) => {
       emitted.push(event);
     },
-    getSession: () => sessionRecord,
-    ...(resolveSubagentSessionLink ? { resolveSubagentSessionLink } : {}),
+    ...(options.logEvent ? { logEvent: options.logEvent } : {}),
   });
+  const streamDone = runtimeEventTransports.get(sessionRecord.eventTransportKey)?.streamDone;
+  if (!streamDone) {
+    throw new Error("Expected OpenCode event transport to start.");
+  }
+  await streamDone;
 
   return { emitted, sessionRecord };
 };

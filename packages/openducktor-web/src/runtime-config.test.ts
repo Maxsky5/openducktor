@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  configureBrowserRuntimeConfig,
   getBrowserAuthToken,
   getBrowserBackendUrl,
-  resetBrowserRuntimeConfig,
 } from "./browser-config";
 import { loadBrowserRuntimeConfig, RUNTIME_CONFIG_PATH } from "./runtime-config";
 
@@ -14,7 +14,7 @@ const response = (body: unknown, status = 200): Response =>
 
 describe("runtime config loader", () => {
   afterEach(() => {
-    resetBrowserRuntimeConfig();
+    configureBrowserRuntimeConfig({});
   });
 
   test("loads the launcher runtime config before the web shell starts", async () => {

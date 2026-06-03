@@ -54,7 +54,7 @@ export type GithubPullRequestSyncPolicy = {
   repository?: GitProviderRepository;
 };
 
-export const requireGithubString = (value: unknown, label: string): string => {
+const requireGithubString = (value: unknown, label: string): string => {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new HostValidationError({
       field: label,
@@ -64,7 +64,7 @@ export const requireGithubString = (value: unknown, label: string): string => {
   return value;
 };
 
-export const requireGithubNumber = (value: unknown, label: string): number => {
+const requireGithubNumber = (value: unknown, label: string): number => {
   if (!Number.isInteger(value) || typeof value !== "number" || value <= 0) {
     throw new HostValidationError({
       field: label,
@@ -74,7 +74,7 @@ export const requireGithubNumber = (value: unknown, label: string): number => {
   return value;
 };
 
-export const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullRequest => {
+const normalizeGithubPullRequest = (response: GithubPullResponse): ResolvedPullRequest => {
   const mergedAt = typeof response.merged_at === "string" ? response.merged_at : undefined;
   const closedAt = typeof response.closed_at === "string" ? response.closed_at : undefined;
   const rawState = requireGithubString(response.state, "state").trim().toLowerCase();

@@ -38,7 +38,8 @@ import {
   type RawIssue,
   type RunBdJson,
 } from "./beads-raw-issue";
-export const metadataDocumentSummary = (
+
+const metadataDocumentSummary = (
   namespace: Record<string, unknown> | undefined,
 ): TaskDocumentSummary => {
   const documents = documentsMetadata(namespace);
@@ -48,7 +49,7 @@ export const metadataDocumentSummary = (
     qaReport: qaDocumentPresence(documents?.qaReports),
   };
 };
-export const parseTargetBranchMetadata = (
+const parseTargetBranchMetadata = (
   namespace: Record<string, unknown> | undefined,
 ): {
   targetBranch?: GitTargetBranch;
@@ -65,7 +66,7 @@ export const parseTargetBranchMetadata = (
     targetBranchError: `Invalid openducktor.targetBranch metadata: ${parsed.error.message}. Fix the saved task metadata or choose a valid target branch again.`,
   };
 };
-export const parsePullRequestMetadata = (
+const parsePullRequestMetadata = (
   namespace: Record<string, unknown> | undefined,
 ): PullRequest | undefined => {
   if (!namespace) {
@@ -77,7 +78,7 @@ export const parsePullRequestMetadata = (
   const parsed = pullRequestSchema.safeParse(candidate);
   return parsed.success ? parsed.data : undefined;
 };
-export const parseDirectMergeMetadata = (
+const parseDirectMergeMetadata = (
   namespace: Record<string, unknown> | undefined,
 ): DirectMergeRecord | undefined => {
   if (!namespace) {
@@ -106,7 +107,7 @@ export const parseAgentSessionsMetadata = (
   }
   return [...parsed.data].sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 };
-export const parseParentId = (issue: RawIssue): string | undefined => {
+const parseParentId = (issue: RawIssue): string | undefined => {
   if (issue.parent !== undefined) {
     return issue.parent;
   }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
-import { compactionMapper, todoMapper } from "./event-mappers";
+import { todoMapper } from "./event-mappers";
 
 const TODO_PAYLOAD = {
   explanation: "Tracking work",
@@ -187,8 +187,9 @@ describe("Codex todo event mapper", () => {
 
 describe("Codex compaction event mapper", () => {
   test("projects live context compaction starts to session events", () => {
+    const pipeline = createCodexEventMapperPipeline();
     const events = projectCodexCanonicalEvents(
-      compactionMapper.fromLive(
+      pipeline.runLive(
         {
           kind: "item_started",
           item: {
@@ -201,7 +202,7 @@ describe("Codex compaction event mapper", () => {
           threadId: "thread-1",
           timestamp: "2026-05-18T21:00:00.000Z",
         },
-      ).events,
+      ),
     );
 
     expect(events).toEqual([
@@ -216,8 +217,9 @@ describe("Codex compaction event mapper", () => {
   });
 
   test("projects live context compaction items to session events", () => {
+    const pipeline = createCodexEventMapperPipeline();
     const events = projectCodexCanonicalEvents(
-      compactionMapper.fromLive(
+      pipeline.runLive(
         {
           kind: "item_completed",
           item: {
@@ -231,8 +233,7 @@ describe("Codex compaction event mapper", () => {
           turnId: "turn-1",
           timestamp: "2026-05-18T21:00:00.000Z",
         },
-        undefined,
-      ).events,
+      ),
     );
 
     expect(events).toEqual([
@@ -247,7 +248,8 @@ describe("Codex compaction event mapper", () => {
   });
 
   test("projects thread-read context compaction items to session notice history", () => {
-    const result = compactionMapper.fromThreadItem(
+    const pipeline = createCodexEventMapperPipeline();
+    const result = pipeline.runThreadItemResult(
       {
         index: 3,
         timestamp: "2026-05-18T21:00:00.000Z",
@@ -261,7 +263,6 @@ describe("Codex compaction event mapper", () => {
         threadId: "thread-1",
         timestamp: "2026-05-18T21:00:00.000Z",
       },
-      undefined,
     );
 
     expect(projectCodexCanonicalEventsToHistory(result.events)).toEqual([
@@ -281,7 +282,8 @@ describe("Codex compaction event mapper", () => {
   });
 
   test("does not map unknown notifications as compaction", () => {
-    const result = compactionMapper.fromLive(
+    const pipeline = createCodexEventMapperPipeline();
+    const result = pipeline.runLiveResult(
       {
         kind: "notification",
         notification: {

@@ -11,7 +11,7 @@ export type UpdateScriptState = (
   update: (script: DevServerScriptState) => void,
 ) => void;
 
-export const stoppedScriptFromState = (
+const stoppedScriptFromState = (
   runtime: DevServerGroupRuntime,
   script: DevServerScriptState,
   pid: number,

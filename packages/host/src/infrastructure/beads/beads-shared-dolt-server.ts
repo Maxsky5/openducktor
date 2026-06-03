@@ -41,28 +41,11 @@ import {
 } from "./beads-shared-dolt-startup";
 import { readSharedServerState, writeSharedServerState } from "./beads-shared-dolt-state";
 
-export { processIsAlive } from "../process/process-tree";
 export type { SharedDoltServerError } from "./beads-shared-dolt-errors";
-export {
-  formatDoltStartupLog,
-  pathExists,
-  runCommandAllowFailure,
-  runDoltAllowFailure,
-  serverStateIsHealthy,
-  sqlProbe,
-  tcpProbe,
-  waitForServerReady,
-} from "./beads-shared-dolt-health";
-export {
-  deterministicSharedDoltPortCandidate,
-  portIsAvailable,
-  wrapPortCandidate,
-  writeDoltConfigFile,
-  yamlQuotePath,
-} from "./beads-shared-dolt-startup";
-export { readSharedServerState, writeSharedServerState } from "./beads-shared-dolt-state";
+export { pathExists, runCommandAllowFailure } from "./beads-shared-dolt-health";
+export { readSharedServerState } from "./beads-shared-dolt-state";
 
-export const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
+const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
     const deadline = startedAt + timeoutMs;
@@ -128,7 +111,7 @@ export const stopOwnedSharedDoltServer: StopSharedDoltServer = (state, serverSta
     }).pipe(Effect.catchTag("HostResourceError", () => Effect.void));
   });
 
-export const spawnSharedDoltServer = (
+const spawnSharedDoltServer = (
   paths: BeadsSharedServerPaths,
   port: number,
 ): Effect.Effect<BeadsSharedServerState, SharedDoltServerError> =>

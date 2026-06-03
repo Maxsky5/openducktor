@@ -1,7 +1,15 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { RuntimeDefinitionsService } from "../../application/runtimes/runtime-definitions-service";
-import { createHostCommandRouter } from "../router/host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../router/host-command-router";
+
 import { createRuntimeDefinitionsCommandHandlers } from "./runtime-definitions-command-handlers";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createRuntimeDefinitionsCommandHandlers", () => {
   test("routes runtime_definitions_list through the runtime definitions service", async () => {

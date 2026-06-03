@@ -269,8 +269,7 @@ const discoverDescriptorToolPath = ({
 
     return yield* Effect.fail(missingToolError(descriptor, checked));
   });
-
-export const discoverToolPath = (
+const discoverToolPath = (
   toolId: ToolDiscoveryId,
   systemCommands: SystemCommandPort,
   env: NodeJS.ProcessEnv = process.env,

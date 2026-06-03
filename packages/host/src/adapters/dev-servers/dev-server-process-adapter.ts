@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { Effect, Exit, Layer, Scope } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import {
   HostOperationError,
   HostValidationError,
@@ -18,7 +18,6 @@ import {
 import {
   type DevServerProcessExit,
   type DevServerProcessPort,
-  DevServerProcessPortTag,
   DevServerProcessStartExitError,
   type DevServerProcessStartInput,
 } from "../../ports/dev-server-process-port";
@@ -259,7 +258,3 @@ export const createDevServerProcessAdapter = ({
     );
   },
 });
-
-export const DevServerProcessPortLive = Layer.sync(DevServerProcessPortTag, () =>
-  createDevServerProcessAdapter(),
-);

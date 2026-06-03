@@ -3,8 +3,8 @@ import path from "node:path";
 import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
 
-export const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
-export const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
+const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
+const DEFAULT_CONFIG_DIR_NAME = ".openducktor";
 
 const resolveHomeDirectory = (): string => {
   const home = homedir();

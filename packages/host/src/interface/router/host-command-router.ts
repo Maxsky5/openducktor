@@ -124,6 +124,3 @@ export const toPromiseHostCommandRouter = (router: EffectHostCommandRouter): Hos
     return runBoundary(router.invoke(command, args));
   },
 });
-
-export const createHostCommandRouter = (input: CreateHostCommandRouterInput): HostCommandRouter =>
-  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));

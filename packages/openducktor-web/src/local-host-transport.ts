@@ -5,6 +5,7 @@ import {
 import { browserLiveControlEvent } from "@openducktor/frontend/lib/browser-live-control-events";
 import { createHostClient, type HostClient } from "@openducktor/host-client";
 import { getBrowserAuthToken, getBrowserBackendUrl } from "./browser-config";
+import { readLocalHostErrorPayload } from "./local-host-errors";
 
 type BrowserSseListener = (payload: unknown) => void;
 
@@ -29,37 +30,6 @@ type BrowserSseSubscription = {
 const sseChannels = new Map<string, BrowserSseChannel>();
 let nextSseListenerId = 0;
 let sessionPromise: Promise<void> | null = null;
-
-const readLocalHostErrorPayload = async (
-  response: Response,
-): Promise<{ message: string; payload: unknown | null }> => {
-  const text = await response.text().catch(() => "");
-  const trimmedText = text.trim();
-
-  if (trimmedText) {
-    try {
-      const payload = JSON.parse(trimmedText) as { error?: unknown; message?: unknown };
-      if (typeof payload.error === "string" && payload.error.trim()) {
-        return { message: payload.error, payload };
-      }
-      if (typeof payload.message === "string" && payload.message.trim()) {
-        return { message: payload.message, payload };
-      }
-    } catch {}
-
-    return { message: trimmedText, payload: null };
-  }
-
-  return {
-    message: `OpenDucktor web host request failed with status ${response.status}.`,
-    payload: null,
-  };
-};
-
-export const readLocalHostErrorMessage = async (response: Response): Promise<string> => {
-  const { message } = await readLocalHostErrorPayload(response);
-  return message;
-};
 
 export const ensureLocalHostSession = (): Promise<void> => {
   if (sessionPromise) {
@@ -249,14 +219,4 @@ export const buildLocalAttachmentPreviewUrl = (browserBackendUrl: string, path: 
   const baseUrl = browserBackendUrl.replace(/\/$/, "");
   const query = new URLSearchParams({ path });
   return `${baseUrl}/local-attachment-preview?${query.toString()}`;
-};
-
-export const __localHostTransportTestInternals = {
-  resetSession() {
-    sessionPromise = null;
-    for (const [path, channel] of sseChannels) {
-      channel.eventSource.close();
-      sseChannels.delete(path);
-    }
-  },
 };

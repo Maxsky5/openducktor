@@ -68,8 +68,7 @@ const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 const MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
 
 type OpenCodeChildProcess = ChildProcessByStdio<null, Readable, Readable>;
-
-export const buildOpenCodeConfigContent = (
+const buildOpenCodeConfigContent = (
   bridge: OpenCodeMcpBridgeConnection,
   mcpCommand: string[],
 ): string =>

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import { resolveOpenDucktorBaseDir } from "../../config/openducktor-config-dir";
 import { toHostOperationError } from "../../effect/host-errors";
-import { defaultEnsureBeadsAttachment } from "../../infrastructure/beads/beads-attachment-provisioning";
+import { defaultEnsureBeadsAttachment } from "../../infrastructure/beads/beads-attachment-provisioning-default";
 import {
   type BeadsCliContext,
   type BeadsCliContextResolutionError,
@@ -27,10 +27,7 @@ import {
   readSharedServerState,
 } from "../../infrastructure/beads/beads-shared-dolt-server";
 
-export {
-  createBeadsAttachmentProvisioner,
-  sharedServerHealthFromContext,
-} from "../../infrastructure/beads/beads-attachment-provisioning";
+export { sharedServerHealthFromContext } from "../../infrastructure/beads/beads-attachment-provisioning";
 export type {
   BeadsCliContext,
   BeadsCliContextResolutionError,

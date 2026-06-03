@@ -58,7 +58,7 @@ export const loadNamespace = (
       namespace: namespaceMap(root),
     };
   });
-export const nextDocumentRevision = (value: unknown, metadataPath: string): number => {
+const nextDocumentRevision = (value: unknown, metadataPath: string): number => {
   if (value === undefined) {
     return 1;
   }
@@ -126,9 +126,9 @@ export const writeDocumentWithBd = (
       revision,
     };
   });
-export const qaReportSourceTool = (verdict: QaReportVerdict): string =>
+const qaReportSourceTool = (verdict: QaReportVerdict): string =>
   verdict === "approved" ? ODT_QA_APPROVED_SOURCE_TOOL : ODT_QA_REJECTED_SOURCE_TOOL;
-export const writeLatestQaReport = (
+const writeLatestQaReport = (
   now: () => Date,
   documents: Record<string, unknown>,
   markdown: string,
@@ -175,7 +175,7 @@ export const recordQaOutcomeWithBd = (
     ]);
     return parseTaskCard(yield* showRawIssue(runBdJson, repoPath, taskId));
   });
-export const compactAgentSessionForStorage = (session: AgentSessionRecord): AgentSessionRecord => {
+const compactAgentSessionForStorage = (session: AgentSessionRecord): AgentSessionRecord => {
   const role = session.role.trim();
   if (!role) {
     throw new HostValidationError({ message: "Agent session role is required", field: "role" });

@@ -5,15 +5,20 @@ import {
   createLocalAttachmentAdapter,
   createNodeEffectHostCommandRouter,
   type EffectHostCommandRouter,
-  type HostEventBusPort,
-  type HostEventChannel,
-  type HostEventListener,
-  type HostEventUnsubscribe,
   type HostRuntimeDistribution,
   type ToolDiscoveryId,
 } from "@openducktor/host";
 import { Cause, Data, Effect } from "effect";
 import { logError, logInfo } from "./logger";
+import {
+  allowedOriginsForFrontendOrigin,
+  type BufferedHostEvent,
+  BufferedHostEventBus,
+  type BufferedHostEventStream,
+  STREAM_PATH_TO_CHANNEL,
+  stopTypescriptHostBackendServices,
+  validateWebFrontendOrigin,
+} from "./typescript-host-backend-support";
 
 export type TypescriptHostBackendOptions = {
   port: number;
@@ -30,17 +35,8 @@ export type TypescriptHostBackend = {
   stop(): Promise<void>;
 };
 
-type BufferedEvent = {
-  id: number;
-  payload: string;
-};
 type RequestTimeoutController = {
   timeout(request: Request, seconds: number): void;
-};
-type StopTypescriptHostBackendServicesInput = {
-  disposeHost: () => Effect.Effect<void, unknown>;
-  resolveExited: (exitCode: number) => void;
-  stopServer: () => void;
 };
 
 const LOCALHOST = "127.0.0.1";
@@ -48,102 +44,7 @@ const CONTROL_TOKEN_HEADER = "x-openducktor-control-token";
 const APP_TOKEN_HEADER = "x-openducktor-app-token";
 const APP_SESSION_COOKIE_NAME = "openducktor_web_session";
 const LAST_EVENT_ID_HEADER = "last-event-id";
-const EVENT_BUFFER_CAPACITY = 256;
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
-
-const STREAM_PATH_TO_CHANNEL = new Map<string, HostEventChannel>([
-  ["events", "openducktor://run-event"],
-  ["dev-server-events", "openducktor://dev-server-event"],
-  ["task-events", "openducktor://task-event"],
-  ["codex-app-server-events", "openducktor://codex-app-server-event"],
-]);
-
-class BufferedHostEventStream {
-  private nextId = 0;
-  private readonly recent: BufferedEvent[] = [];
-  private readonly listeners = new Set<(event: BufferedEvent) => void>();
-
-  constructor(private readonly capacity: number) {}
-
-  emit(payload: unknown): void {
-    this.nextId += 1;
-    const event = {
-      id: this.nextId,
-      payload: JSON.stringify(payload) ?? "null",
-    };
-    this.recent.push(event);
-    if (this.recent.length > this.capacity) {
-      this.recent.shift();
-    }
-    for (const listener of this.listeners) {
-      listener(event);
-    }
-  }
-
-  replayAfter(lastSeenId: number | null): BufferedEvent[] {
-    if (lastSeenId === null) {
-      return [];
-    }
-    return this.recent.filter((event) => event.id > lastSeenId);
-  }
-
-  subscribe(listener: (event: BufferedEvent) => void): HostEventUnsubscribe {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-}
-
-class BufferedHostEventBus implements HostEventBusPort {
-  private readonly streams = new Map<HostEventChannel, BufferedHostEventStream>();
-  private readonly listenersByChannel = new Map<HostEventChannel, Set<HostEventListener>>();
-
-  publish(channel: string, payload: unknown): void {
-    const hostChannel = this.requireChannel(channel);
-    this.streamFor(hostChannel).emit(payload);
-    const listeners = this.listenersByChannel.get(hostChannel);
-    if (!listeners) {
-      return;
-    }
-    for (const listener of listeners) {
-      listener(payload);
-    }
-  }
-
-  subscribe(channel: string, listener: HostEventListener): HostEventUnsubscribe {
-    const hostChannel = this.requireChannel(channel);
-    const listeners = this.listenersByChannel.get(hostChannel) ?? new Set<HostEventListener>();
-    listeners.add(listener);
-    this.listenersByChannel.set(hostChannel, listeners);
-
-    return () => {
-      listeners.delete(listener);
-      if (listeners.size === 0) {
-        this.listenersByChannel.delete(hostChannel);
-      }
-    };
-  }
-
-  streamFor(channel: HostEventChannel): BufferedHostEventStream {
-    const existing = this.streams.get(channel);
-    if (existing) {
-      return existing;
-    }
-    const stream = new BufferedHostEventStream(EVENT_BUFFER_CAPACITY);
-    this.streams.set(channel, stream);
-    return stream;
-  }
-
-  private requireChannel(channel: string): HostEventChannel {
-    for (const knownChannel of STREAM_PATH_TO_CHANNEL.values()) {
-      if (knownChannel === channel) {
-        return knownChannel;
-      }
-    }
-    throw new Error(`Unknown OpenDucktor host event channel: ${channel}`);
-  }
-}
 
 const jsonResponseBody = (payload: unknown): string => {
   const serialized = JSON.stringify(payload);
@@ -179,47 +80,6 @@ const errorResponse = (
     { status },
     corsHeaders,
   );
-
-const validateWebFrontendOrigin = (origin: string): string => {
-  const trimmed = origin.trim();
-  if (!trimmed) {
-    throw new Error("browser frontend origin cannot be empty");
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch (error) {
-    throw new Error(`invalid browser frontend origin configured: ${trimmed}`, { cause: error });
-  }
-
-  if (parsed.protocol !== "http:") {
-    throw new Error("browser frontend origin must use http");
-  }
-  if (parsed.username || parsed.password) {
-    throw new Error("browser frontend origin must not include credentials");
-  }
-  if (parsed.port.length === 0) {
-    throw new Error("browser frontend origin must include an explicit port");
-  }
-  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
-    throw new Error("browser frontend origin must not include a path, query string, or fragment");
-  }
-  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsed.hostname)) {
-    throw new Error("browser frontend origin must target 127.0.0.1, localhost, or [::1]");
-  }
-
-  return parsed.origin;
-};
-
-const allowedOriginsForFrontendOrigin = (frontendOrigin: string): Set<string> => {
-  const parsed = new URL(frontendOrigin);
-  return new Set([
-    `http://127.0.0.1:${parsed.port}`,
-    `http://localhost:${parsed.port}`,
-    `http://[::1]:${parsed.port}`,
-  ]);
-};
 
 const corsHeadersForRequest = (
   request: Request,
@@ -322,7 +182,7 @@ const validateAppCookieOrHeader = (request: Request, expectedToken: string): Res
     "Invalid OpenDucktor web host app token.",
   );
 
-const writeSseEvent = (event: BufferedEvent): string =>
+const writeSseEvent = (event: BufferedHostEvent): string =>
   [`id: ${event.id}`, ...event.payload.split(/\r?\n/).map((line) => `data: ${line}`), "", ""].join(
     "\n",
   );
@@ -333,7 +193,7 @@ const createSseResponse = (
   corsHeaders: HeadersInit,
 ): Response => {
   const encoder = new TextEncoder();
-  let unsubscribe: HostEventUnsubscribe | null = null;
+  let unsubscribe: (() => void) | null = null;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       for (const event of stream.replayAfter(lastEventId)) {
@@ -668,25 +528,7 @@ const handleTypescriptHostBackendRequest = ({
 const toWebHostStartupError = (message: string, cause?: unknown): WebHostStartupError =>
   new WebHostStartupError(cause === undefined ? { message } : { cause, message });
 
-const stopTypescriptHostBackendServices = ({
-  disposeHost,
-  resolveExited,
-  stopServer,
-}: StopTypescriptHostBackendServicesInput): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      let exitCode = 0;
-      const disposeExit = yield* Effect.exit(disposeHost());
-      if (disposeExit._tag === "Failure") {
-        exitCode = 1;
-        logError(Cause.pretty(disposeExit.cause));
-      }
-      yield* Effect.sync(stopServer);
-      resolveExited(exitCode);
-    }),
-  );
-
-export const startTypescriptHostBackendEffect = ({
+const startTypescriptHostBackendEffect = ({
   port,
   frontendOrigin,
   controlToken,
@@ -791,9 +633,3 @@ export const startTypescriptHostBackendEffect = ({
 export const startTypescriptHostBackend = (
   options: TypescriptHostBackendOptions,
 ): Promise<TypescriptHostBackend> => Effect.runPromise(startTypescriptHostBackendEffect(options));
-
-export const __typescriptHostBackendTestInternals = {
-  BufferedHostEventBus,
-  stopTypescriptHostBackendServices,
-  validateWebFrontendOrigin,
-};

@@ -1,5 +1,12 @@
 import { Effect } from "effect";
-import { createEffectHostCommandRouter, createHostCommandRouter } from "./host-command-router";
+import {
+  type CreateHostCommandRouterInput,
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "./host-command-router";
+
+const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
+  toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createHostCommandRouter", () => {
   test("routes known commands to registered handlers", async () => {

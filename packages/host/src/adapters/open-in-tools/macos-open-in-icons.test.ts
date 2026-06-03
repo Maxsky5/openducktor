@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { iconsetRepresentationScore } from "./macos-open-in-icons";
+import { iconsetRepresentationScore } from "./macos-open-in-iconset";
 
 describe("macOS Open In icon extraction", () => {
   test("scores only iconset representations up to the Open In icon size cap", () => {

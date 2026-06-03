@@ -12,12 +12,12 @@ import type {
 import { HostValidationError } from "../../effect/host-errors";
 import type { GitWorktreeStatusData } from "../../ports/git-port";
 
-export const gitWorktreeHashVersion = 1;
-export const fnv1a64OffsetBasis = 0xcbf29ce484222325n;
-export const fnv1a64Prime = 0x100000001b3n;
-export const uint64Mask = 0xffffffffffffffffn;
+const gitWorktreeHashVersion = 1;
+const fnv1a64OffsetBasis = 0xcbf29ce484222325n;
+const fnv1a64Prime = 0x100000001b3n;
+const uint64Mask = 0xffffffffffffffffn;
 
-export class Fnv1a64Hasher {
+class Fnv1a64Hasher {
   private state = fnv1a64OffsetBasis;
 
   updateByte(value: number): void {
@@ -60,7 +60,7 @@ export class Fnv1a64Hasher {
   }
 }
 
-export const hashOptionalString = (hasher: Fnv1a64Hasher, value: string | undefined): void => {
+const hashOptionalString = (hasher: Fnv1a64Hasher, value: string | undefined): void => {
   if (value === undefined) {
     hasher.updateByte(0);
     return;
@@ -70,7 +70,7 @@ export const hashOptionalString = (hasher: Fnv1a64Hasher, value: string | undefi
   hasher.updateString(value);
 };
 
-export const hashUpstreamAheadBehind = (
+const hashUpstreamAheadBehind = (
   hasher: Fnv1a64Hasher,
   upstreamAheadBehind: GitUpstreamAheadBehind,
 ): void => {
@@ -162,7 +162,7 @@ export const createWorktreeSnapshot = (
   diffHash,
 });
 
-export const staleDiffMessage = "Displayed diff is stale. Refresh and try again.";
+const staleDiffMessage = "Displayed diff is stale. Refresh and try again.";
 
 export const validateResetSnapshotMatches = (
   snapshot: GitResetSnapshot,
