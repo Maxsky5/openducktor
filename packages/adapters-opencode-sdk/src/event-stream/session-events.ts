@@ -4,6 +4,7 @@ import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-transl
 import { normalizeTodoList } from "../todo-normalizers";
 import { emitSubagentPartsForSession, reconcileUserMessageQueuedStates } from "./message-events";
 import {
+  parsePendingInputReplied,
   parsePermissionAsked,
   parseQuestionAsked,
   parseSessionStatus,
@@ -290,6 +291,48 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   return true;
 };
 
+const handlePermissionRepliedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
+  if (event.type !== "permission.replied") {
+    return false;
+  }
+
+  const properties = readEventProperties(event);
+  const parsed = properties ? parsePendingInputReplied(properties) : undefined;
+  if (!parsed) {
+    return true;
+  }
+
+  runtime.emit(runtime.externalSessionId, {
+    type: "approval_resolved",
+    externalSessionId: runtime.externalSessionId,
+    timestamp: runtime.now(),
+    requestId: parsed.requestId,
+    ...resolveSubagentInputRouting(event, properties, runtime),
+  });
+  return true;
+};
+
+const handleQuestionRepliedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
+  if (event.type !== "question.replied") {
+    return false;
+  }
+
+  const properties = readEventProperties(event);
+  const parsed = properties ? parsePendingInputReplied(properties) : undefined;
+  if (!parsed) {
+    return true;
+  }
+
+  runtime.emit(runtime.externalSessionId, {
+    type: "question_resolved",
+    externalSessionId: runtime.externalSessionId,
+    timestamp: runtime.now(),
+    requestId: parsed.requestId,
+    ...resolveSubagentInputRouting(event, properties, runtime),
+  });
+  return true;
+};
+
 const handleSessionErrorEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
   if (event.type !== "session.error") {
     return false;
@@ -437,7 +480,9 @@ export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): b
     bindChildSessionCorrelation(event, runtime) ||
     handleSessionStatusEvent(event, runtime) ||
     handlePermissionAskedEvent(event, runtime) ||
+    handlePermissionRepliedEvent(event, runtime) ||
     handleQuestionAskedEvent(event, runtime) ||
+    handleQuestionRepliedEvent(event, runtime) ||
     handleSessionErrorEvent(event, runtime) ||
     handleSessionIdleEvent(event, runtime) ||
     handleTodoUpdatedEvent(event, runtime)

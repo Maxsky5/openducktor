@@ -133,7 +133,12 @@ const OpencodeSdkAdapter = class extends BaseOpencodeSdkAdapter {
   }
 };
 
-const makeMockClient = (): {
+const makeMockClient = (
+  options: {
+    permissionReplyResult?: { data?: unknown; error?: unknown; response?: unknown };
+    questionReplyResult?: { data?: unknown; error?: unknown; response?: unknown };
+  } = {},
+): {
   client: OpencodeClient;
   createCalls: unknown[];
   abortCalls: unknown[];
@@ -141,6 +146,7 @@ const makeMockClient = (): {
   listCalls: unknown[];
   statusCalls: unknown[];
   permissionListCalls: unknown[];
+  permissionReplyCalls: unknown[];
   questionListCalls: unknown[];
   questionReplyCalls: unknown[];
 } => {
@@ -150,6 +156,7 @@ const makeMockClient = (): {
   const listCalls: unknown[] = [];
   const statusCalls: unknown[] = [];
   const permissionListCalls: unknown[] = [];
+  const permissionReplyCalls: unknown[] = [];
   const questionListCalls: unknown[] = [];
   const questionReplyCalls: unknown[] = [];
 
@@ -255,6 +262,10 @@ const makeMockClient = (): {
           error: undefined,
         };
       },
+      reply: async (input: unknown) => {
+        permissionReplyCalls.push(input);
+        return options.permissionReplyResult ?? { data: true, error: undefined };
+      },
     },
     question: {
       list: async (input?: unknown) => {
@@ -286,7 +297,7 @@ const makeMockClient = (): {
       },
       reply: async (input: unknown) => {
         questionReplyCalls.push(input);
-        return { data: true, error: undefined };
+        return options.questionReplyResult ?? { data: true, error: undefined };
       },
     },
     global: {
@@ -309,6 +320,7 @@ const makeMockClient = (): {
     listCalls,
     statusCalls,
     permissionListCalls,
+    permissionReplyCalls,
     questionListCalls,
     questionReplyCalls,
   };
@@ -368,6 +380,84 @@ describe("opencode-sdk-adapter", () => {
     expect(requireRepoRuntime).not.toHaveBeenCalled();
     expect(mockClient.getCalls).toEqual([
       { directory: defaultWorkingDirectory, sessionID: "external-session-1" },
+    ]);
+  });
+
+  test("replyApproval propagates OpenCode reply errors", async () => {
+    const mockClient = makeMockClient({
+      permissionReplyResult: {
+        data: undefined,
+        error: new Error("Permission request not found"),
+        response: { status: 404, statusText: "Not Found" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.resumeSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      systemPrompt: "system",
+      externalSessionId: "external-session-1",
+    });
+
+    await expect(
+      adapter.replyApproval({
+        externalSessionId: "external-session-1",
+        requestId: "missing-permission",
+        outcome: "approve_once",
+      }),
+    ).rejects.toThrow("OpenCode request failed: reply to permission request");
+    expect(mockClient.permissionReplyCalls).toEqual([
+      {
+        directory: defaultWorkingDirectory,
+        requestID: "missing-permission",
+        reply: "once",
+      },
+    ]);
+  });
+
+  test("replyQuestion propagates OpenCode reply errors", async () => {
+    const mockClient = makeMockClient({
+      questionReplyResult: {
+        data: undefined,
+        error: new Error("Question request not found"),
+        response: { status: 404, statusText: "Not Found" },
+      },
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mockClient.client,
+      now: () => "2026-02-22T12:00:00.000Z",
+    });
+
+    await adapter.resumeSession({
+      repoPath: defaultRepoPath,
+      workingDirectory: defaultWorkingDirectory,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      systemPrompt: "system",
+      externalSessionId: "external-session-1",
+    });
+
+    await expect(
+      adapter.replyQuestion({
+        externalSessionId: "external-session-1",
+        requestId: "missing-question",
+        answers: [["yes"]],
+      }),
+    ).rejects.toThrow("OpenCode request failed: reply to question request");
+    expect(mockClient.questionReplyCalls).toEqual([
+      {
+        directory: defaultWorkingDirectory,
+        requestID: "missing-question",
+        answers: [["yes"]],
+      },
     ]);
   });
 

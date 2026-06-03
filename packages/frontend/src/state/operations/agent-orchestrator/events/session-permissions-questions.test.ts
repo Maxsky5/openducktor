@@ -233,6 +233,179 @@ describe("agent-orchestrator session permissions and questions", () => {
     ]);
   });
 
+  test("clears child and parent subagent approval overlay when permission is resolved", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const pendingApproval = {
+      requestId: "perm-child-1",
+      requestType: "permission_grant" as const,
+      title: "Approve permission: read",
+      summary: "Approval request for read.",
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-parent-session": buildSession({
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          subagentPendingApprovalsByExternalSessionId: {
+            "external-child-session": [pendingApproval],
+          },
+        }),
+        "external-child-session": buildSession({
+          externalSessionId: "external-child-session",
+          role: "build",
+          pendingApprovals: [pendingApproval],
+        }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "approval_resolved",
+      externalSessionId: "external-parent-session",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      requestId: "perm-child-1",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey: "part:assistant-parent:subtask-1",
+    });
+
+    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toEqual([]);
+    expect(
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
+    ).toBeUndefined();
+  });
+
+  test("clears child and parent subagent question overlay when question is resolved", () => {
+    const handlers: Array<(event: SessionEvent) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(handler);
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const pendingQuestion = {
+      requestId: "question-child-1",
+      questions: [
+        {
+          header: "Confirm path",
+          question: "Which file?",
+          options: [{ label: "A", description: "Path A" }],
+        },
+      ],
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "external-parent-session": buildSession({
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          subagentPendingQuestionsByExternalSessionId: {
+            "external-child-session": [pendingQuestion],
+          },
+        }),
+        "external-child-session": buildSession({
+          externalSessionId: "external-child-session",
+          role: "build",
+          pendingQuestions: [pendingQuestion],
+        }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+
+    handleEvent({
+      type: "question_resolved",
+      externalSessionId: "external-parent-session",
+      timestamp: "2026-02-22T08:00:06.000Z",
+      requestId: "question-child-1",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+      subagentCorrelationKey: "part:assistant-parent:subtask-1",
+    });
+
+    expect(sessionsRef.current["external-child-session"]?.pendingQuestions).toEqual([]);
+    expect(
+      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId,
+    ).toBeUndefined();
+  });
+
   test("deduplicates child permissions when subagent correlation arrives after the prompt", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {

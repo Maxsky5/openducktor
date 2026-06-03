@@ -6,7 +6,7 @@ const READ_TOOL_NAMES = new Set(["read", "cat", "view"]);
 const LIST_TOOL_NAMES = new Set(["list", "ls"]);
 const SEARCH_TOOL_NAMES = new Set(["glob", "grep", "find", "search", "ast_grep_search"]);
 const TODO_TOOL_NAMES = new Set(["todowrite", "todoread"]);
-const TASK_TOOL_NAMES = new Set(["task", "delegate", "subtask"]);
+const TASK_TOOL_NAMES = new Set(["task", "delegate"]);
 const SESSION_TOOL_NAMES = new Set([
   "session_info",
   "session_list",

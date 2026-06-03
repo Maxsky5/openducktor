@@ -210,7 +210,7 @@ type ToolStreamPart = Extract<AgentStreamPart, { kind: "tool" }>;
 type SubagentStreamPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ToolStatus = ToolStreamPart["status"];
 
-const SUBAGENT_TOOL_NAMES = new Set(["task", "delegate", "subtask"]);
+const SUBAGENT_TOOL_NAMES = new Set(["task", "delegate"]);
 
 const normalizeToolName = (value: string): string => {
   const trimmed = value.trim().toLowerCase();

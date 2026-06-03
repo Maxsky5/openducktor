@@ -134,6 +134,37 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("does not map the unsupported subtask tool alias to a subagent part", () => {
+    const part = createToolPart({
+      id: "tool-subtask-1",
+      tool: "subtask",
+      status: "running",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read a file",
+        description: "Read a file",
+      },
+      time: {
+        start: 10,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      messageId: "assistant-tool-subtask-1",
+      partId: "tool-subtask-1",
+      tool: "subtask",
+      status: "running",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read a file",
+        description: "Read a file",
+      },
+    });
+  });
+
   test("preserves cancelled subagent tool statuses", () => {
     const part = createToolPart({
       id: "tool-subagent-cancelled-1",

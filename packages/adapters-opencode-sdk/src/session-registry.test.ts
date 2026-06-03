@@ -48,7 +48,7 @@ const assistantSubtaskEvent = (input: {
     },
   }) as unknown as Event;
 
-const assistantToolSubtaskEvent = (input: {
+const assistantTaskToolEvent = (input: {
   messageId: string;
   partId: string;
   description: string;
@@ -62,7 +62,7 @@ const assistantToolSubtaskEvent = (input: {
         messageID: input.messageId,
         type: "tool",
         callID: `call-${input.partId}`,
-        tool: "subtask",
+        tool: "task",
         state: {
           status: "running",
           input: {
@@ -257,12 +257,12 @@ describe("session registry runtime event transport", () => {
     });
   });
 
-  test("routes tool subtask child session creation to the pending subagent card", async () => {
+  test("routes task tool child session creation to the pending subagent card", async () => {
     const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-tool-subagent-session-created"),
-      assistantToolSubtaskEvent({
+      assistantTaskToolEvent({
         messageId: "assistant-tool-subagent-session-created",
-        partId: "tool-subtask-a",
+        partId: "tool-task-a",
         description: "Read omp.json file",
       }),
       childSessionCreatedEvent("external-child-session"),
@@ -272,7 +272,7 @@ describe("session registry runtime event transport", () => {
     const subagentParts = readSubagentParts(emitted);
     expect(subagentParts).toHaveLength(2);
     expect(subagentParts[1]).toMatchObject({
-      correlationKey: "part:assistant-tool-subagent-session-created:tool-subtask-a",
+      correlationKey: "part:assistant-tool-subagent-session-created:tool-task-a",
       externalSessionId: "external-child-session",
       status: "running",
     });
@@ -283,7 +283,7 @@ describe("session registry runtime event transport", () => {
       requestId: "permission-child-1",
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
-      subagentCorrelationKey: "part:assistant-tool-subagent-session-created:tool-subtask-a",
+      subagentCorrelationKey: "part:assistant-tool-subagent-session-created:tool-task-a",
     });
   });
 

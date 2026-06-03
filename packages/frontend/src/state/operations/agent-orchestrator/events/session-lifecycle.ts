@@ -21,7 +21,10 @@ import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
-import { clearSubagentPendingApprovalFromSessions } from "../support/subagent-approval-overlay";
+import {
+  clearSubagentPendingApprovalFromSessions,
+  clearSubagentPendingQuestionFromSessions,
+} from "../support/subagent-approval-overlay";
 import { formatSubagentContent } from "../support/subagent-messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
@@ -57,7 +60,9 @@ const nextContextUsageWasEstablishedForMessage = (
 };
 
 type ApprovalRequiredEvent = Extract<SessionEvent, { type: "approval_required" }>;
+type ApprovalResolvedEvent = Extract<SessionEvent, { type: "approval_resolved" }>;
 type QuestionRequiredEvent = Extract<SessionEvent, { type: "question_required" }>;
+type QuestionResolvedEvent = Extract<SessionEvent, { type: "question_resolved" }>;
 type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
 
 const toPendingApproval = (event: ApprovalRequiredEvent): AgentApprovalRequest => {
@@ -633,6 +638,34 @@ export const handlePermissionRequired = (
   recordParentSubagentPendingApproval(context, event);
 };
 
+export const handlePermissionResolved = (
+  context: SessionLifecycleEventContext,
+  event: ApprovalResolvedEvent,
+): void => {
+  const targetSessionId =
+    normalizeSessionId(event.childExternalSessionId) ?? normalizeSessionId(event.externalSessionId);
+  if (!targetSessionId) {
+    return;
+  }
+
+  context.store.updateSession(
+    targetSessionId,
+    (current) => ({
+      ...current,
+      pendingApprovals: current.pendingApprovals.filter(
+        (entry) => entry.requestId !== event.requestId,
+      ),
+    }),
+    { persist: false },
+  );
+  clearSubagentPendingApprovalFromSessions({
+    sessionsRef: context.store.sessionsRef,
+    updateSession: context.store.updateSession,
+    targetExternalSessionId: targetSessionId,
+    requestId: event.requestId,
+  });
+};
+
 export const handleQuestionRequired = (
   context: SessionLifecycleEventContext,
   event: QuestionRequiredEvent,
@@ -658,6 +691,34 @@ export const handleQuestionRequired = (
   );
   patchParentSubagentSessionLink(context, event);
   recordParentSubagentPendingQuestion(context, event);
+};
+
+export const handleQuestionResolved = (
+  context: SessionLifecycleEventContext,
+  event: QuestionResolvedEvent,
+): void => {
+  const targetSessionId =
+    normalizeSessionId(event.childExternalSessionId) ?? normalizeSessionId(event.externalSessionId);
+  if (!targetSessionId) {
+    return;
+  }
+
+  context.store.updateSession(
+    targetSessionId,
+    (current) => ({
+      ...current,
+      pendingQuestions: current.pendingQuestions.filter(
+        (entry) => entry.requestId !== event.requestId,
+      ),
+    }),
+    { persist: false },
+  );
+  clearSubagentPendingQuestionFromSessions({
+    sessionsRef: context.store.sessionsRef,
+    updateSession: context.store.updateSession,
+    targetExternalSessionId: targetSessionId,
+    requestId: event.requestId,
+  });
 };
 
 export const handleSessionTodosUpdated = (

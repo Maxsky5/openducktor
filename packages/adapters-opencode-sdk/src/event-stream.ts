@@ -240,7 +240,10 @@ export const isRelevantSubscriberEvent = (
     }
 
     if (
-      (event.type === "permission.asked" || event.type === "question.asked") &&
+      (event.type === "permission.asked" ||
+        event.type === "permission.replied" ||
+        event.type === "question.asked" ||
+        event.type === "question.replied") &&
       options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
     ) {
       return true;

@@ -139,6 +139,21 @@ describe("workflow-tool-selection", () => {
     expect(selection.odt_set_plan).toBe(false);
   });
 
+  test("enables the supported OpenCode subagent tool and disables the unsupported alias", async () => {
+    const selection = await resolveWorkflowToolSelection({
+      client: makeClient({
+        toolIds: ["task", "subtask", "odt_read_task", "odt_read_task_documents", "odt_set_plan"],
+      }),
+      role: "planner",
+      runtimeDescriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      workingDirectory: "/repo",
+    });
+
+    expect(selection.task).toBe(true);
+    expect(selection.subtask).toBe(false);
+    expect(selection.odt_set_plan).toBe(true);
+  });
+
   test("keeps canonical trusted role tools when global ids miss ODT tools", async () => {
     const selection = await resolveWorkflowToolSelection({
       client: makeClient({

@@ -2431,6 +2431,41 @@ describe("event-stream", () => {
     });
   });
 
+  test("subscribeOpencodeEvents forwards known child permission resolved events to parent subscribers", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.replied",
+          properties: {
+            sessionID: "external-child-session",
+            requestID: "perm-child-1",
+            reply: "once",
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentExternalSessionId: "external-session-1",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    );
+
+    const resolvedEvents = emitted.filter((event) => event.type === "approval_resolved");
+    expect(resolvedEvents).toHaveLength(1);
+    expect(resolvedEvents[0]).toMatchObject({
+      type: "approval_resolved",
+      externalSessionId: "external-session-1",
+      requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
   test("forwards child permission events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [

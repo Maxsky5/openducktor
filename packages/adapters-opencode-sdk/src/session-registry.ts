@@ -77,7 +77,9 @@ const PARENT_CHILD_LOOKUP_EVENT_TYPES = new Set([
   "session.created",
   "session.updated",
   "permission.asked",
+  "permission.replied",
   "question.asked",
+  "question.replied",
 ]);
 
 const shouldResolveParentlessChildEvent = (

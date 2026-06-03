@@ -39,6 +39,8 @@ describe("workflow-tool-permissions", () => {
         action: "deny",
       });
     }
+    expect(rules).toContainEqual({ permission: "task", pattern: "*", action: "allow" });
+    expect(rules).toContainEqual({ permission: "subtask", pattern: "*", action: "deny" });
     expect(rules).not.toContainEqual({ permission: "bash", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({ permission: "openducktor_*", pattern: "*", action: "deny" });
     expect(rules).toContainEqual({
