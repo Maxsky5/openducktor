@@ -61,7 +61,8 @@ export type CreateCodexWorkspaceRuntimeStarterInput = {
 const DEFAULT_CODEX_REQUEST_TIMEOUT_MS = 120_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
-const tomlString = (value: string): string => JSON.stringify(value);
+const tomlString = (value: string): string =>
+  value.includes("'") ? `'''${value}'''` : `'${value}'`;
 
 const tomlStringArray = (values: readonly string[]): string =>
   `[${values.map((value) => tomlString(value)).join(", ")}]`;

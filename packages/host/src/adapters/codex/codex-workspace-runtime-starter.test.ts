@@ -26,6 +26,8 @@ type CodexWorkspaceRuntimeStarterTestInput = Omit<
   Partial<Pick<CodexWorkspaceRuntimeStarterInput, "runtimeDistribution" | "toolDiscovery">> & {
     systemCommands?: SystemCommandPort;
   };
+const tomlStringForTest = (value: string): string =>
+  value.includes("'") ? `'''${value}'''` : `'${value}'`;
 const testRuntimeDistribution = createArtifactRuntimeDistribution({
   mcpLauncher: {
     kind: "executable",
@@ -332,11 +334,11 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       expect(capture.args).toEqual(
         expect.arrayContaining([
           "--config",
-          `mcp_servers.openducktor.command=${JSON.stringify(process.execPath)}`,
+          `mcp_servers.openducktor.command=${tomlStringForTest(process.execPath)}`,
           "--config",
           expect.stringContaining("mcp_servers.openducktor.args="),
           "--config",
-          'mcp_servers.openducktor.env_vars=["ODT_WORKSPACE_ID", "ODT_HOST_URL", "ODT_HOST_TOKEN", "ODT_FORBID_WORKSPACE_ID_INPUT", "ODT_ALLOWED_TOOLS"]',
+          "mcp_servers.openducktor.env_vars=['ODT_WORKSPACE_ID', 'ODT_HOST_URL', 'ODT_HOST_TOKEN', 'ODT_FORBID_WORKSPACE_ID_INPUT', 'ODT_ALLOWED_TOOLS']",
           "--config",
           "mcp_servers.openducktor.enabled=true",
         ]),
