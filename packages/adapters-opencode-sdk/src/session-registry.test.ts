@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Event } from "@opencode-ai/sdk/v2/client";
+import type { Event, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { makeClientWithEvents, makeSessionInput } from "./event-stream.test-support";
 import { registerSession } from "./session-registry";
@@ -122,8 +122,50 @@ const syncChildSessionCreatedEvent = (childSessionId: string): Event =>
     },
   }) as unknown as Event;
 
-const runRuntimeEventTransport = async (events: Event[]): Promise<AgentEvent[]> => {
-  const client = makeClientWithEvents(events);
+const syncChildSessionCreatedEventWithoutParent = (childSessionId: string): Event =>
+  ({
+    type: "sync",
+    name: "session.created.1",
+    id: `sync-${childSessionId}`,
+    seq: 2,
+    aggregateID: "sessionID",
+    data: {
+      sessionID: childSessionId,
+      info: {
+        id: childSessionId,
+        directory: "/repo",
+        title: "Subagent",
+        version: "1.0.0",
+        time: {
+          created: Date.parse("2026-02-22T12:00:10.000Z"),
+          updated: Date.parse("2026-02-22T12:00:10.000Z"),
+        },
+      },
+    },
+  }) as unknown as Event;
+
+const makeSessionChild = (id: string, parentID: string): Session =>
+  ({
+    id,
+    slug: id,
+    projectID: "project-1",
+    directory: "/repo",
+    parentID,
+    title: "Subagent",
+    version: "1.0.0",
+    time: {
+      created: Date.parse("2026-02-22T12:00:10.000Z"),
+      updated: Date.parse("2026-02-22T12:00:10.000Z"),
+    },
+  }) as Session;
+
+const runRuntimeEventTransport = async (
+  events: Event[],
+  options?: {
+    childrenBySessionId?: Record<string, Session[]>;
+  },
+): Promise<AgentEvent[]> => {
+  const client = makeClientWithEvents(events, options);
   const sessions = new Map<string, SessionRecord>();
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
   const emitted: AgentEvent[] = [];
@@ -187,6 +229,43 @@ describe("session registry runtime event transport", () => {
       correlationKey: "part:assistant-sync-subagent-session-created:subtask-a",
       externalSessionId: "external-child-session",
       status: "running",
+    });
+  });
+
+  test("routes parentless sync child session creation through session children lookup", async () => {
+    const emitted = await runRuntimeEventTransport(
+      [
+        assistantRoleEvent("assistant-sync-subagent-session-created"),
+        syncAssistantSubtaskEvent({
+          messageId: "assistant-sync-subagent-session-created",
+          partId: "subtask-a",
+          description: "Read omp.json file",
+        }),
+        syncChildSessionCreatedEventWithoutParent("external-child-session"),
+        childPermissionEvent("external-child-session"),
+      ],
+      {
+        childrenBySessionId: {
+          "external-session-1": [makeSessionChild("external-child-session", "external-session-1")],
+        },
+      },
+    );
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-sync-subagent-session-created:subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+
+    const approvalEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(approvalEvents).toHaveLength(1);
+    expect(approvalEvents[0]).toMatchObject({
+      requestId: "permission-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-sync-subagent-session-created:subtask-a",
     });
   });
 

@@ -32,7 +32,7 @@ type ProcessOpencodeEventInput = {
 type SubscribeGlobalEventsInput = {
   client: OpencodeClient;
   controller: AbortController;
-  onEvent: (event: Event) => void;
+  onEvent: (event: Event) => void | Promise<void>;
 };
 
 type SubscribeOpencodeEventsInput = {
@@ -213,7 +213,7 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
     if (input.controller.signal.aborted) {
       break;
     }
-    input.onEvent(toDirectoryScopedEvent(event));
+    await input.onEvent(toDirectoryScopedEvent(event));
   }
 };
 

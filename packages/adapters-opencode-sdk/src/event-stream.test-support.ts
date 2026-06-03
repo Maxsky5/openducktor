@@ -1,10 +1,15 @@
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { subscribeOpencodeEvents } from "./event-stream";
 import type { SubagentSessionLink } from "./event-stream/shared";
 import type { SessionInput, SessionRecord } from "./types";
 
-export const makeClientWithEvents = (events: Event[]): OpencodeClient => {
+export const makeClientWithEvents = (
+  events: Event[],
+  options?: {
+    childrenBySessionId?: Record<string, Session[]>;
+  },
+): OpencodeClient => {
   return {
     global: {
       event: async () => {
@@ -19,6 +24,15 @@ export const makeClientWithEvents = (events: Event[]): OpencodeClient => {
         return { stream: iterator() };
       },
     },
+    ...(options?.childrenBySessionId
+      ? {
+          session: {
+            children: async ({ sessionID }: { sessionID: string }) => ({
+              data: options.childrenBySessionId?.[sessionID] ?? [],
+            }),
+          },
+        }
+      : {}),
   } as unknown as OpencodeClient;
 };
 
