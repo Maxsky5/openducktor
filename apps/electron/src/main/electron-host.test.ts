@@ -521,6 +521,17 @@ describe("createElectronHostCommandRouter", () => {
   test("disposes registered runtimes on host shutdown", async () => {
     const stoppedRuntimes: string[] = [];
     const lifecycleLogs: string[] = [];
+    const registeredRuntime = {
+      kind: "opencode",
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/repo",
+      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
+      startedAt: "2026-05-13T00:00:00Z",
+      descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
+    } satisfies RuntimeInstanceSummary;
     const router = createElectronHostCommandRouter({
       lifecycleLogger: {
         info(message) {
@@ -532,20 +543,9 @@ describe("createElectronHostCommandRouter", () => {
       },
       runtimeRegistry: {
         ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime start"),
-        listRuntimes: () =>
-          Effect.succeed([
-            {
-              kind: "opencode",
-              runtimeId: "runtime-1",
-              repoPath: "/repo",
-              taskId: null,
-              role: "workspace",
-              workingDirectory: "/repo",
-              runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
-              startedAt: "2026-05-13T00:00:00Z",
-              descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
-            },
-          ]),
+        findRuntimeById: () => Effect.dieMessage("unexpected runtime id lookup"),
+        listRuntimes: () => Effect.succeed([registeredRuntime]),
+        listRuntimesByRepo: () => Effect.dieMessage("unexpected repo runtime lookup"),
         stopRuntime: (runtimeId) =>
           Effect.sync(() => {
             stoppedRuntimes.push(runtimeId);
@@ -554,21 +554,11 @@ describe("createElectronHostCommandRouter", () => {
         stopAllRuntimes: () =>
           Effect.sync(() => {
             stoppedRuntimes.push("runtime-1");
-            return [
-              {
-                kind: "opencode",
-                runtimeId: "runtime-1",
-                repoPath: "/repo",
-                taskId: null,
-                role: "workspace",
-                workingDirectory: "/repo",
-                runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:9999" },
-                startedAt: "2026-05-13T00:00:00Z",
-                descriptor: createRuntimeDefinitionsService().listRuntimeDefinitions()[0],
-              },
-            ] satisfies RuntimeInstanceSummary[];
+            return [registeredRuntime];
           }),
         stopSession: () => Effect.succeed(undefined),
+        probeSessionStatus: () => Effect.dieMessage("unexpected session status probe"),
+        probeMcpStatus: () => Effect.dieMessage("unexpected MCP status probe"),
       },
       settingsConfig: createSettingsConfig(),
     });
@@ -1259,12 +1249,24 @@ describe("createElectronHostCommandRouter", () => {
     };
     const sessionRuntimeRegistry: RuntimeRegistryPort = {
       ensureWorkspaceRuntime: () => Effect.dieMessage("unexpected runtime ensure"),
+      findRuntimeById: (runtimeId) =>
+        Effect.succeed(runtimeId === sessionRuntime.runtimeId ? sessionRuntime : null),
       listRuntimes: () => Effect.succeed([sessionRuntime]),
+      listRuntimesByRepo: (input) =>
+        Effect.succeed(
+          sessionRuntime.repoPath === input.repoPath &&
+            (!input.runtimeKind || sessionRuntime.kind === input.runtimeKind)
+            ? [sessionRuntime]
+            : [],
+        ),
       stopRuntime: () => Effect.dieMessage("unexpected runtime stop"),
+      stopAllRuntimes: () => Effect.succeed([]),
       stopSession: (input) =>
         Effect.sync(() => {
           stoppedSessions.push(input);
         }),
+      probeSessionStatus: () => Effect.dieMessage("unexpected session probe"),
+      probeMcpStatus: () => Effect.dieMessage("unexpected MCP probe"),
     };
     const sessionTaskStore = createTaskStore();
     const sessionStopRouter = createElectronHostCommandRouter({

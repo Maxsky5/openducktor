@@ -48,6 +48,18 @@ const registry = ({
   listRuntimes() {
     return Effect.succeed(runtimes);
   },
+  findRuntimeById(runtimeId) {
+    return Effect.succeed(runtimes.find((entry) => entry.runtimeId === runtimeId) ?? null);
+  },
+  listRuntimesByRepo(input) {
+    return Effect.succeed(
+      runtimes.filter(
+        (entry) =>
+          entry.repoPath === input.repoPath &&
+          (!input.runtimeKind || entry.kind === input.runtimeKind),
+      ),
+    );
+  },
   stopRuntime() {
     return Effect.tryPromise({
       try: async () => {
@@ -214,5 +226,29 @@ describe("createRuntimeTaskActivityGuard", () => {
     ).rejects.toThrow(
       "Cannot reset implementation while active build session(s) exist for task task-1. Stop the active session(s) first.",
     );
+  });
+  test("fails when duplicate same-kind repo runtimes make the probe route ambiguous", async () => {
+    const guard = createRuntimeTaskActivityGuard({
+      runtimeRegistry: registry({
+        runtimes: [
+          runtime(),
+          runtime({
+            runtimeId: "runtime-2",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4097" },
+          }),
+        ],
+      }),
+    });
+    await expect(
+      Effect.runPromise(
+        guard.ensureNoActiveTaskResetActivity({
+          repoPath: "/repo",
+          taskId: "task-1",
+          sessions: [session()],
+          operationLabel: "reset implementation",
+          sessionRoles: ["build"],
+        }),
+      ),
+    ).rejects.toThrow("Failed checking live runtime state before reset implementation task-1");
   });
 });

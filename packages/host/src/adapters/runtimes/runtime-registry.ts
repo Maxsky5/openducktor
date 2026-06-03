@@ -4,6 +4,7 @@ import {
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Deferred, Effect, FiberId } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import {
   HostOperationError,
   HostResourceError,
@@ -55,9 +56,72 @@ export const createRuntimeRegistry = ({
   workspaceStarter,
   codexAppServer,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
-  const entries = new Map(runtimes.map((runtime) => [runtime.runtimeId, runtime]));
+  const entries = new Map<string, RuntimeInstanceSummary>();
+  const runtimeIdsByRepo = new Map<string, Set<string>>();
   const handles = new Map<string, RuntimeWorkspaceHandle>();
   const ensureFlights = new Map<string, RuntimeEnsureFlight>();
+  const repoIndexKey = (repoPath: string): string => normalizePathForComparison(repoPath);
+  const addRuntimeToIndexes = (runtime: RuntimeInstanceSummary) => {
+    const key = repoIndexKey(runtime.repoPath);
+    const ids = runtimeIdsByRepo.get(key) ?? new Set<string>();
+    ids.add(runtime.runtimeId);
+    runtimeIdsByRepo.set(key, ids);
+  };
+  const removeRuntimeFromIndexes = (runtime: RuntimeInstanceSummary) => {
+    const key = repoIndexKey(runtime.repoPath);
+    const ids = runtimeIdsByRepo.get(key);
+    if (!ids) {
+      return;
+    }
+    ids.delete(runtime.runtimeId);
+    if (ids.size === 0) {
+      runtimeIdsByRepo.delete(key);
+    }
+  };
+  const upsertRuntime = (runtime: RuntimeInstanceSummary) => {
+    const previous = entries.get(runtime.runtimeId);
+    if (previous) {
+      removeRuntimeFromIndexes(previous);
+    }
+    entries.set(runtime.runtimeId, runtime);
+    addRuntimeToIndexes(runtime);
+  };
+  const removeRuntime = (runtimeId: string): RuntimeInstanceSummary | null => {
+    const runtime = entries.get(runtimeId);
+    if (!runtime) {
+      return null;
+    }
+    removeRuntimeFromIndexes(runtime);
+    entries.delete(runtimeId);
+    return runtime;
+  };
+  const readRuntimesForRepo = ({
+    repoPath,
+    runtimeKind,
+  }: {
+    repoPath: string;
+    runtimeKind?: string;
+  }): RuntimeInstanceSummary[] => {
+    const ids = runtimeIdsByRepo.get(repoIndexKey(repoPath));
+    if (!ids) {
+      return [];
+    }
+    const result: RuntimeInstanceSummary[] = [];
+    for (const runtimeId of ids) {
+      const runtime = entries.get(runtimeId);
+      if (!runtime) {
+        throw new Error(`Runtime registry repo index referenced missing runtime: ${runtimeId}`);
+      }
+      if (runtimeKind && runtime.kind !== runtimeKind) {
+        continue;
+      }
+      result.push(runtime);
+    }
+    return result;
+  };
+  for (const runtime of runtimes) {
+    upsertRuntime(runtime);
+  }
   const stopRegisteredRuntime = (runtimeId: string) =>
     Effect.gen(function* () {
       const runtime = entries.get(runtimeId);
@@ -76,7 +140,7 @@ export const createRuntimeRegistry = ({
         yield* handle.stop();
         handles.delete(runtimeId);
       }
-      entries.delete(runtimeId);
+      removeRuntime(runtimeId);
       return runtime;
     });
   const waitForStartingRuntimes = () => {
@@ -161,7 +225,7 @@ export const createRuntimeRegistry = ({
                     details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
                   }),
               });
-              entries.set(parsed.runtimeId, parsed);
+              upsertRuntime(parsed);
               handles.set(parsed.runtimeId, handle);
               return parsed;
             });
@@ -175,6 +239,12 @@ export const createRuntimeRegistry = ({
     },
     listRuntimes() {
       return Effect.succeed([...entries.values()]);
+    },
+    findRuntimeById(runtimeId) {
+      return Effect.succeed(entries.get(runtimeId) ?? null);
+    },
+    listRuntimesByRepo(input) {
+      return Effect.sync(() => readRuntimesForRepo(input));
     },
     stopRuntime(runtimeId) {
       return Effect.as(stopRegisteredRuntime(runtimeId), true);

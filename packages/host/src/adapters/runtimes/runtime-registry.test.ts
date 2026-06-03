@@ -50,6 +50,43 @@ describe("createRuntimeRegistry", () => {
       ),
     ).resolves.toEqual(runtime);
   });
+  test("finds runtimes by id from initial registrations", async () => {
+    const runtime = createRuntime();
+    const registry = createRuntimeRegistry({ runtimes: [runtime] });
+    await expect(Effect.runPromise(registry.findRuntimeById(runtime.runtimeId))).resolves.toEqual(
+      runtime,
+    );
+    await expect(
+      Effect.runPromise(registry.findRuntimeById("missing-runtime")),
+    ).resolves.toBeNull();
+  });
+  test("lists initial runtimes by repository and optional kind", async () => {
+    const opencode = createRuntime({
+      runtimeId: "opencode-1",
+      repoPath: "C:\\Repo",
+      workingDirectory: "C:\\Repo",
+    });
+    const codex = createRuntime({
+      kind: "codex",
+      runtimeId: "codex-1",
+      repoPath: "c:/repo",
+      workingDirectory: "c:/repo",
+      runtimeRoute: { type: "stdio", identity: "codex-1" },
+      descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
+    });
+    const otherRepo = createRuntime({
+      runtimeId: "other-repo",
+      repoPath: "/other",
+      workingDirectory: "/other",
+    });
+    const registry = createRuntimeRegistry({ runtimes: [opencode, codex, otherRepo] });
+    await expect(
+      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "c:/repo" })),
+    ).resolves.toEqual([opencode, codex]);
+    await expect(
+      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "c:/repo", runtimeKind: "codex" })),
+    ).resolves.toEqual([codex]);
+  });
   test("starts and registers a workspace runtime through the configured starter", async () => {
     const runtime = createRuntime();
     const starts: unknown[] = [];
@@ -75,6 +112,14 @@ describe("createRuntimeRegistry", () => {
       ),
     ).resolves.toEqual(runtime);
     await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([runtime]);
+    await expect(Effect.runPromise(registry.findRuntimeById(runtime.runtimeId))).resolves.toEqual(
+      runtime,
+    );
+    await expect(
+      Effect.runPromise(
+        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toEqual([runtime]);
     expect(starts).toEqual([
       {
         runtimeKind: "opencode",
@@ -83,6 +128,45 @@ describe("createRuntimeRegistry", () => {
         descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
       },
     ]);
+  });
+  test("removes replaced runtime ids from their previous repo index", async () => {
+    const originalRuntime = createRuntime({
+      runtimeId: "runtime-1",
+      repoPath: "/old-repo",
+      workingDirectory: "/old-repo",
+    });
+    const replacementRuntime = createRuntime({
+      runtimeId: "runtime-1",
+      repoPath: "/new-repo",
+      workingDirectory: "/new-repo",
+    });
+    const registry = createRuntimeRegistry({
+      runtimes: [originalRuntime],
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          return Effect.succeed({
+            runtime: replacementRuntime,
+            stop: () => Effect.succeed(undefined),
+          });
+        },
+      },
+    });
+    await expect(
+      Effect.runPromise(
+        registry.ensureWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: "/new-repo",
+          workingDirectory: "/new-repo",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      ),
+    ).resolves.toEqual(replacementRuntime);
+    await expect(
+      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "/old-repo" })),
+    ).resolves.toEqual([]);
+    await expect(
+      Effect.runPromise(registry.listRuntimesByRepo({ repoPath: "/new-repo" })),
+    ).resolves.toEqual([replacementRuntime]);
   });
   test("deduplicates parallel workspace runtime ensure calls", async () => {
     let starts = 0;
@@ -117,6 +201,11 @@ describe("createRuntimeRegistry", () => {
     const second = Effect.runPromise(registry.ensureWorkspaceRuntime(input));
     resolveStart(createRuntime());
     await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
+    await expect(
+      Effect.runPromise(
+        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toEqual([createRuntime()]);
     expect(starts).toBe(1);
   });
   test("waits for starting runtime handles before stopping all runtimes", async () => {
@@ -159,6 +248,14 @@ describe("createRuntimeRegistry", () => {
     await expect(stopAll).resolves.toEqual([runtime]);
     await expect(ensure).resolves.toEqual(runtime);
     await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([]);
+    await expect(
+      Effect.runPromise(registry.findRuntimeById(runtime.runtimeId)),
+    ).resolves.toBeNull();
+    await expect(
+      Effect.runPromise(
+        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toEqual([]);
     expect(stops).toEqual(["runtime-1"]);
   });
   test("stops host-started runtime handles before removing them", async () => {
@@ -190,6 +287,14 @@ describe("createRuntimeRegistry", () => {
     );
     await expect(Effect.runPromise(registry.stopRuntime(runtime.runtimeId))).resolves.toBe(true);
     await expect(Effect.runPromise(registry.listRuntimes())).resolves.toEqual([]);
+    await expect(
+      Effect.runPromise(registry.findRuntimeById(runtime.runtimeId)),
+    ).resolves.toBeNull();
+    await expect(
+      Effect.runPromise(
+        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toEqual([]);
     expect(stops).toEqual(["runtime-1"]);
   });
   test("fails fast when workspace runtime startup is not configured", async () => {
