@@ -215,9 +215,10 @@ const ensureRuntimeEventTransport = (input: {
         let relevant = isRelevantSubscriberEvent(subscriber, event, {
           isKnownChildExternalSessionId: (externalSessionId) => {
             const session = input.sessions.get(subscriber.externalSessionId);
-            return Boolean(
-              session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ||
-                session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId),
+            return (
+              (session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ??
+                false) ||
+              (session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId) ?? false)
             );
           },
         });

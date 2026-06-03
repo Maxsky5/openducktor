@@ -20,6 +20,7 @@ import {
   flushPendingSubagentInputEventsForSession,
   markSessionActive,
   markSessionIdle,
+  readEventDirectory,
   readEventParentExternalSessionId,
   readEventSessionId,
   removePendingSubagentCorrelationKey,
@@ -95,6 +96,7 @@ const bindChildSessionFromPendingInputEvent = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,
   parentExternalSessionId: string | undefined,
+  isEventScopedToRuntimeWorkingDirectory: boolean,
 ): string | undefined => {
   if (
     parentExternalSessionId !== runtime.externalSessionId ||
@@ -108,6 +110,9 @@ const bindChildSessionFromPendingInputEvent = (
   if (existingCorrelationKey) {
     return existingCorrelationKey;
   }
+  if (!isEventScopedToRuntimeWorkingDirectory) {
+    return undefined;
+  }
 
   const correlationKey = readSinglePendingSubagentCorrelationKey(runtime);
   return correlationKey
@@ -118,10 +123,12 @@ const bindChildSessionFromPendingInputEvent = (
 const bindSinglePendingSubagentInputEvent = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,
+  isEventScopedToRuntimeWorkingDirectory: boolean,
 ): string | undefined => {
   if (
     childExternalSessionId === runtime.externalSessionId ||
-    runtime.subagentCorrelationKeyByExternalSessionId.has(childExternalSessionId)
+    runtime.subagentCorrelationKeyByExternalSessionId.has(childExternalSessionId) ||
+    !isEventScopedToRuntimeWorkingDirectory
   ) {
     return undefined;
   }
@@ -135,6 +142,7 @@ const bindSinglePendingSubagentInputEvent = (
 const resolveLocalSubagentInputLink = (
   runtime: EventStreamRuntime,
   childExternalSessionId: string,
+  isEventScopedToRuntimeWorkingDirectory: boolean,
 ):
   | {
       parentExternalSessionId: string;
@@ -163,6 +171,7 @@ const resolveLocalSubagentInputLink = (
   const singlePendingCorrelationKey = bindSinglePendingSubagentInputEvent(
     runtime,
     childExternalSessionId,
+    isEventScopedToRuntimeWorkingDirectory,
   );
   if (singlePendingCorrelationKey) {
     return {
@@ -180,15 +189,26 @@ const resolveSubagentInputRouting = (
   runtime: EventStreamRuntime,
 ): SubagentInputRouting => {
   const childExternalSessionId = readEventSessionId(event) ?? runtime.externalSessionId;
+  const isEventScopedToRuntimeWorkingDirectory =
+    readEventDirectory(event) === runtime.input.workingDirectory;
   const subagentLink =
     runtime.resolveSubagentSessionLink?.(childExternalSessionId) ??
-    resolveLocalSubagentInputLink(runtime, childExternalSessionId);
+    resolveLocalSubagentInputLink(
+      runtime,
+      childExternalSessionId,
+      isEventScopedToRuntimeWorkingDirectory,
+    );
   const eventParentExternalSessionId = readEventParentExternalSessionId(properties);
   const parentExternalSessionId =
     subagentLink?.parentExternalSessionId ?? eventParentExternalSessionId;
   const subagentCorrelationKey =
     subagentLink?.subagentCorrelationKey ??
-    bindChildSessionFromPendingInputEvent(runtime, childExternalSessionId, parentExternalSessionId);
+    bindChildSessionFromPendingInputEvent(
+      runtime,
+      childExternalSessionId,
+      parentExternalSessionId,
+      isEventScopedToRuntimeWorkingDirectory,
+    );
 
   return {
     childExternalSessionId,

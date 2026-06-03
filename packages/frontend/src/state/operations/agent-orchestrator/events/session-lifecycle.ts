@@ -11,7 +11,6 @@ import {
 import {
   appendSessionMessage,
   findLastSessionMessageByRole,
-  getSessionMessagesSlice,
   upsertSessionMessage,
 } from "../support/messages";
 import {
@@ -129,14 +128,7 @@ const resolveSubagentMessageForSessionLink = (
     );
   }
 
-  const candidates = getSessionMessagesSlice(current, 0).filter(
-    (message) =>
-      message.role === "system" &&
-      message.meta?.kind === "subagent" &&
-      !message.meta.externalSessionId &&
-      (message.meta.status === "pending" || message.meta.status === "running"),
-  );
-  return candidates.length === 1 ? candidates[0] : undefined;
+  return undefined;
 };
 
 const patchParentSubagentSessionLink = (

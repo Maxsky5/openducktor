@@ -95,6 +95,35 @@ test("readEventSessionId accepts info.id only for session lifecycle events", () 
   ).toBeUndefined();
 });
 
+test("runEventStreamWithSession uses the configured session input", async () => {
+  const { emitted } = await runEventStreamWithSession(
+    [
+      {
+        type: "session.status",
+        properties: {
+          directory: "/workspace",
+          status: {
+            type: "busy",
+          },
+        },
+      } as unknown as Event,
+    ],
+    (session) => {
+      session.input = {
+        ...session.input,
+        workingDirectory: "/workspace",
+      };
+    },
+  );
+
+  expect(emitted).toContainEqual({
+    type: "session_status",
+    externalSessionId: "external-session-1",
+    timestamp: "2026-02-22T12:00:00.000Z",
+    status: { type: "busy" },
+  });
+});
+
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
   const runtime: EventStreamRuntime = {
@@ -2322,6 +2351,48 @@ describe("event-stream", () => {
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-1:subtask-1",
     });
+  });
+
+  test("does not consume a pending subagent key for child input events from another directory", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            directory: "/other",
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
+      },
+      () => undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(questionEvents[0]).not.toHaveProperty("subagentCorrelationKey");
+    expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual(["part:assistant-1:subtask-1"]);
+    expect(
+      sessionRecord.subagentCorrelationKeyByExternalSessionId.has("external-child-session"),
+    ).toBe(false);
   });
 
   test("correlates child question events with the running subagent card before completion arrives", async () => {

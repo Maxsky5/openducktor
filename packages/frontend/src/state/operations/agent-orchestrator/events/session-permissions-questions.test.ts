@@ -471,12 +471,22 @@ describe("agent-orchestrator session permissions and questions", () => {
     };
 
     handleEvent(childPermission);
-    expect(getSessionMessages(sessionsRef, "external-parent-session")[0]?.meta).toMatchObject({
+    const firstParentSubagentMeta = getSessionMessages(sessionsRef, "external-parent-session")[0]
+      ?.meta;
+    expect(firstParentSubagentMeta).toMatchObject({
       kind: "subagent",
       correlationKey: subagentCorrelationKey,
-      externalSessionId: "external-child-session",
       status: "running",
     });
+    if (firstParentSubagentMeta?.kind !== "subagent") {
+      throw new Error("Expected parent message to remain a subagent");
+    }
+    expect(firstParentSubagentMeta.externalSessionId).toBeUndefined();
+    expect(
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
+        "external-child-session"
+      ],
+    ).toHaveLength(1);
     handleEvent({
       ...childPermission,
       subagentCorrelationKey,
@@ -620,6 +630,71 @@ describe("agent-orchestrator session permissions and questions", () => {
         message.meta?.kind === "subagent" ? message.meta.externalSessionId : undefined,
       ),
     ).toEqual([undefined, undefined]);
+  });
+
+  test("does not patch a sole parent subagent row without a correlation key", () => {
+    const correlationKey = "part:assistant-parent:subtask-unlinked";
+    const sessionsRef: SessionsRef = {
+      current: {
+        "external-parent-session": buildSession({
+          externalSessionId: "external-parent-session",
+          role: "planner",
+          messages: [
+            {
+              id: `subagent:${correlationKey}`,
+              role: "system",
+              content: "Subagent (build): Inspect repo",
+              timestamp: "2026-02-22T08:00:01.000Z",
+              meta: {
+                kind: "subagent",
+                partId: "subtask-unlinked",
+                correlationKey,
+                status: "running",
+                agent: "build",
+                prompt: "Inspect repo",
+              },
+            },
+          ],
+        }),
+      },
+    };
+    const handleEvent = attachTestSessionListener({
+      externalSessionId: "external-parent-session",
+      sessionsRef,
+    });
+
+    handleEvent({
+      type: "approval_required",
+      externalSessionId: "external-parent-session",
+      requestId: "perm-child-unlinked",
+      requestType: "permission_grant" as const,
+      title: "Approve permission: read",
+      summary: "Approval request for read.",
+      affectedPaths: ["omp.json"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+      timestamp: "2026-02-22T08:00:05.000Z",
+      parentExternalSessionId: "external-parent-session",
+      childExternalSessionId: "external-child-session",
+    });
+
+    const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
+    const parentSubagentMeta = parentSubagentMessage?.meta;
+    expect(parentSubagentMeta?.kind).toBe("subagent");
+    if (parentSubagentMeta?.kind !== "subagent") {
+      throw new Error("Expected parent message to remain a subagent");
+    }
+    expect(parentSubagentMeta.externalSessionId).toBeUndefined();
+    expect(
+      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
+        "external-child-session"
+      ],
+    ).toHaveLength(1);
   });
 
   test("patches the parent subagent row with the child external id when handled from parent context", () => {

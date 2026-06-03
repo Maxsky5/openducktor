@@ -286,6 +286,31 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps completed subagent tool parts with direct runtime errors as error status", () => {
+    const part = createToolPart({
+      id: "tool-subagent-completed-direct-error-1",
+      tool: "task",
+      status: "completed",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read omp.json file",
+      },
+      error: "Timed out after 5m while waiting for permission.",
+      time: {
+        start: 10,
+        end: 300_010,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      status: "error",
+      error: "Timed out after 5m while waiting for permission.",
+    });
+  });
+
   test("maps task tool parts with metadata session ids to canonical subagent parts", () => {
     const part = createToolPart({
       id: "tool-task-1",

@@ -405,6 +405,7 @@ const buildSubagentFromToolPart = (
   const prompt = resolveSubagentPrompt(input, metadata, output);
   const directError = toDisplayText(readUnknownProp(toolState, "error"));
   const error = structuredError ?? directError;
+  const status = directError ? "error" : normalizedStatus;
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput,
@@ -417,7 +418,7 @@ const buildSubagentFromToolPart = (
   return buildSubagentStreamPart({
     messageId: part.messageID,
     partId: part.id,
-    status: normalizedStatus,
+    status,
     ...(agent ? { agent } : {}),
     ...(prompt ? { prompt } : {}),
     ...(description ? { description } : {}),

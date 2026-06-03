@@ -90,8 +90,8 @@ export const runEventStreamWithSession = async (
 
   await subscribeOpencodeEvents({
     context: {
-      externalSessionId: "external-session-1",
-      input: makeSessionInput(),
+      externalSessionId: sessionRecord.externalSessionId,
+      input: sessionRecord.input,
     },
     client,
     controller: new AbortController(),
