@@ -18,7 +18,20 @@ export const isToolDiscoveryId = (value: string): value is ToolDiscoveryId =>
 
 export type ToolDiscoveryError = HostDependencyError | HostValidationError;
 
+export type ToolDiscoverySourceCategory =
+  | "bundled_electron_resource"
+  | "environment_override"
+  | "provided_path"
+  | "system_path";
+
+export type ResolvedTool = {
+  displayLabel: string;
+  path: string;
+  sourceCategory: ToolDiscoverySourceCategory;
+};
+
 export type ToolDiscoveryPort = {
+  resolveTool(toolId: ToolDiscoveryId): Effect.Effect<ResolvedTool, ToolDiscoveryError>;
   resolveToolPath(toolId: ToolDiscoveryId): Effect.Effect<string, ToolDiscoveryError>;
 };
 

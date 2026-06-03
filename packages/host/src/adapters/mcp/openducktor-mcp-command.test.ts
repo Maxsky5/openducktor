@@ -145,6 +145,12 @@ describe("resolveOpenDucktorMcpCommand", () => {
             },
           }),
           toolDiscovery: {
+            resolveTool: (toolId) =>
+              Effect.succeed({
+                displayLabel: "Test tool",
+                path: `/resolved/${toolId}`,
+                sourceCategory: "provided_path",
+              }),
             resolveToolPath: (toolId) => Effect.succeed(`/resolved/${toolId}`),
           },
         }),
@@ -225,6 +231,13 @@ describe("resolveOpenDucktorMcpCommand", () => {
         resolveOpenDucktorMcpCommand({
           runtimeDistribution: createSourceRuntimeDistribution(root),
           toolDiscovery: {
+            resolveTool: () =>
+              Effect.fail(
+                new HostValidationError({
+                  field: "OPENDUCKTOR_BUN_PATH",
+                  message: "Configured bun override is invalid.",
+                }),
+              ),
             resolveToolPath: () =>
               Effect.fail(
                 new HostValidationError({

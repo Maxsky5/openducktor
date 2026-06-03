@@ -30,6 +30,8 @@ mac:
   minimumSystemVersion: "12.0"
   binaries:
     - Contents/Resources/bin/openducktor-mcp
+    - Contents/Resources/bin/bd
+    - Contents/Resources/bin/dolt
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false

@@ -54,7 +54,7 @@ Core tooling:
 
 Notes:
 
-- Local source builds expect a local `bd` install. The released desktop app bundles Beads for end users, but contributor builds do not rely on that packaged sidecar.
+- Local source builds expect a local `bd` install. The released desktop app bundles Beads and Dolt sidecars for end users, but contributor builds do not rely on those packaged sidecars.
 - OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`.
 - You can override the OpenCode binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
 - OpenDucktor manages its own Beads and Dolt storage under the OpenDucktor config directory. You do not need a separate local Dolt install for normal development.

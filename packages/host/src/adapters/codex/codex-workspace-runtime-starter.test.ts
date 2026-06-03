@@ -66,6 +66,16 @@ const createSystemCommands = (): SystemCommandPort => ({
 const createFakeToolDiscovery = (
   paths: Partial<Record<ToolDiscoveryId, string>>,
 ): ToolDiscoveryPort => ({
+  resolveTool(toolId) {
+    const path = paths[toolId];
+    return path === undefined
+      ? Effect.dieMessage(`Missing fake tool path for ${toolId}`)
+      : Effect.succeed({
+          displayLabel: "Test tool",
+          path,
+          sourceCategory: "provided_path",
+        });
+  },
   resolveToolPath(toolId) {
     const path = paths[toolId];
     return path === undefined

@@ -74,6 +74,17 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
+const makeToolExecutablePayload = (
+  path: string | null,
+  overrides: Record<string, unknown> = {},
+) => ({
+  displayLabel: path === null ? "Unavailable" : "System PATH",
+  error: null,
+  path,
+  sourceCategory: path === null ? "unavailable" : "system_path",
+  ...overrides,
+});
+
 const createClient = (resolver: (command: string, args?: Record<string, unknown>) => unknown) => {
   const calls: InvokeCall[] = [];
   const invoke = async (command: string, args?: Record<string, unknown>): Promise<unknown> => {
@@ -176,6 +187,8 @@ describe("HostClient", () => {
           beadsOk: false,
           beadsPath: "/repo/.beads",
           beadsError: "Shared Dolt database repo_db is missing and restore is required",
+          beadsExecutable: makeToolExecutablePayload("/usr/local/bin/bd"),
+          doltExecutable: makeToolExecutablePayload("/usr/local/bin/dolt"),
           repoStoreHealth: makeRepoStoreHealthPayload({
             category: "missing_shared_database",
             status: "restore_needed",

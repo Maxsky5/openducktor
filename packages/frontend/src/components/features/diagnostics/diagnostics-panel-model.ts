@@ -2,6 +2,7 @@ import type {
   BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
+  ToolExecutableProvenance,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
@@ -195,9 +196,27 @@ const getRepoStoreFailureBadge = (
   }
 };
 
+const buildExecutableRows = (
+  label: "Beads" | "Dolt",
+  executable: ToolExecutableProvenance,
+): DiagnosticKeyValueRowModel[] => [
+  {
+    label: `${label} executable source`,
+    value: executable.displayLabel,
+    valueClassName: "text-muted-foreground",
+  },
+  {
+    label: `${label} executable path`,
+    value: executable.path ?? "Unavailable",
+    breakAll: true,
+    mono: executable.path !== null,
+    valueClassName: "text-muted-foreground",
+  },
+];
+
 const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRowModel[] => {
   const repoStoreHealth = getRepoStoreHealth(beadsCheck);
-  if (!repoStoreHealth) {
+  if (!beadsCheck || !repoStoreHealth) {
     return [];
   }
 
@@ -210,6 +229,8 @@ const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRo
       label: "Health category",
       value: getRepoStoreCategoryLabel(repoStoreHealth),
     },
+    ...buildExecutableRows("Beads", beadsCheck.beadsExecutable),
+    ...buildExecutableRows("Dolt", beadsCheck.doltExecutable),
     {
       label: "Beads attachment path",
       value: repoStoreHealth.attachment.path ?? "Unavailable",
@@ -247,21 +268,31 @@ const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRo
   return rows;
 };
 
+const appendUniqueError = (errors: string[], error: string | null): void => {
+  if (error !== null && !errors.includes(error)) {
+    errors.push(error);
+  }
+};
+
 const buildRepoStoreErrors = (
   beadsCheck: BeadsCheck | null,
   failureKind: RepoRuntimeFailureKind,
 ): string[] => {
   if (failureKind === "timeout") {
     const repoStoreHealth = getRepoStoreHealth(beadsCheck);
-    return buildFailureMessages({
+    const errors = buildFailureMessages({
       label: "Beads store",
       detail: repoStoreHealth ? getRepoStoreDetail(repoStoreHealth) : null,
       failureKind,
     });
+    appendUniqueError(errors, beadsCheck?.beadsExecutable.error ?? null);
+    appendUniqueError(errors, beadsCheck?.doltExecutable.error ?? null);
+    return errors;
   }
 
   const repoStoreHealth = getRepoStoreHealth(beadsCheck);
   if (
+    !beadsCheck ||
     !repoStoreHealth ||
     isRepoStoreReady(repoStoreHealth) ||
     repoStoreHealth.status === "initializing"
@@ -269,11 +300,14 @@ const buildRepoStoreErrors = (
     return [];
   }
 
-  return buildFailureMessages({
+  const errors = buildFailureMessages({
     label: "Beads store",
     detail: getRepoStoreDetail(repoStoreHealth),
     failureKind,
   });
+  appendUniqueError(errors, beadsCheck.beadsExecutable.error);
+  appendUniqueError(errors, beadsCheck.doltExecutable.error);
+  return errors;
 };
 
 const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValueRowModel[] => {

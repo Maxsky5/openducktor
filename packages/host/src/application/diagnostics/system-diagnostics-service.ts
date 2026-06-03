@@ -5,6 +5,7 @@ import {
   type RuntimeCheck,
   type RuntimeHealth,
   type SystemCheck,
+  type ToolExecutableProvenance,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { createDefaultGlobalConfig, type LoadedGlobalConfig } from "../../config/global-config";
@@ -107,7 +108,13 @@ const repoStoreHealthForMissingCommand = (detail: string): RepoStoreHealth => ({
     ownershipState: "unavailable",
   },
 });
-const buildBeadsCheck = (repoStoreHealth: RepoStoreHealth): BeadsCheck => {
+const buildBeadsCheck = (
+  repoStoreHealth: RepoStoreHealth,
+  tools: {
+    beadsExecutable: ToolExecutableProvenance;
+    doltExecutable: ToolExecutableProvenance;
+  },
+): BeadsCheck => {
   const beadsError =
     !repoStoreHealth.isReady && repoStoreHealth.status !== "initializing"
       ? repoStoreHealth.detail
@@ -117,14 +124,13 @@ const buildBeadsCheck = (repoStoreHealth: RepoStoreHealth): BeadsCheck => {
     beadsOk: repoStoreHealth.isReady,
     beadsPath: repoStoreHealth.attachment.path,
     beadsError,
+    beadsExecutable: tools.beadsExecutable,
+    doltExecutable: tools.doltExecutable,
   };
 };
 const enabledForRuntime = (config: LoadedGlobalConfig, kind: string): boolean =>
   config.agentRuntimes[kind]?.enabled ?? DEFAULT_AGENT_RUNTIMES[kind]?.enabled ?? false;
-type ToolAvailability = {
-  error: string | null;
-  path: string | null;
-};
+type ToolAvailability = ToolExecutableProvenance;
 type ToolVersionAvailability = {
   error: string | null;
   version: string | null;
@@ -133,11 +139,21 @@ const resolveToolAvailability = (
   toolDiscovery: ToolDiscoveryPort,
   toolId: ToolDiscoveryId,
 ): Effect.Effect<ToolAvailability, never> =>
-  Effect.either(toolDiscovery.resolveToolPath(toolId)).pipe(
+  Effect.either(toolDiscovery.resolveTool(toolId)).pipe(
     Effect.map((result) =>
       result._tag === "Right"
-        ? { error: null, path: result.right }
-        : { error: errorMessage(result.left), path: null },
+        ? {
+            displayLabel: result.right.displayLabel,
+            error: null,
+            path: result.right.path,
+            sourceCategory: result.right.sourceCategory,
+          }
+        : {
+            displayLabel: "Unavailable",
+            error: errorMessage(result.left),
+            path: null,
+            sourceCategory: "unavailable",
+          },
     ),
   );
 const versionForResolvedTool = (
@@ -245,18 +261,20 @@ export const createSystemDiagnosticsService = ({
   const beadsCheck = (repoPath: string) =>
     Effect.gen(function* () {
       const bdTool = yield* resolveToolAvailability(toolDiscovery, "beads");
-      if (bdTool.error !== null) {
-        return buildBeadsCheck(repoStoreHealthForMissingCommand(bdTool.error));
-      }
       const doltTool = yield* resolveToolAvailability(toolDiscovery, "dolt");
-      if (doltTool.error !== null) {
-        return buildBeadsCheck(repoStoreHealthForMissingCommand(doltTool.error));
+      const toolProvenance = {
+        beadsExecutable: bdTool,
+        doltExecutable: doltTool,
+      };
+      const toolError = bdTool.error ?? doltTool.error;
+      if (toolError !== null) {
+        return buildBeadsCheck(repoStoreHealthForMissingCommand(toolError), toolProvenance);
       }
       const repoStoreHealth = yield* repoStoreDiagnostics.diagnoseRepoStore({
         repoPath,
         prepare: true,
       });
-      return buildBeadsCheck(repoStoreHealth);
+      return buildBeadsCheck(repoStoreHealth, toolProvenance);
     });
   const systemCheck = (repoPath: string) =>
     Effect.gen(function* () {
@@ -279,6 +297,8 @@ export const createSystemDiagnosticsService = ({
         beadsOk: beads.beadsOk,
         beadsPath: beads.beadsPath,
         beadsError: beads.beadsError,
+        beadsExecutable: beads.beadsExecutable,
+        doltExecutable: beads.doltExecutable,
         errors,
       };
     });

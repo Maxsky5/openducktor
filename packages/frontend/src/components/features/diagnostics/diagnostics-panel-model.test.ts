@@ -376,6 +376,10 @@ describe("buildDiagnosticsPanelModel", () => {
       expect.arrayContaining([
         expect.objectContaining({ label: "Status", value: "Restore needed" }),
         expect.objectContaining({ label: "Health category", value: "Missing Dolt database" }),
+        expect.objectContaining({ label: "Beads executable source", value: "System PATH" }),
+        expect.objectContaining({ label: "Beads executable path", value: "/usr/local/bin/bd" }),
+        expect.objectContaining({ label: "Dolt executable source", value: "System PATH" }),
+        expect.objectContaining({ label: "Dolt executable path", value: "/usr/local/bin/dolt" }),
         expect.objectContaining({
           label: "Beads attachment path",
           value: "/Users/dev/.openducktor/beads/repo/.beads",
@@ -392,6 +396,143 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(beadsSection?.errors).toEqual([
       "Shared Dolt database repo_db is missing and restore is required",
     ]);
+  });
+
+  test("renders bundled and override executable provenance for Beads diagnostics", () => {
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: makeBeadsCheck({
+        beadsExecutable: {
+          displayLabel: "Bundled with OpenDucktor",
+          error: null,
+          path: "/Applications/OpenDucktor.app/Contents/Resources/bin/bd",
+          sourceCategory: "bundled_electron_resource",
+        },
+        doltExecutable: {
+          displayLabel: "Environment override",
+          error: null,
+          path: "/opt/dolt/bin/dolt",
+          sourceCategory: "environment_override",
+        },
+      }),
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const beadsSection = model.sections.find((section) => section.key === "beads-store");
+
+    expect(beadsSection?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Beads executable source",
+          value: "Bundled with OpenDucktor",
+        }),
+        expect.objectContaining({
+          label: "Beads executable path",
+          value: "/Applications/OpenDucktor.app/Contents/Resources/bin/bd",
+        }),
+        expect.objectContaining({ label: "Dolt executable source", value: "Environment override" }),
+        expect.objectContaining({ label: "Dolt executable path", value: "/opt/dolt/bin/dolt" }),
+      ]),
+    );
+  });
+
+  test("renders unavailable executable provenance without duplicating primary errors", () => {
+    const missingBeads =
+      "Packaged Electron Beads sidecar is missing or invalid: expected bd in /Applications/OpenDucktor.app/Contents/Resources/bin. This is an OpenDucktor packaging defect.";
+    const missingDolt =
+      "Packaged Electron Dolt sidecar is missing or invalid: expected dolt in /Applications/OpenDucktor.app/Contents/Resources/bin. This is an OpenDucktor packaging defect.";
+    const model = buildDiagnosticsPanelModel({
+      workspaceRepoPath: "/repo",
+      activeWorkspace: makeWorkspace("/repo"),
+      runtimeDefinitions,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      runtimeCheck: {
+        gitOk: true,
+        gitVersion: "git version 2.50.1",
+        ghOk: true,
+        ghVersion: "gh version 2.73.0",
+        ghAuthOk: true,
+        ghAuthLogin: "octocat",
+        ghAuthError: null,
+        runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
+        errors: [],
+      },
+      beadsCheck: makeBeadsCheck({
+        beadsOk: false,
+        beadsPath: null,
+        beadsError: missingBeads,
+        beadsExecutable: {
+          displayLabel: "Unavailable",
+          error: missingBeads,
+          path: null,
+          sourceCategory: "unavailable",
+        },
+        doltExecutable: {
+          displayLabel: "Unavailable",
+          error: missingDolt,
+          path: null,
+          sourceCategory: "unavailable",
+        },
+        repoStoreHealth: {
+          category: "attachment_verification_failed",
+          status: "blocking",
+          isReady: false,
+          detail: missingBeads,
+          attachment: {
+            path: null,
+            databaseName: null,
+          },
+          sharedServer: {
+            host: null,
+            port: null,
+            ownershipState: "unavailable",
+          },
+        },
+      }),
+      runtimeCheckFailureKind: null,
+      beadsCheckFailureKind: null,
+      runtimeHealthByRuntime: {
+        opencode: makeRepoHealth({
+          runtime: { instance: runtimeSummary },
+          mcp: { toolIds: [] },
+        }),
+      },
+      isLoadingChecks: false,
+    });
+
+    const beadsSection = model.sections.find((section) => section.key === "beads-store");
+
+    expect(beadsSection?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Beads executable path", value: "Unavailable" }),
+        expect.objectContaining({ label: "Dolt executable path", value: "Unavailable" }),
+      ]),
+    );
+    expect(beadsSection?.errors).toEqual([missingBeads, missingDolt]);
   });
 
   test("treats repositories using the default worktree path as healthy", () => {

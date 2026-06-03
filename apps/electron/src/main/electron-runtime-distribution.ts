@@ -33,7 +33,12 @@ export const resolveElectronRuntimeDistribution = ({
     return createSourceRuntimeDistribution(workspaceRoot);
   }
 
+  const binDir = resolveElectronMcpSidecarBinDir(resourcesPath);
   return createArtifactRuntimeDistribution({
+    bundledToolBinDirs: {
+      beads: binDir,
+      dolt: binDir,
+    },
     mcpLauncher: {
       kind: "executable",
       executablePath: resolveElectronMcpSidecarPath({

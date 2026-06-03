@@ -3,6 +3,7 @@ import type {
   RepoStoreHealth,
   RuntimeDescriptor,
   RuntimeHealth,
+  ToolExecutableProvenance,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
@@ -148,6 +149,16 @@ const createToolDiscoveryPort = ({
       versionForCommand: (command) => versionForCommand?.(command) ?? `${command} version 1.0.0`,
     }),
   });
+const toolProvenance = (
+  path: string | null,
+  overrides: Partial<ToolExecutableProvenance> = {},
+): ToolExecutableProvenance => ({
+  displayLabel: path === null ? "Unavailable" : "System PATH",
+  error: null,
+  path,
+  sourceCategory: path === null ? "unavailable" : "system_path",
+  ...overrides,
+});
 const healthyRepoStoreHealth: RepoStoreHealth = {
   category: "healthy",
   status: "ready",
@@ -313,6 +324,11 @@ describe("createSystemDiagnosticsService", () => {
       beadsPath: null,
       beadsError:
         "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
+      beadsExecutable: toolProvenance(null, {
+        error:
+          "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
+      }),
+      doltExecutable: toolProvenance("dolt"),
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
@@ -339,6 +355,11 @@ describe("createSystemDiagnosticsService", () => {
       beadsPath: null,
       beadsError:
         "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
+      beadsExecutable: toolProvenance("bd"),
+      doltExecutable: toolProvenance(null, {
+        error:
+          "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
+      }),
       repoStoreHealth: {
         category: "attachment_verification_failed",
         status: "blocking",
@@ -381,8 +402,54 @@ describe("createSystemDiagnosticsService", () => {
       beadsOk: false,
       beadsPath: "/repo/.beads",
       beadsError: "Shared Dolt database odt_repo is missing and restore is required",
+      beadsExecutable: toolProvenance("bd"),
+      doltExecutable: toolProvenance("dolt"),
       repoStoreHealth: restoreNeededHealth,
     });
     expect(calls).toEqual([{ repoPath: "/repo", prepare: true }]);
+  });
+
+  test("beadsCheck includes executable provenance for resolved Beads and Dolt tools", async () => {
+    const toolDiscovery: ToolDiscoveryPort = {
+      resolveTool: (toolId) =>
+        Effect.succeed(
+          toolId === "beads"
+            ? {
+                displayLabel: "Bundled with OpenDucktor",
+                path: "/Applications/OpenDucktor.app/Contents/Resources/bin/bd",
+                sourceCategory: "bundled_electron_resource",
+              }
+            : {
+                displayLabel: "Environment override",
+                path: "/opt/dolt/bin/dolt",
+                sourceCategory: "environment_override",
+              },
+        ),
+      resolveToolPath: (toolId) =>
+        toolDiscovery.resolveTool(toolId).pipe(Effect.map((tool) => tool.path)),
+    };
+    const service = createSystemDiagnosticsServiceForTest({
+      runtimeDefinitionsService: createRuntimeDefinitions(),
+      runtimeHealth: createRuntimeHealthPort(),
+      settingsConfig: createSettingsConfig(null),
+      systemCommands: createSystemCommandPort(),
+      toolDiscovery,
+      repoStoreDiagnostics: createTaskStore(),
+    });
+
+    const check = await Effect.runPromise(service.beadsCheck("/repo"));
+
+    expect(check.beadsExecutable).toEqual({
+      displayLabel: "Bundled with OpenDucktor",
+      error: null,
+      path: "/Applications/OpenDucktor.app/Contents/Resources/bin/bd",
+      sourceCategory: "bundled_electron_resource",
+    });
+    expect(check.doltExecutable).toEqual({
+      displayLabel: "Environment override",
+      error: null,
+      path: "/opt/dolt/bin/dolt",
+      sourceCategory: "environment_override",
+    });
   });
 });

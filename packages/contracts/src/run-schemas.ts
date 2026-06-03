@@ -69,6 +69,23 @@ export const repoStoreHealthSchema = z.object({
 });
 export type RepoStoreHealth = z.infer<typeof repoStoreHealthSchema>;
 
+export const toolExecutableSourceCategorySchema = z.enum([
+  "bundled_electron_resource",
+  "environment_override",
+  "provided_path",
+  "system_path",
+  "unavailable",
+]);
+export type ToolExecutableSourceCategory = z.infer<typeof toolExecutableSourceCategorySchema>;
+
+export const toolExecutableProvenanceSchema = z.object({
+  path: z.string().nullable(),
+  sourceCategory: toolExecutableSourceCategorySchema,
+  displayLabel: z.string(),
+  error: z.string().nullable(),
+});
+export type ToolExecutableProvenance = z.infer<typeof toolExecutableProvenanceSchema>;
+
 export const systemCheckSchema = z.object({
   gitOk: z.boolean(),
   gitVersion: z.string().nullable(),
@@ -82,6 +99,8 @@ export const systemCheckSchema = z.object({
   beadsOk: z.boolean(),
   beadsPath: z.string().nullable(),
   beadsError: z.string().nullable(),
+  beadsExecutable: toolExecutableProvenanceSchema,
+  doltExecutable: toolExecutableProvenanceSchema,
   errors: z.array(z.string()),
 });
 export type SystemCheck = z.infer<typeof systemCheckSchema>;
@@ -104,6 +123,8 @@ export const beadsCheckSchema = z.object({
   beadsOk: z.boolean(),
   beadsPath: z.string().nullable(),
   beadsError: z.string().nullable(),
+  beadsExecutable: toolExecutableProvenanceSchema,
+  doltExecutable: toolExecutableProvenanceSchema,
 });
 export type BeadsCheck = z.infer<typeof beadsCheckSchema>;
 

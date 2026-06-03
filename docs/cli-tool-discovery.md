@@ -17,10 +17,16 @@ Adding a new CLI should mean adding a descriptor and wiring the consumer to `Too
 
 Consumers do not search the filesystem themselves.
 
-They call:
+Most consumers call:
 
 ```ts
 toolDiscovery.resolveToolPath("codex")
+```
+
+Diagnostics that need to explain where an executable came from call:
+
+```ts
+toolDiscovery.resolveTool("beads")
 ```
 
 The host resolves that tool by walking its descriptor:
@@ -144,10 +150,10 @@ It uses `SystemCommandPort.resolveCommandPath`, so platform details stay central
 
 | Tool id | Command | Override variable | Extra descriptor sources | Main consumers |
 | --- | --- | --- | --- | --- |
-| `beads` | `bd` | `OPENDUCKTOR_BD_PATH` | none | Beads task store, diagnostics |
+| `beads` | `bd` | `OPENDUCKTOR_BD_PATH` | bundled Electron resources when provided | Beads task store, diagnostics |
 | `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | none | source-mode and web artifact OpenDucktor MCP command |
 | `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | bundled directory when provided, macOS Codex.app candidates | Codex runtime startup and health |
-| `dolt` | `dolt` | `OPENDUCKTOR_DOLT_PATH` | none | shared Dolt server, Beads diagnostics |
+| `dolt` | `dolt` | `OPENDUCKTOR_DOLT_PATH` | bundled Electron resources when provided | shared Dolt server, Beads diagnostics |
 | `git` | `git` | `OPENDUCKTOR_GIT_PATH` | none | Git adapter, diagnostics |
 | `githubCli` | `gh` | `OPENDUCKTOR_GH_PATH` | none | GitHub auth, PR detection and sync |
 | `opencode` | `opencode` | `OPENDUCKTOR_OPENCODE_BINARY` | bundled directory when provided, `~/.opencode/bin` | OpenCode runtime startup and health |
@@ -170,8 +176,9 @@ Discovery uses environment overrides, shell-provided tool paths, descriptor conv
 Electron packaged mode passes an artifact runtime distribution.
 
 The packaged MCP launcher is resolved from Electron resources.
-If Electron later bundles additional CLI tools, Electron must pass package-owned `bundledToolBinDirs` for those tools.
-Descriptors may then add a `searchDirectories` source that points at that tool id's bundled directory.
+Released Electron builds also package the Beads (`bd`) and Dolt (`dolt`) sidecars under the resources `bin` directory.
+Electron passes that package-owned directory through `bundledToolBinDirs` for both `beads` and `dolt`, and their descriptors require the bundled source before `PATH`.
+If a configured packaged Beads or Dolt sidecar is missing, empty, or non-executable where the platform can validate executable mode, discovery reports an OpenDucktor packaging defect instead of asking the user to install a local CLI.
 
 Packaged Electron must never point discovery at a development worktree.
 Resource paths must come from the packaged app resources for that run.
@@ -295,6 +302,7 @@ If the missing tool blocks a user-visible setup or runtime path, add it to the r
 
 Diagnostics should call `ToolDiscoveryPort`.
 They should not duplicate descriptor logic.
+For Beads diagnostics, include the structured executable provenance from `resolveTool("beads")` and `resolveTool("dolt")` so the panel can distinguish bundled Electron resources, environment overrides, provided paths, external `PATH`, and unavailable tools.
 
 ### 6. Handle Distribution Ownership
 

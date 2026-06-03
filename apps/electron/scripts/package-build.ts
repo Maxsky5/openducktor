@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { prepareMcpSidecar } from "./prepare-mcp-sidecar";
-import { verifyPackagedMcpSidecar } from "./verify-mcp-sidecar-package";
+import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
+import { prepareElectronSidecars } from "./prepare-electron-sidecars";
+import { verifyPackagedElectronSidecars } from "./verify-electron-sidecar-package";
 
 export type ElectronReleasePlatform = "linux" | "macos" | "windows";
 export type ElectronReleaseArch = "arm64" | "x64";
@@ -191,9 +192,10 @@ export const buildElectronPackage = async ({
   const releaseDirectory = join(electronPackageDirectory, "release");
 
   await rm(releaseDirectory, { force: true, recursive: true });
-  await prepareMcpSidecar({
+  await prepareElectronSidecars({
+    arch,
     electronPackageDirectory,
-    platform: process.platform,
+    platform,
     workspaceRoot,
   });
 
@@ -214,13 +216,21 @@ export const buildElectronPackage = async ({
     env: resolveElectronBuilderEnv(signed, process.env),
   });
 
-  const verifiedSidecarPath = await verifyPackagedMcpSidecar({
+  const verifiedSidecarPaths = await verifyPackagedElectronSidecars({
     arch,
     platform,
     releaseDirectory,
   });
-  if (verifiedSidecarPath) {
-    console.log(`Verified Electron MCP sidecar package payload: ${verifiedSidecarPath}`);
+  for (const verifiedSidecarPath of verifiedSidecarPaths) {
+    const fileName = verifiedSidecarPath.split(/[\\/]/).at(-1) ?? verifiedSidecarPath;
+    const sidecarLabel = fileName.startsWith("bd")
+      ? electronSidecarDisplayName("beads")
+      : fileName.startsWith("dolt")
+        ? electronSidecarDisplayName("dolt")
+        : electronSidecarDisplayName("openducktor-mcp");
+    console.log(
+      `Verified packaged Electron ${sidecarLabel} sidecar payload: ${verifiedSidecarPath}`,
+    );
   }
 
   if (!stageReleaseArtifacts) {
