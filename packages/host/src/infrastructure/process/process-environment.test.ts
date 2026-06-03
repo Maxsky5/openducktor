@@ -8,6 +8,8 @@ import {
   pathEnvironmentValue,
 } from "./process-environment";
 
+const testIfPosixShellIsAvailable = process.platform === "win32" ? test.skip : test;
+
 describe("createProcessEnvironment", () => {
   test("merges the macOS login shell PATH before the inherited GUI PATH", () => {
     const env = createProcessEnvironment({
@@ -73,26 +75,29 @@ describe("createProcessEnvironment", () => {
     expect(env.PATH).toBeUndefined();
   });
 
-  test("reads and merges PATH from the current user's login shell", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-path-"));
-    const shellPath = path.join(root, "fake-shell");
-    try {
-      await writeFile(
-        shellPath,
-        "#!/bin/sh\nprintf 'profile noise\\0__OPENDUCKTOR_ENV_START__\\0USER=max\\0PATH=/opt/bin:/usr/bin\\0'\n",
-      );
-      await chmod(shellPath, 0o755);
+  testIfPosixShellIsAvailable(
+    "reads and merges PATH from the current user's login shell",
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "odt-login-shell-path-"));
+      const shellPath = path.join(root, "fake-shell");
+      try {
+        await writeFile(
+          shellPath,
+          "#!/bin/sh\nprintf 'profile noise\\0__OPENDUCKTOR_ENV_START__\\0USER=max\\0PATH=/opt/bin:/usr/bin\\0'\n",
+        );
+        await chmod(shellPath, 0o755);
 
-      const env = createProcessEnvironment({
-        baseEnv: { SHELL: shellPath, PATH: "/usr/bin:/bin" },
-        platform: "darwin",
-      });
+        const env = createProcessEnvironment({
+          baseEnv: { SHELL: shellPath, PATH: "/usr/bin:/bin" },
+          platform: "darwin",
+        });
 
-      expect(env.PATH?.split(":")).toEqual(["/opt/bin", "/usr/bin", "/bin"]);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
+        expect(env.PATH?.split(":")).toEqual(["/opt/bin", "/usr/bin", "/bin"]);
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
 });
 
 describe("normalizeProcessEnvironment", () => {

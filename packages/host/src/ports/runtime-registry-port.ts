@@ -4,7 +4,7 @@ import type {
   RuntimeInstanceSummary,
   RuntimeRoute,
 } from "@openducktor/contracts";
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type {
   HostDependencyError,
   HostOperationError,
@@ -88,8 +88,3 @@ export type RuntimeRegistryPort = {
     input: RuntimeMcpStatusProbeInput,
   ): Effect.Effect<RuntimeMcpStatusProbeResult, RuntimeRegistryError>;
 };
-
-class RuntimeRegistryPortTag extends Context.Tag("@openducktor/host/RuntimeRegistryPort")<
-  RuntimeRegistryPortTag,
-  RuntimeRegistryPort
->() {}

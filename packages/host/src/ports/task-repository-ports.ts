@@ -11,7 +11,7 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
 } from "@openducktor/contracts";
-import { Context, type Effect } from "effect";
+import type { Effect } from "effect";
 import type {
   HostDependencyError,
   HostInvariantError,
@@ -133,8 +133,3 @@ export type TaskStorePort = AgentSessionRepository &
   TaskReader &
   TaskWriter &
   WorkflowDocumentRepository;
-
-class TaskStorePortTag extends Context.Tag("@openducktor/host/TaskStorePort")<
-  TaskStorePortTag,
-  TaskStorePort
->() {}

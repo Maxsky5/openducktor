@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
+import type { RuntimeWorkspaceHandle } from "../../ports/runtime-registry-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { ToolDiscoveryId, ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { writeFakeRuntimeCommand } from "../../test-support/fake-runtime-command";
@@ -77,10 +78,12 @@ const createFakeCodex = async (
     childPidPath,
     emitStreamEvents = false,
     exitBeforeInitialize,
+    runtimePidPath,
   }: {
     childPidPath?: string;
     emitStreamEvents?: boolean;
     exitBeforeInitialize?: { code: number; stderr: string };
+    runtimePidPath?: string;
   } = {},
 ): Promise<string> => {
   const scriptPath = join(root, "codex.mjs");
@@ -94,6 +97,7 @@ const capturePath = process.env.CODEX_CAPTURE_PATH;
 const childPidPath = ${JSON.stringify(childPidPath ?? null)};
 const emitStreamEvents = ${JSON.stringify(emitStreamEvents)};
 const exitBeforeInitialize = ${JSON.stringify(exitBeforeInitialize ?? null)};
+const runtimePidPath = ${JSON.stringify(runtimePidPath ?? null)};
 const capture = {
   args: process.argv.slice(2),
   env: {
@@ -107,6 +111,9 @@ const capture = {
 };
 if (capturePath) {
   writeFileSync(capturePath, JSON.stringify(capture));
+}
+if (runtimePidPath) {
+  writeFileSync(runtimePidPath, String(process.pid));
 }
 
 if (!process.argv.includes("app-server")) {
@@ -238,12 +245,24 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
   test("starts a Codex app-server runtime, registers transport, and stops it", async () => {
     const root = await mkdtemp(join(tmpdir(), "odt-codex-starter-"));
     const originalCapturePath = process.env.CODEX_CAPTURE_PATH;
+    const runtimePidPath = join(root, "runtime.pid");
+    let handle: RuntimeWorkspaceHandle | null = null;
+    let runtimeStopped = false;
+    const waitForRuntimeExit = async (): Promise<void> => {
+      if (!existsSync(runtimePidPath)) {
+        return;
+      }
+      const runtimePid = Number(await readFile(runtimePidPath, "utf8"));
+      if (Number.isInteger(runtimePid) && runtimePid > 0) {
+        await waitFor(() => !processIsAlive(runtimePid), 2_000);
+      }
+    };
     try {
       const repo = join(root, "repo");
       await mkdir(repo);
       const capturePath = join(root, "capture.json");
       process.env.CODEX_CAPTURE_PATH = capturePath;
-      const codexBinary = await createFakeCodex(root);
+      const codexBinary = await createFakeCodex(root, { runtimePidPath });
       const codexAppServer = createCodexAppServerTransportRegistry();
       const promiseCodexAppServer = codexAppServer;
       const starter = createCodexWorkspaceRuntimeStarter({
@@ -271,7 +290,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         now: () => new Date("2026-05-10T10:00:00.000Z"),
         runtimeId: () => "runtime-1",
       });
-      const handle = await Effect.runPromise(
+      handle = await Effect.runPromise(
         starter.startWorkspaceRuntime({
           runtimeKind: "codex",
           repoPath: repo,
@@ -279,6 +298,7 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
           descriptor: RUNTIME_DESCRIPTORS_BY_KIND.codex,
         }),
       );
+      await waitFor(() => existsSync(runtimePidPath));
       expect(handle.runtime).toMatchObject({
         kind: "codex",
         runtimeId: "runtime-1",
@@ -323,6 +343,8 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
       );
       expect(capture.args).toContain("app-server");
       await expect(Effect.runPromise(handle.stop())).resolves.toBeUndefined();
+      runtimeStopped = true;
+      await waitForRuntimeExit();
       await expect(
         Effect.runPromise(
           promiseCodexAppServer.request({ runtimeId: "runtime-1", method: "thread/loaded/list" }),
@@ -333,6 +355,10 @@ describe("createCodexWorkspaceRuntimeStarter", () => {
         delete process.env.CODEX_CAPTURE_PATH;
       } else {
         process.env.CODEX_CAPTURE_PATH = originalCapturePath;
+      }
+      if (handle !== null && !runtimeStopped) {
+        await Effect.runPromise(handle.stop());
+        await waitForRuntimeExit();
       }
       await removeTestDirectory(root);
     }
