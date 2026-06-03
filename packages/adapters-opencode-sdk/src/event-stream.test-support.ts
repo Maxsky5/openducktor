@@ -1,7 +1,12 @@
 import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { attachSessionToRuntimeEvents } from "./session-registry";
-import type { OpencodeEventLogger, RuntimeEventTransportRecord, SessionInput, SessionRecord } from "./types";
+import type {
+  OpencodeEventLogger,
+  RuntimeEventTransportRecord,
+  SessionInput,
+  SessionRecord,
+} from "./types";
 
 type RunEventStreamOptions = {
   logEvent?: OpencodeEventLogger;
