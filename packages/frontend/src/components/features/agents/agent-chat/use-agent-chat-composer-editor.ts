@@ -194,7 +194,7 @@ export const useAgentChatComposerEditor = ({
       attachments: latestDraftRef.current.attachments ?? [],
     });
     const firstSegment = nextDraft.segments[0];
-    if (!firstSegment || firstSegment.kind !== "text") {
+    if (firstSegment?.kind !== "text") {
       return false;
     }
 

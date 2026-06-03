@@ -189,7 +189,7 @@ export function useAgentStudioDocuments({
       }
 
       const meta = message.meta;
-      if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+      if (meta?.kind !== "tool" || meta.status !== "completed") {
         return;
       }
       const normalizedTool = normalizeOdtWorkflowToolName(

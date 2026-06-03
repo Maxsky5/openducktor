@@ -20,7 +20,7 @@ const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> =
   const keys = new Set<string>();
   forEachSessionMessage(session, (message) => {
     const meta = message.meta;
-    if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+    if (meta?.kind !== "tool" || meta.status !== "completed") {
       return;
     }
 
@@ -33,7 +33,7 @@ const collectCompletedGitPanelRefreshToolKeys = (session: AgentSessionState): Se
   const keys = new Set<string>();
   forEachSessionMessage(session, (message) => {
     const meta = message.meta;
-    if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+    if (meta?.kind !== "tool" || meta.status !== "completed") {
       return;
     }
 
@@ -100,7 +100,7 @@ export function useAgentStudioBuildWorktreeRefresh({
     let shouldRefresh = false;
     forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
       const meta = message.meta;
-      if (!meta || meta.kind !== "tool" || meta.status !== "completed") {
+      if (meta?.kind !== "tool" || meta.status !== "completed") {
         return;
       }
 

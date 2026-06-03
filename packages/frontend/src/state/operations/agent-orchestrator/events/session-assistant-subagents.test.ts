@@ -363,7 +363,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const subagentMessage = getSessionMessages(sessionsRef).find(
       (message) => message.role === "system" && message.meta?.kind === "subagent",
     );
-    if (!subagentMessage || subagentMessage.meta?.kind !== "subagent") {
+    if (subagentMessage?.meta?.kind !== "subagent") {
       throw new Error("Expected subagent message with subagent meta");
     }
     expect(subagentMessage.meta.status).toBe("completed");
@@ -381,7 +381,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       (message) =>
         message.role === "assistant" && message.content.includes("Final assistant output"),
     );
-    if (!finalAssistantMessage || finalAssistantMessage.meta?.kind !== "assistant") {
+    if (finalAssistantMessage?.meta?.kind !== "assistant") {
       throw new Error("Expected final assistant message with assistant meta");
     }
     expect(finalAssistantMessage.meta.profileId).toBe("Hephaestus");
@@ -814,7 +814,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagentMessages).toHaveLength(1);
 
     const subagent = subagentMessages[0];
-    if (!subagent || subagent.meta?.kind !== "subagent") {
+    if (subagent?.meta?.kind !== "subagent") {
       throw new Error("Expected subagent message with subagent meta");
     }
     expect(subagent.meta.status).toBe("error");

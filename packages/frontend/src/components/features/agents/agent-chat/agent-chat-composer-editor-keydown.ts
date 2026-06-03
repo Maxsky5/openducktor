@@ -309,7 +309,7 @@ const resolveCurrentLineStart = (
     (segment) => segment.id === repairedSelection.segmentId,
   );
   const currentSegment = sourceDraft.segments[currentIndex];
-  if (!currentSegment || currentSegment.kind !== "text") {
+  if (currentSegment?.kind !== "text") {
     return null;
   }
 

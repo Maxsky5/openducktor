@@ -4,7 +4,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 export const resolveActiveStreamingAssistantMessageId = (
   session: Pick<AgentSessionState, "externalSessionId" | "messages" | "status"> | null,
 ): string | null => {
-  if (!session || session.status !== "running") {
+  if (session?.status !== "running") {
     return null;
   }
 

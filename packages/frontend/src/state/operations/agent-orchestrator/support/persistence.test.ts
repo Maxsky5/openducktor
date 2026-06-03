@@ -447,7 +447,7 @@ describe("agent-orchestrator/support/persistence", () => {
     const assistant = messages.find(
       (entry) => entry.role === "assistant" && entry.content === "Done",
     );
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
     expect(assistant.meta.agentRole).toBe("build");
@@ -460,7 +460,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(assistant.meta.variant).toBe("max");
 
     const user = messages.find((entry) => entry.role === "user");
-    if (!user || user.meta?.kind !== "user") {
+    if (user?.meta?.kind !== "user") {
       throw new Error("Expected user message with user meta");
     }
     expect(user.meta.providerId).toBe("openai");
@@ -534,7 +534,7 @@ describe("agent-orchestrator/support/persistence", () => {
     );
 
     const assistant = messages.find((entry) => entry.role === "assistant");
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
     expect(assistant.meta.isFinal).toBe(false);
@@ -569,7 +569,7 @@ describe("agent-orchestrator/support/persistence", () => {
     );
 
     const assistant = messages.find((entry) => entry.role === "assistant");
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
     expect(assistant.meta.isFinal).toBe(false);
@@ -648,11 +648,11 @@ describe("agent-orchestrator/support/persistence", () => {
     const assistant = messages.find(
       (entry) => entry.role === "assistant" && entry.content === "Let me inspect the current code.",
     );
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
     const user = messages.find((entry) => entry.role === "user");
-    if (!user || user.meta?.kind !== "user") {
+    if (user?.meta?.kind !== "user") {
       throw new Error("Expected user message with user meta");
     }
 
@@ -695,7 +695,7 @@ describe("agent-orchestrator/support/persistence", () => {
     );
 
     const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
 
@@ -745,7 +745,7 @@ describe("agent-orchestrator/support/persistence", () => {
     const assistant = messages.find(
       (entry) => entry.role === "assistant" && entry.content === "Reviewed the changes",
     );
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
 
@@ -805,7 +805,7 @@ describe("agent-orchestrator/support/persistence", () => {
     const assistant = messages.find(
       (entry) => entry.role === "assistant" && entry.content === "Reviewed the changes",
     );
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
 
@@ -849,7 +849,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
     expect(messages).toHaveLength(2);
     const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 1);
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
 
@@ -884,7 +884,7 @@ describe("agent-orchestrator/support/persistence", () => {
     );
 
     const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
 
@@ -1008,7 +1008,7 @@ describe("agent-orchestrator/support/persistence", () => {
     const assistant = messages.find(
       (entry) => entry.role === "assistant" && entry.content === "Persisted the canonical spec.",
     );
-    if (!assistant || assistant.meta?.kind !== "assistant") {
+    if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected visible assistant message with assistant meta");
     }
 
@@ -1067,10 +1067,10 @@ describe("agent-orchestrator/support/persistence", () => {
 
     const firstAssistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 1);
     const secondAssistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 2);
-    if (!firstAssistant || firstAssistant.meta?.kind !== "assistant") {
+    if (firstAssistant?.meta?.kind !== "assistant") {
       throw new Error("Expected first assistant message with assistant meta");
     }
-    if (!secondAssistant || secondAssistant.meta?.kind !== "assistant") {
+    if (secondAssistant?.meta?.kind !== "assistant") {
       throw new Error("Expected second assistant message with assistant meta");
     }
 

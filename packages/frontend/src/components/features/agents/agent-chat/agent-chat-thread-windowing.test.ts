@@ -300,7 +300,7 @@ describe("agent-chat-thread windowing helpers", () => {
     const previousSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
 
     const assistantMessage = messages[0];
-    if (!assistantMessage || assistantMessage.meta?.kind !== "assistant") {
+    if (assistantMessage?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message metadata");
     }
 

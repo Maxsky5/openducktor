@@ -326,10 +326,10 @@ describe("stream-part-mapper", () => {
     const spawned = mapPartToAgentStreamPart(spawnPart);
     const completed = mapPartToAgentStreamPart(completionPart);
 
-    if (!spawned || spawned.kind !== "subagent") {
+    if (spawned?.kind !== "subagent") {
       throw new Error("Expected spawned subagent part");
     }
-    if (!completed || completed.kind !== "subagent") {
+    if (completed?.kind !== "subagent") {
       throw new Error("Expected completed subagent part");
     }
 
@@ -419,7 +419,7 @@ describe("stream-part-mapper", () => {
     for (const testCase of cases) {
       const mapped = mapPartToAgentStreamPart(testCase.part);
       expect(mapped).toBeTruthy();
-      if (!mapped || mapped.kind !== "tool") {
+      if (mapped?.kind !== "tool") {
         throw new Error(`Expected mapped tool part for ${testCase.label}.`);
       }
       expect(mapped.preview).toBe(testCase.expectedPreview);
@@ -889,7 +889,7 @@ describe("stream-part-mapper", () => {
       const mapped = mapPartToAgentStreamPart(part);
 
       expect(mapped).toBeTruthy();
-      if (!mapped || mapped.kind !== "tool") {
+      if (mapped?.kind !== "tool") {
         throw new Error("Expected mapped tool part.");
       }
       expect(mapped.status).toBe(testCase.expectedStatus);

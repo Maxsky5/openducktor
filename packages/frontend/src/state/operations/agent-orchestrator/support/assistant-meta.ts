@@ -142,7 +142,7 @@ export const finalizeDraftAssistantMessage = (
       ...session,
       ...clearedDraftFields,
       messages: updateLastSessionMessage(session, (existing) =>
-        !existing.meta || existing.meta.kind !== "assistant"
+        existing.meta?.kind !== "assistant"
           ? {
               ...existing,
               meta: toAssistantMessageMeta(session, durationMs, totalTokens, model),

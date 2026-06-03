@@ -247,7 +247,7 @@ export const normalizeComposerDraft = (draft: AgentChatComposerDraft): AgentChat
     normalized.push(segment);
 
     const nextSegment = draft.segments[index + 1];
-    if (!nextSegment || nextSegment.kind !== "text") {
+    if (nextSegment?.kind !== "text") {
       normalized.push(createTextSegment(""));
     }
   }
@@ -297,7 +297,7 @@ const insertNewlineInTextSegment = (
   caretOffset: number,
 ): AgentChatComposerDraftEditResult | null => {
   const segment = draft.segments.find((entry) => entry.id === segmentId);
-  if (!segment || segment.kind !== "text") {
+  if (segment?.kind !== "text") {
     return null;
   }
 
@@ -667,7 +667,7 @@ export const appendTextToDraft = (
 
   const normalizedDraft = normalizeComposerDraft(draft);
   const lastSegment = normalizedDraft.segments[normalizedDraft.segments.length - 1];
-  if (!lastSegment || lastSegment.kind !== "text") {
+  if (lastSegment?.kind !== "text") {
     throw new Error(
       "appendTextToDraft: normalizeComposerDraft invariant violated - last segment is not text.",
     );
@@ -784,7 +784,7 @@ const textSegmentValueForTrigger = (
   textOverride?: string,
 ): string | null => {
   const segment = draft.segments.find((entry) => entry.id === textSegmentId);
-  if (!segment || segment.kind !== "text") {
+  if (segment?.kind !== "text") {
     return null;
   }
 

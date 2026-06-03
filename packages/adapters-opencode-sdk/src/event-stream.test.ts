@@ -587,7 +587,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     const latestUserMessage = userMessages[userMessages.length - 1];
-    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+    if (latestUserMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
 
@@ -912,7 +912,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     const userMessage = userMessages[0];
-    if (!userMessage || userMessage.type !== "user_message") {
+    if (userMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
     expect(userMessage.parts).toContainEqual(
@@ -999,7 +999,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(2);
     const latestUserMessage = userMessages[userMessages.length - 1];
-    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+    if (latestUserMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
     expect(latestUserMessage.parts).toContainEqual(
@@ -1084,7 +1084,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     const userMessage = userMessages[0];
-    if (!userMessage || userMessage.type !== "user_message") {
+    if (userMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
 
@@ -1467,7 +1467,7 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
 
     const updatedPart = sessionRecord.partsById.get("text-late-part-update-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Done later");
@@ -1496,7 +1496,7 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
 
     const updatedPart = sessionRecord.partsById.get("text-late-delta-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Done later");
@@ -1531,7 +1531,7 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
 
     const updatedPart = sessionRecord.partsById.get("text-idle-late-part-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Recovered final output");
@@ -1627,7 +1627,7 @@ describe("event-stream", () => {
     expect(sessionRecord.activeAssistantMessageId).toBeNull();
 
     const updatedPart = sessionRecord.partsById.get("text-stale-update-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Done later");
@@ -1987,8 +1987,7 @@ describe("event-stream", () => {
     const lastQueued = queuedParts[queuedParts.length - 1];
     const lastKnown = knownParts[knownParts.length - 1];
     if (
-      !lastQueued ||
-      lastQueued.type !== "assistant_part" ||
+      lastQueued?.type !== "assistant_part" ||
       lastQueued.part.kind !== "text" ||
       !lastKnown ||
       lastKnown.type !== "assistant_part" ||

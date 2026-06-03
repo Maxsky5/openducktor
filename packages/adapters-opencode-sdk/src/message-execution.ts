@@ -159,7 +159,7 @@ const toSlashCommandExecutionRequest = (
   }
 
   const commandPart = normalizedParts[commandIndex];
-  if (!commandPart || commandPart.kind !== "slash_command") {
+  if (commandPart?.kind !== "slash_command") {
     return null;
   }
 

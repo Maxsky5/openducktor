@@ -344,7 +344,7 @@ export const historyToSessionContextUsage = (
 ): AgentSessionContextUsage | null => {
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const message = history[index];
-    if (!message || message.role !== "assistant") {
+    if (message?.role !== "assistant") {
       continue;
     }
     if (!isFinalAssistantHistoryMessage(message)) {

@@ -79,7 +79,7 @@ const odtErrorEnvelopeMessage = (value: unknown): string | null => {
 
 const looseErrorEnvelopeMessage = (value: unknown): string | null => {
   const record = asRecord(value);
-  if (!record || record.ok !== false) {
+  if (record?.ok !== false) {
     return null;
   }
 

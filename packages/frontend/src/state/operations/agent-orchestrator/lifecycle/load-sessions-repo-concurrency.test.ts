@@ -1264,7 +1264,7 @@ describe("agent-orchestrator repo switch and requested hydration concurrency", (
       getSession(state, "external-1"),
       (message) => message.id === "hydrated-user-1",
     );
-    if (!hydratedUser || hydratedUser.meta?.kind !== "user") {
+    if (hydratedUser?.meta?.kind !== "user") {
       throw new Error("Expected hydrated user message metadata");
     }
     expect(hydratedUser.meta.state).toBe("read");
