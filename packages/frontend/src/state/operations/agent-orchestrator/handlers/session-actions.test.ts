@@ -1123,7 +1123,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
       expect(updateSessionOptions).toEqual([{ persist: false }]);
       const message = sessionMessageAt(getSession(sessionsRef), 0);
-      if (!message || message.meta?.kind !== "tool") {
+      if (message?.meta?.kind !== "tool") {
         throw new Error("Expected tool message metadata");
       }
       expect(message.meta.metadata?.requestId).toBe("question-1");

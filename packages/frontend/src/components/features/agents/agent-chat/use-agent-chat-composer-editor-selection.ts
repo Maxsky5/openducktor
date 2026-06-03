@@ -465,7 +465,7 @@ export const useAgentChatComposerEditorSelection = ({
     (sourceDraft: AgentChatComposerDraft) => {
       for (let index = sourceDraft.segments.length - 1; index >= 0; index -= 1) {
         const segment = sourceDraft.segments[index];
-        if (!segment || segment.kind !== "text") {
+        if (segment?.kind !== "text") {
           continue;
         }
         focusTextSegmentWithMemory(segment.id, segment.text.length, sourceDraft);

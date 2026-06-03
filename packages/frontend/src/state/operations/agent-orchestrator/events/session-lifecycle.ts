@@ -20,7 +20,10 @@ import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
-import { clearSubagentPendingApprovalFromSessions } from "../support/subagent-approval-overlay";
+import {
+  clearSubagentPendingApprovalFromSessions,
+  clearSubagentPendingQuestionFromSessions,
+} from "../support/subagent-approval-overlay";
 import { formatSubagentContent } from "../support/subagent-messages";
 import { mergeTodoListPreservingOrder } from "../support/todos";
 import {
@@ -56,7 +59,9 @@ const nextContextUsageWasEstablishedForMessage = (
 };
 
 type ApprovalRequiredEvent = Extract<SessionEvent, { type: "approval_required" }>;
+type ApprovalResolvedEvent = Extract<SessionEvent, { type: "approval_resolved" }>;
 type QuestionRequiredEvent = Extract<SessionEvent, { type: "question_required" }>;
+type QuestionResolvedEvent = Extract<SessionEvent, { type: "question_resolved" }>;
 type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
 
 const toPendingApproval = (event: ApprovalRequiredEvent): AgentApprovalRequest => {
@@ -87,10 +92,7 @@ const resolveLocalSessionIdByExternalId = (
   externalSessionId: string,
 ): string | null => {
   for (const session of Object.values(sessions)) {
-    if (
-      session.externalSessionId === externalSessionId ||
-      session.externalSessionId === externalSessionId
-    ) {
+    if (session.externalSessionId === externalSessionId) {
       return session.externalSessionId;
     }
   }
@@ -112,11 +114,28 @@ const resolvePermissionPolicyRole = (
   return context.store.sessionsRef.current[context.store.externalSessionId]?.role ?? undefined;
 };
 
+const resolveSubagentMessageForSessionLink = (
+  current: AgentSessionState,
+  event: ApprovalRequiredEvent | QuestionRequiredEvent,
+) => {
+  if (event.subagentCorrelationKey) {
+    return findLastSessionMessageByRole(
+      current,
+      "system",
+      (message) =>
+        message.meta?.kind === "subagent" &&
+        message.meta.correlationKey === event.subagentCorrelationKey,
+    );
+  }
+
+  return undefined;
+};
+
 const patchParentSubagentSessionLink = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent | QuestionRequiredEvent,
 ): void => {
-  if (!event.parentExternalSessionId || !event.subagentCorrelationKey) {
+  if (!event.parentExternalSessionId) {
     return;
   }
   const childExternalSessionId = event.childExternalSessionId?.trim();
@@ -127,13 +146,7 @@ const patchParentSubagentSessionLink = (
   context.store.updateSession(
     event.parentExternalSessionId,
     (current) => {
-      const subagentMessage = findLastSessionMessageByRole(
-        current,
-        "system",
-        (message) =>
-          message.meta?.kind === "subagent" &&
-          message.meta.correlationKey === event.subagentCorrelationKey,
-      );
+      const subagentMessage = resolveSubagentMessageForSessionLink(current, event);
       if (subagentMessage?.meta?.kind !== "subagent") {
         return current;
       }
@@ -158,9 +171,9 @@ const patchParentSubagentSessionLink = (
   );
 };
 
-const isLinkedChildPermissionObservedByParent = (
+const isLinkedChildObservedByParent = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: ApprovalRequiredEvent,
+  event: ApprovalRequiredEvent | QuestionRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   return Boolean(
@@ -170,16 +183,20 @@ const isLinkedChildPermissionObservedByParent = (
   );
 };
 
-const isLinkedChildQuestionObservedByParent = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  event: QuestionRequiredEvent,
-): boolean => {
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  return Boolean(
-    childExternalSessionId &&
-      event.parentExternalSessionId === context.store.externalSessionId &&
-      childExternalSessionId !== context.store.externalSessionId,
-  );
+const appendParentSubagentPendingRequest = <Request extends { requestId: string }>(
+  currentMap: Record<string, Request[]> | undefined,
+  childExternalSessionId: string,
+  request: Request,
+): Record<string, Request[]> => {
+  const map = currentMap ?? {};
+  const currentEntries = map[childExternalSessionId] ?? [];
+  return {
+    ...map,
+    [childExternalSessionId]: [
+      ...currentEntries.filter((entry) => entry.requestId !== request.requestId),
+      request,
+    ],
+  };
 };
 
 const recordParentSubagentPendingApproval = (
@@ -198,21 +215,14 @@ const recordParentSubagentPendingApproval = (
   const pendingApproval = toPendingApproval(event);
   context.store.updateSession(
     event.parentExternalSessionId,
-    (current) => {
-      const currentMap = current.subagentPendingApprovalsByExternalSessionId ?? {};
-      const currentEntries = currentMap[childExternalSessionId] ?? [];
-      const nextEntries = [
-        ...currentEntries.filter((entry) => entry.requestId !== event.requestId),
+    (current) => ({
+      ...current,
+      subagentPendingApprovalsByExternalSessionId: appendParentSubagentPendingRequest(
+        current.subagentPendingApprovalsByExternalSessionId,
+        childExternalSessionId,
         pendingApproval,
-      ];
-      return {
-        ...current,
-        subagentPendingApprovalsByExternalSessionId: {
-          ...currentMap,
-          [childExternalSessionId]: nextEntries,
-        },
-      };
-    },
+      ),
+    }),
     { persist: false },
   );
 };
@@ -233,21 +243,14 @@ const recordParentSubagentPendingQuestion = (
   const pendingQuestion = toPendingQuestion(event);
   context.store.updateSession(
     event.parentExternalSessionId,
-    (current) => {
-      const currentMap = current.subagentPendingQuestionsByExternalSessionId ?? {};
-      const currentEntries = currentMap[childExternalSessionId] ?? [];
-      const nextEntries = [
-        ...currentEntries.filter((entry) => entry.requestId !== event.requestId),
+    (current) => ({
+      ...current,
+      subagentPendingQuestionsByExternalSessionId: appendParentSubagentPendingRequest(
+        current.subagentPendingQuestionsByExternalSessionId,
+        childExternalSessionId,
         pendingQuestion,
-      ];
-      return {
-        ...current,
-        subagentPendingQuestionsByExternalSessionId: {
-          ...currentMap,
-          [childExternalSessionId]: nextEntries,
-        },
-      };
-    },
+      ),
+    }),
     { persist: false },
   );
 };
@@ -578,7 +581,7 @@ export const handlePermissionRequired = (
   flushDraftBuffers(context);
   const role = resolvePermissionPolicyRole(context, event);
 
-  if (isLinkedChildPermissionObservedByParent(context, event)) {
+  if (isLinkedChildObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
     const isOwnedByAttachedListener = isLinkedChildApprovalOwnedByAttachedListener(context, event);
     if (isOwnedByAttachedListener && shouldAutoRejectApproval(context, role, event)) {
@@ -627,13 +630,41 @@ export const handlePermissionRequired = (
   recordParentSubagentPendingApproval(context, event);
 };
 
+export const handlePermissionResolved = (
+  context: SessionLifecycleEventContext,
+  event: ApprovalResolvedEvent,
+): void => {
+  const targetSessionId =
+    normalizeSessionId(event.childExternalSessionId) ?? normalizeSessionId(event.externalSessionId);
+  if (!targetSessionId) {
+    return;
+  }
+
+  context.store.updateSession(
+    targetSessionId,
+    (current) => ({
+      ...current,
+      pendingApprovals: current.pendingApprovals.filter(
+        (entry) => entry.requestId !== event.requestId,
+      ),
+    }),
+    { persist: false },
+  );
+  clearSubagentPendingApprovalFromSessions({
+    sessionsRef: context.store.sessionsRef,
+    updateSession: context.store.updateSession,
+    targetExternalSessionId: targetSessionId,
+    requestId: event.requestId,
+  });
+};
+
 export const handleQuestionRequired = (
   context: SessionLifecycleEventContext,
   event: QuestionRequiredEvent,
 ): void => {
   flushDraftBuffers(context);
 
-  if (isLinkedChildQuestionObservedByParent(context, event)) {
+  if (isLinkedChildObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
     recordParentSubagentPendingQuestion(context, event);
     return;
@@ -652,6 +683,34 @@ export const handleQuestionRequired = (
   );
   patchParentSubagentSessionLink(context, event);
   recordParentSubagentPendingQuestion(context, event);
+};
+
+export const handleQuestionResolved = (
+  context: SessionLifecycleEventContext,
+  event: QuestionResolvedEvent,
+): void => {
+  const targetSessionId =
+    normalizeSessionId(event.childExternalSessionId) ?? normalizeSessionId(event.externalSessionId);
+  if (!targetSessionId) {
+    return;
+  }
+
+  context.store.updateSession(
+    targetSessionId,
+    (current) => ({
+      ...current,
+      pendingQuestions: current.pendingQuestions.filter(
+        (entry) => entry.requestId !== event.requestId,
+      ),
+    }),
+    { persist: false },
+  );
+  clearSubagentPendingQuestionFromSessions({
+    sessionsRef: context.store.sessionsRef,
+    updateSession: context.store.updateSession,
+    targetExternalSessionId: targetSessionId,
+    requestId: event.requestId,
+  });
 };
 
 export const handleSessionTodosUpdated = (

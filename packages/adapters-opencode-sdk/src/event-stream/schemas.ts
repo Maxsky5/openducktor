@@ -53,6 +53,10 @@ export type ParsedQuestionAsked = {
   questions: ParsedQuestion[];
 };
 
+export type ParsedPendingInputReplied = {
+  requestId: string;
+};
+
 export const readEventProperties = (event: Event): UnknownRecord | undefined => {
   return asUnknownRecord(event.properties);
 };
@@ -159,6 +163,17 @@ export const parseQuestionAsked = (properties: unknown): ParsedQuestionAsked | u
     requestId,
     questions,
   };
+};
+
+export const parsePendingInputReplied = (
+  properties: unknown,
+): ParsedPendingInputReplied | undefined => {
+  const requestId = readStringProp(properties, ["requestID", "requestId", "id"]);
+  if (!requestId) {
+    return undefined;
+  }
+
+  return { requestId };
 };
 
 export const readSessionErrorMessage = (properties: unknown): string => {

@@ -403,6 +403,7 @@ const handleSubagentPart = (
         ...(typeof part.agent === "string" ? { agent: part.agent } : {}),
         ...(typeof part.prompt === "string" ? { prompt: part.prompt } : {}),
         ...(typeof part.description === "string" ? { description: part.description } : {}),
+        ...(typeof part.error === "string" ? { error: part.error } : {}),
         ...(typeof part.externalSessionId === "string"
           ? { externalSessionId: part.externalSessionId }
           : {}),

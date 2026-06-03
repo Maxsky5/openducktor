@@ -62,6 +62,7 @@ export type MockSession = {
   abortCalls: unknown[];
   getCalls: unknown[];
   messagesCalls: unknown[];
+  childrenCalls: unknown[];
   todoCalls: unknown[];
   messagesResponse: Array<{
     info: {
@@ -172,6 +173,7 @@ export type MakeMockClientInput = {
     };
     parts: Part[];
   }>;
+  childrenResponse?: unknown[];
   todoResult?: TodoMockResult;
   providerResponse?: unknown;
   agentsResponse?: unknown;
@@ -188,6 +190,7 @@ export const makeMockClient = ({
   commandResult = { mode: "success" },
   streamEvents = [],
   messagesResponse = [],
+  childrenResponse = [],
   todoResult = {
     mode: "success",
     data: [],
@@ -238,6 +241,7 @@ export const makeMockClient = ({
     abortCalls: [],
     getCalls: [],
     messagesCalls: [],
+    childrenCalls: [],
     todoCalls: [],
     messagesResponse: [...messagesResponse],
     todoResult,
@@ -318,6 +322,13 @@ export const makeMockClient = ({
         session.messagesCalls.push(input);
         return {
           data: session.messagesResponse,
+          error: undefined,
+        };
+      },
+      children: async (input: unknown) => {
+        session.childrenCalls.push(input);
+        return {
+          data: childrenResponse,
           error: undefined,
         };
       },

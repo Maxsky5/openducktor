@@ -35,6 +35,7 @@ import {
   runtimeDescriptorSchema,
   runtimeInstanceSummaryRoleSchema,
   runtimeInstanceSummarySchema,
+  runtimeRefSchema,
   runtimeTransportSchema,
   slashCommandCatalogSchema,
   taskCardSchema,
@@ -126,6 +127,19 @@ describe("runtime schemas", () => {
       supportsAttachLiveSessions: true,
       supportsListLiveSessions: true,
     });
+  });
+
+  test("runtime ref identifies a concrete running runtime", () => {
+    const parsed = runtimeRefSchema.parse({
+      kind: "opencode",
+      runtimeId: " runtime-1 ",
+    });
+
+    expect(parsed).toEqual({
+      kind: "opencode",
+      runtimeId: "runtime-1",
+    });
+    expect(() => runtimeRefSchema.parse({ kind: "opencode" })).toThrow();
   });
 
   test.each(

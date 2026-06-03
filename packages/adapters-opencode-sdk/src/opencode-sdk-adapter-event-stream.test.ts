@@ -657,11 +657,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     expect(toolPartEvent).toBeDefined();
-    if (
-      !toolPartEvent ||
-      toolPartEvent.type !== "assistant_part" ||
-      toolPartEvent.part.kind !== "tool"
-    ) {
+    if (toolPartEvent?.type !== "assistant_part" || toolPartEvent.part.kind !== "tool") {
       throw new Error("Expected tool part event");
     }
     expect(toolPartEvent.part.status).toBe("error");
@@ -736,11 +732,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     expect(toolPartEvent).toBeDefined();
-    if (
-      !toolPartEvent ||
-      toolPartEvent.type !== "assistant_part" ||
-      toolPartEvent.part.kind !== "tool"
-    ) {
+    if (toolPartEvent?.type !== "assistant_part" || toolPartEvent.part.kind !== "tool") {
       throw new Error("Expected tool part event");
     }
 
@@ -813,11 +805,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     expect(toolPartEvent).toBeDefined();
-    if (
-      !toolPartEvent ||
-      toolPartEvent.type !== "assistant_part" ||
-      toolPartEvent.part.kind !== "tool"
-    ) {
+    if (toolPartEvent?.type !== "assistant_part" || toolPartEvent.part.kind !== "tool") {
       throw new Error("Expected todowrite tool part event");
     }
 
@@ -868,7 +856,7 @@ describe("OpencodeSdkAdapter event stream", () => {
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
     expect(todoEvent).toBeDefined();
-    if (!todoEvent || todoEvent.type !== "session_todos_updated") {
+    if (todoEvent?.type !== "session_todos_updated") {
       throw new Error("Expected session_todos_updated event");
     }
     expect(todoEvent.todos).toEqual([
@@ -926,7 +914,7 @@ describe("OpencodeSdkAdapter event stream", () => {
 
     const todoEvent = events.find((entry) => entry.type === "session_todos_updated");
     expect(todoEvent).toBeDefined();
-    if (!todoEvent || todoEvent.type !== "session_todos_updated") {
+    if (todoEvent?.type !== "session_todos_updated") {
       throw new Error("Expected session_todos_updated event");
     }
     expect(todoEvent.todos).toEqual([

@@ -7,7 +7,11 @@ import {
 } from "../../message-normalizers";
 import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { EventStreamRuntime } from "../shared";
-import { emitSessionIdle, markSessionActive } from "../shared";
+import {
+  emitSessionIdle,
+  flushPendingSubagentInputEventsForSession,
+  markSessionActive,
+} from "../shared";
 import {
   getKnownMessageParts,
   hasTerminalStopSignalInParts,
@@ -16,6 +20,10 @@ import {
 } from "./helpers";
 import { normalizeLiveSubagentCorrelation } from "./subagent";
 import { reconcileUserMessageQueuedStates } from "./user";
+
+type EmitAssistantPartOptions = {
+  linkedSubagentExternalSessionId?: string;
+};
 
 export const shouldSuppressAssistantStreamingAfterIdle = (
   runtime: EventStreamRuntime,
@@ -35,6 +43,7 @@ export const emitAssistantPart = (
   part: Part,
   roleHint?: string,
   markActive = true,
+  options: EmitAssistantPartOptions = {},
 ): boolean => {
   if (!isAssistantMessage(runtime, part.messageID, roleHint)) {
     return false;
@@ -47,7 +56,13 @@ export const emitAssistantPart = (
 
   const nextMapped =
     mapped.kind === "subagent"
-      ? normalizeLiveSubagentCorrelation(runtime, part, mapped, roleHint)
+      ? normalizeLiveSubagentCorrelation(
+          runtime,
+          part,
+          mapped,
+          roleHint,
+          options.linkedSubagentExternalSessionId,
+        )
       : mapped;
   if (!nextMapped) {
     return false;
@@ -71,21 +86,57 @@ export const emitAssistantPart = (
     timestamp: runtime.now(),
     part: nextMapped,
   });
+  if (nextMapped.kind === "subagent" && nextMapped.externalSessionId) {
+    flushPendingSubagentInputEventsForSession(runtime, nextMapped.externalSessionId);
+  }
   return true;
 };
 
-export const flushPendingSubagentPartEmissionsForSession = (
+const flushPendingSubagentPartEmissionsForSession = (
   runtime: EventStreamRuntime,
   externalSessionId: string,
-): void => {
+): boolean => {
   const pending = runtime.pendingSubagentPartEmissionsByExternalSessionId.get(externalSessionId);
   if (!pending || pending.length === 0) {
-    return;
+    return false;
   }
   runtime.pendingSubagentPartEmissionsByExternalSessionId.delete(externalSessionId);
+  let emitted = false;
   for (const emission of pending) {
-    emitAssistantPart(runtime, emission.part, emission.roleHint);
+    emitted =
+      emitAssistantPart(runtime, emission.part, emission.roleHint, true, {
+        linkedSubagentExternalSessionId: externalSessionId,
+      }) || emitted;
   }
+  return emitted;
+};
+
+const readLinkedSubagentPart = (
+  runtime: EventStreamRuntime,
+  externalSessionId: string,
+): Part | null => {
+  const linkedPartId = runtime.subagentPartIdByExternalSessionId.get(externalSessionId);
+  if (!linkedPartId) {
+    return null;
+  }
+
+  return runtime.partsById.get(linkedPartId) ?? null;
+};
+
+export const emitSubagentPartsForSession = (
+  runtime: EventStreamRuntime,
+  externalSessionId: string,
+): boolean => {
+  if (flushPendingSubagentPartEmissionsForSession(runtime, externalSessionId)) {
+    return true;
+  }
+
+  const part = readLinkedSubagentPart(runtime, externalSessionId);
+  return part
+    ? emitAssistantPart(runtime, part, undefined, false, {
+        linkedSubagentExternalSessionId: externalSessionId,
+      })
+    : false;
 };
 
 export const emitKnownAssistantPartsForMessage = (

@@ -20,6 +20,8 @@ const CONNECTED_MCP_STATUS = "connected";
 const OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS = new Set<string>(
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES.flatMap(toOpencodeExposedOdtToolIds),
 );
+const OPENCODE_SUBAGENT_TOOL_NAME = "task";
+const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
 
 const isToolIdControlledByOdtWorkflowSelection = (toolId: string): boolean =>
   isOpencodeExposedOdtToolAlias(toolId) ||
@@ -183,6 +185,7 @@ export const resolveWorkflowToolSelection = async (input: {
     directory: input.workingDirectory,
   });
   const runtimeToolIds = toToolIdList(unwrapData(response, "list global tool ids for role policy"));
+  const runtimeToolIdSet = new Set(runtimeToolIds);
 
   const selection = buildRoleScopedOdtToolSelection(input.role, {
     includeCanonicalDefaults: true,
@@ -192,6 +195,17 @@ export const resolveWorkflowToolSelection = async (input: {
 
   for (const toolId of OPENCODE_EXPOSED_ODT_TOOL_IDS_BLOCKED_FOR_WORKFLOW_AGENTS) {
     selection[toolId] = false;
+  }
+
+  if (input.runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
+    if (runtimeToolIdSet.has(OPENCODE_SUBAGENT_TOOL_NAME)) {
+      selection[OPENCODE_SUBAGENT_TOOL_NAME] = true;
+    }
+    for (const toolId of OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES) {
+      if (runtimeToolIdSet.has(toolId)) {
+        selection[toolId] = false;
+      }
+    }
   }
 
   if (isReadOnlyAgentRole(input.role)) {

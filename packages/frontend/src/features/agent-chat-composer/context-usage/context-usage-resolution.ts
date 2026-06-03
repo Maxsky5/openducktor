@@ -226,7 +226,7 @@ export const extractLatestSessionContextUsageEntry = ({
 
   for (let index = scanEndIndex; index >= startIndex; index -= 1) {
     const message = getSessionMessageAt(session, index);
-    if (!message || message.meta?.kind !== "assistant") {
+    if (message?.meta?.kind !== "assistant") {
       continue;
     }
 

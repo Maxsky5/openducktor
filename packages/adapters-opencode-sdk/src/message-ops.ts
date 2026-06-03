@@ -1,4 +1,4 @@
-import type { Part } from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -14,6 +14,7 @@ import {
   toOpenCodePermissionReply,
 } from "./approval-translation";
 import { unwrapData } from "./data-utils";
+import { bindSubagentExternalSession, bindSubagentPartCorrelation } from "./event-stream/shared";
 import {
   ensureVisibleUserTextDisplayParts,
   extractMessageTotalTokens,
@@ -159,6 +160,12 @@ const hasCompletedAssistantMessage = (value: unknown): boolean => {
 };
 
 type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
+type ChildSessionLink = {
+  externalSessionId: string;
+  createdAtMs: number;
+};
+
+const CHILD_SESSION_START_TOLERANCE_MS = 5_000;
 
 const buildSubagentSignature = (part: MappedSubagentPart): string | undefined => {
   const agent = part.agent?.trim() ?? "";
@@ -175,6 +182,87 @@ const buildPartScopedSubagentCorrelationKey = (
   rawPartId: string,
 ): string => {
   return ["part", part.messageId, rawPartId].join(":");
+};
+
+const readChildSessionCreatedAt = (session: Session): number | undefined => {
+  const record = asRecord(session);
+  const time = record ? asRecord(record.time) : null;
+  const created = time?.created;
+  return typeof created === "number" ? created : undefined;
+};
+
+const toChildSessionLink = (session: Session): ChildSessionLink | null => {
+  if (typeof session.id !== "string" || session.id.trim().length === 0) {
+    return null;
+  }
+  const createdAtMs = readChildSessionCreatedAt(session);
+  if (typeof createdAtMs !== "number") {
+    return null;
+  }
+
+  return {
+    externalSessionId: session.id,
+    createdAtMs,
+  };
+};
+
+const listChildSessionLinks = async (
+  client: OpencodeClient,
+  input: {
+    workingDirectory: string;
+    externalSessionId: string;
+  },
+): Promise<ChildSessionLink[]> => {
+  const childrenApi = (client as OpencodeClient & { session?: { children?: unknown } }).session
+    ?.children;
+  if (typeof childrenApi !== "function") {
+    throw new Error(
+      "OpenCode SDK does not expose session.children(); cannot hydrate subagent transcript links.",
+    );
+  }
+
+  const response = await client.session.children({
+    sessionID: input.externalSessionId,
+    directory: input.workingDirectory,
+  });
+  return unwrapData(response, `list child sessions for ${input.externalSessionId}`)
+    .map(toChildSessionLink)
+    .filter((entry): entry is ChildSessionLink => entry !== null)
+    .sort((left, right) => left.createdAtMs - right.createdAtMs);
+};
+
+const takeChildSessionLinkForSubagentPart = (
+  childLinks: ChildSessionLink[],
+  part: MappedSubagentPart,
+): ChildSessionLink | undefined => {
+  const startedAtMs = part.startedAtMs;
+  if (part.externalSessionId || typeof startedAtMs !== "number") {
+    return undefined;
+  }
+
+  const matchIndex = childLinks.findIndex(
+    (entry) => Math.abs(entry.createdAtMs - startedAtMs) <= CHILD_SESSION_START_TOLERANCE_MS,
+  );
+  if (matchIndex < 0) {
+    return undefined;
+  }
+
+  return childLinks.splice(matchIndex, 1)[0];
+};
+
+const linkSubagentPartToChildSession = (
+  part: MappedSubagentPart,
+  childLinks: ChildSessionLink[],
+): MappedSubagentPart => {
+  const childLink = takeChildSessionLinkForSubagentPart(childLinks, part);
+  if (!childLink) {
+    return part;
+  }
+
+  return {
+    ...part,
+    externalSessionId: childLink.externalSessionId,
+  };
 };
 
 const enqueuePendingSubagentCorrelationKey = (
@@ -235,22 +323,27 @@ const removePendingSubagentCorrelationKey = (
   }
 };
 
-const normalizeHistoryStreamParts = (parts: Part[]): AgentStreamPart[] => {
+const normalizeHistoryStreamParts = (
+  parts: Part[],
+  childSessionLinks: ChildSessionLink[] = [],
+): AgentStreamPart[] => {
   const pendingBySignature = new Map<string, string[]>();
   const correlationByExternalSessionId = new Map<string, string>();
   const normalized: AgentStreamPart[] = [];
+  const unmatchedChildSessionLinks = [...childSessionLinks];
 
   for (const rawPart of parts) {
-    const mapped = mapPartToAgentStreamPart(rawPart);
-    if (!mapped || mapped.kind === "text") {
+    const rawMapped = mapPartToAgentStreamPart(rawPart);
+    if (!rawMapped || rawMapped.kind === "text") {
       continue;
     }
 
-    if (mapped.kind !== "subagent") {
-      normalized.push(mapped);
+    if (rawMapped.kind !== "subagent") {
+      normalized.push(rawMapped);
       continue;
     }
 
+    const mapped = linkSubagentPartToChildSession(rawMapped, unmatchedChildSessionLinks);
     const signature = buildSubagentSignature(mapped);
     if (rawPart.type === "subtask") {
       const correlationKey = buildPartScopedSubagentCorrelationKey(mapped, rawPart.id);
@@ -304,6 +397,8 @@ const seedSubagentCorrelationFromHistory = (
     SessionRecord,
     | "subagentCorrelationKeyByPartId"
     | "subagentCorrelationKeyByExternalSessionId"
+    | "subagentPartIdByCorrelationKey"
+    | "subagentPartIdByExternalSessionId"
     | "pendingSubagentCorrelationKeysBySignature"
     | "pendingSubagentCorrelationKeys"
   >,
@@ -314,11 +409,13 @@ const seedSubagentCorrelationFromHistory = (
       continue;
     }
 
-    session.subagentCorrelationKeyByPartId.set(part.partId, part.correlationKey);
+    bindSubagentPartCorrelation(session, part.partId, part.correlationKey);
     if (part.externalSessionId) {
-      session.subagentCorrelationKeyByExternalSessionId.set(
+      bindSubagentExternalSession(
+        session,
         part.externalSessionId,
         part.correlationKey,
+        part.partId,
       );
     }
 
@@ -383,6 +480,7 @@ export const loadSessionHistory = async (
     ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
   });
   const data = unwrapData(response, "load session messages");
+  const childSessionLinks = await listChildSessionLinks(client, input);
   const normalizedEntries = data
     .map((entry) => {
       const infoText = readTextFromMessageInfo(entry.info);
@@ -440,6 +538,7 @@ export const loadSessionHistory = async (
       normalizedEntries.flatMap((item) =>
         item.entry.info.role === "assistant" ? item.rawParts : [],
       ),
+      childSessionLinks,
     ).reduce<Map<string, AgentStreamPart[]>>((byMessageId, part) => {
       const existing = byMessageId.get(part.messageId) ?? [];
       existing.push(part);
@@ -504,6 +603,8 @@ export const loadAndSeedSessionHistory = async (
       SessionRecord,
       | "subagentCorrelationKeyByPartId"
       | "subagentCorrelationKeyByExternalSessionId"
+      | "subagentPartIdByCorrelationKey"
+      | "subagentPartIdByExternalSessionId"
       | "pendingSubagentCorrelationKeysBySignature"
       | "pendingSubagentCorrelationKeys"
     >;
@@ -612,21 +713,27 @@ export const replyApproval = async (
   session: SessionRecord,
   input: ReplyApprovalInput,
 ): Promise<void> => {
-  await session.client.permission.reply({
+  const response = await session.client.permission.reply({
     directory: session.input.workingDirectory,
     requestID: input.requestId,
     reply: toOpenCodePermissionReply(input.outcome),
     ...(input.message ? { message: input.message } : {}),
   });
+  if (response.error) {
+    throw toOpenCodeRequestError("reply to permission request", response.error, response.response);
+  }
 };
 
 export const replyQuestion = async (
   session: SessionRecord,
   input: ReplyQuestionInput,
 ): Promise<void> => {
-  await session.client.question.reply({
+  const response = await session.client.question.reply({
     directory: session.input.workingDirectory,
     requestID: input.requestId,
     answers: input.answers,
   });
+  if (response.error) {
+    throw toOpenCodeRequestError("reply to question request", response.error, response.response);
+  }
 };

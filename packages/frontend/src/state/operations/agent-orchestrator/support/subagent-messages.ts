@@ -87,6 +87,7 @@ export const mergeSubagentMeta = (
   const agent = incomingMeta.agent ?? existingMeta?.agent;
   const prompt = incomingMeta.prompt ?? existingMeta?.prompt;
   const description = incomingMeta.description ?? existingMeta?.description;
+  const error = incomingMeta.error ?? existingMeta?.error;
   const externalSessionId = incomingMeta.externalSessionId ?? existingMeta?.externalSessionId;
   const executionMode = incomingMeta.executionMode ?? existingMeta?.executionMode;
 
@@ -98,6 +99,7 @@ export const mergeSubagentMeta = (
     ...(typeof agent === "string" ? { agent } : {}),
     ...(typeof prompt === "string" ? { prompt } : {}),
     ...(typeof description === "string" ? { description } : {}),
+    ...(typeof error === "string" ? { error } : {}),
     ...(typeof externalSessionId === "string" ? { externalSessionId } : {}),
     ...(executionMode ? { executionMode } : {}),
     ...(metadata ? { metadata } : {}),

@@ -363,7 +363,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const subagentMessage = getSessionMessages(sessionsRef).find(
       (message) => message.role === "system" && message.meta?.kind === "subagent",
     );
-    if (!subagentMessage || subagentMessage.meta?.kind !== "subagent") {
+    if (subagentMessage?.meta?.kind !== "subagent") {
       throw new Error("Expected subagent message with subagent meta");
     }
     expect(subagentMessage.meta.status).toBe("completed");
@@ -381,7 +381,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       (message) =>
         message.role === "assistant" && message.content.includes("Final assistant output"),
     );
-    if (!finalAssistantMessage || finalAssistantMessage.meta?.kind !== "assistant") {
+    if (finalAssistantMessage?.meta?.kind !== "assistant") {
       throw new Error("Expected final assistant message with assistant meta");
     }
     expect(finalAssistantMessage.meta.profileId).toBe("Hephaestus");
@@ -732,6 +732,94 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     }
     expect(subagentMessages[0].meta.externalSessionId).toBe("session-child-1");
     expect(subagentMessages[0].meta.status).toBe("completed");
+  });
+
+  test("preserves live subagent runtime error details", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ role: "build" }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    attachAgentSessionListener({
+      adapter,
+      repoPath: "/tmp/repo",
+      sessionsRef,
+      externalSessionId: "session-1",
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+      contextUsageMessageIdBySessionRef: { current: {} },
+      turnModelBySessionRef: { current: {} },
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler");
+    }
+
+    handleEvent({
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-02-22T08:05:02.300Z",
+      part: {
+        kind: "subagent",
+        messageId: "m1",
+        partId: "p-subtask-error",
+        correlationKey: "spawn:m1:explorer:Read the file at ~/maxsky5.omp.json",
+        status: "error",
+        agent: "explorer",
+        prompt: "Read the file at ~/maxsky5.omp.json",
+        description: "Read the file at ~/maxsky5.omp.json",
+        error: "Timed out after 5m while waiting for permission.",
+        startedAtMs: 100,
+        endedAtMs: 300_100,
+      },
+    });
+
+    const subagentMessages = getSessionMessages(sessionsRef).filter(
+      (message) => message.role === "system" && message.meta?.kind === "subagent",
+    );
+    expect(subagentMessages).toHaveLength(1);
+
+    const subagent = subagentMessages[0];
+    if (subagent?.meta?.kind !== "subagent") {
+      throw new Error("Expected subagent message with subagent meta");
+    }
+    expect(subagent.meta.status).toBe("error");
+    expect(subagent.meta.error).toBe("Timed out after 5m while waiting for permission.");
+    expect(subagent.content).toContain("Read the file at ~/maxsky5.omp.json");
   });
 
   test("keeps same-prompt subagents separate until an exact identity match arrives", () => {

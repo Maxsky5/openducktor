@@ -6,9 +6,10 @@ import type { SubagentSessionLink } from "./event-stream/shared";
 import {
   isRelevantEvent,
   readEventDirectory,
+  readEventParentExternalSessionId,
   readEventSessionId,
-  readParentExternalSessionId,
 } from "./event-stream/shared";
+import { asUnknownRecord } from "./guards";
 import type {
   EventStreamSubscriber,
   OpencodeEventLogger,
@@ -31,7 +32,7 @@ type ProcessOpencodeEventInput = {
 type SubscribeGlobalEventsInput = {
   client: OpencodeClient;
   controller: AbortController;
-  onEvent: (event: Event) => void;
+  onEvent: (event: Event) => void | Promise<void>;
 };
 
 type SubscribeOpencodeEventsInput = {
@@ -67,6 +68,14 @@ type GlobalEventApi = {
   event: (options?: { signal?: AbortSignal }) => Promise<GlobalEventStream> | GlobalEventStream;
 };
 
+const SYNC_EVENT_TYPE_BY_NAME = {
+  "message.updated.1": "message.updated",
+  "message.part.updated.1": "message.part.updated",
+  "message.part.removed.1": "message.part.removed",
+  "session.created.1": "session.created",
+  "session.updated.1": "session.updated",
+} as const;
+
 const getGlobalEventApi = (client: OpencodeClient): GlobalEventApi => {
   const globalApi = (client as OpencodeClient & { global?: { event?: unknown } }).global;
   if (!globalApi || typeof globalApi.event !== "function") {
@@ -94,8 +103,34 @@ const resolveGlobalEventStream = async (
   throw new Error("OpenCode SDK global event stream must expose a stream async iterator.");
 };
 
+const normalizeGlobalEventPayload = (payload: Event): Event => {
+  const payloadRecord = asUnknownRecord(payload);
+  if (payloadRecord?.type !== "sync") {
+    return payload;
+  }
+
+  const name = payloadRecord.name;
+  if (typeof name !== "string") {
+    return payload;
+  }
+
+  const eventType = SYNC_EVENT_TYPE_BY_NAME[name as keyof typeof SYNC_EVENT_TYPE_BY_NAME];
+  const data = asUnknownRecord(payloadRecord.data);
+  if (!eventType || !data) {
+    return payload;
+  }
+
+  return {
+    ...payloadRecord,
+    type: eventType,
+    properties: data,
+  } as unknown as Event;
+};
+
 const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
-  const payload = event.payload as Event & { properties?: Record<string, unknown> };
+  const payload = normalizeGlobalEventPayload(event.payload as Event) as Event & {
+    properties?: Record<string, unknown>;
+  };
   return {
     ...payload,
     properties: {
@@ -106,6 +141,20 @@ const toDirectoryScopedEvent = (event: GlobalEvent): Event => {
 };
 
 const normalizeDirectory = (directory: string): string => directory.trim();
+
+const isEventDirectoryScopedToSubscriber = (
+  subscriber: EventStreamSubscriber,
+  event: Event,
+): boolean => {
+  const eventDirectory = readEventDirectory(event);
+  if (!eventDirectory) {
+    return false;
+  }
+
+  return (
+    normalizeDirectory(eventDirectory) === normalizeDirectory(subscriber.input.workingDirectory)
+  );
+};
 
 export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => {
   const session = input.getSession(input.context.externalSessionId);
@@ -126,6 +175,8 @@ export const processOpencodeEvent = (input: ProcessOpencodeEventInput): void => 
     pendingDeltasByPartId: session.pendingDeltasByPartId,
     subagentCorrelationKeyByPartId: session.subagentCorrelationKeyByPartId,
     subagentCorrelationKeyByExternalSessionId: session.subagentCorrelationKeyByExternalSessionId,
+    subagentPartIdByCorrelationKey: session.subagentPartIdByCorrelationKey,
+    subagentPartIdByExternalSessionId: session.subagentPartIdByExternalSessionId,
     pendingSubagentCorrelationKeysBySignature: session.pendingSubagentCorrelationKeysBySignature,
     pendingSubagentCorrelationKeys: session.pendingSubagentCorrelationKeys,
     pendingSubagentSessionsByExternalSessionId: session.pendingSubagentSessionsByExternalSessionId,
@@ -162,7 +213,7 @@ export const subscribeGlobalEvents = async (input: SubscribeGlobalEventsInput): 
     if (input.controller.signal.aborted) {
       break;
     }
-    input.onEvent(toDirectoryScopedEvent(event));
+    await input.onEvent(toDirectoryScopedEvent(event));
   }
 };
 
@@ -178,11 +229,7 @@ export const isRelevantSubscriberEvent = (
   const eventExternalSessionId = readEventSessionId(event);
   if (eventExternalSessionId) {
     const properties = "properties" in event ? event.properties : undefined;
-    const info =
-      properties && typeof properties === "object" && properties !== null && "info" in properties
-        ? (properties as { info?: unknown }).info
-        : undefined;
-    const parentExternalSessionId = readParentExternalSessionId(info);
+    const parentExternalSessionId = readEventParentExternalSessionId(properties);
 
     if (event.type === "question.asked" && parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;
@@ -193,7 +240,10 @@ export const isRelevantSubscriberEvent = (
     }
 
     if (
-      (event.type === "permission.asked" || event.type === "question.asked") &&
+      (event.type === "permission.asked" ||
+        event.type === "permission.replied" ||
+        event.type === "question.asked" ||
+        event.type === "question.replied") &&
       options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
     ) {
       return true;
@@ -202,45 +252,37 @@ export const isRelevantSubscriberEvent = (
     return false;
   }
 
-  const eventDirectory = readEventDirectory(event);
-  if (!eventDirectory) {
-    return false;
-  }
-
-  return (
-    normalizeDirectory(eventDirectory) === normalizeDirectory(subscriber.input.workingDirectory)
-  );
+  return isEventDirectoryScopedToSubscriber(subscriber, event);
 };
 
 export const subscribeOpencodeEvents = async (
   input: SubscribeOpencodeEventsInput,
 ): Promise<void> => {
+  const isKnownChildExternalSessionId = (externalSessionId: string): boolean => {
+    const link = input.resolveSubagentSessionLink?.(externalSessionId);
+    if (link && link.parentExternalSessionId === input.context.externalSessionId) {
+      return true;
+    }
+
+    const session = input.getSession(input.context.externalSessionId);
+    return Boolean(
+      session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ||
+        session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId),
+    );
+  };
   return subscribeGlobalEvents({
     client: input.client,
     controller: input.controller,
     onEvent: (event) => {
-      const relevant = isRelevantSubscriberEvent(
-        {
-          externalSessionId: input.context.externalSessionId,
-          input: input.context.input,
-        },
-        event,
-        input.resolveSubagentSessionLink
-          ? {
-              isKnownChildExternalSessionId: (externalSessionId) => {
-                const link = input.resolveSubagentSessionLink?.(externalSessionId);
-                return Boolean(
-                  link && link.parentExternalSessionId === input.context.externalSessionId,
-                );
-              },
-            }
-          : undefined,
-      );
+      const subscriber = {
+        externalSessionId: input.context.externalSessionId,
+        input: input.context.input,
+      };
+      const relevant = isRelevantSubscriberEvent(subscriber, event, {
+        isKnownChildExternalSessionId,
+      });
       logStreamEvent({
-        subscriber: {
-          externalSessionId: input.context.externalSessionId,
-          input: input.context.input,
-        },
+        subscriber,
         event,
         relevant,
         ...(input.logEvent ? { logEvent: input.logEvent } : {}),

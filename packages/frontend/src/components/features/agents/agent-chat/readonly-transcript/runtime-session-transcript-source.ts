@@ -1,14 +1,13 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeRef } from "@openducktor/contracts";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 
 type RuntimeSessionTranscriptSourceBase = {
-  runtimeKind: RuntimeKind;
-  runtimeId: string;
+  runtimeRef: RuntimeRef;
   workingDirectory: string;
   externalSessionId?: string;
   isLive?: boolean;
-  pendingApprovals?: AgentApprovalRequest[] | undefined;
-  pendingQuestions?: AgentQuestionRequest[] | undefined;
+  pendingApprovals?: AgentApprovalRequest[];
+  pendingQuestions?: AgentQuestionRequest[];
 };
 
 export type RuntimeSessionTranscriptSource = RuntimeSessionTranscriptSourceBase;

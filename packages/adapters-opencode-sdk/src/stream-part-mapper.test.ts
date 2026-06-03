@@ -134,6 +134,37 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("does not map the unsupported subtask tool alias to a subagent part", () => {
+    const part = createToolPart({
+      id: "tool-subtask-1",
+      tool: "subtask",
+      status: "running",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read a file",
+        description: "Read a file",
+      },
+      time: {
+        start: 10,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      messageId: "assistant-tool-subtask-1",
+      partId: "tool-subtask-1",
+      tool: "subtask",
+      status: "running",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read a file",
+        description: "Read a file",
+      },
+    });
+  });
+
   test("preserves cancelled subagent tool statuses", () => {
     const part = createToolPart({
       id: "tool-subagent-cancelled-1",
@@ -202,13 +233,81 @@ describe("stream-part-mapper", () => {
       status: "error",
       agent: "planner",
       prompt: "Inspect the tests",
-      description: "Task failed",
+      description: "Inspect the tests",
+      error: "Task failed",
       externalSessionId: "session-child-error-1",
       metadata: {
         externalSessionId: "session-child-error-1",
       },
       startedAtMs: 10,
       endedAtMs: 25,
+    });
+  });
+
+  test("preserves direct runtime subagent tool errors", () => {
+    const part = createToolPart({
+      id: "tool-subagent-direct-error-1",
+      tool: "task",
+      status: "failed",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read the file at ~/maxsky5.omp.json",
+        description: "Read the file at ~/maxsky5.omp.json",
+      },
+      error: "Timed out after 5m while waiting for permission.",
+      metadata: {
+        externalSessionId: "session-child-timeout-1",
+      },
+      time: {
+        start: 10,
+        end: 300_010,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toEqual({
+      kind: "subagent",
+      messageId: "assistant-tool-subagent-direct-error-1",
+      partId: "tool-subagent-direct-error-1",
+      correlationKey:
+        "spawn:assistant-tool-subagent-direct-error-1:explorer:Read the file at ~/maxsky5.omp.json",
+      status: "error",
+      agent: "explorer",
+      prompt: "Read the file at ~/maxsky5.omp.json",
+      description: "Read the file at ~/maxsky5.omp.json",
+      error: "Timed out after 5m while waiting for permission.",
+      externalSessionId: "session-child-timeout-1",
+      metadata: {
+        externalSessionId: "session-child-timeout-1",
+      },
+      startedAtMs: 10,
+      endedAtMs: 300_010,
+    });
+  });
+
+  test("maps completed subagent tool parts with direct runtime errors as error status", () => {
+    const part = createToolPart({
+      id: "tool-subagent-completed-direct-error-1",
+      tool: "task",
+      status: "completed",
+      input: {
+        subagent_type: "explorer",
+        prompt: "Read omp.json file",
+      },
+      error: "Timed out after 5m while waiting for permission.",
+      time: {
+        start: 10,
+        end: 300_010,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "subagent",
+      status: "error",
+      error: "Timed out after 5m while waiting for permission.",
     });
   });
 
@@ -283,10 +382,10 @@ describe("stream-part-mapper", () => {
     const spawned = mapPartToAgentStreamPart(spawnPart);
     const completed = mapPartToAgentStreamPart(completionPart);
 
-    if (!spawned || spawned.kind !== "subagent") {
+    if (spawned?.kind !== "subagent") {
       throw new Error("Expected spawned subagent part");
     }
-    if (!completed || completed.kind !== "subagent") {
+    if (completed?.kind !== "subagent") {
       throw new Error("Expected completed subagent part");
     }
 
@@ -376,7 +475,7 @@ describe("stream-part-mapper", () => {
     for (const testCase of cases) {
       const mapped = mapPartToAgentStreamPart(testCase.part);
       expect(mapped).toBeTruthy();
-      if (!mapped || mapped.kind !== "tool") {
+      if (mapped?.kind !== "tool") {
         throw new Error(`Expected mapped tool part for ${testCase.label}.`);
       }
       expect(mapped.preview).toBe(testCase.expectedPreview);
@@ -846,7 +945,7 @@ describe("stream-part-mapper", () => {
       const mapped = mapPartToAgentStreamPart(part);
 
       expect(mapped).toBeTruthy();
-      if (!mapped || mapped.kind !== "tool") {
+      if (mapped?.kind !== "tool") {
         throw new Error("Expected mapped tool part.");
       }
       expect(mapped.status).toBe(testCase.expectedStatus);

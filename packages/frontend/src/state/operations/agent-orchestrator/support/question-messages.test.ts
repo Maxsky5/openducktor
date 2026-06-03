@@ -62,7 +62,7 @@ describe("agent-orchestrator-question-messages", () => {
     );
 
     const latest = sessionMessageAt(createSession(next), 1);
-    if (!latest || latest.meta?.kind !== "tool") {
+    if (latest?.meta?.kind !== "tool") {
       throw new Error("Expected tool meta on latest message");
     }
     expect(latest.meta.metadata?.requestId).toBe("question-1");
@@ -107,7 +107,7 @@ describe("agent-orchestrator-question-messages", () => {
     );
 
     const first = sessionMessageAt(createSession(next), 0);
-    if (!first || first.meta?.kind !== "tool") {
+    if (first?.meta?.kind !== "tool") {
       throw new Error("Expected tool meta on first message");
     }
     expect(first.meta.metadata?.requestId).toBe("other-request");
@@ -150,7 +150,7 @@ describe("agent-orchestrator-question-messages", () => {
     );
 
     const first = sessionMessageAt(createSession(next), 0);
-    if (!first || first.meta?.kind !== "tool") {
+    if (first?.meta?.kind !== "tool") {
       throw new Error("Expected tool meta on first message");
     }
     expect(first.meta.metadata?.requestId).toBeUndefined();

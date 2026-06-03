@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   type AgentSessionState,
+  type AttachSessionInput,
   createAdapter,
   createDeferred,
   createLoadAgentSessions,
@@ -181,6 +182,150 @@ describe("agent-orchestrator live reattach hydration", () => {
     );
     expect(reconciledContents[0]).toContain("System prompt:");
     expect(reconciledContents.slice(1)).toEqual(["Hydrated from reconcile"]);
+  });
+
+  test("reattaches a requested running planner session and hydrates live subagent pending input", async () => {
+    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
+    let state: Record<string, AgentSessionState> = {};
+    let attachedToAdapter = false;
+    const permissionRequest = {
+      requestId: "permission-1",
+      requestType: "permission_grant" as const,
+      title: `Approve permission: ${"read"}`,
+      summary: `Approval request for ${"read"}.`,
+      affectedPaths: ["~/maxsky5.omp.json"],
+      action: { name: "read" },
+      mutation: "read_only" as const,
+      supportedReplyOutcomes: [
+        "approve_once" as const,
+        "approve_session" as const,
+        "reject" as const,
+      ],
+    };
+
+    const setSessionsById = (
+      updater:
+        | Record<string, AgentSessionState>
+        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
+    ) => {
+      state = typeof updater === "function" ? updater(state) : updater;
+      sessionsRef.current = state;
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = state[externalSessionId];
+      if (!current) {
+        return;
+      }
+      state = {
+        ...state,
+        [externalSessionId]: updater(current),
+      };
+      sessionsRef.current = state;
+    };
+
+    const loadAgentSessions = createLoadAgentSessions({
+      queryClient,
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter: createAdapter({
+        hasSession: () => attachedToAdapter,
+        listSessionPresence: async () => [
+          {
+            externalSessionId: "external-planner",
+            title: "PLANNER task-1",
+            role: "planner",
+            workingDirectory: "/tmp/repo",
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: { type: "busy" },
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+          {
+            externalSessionId: "external-child",
+            title: "explorer",
+            role: "build",
+            workingDirectory: "/tmp/repo",
+            startedAt: "2026-02-22T08:00:01.000Z",
+            status: { type: "busy" },
+            pendingApprovals: [permissionRequest],
+            pendingQuestions: [],
+          },
+        ],
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-parent",
+            role: "assistant",
+            timestamp: "2026-02-22T08:00:02.000Z",
+            text: "",
+            parts: [
+              {
+                kind: "subagent",
+                messageId: "history-parent",
+                partId: "subtask-1",
+                correlationKey: "part:history-parent:subtask-1",
+                status: "running",
+                agent: "explorer",
+                description: "Read omp.json file",
+                externalSessionId: "external-child",
+              },
+            ],
+          },
+        ],
+        attachSession: async (input: AttachSessionInput) => {
+          attachedToAdapter = true;
+          return {
+            externalSessionId: input.externalSessionId,
+            role: input.role,
+            startedAt: "2026-02-22T08:00:00.000Z",
+            status: "running",
+            runtimeKind: input.runtimeKind,
+          };
+        },
+      }),
+      repoEpochRef: { current: 2 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      setSessionsById,
+      taskRef: { current: [createTaskFixture()] },
+      updateSession,
+      attachSessionListener: () => {},
+      loadRepoPromptOverrides: async () => ({}),
+      loadTaskDocuments: async () => ({
+        specMarkdown: "",
+        planMarkdown: "",
+        qaMarkdown: "",
+      }),
+    });
+
+    await loadAgentSessions("task-1", {
+      mode: "requested_history",
+      targetExternalSessionId: "external-planner",
+      historyPolicy: "requested_only",
+      allowLiveSessionResume: true,
+      persistedRecords: [
+        persistedSessionRecord({
+          runtimeKind: "opencode",
+          externalSessionId: "external-planner",
+          taskId: "task-1",
+          role: "planner",
+          status: "running",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          updatedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo",
+        }),
+      ],
+    });
+
+    expect(state["external-planner"]?.runtimeId).toBe("runtime-1");
+    expect(
+      state["external-planner"]?.subagentPendingApprovalsByExternalSessionId?.["external-child"],
+    ).toEqual([permissionRequest]);
   });
 
   test("still hydrates on first live_if_empty reattach when a live message lands before hydration gating", async () => {

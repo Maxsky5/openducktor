@@ -1,5 +1,6 @@
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
+import { unwrapData } from "./data-utils";
 import {
   assertGlobalEventSupport,
   isRelevantSubscriberEvent,
@@ -7,9 +8,15 @@ import {
   processOpencodeEvent,
   subscribeGlobalEvents,
 } from "./event-stream";
-import type { SubagentSessionLink } from "./event-stream/shared";
+import {
+  readEventDirectory,
+  readEventParentExternalSessionId,
+  readEventSessionId,
+  type SubagentSessionLink,
+} from "./event-stream/shared";
 import type {
   ClientFactory,
+  EventStreamSubscriber,
   OpencodeEventLogger,
   RuntimeEventTransportRecord,
   SessionInput,
@@ -66,6 +73,112 @@ const resolveSubagentSessionLink = (
   return matches.length === 1 ? matches[0] : undefined;
 };
 
+const PARENT_CHILD_LOOKUP_EVENT_TYPES = new Set([
+  "session.created",
+  "session.updated",
+  "permission.asked",
+  "permission.replied",
+  "question.asked",
+  "question.replied",
+]);
+
+const shouldResolveParentlessChildEvent = (
+  subscriber: EventStreamSubscriber,
+  event: Event,
+): string | null => {
+  if (!PARENT_CHILD_LOOKUP_EVENT_TYPES.has(event.type)) {
+    return null;
+  }
+
+  const childExternalSessionId = readEventSessionId(event);
+  if (
+    !childExternalSessionId ||
+    childExternalSessionId === subscriber.externalSessionId ||
+    readEventParentExternalSessionId("properties" in event ? event.properties : undefined)
+  ) {
+    return null;
+  }
+
+  const eventDirectory = readEventDirectory(event);
+  if (eventDirectory && eventDirectory !== subscriber.input.workingDirectory) {
+    return null;
+  }
+
+  return childExternalSessionId;
+};
+
+const listChildSessions = async (
+  client: OpencodeClient,
+  subscriber: EventStreamSubscriber,
+): Promise<Session[]> => {
+  const childrenApi = (client as OpencodeClient & { session?: { children?: unknown } }).session
+    ?.children;
+  if (typeof childrenApi !== "function") {
+    throw new Error(
+      "OpenCode SDK does not expose session.children(); cannot resolve parentless child session events.",
+    );
+  }
+
+  const response = await client.session.children({
+    directory: subscriber.input.workingDirectory,
+    sessionID: subscriber.externalSessionId,
+  });
+  return unwrapData(response, `list child sessions for ${subscriber.externalSessionId}`);
+};
+
+const hasConfirmedChildSession = (
+  children: Session[],
+  subscriber: EventStreamSubscriber,
+  childExternalSessionId: string,
+): boolean => {
+  return children.some(
+    (child) =>
+      child.id === childExternalSessionId &&
+      readEventParentExternalSessionId(child) === subscriber.externalSessionId,
+  );
+};
+
+const withParentExternalSessionId = (event: Event, parentExternalSessionId: string): Event => {
+  const properties =
+    "properties" in event && event.properties && typeof event.properties === "object"
+      ? (event.properties as Record<string, unknown>)
+      : {};
+  const info =
+    properties.info && typeof properties.info === "object"
+      ? (properties.info as Record<string, unknown>)
+      : {};
+
+  return {
+    ...event,
+    properties: {
+      ...properties,
+      parentID: parentExternalSessionId,
+      info: {
+        ...info,
+        parentID: parentExternalSessionId,
+      },
+    },
+  } as Event;
+};
+
+const resolveParentlessChildEvent = async (input: {
+  client: OpencodeClient;
+  subscriber: EventStreamSubscriber;
+  event: Event;
+}): Promise<Event | null> => {
+  const childExternalSessionId = shouldResolveParentlessChildEvent(input.subscriber, input.event);
+  if (!childExternalSessionId) {
+    return null;
+  }
+
+  const children = await listChildSessions(input.client, input.subscriber);
+  if (!hasConfirmedChildSession(children, input.subscriber, childExternalSessionId)) {
+    return null;
+  }
+
+  return withParentExternalSessionId(input.event, input.subscriber.externalSessionId);
+};
+
 const ensureRuntimeEventTransport = (input: {
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
@@ -96,14 +209,30 @@ const ensureRuntimeEventTransport = (input: {
   streamRecord.streamDone = subscribeGlobalEvents({
     client: streamClient,
     controller,
-    onEvent: (event) => {
+    onEvent: async (event) => {
       for (const subscriber of streamRecord.subscribers.values()) {
-        const relevant = isRelevantSubscriberEvent(subscriber, event, {
-          isKnownChildExternalSessionId: (externalSessionId) =>
-            input.sessions
-              .get(subscriber.externalSessionId)
-              ?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ?? false,
+        let eventForSubscriber = event;
+        let relevant = isRelevantSubscriberEvent(subscriber, event, {
+          isKnownChildExternalSessionId: (externalSessionId) => {
+            const session = input.sessions.get(subscriber.externalSessionId);
+            return (
+              (session?.subagentCorrelationKeyByExternalSessionId.has(externalSessionId) ??
+                false) ||
+              (session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId) ?? false)
+            );
+          },
         });
+        if (!relevant) {
+          const parentLinkedEvent = await resolveParentlessChildEvent({
+            client: streamClient,
+            subscriber,
+            event,
+          });
+          if (parentLinkedEvent) {
+            eventForSubscriber = parentLinkedEvent;
+            relevant = true;
+          }
+        }
         logStreamEvent({
           subscriber,
           event,
@@ -118,7 +247,7 @@ const ensureRuntimeEventTransport = (input: {
             externalSessionId: subscriber.externalSessionId,
             input: subscriber.input,
           },
-          event,
+          event: eventForSubscriber,
           now: input.now,
           emit: input.emit,
           getSession: (sessionId) => input.sessions.get(sessionId),
@@ -216,6 +345,8 @@ export const registerSession = (input: {
     pendingDeltasByPartId: new Map(),
     subagentCorrelationKeyByPartId: new Map(),
     subagentCorrelationKeyByExternalSessionId: new Map(),
+    subagentPartIdByCorrelationKey: new Map(),
+    subagentPartIdByExternalSessionId: new Map(),
     pendingSubagentCorrelationKeysBySignature: new Map(),
     pendingSubagentCorrelationKeys: [],
     pendingSubagentSessionsByExternalSessionId: new Map(),

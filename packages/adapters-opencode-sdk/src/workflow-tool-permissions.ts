@@ -20,6 +20,8 @@ export type OpencodePermissionRule = {
 };
 
 const ODT_MCP_PERMISSION_WILDCARDS = OPENCODE_ODT_TOOL_ID_PREFIXES.map((prefix) => `${prefix}*`);
+const OPENCODE_SUBAGENT_TOOL_NAME = "task";
+const OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES = ["subtask"] as const;
 
 const buildOdtToolDenyPermissions = (runtimeDescriptor: RuntimeDescriptor): Set<string> => {
   const permissions = new Set<string>();
@@ -51,6 +53,21 @@ export const buildRoleScopedPermissionRules = (input: {
     for (const toolId of new Set(runtimeDescriptor.readOnlyRoleBlockedTools)) {
       rules.push({
         permission: toolId,
+        pattern: "*",
+        action: "deny",
+      });
+    }
+  }
+
+  if (runtimeDescriptor.capabilities.optionalSurfaces.supportsSubagents) {
+    rules.push({
+      permission: OPENCODE_SUBAGENT_TOOL_NAME,
+      pattern: "*",
+      action: "allow",
+    });
+    for (const permission of OPENCODE_UNSUPPORTED_SUBAGENT_TOOL_NAMES) {
+      rules.push({
+        permission,
         pattern: "*",
         action: "deny",
       });

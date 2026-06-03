@@ -349,6 +349,7 @@ export type AgentStreamPart =
       agent?: string;
       prompt?: string;
       description?: string;
+      error?: string;
       externalSessionId?: ExternalSessionId;
       executionMode?: AgentSubagentExecutionMode;
       metadata?: Record<string, unknown>;
@@ -482,6 +483,15 @@ export type AgentEvent =
       subagentCorrelationKey?: string;
     })
   | {
+      type: "approval_resolved";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      requestId: RuntimePendingInputRequestId;
+      parentExternalSessionId?: string;
+      childExternalSessionId?: string;
+      subagentCorrelationKey?: string;
+    }
+  | {
       type: "question_required";
       externalSessionId: ExternalSessionId;
       timestamp: string;
@@ -496,6 +506,15 @@ export type AgentEvent =
         multiple?: boolean;
         custom?: boolean;
       }>;
+    }
+  | {
+      type: "question_resolved";
+      externalSessionId: ExternalSessionId;
+      timestamp: string;
+      requestId: RuntimePendingInputRequestId;
+      parentExternalSessionId?: string;
+      childExternalSessionId?: string;
+      subagentCorrelationKey?: string;
     }
   | {
       type: "session_status";

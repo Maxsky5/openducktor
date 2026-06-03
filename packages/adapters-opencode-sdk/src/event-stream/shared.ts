@@ -45,6 +45,8 @@ export type EventStreamState = {
   pendingDeltasByPartId: Map<string, PendingPartDelta[]>;
   subagentCorrelationKeyByPartId: Map<string, string>;
   subagentCorrelationKeyByExternalSessionId: Map<string, string>;
+  subagentPartIdByCorrelationKey: Map<string, string>;
+  subagentPartIdByExternalSessionId: Map<string, string>;
   pendingSubagentCorrelationKeysBySignature: Map<string, string[]>;
   pendingSubagentCorrelationKeys: string[];
   pendingSubagentSessionsByExternalSessionId: Map<string, PendingSubagentSessionBinding>;
@@ -55,9 +57,11 @@ export type EventStreamState = {
 export type EventStreamRuntime = EventStreamContext & EventStreamState;
 
 const PARENT_EXTERNAL_SESSION_ID_KEYS = ["parentID", "parentId", "parent_id"] as const;
+const EVENT_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id", "session"] as const;
+const NESTED_SESSION_ID_KEYS = ["sessionID", "sessionId", "session_id"] as const;
 
-export const readParentExternalSessionId = (info: unknown): string | undefined => {
-  const record = asUnknownRecord(info);
+const readParentExternalSessionIdFromRecord = (source: unknown): string | undefined => {
+  const record = asUnknownRecord(source);
   if (!record) {
     return undefined;
   }
@@ -70,6 +74,13 @@ export const readParentExternalSessionId = (info: unknown): string | undefined =
   }
 
   return undefined;
+};
+
+export const readEventParentExternalSessionId = (properties: unknown): string | undefined => {
+  return (
+    readParentExternalSessionIdFromRecord(readRecordProp(properties, "info")) ??
+    readParentExternalSessionIdFromRecord(properties)
+  );
 };
 
 export const flushPendingSubagentInputEventsForSession = (
@@ -121,6 +132,37 @@ export const removePendingSubagentCorrelationKey = (
 
     state.pendingSubagentCorrelationKeysBySignature.set(signature, nextPending);
   }
+};
+
+export const bindSubagentPartCorrelation = (
+  state: Pick<
+    EventStreamState,
+    "subagentCorrelationKeyByPartId" | "subagentPartIdByCorrelationKey"
+  >,
+  partId: string,
+  correlationKey: string,
+): void => {
+  state.subagentCorrelationKeyByPartId.set(partId, correlationKey);
+  state.subagentPartIdByCorrelationKey.set(correlationKey, partId);
+};
+
+export const bindSubagentExternalSession = (
+  state: Pick<
+    EventStreamState,
+    | "subagentCorrelationKeyByExternalSessionId"
+    | "subagentPartIdByCorrelationKey"
+    | "subagentPartIdByExternalSessionId"
+  >,
+  externalSessionId: string,
+  correlationKey: string,
+  partId?: string,
+): void => {
+  state.subagentCorrelationKeyByExternalSessionId.set(externalSessionId, correlationKey);
+  if (!partId) {
+    return;
+  }
+  state.subagentPartIdByCorrelationKey.set(correlationKey, partId);
+  state.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
 };
 
 export const setSessionActive = (session: SessionRecord | undefined): void => {
@@ -217,19 +259,14 @@ export const readEventSessionId = (event: Event): string | undefined => {
     return undefined;
   }
 
-  const directSessionId = readStringProp(properties, [
-    "sessionID",
-    "sessionId",
-    "session_id",
-    "session",
-  ]);
+  const directSessionId = readStringProp(properties, EVENT_SESSION_ID_KEYS);
   if (directSessionId) {
     return directSessionId;
   }
 
   const part = readRecordProp(properties, "part");
   if (part) {
-    const partSessionId = readStringProp(part, ["sessionID", "sessionId", "session_id"]);
+    const partSessionId = readStringProp(part, NESTED_SESSION_ID_KEYS);
     if (partSessionId) {
       return partSessionId;
     }
@@ -237,9 +274,13 @@ export const readEventSessionId = (event: Event): string | undefined => {
 
   const info = readRecordProp(properties, "info");
   if (info) {
-    const infoSessionId = readStringProp(info, ["sessionID", "sessionId", "session_id"]);
+    const infoSessionId = readStringProp(info, NESTED_SESSION_ID_KEYS);
     if (infoSessionId) {
       return infoSessionId;
+    }
+
+    if (event.type === "session.created" || event.type === "session.updated") {
+      return readStringProp(info, ["id"]);
     }
   }
 

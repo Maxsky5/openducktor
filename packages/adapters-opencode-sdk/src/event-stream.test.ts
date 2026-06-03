@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
+import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentModelSelection, AgentUserMessagePart } from "@openducktor/core";
 import {
   isRelevantSubscriberEvent,
@@ -9,10 +9,16 @@ import {
 import {
   type EventStreamRuntime,
   flushPendingSubagentInputEventsForSession,
-  readParentExternalSessionId,
-  type SubagentSessionLink,
+  readEventParentExternalSessionId,
+  readEventSessionId,
 } from "./event-stream/shared";
-import type { SessionInput, SessionRecord } from "./types";
+import {
+  makeClientWithEvents,
+  makeSessionInput,
+  makeSessionRecord,
+  runEventStream,
+  runEventStreamWithSession,
+} from "./event-stream.test-support";
 import {
   buildQueuedRequestAttachmentIdentitySignature,
   buildQueuedRequestSignature,
@@ -40,112 +46,82 @@ const PDF_ATTACHMENT_DISPLAY_PART = {
   },
 };
 
-const makeClientWithEvents = (events: Event[]): OpencodeClient => {
-  return {
-    global: {
-      event: async () => {
-        async function* iterator(): AsyncGenerator<{ directory: string; payload: Event }> {
-          for (const event of events) {
-            const directory =
-              (event as Event & { properties?: { directory?: string } }).properties?.directory ??
-              "/repo";
-            yield { directory, payload: event };
-          }
-        }
-        return { stream: iterator() };
-      },
-    },
-  } as unknown as OpencodeClient;
-};
-
-const makeSessionInput = (): SessionInput => ({
-  repoPath: "/repo",
-  runtimeKind: "opencode",
-  workingDirectory: "/repo",
-  taskId: "task-1",
-  role: "spec",
-  systemPrompt: "System prompt",
-});
-
-const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
-  summary: {
-    externalSessionId: "external-session-1",
-    role: "spec",
-    startedAt: "2026-02-22T12:00:00.000Z",
-    status: "running",
-  },
-  input: makeSessionInput(),
-  client,
-  externalSessionId: "external-session-1",
-  eventTransportKey: "http://127.0.0.1:12345",
-  hasIdleSinceActivity: false,
-  activeAssistantMessageId: null,
-  completedAssistantMessageIds: new Set<string>(),
-  emittedAssistantMessageIds: new Set<string>(),
-  emittedUserMessageSignatures: new Map<string, string>(),
-  emittedUserMessageStates: new Map(),
-  pendingQueuedUserMessages: [],
-  partsById: new Map(),
-  messageRoleById: new Map(),
-  messageMetadataById: new Map(),
-  pendingDeltasByPartId: new Map(),
-  subagentCorrelationKeyByPartId: new Map(),
-  subagentCorrelationKeyByExternalSessionId: new Map(),
-  pendingSubagentCorrelationKeysBySignature: new Map(),
-  pendingSubagentCorrelationKeys: [],
-  pendingSubagentSessionsByExternalSessionId: new Map(),
-  pendingSubagentPartEmissionsByExternalSessionId: new Map(),
-  pendingSubagentInputEventsByExternalSessionId: new Map(),
-});
-
 const buildQueuedSignature = (message: string, model?: AgentModelSelection | null): string => {
   const parts: AgentUserMessagePart[] = [{ kind: "text", text: message }];
   return buildQueuedRequestSignature(parts, model ?? undefined);
 };
 
-const runEventStreamWithSession = async (
-  events: Event[],
-  configureSession?: (sessionRecord: SessionRecord) => void,
-  resolveSubagentSessionLink?: (childExternalSessionId: string) => SubagentSessionLink | undefined,
-): Promise<{ emitted: AgentEvent[]; sessionRecord: SessionRecord }> => {
-  const client = makeClientWithEvents(events);
-  const emitted: AgentEvent[] = [];
-  const sessionRecord = makeSessionRecord(client);
-  configureSession?.(sessionRecord);
-
-  await subscribeOpencodeEvents({
-    context: {
-      externalSessionId: "external-session-1",
-      input: makeSessionInput(),
-    },
-    client,
-    controller: new AbortController(),
-    now: () => "2026-02-22T12:00:00.000Z",
-    emit: (_sessionId, event) => {
-      emitted.push(event);
-    },
-    getSession: () => sessionRecord,
-    ...(resolveSubagentSessionLink ? { resolveSubagentSessionLink } : {}),
-  });
-
-  return { emitted, sessionRecord };
-};
-
-const runEventStream = async (events: Event[]): Promise<AgentEvent[]> => {
-  return (await runEventStreamWithSession(events)).emitted;
-};
-
-test("readParentExternalSessionId accepts OpenCode parent id spellings", () => {
+test("readEventParentExternalSessionId accepts OpenCode parent id spellings", () => {
   for (const key of ["parentID", "parentId", "parent_id"] as const) {
-    expect(readParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
+    expect(readEventParentExternalSessionId({ [key]: "external-parent-session" })).toBe(
+      "external-parent-session",
+    );
+    expect(readEventParentExternalSessionId({ info: { [key]: "external-parent-session" } })).toBe(
       "external-parent-session",
     );
   }
 
-  expect(readParentExternalSessionId({ parentID: "" })).toBeUndefined();
-  expect(readParentExternalSessionId({ parentID: "   " })).toBeUndefined();
-  expect(readParentExternalSessionId({ parentID: 123 })).toBeUndefined();
-  expect(readParentExternalSessionId(undefined)).toBeUndefined();
+  expect(readEventParentExternalSessionId({ parentID: "" })).toBeUndefined();
+  expect(readEventParentExternalSessionId({ parentID: "   " })).toBeUndefined();
+  expect(readEventParentExternalSessionId({ parentID: 123 })).toBeUndefined();
+  expect(readEventParentExternalSessionId(undefined)).toBeUndefined();
+});
+
+test("readEventParentExternalSessionId prefers parent ids from event info", () => {
+  expect(
+    readEventParentExternalSessionId({
+      parentID: "event-parent-session",
+      info: { parentID: "info-parent-session" },
+    }),
+  ).toBe("info-parent-session");
+});
+
+test("readEventSessionId accepts info.id only for session lifecycle events", () => {
+  expect(
+    readEventSessionId({
+      type: "session.created",
+      properties: {
+        info: { id: "external-child-session" },
+      },
+    } as unknown as Event),
+  ).toBe("external-child-session");
+  expect(
+    readEventSessionId({
+      type: "message.updated",
+      properties: {
+        info: { id: "message-1" },
+      },
+    } as unknown as Event),
+  ).toBeUndefined();
+});
+
+test("runEventStreamWithSession uses the configured session input", async () => {
+  const { emitted } = await runEventStreamWithSession(
+    [
+      {
+        type: "session.status",
+        properties: {
+          directory: "/workspace",
+          status: {
+            type: "busy",
+          },
+        },
+      } as unknown as Event,
+    ],
+    (session) => {
+      session.input = {
+        ...session.input,
+        workingDirectory: "/workspace",
+      };
+    },
+  );
+
+  expect(emitted).toContainEqual({
+    type: "session_status",
+    externalSessionId: "external-session-1",
+    timestamp: "2026-02-22T12:00:00.000Z",
+    status: { type: "busy" },
+  });
 });
 
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
@@ -165,6 +141,8 @@ test("flushPendingSubagentInputEventsForSession preserves original timestamps", 
     subagentCorrelationKeyByExternalSessionId: new Map<string, string>([
       ["external-child-session", "part:assistant-1:subtask-1"],
     ]),
+    subagentPartIdByCorrelationKey: new Map<string, string>(),
+    subagentPartIdByExternalSessionId: new Map<string, string>(),
     pendingSubagentCorrelationKeysBySignature: new Map<string, string[]>(),
     pendingSubagentCorrelationKeys: [],
     pendingSubagentSessionsByExternalSessionId: new Map(),
@@ -385,30 +363,6 @@ const makeAssistantSubtaskPartUpdatedEvent = (input: {
         agent: input.agent,
         prompt: input.prompt,
         description: input.description,
-      },
-    },
-  }) as unknown as Event;
-
-const makeChildSessionCreatedEvent = (input: {
-  childSessionId: string;
-  parentExternalSessionId: string;
-}): Event =>
-  ({
-    type: "session.created",
-    properties: {
-      sessionID: input.childSessionId,
-      info: {
-        id: input.childSessionId,
-        slug: input.childSessionId,
-        projectID: "project-1",
-        directory: "/repo",
-        title: input.childSessionId,
-        version: "1",
-        parentID: input.parentExternalSessionId,
-        time: {
-          created: Date.parse("2026-02-22T12:00:10.000Z"),
-          updated: Date.parse("2026-02-22T12:00:10.000Z"),
-        },
       },
     },
   }) as unknown as Event;
@@ -662,7 +616,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     const latestUserMessage = userMessages[userMessages.length - 1];
-    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+    if (latestUserMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
 
@@ -987,7 +941,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     const userMessage = userMessages[0];
-    if (!userMessage || userMessage.type !== "user_message") {
+    if (userMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
     expect(userMessage.parts).toContainEqual(
@@ -1074,7 +1028,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(2);
     const latestUserMessage = userMessages[userMessages.length - 1];
-    if (!latestUserMessage || latestUserMessage.type !== "user_message") {
+    if (latestUserMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
     expect(latestUserMessage.parts).toContainEqual(
@@ -1159,7 +1113,7 @@ describe("event-stream", () => {
     const userMessages = emitted.filter((event) => event.type === "user_message");
     expect(userMessages).toHaveLength(1);
     const userMessage = userMessages[0];
-    if (!userMessage || userMessage.type !== "user_message") {
+    if (userMessage?.type !== "user_message") {
       throw new Error("Expected user_message event");
     }
 
@@ -1542,7 +1496,7 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
 
     const updatedPart = sessionRecord.partsById.get("text-late-part-update-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Done later");
@@ -1571,7 +1525,7 @@ describe("event-stream", () => {
     expect(emitted.filter((event) => event.type === "session_idle")).toHaveLength(1);
 
     const updatedPart = sessionRecord.partsById.get("text-late-delta-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Done later");
@@ -1606,7 +1560,7 @@ describe("event-stream", () => {
     expect(idleEvents).toHaveLength(1);
 
     const updatedPart = sessionRecord.partsById.get("text-idle-late-part-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Recovered final output");
@@ -1702,7 +1656,7 @@ describe("event-stream", () => {
     expect(sessionRecord.activeAssistantMessageId).toBeNull();
 
     const updatedPart = sessionRecord.partsById.get("text-stale-update-1");
-    if (!updatedPart || updatedPart.type !== "text") {
+    if (updatedPart?.type !== "text") {
       throw new Error("Expected cached assistant text part");
     }
     expect(updatedPart.text).toBe("Done later");
@@ -1731,523 +1685,6 @@ describe("event-stream", () => {
       throw new Error("Expected assistant text part event");
     }
     expect(partEvents[0].part.text).toBe("Late role text");
-  });
-
-  test("binds same-turn sibling subagents to child sessions without fragmenting their cards", async () => {
-    const emitted = await runEventStream([
-      assistantRoleEvent("assistant-subagent-collision"),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-collision",
-        partId: "subtask-a",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting A",
-      }),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-collision",
-        partId: "subtask-b",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting B",
-      }),
-      makeChildSessionCreatedEvent({
-        childSessionId: "child-a",
-        parentExternalSessionId: "external-session-1",
-      }),
-      makeChildSessionCreatedEvent({
-        childSessionId: "child-b",
-        parentExternalSessionId: "external-session-1",
-      }),
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-a",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-collision",
-            callID: "call-a",
-            type: "tool",
-            tool: "delegate",
-            state: {
-              status: "completed",
-              input: {
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-              output: {
-                result: "Finished A",
-                externalSessionId: "child-a",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-b",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-collision",
-            callID: "call-b",
-            type: "tool",
-            tool: "delegate",
-            state: {
-              status: "completed",
-              input: {
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-              output: {
-                result: "Finished B",
-                externalSessionId: "child-b",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    const assistantPartEvents = emitted.filter(
-      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
-        event.type === "assistant_part",
-    );
-    const subagentParts = assistantPartEvents
-      .map((event): Extract<AgentEvent, { type: "assistant_part" }>["part"] => event.part)
-      .filter(
-        (
-          part,
-        ): part is Extract<
-          Extract<AgentEvent, { type: "assistant_part" }>["part"],
-          { kind: "subagent" }
-        > => part.kind === "subagent",
-      );
-
-    expect(subagentParts).toHaveLength(4);
-
-    const runningParts = subagentParts.filter((part) => part.status === "running");
-    const completedParts = subagentParts.filter((part) => part.status === "completed");
-
-    expect(runningParts).toHaveLength(2);
-    expect(completedParts).toHaveLength(2);
-
-    const runningKeys = runningParts.map((part) => part.correlationKey);
-    expect(new Set(runningKeys).size).toBe(2);
-    expect(runningKeys).toEqual([
-      "part:assistant-subagent-collision:subtask-a",
-      "part:assistant-subagent-collision:subtask-b",
-    ]);
-
-    expect(completedParts.map((part) => part.correlationKey)).toEqual([
-      "part:assistant-subagent-collision:subtask-a",
-      "part:assistant-subagent-collision:subtask-b",
-    ]);
-    expect(completedParts.map((part) => part.externalSessionId)).toEqual(["child-a", "child-b"]);
-    expect(completedParts.map((part) => part.description)).toEqual(["Finished A", "Finished B"]);
-  });
-
-  test("keeps ambiguous sibling completions bound to their original cards even when they finish out of order", async () => {
-    const { emitted } = await runEventStreamWithSession([
-      assistantRoleEvent("assistant-subagent-out-of-order"),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-out-of-order",
-        partId: "subtask-a",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting A",
-      }),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-out-of-order",
-        partId: "subtask-b",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting B",
-      }),
-      makeChildSessionCreatedEvent({
-        childSessionId: "child-a",
-        parentExternalSessionId: "external-session-1",
-      }),
-      makeChildSessionCreatedEvent({
-        childSessionId: "child-b",
-        parentExternalSessionId: "external-session-1",
-      }),
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-b",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-out-of-order",
-            callID: "call-b",
-            type: "tool",
-            tool: "delegate",
-            state: {
-              status: "completed",
-              input: {
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-              output: {
-                result: "Finished B",
-                externalSessionId: "child-b",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-a",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-out-of-order",
-            callID: "call-a",
-            type: "tool",
-            tool: "delegate",
-            state: {
-              status: "completed",
-              input: {
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-              output: {
-                result: "Finished A",
-                externalSessionId: "child-a",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    const assistantPartEvents = emitted.filter(
-      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
-        event.type === "assistant_part",
-    );
-    const subagentParts = assistantPartEvents
-      .map((event): Extract<AgentEvent, { type: "assistant_part" }>["part"] => event.part)
-      .filter(
-        (
-          part,
-        ): part is Extract<
-          Extract<AgentEvent, { type: "assistant_part" }>["part"],
-          { kind: "subagent" }
-        > => part.kind === "subagent",
-      );
-
-    expect(subagentParts).toHaveLength(4);
-
-    const runningParts = subagentParts.filter((part) => part.status === "running");
-    const completedParts = subagentParts.filter((part) => part.status === "completed");
-
-    expect(runningParts.map((part) => part.correlationKey)).toEqual([
-      "part:assistant-subagent-out-of-order:subtask-a",
-      "part:assistant-subagent-out-of-order:subtask-b",
-    ]);
-    expect(completedParts.map((part) => part.correlationKey)).toEqual([
-      "part:assistant-subagent-out-of-order:subtask-b",
-      "part:assistant-subagent-out-of-order:subtask-a",
-    ]);
-    expect(completedParts.map((part) => part.externalSessionId)).toEqual(["child-b", "child-a"]);
-    expect(completedParts.map((part) => part.description)).toEqual(["Finished B", "Finished A"]);
-  });
-
-  test("binds running task tool updates with metadata session ids back to their spawned card", async () => {
-    const emitted = await runEventStream([
-      assistantRoleEvent("assistant-task-tool-running"),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-task-tool-running",
-        partId: "subtask-a",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting A",
-      }),
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-a",
-            sessionID: "external-session-1",
-            messageID: "assistant-task-tool-running",
-            callID: "call-a",
-            type: "tool",
-            tool: "task",
-            state: {
-              status: "running",
-              input: {
-                subagent_type: "build",
-                prompt: "Inspect repo",
-                description: "Starting A",
-              },
-              metadata: {
-                externalSessionId: "child-a",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    const assistantPartEvents = emitted.filter(
-      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
-        event.type === "assistant_part",
-    );
-    const subagentParts = assistantPartEvents
-      .map((event): Extract<AgentEvent, { type: "assistant_part" }>["part"] => event.part)
-      .filter(
-        (
-          part,
-        ): part is Extract<
-          Extract<AgentEvent, { type: "assistant_part" }>["part"],
-          { kind: "subagent" }
-        > => part.kind === "subagent",
-      );
-
-    expect(subagentParts).toHaveLength(2);
-    expect(subagentParts.map((part) => part.correlationKey)).toEqual([
-      "part:assistant-task-tool-running:subtask-a",
-      "part:assistant-task-tool-running:subtask-a",
-    ]);
-    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([undefined, "child-a"]);
-    expect(subagentParts.map((part) => part.agent)).toEqual(["build", "build"]);
-  });
-
-  test("clears pending subagent queues once a running task tool update gains a session id", async () => {
-    const { sessionRecord } = await runEventStreamWithSession([
-      assistantRoleEvent("assistant-task-tool-running"),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-task-tool-running",
-        partId: "subtask-a",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting A",
-      }),
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-a",
-            sessionID: "external-session-1",
-            messageID: "assistant-task-tool-running",
-            callID: "call-a",
-            type: "tool",
-            tool: "task",
-            state: {
-              status: "running",
-              input: {
-                subagent_type: "build",
-                prompt: "Inspect repo",
-                description: "Starting A",
-              },
-              metadata: {
-                externalSessionId: "child-a",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    expect(sessionRecord.subagentCorrelationKeyByExternalSessionId.get("child-a")).toBe(
-      "part:assistant-task-tool-running:subtask-a",
-    );
-    expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual([]);
-    expect(sessionRecord.pendingSubagentCorrelationKeysBySignature.size).toBe(0);
-  });
-
-  test("binds sibling child sessions correctly when session.created arrives out of order", async () => {
-    const { emitted } = await runEventStreamWithSession([
-      assistantRoleEvent("assistant-subagent-created-order"),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-created-order",
-        partId: "subtask-a",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting A",
-      }),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-created-order",
-        partId: "subtask-b",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting B",
-      }),
-      {
-        type: "session.created",
-        properties: {
-          info: {
-            id: "child-b",
-            parentID: "external-session-1",
-            time: { created: Date.parse("2026-02-22T12:00:12.000Z") },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "session.created",
-        properties: {
-          info: {
-            id: "child-a",
-            parentID: "external-session-1",
-            time: { created: Date.parse("2026-02-22T12:00:10.000Z") },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-a",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-created-order",
-            callID: "call-a",
-            type: "tool",
-            tool: "delegate",
-            state: {
-              status: "completed",
-              input: {
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-              output: {
-                result: "Finished A",
-                externalSessionId: "child-a",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-b",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-created-order",
-            callID: "call-b",
-            type: "tool",
-            tool: "delegate",
-            state: {
-              status: "completed",
-              input: {
-                agent: "build",
-                prompt: "Inspect repo",
-              },
-              output: {
-                result: "Finished B",
-                externalSessionId: "child-b",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    const completedSubagentParts = emitted.filter(
-      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
-        event.type === "assistant_part" &&
-        event.part.kind === "subagent" &&
-        event.part.status === "completed",
-    );
-
-    expect(
-      completedSubagentParts.map(
-        (event) => (event.part as { correlationKey: string }).correlationKey,
-      ),
-    ).toEqual([
-      "part:assistant-subagent-created-order:subtask-a",
-      "part:assistant-subagent-created-order:subtask-b",
-    ]);
-    expect(
-      completedSubagentParts.map(
-        (event) => (event.part as { externalSessionId?: string }).externalSessionId,
-      ),
-    ).toEqual(["child-a", "child-b"]);
-  });
-
-  test("defers ambiguous task tool updates until child sessions bind to spawned cards", async () => {
-    const { emitted } = await runEventStreamWithSession([
-      assistantRoleEvent("assistant-subagent-ambiguous-deferred"),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-ambiguous-deferred",
-        partId: "subtask-a",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting A",
-      }),
-      makeAssistantSubtaskPartUpdatedEvent({
-        messageId: "assistant-subagent-ambiguous-deferred",
-        partId: "subtask-b",
-        agent: "build",
-        prompt: "Inspect repo",
-        description: "Starting B",
-      }),
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: "tool-b",
-            sessionID: "external-session-1",
-            messageID: "assistant-subagent-ambiguous-deferred",
-            callID: "call-b",
-            type: "tool",
-            tool: "task",
-            state: {
-              status: "completed",
-              metadata: {
-                agent: "build",
-                prompt: "Inspect repo",
-                externalSessionId: "child-b",
-              },
-            },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "session.created",
-        properties: {
-          info: {
-            id: "child-b",
-            parentID: "external-session-1",
-            time: { created: Date.parse("2026-02-22T12:00:12.000Z") },
-          },
-        },
-      } as unknown as Event,
-      {
-        type: "session.created",
-        properties: {
-          info: {
-            id: "child-a",
-            parentID: "external-session-1",
-            time: { created: Date.parse("2026-02-22T12:00:10.000Z") },
-          },
-        },
-      } as unknown as Event,
-    ]);
-
-    const subagentParts = emitted.filter(
-      (event): event is Extract<AgentEvent, { type: "assistant_part" }> =>
-        event.type === "assistant_part" && event.part.kind === "subagent",
-    );
-
-    expect(subagentParts).toHaveLength(3);
-    expect(
-      subagentParts.map((event) => (event.part as { correlationKey: string }).correlationKey),
-    ).toEqual([
-      "part:assistant-subagent-ambiguous-deferred:subtask-a",
-      "part:assistant-subagent-ambiguous-deferred:subtask-b",
-      "part:assistant-subagent-ambiguous-deferred:subtask-b",
-    ]);
-    expect(subagentParts.map((event) => (event.part as { status: string }).status)).toEqual([
-      "running",
-      "running",
-      "completed",
-    ]);
-    expect(
-      subagentParts.map(
-        (event) => (event.part as { externalSessionId?: string }).externalSessionId,
-      ),
-    ).toEqual([undefined, undefined, "child-b"]);
   });
 
   test("normalizes todo.updated and ignores unrelated sessions", async () => {
@@ -2387,6 +1824,48 @@ describe("event-stream", () => {
           externalSessionId === "external-child-session",
       }),
     ).toBe(false);
+  });
+
+  test("treats child session creation with top-level parent id as relevant to the parent subscriber", () => {
+    const childSessionCreatedEvent = {
+      type: "session.created",
+      properties: {
+        parentID: "external-parent-session",
+        info: {
+          id: "external-child-session",
+        },
+      },
+    } as unknown as Event;
+    const parentSubscriber = {
+      externalSessionId: "external-parent-session",
+      input: makeSessionInput(),
+    };
+    const otherSubscriber = {
+      externalSessionId: "other-parent-session",
+      input: makeSessionInput(),
+    };
+
+    expect(isRelevantSubscriberEvent(parentSubscriber, childSessionCreatedEvent)).toBe(true);
+    expect(isRelevantSubscriberEvent(otherSubscriber, childSessionCreatedEvent)).toBe(false);
+  });
+
+  test("does not treat same-directory child input events as parent-owned without a child link", () => {
+    const parentSubscriber = {
+      externalSessionId: "external-parent-session",
+      input: makeSessionInput(),
+    };
+    const childPermissionEvent = {
+      type: "permission.asked",
+      properties: {
+        sessionID: "external-child-session",
+        directory: "/repo",
+        id: "perm-child-1",
+        permission: "read",
+        patterns: ["src/**"],
+      },
+    } as unknown as Event;
+
+    expect(isRelevantSubscriberEvent(parentSubscriber, childPermissionEvent)).toBe(false);
   });
 
   test("applies queued part delta with append semantics", async () => {
@@ -2537,8 +2016,7 @@ describe("event-stream", () => {
     const lastQueued = queuedParts[queuedParts.length - 1];
     const lastKnown = knownParts[knownParts.length - 1];
     if (
-      !lastQueued ||
-      lastQueued.type !== "assistant_part" ||
+      lastQueued?.type !== "assistant_part" ||
       lastQueued.part.kind !== "text" ||
       !lastKnown ||
       lastKnown.type !== "assistant_part" ||
@@ -2742,7 +2220,6 @@ describe("event-stream", () => {
     });
     expect(permissionEvents[0].childExternalSessionId).toBe("external-session-1");
     expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
-    expect(permissionEvents[0].parentExternalSessionId).toBeUndefined();
     expect(permissionEvents[0].subagentCorrelationKey).toBeUndefined();
     expect(questionEvents[0].childExternalSessionId).toBe("external-session-1");
     expect(questionEvents[0].parentExternalSessionId).toBeUndefined();
@@ -2799,9 +2276,7 @@ describe("event-stream", () => {
           type: "question.asked",
           properties: {
             sessionID: "external-child-session",
-            info: {
-              parentID: "external-session-1",
-            },
+            parentID: "external-session-1",
             id: "question-child-1",
             questions: [
               {
@@ -2829,7 +2304,7 @@ describe("event-stream", () => {
     expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
   });
 
-  test("re-emits unresolved child question events after subagent correlation binds", async () => {
+  test("correlates child question events immediately when a pending subagent key exists", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
         {
@@ -2869,14 +2344,8 @@ describe("event-stream", () => {
     );
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(2);
+    expect(questionEvents).toHaveLength(1);
     expect(questionEvents[0]).toMatchObject({
-      requestId: "question-child-1",
-      childExternalSessionId: "external-child-session",
-      parentExternalSessionId: "external-session-1",
-    });
-    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
-    expect(questionEvents[1]).toMatchObject({
       requestId: "question-child-1",
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
@@ -2884,7 +2353,49 @@ describe("event-stream", () => {
     });
   });
 
-  test("re-emits unresolved child question events when message parts bind the child session", async () => {
+  test("does not consume a pending subagent key for child input events from another directory", async () => {
+    const { emitted, sessionRecord } = await runEventStreamWithSession(
+      [
+        {
+          type: "question.asked",
+          properties: {
+            directory: "/other",
+            sessionID: "external-child-session",
+            info: {
+              parentID: "external-session-1",
+            },
+            id: "question-child-1",
+            questions: [
+              {
+                header: "Scope",
+                question: "Pick target",
+                options: [{ label: "A", description: "Option A" }],
+              },
+            ],
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.pendingSubagentCorrelationKeys.push("part:assistant-1:subtask-1");
+      },
+      () => undefined,
+    );
+
+    const questionEvents = emitted.filter((event) => event.type === "question_required");
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
+      requestId: "question-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+    });
+    expect(questionEvents[0]).not.toHaveProperty("subagentCorrelationKey");
+    expect(sessionRecord.pendingSubagentCorrelationKeys).toEqual(["part:assistant-1:subtask-1"]);
+    expect(
+      sessionRecord.subagentCorrelationKeyByExternalSessionId.has("external-child-session"),
+    ).toBe(false);
+  });
+
+  test("correlates child question events with the running subagent card before completion arrives", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-question-bind"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -2937,14 +2448,22 @@ describe("event-stream", () => {
     ]);
 
     const questionEvents = emitted.filter((event) => event.type === "question_required");
-    expect(questionEvents).toHaveLength(2);
-    expect(questionEvents[0].subagentCorrelationKey).toBeUndefined();
-    expect(questionEvents[1]).toMatchObject({
+    expect(questionEvents).toHaveLength(1);
+    expect(questionEvents[0]).toMatchObject({
       requestId: "question-child-1",
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-subagent-question-bind:subtask-a",
     });
+
+    const subagentParts = emitted.flatMap((event) =>
+      event.type === "assistant_part" && event.part.kind === "subagent" ? [event.part] : [],
+    );
+    expect(subagentParts.map((part) => part.externalSessionId)).toEqual([
+      undefined,
+      "external-child-session",
+      "external-child-session",
+    ]);
   });
 
   test("subscribeOpencodeEvents forwards known child permission events to parent subscribers", async () => {
@@ -2983,6 +2502,41 @@ describe("event-stream", () => {
     });
   });
 
+  test("subscribeOpencodeEvents forwards known child permission resolved events to parent subscribers", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.replied",
+          properties: {
+            sessionID: "external-child-session",
+            requestID: "perm-child-1",
+            reply: "once",
+          },
+        } as unknown as Event,
+      ],
+      undefined,
+      (childExternalSessionId) =>
+        childExternalSessionId === "external-child-session"
+          ? {
+              parentExternalSessionId: "external-session-1",
+              childExternalSessionId,
+              subagentCorrelationKey: "part:assistant-1:subtask-1",
+            }
+          : undefined,
+    );
+
+    const resolvedEvents = emitted.filter((event) => event.type === "approval_resolved");
+    expect(resolvedEvents).toHaveLength(1);
+    expect(resolvedEvents[0]).toMatchObject({
+      type: "approval_resolved",
+      externalSessionId: "external-session-1",
+      requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
   test("forwards child permission events with parent id before the child link is known", async () => {
     const { emitted } = await runEventStreamWithSession(
       [
@@ -2990,9 +2544,7 @@ describe("event-stream", () => {
           type: "permission.asked",
           properties: {
             sessionID: "external-child-session",
-            info: {
-              parentID: "external-session-1",
-            },
+            parentID: "external-session-1",
             id: "perm-child-1",
             permission: "read",
             patterns: ["src/**"],

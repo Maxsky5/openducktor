@@ -194,6 +194,79 @@ describe("OpencodeSdkAdapter session history", () => {
     });
   });
 
+  test("loadSessionHistory links task tool parts to OpenCode child sessions", async () => {
+    const taskStartedAtMs = Date.parse("2026-02-17T12:00:03.000Z");
+    const mock = makeMockClient({
+      childrenResponse: [
+        {
+          id: "child-session-a",
+          parentID: "session-opencode-1",
+          time: {
+            created: taskStartedAtMs + 4,
+          },
+        },
+      ],
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-200",
+            role: "assistant",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "tool-task-a",
+              sessionID: "session-opencode-1",
+              messageID: "msg-200",
+              callID: "call-a",
+              type: "tool",
+              tool: "task",
+              state: {
+                status: "running",
+                input: {
+                  subagent_type: "explorer",
+                  prompt: "Read omp.json file",
+                  description: "Read omp.json file",
+                },
+                time: {
+                  start: taskStartedAtMs,
+                },
+              },
+            } as unknown as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(mock.session.childrenCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+      },
+    ]);
+    if (history[0]?.role !== "assistant") {
+      throw new Error("Expected assistant history entry");
+    }
+    expect(history[0].parts).toEqual([
+      expect.objectContaining({
+        kind: "subagent",
+        status: "running",
+        partId: "tool-task-a",
+        externalSessionId: "child-session-a",
+      }),
+    ]);
+  });
+
   test("loadSessionHistory seeds live subagent correlation for later task-tool updates", async () => {
     const streamEvents: Event[] = [
       {

@@ -69,8 +69,7 @@ describe("useRuntimeTranscriptAttachment", () => {
       attachTranscript({
         repoPath: "/tmp/repo",
         externalSessionId: "transcript-1",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
         workingDirectory: "/tmp/repo",
       }),
     );
@@ -106,8 +105,7 @@ describe("useRuntimeTranscriptAttachment", () => {
         attachTranscript({
           repoPath: "/tmp/repo",
           externalSessionId: "transcript-fail",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
+          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
           workingDirectory: "/tmp/repo",
         }),
       ),
@@ -142,8 +140,7 @@ describe("useRuntimeTranscriptAttachment", () => {
       const attachPromise = attachTranscript({
         repoPath: "/tmp/repo",
         externalSessionId: "transcript-1",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
         workingDirectory: "/tmp/repo",
       });
       sessionsRef.current = {

@@ -43,10 +43,7 @@ export const useRuntimeTranscriptAttachment = ({
           `Session ${input.externalSessionId} is already active and is not a transcript.`,
         );
       }
-      const runtimeId = input.runtimeId?.trim() || null;
-      if (!runtimeId) {
-        throw new Error("Runtime identity is unavailable for this transcript.");
-      }
+      const { kind: runtimeKind, runtimeId } = input.runtimeRef;
 
       const hadRuntimeSession = agentEngine.hasSession(input.externalSessionId);
       let attachedListener = false;
@@ -67,7 +64,7 @@ export const useRuntimeTranscriptAttachment = ({
           current !== undefined &&
           isTranscriptAgentSession(current) &&
           current.externalSessionId === input.externalSessionId &&
-          current.runtimeKind === input.runtimeKind &&
+          current.runtimeKind === runtimeKind &&
           current.runtimeId === runtimeId
         );
       };
@@ -87,8 +84,7 @@ export const useRuntimeTranscriptAttachment = ({
         const initialSession = createRuntimeTranscriptSession({
           repoPath: input.repoPath,
           externalSessionId: input.externalSessionId,
-          runtimeKind: input.runtimeKind,
-          runtimeId,
+          runtimeRef: input.runtimeRef,
           workingDirectory: input.workingDirectory,
           history: [],
           isLive: true,
@@ -107,7 +103,7 @@ export const useRuntimeTranscriptAttachment = ({
           : agentEngine.attachSession({
               externalSessionId: input.externalSessionId,
               repoPath: input.repoPath,
-              runtimeKind: input.runtimeKind,
+              runtimeKind,
               runtimeId,
               workingDirectory: input.workingDirectory,
               purpose: "transcript",
@@ -126,7 +122,7 @@ export const useRuntimeTranscriptAttachment = ({
 
         const history = await agentEngine.loadSessionHistory({
           repoPath: input.repoPath,
-          runtimeKind: input.runtimeKind,
+          runtimeKind,
           workingDirectory: input.workingDirectory,
           externalSessionId: input.externalSessionId,
         });
@@ -137,8 +133,7 @@ export const useRuntimeTranscriptAttachment = ({
         const hydratedSession = createRuntimeTranscriptSession({
           repoPath: input.repoPath,
           externalSessionId: input.externalSessionId,
-          runtimeKind: input.runtimeKind,
-          runtimeId,
+          runtimeRef: input.runtimeRef,
           workingDirectory: input.workingDirectory,
           history,
           isLive: true,
@@ -162,7 +157,7 @@ export const useRuntimeTranscriptAttachment = ({
               ...current,
               startedAt: summary?.startedAt ?? hydratedSession.startedAt,
               status: summary?.status ?? current.status,
-              runtimeKind: input.runtimeKind,
+              runtimeKind,
               runtimeId,
               workingDirectory: input.workingDirectory,
               historyHydrationState: "hydrated",

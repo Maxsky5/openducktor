@@ -91,6 +91,7 @@ export type AgentChatMessageMeta =
       agent?: string;
       prompt?: string;
       description?: string;
+      error?: string;
       externalSessionId?: string;
       executionMode?: AgentSubagentExecutionMode;
       metadata?: Record<string, unknown>;

@@ -263,7 +263,7 @@ const createUseTaskApprovalFlowArgs = (
 const expectApprovalModal = (): TaskApprovalApprovalModalModel => {
   const modal = latestHarnessValue?.taskApprovalModal;
   expect(modal?.stage).toBe("approval");
-  if (!modal || modal.stage !== "approval") {
+  if (modal?.stage !== "approval") {
     throw new Error("Expected approval modal");
   }
   return modal;
@@ -272,7 +272,7 @@ const expectApprovalModal = (): TaskApprovalApprovalModalModel => {
 const expectCompletionModal = (): TaskApprovalCompletionModalModel => {
   const modal = latestHarnessValue?.taskApprovalModal;
   expect(modal?.stage).toBe("complete_direct_merge");
-  if (!modal || modal.stage !== "complete_direct_merge") {
+  if (modal?.stage !== "complete_direct_merge") {
     throw new Error("Expected direct-merge completion modal");
   }
   return modal;
@@ -281,7 +281,7 @@ const expectCompletionModal = (): TaskApprovalCompletionModalModel => {
 const expectMissingBuilderWorktreeModal = (): TaskApprovalMissingBuilderWorktreeModalModel => {
   const modal = latestHarnessValue?.taskApprovalModal;
   expect(modal?.stage).toBe("missing_builder_worktree");
-  if (!modal || modal.stage !== "missing_builder_worktree") {
+  if (modal?.stage !== "missing_builder_worktree") {
     throw new Error("Expected missing-builder-worktree modal");
   }
   return modal;

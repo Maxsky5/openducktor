@@ -34,7 +34,7 @@ export const readArrayProp = (source: unknown, key: string): unknown[] | undefin
   return safeProp(source, key, Array.isArray);
 };
 
-export const readStringProp = (source: unknown, keys: string[]): string | undefined => {
+export const readStringProp = (source: unknown, keys: readonly string[]): string | undefined => {
   const record = asUnknownRecord(source);
   if (!record) {
     return undefined;

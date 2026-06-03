@@ -1,3 +1,4 @@
+import type { RuntimeRef } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
@@ -6,8 +7,7 @@ import { historyToChatMessages } from "./persistence";
 export type RuntimeTranscriptSessionInput = {
   repoPath: string;
   externalSessionId: string;
-  runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
-  runtimeId: string | null;
+  runtimeRef: RuntimeRef;
   workingDirectory: string;
   history: AgentSessionHistoryMessage[];
   isLive?: boolean;
@@ -38,8 +38,7 @@ const runtimeTranscriptHistoryVersion = (history: AgentSessionHistoryMessage[]):
 export const createRuntimeTranscriptSession = ({
   repoPath,
   externalSessionId,
-  runtimeKind,
-  runtimeId,
+  runtimeRef,
   workingDirectory,
   history,
   isLive = false,
@@ -53,11 +52,11 @@ export const createRuntimeTranscriptSession = ({
     purpose: "transcript",
     taskId: "",
     repoPath,
-    runtimeKind,
+    runtimeKind: runtimeRef.kind,
     role: null,
     status: isLive ? "running" : "idle",
     startedAt,
-    runtimeId,
+    runtimeId: runtimeRef.runtimeId,
     workingDirectory,
     historyHydrationState: "hydrated",
     runtimeRecoveryState: "idle",

@@ -99,6 +99,32 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
+  test("requests a view readiness refresh for running planner sessions missing runtime identity", () => {
+    const lifecycle = deriveAgentSessionViewLifecycle({
+      session: createSession({
+        role: "planner",
+        status: "running",
+        historyHydrationState: "hydrated",
+        runtimeId: null,
+        runtimeKind: "opencode",
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "already hydrated",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("ready");
+    expect(lifecycle.canRenderHistory).toBe(true);
+    expect(lifecycle.canReadRuntimeData).toBe(false);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(true);
+  });
+
   test("does not request view readiness while a local outbound send is pending", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({

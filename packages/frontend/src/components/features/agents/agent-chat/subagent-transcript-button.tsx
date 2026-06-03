@@ -1,19 +1,18 @@
-import type { RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeRef } from "@openducktor/contracts";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./use-agent-session-transcript-dialog";
 
 type SubagentTranscriptButtonProps = {
-  sessionRuntimeKind?: RuntimeKind | null;
-  sessionRuntimeId?: string | null;
+  sessionRuntimeRef?: RuntimeRef | null;
   sessionWorkingDirectory?: string | null | undefined;
   pendingApprovals?: AgentApprovalRequest[] | undefined;
   pendingQuestions?: AgentQuestionRequest[] | undefined;
@@ -23,8 +22,7 @@ type SubagentTranscriptButtonProps = {
 };
 
 type TranscriptSourceInput = {
-  sessionRuntimeKind: RuntimeKind | null | undefined;
-  sessionRuntimeId: string | null | undefined;
+  sessionRuntimeRef: RuntimeRef | null | undefined;
   sessionWorkingDirectory: string | null | undefined;
   isLive: boolean;
   pendingApprovals: AgentApprovalRequest[] | undefined;
@@ -48,23 +46,20 @@ const buildTranscriptRequest = (
 };
 
 const buildTranscriptSource = ({
-  sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   sessionWorkingDirectory,
   isLive,
   pendingApprovals,
   pendingQuestions,
 }: TranscriptSourceInput): RuntimeSessionTranscriptSource | null => {
-  const runtimeId = sessionRuntimeId?.trim() || null;
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
 
-  if (!sessionRuntimeKind || !runtimeId || !workingDirectory) {
+  if (!sessionRuntimeRef || !workingDirectory) {
     return null;
   }
 
   return {
-    runtimeKind: sessionRuntimeKind,
-    runtimeId,
+    runtimeRef: sessionRuntimeRef,
     workingDirectory,
     ...(isLive ? { isLive: true } : {}),
     ...(pendingApprovals ? { pendingApprovals } : {}),
@@ -73,8 +68,7 @@ const buildTranscriptSource = ({
 };
 
 export function SubagentTranscriptButton({
-  sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   sessionWorkingDirectory,
   pendingApprovals,
   pendingQuestions,
@@ -86,8 +80,7 @@ export function SubagentTranscriptButton({
   const externalSessionId = meta.externalSessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
   const transcriptSource = buildTranscriptSource({
-    sessionRuntimeKind,
-    sessionRuntimeId,
+    sessionRuntimeRef,
     sessionWorkingDirectory,
     isLive: isLiveSubagentStatus(meta.status),
     pendingApprovals,

@@ -1,3 +1,4 @@
+import type { RuntimeRef } from "@openducktor/contracts";
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import {
   memo,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
+import { toRuntimeRef } from "./agent-chat-runtime-ref";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
@@ -38,7 +40,7 @@ type AgentChatThreadMotionRowProps = {
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  sessionRuntimeRef: RuntimeRef | null;
   subagentPendingApprovals: AgentSessionState["pendingApprovals"];
   subagentPendingApprovalCount: number;
   subagentPendingQuestions: AgentSessionState["pendingQuestions"];
@@ -56,7 +58,7 @@ type AgentChatTranscriptProps = {
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  sessionRuntimeRef: RuntimeRef | null;
   subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
   subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
@@ -207,7 +209,7 @@ const AgentChatThreadMotionRow = memo(
     sessionAgentColors,
     sessionWorkingDirectory,
     sessionRuntimeKind,
-    sessionRuntimeId,
+    sessionRuntimeRef,
     subagentPendingApprovals,
     subagentPendingApprovalCount,
     subagentPendingQuestions,
@@ -222,7 +224,7 @@ const AgentChatThreadMotionRow = memo(
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
-          sessionRuntimeId={sessionRuntimeId}
+          sessionRuntimeRef={sessionRuntimeRef}
           subagentPendingApprovals={subagentPendingApprovals}
           subagentPendingApprovalCount={subagentPendingApprovalCount}
           subagentPendingQuestions={subagentPendingQuestions}
@@ -234,7 +236,7 @@ const AgentChatThreadMotionRow = memo(
   (previousProps, nextProps) => {
     return (
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
-      previousProps.sessionRuntimeId === nextProps.sessionRuntimeId &&
+      previousProps.sessionRuntimeRef === nextProps.sessionRuntimeRef &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
       previousProps.subagentPendingApprovals === nextProps.subagentPendingApprovals &&
       previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
@@ -254,7 +256,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
@@ -267,7 +269,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  sessionRuntimeId: AgentSessionState["runtimeId"] | null;
+  sessionRuntimeRef: RuntimeRef | null;
   subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
   subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
@@ -287,7 +289,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
-          sessionRuntimeId={sessionRuntimeId}
+          sessionRuntimeRef={sessionRuntimeRef}
           subagentPendingApprovals={readSubagentPendingApprovals(
             row,
             subagentPendingApprovalsByExternalSessionId,
@@ -321,7 +323,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
   subagentPendingQuestionsByExternalSessionId,
@@ -414,7 +416,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
-                sessionRuntimeId={sessionRuntimeId}
+                sessionRuntimeRef={sessionRuntimeRef}
                 subagentPendingApprovalsByExternalSessionId={
                   subagentPendingApprovalsByExternalSessionId
                 }
@@ -600,6 +602,10 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
 
   const sessionRuntimeKind = session?.runtimeKind ?? null;
   const sessionRuntimeId = session?.runtimeId ?? null;
+  const sessionRuntimeRef = useMemo(
+    () => toRuntimeRef({ runtimeKind: sessionRuntimeKind, runtimeId: sessionRuntimeId }),
+    [sessionRuntimeId, sessionRuntimeKind],
+  );
   const sessionSelectedModel = session?.selectedModel ?? null;
   const sessionAccentColor = useMemo(() => {
     const profileId = sessionSelectedModel?.profileId;
@@ -749,7 +755,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         }
         sessionWorkingDirectory={sessionWorkingDirectory}
         sessionRuntimeKind={sessionRuntimeKind}
-        sessionRuntimeId={sessionRuntimeId}
+        sessionRuntimeRef={sessionRuntimeRef}
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={

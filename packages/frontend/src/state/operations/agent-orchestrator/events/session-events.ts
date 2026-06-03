@@ -9,7 +9,9 @@ import { createSessionEventHandlerContext } from "./session-event-types";
 import {
   handleAssistantMessage,
   handlePermissionRequired,
+  handlePermissionResolved,
   handleQuestionRequired,
+  handleQuestionResolved,
   handleSessionCompacted,
   handleSessionCompactionStarted,
   handleSessionError,
@@ -66,11 +68,17 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
     case "approval_required":
       handlePermissionRequired(context.lifecycle, event);
       return;
+    case "approval_resolved":
+      handlePermissionResolved(context.lifecycle, event);
+      return;
     case "mcp_reconnect_started":
       handleMcpReconnectStarted(event);
       return;
     case "question_required":
       handleQuestionRequired(context.lifecycle, event);
+      return;
+    case "question_resolved":
+      handleQuestionResolved(context.lifecycle, event);
       return;
     case "session_todos_updated":
       handleSessionTodosUpdated(context.lifecycle, event);

@@ -3,6 +3,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
+const runtimeRef = { kind: "opencode" as const, runtimeId: "runtime-1" };
+
 const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta => ({
   kind: "subagent",
   partId: "part-1",
@@ -42,8 +44,7 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={runtimeRef}
         sessionWorkingDirectory="/repo-a"
         pendingApprovals={[pendingApproval]}
         pendingQuestions={[pendingQuestion]}
@@ -63,8 +64,7 @@ describe("SubagentTranscriptButton", () => {
       title: "Subagent activity",
       description: "View what this subagent did.",
       source: {
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef,
         workingDirectory: "/repo-a",
         pendingApprovals: [pendingApproval],
         pendingQuestions: [pendingQuestion],
@@ -77,8 +77,7 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={runtimeRef}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
@@ -92,8 +91,7 @@ describe("SubagentTranscriptButton", () => {
       title: "Subagent activity",
       description: "View what this subagent did.",
       source: {
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef,
         workingDirectory: "/repo-a",
       },
     });
@@ -104,8 +102,7 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={runtimeRef}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta({ status: "running" })}
         onOpenTranscript={onOpenTranscript}
@@ -119,8 +116,7 @@ describe("SubagentTranscriptButton", () => {
       title: "Subagent activity",
       description: "View what this subagent did.",
       source: {
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
+        runtimeRef,
         workingDirectory: "/repo-a",
         isLive: true,
       },
@@ -130,8 +126,7 @@ describe("SubagentTranscriptButton", () => {
   test("does not render when subagent session id is unavailable", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={runtimeRef}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
@@ -143,8 +138,7 @@ describe("SubagentTranscriptButton", () => {
 
     rerender(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={runtimeRef}
         sessionWorkingDirectory="/repo-a"
         meta={metaWithoutSessionId}
         onOpenTranscript={() => {}}
@@ -160,10 +154,19 @@ describe("SubagentTranscriptButton", () => {
     expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
   });
 
-  test("does not render when runtime identity is unavailable", () => {
-    render(
+  test("does not render when runtime ref or working directory is unavailable", () => {
+    const { rerender } = render(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
+        sessionRuntimeRef={runtimeRef}
+        meta={createSubagentMeta()}
+        onOpenTranscript={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
+
+    rerender(
+      <SubagentTranscriptButton
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
@@ -181,8 +184,7 @@ describe("SubagentTranscriptButton", () => {
     try {
       render(
         <SubagentTranscriptButton
-          sessionRuntimeKind="opencode"
-          sessionRuntimeId="runtime-1"
+          sessionRuntimeRef={runtimeRef}
           sessionWorkingDirectory="/repo-a"
           meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
@@ -201,8 +203,7 @@ describe("SubagentTranscriptButton", () => {
   test("renders the transcript action as a labeled outline button", () => {
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind="opencode"
-        sessionRuntimeId="runtime-1"
+        sessionRuntimeRef={runtimeRef}
         sessionWorkingDirectory="/repo-a"
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}

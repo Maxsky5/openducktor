@@ -402,7 +402,7 @@ const buildRuntimeSectionErrors = (
   runtimeLabel: string,
   runtimeHealth: RuntimeHealthState,
 ): string[] => {
-  if (!runtimeHealth || runtimeHealth.runtime.status !== "error") {
+  if (runtimeHealth?.runtime.status !== "error") {
     return [];
   }
 
@@ -417,7 +417,7 @@ const buildMcpSectionErrors = (
   runtimeLabel: string,
   runtimeHealth: RuntimeHealthState,
 ): string[] => {
-  if (!runtimeHealth?.mcp || runtimeHealth.mcp.status !== "error") {
+  if (runtimeHealth?.mcp?.status !== "error") {
     return [];
   }
 

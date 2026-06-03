@@ -134,7 +134,7 @@ const attachSessionListenerAndGuard = async ({
 
     session.setSessionsById((current) => {
       const currentSession = current[startedCtx.summary.externalSessionId];
-      if (!currentSession || currentSession.status !== "starting") {
+      if (currentSession?.status !== "starting") {
         return current;
       }
       return {

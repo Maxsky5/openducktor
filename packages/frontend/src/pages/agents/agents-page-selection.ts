@@ -246,7 +246,7 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
   const sessions: AgentSessionSummary[] = [];
 
   for (const session of candidates) {
-    if (!session || session.role !== "build" || session.taskId !== taskId) {
+    if (session?.role !== "build" || session.taskId !== taskId) {
       continue;
     }
     if (seenSessionIds.has(session.externalSessionId)) {

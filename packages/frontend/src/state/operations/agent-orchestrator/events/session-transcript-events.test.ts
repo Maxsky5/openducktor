@@ -89,7 +89,7 @@ describe("agent-orchestrator session transcript events", () => {
       const queuedMessage = getSessionMessages(sessionsRef).find(
         (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
       );
-      if (!queuedMessage || queuedMessage.meta?.kind !== "tool") {
+      if (queuedMessage?.meta?.kind !== "tool") {
         throw new Error("Expected queued tool message");
       }
       expect(queuedMessage.meta.inputReadyAtMs).toBeUndefined();
@@ -119,7 +119,7 @@ describe("agent-orchestrator session transcript events", () => {
       const inputReadyMessage = getSessionMessages(sessionsRef).find(
         (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
       );
-      if (!inputReadyMessage || inputReadyMessage.meta?.kind !== "tool") {
+      if (inputReadyMessage?.meta?.kind !== "tool") {
         throw new Error("Expected input-ready tool message");
       }
       expect(inputReadyMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
@@ -149,7 +149,7 @@ describe("agent-orchestrator session transcript events", () => {
       const completedMessage = getSessionMessages(sessionsRef).find(
         (message) => message.meta?.kind === "tool" && message.meta.callId === "call-1",
       );
-      if (!completedMessage || completedMessage.meta?.kind !== "tool") {
+      if (completedMessage?.meta?.kind !== "tool") {
         throw new Error("Expected completed tool message");
       }
       expect(completedMessage.meta.inputReadyAtMs).toBe(Date.parse("2026-02-22T08:00:10.000Z"));
@@ -415,22 +415,23 @@ describe("agent-orchestrator session transcript events", () => {
       (message) => message.role === "user",
     );
     expect(userMessages).toHaveLength(1);
-    expect(userMessages?.[0]?.id).toBe("user-message-1");
-    expect(userMessages?.[0]?.content).toBe("Generate the pull request");
-    if (!userMessages?.[0]?.meta || userMessages[0].meta.kind !== "user") {
+    const userMessage = userMessages[0];
+    expect(userMessage?.id).toBe("user-message-1");
+    expect(userMessage?.content).toBe("Generate the pull request");
+    if (userMessage?.meta?.kind !== "user") {
       throw new Error("Expected canonical user message metadata");
     }
-    expect(userMessages[0].meta.parts).toEqual([
+    expect(userMessage.meta.parts).toEqual([
       {
         kind: "text",
         text: "Generate the pull request",
       },
     ]);
-    expect(userMessages[0].meta.providerId).toBe("openai");
-    expect(userMessages[0].meta.modelId).toBe("gpt-5");
-    expect(userMessages[0].meta.variant).toBe("high");
-    expect(userMessages[0].meta.profileId).toBe("Hephaestus");
-    expect(userMessages[0].meta.state).toBe("read");
+    expect(userMessage.meta.providerId).toBe("openai");
+    expect(userMessage.meta.modelId).toBe("gpt-5");
+    expect(userMessage.meta.variant).toBe("high");
+    expect(userMessage.meta.profileId).toBe("Hephaestus");
+    expect(userMessage.meta.state).toBe("read");
   });
 
   test("appends session compaction notices without changing live session state", () => {
@@ -673,17 +674,18 @@ describe("agent-orchestrator session transcript events", () => {
       (message) => message.role === "user",
     );
     expect(userMessages).toHaveLength(1);
-    expect(userMessages?.[0]?.content).toBe("Queued follow-up");
-    if (!userMessages?.[0]?.meta || userMessages[0].meta.kind !== "user") {
+    const userMessage = userMessages[0];
+    expect(userMessage?.content).toBe("Queued follow-up");
+    if (userMessage?.meta?.kind !== "user") {
       throw new Error("Expected queued user message metadata");
     }
-    expect(userMessages[0].meta.parts).toEqual([
+    expect(userMessage.meta.parts).toEqual([
       {
         kind: "text",
         text: "Queued follow-up",
       },
     ]);
-    expect(userMessages[0].meta.state).toBe("read");
+    expect(userMessage.meta.state).toBe("read");
   });
 
   test("flushes queued non-immediate events in a single session commit", () => {

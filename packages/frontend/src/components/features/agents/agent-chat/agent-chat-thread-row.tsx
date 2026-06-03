@@ -1,3 +1,4 @@
+import type { RuntimeRef } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,7 @@ type AgentChatWindowRowProps = {
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
-  sessionRuntimeId?: AgentSessionState["runtimeId"] | null | undefined;
+  sessionRuntimeRef?: RuntimeRef | null | undefined;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
@@ -25,7 +26,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
-  sessionRuntimeId,
+  sessionRuntimeRef,
   subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestions,
@@ -45,7 +46,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             sessionAgentColors={sessionAgentColors}
             sessionWorkingDirectory={sessionWorkingDirectory}
             sessionRuntimeKind={sessionRuntimeKind}
-            sessionRuntimeId={sessionRuntimeId}
+            sessionRuntimeRef={sessionRuntimeRef}
             subagentPendingApprovals={subagentPendingApprovals}
             subagentPendingApprovalCount={subagentPendingApprovalCount}
             subagentPendingQuestions={subagentPendingQuestions}
