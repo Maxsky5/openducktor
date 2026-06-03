@@ -1,13 +1,18 @@
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import path, { delimiter } from "node:path";
+import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { BeadsCommandJsonOutput } from "../../infrastructure/beads/task-store/beads-raw-issue";
-import { createToolDiscoveryAdapter } from "../system/tool-discovery";
-import type { BeadsCliContext, BeadsSharedServerContext } from "./beads-cli-context";
+import type { BeadsCliContext } from "./beads-cli-context";
 import { createBeadsTaskRepository } from "./beads-task-repository";
+import {
+  createTestBeadsCliContext as createBeadsCliContext,
+  createExistingTestBeadsCliContext as createExistingBeadsCliContext,
+  createFakeBd,
+  createTestToolDiscoveryPort as createToolDiscoveryPort,
+} from "./test-support/beads-test-support";
 
 const encodedMarkdown = (markdown: string): string => gzipSync(markdown).toString("base64");
 type RawTaskFixture = { [key in string]?: BeadsCommandJsonOutput };
@@ -22,122 +27,32 @@ const rawTask = (overrides: RawTaskFixture = {}): RawTaskFixture => ({
   created_at: "2026-05-10T00:00:00Z",
   ...overrides,
 });
-const TEST_BEADS_TOOL_PATHS = {
-  beads: "bd",
-};
-
-const TEST_SHARED_DOLT_TOOL_PATHS = {
-  dolt: "dolt",
-};
-const createToolDiscoveryPort = (missingCommands: string[] = []) =>
-  createToolDiscoveryAdapter({
-    systemCommands: {
-      resolveCommandPath: (command) =>
-        Effect.succeed(missingCommands.includes(command) ? null : command),
-      versionCommand: () => Effect.succeed(null),
-      runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
-    },
-  });
-const createBeadsCliContext = (beadsDir: string): BeadsSharedServerContext => ({
-  repoPath: "/repo",
-  repoId: "repo-12345678",
-  databaseName: "odt_repo_123456789abc",
-  attachmentRoot: path.dirname(beadsDir),
-  beadsDir,
-  workingDir: path.dirname(beadsDir),
-  serverStatePath: "/config/beads/shared-server/server.json",
-  sharedServer: {
-    pid: process.pid,
-    host: "127.0.0.1",
-    port: 36000,
-    user: "root",
-    ownerPid: process.pid,
-    acquisition: "started_by_owner",
-    sharedServerRoot: "/config/beads/shared-server",
-    doltDataDir: "/config/beads/shared-server/dolt",
-    startedAt: "2026-05-10T00:00:00Z",
-  },
-  env: {
-    BEADS_DIR: beadsDir,
-    BEADS_DOLT_SERVER_MODE: "1",
-    BEADS_DOLT_SERVER_HOST: "127.0.0.1",
-    BEADS_DOLT_SERVER_PORT: "36000",
-    BEADS_DOLT_SERVER_USER: "root",
-  },
-  tools: TEST_BEADS_TOOL_PATHS,
-  sharedDoltTools: TEST_SHARED_DOLT_TOOL_PATHS,
-});
-const createExistingBeadsCliContext = async (): Promise<BeadsSharedServerContext> => {
-  const attachmentRoot = await mkdtemp(path.join(tmpdir(), "odt-beads-test-"));
-  const beadsDir = path.join(attachmentRoot, ".beads");
-  await mkdir(beadsDir);
-  return createBeadsCliContext(beadsDir);
-};
 const createTestBeadsTaskRepository = (
-  input: Omit<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery"> &
-    Partial<Pick<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery">>,
+  input: Omit<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery">,
+  toolDiscovery = createToolDiscoveryPort(),
 ) =>
   createBeadsTaskRepository({
-    toolDiscovery: createToolDiscoveryPort(),
+    toolDiscovery,
     ...input,
   });
-const createFakeBd = async (binDir: string, script: string): Promise<string> => {
-  const scriptPath = path.join(binDir, "bd.mjs");
-  await writeFile(scriptPath, script);
-  if (process.platform === "win32") {
-    const bdPath = path.join(binDir, "bd.cmd");
-    await writeFile(bdPath, `@echo off\r\nbun "%~dp0bd.mjs" %*\r\n`);
-    return bdPath;
-  }
-  const bdPath = path.join(binDir, "bd");
-  await writeFile(bdPath, `#!/bin/sh\nexec bun "$(dirname "$0")/bd.mjs" "$@"\n`);
-  await chmod(bdPath, 0o755);
-  return bdPath;
-};
 describe("createBeadsTaskRepository", () => {
-  test("stops the owned shared Dolt server on close", async () => {
+  test("delegates close to the Beads CLI context manager", async () => {
     const context = await createExistingBeadsCliContext();
     const stoppedServers: Array<{
       pid: number;
       serverStatePath: string;
     }> = [];
     const port = createTestBeadsTaskRepository({
-      resolveCliContext: () =>
-        Effect.tryPromise({
-          try: async () => {
-            return context;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        }),
+      resolveCliContext: () => Effect.succeed(context),
       runBdJson() {
-        return Effect.tryPromise({
-          try: async () => {
-            return { path: context.beadsDir };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        return Effect.succeed({ path: context.beadsDir });
       },
       stopSharedDoltServer(sharedServer, serverStatePath) {
-        return Effect.tryPromise({
-          try: async () => {
-            stoppedServers.push({ pid: sharedServer.pid, serverStatePath });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
+        return Effect.sync(() => {
+          stoppedServers.push({
+            pid: sharedServer.pid,
+            serverStatePath,
+          });
         });
       },
     });
@@ -149,138 +64,6 @@ describe("createBeadsTaskRepository", () => {
         serverStatePath: "/config/beads/shared-server/server.json",
       },
     ]);
-  });
-  test("waits for in-flight shared Dolt server context resolution before close", async () => {
-    const context = await createExistingBeadsCliContext();
-    const stoppedServers: Array<{
-      pid: number;
-      serverStatePath: string;
-    }> = [];
-    let resolveContextRequested: () => void = () => {};
-    const contextRequested = new Promise<void>((resolve) => {
-      resolveContextRequested = resolve;
-    });
-    let resolveContext: (context: BeadsSharedServerContext) => void = () => {};
-    const contextResolution = new Promise<BeadsSharedServerContext>((resolve) => {
-      resolveContext = resolve;
-    });
-    const port = createTestBeadsTaskRepository({
-      resolveCliContext() {
-        return Effect.tryPromise({
-          try: async () => {
-            resolveContextRequested();
-            return contextResolution;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      runBdJson() {
-        return Effect.tryPromise({
-          try: async () => {
-            return { path: context.beadsDir };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      stopSharedDoltServer(sharedServer, serverStatePath) {
-        return Effect.tryPromise({
-          try: async () => {
-            stoppedServers.push({ pid: sharedServer.pid, serverStatePath });
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-    });
-    const diagnose = Effect.runPromise(
-      port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true }),
-    );
-    await contextRequested;
-    const close = Effect.runPromise(port.close());
-    resolveContext(context);
-    await expect(diagnose).resolves.toMatchObject({ status: "ready" });
-    await expect(close).resolves.toEqual({ stoppedSharedDoltServers: 1 });
-    expect(stoppedServers).toEqual([
-      {
-        pid: process.pid,
-        serverStatePath: "/config/beads/shared-server/server.json",
-      },
-    ]);
-  });
-  test("deduplicates concurrent shared Dolt server context resolution", async () => {
-    const context = await createExistingBeadsCliContext();
-    let resolveContextRequested: () => void = () => {};
-    const contextRequested = new Promise<void>((resolve) => {
-      resolveContextRequested = resolve;
-    });
-    let resolveContext: (context: BeadsSharedServerContext) => void = () => {};
-    const contextResolution = new Promise<BeadsSharedServerContext>((resolve) => {
-      resolveContext = resolve;
-    });
-    let contextResolutionAttempts = 0;
-    const port = createTestBeadsTaskRepository({
-      resolveCliContext() {
-        return Effect.tryPromise({
-          try: async () => {
-            contextResolutionAttempts += 1;
-            resolveContextRequested();
-            return contextResolution;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      runBdJson() {
-        return Effect.succeed({ path: context.beadsDir });
-      },
-    });
-
-    const first = Effect.runPromise(port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true }));
-    const second = Effect.runPromise(
-      port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: true }),
-    );
-
-    await contextRequested;
-    resolveContext(context);
-
-    const expectedDiagnosis = {
-      category: "healthy",
-      status: "ready",
-      isReady: true,
-      detail: "Beads attachment and shared Dolt server are healthy.",
-      attachment: {
-        path: context.beadsDir,
-        databaseName: "odt_repo_123456789abc",
-      },
-      sharedServer: {
-        host: "127.0.0.1",
-        port: 36000,
-        ownershipState: "owned_by_current_process",
-      },
-    } as const;
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      expectedDiagnosis,
-      expectedDiagnosis,
-    ]);
-    expect(contextResolutionAttempts).toBe(1);
   });
   test("diagnoses a ready Beads repo store from bd where", async () => {
     const context = await createExistingBeadsCliContext();
@@ -497,7 +280,6 @@ describe("createBeadsTaskRepository", () => {
       `console.log(JSON.stringify([{ id: "task-1", title: "Task", status: "open", priority: 0, issue_type: "task", labels: [], updated_at: "2026-05-10T00:00:00Z", created_at: "2026-05-10T00:00:00Z" }]));\n`,
     );
     context.tools = { beads: bdPath };
-    context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createTestBeadsTaskRepository({
       resolveWorkspaceIdForRepoPath() {
@@ -550,7 +332,6 @@ if (args.join(" ") === "list --limit 0 --json") {
 `,
     );
     context.tools = { beads: bdPath };
-    context.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createTestBeadsTaskRepository({
       resolveWorkspaceIdForRepoPath() {
@@ -630,35 +411,39 @@ if (args.join(" ") === "list --limit 0 --json") {
     expect(refreshed[0]?.title).toBe("Task 2");
   });
   test("resolves Dolt before context resolution for task commands that require the shared server", async () => {
-    const port = createTestBeadsTaskRepository({
-      toolDiscovery: createToolDiscoveryPort(["dolt"]),
-      resolveCliContext() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("Dolt preflight should run before context resolution.");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+    const port = createTestBeadsTaskRepository(
+      {
+        resolveCliContext() {
+          return Effect.tryPromise({
+            try: async () => {
+              throw new Error("Dolt preflight should run before context resolution.");
+            },
+            catch: (cause) =>
+              new HostOperationError({
+                operation: "test.effect",
+                message: cause instanceof Error ? cause.message : String(cause),
+                cause: cause,
+              }),
+          });
+        },
       },
-    });
+      createToolDiscoveryPort(["dolt"]),
+    );
     await expect(Effect.runPromise(port.listTasks({ repoPath: "/repo" }))).rejects.toThrow(
       "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
     );
   });
   test("diagnoses existing Beads store without requiring Dolt when preparation is disabled", async () => {
     const context = await createExistingBeadsCliContext();
-    const port = createTestBeadsTaskRepository({
-      toolDiscovery: createToolDiscoveryPort(["dolt"]),
-      resolveCliContext: () => Effect.succeed(context),
-      runBdJson() {
-        return Effect.succeed({ path: context.beadsDir });
+    const port = createTestBeadsTaskRepository(
+      {
+        resolveCliContext: () => Effect.succeed(context),
+        runBdJson() {
+          return Effect.succeed({ path: context.beadsDir });
+        },
       },
-    });
+      createToolDiscoveryPort(["dolt"]),
+    );
 
     await expect(
       Effect.runPromise(port.diagnoseRepoStore?.({ repoPath: "/repo", prepare: false })),
