@@ -9,6 +9,56 @@ import {
   type SessionEventAdapter,
 } from "./session-events-test-harness";
 
+type SessionsRef = { current: Record<string, AgentSessionState> };
+
+const attachTestSessionListener = (input: {
+  externalSessionId: string;
+  sessionsRef: SessionsRef;
+}): ((event: SessionEvent) => void) => {
+  const handlers: Array<(event: SessionEvent) => void> = [];
+  const adapter: SessionEventAdapter = {
+    subscribeEvents: (_externalSessionId, handler) => {
+      handlers.push(handler);
+      return () => {};
+    },
+    replyApproval: async () => {},
+  };
+  const updateSession = (
+    externalSessionId: string,
+    updater: (current: AgentSessionState) => AgentSessionState,
+  ) => {
+    const current = input.sessionsRef.current[externalSessionId];
+    if (!current) {
+      return;
+    }
+    input.sessionsRef.current = {
+      ...input.sessionsRef.current,
+      [externalSessionId]: updater(current),
+    };
+  };
+
+  attachAgentSessionListener({
+    adapter,
+    repoPath: "/tmp/repo",
+    externalSessionId: input.externalSessionId,
+    sessionsRef: input.sessionsRef,
+    draftRawBySessionRef: { current: {} },
+    draftSourceBySessionRef: { current: {} },
+    turnStartedAtBySessionRef: { current: {} },
+    updateSession,
+    resolveTurnDurationMs: () => undefined,
+    clearTurnDuration: () => {},
+    refreshTaskData: async () => {},
+    resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+  });
+
+  const handleEvent = handlers[0];
+  if (!handleEvent) {
+    throw new Error("Expected session event handler to be registered");
+  }
+  return handleEvent;
+};
+
 describe("agent-orchestrator session permissions and questions", () => {
   test("auto-rejects mutating permissions for read-only roles", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
@@ -234,14 +284,6 @@ describe("agent-orchestrator session permissions and questions", () => {
   });
 
   test("clears child and parent subagent approval overlay when permission is resolved", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
     const pendingApproval = {
       requestId: "perm-child-1",
       requestType: "permission_grant" as const,
@@ -271,39 +313,10 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const handleEvent = attachTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
 
     handleEvent({
       type: "approval_resolved",
@@ -322,14 +335,6 @@ describe("agent-orchestrator session permissions and questions", () => {
   });
 
   test("clears child and parent subagent question overlay when question is resolved", () => {
-    const handlers: Array<(event: SessionEvent) => void> = [];
-    const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
-        handlers.push(handler);
-        return () => {};
-      },
-      replyApproval: async () => {},
-    };
     const pendingQuestion = {
       requestId: "question-child-1",
       questions: [
@@ -356,39 +361,10 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
-    };
-
-    attachAgentSessionListener({
-      adapter,
-      repoPath: "/tmp/repo",
+    const handleEvent = attachTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
-      updateSession,
-      resolveTurnDurationMs: () => undefined,
-      clearTurnDuration: () => {},
-      refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
-
-    const handleEvent = handlers[0];
-    if (!handleEvent) {
-      throw new Error("Expected session event handler to be registered");
-    }
 
     handleEvent({
       type: "question_resolved",

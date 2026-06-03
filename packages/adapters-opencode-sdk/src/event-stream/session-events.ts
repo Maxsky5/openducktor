@@ -26,6 +26,10 @@ import {
 } from "./shared";
 
 type PendingInputEvent = Extract<AgentEvent, { type: "approval_required" | "question_required" }>;
+type PendingInputResolvedEvent = Extract<
+  AgentEvent,
+  { type: "approval_resolved" | "question_resolved" }
+>;
 
 const shouldQueueSubagentInputEvent = (
   runtime: EventStreamRuntime,
@@ -291,29 +295,22 @@ const handleQuestionAskedEvent = (event: Event, runtime: EventStreamRuntime): bo
   return true;
 };
 
-const handlePermissionRepliedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "permission.replied") {
-    return false;
+const readPendingInputResolvedEventType = (
+  event: Event,
+): PendingInputResolvedEvent["type"] | undefined => {
+  switch (event.type) {
+    case "permission.replied":
+      return "approval_resolved";
+    case "question.replied":
+      return "question_resolved";
+    default:
+      return undefined;
   }
-
-  const properties = readEventProperties(event);
-  const parsed = properties ? parsePendingInputReplied(properties) : undefined;
-  if (!parsed) {
-    return true;
-  }
-
-  runtime.emit(runtime.externalSessionId, {
-    type: "approval_resolved",
-    externalSessionId: runtime.externalSessionId,
-    timestamp: runtime.now(),
-    requestId: parsed.requestId,
-    ...resolveSubagentInputRouting(event, properties, runtime),
-  });
-  return true;
 };
 
-const handleQuestionRepliedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "question.replied") {
+const handlePendingInputRepliedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
+  const resolvedEventType = readPendingInputResolvedEventType(event);
+  if (!resolvedEventType) {
     return false;
   }
 
@@ -323,13 +320,14 @@ const handleQuestionRepliedEvent = (event: Event, runtime: EventStreamRuntime): 
     return true;
   }
 
-  runtime.emit(runtime.externalSessionId, {
-    type: "question_resolved",
+  const resolvedEvent: PendingInputResolvedEvent = {
+    type: resolvedEventType,
     externalSessionId: runtime.externalSessionId,
     timestamp: runtime.now(),
     requestId: parsed.requestId,
     ...resolveSubagentInputRouting(event, properties, runtime),
-  });
+  };
+  runtime.emit(runtime.externalSessionId, resolvedEvent);
   return true;
 };
 
@@ -480,9 +478,8 @@ export const handleSessionEvent = (event: Event, runtime: EventStreamRuntime): b
     bindChildSessionCorrelation(event, runtime) ||
     handleSessionStatusEvent(event, runtime) ||
     handlePermissionAskedEvent(event, runtime) ||
-    handlePermissionRepliedEvent(event, runtime) ||
     handleQuestionAskedEvent(event, runtime) ||
-    handleQuestionRepliedEvent(event, runtime) ||
+    handlePendingInputRepliedEvent(event, runtime) ||
     handleSessionErrorEvent(event, runtime) ||
     handleSessionIdleEvent(event, runtime) ||
     handleTodoUpdatedEvent(event, runtime)

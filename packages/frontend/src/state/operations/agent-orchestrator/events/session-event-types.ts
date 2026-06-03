@@ -21,8 +21,7 @@ export type ResolveTurnDuration = (
 
 export type RecordTurnTimestamp = (externalSessionId: string, timestamp: string | number) => void;
 
-export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval"> &
-  Partial<Pick<AgentEnginePort, "readSessionPresence">>;
+export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval">;
 
 export type SessionEvent = Parameters<Parameters<SessionEventAdapter["subscribeEvents"]>[1]>[0];
 export type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
