@@ -106,14 +106,6 @@ const ensureRuntimeEventTransport = (input: {
                 session?.pendingSubagentSessionsByExternalSessionId.has(externalSessionId),
             );
           },
-          hasSinglePendingSubagentInputCandidate: (externalSessionId) => {
-            if (externalSessionId === subscriber.externalSessionId) {
-              return false;
-            }
-
-            const session = input.sessions.get(subscriber.externalSessionId);
-            return Boolean(session && session.pendingSubagentCorrelationKeys.length === 1);
-          },
         });
         logStreamEvent({
           subscriber,

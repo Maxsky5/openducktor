@@ -59,6 +59,32 @@ const childPermissionEvent = (childSessionId: string): Event =>
     },
   }) as unknown as Event;
 
+const syncAssistantSubtaskEvent = (input: {
+  messageId: string;
+  partId: string;
+  description: string;
+}): Event =>
+  ({
+    type: "sync",
+    name: "message.part.updated.1",
+    id: `sync-${input.partId}`,
+    seq: 1,
+    aggregateID: "sessionID",
+    data: {
+      sessionID: "external-session-1",
+      time: Date.parse("2026-02-22T12:00:09.000Z"),
+      part: {
+        id: input.partId,
+        sessionID: "external-session-1",
+        messageID: input.messageId,
+        type: "subtask",
+        agent: "build",
+        prompt: "Inspect repo",
+        description: input.description,
+      },
+    },
+  }) as unknown as Event;
+
 const childSessionCreatedEvent = (childSessionId: string): Event =>
   ({
     type: "session.created",
@@ -68,6 +94,29 @@ const childSessionCreatedEvent = (childSessionId: string): Event =>
         id: childSessionId,
         time: {
           created: Date.parse("2026-02-22T12:00:10.000Z"),
+        },
+      },
+    },
+  }) as unknown as Event;
+
+const syncChildSessionCreatedEvent = (childSessionId: string): Event =>
+  ({
+    type: "sync",
+    name: "session.created.1",
+    id: `sync-${childSessionId}`,
+    seq: 2,
+    aggregateID: "sessionID",
+    data: {
+      sessionID: childSessionId,
+      info: {
+        id: childSessionId,
+        parentID: "external-session-1",
+        directory: "/repo",
+        title: "Subagent",
+        version: "1.0.0",
+        time: {
+          created: Date.parse("2026-02-22T12:00:10.000Z"),
+          updated: Date.parse("2026-02-22T12:00:10.000Z"),
         },
       },
     },
@@ -121,7 +170,27 @@ describe("session registry runtime event transport", () => {
     });
   });
 
-  test("routes same-directory child permission events to the single pending subagent card", async () => {
+  test("routes sync child session creation to the single pending subagent card", async () => {
+    const emitted = await runRuntimeEventTransport([
+      assistantRoleEvent("assistant-sync-subagent-session-created"),
+      syncAssistantSubtaskEvent({
+        messageId: "assistant-sync-subagent-session-created",
+        partId: "subtask-a",
+        description: "Read omp.json file",
+      }),
+      syncChildSessionCreatedEvent("external-child-session"),
+    ]);
+
+    const subagentParts = readSubagentParts(emitted);
+    expect(subagentParts).toHaveLength(2);
+    expect(subagentParts[1]).toMatchObject({
+      correlationKey: "part:assistant-sync-subagent-session-created:subtask-a",
+      externalSessionId: "external-child-session",
+      status: "running",
+    });
+  });
+
+  test("routes known child permission events after the child session link is established", async () => {
     const emitted = await runRuntimeEventTransport([
       assistantRoleEvent("assistant-subagent-permission"),
       assistantSubtaskEvent({
@@ -129,6 +198,7 @@ describe("session registry runtime event transport", () => {
         partId: "subtask-a",
         description: "Read omp.json file",
       }),
+      childSessionCreatedEvent("external-child-session"),
       childPermissionEvent("external-child-session"),
     ]);
 

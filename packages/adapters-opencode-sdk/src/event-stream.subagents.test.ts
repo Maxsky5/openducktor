@@ -452,7 +452,7 @@ describe("event-stream subagent correlation", () => {
     );
   });
 
-  test("binds child permission events to the single running subagent card without a parent hint", async () => {
+  test("binds child permission events after the child session link is established", async () => {
     const { emitted, sessionRecord } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-permission"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -460,6 +460,7 @@ describe("event-stream subagent correlation", () => {
         partId: "subtask-a",
         description: "Read omp.json file",
       }),
+      makeChildSessionCreatedEvent({ childSessionId: "external-child-session" }),
       makeChildPermissionAskedEvent({ childSessionId: "external-child-session" }),
     ]);
 
@@ -492,7 +493,7 @@ describe("event-stream subagent correlation", () => {
     );
   });
 
-  test("binds child question events to the single running subagent card without a parent hint", async () => {
+  test("binds child question events after the child session link is established", async () => {
     const { emitted } = await runEventStreamWithSession([
       assistantRoleEvent("assistant-subagent-question"),
       makeAssistantSubtaskPartUpdatedEvent({
@@ -500,6 +501,7 @@ describe("event-stream subagent correlation", () => {
         partId: "subtask-a",
         description: "Ask for scope",
       }),
+      makeChildSessionCreatedEvent({ childSessionId: "external-child-session" }),
       makeChildQuestionAskedEvent({ childSessionId: "external-child-session" }),
     ]);
 
