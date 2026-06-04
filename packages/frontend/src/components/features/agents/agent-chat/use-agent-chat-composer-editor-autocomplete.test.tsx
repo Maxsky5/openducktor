@@ -44,25 +44,35 @@ const skills = [
   },
 ];
 
-const createHarness = (
+type AutocompleteProps = Parameters<typeof useAgentChatComposerEditorAutocomplete>[0];
+
+const createAutocompleteProps = (
   searchFiles: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>,
-  options: {
-    supportsSkillReferences?: boolean;
+  options: Partial<
+    Pick<
+      AutocompleteProps,
+      "disabled" | "supportsSlashCommands" | "supportsFileSearch" | "supportsSkillReferences"
+    >
+  > & {
     skills?: typeof skills;
   } = {},
+): AutocompleteProps => ({
+  disabled: options.disabled ?? false,
+  supportsSlashCommands: options.supportsSlashCommands ?? true,
+  supportsFileSearch: options.supportsFileSearch ?? true,
+  supportsSkillReferences: options.supportsSkillReferences ?? false,
+  slashCommands: [...slashCommands],
+  skills: options.skills ? [...options.skills] : [],
+  searchFiles,
+});
+
+const createHarness = (
+  searchFiles: (query: string) => Promise<ReturnType<typeof buildFileSearchResult>[]>,
+  options: Parameters<typeof createAutocompleteProps>[1] = {},
 ) => {
   return createHookHarness(
-    () =>
-      useAgentChatComposerEditorAutocomplete({
-        disabled: false,
-        supportsSlashCommands: true,
-        supportsFileSearch: true,
-        supportsSkillReferences: options.supportsSkillReferences ?? false,
-        slashCommands: [...slashCommands],
-        skills: options.skills ? [...options.skills] : [],
-        searchFiles,
-      }),
-    undefined,
+    useAgentChatComposerEditorAutocomplete,
+    createAutocompleteProps(searchFiles, options),
   );
 };
 
@@ -152,6 +162,37 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     await unsupportedHarness.unmount();
   });
 
+  test("does not restore stale slash menu after slash support returns", async () => {
+    const searchFiles = mock(async () => []);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("/comp"), {
+        segmentId: "segment-1",
+        offset: 5,
+      });
+    });
+
+    expect(harness.getLatest().showSlashMenu).toBe(true);
+
+    await harness.update(
+      createAutocompleteProps(searchFiles, {
+        supportsSlashCommands: false,
+      }),
+    );
+
+    expect(harness.getLatest().slashMenuState).toBeNull();
+    expect(harness.getLatest().showSlashMenu).toBe(false);
+
+    await harness.update(createAutocompleteProps(searchFiles));
+
+    expect(harness.getLatest().slashMenuState).toBeNull();
+    expect(harness.getLatest().showSlashMenu).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("keeps previous file results while a newer search is loading", async () => {
     const firstSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
     const secondSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
@@ -233,6 +274,45 @@ describe("useAgentChatComposerEditorAutocomplete", () => {
     expect(harness.getLatest().fileSearchResults.map((result) => result.path)).toEqual([
       "src/ab.ts",
     ]);
+
+    await harness.unmount();
+  });
+
+  test("ignores stale file search responses after file search support is disabled", async () => {
+    const fileSearch = createDeferred<ReturnType<typeof buildFileSearchResult>[]>();
+    const searchFiles = mock(() => fileSearch.promise);
+    const harness = createHarness(searchFiles);
+    await harness.mount();
+
+    await harness.run((state) => {
+      state.syncMenusForSelectionTarget(buildDraft("@a"), {
+        segmentId: "segment-1",
+        offset: 2,
+      });
+    });
+
+    expect(harness.getLatest().showFileMenu).toBe(true);
+    expect(harness.getLatest().isFileSearchLoading).toBe(true);
+
+    await harness.update(
+      createAutocompleteProps(searchFiles, {
+        supportsFileSearch: false,
+      }),
+    );
+
+    expect(harness.getLatest().fileMenuState).toBeNull();
+    expect(harness.getLatest().showFileMenu).toBe(false);
+    expect(harness.getLatest().isFileSearchLoading).toBe(false);
+
+    await harness.run(() => {
+      fileSearch.resolve([buildFileSearchResult({ path: "src/alpha.ts", name: "alpha.ts" })]);
+    });
+
+    await harness.update(createAutocompleteProps(searchFiles));
+
+    expect(harness.getLatest().fileMenuState).toBeNull();
+    expect(harness.getLatest().showFileMenu).toBe(false);
+    expect(harness.getLatest().fileSearchResults).toEqual([]);
 
     await harness.unmount();
   });

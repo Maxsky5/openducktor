@@ -45,6 +45,19 @@ export type SkillMenuState = {
   rangeEnd: number;
 };
 
+type InternalSlashMenuState = SlashMenuState & {
+  availabilityVersion: number;
+};
+
+type InternalFileMenuState = FileMenuState & {
+  availabilityVersion: number;
+  requestId: number;
+};
+
+type InternalSkillMenuState = SkillMenuState & {
+  availabilityVersion: number;
+};
+
 export const AUTOCOMPLETE_NAVIGATION_KEYS = new Set([
   "ArrowDown",
   "ArrowUp",
@@ -165,61 +178,60 @@ export const useAgentChatComposerEditorAutocomplete = ({
   skills,
   searchFiles,
 }: UseAgentChatComposerEditorAutocompleteArgs): UseAgentChatComposerEditorAutocompleteResult => {
-  const [slashMenuState, setSlashMenuState] = useState<SlashMenuState | null>(null);
+  const [slashMenuState, setSlashMenuState] = useState<InternalSlashMenuState | null>(null);
   const [activeSlashIndex, setActiveSlashIndex] = useState(0);
-  const [skillMenuState, setSkillMenuState] = useState<SkillMenuState | null>(null);
+  const [skillMenuState, setSkillMenuState] = useState<InternalSkillMenuState | null>(null);
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
-  const [fileMenuState, setFileMenuState] = useState<FileMenuState | null>(null);
+  const [fileMenuState, setFileMenuState] = useState<InternalFileMenuState | null>(null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const [availabilitySnapshot, setAvailabilitySnapshot] = useState({
-    disabled,
-    supportsFileSearch,
-    supportsSkillReferences,
-    supportsSlashCommands,
-  });
+  const availabilityKey = [
+    disabled ? "disabled" : "enabled",
+    supportsSlashCommands ? "slash" : "no-slash",
+    supportsFileSearch ? "file" : "no-file",
+    supportsSkillReferences ? "skill" : "no-skill",
+  ].join("\0");
+  const previousAvailabilityKeyRef = useRef(availabilityKey);
+  const availabilityVersionRef = useRef(0);
   const fileSearchRequestIdRef = useRef(0);
 
-  if (
-    availabilitySnapshot.disabled !== disabled ||
-    availabilitySnapshot.supportsFileSearch !== supportsFileSearch ||
-    availabilitySnapshot.supportsSkillReferences !== supportsSkillReferences ||
-    availabilitySnapshot.supportsSlashCommands !== supportsSlashCommands
-  ) {
-    setAvailabilitySnapshot({
-      disabled,
-      supportsFileSearch,
-      supportsSkillReferences,
-      supportsSlashCommands,
-    });
-
-    if (disabled || !supportsSlashCommands) {
-      setActiveSlashIndex(0);
-      setSlashMenuState(null);
-    }
-    if (disabled || !supportsFileSearch) {
-      fileSearchRequestIdRef.current += 1;
-      setActiveFileIndex(0);
-      setFileMenuState(null);
-    }
-    if (disabled || !supportsSkillReferences) {
-      setActiveSkillIndex(0);
-      setSkillMenuState(null);
-    }
+  if (previousAvailabilityKeyRef.current !== availabilityKey) {
+    previousAvailabilityKeyRef.current = availabilityKey;
+    availabilityVersionRef.current += 1;
   }
+  const currentAvailabilityVersion = availabilityVersionRef.current;
+
+  const effectiveSlashMenuState =
+    disabled ||
+    !supportsSlashCommands ||
+    slashMenuState?.availabilityVersion !== currentAvailabilityVersion
+      ? null
+      : slashMenuState;
+  const effectiveFileMenuState =
+    disabled ||
+    !supportsFileSearch ||
+    fileMenuState?.availabilityVersion !== currentAvailabilityVersion
+      ? null
+      : fileMenuState;
+  const effectiveSkillMenuState =
+    disabled ||
+    !supportsSkillReferences ||
+    skillMenuState?.availabilityVersion !== currentAvailabilityVersion
+      ? null
+      : skillMenuState;
 
   const filteredSlashCommands = useMemo(() => {
-    if (!slashMenuState) {
+    if (!effectiveSlashMenuState) {
       return [];
     }
-    return filterSlashCommands(slashCommands, slashMenuState.query);
-  }, [slashCommands, slashMenuState]);
+    return filterSlashCommands(slashCommands, effectiveSlashMenuState.query);
+  }, [effectiveSlashMenuState, slashCommands]);
 
   const filteredSkills = useMemo(() => {
-    if (!skillMenuState) {
+    if (!effectiveSkillMenuState) {
       return [];
     }
-    return filterSkills(skills, skillMenuState.query);
-  }, [skillMenuState, skills]);
+    return filterSkills(skills, effectiveSkillMenuState.query);
+  }, [effectiveSkillMenuState, skills]);
 
   const closeSlashMenu = useCallback(() => {
     setSlashMenuState(null);
@@ -262,6 +274,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         query: match.query,
         rangeStart: match.rangeStart,
         rangeEnd: match.rangeEnd,
+        availabilityVersion: availabilityVersionRef.current,
       });
     },
     [disabled, supportsSlashCommands],
@@ -290,6 +303,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
       }
 
       const requestId = fileSearchRequestIdRef.current + 1;
+      const requestAvailabilityVersion = availabilityVersionRef.current;
       fileSearchRequestIdRef.current = requestId;
       setActiveFileIndex(0);
       setFileMenuState((previousState) => ({
@@ -301,11 +315,16 @@ export const useAgentChatComposerEditorAutocomplete = ({
           previousState && previousState.textSegmentId === segmentId ? previousState.results : [],
         isLoading: true,
         error: null,
+        availabilityVersion: requestAvailabilityVersion,
+        requestId,
       }));
 
       void searchFiles(match.query)
         .then((results) => {
-          if (fileSearchRequestIdRef.current !== requestId) {
+          if (
+            fileSearchRequestIdRef.current !== requestId ||
+            availabilityVersionRef.current !== requestAvailabilityVersion
+          ) {
             return;
           }
           setFileMenuState({
@@ -316,10 +335,15 @@ export const useAgentChatComposerEditorAutocomplete = ({
             results,
             isLoading: false,
             error: null,
+            availabilityVersion: requestAvailabilityVersion,
+            requestId,
           });
         })
         .catch((error) => {
-          if (fileSearchRequestIdRef.current !== requestId) {
+          if (
+            fileSearchRequestIdRef.current !== requestId ||
+            availabilityVersionRef.current !== requestAvailabilityVersion
+          ) {
             return;
           }
           setFileMenuState((previousState) => ({
@@ -330,6 +354,8 @@ export const useAgentChatComposerEditorAutocomplete = ({
             results: previousState?.results ?? [],
             isLoading: false,
             error: error instanceof Error ? error.message : FILE_SEARCH_FAILED_MESSAGE,
+            availabilityVersion: requestAvailabilityVersion,
+            requestId,
           }));
         });
     },
@@ -364,6 +390,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         query: match.query,
         rangeStart: match.rangeStart,
         rangeEnd: match.rangeEnd,
+        availabilityVersion: availabilityVersionRef.current,
       });
     },
     [closeSkillMenu, disabled, skillMenuState, supportsSkillReferences],
@@ -403,9 +430,13 @@ export const useAgentChatComposerEditorAutocomplete = ({
 
   const moveActiveFileIndex = useCallback(
     (direction: 1 | -1) => {
-      return moveActiveIndex(fileMenuState?.results.length ?? 0, direction, setActiveFileIndex);
+      return moveActiveIndex(
+        effectiveFileMenuState?.results.length ?? 0,
+        direction,
+        setActiveFileIndex,
+      );
     },
-    [fileMenuState],
+    [effectiveFileMenuState],
   );
 
   const moveActiveSlashIndex = useCallback(
@@ -423,20 +454,20 @@ export const useAgentChatComposerEditorAutocomplete = ({
   );
 
   return {
-    slashMenuState,
-    fileMenuState,
-    skillMenuState,
+    slashMenuState: effectiveSlashMenuState,
+    fileMenuState: effectiveFileMenuState,
+    skillMenuState: effectiveSkillMenuState,
     filteredSlashCommands,
     filteredSkills,
-    activeSlashIndex,
-    activeSkillIndex,
-    showSlashMenu: supportsSlashCommands && slashMenuState !== null,
-    showSkillMenu: supportsSkillReferences && skillMenuState !== null,
-    fileSearchResults: fileMenuState?.results ?? [],
-    activeFileIndex,
-    showFileMenu: supportsFileSearch && fileMenuState !== null,
-    fileSearchError: fileMenuState?.error ?? null,
-    isFileSearchLoading: fileMenuState?.isLoading ?? false,
+    activeSlashIndex: effectiveSlashMenuState ? activeSlashIndex : 0,
+    activeSkillIndex: effectiveSkillMenuState ? activeSkillIndex : 0,
+    showSlashMenu: effectiveSlashMenuState !== null,
+    showSkillMenu: effectiveSkillMenuState !== null,
+    fileSearchResults: effectiveFileMenuState?.results ?? [],
+    activeFileIndex: effectiveFileMenuState ? activeFileIndex : 0,
+    showFileMenu: effectiveFileMenuState !== null,
+    fileSearchError: effectiveFileMenuState?.error ?? null,
+    isFileSearchLoading: effectiveFileMenuState?.isLoading ?? false,
     closeSlashMenu,
     closeFileMenu,
     closeSkillMenu,
