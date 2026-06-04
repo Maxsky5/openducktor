@@ -53,6 +53,38 @@ describe("Codex App Server transcript parsing", () => {
     expect(inputs).toEqual([{ type: "mention", name: "components", path: "src/components" }]);
   });
 
+  test("keeps a path marker in Codex turn input for file references", () => {
+    expect(
+      toCodexTurnInputList([
+        { kind: "text", text: "Tell me about " },
+        {
+          kind: "file_reference",
+          file: {
+            id: "src/main.ts",
+            path: "src/main.ts",
+            name: "main.ts",
+            kind: "code",
+          },
+        },
+        { kind: "text", text: " please" },
+      ]),
+    ).toEqual([
+      { type: "text", text: "Tell me about " },
+      {
+        type: "text",
+        text: "@src/main.ts",
+        text_elements: [
+          {
+            byteRange: { start: 0, end: 12 },
+            placeholder: "@main.ts",
+          },
+        ],
+      },
+      { type: "mention", name: "main.ts", path: "src/main.ts" },
+      { type: "text", text: " please" },
+    ]);
+  });
+
   test("keeps a text skill marker in Codex turn input for history hydration", () => {
     const skill = {
       id: "/skills/review/SKILL.md",
@@ -145,6 +177,98 @@ describe("Codex App Server transcript parsing", () => {
           },
         },
         { kind: "text", text: " please" },
+      ],
+    });
+  });
+
+  test("hydrates Codex text element file markers as structured file display parts", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "Tell me about @src/main.ts please",
+          text_elements: [
+            {
+              byteRange: { start: 14, end: 26 },
+              placeholder: "@main.ts",
+            },
+          ],
+        },
+        { type: "mention", name: "main.ts", path: "src/main.ts" },
+      ],
+    });
+
+    expect(codexUserInputListToText(input)).toBe("Tell me about @src/main.ts please");
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Tell me about @src/main.ts please",
+      displayParts: [
+        { kind: "text", text: "Tell me about " },
+        {
+          kind: "file_reference",
+          file: {
+            id: "src/main.ts",
+            name: "main.ts",
+            path: "src/main.ts",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@src/main.ts",
+            start: 14,
+            end: 26,
+          },
+        },
+        { kind: "text", text: " please" },
+      ],
+    });
+  });
+
+  test("hydrates standalone Codex file mentions as structured file display parts", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        { type: "text", text: "Tell me about" },
+        { type: "mention", name: "main.ts", path: "src/main.ts" },
+      ],
+    });
+
+    expect(codexUserInputListToText(input)).toBe("Tell me about @src/main.ts");
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      displayParts: [
+        { kind: "text", text: "Tell me about" },
+        {
+          kind: "file_reference",
+          file: {
+            id: "src/main.ts",
+            name: "main.ts",
+            path: "src/main.ts",
+            kind: "code",
+          },
+        },
       ],
     });
   });

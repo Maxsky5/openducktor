@@ -981,24 +981,28 @@ export const toCodexUserInputList = (parts: AgentUserMessagePart[]): CodexUserIn
   return parts.map(toCodexUserInput);
 };
 
+const toCodexMarkedTextInput = (marker: string, placeholder: string): CodexUserInput => ({
+  type: "text",
+  text: marker,
+  text_elements: [
+    {
+      byteRange: { start: 0, end: utf8ByteLength(marker) },
+      placeholder,
+    },
+  ],
+});
+
 export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] => {
   return parts.flatMap((part): CodexUserInput[] => {
+    if (part.kind === "file_reference") {
+      const marker = `@${part.file.path}`;
+      const placeholder = `@${part.file.name || part.file.path}`;
+      return [toCodexMarkedTextInput(marker, placeholder), toCodexUserInput(part)];
+    }
     if (part.kind !== "skill_mention") {
       return [toCodexUserInput(part)];
     }
     const marker = `$${part.skill.name}`;
-    return [
-      {
-        type: "text",
-        text: marker,
-        text_elements: [
-          {
-            byteRange: { start: 0, end: utf8ByteLength(marker) },
-            placeholder: marker,
-          },
-        ],
-      },
-      toCodexUserInput(part),
-    ];
+    return [toCodexMarkedTextInput(marker, marker), toCodexUserInput(part)];
   });
 };
