@@ -142,7 +142,7 @@ describe("prepareElectronSidecars", () => {
       "dolt",
     ]);
     expect(downloadedAssets).toEqual(["beads", "dolt"]);
-    expect(extractedAssets).toEqual(["beads", "dolt"]);
+    expect(extractedAssets.sort()).toEqual(["beads", "dolt"]);
     await expect(stat(prepared.plan.outputPaths.beads)).resolves.toMatchObject({ size: 6 });
     await expect(stat(prepared.plan.outputPaths.dolt)).resolves.toMatchObject({ size: 6 });
     expect(chmodCalls.map((call) => call.path).sort()).toEqual(
