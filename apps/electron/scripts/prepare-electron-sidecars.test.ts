@@ -128,8 +128,12 @@ describe("prepareElectronSidecars", () => {
     );
   });
 
-  test("rejects unsupported target assets before Electron Builder runs", async () => {
+  test("rejects unsupported target assets before mutating sidecar output", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
+    const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
+    const sideEffects: string[] = [];
+    await mkdir(dirname(staleOutput), { recursive: true });
+    await writeFile(staleOutput, "stale");
 
     await expect(
       prepareElectronSidecars({
@@ -138,18 +142,27 @@ describe("prepareElectronSidecars", () => {
         platform: "windows",
         workspaceRoot,
         compileMcp: async ({ outputPaths }) => {
+          sideEffects.push("compile");
           await writeFile(outputPaths["openducktor-mcp"], "binary");
         },
         downloadAsset: async ({ archivePath }) => {
+          sideEffects.push("download");
           await mkdir(dirname(archivePath), { recursive: true });
           await writeFile(archivePath, "archive");
         },
         extractArchive: async ({ asset, extractionDirectory }) => {
+          sideEffects.push("extract");
           await writeExtractedSidecar({ asset, extractionDirectory });
+        },
+        chmodFile: async (path, mode) => {
+          sideEffects.push("chmod");
+          await chmod(path, mode);
         },
         verifyArchiveChecksum: async () => {},
       }),
     ).rejects.toThrow("No pinned Electron Dolt sidecar asset for windows/arm64");
+    expect(sideEffects).toEqual([]);
+    await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
 
   test("does not chmod Windows sidecars", async () => {

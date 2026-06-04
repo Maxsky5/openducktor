@@ -15,7 +15,9 @@ import {
 } from "./electron-sidecar-archives";
 import {
   ELECTRON_SIDECAR_IDS,
+  type ElectronExternalSidecarAsset,
   type ElectronSidecarId,
+  type ExternalElectronSidecarId,
   electronExternalSidecarAssetFileName,
   electronSidecarDisplayName,
   electronSidecarExecutableName,
@@ -32,6 +34,13 @@ export type ElectronSidecarBuildPlan = {
 
 export type PreparedElectronSidecar = {
   id: ElectronSidecarId;
+  outputPath: string;
+};
+
+type ExternalElectronSidecarStagingPlan = {
+  archivePath: string;
+  asset: ElectronExternalSidecarAsset;
+  extractionDirectory: string;
   outputPath: string;
 };
 
@@ -162,42 +171,61 @@ const compileAndVerifyMcpSidecar = async ({
   return { id: "openducktor-mcp", outputPath };
 };
 
-const stageExternalSidecar = async ({
+const EXTERNAL_ELECTRON_SIDECAR_IDS = [
+  "beads",
+  "dolt",
+] as const satisfies readonly ExternalElectronSidecarId[];
+
+const resolveExternalSidecarStagingPlans = ({
   arch,
-  chmodFile,
-  download,
   electronPackageDirectory,
-  extract,
   plan,
   platform,
-  sidecarId,
-  verifyChecksum,
 }: {
   arch: ElectronReleaseArch;
-  chmodFile: (path: string, mode: number) => Promise<void>;
-  download: DownloadElectronSidecarAsset;
   electronPackageDirectory: string;
-  extract: ExtractElectronSidecarArchive;
   plan: ElectronSidecarBuildPlan;
   platform: ElectronReleasePlatform;
-  sidecarId: "beads" | "dolt";
+}): ExternalElectronSidecarStagingPlan[] =>
+  EXTERNAL_ELECTRON_SIDECAR_IDS.map((sidecarId) => {
+    const asset = resolveElectronExternalSidecarAsset({ arch, id: sidecarId, platform });
+
+    return {
+      archivePath: join(
+        electronPackageDirectory,
+        "build",
+        "sidecar-cache",
+        sidecarId,
+        asset.version,
+        electronExternalSidecarAssetFileName(asset),
+      ),
+      asset,
+      extractionDirectory: join(
+        electronPackageDirectory,
+        "build",
+        "sidecar-extract",
+        `${sidecarId}-${platform}-${arch}`,
+      ),
+      outputPath: plan.outputPaths[sidecarId],
+    };
+  });
+
+const stageExternalSidecar = async ({
+  chmodFile,
+  download,
+  extract,
+  platform,
+  stagingPlan,
+  verifyChecksum,
+}: {
+  chmodFile: (path: string, mode: number) => Promise<void>;
+  download: DownloadElectronSidecarAsset;
+  extract: ExtractElectronSidecarArchive;
+  platform: ElectronReleasePlatform;
+  stagingPlan: ExternalElectronSidecarStagingPlan;
   verifyChecksum: VerifyElectronSidecarArchiveChecksum;
 }): Promise<PreparedElectronSidecar> => {
-  const asset = resolveElectronExternalSidecarAsset({ arch, id: sidecarId, platform });
-  const archivePath = join(
-    electronPackageDirectory,
-    "build",
-    "sidecar-cache",
-    sidecarId,
-    asset.version,
-    electronExternalSidecarAssetFileName(asset),
-  );
-  const extractionDirectory = join(
-    electronPackageDirectory,
-    "build",
-    "sidecar-extract",
-    `${sidecarId}-${platform}-${arch}`,
-  );
+  const { archivePath, asset, extractionDirectory, outputPath } = stagingPlan;
 
   await prepareCachedElectronSidecarArchive({ archivePath, asset, download, verifyChecksum });
   await rm(extractionDirectory, { force: true, recursive: true });
@@ -206,23 +234,22 @@ const stageExternalSidecar = async ({
 
   const sourcePath = join(extractionDirectory, ...archiveEntryPathToFilePath(asset.executablePath));
   await assertSidecarFile({
-    label: `Extracted ${electronSidecarDisplayName(sidecarId)} sidecar`,
+    label: `Extracted ${electronSidecarDisplayName(asset.id)} sidecar`,
     path: sourcePath,
     platform,
   });
 
-  const outputPath = plan.outputPaths[sidecarId];
   await copyFile(sourcePath, outputPath);
   if (platform !== "windows") {
     await chmodFile(outputPath, 0o755);
   }
   await assertSidecarFile({
-    label: `Staged ${electronSidecarDisplayName(sidecarId)} sidecar`,
+    label: `Staged ${electronSidecarDisplayName(asset.id)} sidecar`,
     path: outputPath,
     platform,
   });
 
-  return { id: sidecarId, outputPath };
+  return { id: asset.id, outputPath };
 };
 
 export const prepareElectronSidecars = async ({
@@ -238,6 +265,12 @@ export const prepareElectronSidecars = async ({
   sidecars: PreparedElectronSidecar[];
 }> => {
   const plan = resolveElectronSidecarBuildPlan(input);
+  const externalSidecarPlans = resolveExternalSidecarStagingPlans({
+    arch,
+    electronPackageDirectory: input.electronPackageDirectory,
+    plan,
+    platform: input.platform,
+  });
 
   await resetSidecarOutput(plan);
   const mcpSidecar = await compileAndVerifyMcpSidecar({
@@ -247,16 +280,13 @@ export const prepareElectronSidecars = async ({
     platform: input.platform,
   });
   const externalSidecars = await Promise.all(
-    (["beads", "dolt"] as const).map((sidecarId) =>
+    externalSidecarPlans.map((stagingPlan) =>
       stageExternalSidecar({
-        arch,
         chmodFile,
         download,
-        electronPackageDirectory: input.electronPackageDirectory,
         extract,
-        plan,
         platform: input.platform,
-        sidecarId,
+        stagingPlan,
         verifyChecksum,
       }),
     ),
