@@ -105,6 +105,7 @@ describe("createChatComposerFileSearch", () => {
   });
 
   test("throws when active session runtime resolution failed", async () => {
+    const loadFileSearchForRepo = mock(async () => makeFileSearchResults());
     const searchFiles = createChatComposerFileSearch({
       hasActiveSession: true,
       activeSessionRuntimeQueryInput: null,
@@ -113,10 +114,11 @@ describe("createChatComposerFileSearch", () => {
       selectedRuntimeKind: "opencode",
       supportsFileSearch: true,
       queryClient: createQueryClient(),
-      loadFileSearchForRepo: async () => makeFileSearchResults(),
+      loadFileSearchForRepo,
     });
 
     await expect(searchFiles("src")).rejects.toThrow("Runtime query failed");
+    expect(loadFileSearchForRepo).not.toHaveBeenCalled();
   });
 
   test("throws when no active session has no workspace repo path", async () => {
@@ -163,6 +165,47 @@ describe("createChatComposerFileSearch", () => {
     });
 
     await expect(searchFiles("src")).resolves.toEqual([]);
+    expect(loadFileSearchForRepo).not.toHaveBeenCalled();
+  });
+
+  test("searches repo files through a supported Codex repo runtime before a session starts", async () => {
+    const loadFileSearchForRepo = mock(async () => makeFileSearchResults());
+    const searchFiles = createChatComposerFileSearch({
+      hasActiveSession: false,
+      activeSessionRuntimeQueryInput: null,
+      activeSessionRuntimeQueryError: null,
+      workspaceRepoPath: "/repo",
+      selectedRuntimeKind: "codex",
+      supportsFileSearch: true,
+      queryClient: createQueryClient(),
+      loadFileSearchForRepo,
+    });
+
+    await expect(searchFiles("")).resolves.toEqual(makeFileSearchResults());
+    expect(loadFileSearchForRepo).toHaveBeenCalledWith("/repo", "codex", "");
+  });
+
+  test("searches active-session files through the Codex session working directory", async () => {
+    const loadFileSearchForRepo = mock(async () => makeFileSearchResults());
+    const readSessionFileSearch = mock(async () => makeFileSearchResults());
+    const searchFiles = createChatComposerFileSearch({
+      hasActiveSession: true,
+      activeSessionRuntimeQueryInput: {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+      },
+      activeSessionRuntimeQueryError: null,
+      workspaceRepoPath: "/repo",
+      selectedRuntimeKind: "opencode",
+      supportsFileSearch: true,
+      queryClient: createQueryClient(),
+      loadFileSearchForRepo,
+      readSessionFileSearch,
+    });
+
+    await expect(searchFiles("src")).resolves.toEqual(makeFileSearchResults());
+    expect(readSessionFileSearch).toHaveBeenCalledWith("/repo", "codex", "/repo/worktree", "src");
     expect(loadFileSearchForRepo).not.toHaveBeenCalled();
   });
 });

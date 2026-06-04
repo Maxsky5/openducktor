@@ -21,6 +21,38 @@ describe("Codex App Server transcript parsing", () => {
     expect(codexUserInputListToText(inputs)).toBe("$review");
   });
 
+  test("maps file references to structured Codex mention input", () => {
+    const inputs = toCodexUserInputList([
+      {
+        kind: "file_reference",
+        file: {
+          id: "src/main.ts",
+          path: "src/main.ts",
+          name: "main.ts",
+          kind: "code",
+        },
+      },
+    ]);
+
+    expect(inputs).toEqual([{ type: "mention", name: "main.ts", path: "src/main.ts" }]);
+  });
+
+  test("maps directory references to structured Codex mention input", () => {
+    const inputs = toCodexUserInputList([
+      {
+        kind: "file_reference",
+        file: {
+          id: "src/components",
+          path: "src/components",
+          name: "components",
+          kind: "directory",
+        },
+      },
+    ]);
+
+    expect(inputs).toEqual([{ type: "mention", name: "components", path: "src/components" }]);
+  });
+
   test("keeps a text skill marker in Codex turn input for history hydration", () => {
     const skill = {
       id: "/skills/review/SKILL.md",

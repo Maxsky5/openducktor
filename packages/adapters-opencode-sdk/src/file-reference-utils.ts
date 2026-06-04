@@ -1,46 +1,4 @@
-import type { AgentFileReference, AgentFileSearchResultKind } from "@openducktor/core";
-
-const CSS_EXTENSIONS = new Set(["css", "scss", "sass", "less"]);
-
-const CODE_EXTENSIONS = new Set([
-  "ts",
-  "tsx",
-  "mts",
-  "cts",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "java",
-  "kt",
-  "kts",
-  "php",
-  "phtml",
-  "html",
-  "htm",
-  "rs",
-  "py",
-  "rb",
-  "go",
-  "c",
-  "h",
-  "cpp",
-  "cc",
-  "cxx",
-  "hpp",
-  "cs",
-  "swift",
-  "scala",
-  "sh",
-  "bash",
-  "zsh",
-  "sql",
-  "json",
-  "yaml",
-  "yml",
-  "toml",
-  "xml",
-]);
+import { type AgentFileReference, detectAgentFileReferenceKind } from "@openducktor/core";
 
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   png: "image/png",
@@ -72,46 +30,7 @@ const readLowercaseExtension = (filePath: string): string | null => {
   return normalizedPath.slice(extensionIndex + 1);
 };
 
-export const detectAgentFileReferenceKind = (input: {
-  filePath: string;
-  mime?: string;
-  isDirectory?: boolean;
-}): AgentFileSearchResultKind => {
-  if (input.isDirectory || input.mime === "inode/directory") {
-    return "directory";
-  }
-
-  if (input.mime?.startsWith("image/")) {
-    return "image";
-  }
-
-  if (input.mime?.startsWith("video/")) {
-    return "video";
-  }
-
-  const extension = readLowercaseExtension(input.filePath);
-  if (!extension) {
-    return "default";
-  }
-
-  if (CSS_EXTENSIONS.has(extension)) {
-    return "css";
-  }
-
-  if (CODE_EXTENSIONS.has(extension)) {
-    return "code";
-  }
-
-  if (extension in IMAGE_MIME_BY_EXTENSION) {
-    return "image";
-  }
-
-  if (extension in VIDEO_MIME_BY_EXTENSION) {
-    return "video";
-  }
-
-  return "default";
-};
+export { detectAgentFileReferenceKind };
 
 export const detectAgentFileReferenceMime = (
   file: Pick<AgentFileReference, "kind" | "path">,

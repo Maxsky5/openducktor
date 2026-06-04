@@ -75,6 +75,13 @@ describe("createCodexAppServerCommandHandlers", () => {
       }),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "fuzzyFileSearch",
+        params: { query: "src", roots: ["/repo"], cancellationToken: null },
+      }),
+    ).resolves.toEqual({ data: [], nextCursor: null });
+    await expect(
       router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
     ).resolves.toEqual([codexStatusNotification]);
     await expect(
@@ -106,6 +113,14 @@ describe("createCodexAppServerCommandHandlers", () => {
           runtimeId: "runtime-1",
           method: "skills/list",
           params: { cwd: "/repo", forceReload: false },
+        },
+      },
+      {
+        method: "request",
+        input: {
+          runtimeId: "runtime-1",
+          method: "fuzzyFileSearch",
+          params: { query: "src", roots: ["/repo"], cancellationToken: null },
         },
       },
       {
@@ -177,6 +192,13 @@ describe("createCodexAppServerCommandHandlers", () => {
     await expect(
       router.invoke("codex_app_server_request", { runtimeId: "runtime-1", method: "" }),
     ).rejects.toThrow("method is required.");
+    await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "fuzzyFileSearch/sessionStart",
+        params: {},
+      }),
+    ).rejects.toThrow("Unsupported Codex app-server request method: fuzzyFileSearch/sessionStart");
     await expect(
       router.invoke("codex_app_server_respond", { runtimeId: "runtime-1", requestId: 1.5 }),
     ).rejects.toThrow("requestId must be a non-negative integer.");

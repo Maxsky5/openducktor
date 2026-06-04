@@ -30,7 +30,8 @@ export const CODEX_APP_SERVER_REQUEST_METHODS = [
   "turn/steer",
   "turn/interrupt",
   "gitDiffToRemote",
-] as const;
+  "fuzzyFileSearch",
+] as const satisfies readonly CodexAppServerRequestMethod[];
 
 export type {
   CodexAppServerProtocolMessage,

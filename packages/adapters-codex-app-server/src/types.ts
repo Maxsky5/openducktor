@@ -1,4 +1,6 @@
 import type {
+  CodexAppServerFuzzyFileSearchParams,
+  CodexAppServerFuzzyFileSearchResponse,
   RepoRuntimeRef,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
@@ -261,6 +263,9 @@ export type CodexAppServerClient = {
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
   turnInterrupt(params: CodexTurnInterruptParams): Promise<Record<string, never>>;
+  fuzzyFileSearch(
+    params: CodexAppServerFuzzyFileSearchParams,
+  ): Promise<CodexAppServerFuzzyFileSearchResponse>;
   threadRead(params: { threadId: string; includeTurns?: boolean }): Promise<unknown>;
   threadList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
   threadLoadedList(params?: { limit?: number; cursor?: string | null }): Promise<unknown>;
@@ -296,6 +301,8 @@ export type {
   AgentSessionHistoryMessage,
   AgentSessionSummary,
   AgentSkillCatalog,
+  CodexAppServerFuzzyFileSearchParams,
+  CodexAppServerFuzzyFileSearchResponse,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   RuntimeDescriptor,

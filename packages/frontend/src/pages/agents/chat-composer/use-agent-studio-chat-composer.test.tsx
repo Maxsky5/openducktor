@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
@@ -134,6 +135,24 @@ const EMPTY_CATALOG: AgentModelCatalog = {
   profiles: [],
 };
 
+const CODEX_CATALOG: AgentModelCatalog = {
+  runtime: CODEX_RUNTIME_DESCRIPTOR,
+  models: [
+    {
+      id: "openai/gpt-5",
+      providerId: "openai",
+      providerName: "OpenAI",
+      modelId: "gpt-5",
+      modelName: "GPT-5",
+      variants: ["default"],
+    },
+  ],
+  defaultModelsByProvider: {
+    openai: "gpt-5",
+  },
+  profiles: [],
+};
+
 const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
   {
     id: "src/main.ts",
@@ -145,8 +164,9 @@ const FILE_SEARCH_RESULTS: AgentFileSearchResult[] = [
 
 const createRepoSettings = (
   specDefault: RepoSettingsInput["agentDefaults"]["spec"] | null,
+  defaultRuntimeKind: RepoSettingsInput["defaultRuntimeKind"] = "opencode",
 ): RepoSettingsInput => ({
-  defaultRuntimeKind: "opencode" as const,
+  defaultRuntimeKind,
   worktreeBasePath: "",
   branchPrefix: "codex/",
   defaultTargetBranch: { remote: "origin", branch: "main" },
@@ -468,6 +488,35 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
+  test("searches repo files through the selected Codex repo runtime before a session starts", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createRepoSettings(null, "codex"),
+        loadCatalog: async () => CODEX_CATALOG,
+        loadFileSearch,
+      }),
+      {
+        runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("src");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(loadFileSearch).toHaveBeenCalledWith("/repo", "codex", "src");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("uses the active session runtime for file search", async () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const activeSession = createActiveSession({
@@ -501,6 +550,55 @@ describe("useAgentStudioChatComposer", () => {
         "/repo/session-worktree",
         "",
       );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("uses the active Codex session runtime and working directory for file search", async () => {
+    const loadFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
+    const activeSession = createActiveSession({
+      runtimeKind: "codex",
+      modelCatalog: CODEX_CATALOG,
+      selectedModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "default",
+      },
+      runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
+      workingDirectory: "/repo/codex-worktree",
+    });
+    const harness = createHookHarness(
+      createBaseProps({
+        repoSettings: createRepoSettings(null, "opencode"),
+        activeSession,
+        loadFileSearch,
+        readSessionFileSearch,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+
+      let results: AgentFileSearchResult[] = [];
+      await harness.run(async (state) => {
+        results = await state.searchFiles("");
+      });
+
+      expect(results).toEqual(FILE_SEARCH_RESULTS);
+      expect(readSessionFileSearch).toHaveBeenCalledWith(
+        "/repo",
+        "codex",
+        "/repo/codex-worktree",
+        "",
+      );
+      expect(loadFileSearch).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

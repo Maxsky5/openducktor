@@ -129,6 +129,13 @@ describe("runtime schemas", () => {
     });
   });
 
+  test("Codex descriptor enables file search with structured file and folder references", () => {
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportsFileSearch).toBe(true);
+    expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.promptInput.supportedParts).toEqual(
+      expect.arrayContaining(["text", "skill_mention", "file_reference", "folder_reference"]),
+    );
+  });
+
   test("runtime ref identifies a concrete running runtime", () => {
     const parsed = runtimeRefSchema.parse({
       kind: "opencode",

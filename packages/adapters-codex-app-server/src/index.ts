@@ -2,6 +2,8 @@ export { CodexAppServerAdapter, createCodexAppServerClient } from "./codex-app-s
 export type {
   CodexAppServerAdapterOptions,
   CodexAppServerClient,
+  CodexAppServerFuzzyFileSearchParams,
+  CodexAppServerFuzzyFileSearchResponse,
   CodexInitializeParams,
   CodexJsonRpcRequest,
   CodexJsonRpcTransport,
