@@ -83,7 +83,8 @@ const filterSlashCommands = (commands: AgentSlashCommand[], query: string): Agen
 
 const filterSkills = (skills: AgentSkillReference[], query: string): AgentSkillReference[] => {
   const normalizedQuery = query.trim().toLowerCase();
-  const sortedSkills = skills.toSorted((left, right) => {
+  // react-doctor-disable-next-line react-doctor/js-tosorted-immutable -- keep older WebView compatibility.
+  const sortedSkills = [...skills].sort((left, right) => {
     const leftLabel = left.displayName ?? left.title ?? left.name;
     const rightLabel = right.displayName ?? right.title ?? right.name;
     return leftLabel.localeCompare(rightLabel, undefined, { sensitivity: "base" });

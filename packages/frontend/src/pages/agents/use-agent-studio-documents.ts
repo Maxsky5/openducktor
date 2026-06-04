@@ -113,6 +113,8 @@ export function useAgentStudioDocuments({
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
   const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
+  const workflowAliasMetadataReadyRef = useRef(workflowAliasMetadataReady);
+  workflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
   const taskDocumentVersionKey =
     taskId && selectedTask
       ? [
@@ -129,19 +131,20 @@ export function useAgentStudioDocuments({
         ].join(":")
       : null;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Context key intentionally controls reset boundary.
   useEffect(() => {
-    processedDocumentToolEvents.clear();
-    refreshedTaskVersions.clear();
+    void documentContextKey;
+    const documentToolEvents = processedDocumentToolEventsRef.current;
+    const taskVersions = refreshedTaskVersionsRef.current;
+    if (documentToolEvents === null || taskVersions === null) {
+      throw new Error("Agent Studio document tracking refs were not initialized.");
+    }
+
+    documentToolEvents.clear();
+    taskVersions.clear();
     previousSessionIdRef.current = null;
     previousMessagesRef.current = null;
-    previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReady;
-  }, [
-    documentContextKey,
-    processedDocumentToolEvents,
-    refreshedTaskVersions,
-    workflowAliasMetadataReady,
-  ]);
+    previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReadyRef.current;
+  }, [documentContextKey]);
 
   useEffect(() => {
     const previousWorkflowAliasMetadataReady = previousWorkflowAliasMetadataReadyRef.current;

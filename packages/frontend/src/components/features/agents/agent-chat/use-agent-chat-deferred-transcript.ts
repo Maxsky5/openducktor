@@ -63,6 +63,7 @@ export function useAgentChatDeferredTranscript({
     }
 
     const nextSessionId = activeExternalSessionId;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
     let frameId: number | null = globalThis.requestAnimationFrame(() => {
       frameId = null;
       const timeoutId = setTimeout(() => {
@@ -73,7 +74,6 @@ export function useAgentChatDeferredTranscript({
       }, 0);
       timerId = timeoutId;
     });
-    let timerId: ReturnType<typeof setTimeout> | null = null;
 
     const cleanup = () => {
       const cleanupTimerId = timerId;
