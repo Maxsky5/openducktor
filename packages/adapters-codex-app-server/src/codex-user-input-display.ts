@@ -219,6 +219,28 @@ const codexFileMentionMarkers = (input: CodexMentionInput): string[] => {
   return [...new Set([`@${input.path}`, `@${input.name}`])].filter((marker) => marker.length > 1);
 };
 
+const findCodexFileMentionMarkerRange = (
+  text: string,
+  mention: CodexMentionInput,
+): { start: number; end: number } | null => {
+  let selected: { start: number; end: number } | null = null;
+  for (const marker of codexFileMentionMarkers(mention)) {
+    const start = text.indexOf(marker);
+    if (start < 0) {
+      continue;
+    }
+    const end = start + marker.length;
+    if (
+      selected === null ||
+      start < selected.start ||
+      (start === selected.start && end > selected.end)
+    ) {
+      selected = { start, end };
+    }
+  }
+  return selected;
+};
+
 type CodexTextDisplayParts = {
   parts: AgentUserMessageDisplayPart[];
   renderedSkillIds: Set<string>;
@@ -403,6 +425,37 @@ const codexTextSkillEchoToDisplayParts = (
   return parts;
 };
 
+const codexTextFileEchoToDisplayParts = (
+  input: CodexTextInput,
+  fileInput: CodexMentionInput,
+  textOffset: number,
+): AgentUserMessageDisplayPart[] | null => {
+  const range = findCodexFileMentionMarkerRange(input.text, fileInput);
+  if (!range) {
+    return null;
+  }
+
+  const parts: AgentUserMessageDisplayPart[] = [];
+  const prefix = input.text.slice(0, range.start);
+  if (prefix.length > 0) {
+    parts.push({ kind: "text", text: prefix });
+  }
+  parts.push({
+    kind: "file_reference",
+    file: codexFileReferenceFromMentionInput(fileInput),
+    sourceText: {
+      value: input.text.slice(range.start, range.end),
+      start: textOffset + range.start,
+      end: textOffset + range.end,
+    },
+  });
+  const suffix = input.text.slice(range.end);
+  if (suffix.length > 0) {
+    parts.push({ kind: "text", text: suffix });
+  }
+  return parts;
+};
+
 const collectCodexMarkedSkillMarkerCounts = (input: CodexUserInput[]): Map<string, number> => {
   const markers = new Map<string, number>();
   for (const entry of input) {
@@ -436,11 +489,11 @@ const consumeMarker = (markers: Map<string, number>, marker: string): boolean =>
   return true;
 };
 
-const textInputEndsWithFileMentionMarker = (
+const textInputHasFileMentionMarker = (
   input: CodexTextInput,
   mention: CodexMentionInput,
 ): boolean => {
-  return codexFileMentionMarkers(mention).some((marker) => input.text.endsWith(marker));
+  return findCodexFileMentionMarkerRange(input.text, mention) !== null;
 };
 
 const textInputHasFileMentionElement = (
@@ -467,7 +520,7 @@ const codexUserInputTextContributions = (input: CodexUserInput[]): string[] => {
       if (
         previous?.type === "text" &&
         (textInputHasFileMentionElement(previous, current) ||
-          textInputEndsWithFileMentionMarker(previous, current))
+          textInputHasFileMentionMarker(previous, current))
       ) {
         return "";
       }
@@ -532,6 +585,17 @@ export const codexUserInputsToDisplayParts = (
       }
       accumulatedText = appendUserInputText(accumulatedText, partText);
       continue;
+    }
+    if (current.type === "text" && next?.type === "mention" && isCodexFileMentionInput(next)) {
+      const echoParts = codexTextFileEchoToDisplayParts(current, next, textOffset);
+      if (echoParts) {
+        parts.push(...echoParts);
+        renderedFileMentions.add(next);
+        accumulatedText = appendUserInputText(accumulatedText, partText);
+        accumulatedText = appendUserInputText(accumulatedText, textContributions[index + 1] ?? "");
+        index += 1;
+        continue;
+      }
     }
     if (current.type === "skill" && renderedSkillIds.has(current.path)) {
       accumulatedText = appendUserInputText(accumulatedText, partText);

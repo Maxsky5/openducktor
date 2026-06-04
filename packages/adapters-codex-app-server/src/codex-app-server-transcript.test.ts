@@ -273,6 +273,59 @@ describe("Codex App Server transcript parsing", () => {
     });
   });
 
+  test("hydrates Codex raw file markers as inline structured file display parts", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "Tell me what's in @apps/api/src/routes/groups.ts",
+        },
+        {
+          type: "mention",
+          name: "groups.ts",
+          path: "apps/api/src/routes/groups.ts",
+        },
+      ],
+    });
+
+    expect(codexUserInputListToText(input)).toBe(
+      "Tell me what's in @apps/api/src/routes/groups.ts",
+    );
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Tell me what's in @apps/api/src/routes/groups.ts",
+      displayParts: [
+        { kind: "text", text: "Tell me what's in " },
+        {
+          kind: "file_reference",
+          file: {
+            id: "apps/api/src/routes/groups.ts",
+            name: "groups.ts",
+            path: "apps/api/src/routes/groups.ts",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@apps/api/src/routes/groups.ts",
+            start: 18,
+            end: 48,
+          },
+        },
+      ],
+    });
+  });
+
   test("collapses Codex persisted marker plus skill echoes", () => {
     const input = codexUserInputsFromItem({
       id: "user-1",
