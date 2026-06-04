@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { ElectronReleaseArch, ElectronReleasePlatform } from "./package-build";
+import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
 
 export const ELECTRON_SIDECAR_IDS = ["openducktor-mcp", "beads", "dolt"] as const;
 export type ElectronSidecarId = (typeof ELECTRON_SIDECAR_IDS)[number];

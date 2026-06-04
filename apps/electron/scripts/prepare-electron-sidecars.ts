@@ -4,6 +4,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 import {
+  type ElectronReleaseArch,
+  type ElectronReleasePlatform,
+  resolveHostReleaseArch,
+  resolveHostReleasePlatform,
+} from "./electron-release-targets";
+import {
   archiveEntryPathToFilePath,
   type DownloadElectronSidecarAsset,
   downloadElectronSidecarAsset,
@@ -23,7 +29,6 @@ import {
   electronSidecarExecutableName,
   resolveElectronExternalSidecarAsset,
 } from "./electron-sidecar-manifest";
-import type { ElectronReleaseArch, ElectronReleasePlatform } from "./package-build";
 
 export type ElectronSidecarBuildPlan = {
   entrypoint: string;
@@ -57,18 +62,6 @@ type PrepareElectronSidecarsInput = ResolveElectronSidecarBuildPlanInput & {
   downloadAsset?: DownloadElectronSidecarAsset;
   extractArchive?: ExtractElectronSidecarArchive;
   verifyArchiveChecksum?: VerifyElectronSidecarArchiveChecksum;
-};
-
-const toElectronReleasePlatform = (platform: NodeJS.Platform): ElectronReleasePlatform => {
-  if (platform === "darwin") return "macos";
-  if (platform === "linux") return "linux";
-  if (platform === "win32") return "windows";
-  throw new Error(`Unsupported Electron sidecar host platform: ${platform}`);
-};
-
-const toElectronReleaseArch = (arch: NodeJS.Architecture): ElectronReleaseArch => {
-  if (arch === "arm64" || arch === "x64") return arch;
-  throw new Error(`Unsupported Electron sidecar host architecture: ${arch}`);
 };
 
 export const resolveElectronSidecarBuildPlan = ({
@@ -139,10 +132,8 @@ const compileMcpSidecar = async (plan: ElectronSidecarBuildPlan): Promise<void> 
 };
 
 const resetSidecarOutput = async (plan: ElectronSidecarBuildPlan): Promise<void> => {
-  await Promise.all([
-    assertFileExists(plan.entrypoint, "OpenDucktor MCP entrypoint"),
-    rm(plan.outputDirectory, { force: true, recursive: true }),
-  ]);
+  await assertFileExists(plan.entrypoint, "OpenDucktor MCP entrypoint");
+  await rm(plan.outputDirectory, { force: true, recursive: true });
   await mkdir(plan.outputDirectory, { recursive: true });
 };
 
@@ -304,9 +295,9 @@ const workspaceRoot = resolve(electronPackageDirectory, "../..");
 
 if (import.meta.main) {
   const prepared = await prepareElectronSidecars({
-    arch: toElectronReleaseArch(process.arch),
+    arch: resolveHostReleaseArch(process.arch),
     electronPackageDirectory,
-    platform: toElectronReleasePlatform(process.platform),
+    platform: resolveHostReleasePlatform(process.platform),
     workspaceRoot,
   });
   for (const sidecar of prepared.sidecars) {

@@ -1,13 +1,13 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import type { ElectronReleaseArch, ElectronReleasePlatform } from "./electron-release-targets";
 import {
   ELECTRON_SIDECAR_IDS,
   type ElectronSidecarId,
   electronSidecarDisplayName,
   electronSidecarExecutableName,
 } from "./electron-sidecar-manifest";
-import type { ElectronReleaseArch, ElectronReleasePlatform } from "./package-build";
 
 type PackagedSidecarPlatform = Exclude<ElectronReleasePlatform, "macos">;
 

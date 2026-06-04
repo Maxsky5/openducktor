@@ -1,3 +1,4 @@
+import type { ToolExecutableSourceCategory } from "@openducktor/contracts";
 import { Context, type Effect } from "effect";
 import type { HostDependencyError, HostValidationError } from "../effect/host-errors";
 
@@ -18,11 +19,7 @@ export const isToolDiscoveryId = (value: string): value is ToolDiscoveryId =>
 
 export type ToolDiscoveryError = HostDependencyError | HostValidationError;
 
-export type ToolDiscoverySourceCategory =
-  | "bundled_electron_resource"
-  | "environment_override"
-  | "provided_path"
-  | "system_path";
+export type ToolDiscoverySourceCategory = Exclude<ToolExecutableSourceCategory, "unavailable">;
 
 export type ResolvedTool = {
   displayLabel: string;

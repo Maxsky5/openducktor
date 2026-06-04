@@ -2,12 +2,15 @@ import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "@openducktor/build-tools";
+import {
+  detectHostReleaseArch,
+  detectHostReleasePlatform,
+  type ElectronReleaseArch,
+  type ElectronReleasePlatform,
+} from "./electron-release-targets";
 import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
 import { prepareElectronSidecars } from "./prepare-electron-sidecars";
 import { verifyPackagedElectronSidecars } from "./verify-electron-sidecar-package";
-
-export type ElectronReleasePlatform = "linux" | "macos" | "windows";
-export type ElectronReleaseArch = "arm64" | "x64";
 
 export type ElectronPackageBuildOptions = {
   arch: ElectronReleaseArch;
@@ -35,23 +38,6 @@ const artifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> =
   linux: new Set([".AppImage", ".deb", ".blockmap"]),
   macos: new Set([".dmg", ".zip", ".blockmap"]),
   windows: new Set([".exe", ".zip", ".blockmap"]),
-};
-
-export const detectHostReleasePlatform = (
-  platform: NodeJS.Platform,
-): ElectronReleasePlatform | undefined => {
-  if (platform === "darwin") return "macos";
-  if (platform === "linux") return "linux";
-  if (platform === "win32") return "windows";
-  return undefined;
-};
-
-export const detectHostReleaseArch = (
-  arch: NodeJS.Architecture,
-): ElectronReleaseArch | undefined => {
-  if (arch === "arm64") return "arm64";
-  if (arch === "x64") return "x64";
-  return undefined;
 };
 
 export const resolveElectronBuilderArgs = ({

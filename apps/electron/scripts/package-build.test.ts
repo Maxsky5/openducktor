@@ -2,10 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { detectHostReleaseArch, detectHostReleasePlatform } from "./electron-release-targets";
 import {
   collectReleaseArtifacts,
-  detectHostReleaseArch,
-  detectHostReleasePlatform,
   isReleaseArtifact,
   resolveElectronBuilderArgs,
   resolveElectronBuilderEnv,

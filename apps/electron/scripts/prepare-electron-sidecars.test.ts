@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { archiveEntryPathToFilePath } from "./electron-sidecar-archives";
@@ -161,6 +161,45 @@ describe("prepareElectronSidecars", () => {
         verifyArchiveChecksum: async () => {},
       }),
     ).rejects.toThrow("No pinned Electron Dolt sidecar asset for windows/arm64");
+    expect(sideEffects).toEqual([]);
+    await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
+  });
+
+  test("rejects a missing MCP entrypoint before mutating sidecar output", async () => {
+    const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
+    const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
+    const mcpEntrypoint = join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts");
+    const sideEffects: string[] = [];
+    await mkdir(dirname(staleOutput), { recursive: true });
+    await writeFile(staleOutput, "stale");
+    await rm(mcpEntrypoint);
+
+    await expect(
+      prepareElectronSidecars({
+        arch: "x64",
+        electronPackageDirectory,
+        platform: "linux",
+        workspaceRoot,
+        compileMcp: async ({ outputPaths }) => {
+          sideEffects.push("compile");
+          await writeFile(outputPaths["openducktor-mcp"], "binary");
+        },
+        downloadAsset: async ({ archivePath }) => {
+          sideEffects.push("download");
+          await mkdir(dirname(archivePath), { recursive: true });
+          await writeFile(archivePath, "archive");
+        },
+        extractArchive: async ({ asset, extractionDirectory }) => {
+          sideEffects.push("extract");
+          await writeExtractedSidecar({ asset, extractionDirectory });
+        },
+        chmodFile: async (path, mode) => {
+          sideEffects.push("chmod");
+          await chmod(path, mode);
+        },
+        verifyArchiveChecksum: async () => {},
+      }),
+    ).rejects.toThrow("OpenDucktor MCP entrypoint is missing");
     expect(sideEffects).toEqual([]);
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
