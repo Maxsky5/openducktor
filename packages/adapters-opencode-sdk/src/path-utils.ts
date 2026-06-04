@@ -4,9 +4,16 @@ import {
   normalizePathSeparators,
   resolveAgainstWorkingDirectory,
   toProjectRelativePath,
+  trimTrailingPathSeparators,
 } from "@openducktor/path-support";
 
-export { isAbsolutePath, resolveAgainstWorkingDirectory, toProjectRelativePath };
+export {
+  isAbsolutePath,
+  normalizePathSeparators,
+  resolveAgainstWorkingDirectory,
+  toProjectRelativePath,
+  trimTrailingPathSeparators,
+};
 
 export const basename = basenameForPath;
 

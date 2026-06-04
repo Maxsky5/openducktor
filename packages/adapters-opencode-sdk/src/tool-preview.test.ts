@@ -40,4 +40,16 @@ describe("deriveToolPreview", () => {
       }),
     ).toBe("parse-questions");
   });
+
+  test("derives skill previews from slash and backslash separated paths", () => {
+    expect(
+      deriveToolPreview({
+        tool: "skill",
+        rawInput: {
+          path: "C:\\Users\\max\\.codex\\skills\\review-code.md",
+        },
+        rawOutput: undefined,
+      }),
+    ).toBe("review-code");
+  });
 });

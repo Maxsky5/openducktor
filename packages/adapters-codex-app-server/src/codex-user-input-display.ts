@@ -3,6 +3,7 @@ import type {
   AgentUserMessageDisplayPart,
   AgentUserMessagePart,
 } from "@openducktor/core";
+import { basenameForPath } from "@openducktor/path-support";
 import type { CodexTextElement, CodexUserInput } from "./types";
 
 type CodexTextInput = Extract<CodexUserInput, { type: "text" }>;
@@ -46,7 +47,7 @@ const stagedAttachmentUuidPrefixPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
 
 const codexLocalImageNameFromPath = (path: string): string => {
-  const fileName = path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
+  const fileName = basenameForPath(path) || path;
   if (fileName.length <= 37 || !stagedAttachmentUuidPrefixPattern.test(fileName)) {
     return fileName;
   }

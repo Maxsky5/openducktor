@@ -1,4 +1,5 @@
 import type { AgentAttachmentKind, AgentModelAttachmentSupport } from "@openducktor/core";
+import { basenameForPath } from "@openducktor/path-support";
 import {
   type AgentChatComposerAttachment,
   createComposerAttachment,
@@ -89,11 +90,7 @@ const readFileExtension = (name: string): string => {
   return lastDot >= 0 ? name.slice(lastDot).toLowerCase() : "";
 };
 
-const readAttachmentNameFromPath = (path: string): string => {
-  const normalized = path.replace(/\\/g, "/");
-  const segments = normalized.split("/");
-  return segments[segments.length - 1] ?? path;
-};
+export const readAttachmentNameFromPath = (path: string): string => basenameForPath(path) || path;
 
 export const classifyAttachment = (input: {
   name: string;

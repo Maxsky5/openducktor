@@ -5,6 +5,7 @@ import type {
   AgentUserMessagePart,
   AgentUserMessageSourceText,
 } from "@openducktor/core";
+import { basenameForPath } from "@openducktor/path-support";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readNumberProp, readRecordProp, readUnknownProp } from "./guards";
 import { buildOpenCodeVisibleText } from "./opencode-user-message-encoding";
@@ -18,12 +19,6 @@ export const readTextFromParts = (parts: Part[]): string => {
     .map((part) => part.text)
     .join("\n")
     .trim();
-};
-
-const readPathBasename = (filePath: string): string => {
-  const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/, "");
-  const segments = normalized.split("/");
-  return segments[segments.length - 1] ?? filePath;
 };
 
 const readFilePathFromUrl = (url: string): string | null => {
@@ -78,7 +73,7 @@ const normalizeAttachmentPart = (
     return null;
   }
 
-  const name = part.filename?.trim() || readPathBasename(filePath);
+  const name = part.filename?.trim() || basenameForPath(filePath);
   if (part.mime.startsWith("image/")) {
     return {
       kind: "attachment",
@@ -149,7 +144,7 @@ const normalizeFileReferencePart = (
     return null;
   }
 
-  const name = part.filename?.trim() || readPathBasename(filePath);
+  const name = part.filename?.trim() || basenameForPath(filePath);
   const sourceText = normalizeSourceText(source.text);
   return {
     kind: "file_reference",
