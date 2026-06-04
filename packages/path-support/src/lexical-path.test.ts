@@ -80,6 +80,11 @@ describe("lexical path helpers", () => {
     expect(pathStartsWith("/repo/worktree", "/repo/worktree")).toBe(true);
     expect(pathStartsWith("/repo/worktree-other", "/repo/worktree")).toBe(false);
     expect(pathStartsWith("C:\\Repo\\Worktree\\src", "c:/repo/worktree")).toBe(true);
+    expect(pathStartsWith("/repo/worktree/./src", "/repo/worktree")).toBe(true);
+    expect(pathStartsWith("/repo/worktree/../secret", "/repo/worktree")).toBe(false);
+    expect(pathStartsWith("../repo/worktree", "repo")).toBe(false);
+    expect(pathStartsWith("/repo/worktree", "")).toBe(false);
+    expect(pathStartsWith("/repo/worktree", "/")).toBe(true);
   });
 
   test("converts absolute paths under a working directory to project-relative paths", () => {
@@ -96,6 +101,13 @@ describe("lexical path helpers", () => {
     expect(toProjectRelativePath("C:\\Repo\\Worktree\\src\\main.ts", "c:/repo/worktree")).toBe(
       "src/main.ts",
     );
+    expect(toProjectRelativePath("/repo/worktree/./src/main.ts", "/repo/worktree")).toBe(
+      "src/main.ts",
+    );
+    expect(toProjectRelativePath("/repo/worktree/../secret.ts", "/repo/worktree")).toBe(
+      "/repo/secret.ts",
+    );
+    expect(toProjectRelativePath("../secret.ts", "/repo/worktree")).toBe("../secret.ts");
   });
 
   test("resolves relative paths against a working directory", () => {

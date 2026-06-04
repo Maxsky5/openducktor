@@ -79,6 +79,38 @@ describe("searchCodexFiles", () => {
     expect(calls).toEqual([{ query: "src", roots: ["/repo/worktree"], cancellationToken: null }]);
   });
 
+  test("does not map escaped absolute paths to project-relative references", async () => {
+    const client = createClient(
+      {
+        files: [
+          {
+            root: "/repo/worktree",
+            path: "/repo/worktree/../outside.ts",
+            match_type: "file",
+            file_name: "outside.ts",
+            score: 4,
+            indices: null,
+          },
+        ],
+      },
+      [],
+    );
+
+    await expect(
+      searchCodexFiles(client, {
+        query: "outside",
+        workingDirectory: "/repo/worktree",
+      }),
+    ).resolves.toEqual([
+      {
+        id: "/repo/outside.ts",
+        path: "/repo/outside.ts",
+        name: "outside.ts",
+        kind: "code",
+      },
+    ]);
+  });
+
   test("rejects malformed Codex fuzzyFileSearch payloads", async () => {
     const client = createClient(
       {

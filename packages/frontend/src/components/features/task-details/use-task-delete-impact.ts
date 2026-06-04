@@ -1,4 +1,5 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import { normalizePathForComparison } from "@openducktor/path-support";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useWorkspaceState } from "@/state/app-state-provider";
@@ -16,15 +17,6 @@ const EMPTY_DELETE_IMPACT: TaskDeleteImpact = {
   managedWorktreeCount: 0,
   impactError: null,
   isLoadingImpact: false,
-};
-
-const normalizePathForComparison = (path: string): string => {
-  const trimmed = path.trim();
-  if (trimmed.length === 0) {
-    return "";
-  }
-  const withoutTrailingSeparators = trimmed.replace(/[\\/]+$/u, "");
-  return withoutTrailingSeparators.length > 0 ? withoutTrailingSeparators : trimmed;
 };
 
 export const getManagedTaskDeleteImpact = (

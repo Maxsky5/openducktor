@@ -2,6 +2,11 @@ const WINDOWS_DRIVE_PATH_PATTERN = /^[A-Za-z]:(?:[\\/]|$)/;
 const WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
 const WINDOWS_DRIVE_ROOT_PATTERN = /^[A-Za-z]:[\\/]$/;
 
+type LexicalPath = {
+  path: string;
+  comparisonPath: string;
+};
+
 export const normalizePathSeparators = (path: string): string => path.replace(/\\+/g, "/");
 
 export const trimTrailingPathSeparators = (path: string): string => {
@@ -23,7 +28,10 @@ export const basenameForPath = (path: string): string => {
   return parts[parts.length - 1] ?? "";
 };
 
-export const normalizePathForComparison = (value: string): string => {
+const toLexicalPath = (
+  value: string,
+  { preserveLeadingParents }: { preserveLeadingParents: boolean },
+): LexicalPath => {
   const trimmed = value.trim();
   const leadingSeparatorRoot = /^[\\/]/.test(trimmed);
   const windowsDrivePath = WINDOWS_DRIVE_PATH_PATTERN.test(trimmed);
@@ -34,25 +42,39 @@ export const normalizePathForComparison = (value: string): string => {
       continue;
     }
     if (segment === "..") {
-      if (segments.length > minimumSegments) {
+      if (segments.length > minimumSegments && segments[segments.length - 1] !== "..") {
         segments.pop();
+      } else if (preserveLeadingParents && !leadingSeparatorRoot && !windowsDrivePath) {
+        segments.push(segment);
       }
       continue;
     }
     segments.push(segment);
   }
-  const comparable = leadingSeparatorRoot ? `/${segments.join("/")}` : segments.join("/");
-  return windowsDrivePath ? comparable.toLowerCase() : comparable;
+  const path = leadingSeparatorRoot ? `/${segments.join("/")}` : segments.join("/");
+  return {
+    path,
+    comparisonPath: windowsDrivePath ? path.toLowerCase() : path,
+  };
 };
+
+export const normalizePathForComparison = (value: string): string =>
+  toLexicalPath(value, { preserveLeadingParents: false }).comparisonPath;
+
+const normalizePathForContainment = (value: string): LexicalPath =>
+  toLexicalPath(value, { preserveLeadingParents: true });
 
 export const pathStartsWith = (child: string, parent: string): boolean => {
-  const normalizedChild = normalizePathForComparison(child);
-  const normalizedParent = normalizePathForComparison(parent);
-  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
-};
-
-const normalizePathForPrefixComparison = (path: string): string => {
-  return WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN.test(path) ? path.toLowerCase() : path;
+  const normalizedChild = normalizePathForContainment(child).comparisonPath;
+  const normalizedParent = normalizePathForContainment(parent).comparisonPath;
+  if (normalizedParent.length === 0) {
+    return false;
+  }
+  if (normalizedChild === normalizedParent) {
+    return true;
+  }
+  const parentPrefix = normalizedParent.endsWith("/") ? normalizedParent : `${normalizedParent}/`;
+  return normalizedChild.startsWith(parentPrefix);
 };
 
 export const toProjectRelativePath = (path: string, workingDirectory: string): string => {
@@ -60,32 +82,32 @@ export const toProjectRelativePath = (path: string, workingDirectory: string): s
   const normalizedWorkingDirectory = trimTrailingPathSeparators(
     normalizePathSeparators(workingDirectory.trim()),
   );
+  const lexicalPath = normalizePathForContainment(normalizedPath);
   if (!isAbsolutePath(normalizedPath)) {
     return normalizedPath;
   }
 
   if (normalizedWorkingDirectory.length === 0) {
-    return normalizedPath;
+    return lexicalPath.path;
   }
 
-  const comparablePath = normalizePathForPrefixComparison(normalizedPath);
-  const comparableWorkingDirectory = normalizePathForPrefixComparison(normalizedWorkingDirectory);
+  const lexicalWorkingDirectory = normalizePathForContainment(normalizedWorkingDirectory);
 
-  if (comparablePath === comparableWorkingDirectory) {
-    return normalizedPath;
+  if (lexicalPath.comparisonPath === lexicalWorkingDirectory.comparisonPath) {
+    return lexicalPath.path;
   }
 
-  const workingDirectoryPrefix = normalizedWorkingDirectory.endsWith("/")
-    ? normalizedWorkingDirectory
-    : `${normalizedWorkingDirectory}/`;
-  const comparableWorkingDirectoryPrefix = comparableWorkingDirectory.endsWith("/")
-    ? comparableWorkingDirectory
-    : `${comparableWorkingDirectory}/`;
-  if (comparablePath.startsWith(comparableWorkingDirectoryPrefix)) {
-    return normalizedPath.slice(workingDirectoryPrefix.length);
+  const comparableWorkingDirectoryPrefix = lexicalWorkingDirectory.comparisonPath.endsWith("/")
+    ? lexicalWorkingDirectory.comparisonPath
+    : `${lexicalWorkingDirectory.comparisonPath}/`;
+  if (lexicalPath.comparisonPath.startsWith(comparableWorkingDirectoryPrefix)) {
+    const workingDirectoryPrefixLength = lexicalWorkingDirectory.path.endsWith("/")
+      ? lexicalWorkingDirectory.path.length
+      : lexicalWorkingDirectory.path.length + 1;
+    return lexicalPath.path.slice(workingDirectoryPrefixLength);
   }
 
-  return normalizedPath;
+  return lexicalPath.path;
 };
 
 export const resolveAgainstWorkingDirectory = (workingDirectory: string, path: string): string => {
@@ -112,7 +134,8 @@ export const toDisplayRelativePath = (path: string, workingDirectory?: string | 
   }
 
   if (
-    normalizePathForComparison(trimmedPath) === normalizePathForComparison(trimmedWorkingDirectory)
+    normalizePathForContainment(trimmedPath).comparisonPath ===
+    normalizePathForContainment(trimmedWorkingDirectory).comparisonPath
   ) {
     return ".";
   }
