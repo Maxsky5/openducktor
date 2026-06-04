@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { runCommand } from "../../../scripts/package-build-helpers";
 import {
   type ElectronExternalSidecarAsset,
   electronExternalSidecarAssetFileName,
@@ -34,27 +34,6 @@ export type VerifyElectronSidecarArchiveChecksum = (
 
 export const archiveEntryPathToFilePath = (entryPath: string): string[] =>
   entryPath.replace(/\\/g, "/").replace(/^\.\//, "").split("/").filter(Boolean);
-
-const runCommand = (command: string, args: string[], cwd: string): Promise<void> =>
-  new Promise((resolveCommand, rejectCommand) => {
-    const child = spawn(command, args, {
-      cwd,
-      shell: process.platform === "win32",
-      stdio: "inherit",
-    });
-
-    child.on("error", rejectCommand);
-    child.on("exit", (exitCode) => {
-      if (exitCode === 0) {
-        resolveCommand();
-        return;
-      }
-
-      rejectCommand(
-        new Error(`${command} ${args.join(" ")} exited with code ${exitCode ?? "unknown"}`),
-      );
-    });
-  });
 
 const sha256File = async (path: string): Promise<string> =>
   createHash("sha256")
@@ -137,9 +116,13 @@ export const extractElectronSidecarArchive = async ({
   asset,
   extractionDirectory,
 }: ExtractElectronSidecarArchiveInput): Promise<void> => {
-  const extractArgs =
+  const extractArgs: [string, string, string, string, string] =
     asset.archiveType === "tar.gz"
       ? ["-xzf", archivePath, "-C", extractionDirectory, asset.executablePath]
       : ["-xf", archivePath, "-C", extractionDirectory, asset.executablePath];
-  await runCommand("tar", extractArgs, extractionDirectory);
+  await runCommand({
+    command: ["tar", ...extractArgs],
+    cwd: extractionDirectory,
+    label: `Electron ${electronSidecarDisplayName(asset.id)} sidecar archive extraction`,
+  });
 };
