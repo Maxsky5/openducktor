@@ -45,17 +45,24 @@ export type SkillMenuState = {
   rangeEnd: number;
 };
 
+type AutocompleteAvailabilityContext = {
+  disabled: boolean;
+  supportsSlashCommands: boolean;
+  supportsFileSearch: boolean;
+  supportsSkillReferences: boolean;
+};
+
 type InternalSlashMenuState = SlashMenuState & {
-  availabilityVersion: number;
+  availabilityContext: AutocompleteAvailabilityContext;
 };
 
 type InternalFileMenuState = FileMenuState & {
-  availabilityVersion: number;
+  availabilityContext: AutocompleteAvailabilityContext;
   requestId: number;
 };
 
 type InternalSkillMenuState = SkillMenuState & {
-  availabilityVersion: number;
+  availabilityContext: AutocompleteAvailabilityContext;
 };
 
 export const AUTOCOMPLETE_NAVIGATION_KEYS = new Set([
@@ -184,38 +191,31 @@ export const useAgentChatComposerEditorAutocomplete = ({
   const [activeSkillIndex, setActiveSkillIndex] = useState(0);
   const [fileMenuState, setFileMenuState] = useState<InternalFileMenuState | null>(null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
-  const availabilityKey = [
-    disabled ? "disabled" : "enabled",
-    supportsSlashCommands ? "slash" : "no-slash",
-    supportsFileSearch ? "file" : "no-file",
-    supportsSkillReferences ? "skill" : "no-skill",
-  ].join("\0");
-  const previousAvailabilityKeyRef = useRef(availabilityKey);
-  const availabilityVersionRef = useRef(0);
   const fileSearchRequestIdRef = useRef(0);
-
-  if (previousAvailabilityKeyRef.current !== availabilityKey) {
-    previousAvailabilityKeyRef.current = availabilityKey;
-    availabilityVersionRef.current += 1;
-  }
-  const currentAvailabilityVersion = availabilityVersionRef.current;
+  const availabilityContext = useMemo<AutocompleteAvailabilityContext>(
+    () => ({
+      disabled,
+      supportsSlashCommands,
+      supportsFileSearch,
+      supportsSkillReferences,
+    }),
+    [disabled, supportsFileSearch, supportsSkillReferences, supportsSlashCommands],
+  );
 
   const effectiveSlashMenuState =
     disabled ||
     !supportsSlashCommands ||
-    slashMenuState?.availabilityVersion !== currentAvailabilityVersion
+    slashMenuState?.availabilityContext !== availabilityContext
       ? null
       : slashMenuState;
   const effectiveFileMenuState =
-    disabled ||
-    !supportsFileSearch ||
-    fileMenuState?.availabilityVersion !== currentAvailabilityVersion
+    disabled || !supportsFileSearch || fileMenuState?.availabilityContext !== availabilityContext
       ? null
       : fileMenuState;
   const effectiveSkillMenuState =
     disabled ||
     !supportsSkillReferences ||
-    skillMenuState?.availabilityVersion !== currentAvailabilityVersion
+    skillMenuState?.availabilityContext !== availabilityContext
       ? null
       : skillMenuState;
 
@@ -274,10 +274,10 @@ export const useAgentChatComposerEditorAutocomplete = ({
         query: match.query,
         rangeStart: match.rangeStart,
         rangeEnd: match.rangeEnd,
-        availabilityVersion: availabilityVersionRef.current,
+        availabilityContext,
       });
     },
-    [disabled, supportsSlashCommands],
+    [availabilityContext, disabled, supportsSlashCommands],
   );
 
   const updateFileMenuForText = useCallback(
@@ -298,12 +298,12 @@ export const useAgentChatComposerEditorAutocomplete = ({
         return;
       }
 
-      if (isSameTextMenuRequest(fileMenuState, segmentId, match)) {
+      if (isSameTextMenuRequest(effectiveFileMenuState, segmentId, match)) {
         return;
       }
 
       const requestId = fileSearchRequestIdRef.current + 1;
-      const requestAvailabilityVersion = availabilityVersionRef.current;
+      const requestAvailabilityContext = availabilityContext;
       fileSearchRequestIdRef.current = requestId;
       setActiveFileIndex(0);
       setFileMenuState((previousState) => ({
@@ -315,16 +315,13 @@ export const useAgentChatComposerEditorAutocomplete = ({
           previousState && previousState.textSegmentId === segmentId ? previousState.results : [],
         isLoading: true,
         error: null,
-        availabilityVersion: requestAvailabilityVersion,
+        availabilityContext: requestAvailabilityContext,
         requestId,
       }));
 
       void searchFiles(match.query)
         .then((results) => {
-          if (
-            fileSearchRequestIdRef.current !== requestId ||
-            availabilityVersionRef.current !== requestAvailabilityVersion
-          ) {
+          if (fileSearchRequestIdRef.current !== requestId) {
             return;
           }
           setFileMenuState({
@@ -335,15 +332,12 @@ export const useAgentChatComposerEditorAutocomplete = ({
             results,
             isLoading: false,
             error: null,
-            availabilityVersion: requestAvailabilityVersion,
+            availabilityContext: requestAvailabilityContext,
             requestId,
           });
         })
         .catch((error) => {
-          if (
-            fileSearchRequestIdRef.current !== requestId ||
-            availabilityVersionRef.current !== requestAvailabilityVersion
-          ) {
+          if (fileSearchRequestIdRef.current !== requestId) {
             return;
           }
           setFileMenuState((previousState) => ({
@@ -354,12 +348,19 @@ export const useAgentChatComposerEditorAutocomplete = ({
             results: previousState?.results ?? [],
             isLoading: false,
             error: error instanceof Error ? error.message : FILE_SEARCH_FAILED_MESSAGE,
-            availabilityVersion: requestAvailabilityVersion,
+            availabilityContext: requestAvailabilityContext,
             requestId,
           }));
         });
     },
-    [closeFileMenu, disabled, fileMenuState, searchFiles, supportsFileSearch],
+    [
+      availabilityContext,
+      closeFileMenu,
+      disabled,
+      effectiveFileMenuState,
+      searchFiles,
+      supportsFileSearch,
+    ],
   );
 
   const updateSkillMenuForText = useCallback(
@@ -380,7 +381,7 @@ export const useAgentChatComposerEditorAutocomplete = ({
         return;
       }
 
-      if (isSameTextMenuRequest(skillMenuState, segmentId, match)) {
+      if (isSameTextMenuRequest(effectiveSkillMenuState, segmentId, match)) {
         return;
       }
 
@@ -390,10 +391,16 @@ export const useAgentChatComposerEditorAutocomplete = ({
         query: match.query,
         rangeStart: match.rangeStart,
         rangeEnd: match.rangeEnd,
-        availabilityVersion: availabilityVersionRef.current,
+        availabilityContext,
       });
     },
-    [closeSkillMenu, disabled, skillMenuState, supportsSkillReferences],
+    [
+      availabilityContext,
+      closeSkillMenu,
+      disabled,
+      effectiveSkillMenuState,
+      supportsSkillReferences,
+    ],
   );
 
   const syncMenusForSelectionTarget = useCallback(

@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useMemo, useReducer, useRef } from "react";
+import { useCallback, useMemo, useReducer } from "react";
 import { isSameSelection } from "@/features/session-start";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveDraftModelSelection } from "./model-selection-preferences";
@@ -19,14 +19,16 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
 });
 
 type DraftModelSelectionContext = {
-  token: string;
   workspaceRepoPath: string | null;
+};
+
+type DraftModelSelectionInit = {
+  context: DraftModelSelectionContext;
   repoSettingsReady: boolean;
 };
 
 type DraftModelSelectionState = {
-  contextToken: string;
-  workspaceRepoPath: string | null;
+  context: DraftModelSelectionContext;
   isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
   draftSelectionByRole: Record<AgentRole, AgentModelSelection | null>;
   draftSelectionTouchedByRole: Record<AgentRole, boolean>;
@@ -36,6 +38,7 @@ type DraftModelSelectionAction =
   | {
       type: "draftSelectionApplied";
       context: DraftModelSelectionContext;
+      repoSettingsReady: boolean;
       role: AgentRole;
       selection: AgentModelSelection | null;
     }
@@ -44,18 +47,18 @@ type DraftModelSelectionAction =
       composerCatalog: AgentModelCatalog | null;
       context: DraftModelSelectionContext;
       hasActiveSession: boolean;
+      repoSettingsReady: boolean;
       role: AgentRole;
       roleDefaultSelection: AgentModelSelection | null;
     };
 
 const createDraftModelSelectionState = ({
+  context,
   repoSettingsReady,
-  token,
-  workspaceRepoPath,
-}: DraftModelSelectionContext): DraftModelSelectionState => ({
-  contextToken: token,
-  workspaceRepoPath,
-  isAwaitingRepoSettingsForWorkspaceRepoPath: Boolean(workspaceRepoPath) && !repoSettingsReady,
+}: DraftModelSelectionInit): DraftModelSelectionState => ({
+  context,
+  isAwaitingRepoSettingsForWorkspaceRepoPath:
+    Boolean(context.workspaceRepoPath) && !repoSettingsReady,
   draftSelectionByRole: emptyDraftSelections(),
   draftSelectionTouchedByRole: emptyDraftSelectionTouchedByRole(),
 });
@@ -63,12 +66,13 @@ const createDraftModelSelectionState = ({
 const getDraftModelSelectionStateForContext = (
   state: DraftModelSelectionState,
   context: DraftModelSelectionContext,
+  repoSettingsReady: boolean,
 ): DraftModelSelectionState => {
-  if (state.contextToken !== context.token) {
-    return createDraftModelSelectionState(context);
+  if (state.context !== context) {
+    return createDraftModelSelectionState({ context, repoSettingsReady });
   }
 
-  if (state.isAwaitingRepoSettingsForWorkspaceRepoPath && context.repoSettingsReady) {
+  if (state.isAwaitingRepoSettingsForWorkspaceRepoPath && repoSettingsReady) {
     return {
       ...state,
       isAwaitingRepoSettingsForWorkspaceRepoPath: false,
@@ -82,7 +86,11 @@ const draftModelSelectionReducer = (
   state: DraftModelSelectionState,
   action: DraftModelSelectionAction,
 ): DraftModelSelectionState => {
-  const currentState = getDraftModelSelectionStateForContext(state, action.context);
+  const currentState = getDraftModelSelectionStateForContext(
+    state,
+    action.context,
+    action.repoSettingsReady,
+  );
 
   switch (action.type) {
     case "draftSelectionApplied":
@@ -139,39 +147,33 @@ export const useAgentStudioDraftModelSelectionState = ({
     roleDefaultSelection: AgentModelSelection | null;
   }) => void;
 } => {
-  const previousWorkspaceRepoPathRef = useRef(workspaceRepoPath);
-  const workspaceContextVersionRef = useRef(0);
-  if (previousWorkspaceRepoPathRef.current !== workspaceRepoPath) {
-    previousWorkspaceRepoPathRef.current = workspaceRepoPath;
-    workspaceContextVersionRef.current += 1;
-  }
-
   const repoSettingsReady = repoSettings != null;
   const draftContext = useMemo<DraftModelSelectionContext>(
-    () => ({
-      token: `${workspaceRepoPath ?? ""}\0${workspaceContextVersionRef.current}`,
-      workspaceRepoPath,
-      repoSettingsReady,
-    }),
-    [repoSettingsReady, workspaceRepoPath],
+    () => ({ workspaceRepoPath }),
+    [workspaceRepoPath],
   );
   const [draftState, dispatchDraftState] = useReducer(
     draftModelSelectionReducer,
-    draftContext,
+    { context: draftContext, repoSettingsReady },
     createDraftModelSelectionState,
   );
-  const currentDraftState = getDraftModelSelectionStateForContext(draftState, draftContext);
+  const currentDraftState = getDraftModelSelectionStateForContext(
+    draftState,
+    draftContext,
+    repoSettingsReady,
+  );
 
   const applyDraftSelection = useCallback(
     (selection: AgentModelSelection | null): void => {
       dispatchDraftState({
         type: "draftSelectionApplied",
         context: draftContext,
+        repoSettingsReady,
         role,
         selection,
       });
     },
-    [draftContext, role],
+    [draftContext, repoSettingsReady, role],
   );
 
   const repairDraftSelection = useCallback(
@@ -189,11 +191,12 @@ export const useAgentStudioDraftModelSelectionState = ({
         composerCatalog,
         context: draftContext,
         hasActiveSession,
+        repoSettingsReady,
         role,
         roleDefaultSelection,
       });
     },
-    [draftContext, role],
+    [draftContext, repoSettingsReady, role],
   );
 
   return {

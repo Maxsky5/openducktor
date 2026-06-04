@@ -1,7 +1,7 @@
 import type { DirectoryListing } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronUp, Folder, GitBranch, Home, LoaderCircle, Search } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useReducer, useRef } from "react";
+import { type ReactElement, useEffect, useMemo, useReducer } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,8 +41,6 @@ type FolderPickerState = {
 };
 
 type FolderPickerAction =
-  | { type: "closed" }
-  | { type: "opened"; initialPath: string | undefined }
   | { type: "manualPathChanged"; value: string }
   | { type: "filterTextChanged"; value: string }
   | { type: "directoryRequested"; path: string }
@@ -66,15 +64,6 @@ const folderPickerReducer = (
   action: FolderPickerAction,
 ): FolderPickerState => {
   switch (action.type) {
-    case "closed":
-      return {
-        ...state,
-        confirmedListing: null,
-        hasResolvedRequestedPath: false,
-        submitError: null,
-      };
-    case "opened":
-      return initialFolderPickerState(action.initialPath);
     case "manualPathChanged":
       return { ...state, manualPath: action.value };
     case "filterTextChanged":
@@ -236,7 +225,15 @@ function FolderPickerDirectoryBrowser({
   );
 }
 
-export function FolderPickerDialog({
+const getFolderPickerSessionKey = ({
+  initialPath,
+  open,
+}: {
+  initialPath: string | undefined;
+  open: boolean;
+}): string => `${open ? "open" : "closed"}\0${initialPath ?? ""}`;
+
+function FolderPickerDialogSession({
   open,
   onOpenChange,
   title,
@@ -247,8 +244,6 @@ export function FolderPickerDialog({
   onConfirm,
 }: FolderPickerDialogProps): ReactElement {
   const [state, dispatch] = useReducer(folderPickerReducer, initialPath, initialFolderPickerState);
-  const previousOpenRef = useRef(open);
-  const previousInitialPathRef = useRef(initialPath);
   const {
     requestedPath,
     manualPath,
@@ -258,15 +253,6 @@ export function FolderPickerDialog({
     submitError,
     isSubmitting,
   } = state;
-
-  const hasOpenBoundaryChanged = previousOpenRef.current !== open;
-  const hasOpenInitialPathChanged = open && previousInitialPathRef.current !== initialPath;
-  previousOpenRef.current = open;
-  previousInitialPathRef.current = initialPath;
-
-  if (hasOpenBoundaryChanged || hasOpenInitialPathChanged) {
-    dispatch(open ? { type: "opened", initialPath } : { type: "closed" });
-  }
 
   const directoryQuery = useQuery({
     ...directoryListingQueryOptions(requestedPath),
@@ -451,5 +437,14 @@ export function FolderPickerDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function FolderPickerDialog(props: FolderPickerDialogProps): ReactElement {
+  return (
+    <FolderPickerDialogSession
+      key={getFolderPickerSessionKey({ initialPath: props.initialPath, open: props.open })}
+      {...props}
+    />
   );
 }
