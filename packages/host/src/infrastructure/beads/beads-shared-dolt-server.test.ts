@@ -1,9 +1,14 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
-import { serverStateIsHealthy } from "./beads-shared-dolt-health";
+import {
+  parseDoltBinaryVersion,
+  parseDoltServerVersion,
+  serverStateIsHealthy,
+} from "./beads-shared-dolt-health";
 import {
   readSharedServerState,
   runCommandAllowFailure,
@@ -67,6 +72,84 @@ const createStopState = (
 const expectedYamlQuotedPath = (inputPath: string): string =>
   `'${inputPath.replaceAll("'", "''")}'`;
 
+const createFakeDoltCommand = async ({
+  selectedVersion,
+  serverVersion,
+}: {
+  selectedVersion: string;
+  serverVersion: string;
+}): Promise<string> => {
+  const root = await mkdtemp(path.join(tmpdir(), "odt-fake-dolt-"));
+  if (process.platform === "win32") {
+    const command = path.join(root, "dolt.cmd");
+    await writeFile(
+      command,
+      [
+        "@echo off",
+        'if "%1"=="version" (',
+        `  echo dolt version ${selectedVersion}`,
+        "  exit /b 0",
+        ")",
+        'echo %* | findstr /C:"select dolt_version();" >nul',
+        "if not errorlevel 1 (",
+        "  echo dolt_version()",
+        `  echo ${serverVersion}`,
+        "  exit /b 0",
+        ")",
+        'echo %* | findstr /C:"show databases" >nul',
+        "if not errorlevel 1 exit /b 0",
+        "exit /b 1",
+        "",
+      ].join("\r\n"),
+    );
+    return command;
+  }
+
+  const command = path.join(root, "dolt");
+  await writeFile(
+    command,
+    `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "dolt version ${selectedVersion}"
+  exit 0
+fi
+
+case " $* " in
+  *"select dolt_version();"*)
+    printf 'dolt_version()\\n${serverVersion}\\n'
+    exit 0
+    ;;
+  *"show databases"*)
+    exit 0
+    ;;
+esac
+
+exit 1
+`,
+  );
+  await chmod(command, 0o755);
+  return command;
+};
+
+const withTcpServer = async <T>(fn: (port: number) => Promise<T>): Promise<T> => {
+  const server = net.createServer((socket) => socket.destroy());
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Test TCP server did not expose a port.");
+    }
+    return await fn(address.port);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+};
+
 describe("readSharedServerState", () => {
   test("preserves path-edge strings from valid server state", async () => {
     const paths = await createPaths();
@@ -124,6 +207,22 @@ describe("readSharedServerState", () => {
 });
 
 describe("serverStateIsHealthy", () => {
+  test.each([
+    ["dolt version 2.1.2\n", "2.1.2"],
+    ["dolt version 1.86.0", "1.86.0"],
+    ["unexpected", null],
+  ])("parses Dolt binary version output %#", (output, expected) => {
+    expect(parseDoltBinaryVersion(output)).toBe(expected);
+  });
+
+  test.each([
+    ["dolt_version()\n2.1.2\n", "2.1.2"],
+    ["dolt_version()\r\n1.86.0\r\n", "1.86.0"],
+    ["+----------------+\n| dolt_version() |", null],
+  ])("parses Dolt server version CSV output %#", (output, expected) => {
+    expect(parseDoltServerVersion(output)).toBe(expected);
+  });
+
   test("rejects mismatched host, user, shared root, and data dir before probing services", async () => {
     const paths = await createPaths();
     const state = createState(paths);
@@ -147,6 +246,48 @@ describe("serverStateIsHealthy", () => {
         serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
       ),
     ).resolves.toBe(false);
+  });
+
+  test("rejects a reachable server running a stale Dolt version", async () => {
+    const paths = await createPaths();
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "1.86.0",
+    });
+
+    await withTcpServer(async (port) => {
+      const state = createState(paths, { port });
+
+      await expect(
+        Effect.runPromise(
+          serverStateIsHealthy(state, {
+            ...paths,
+            tools: { dolt: fakeDolt },
+          }),
+        ),
+      ).resolves.toBe(false);
+    });
+  });
+
+  test("accepts a reachable server matching the selected Dolt version", async () => {
+    const paths = await createPaths();
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "2.1.2",
+    });
+
+    await withTcpServer(async (port) => {
+      const state = createState(paths, { port });
+
+      await expect(
+        Effect.runPromise(
+          serverStateIsHealthy(state, {
+            ...paths,
+            tools: { dolt: fakeDolt },
+          }),
+        ),
+      ).resolves.toBe(true);
+    });
   });
 });
 

@@ -20,6 +20,22 @@ import { type SharedDoltServerError, toSharedDoltServerError } from "./beads-sha
 
 type BeadsCommandResult = { ok: boolean; stdout: string; stderr: string };
 
+export const parseDoltBinaryVersion = (output: string): string | null => {
+  const match = output.trim().match(/^dolt version\s+(\S+)/);
+  return match?.[1] ?? null;
+};
+
+export const parseDoltServerVersion = (output: string): string | null => {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2 || lines[0] !== "dolt_version()") {
+    return null;
+  }
+  return lines[1] ?? null;
+};
+
 export const pathExists = (inputPath: string) =>
   Effect.tryPromise({
     try: () => access(inputPath),
@@ -188,6 +204,16 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
     child.once("close", onClose);
   });
 
+const runDoltText = (
+  doltCommand: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Effect.Effect<string | null> =>
+  runCommandAllowFailure({ command: doltCommand, args, env }).pipe(
+    Effect.map((result) => (result.ok ? result.stdout : null)),
+    Effect.catchAll(() => Effect.succeed(null)),
+  );
+
 const sqlProbe = (
   port: number,
   env: NodeJS.ProcessEnv,
@@ -212,6 +238,47 @@ const sqlProbe = (
     env,
   );
 
+const doltVersionMatchesServer = (
+  port: number,
+  env: NodeJS.ProcessEnv,
+  doltCommand: string,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const selectedVersionOutput = yield* runDoltText(doltCommand, ["version"], env);
+    if (!selectedVersionOutput) {
+      return false;
+    }
+    const selectedVersion = parseDoltBinaryVersion(selectedVersionOutput);
+    if (!selectedVersion) {
+      return false;
+    }
+
+    const serverVersionOutput = yield* runDoltText(
+      doltCommand,
+      [
+        "--host",
+        SHARED_DOLT_SERVER_HOST,
+        "--port",
+        String(port),
+        "--no-tls",
+        "-u",
+        SHARED_DOLT_SERVER_USER,
+        "-p",
+        "",
+        "sql",
+        "-r",
+        "csv",
+        "-q",
+        "select dolt_version();",
+      ],
+      env,
+    );
+    if (!serverVersionOutput) {
+      return false;
+    }
+    return parseDoltServerVersion(serverVersionOutput) === selectedVersion;
+  });
+
 export const serverStateIsHealthy = (
   state: BeadsSharedServerState,
   paths: BeadsSharedServerPaths,
@@ -225,7 +292,8 @@ export const serverStateIsHealthy = (
     }
     if (
       !(yield* tcpProbe(state.port)) ||
-      !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt))
+      !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt)) ||
+      !(yield* doltVersionMatchesServer(state.port, paths.env, paths.tools.dolt))
     ) {
       return false;
     }
