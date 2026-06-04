@@ -25,6 +25,7 @@
     "@openducktor/host-client": "workspace:*",
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
+    "@openducktor/path-support": "workspace:*",
     "@pierre/diffs": "^1.2.5",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.14",

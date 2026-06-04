@@ -5,6 +5,7 @@ import type {
   RepoConfig,
   TaskCard,
 } from "@openducktor/contracts";
+import { pathStartsWith } from "@openducktor/path-support";
 import { Effect } from "effect";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
 import {
@@ -29,13 +30,6 @@ export const enrichTask = (task: TaskCard, allTasks: TaskCard[]): TaskCard => ({
   availableActions: deriveAvailableActions(task, allTasks),
   agentWorkflows: deriveAgentWorkflows(task),
 });
-const normalizeComparablePath = (value: string): string =>
-  value.replace(/\\/g, "/").replace(/\/+$/g, "");
-const pathStartsWith = (child: string, parent: string): boolean => {
-  const normalizedChild = normalizeComparablePath(child);
-  const normalizedParent = normalizeComparablePath(parent);
-  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
-};
 const tryCanonicalizePath = (
   settingsConfig: SettingsConfigPort,
   rawPath: string | null | undefined,

@@ -1,53 +1,11 @@
 import type { CodexAppServerFuzzyFileSearchResult } from "@openducktor/contracts";
 import { type AgentFileSearchResult, detectAgentFileReferenceKind } from "@openducktor/core";
+import { basenameForPath, toProjectRelativePath } from "@openducktor/path-support";
 import type { CodexAppServerClient } from "./types";
 
 type CodexFileSearchInput = {
   query: string;
   workingDirectory: string;
-};
-
-const normalizeSeparators = (path: string): string => path.replace(/\\+/g, "/");
-
-const isWindowsDrivePath = (path: string): boolean => /^[A-Za-z]:\//.test(path);
-
-const normalizePathForComparison = (path: string): string => {
-  return isWindowsDrivePath(path) ? path.toLowerCase() : path;
-};
-
-const isAbsolutePath = (path: string): boolean => {
-  const normalized = normalizeSeparators(path.trim());
-  return normalized.startsWith("/") || isWindowsDrivePath(normalized);
-};
-
-const trimTrailingSeparators = (path: string): string => {
-  const trimmed = path.replace(/[\\/]+$/g, "");
-  return trimmed.length > 0 ? trimmed : path;
-};
-
-const basename = (path: string): string => {
-  const normalized = trimTrailingSeparators(normalizeSeparators(path));
-  const parts = normalized.split("/").filter((segment) => segment.length > 0);
-  return parts[parts.length - 1] ?? "";
-};
-
-const stripWorkingDirectoryPrefix = (path: string, workingDirectory: string): string => {
-  const normalizedWorkingDirectory = trimTrailingSeparators(
-    normalizeSeparators(workingDirectory.trim()),
-  );
-  if (normalizedWorkingDirectory.length === 0 || !isAbsolutePath(path)) {
-    return path;
-  }
-
-  const workingDirectoryPrefix = normalizedWorkingDirectory.endsWith("/")
-    ? normalizedWorkingDirectory
-    : `${normalizedWorkingDirectory}/`;
-  const comparablePath = normalizePathForComparison(path);
-  const comparablePrefix = normalizePathForComparison(workingDirectoryPrefix);
-  if (comparablePath.startsWith(comparablePrefix)) {
-    return path.slice(workingDirectoryPrefix.length);
-  }
-  return path;
 };
 
 const normalizeReferencePath = (
@@ -59,8 +17,7 @@ const normalizeReferencePath = (
   if (trimmedPath.length === 0) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has an empty path.`);
   }
-  const withoutTrailingSeparators = trimTrailingSeparators(normalizeSeparators(trimmedPath));
-  const referencePath = stripWorkingDirectoryPrefix(withoutTrailingSeparators, workingDirectory);
+  const referencePath = toProjectRelativePath(trimmedPath, workingDirectory);
   if (referencePath.trim().length === 0) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has an empty path.`);
   }
@@ -151,7 +108,7 @@ const mapCodexFileSearchResult = (
   index: number,
 ): AgentFileSearchResult => {
   const path = normalizeReferencePath(entry.path, workingDirectory, index);
-  const fallbackName = basename(path);
+  const fallbackName = basenameForPath(path);
   const name = entry.file_name.trim().length > 0 ? entry.file_name : fallbackName || path;
   return {
     id: path,

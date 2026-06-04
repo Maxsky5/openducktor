@@ -1,13 +1,9 @@
 import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
+import { normalizePathForComparison } from "@openducktor/path-support";
 
 export type CodexRuntimeResolutionInput = RepoRuntimeRef & {
   workingDirectory?: string | null;
-};
-
-const normalizeRepoPathForComparison = (repoPath: string): string => {
-  const trimmed = repoPath.trim();
-  return trimmed.length > 1 ? trimmed.replace(/\/+$/, "") : trimmed;
 };
 
 export const resolveCodexRuntimeClientInput = (
@@ -24,10 +20,7 @@ export const resolveCodexRuntimeClientInput = (
       `Resolved runtime kind '${runtime.kind}' cannot be used to ${action}; 'codex' was requested for repo '${ref.repoPath}'.`,
     );
   }
-  if (
-    normalizeRepoPathForComparison(runtime.repoPath) !==
-    normalizeRepoPathForComparison(ref.repoPath)
-  ) {
+  if (normalizePathForComparison(runtime.repoPath) !== normalizePathForComparison(ref.repoPath)) {
     throw new Error(
       `Resolved runtime repo '${runtime.repoPath}' cannot be used to ${action}; repo '${ref.repoPath}' was requested.`,
     );
