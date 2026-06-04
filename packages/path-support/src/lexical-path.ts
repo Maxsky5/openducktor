@@ -82,11 +82,11 @@ export const toProjectRelativePath = (path: string, workingDirectory: string): s
   const normalizedWorkingDirectory = trimTrailingPathSeparators(
     normalizePathSeparators(workingDirectory.trim()),
   );
-  const lexicalPath = normalizePathForContainment(normalizedPath);
   if (!isAbsolutePath(normalizedPath)) {
     return normalizedPath;
   }
 
+  const lexicalPath = normalizePathForContainment(normalizedPath);
   if (normalizedWorkingDirectory.length === 0) {
     return lexicalPath.path;
   }
