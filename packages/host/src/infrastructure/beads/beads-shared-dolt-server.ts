@@ -3,7 +3,6 @@ import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { Clock, Effect, Fiber } from "effect";
-import { HostResourceError } from "../../effect/host-errors";
 import { createProcessCommandLaunch } from "../process/process-command-launch";
 import {
   processIsAlive,
@@ -73,6 +72,28 @@ const terminateSharedDoltProcess = (
     Effect.mapError((cause) => toSharedDoltServerError(cause, "shared-dolt.terminate-process")),
   );
 
+const errorHasCode = (error: unknown, code: string): boolean =>
+  typeof error === "object" && error !== null && "code" in error && error.code === code;
+
+const removeSharedServerStateFile = (
+  serverStatePath: string,
+): Effect.Effect<void, SharedDoltServerError> =>
+  Effect.tryPromise({
+    try: async () => {
+      try {
+        await unlink(serverStatePath);
+      } catch (error) {
+        if (errorHasCode(error, "ENOENT")) {
+          return;
+        }
+        throw error;
+      }
+    },
+    catch: (error) => {
+      return toSharedDoltServerError(error, "shared-dolt.unlink-state");
+    },
+  });
+
 export type StopSharedDoltServer = (
   state: BeadsSharedServerState,
   serverStatePath: string,
@@ -90,25 +111,27 @@ export const stopOwnedSharedDoltServer: StopSharedDoltServer = (state, serverSta
     }
 
     yield* terminateSharedDoltProcess(state.pid, `shared Dolt server ${state.pid}`);
+    yield* removeSharedServerStateFile(serverStatePath);
+  });
 
-    yield* Effect.tryPromise({
-      try: () => unlink(serverStatePath),
-      catch: (error) => {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          error.code === "ENOENT"
-        ) {
-          return new HostResourceError({
-            message: `Shared Dolt server state ${serverStatePath} does not exist`,
-            operation: "shared-dolt.unlink-state",
-            resource: serverStatePath,
-          });
-        }
-        return toSharedDoltServerError(error, "shared-dolt.unlink-state");
-      },
-    }).pipe(Effect.catchTag("HostResourceError", () => Effect.void));
+export const cleanupReplaceableUnhealthySharedDoltServer = (
+  state: BeadsSharedServerState,
+  serverStatePath: string,
+): Effect.Effect<void, SharedDoltServerError> =>
+  Effect.gen(function* () {
+    if (state.ownerPid !== process.pid && processIsAlive(state.ownerPid)) {
+      return yield* Effect.fail(
+        sharedDoltValidationError(
+          `Shared Dolt server ${state.pid} is unhealthy but still owned by live pid ${state.ownerPid}`,
+          "ownerPid",
+        ),
+      );
+    }
+
+    if (processIsAlive(state.pid)) {
+      yield* terminateSharedDoltProcess(state.pid, `unhealthy shared Dolt server ${state.pid}`);
+    }
+    yield* removeSharedServerStateFile(serverStatePath);
   });
 
 const spawnSharedDoltServer = (
@@ -313,13 +336,8 @@ export const defaultEnsureSharedDoltServerRunning: EnsureSharedDoltServer = (pat
       return existing;
     }
 
-    if (existing && processIsAlive(existing.ownerPid) && existing.ownerPid !== process.pid) {
-      return yield* Effect.fail(
-        sharedDoltValidationError(
-          `Shared Dolt server for ${paths.sharedServerRoot} is unhealthy but still owned by live pid ${existing.ownerPid}`,
-          "ownerPid",
-        ),
-      );
+    if (existing) {
+      yield* cleanupReplaceableUnhealthySharedDoltServer(existing, paths.serverStatePath);
     }
 
     const basePort = yield* deterministicSharedDoltPortCandidate(paths.baseDir).pipe(

@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -10,6 +11,7 @@ import {
   serverStateIsHealthy,
 } from "./beads-shared-dolt-health";
 import {
+  cleanupReplaceableUnhealthySharedDoltServer,
   readSharedServerState,
   runCommandAllowFailure,
   stopOwnedSharedDoltServer,
@@ -71,6 +73,51 @@ const createStopState = (
 
 const expectedYamlQuotedPath = (inputPath: string): string =>
   `'${inputPath.replaceAll("'", "''")}'`;
+
+const processIsRunning = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const spawnLongRunningProcess = async (): Promise<number> => {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    detached: process.platform !== "win32",
+    stdio: "ignore",
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", reject);
+  });
+  if (!child.pid) {
+    throw new Error("Test process started without a pid.");
+  }
+  child.unref();
+  return child.pid;
+};
+
+const stopTestProcess = async (pid: number): Promise<void> => {
+  if (!processIsRunning(pid)) {
+    return;
+  }
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore" });
+      return;
+    }
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Best-effort cleanup for failed tests.
+    }
+  }
+};
 
 const createFakeDoltCommand = async ({
   selectedVersion,
@@ -326,6 +373,51 @@ describe("stopOwnedSharedDoltServer", () => {
       Effect.runPromise(stopOwnedSharedDoltServer(createStopState({ pid: 0 }), statePath)),
     ).rejects.toThrow("invalid process pid 0");
     await expect(readFile(statePath, "utf8")).resolves.toBe("state");
+  });
+});
+
+describe("cleanupReplaceableUnhealthySharedDoltServer", () => {
+  test("refuses to replace an unhealthy server owned by another live process", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-unhealthy-"));
+    const statePath = path.join(root, "server.json");
+    await writeFile(statePath, "state");
+    const ownerPid = await spawnLongRunningProcess();
+
+    try {
+      await expect(
+        Effect.runPromise(
+          cleanupReplaceableUnhealthySharedDoltServer(
+            createStopState({ ownerPid, pid: 999_999_992 }),
+            statePath,
+          ),
+        ),
+      ).rejects.toThrow(`still owned by live pid ${ownerPid}`);
+      await expect(readFile(statePath, "utf8")).resolves.toBe("state");
+    } finally {
+      await stopTestProcess(ownerPid);
+    }
+  });
+
+  test("terminates an orphaned unhealthy server before removing stale state", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-unhealthy-"));
+    const statePath = path.join(root, "server.json");
+    await writeFile(statePath, "state");
+    const serverPid = await spawnLongRunningProcess();
+
+    try {
+      await expect(
+        Effect.runPromise(
+          cleanupReplaceableUnhealthySharedDoltServer(
+            createStopState({ ownerPid: 999_999_993, pid: serverPid }),
+            statePath,
+          ),
+        ),
+      ).resolves.toBeUndefined();
+      expect(processIsRunning(serverPid)).toBe(false);
+      await expect(readFile(statePath, "utf8")).rejects.toThrow();
+    } finally {
+      await stopTestProcess(serverPid);
+    }
   });
 });
 
