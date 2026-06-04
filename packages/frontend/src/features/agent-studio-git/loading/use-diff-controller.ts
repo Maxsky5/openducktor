@@ -114,22 +114,6 @@ export function useAgentStudioDiffController({
     shouldApplyResult,
   });
 
-  const [resetContextKey, setResetContextKey] = useState<string | null>(requestContextKey);
-
-  if (!repoPath) {
-    if (resetContextKey !== null) {
-      setResetContextKey(null);
-      resetToDefaultScope();
-      resetControllerState();
-    }
-  } else if (resetContextKey === null) {
-    setResetContextKey(requestContextKey);
-  } else if (resetContextKey !== requestContextKey) {
-    setResetContextKey(requestContextKey);
-    resetToDefaultScope();
-    resetControllerState();
-  }
-
   useEffect(() => {
     if (!pendingFullReload) {
       return;
@@ -154,8 +138,17 @@ export function useAgentStudioDiffController({
     requestContextKeyRef.current = requestContextKey;
 
     if (!repoPath) {
+      if (previousContextKey !== null) {
+        resetToDefaultScope();
+        resetControllerState();
+      }
       requestContextKeyRef.current = null;
       return;
+    }
+
+    if (hasContextChanged) {
+      resetToDefaultScope();
+      resetControllerState();
     }
 
     const scope = hasContextChanged ? "uncommitted" : diffScopeRef.current;
@@ -172,7 +165,16 @@ export function useAgentStudioDiffController({
         hydrateCachedFullLoad: shouldHydrateFromCache,
       });
     }
-  }, [loadData, repoPath, requestContextKey, shouldBlockDiffLoading, targetBranch, workingDir]);
+  }, [
+    loadData,
+    repoPath,
+    requestContextKey,
+    resetControllerState,
+    resetToDefaultScope,
+    shouldBlockDiffLoading,
+    targetBranch,
+    workingDir,
+  ]);
   useEffect(syncDiffRequestContext, [syncDiffRequestContext]);
 
   useEffect(() => {
