@@ -213,6 +213,55 @@ describe("useTaskDocumentEditorState", () => {
     await harness.unmount();
   });
 
+  test("ignores stale loadSection callbacks after task context changes", async () => {
+    const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const loadedTaskIds: string[] = [];
+    const loadSpecDocument = async (taskId: string) => {
+      loadedTaskIds.push(taskId);
+      if (taskId === "task-1") {
+        return first.promise;
+      }
+      throw new Error(`Unexpected taskId ${taskId}`);
+    };
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSection: null,
+        taskId: "task-1",
+        loadSpecDocument,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      const staleLoadSection = harness.getLatest().loadSection;
+
+      await harness.update(
+        createBaseProps({
+          activeSection: null,
+          taskId: "task-2",
+          loadSpecDocument,
+        }),
+      );
+
+      await harness.run(() => {
+        void staleLoadSection("spec", true);
+      });
+      await harness.run(async () => {
+        first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
+        await first.promise;
+      });
+
+      const state = harness.getLatest();
+      expect(loadedTaskIds).toEqual([]);
+      expect(state.documents.spec.loaded).toBe(false);
+      expect(state.documents.spec.isLoading).toBe(false);
+      expect(state.documents.spec.serverMarkdown).toBe("");
+    } finally {
+      first.resolve({ markdown: "# Task 1", updatedAt: "2026-02-20T10:00:00Z" });
+      await harness.unmount();
+    }
+  });
+
   test("supports explicit retry after failure", async () => {
     let attempts = 0;
     const harness = createHookHarness(

@@ -300,11 +300,11 @@ export function useTaskDocumentEditorState({
 
   const loadSection = useCallback(
     (section: TaskDocumentSection, force = false): Promise<void> => {
-      if (!open || !taskId) {
+      const loadContext = editorContext;
+      if (!loadContext.open || !loadContext.taskId || loadContext !== contextRef.current) {
         return Promise.resolve();
       }
 
-      const loadContext = contextRef.current;
       const inFlightSections = getInFlightSectionsForContext(loadContext);
       const current = documentsRef.current[section];
       if (inFlightSections[section] || (!force && current.loaded)) {
@@ -319,7 +319,9 @@ export function useTaskDocumentEditorState({
       });
 
       return withTimeout(
-        section === "spec" ? loadSpecDocument(taskId) : loadPlanDocument(taskId),
+        section === "spec"
+          ? loadSpecDocument(loadContext.taskId)
+          : loadPlanDocument(loadContext.taskId),
         loadTimeoutMs,
       )
         .then((payload) => {
@@ -349,11 +351,10 @@ export function useTaskDocumentEditorState({
     },
     [
       getInFlightSectionsForContext,
+      editorContext,
       loadPlanDocument,
       loadSpecDocument,
       loadTimeoutMs,
-      open,
-      taskId,
     ],
   );
 
