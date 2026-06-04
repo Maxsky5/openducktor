@@ -17,6 +17,11 @@ type VerifyPackagedElectronSidecarsInput = {
   releaseDirectory: string;
 };
 
+export type VerifiedPackagedElectronSidecar = {
+  id: ElectronSidecarId;
+  path: string;
+};
+
 type PackagedSidecarInput = {
   arch: ElectronReleaseArch;
   platform: PackagedSidecarPlatform;
@@ -83,12 +88,12 @@ export const verifyPackagedElectronSidecars = async ({
   arch,
   platform,
   releaseDirectory,
-}: VerifyPackagedElectronSidecarsInput): Promise<string[]> => {
+}: VerifyPackagedElectronSidecarsInput): Promise<VerifiedPackagedElectronSidecar[]> => {
   if (platform === "macos") {
     return [];
   }
 
-  const sidecarPaths: string[] = [];
+  const verifiedSidecars: VerifiedPackagedElectronSidecar[] = [];
   for (const sidecarId of ELECTRON_SIDECAR_IDS) {
     const sidecarPath = resolvePackagedElectronSidecarPath({
       arch,
@@ -104,8 +109,8 @@ export const verifyPackagedElectronSidecars = async ({
       );
     }
 
-    sidecarPaths.push(sidecarPath);
+    verifiedSidecars.push({ id: sidecarId, path: sidecarPath });
   }
 
-  return sidecarPaths;
+  return verifiedSidecars;
 };

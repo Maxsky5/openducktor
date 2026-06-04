@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import type { ElectronSidecarId } from "./electron-sidecar-manifest";
 import {
   resolvePackagedElectronSidecarPath,
+  type VerifiedPackagedElectronSidecar,
   verifyPackagedElectronSidecars,
 } from "./verify-electron-sidecar-package";
 
@@ -12,6 +13,8 @@ const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : tes
 
 const makeReleaseDirectory = async (): Promise<string> =>
   mkdtemp(join(tmpdir(), "openducktor-electron-package-sidecars-"));
+
+const REQUIRED_SIDECAR_IDS = ["openducktor-mcp", "beads", "dolt"] as const;
 
 const writePackagedSidecar = async ({
   arch = "x64",
@@ -52,11 +55,18 @@ const writeRequiredPackagedSidecars = async ({
   executable?: boolean;
   platform: "linux" | "windows";
   releaseDirectory: string;
-}): Promise<string[]> =>
+}): Promise<VerifiedPackagedElectronSidecar[]> =>
   Promise.all(
-    (["openducktor-mcp", "beads", "dolt"] as const).map((sidecarId) =>
-      writePackagedSidecar({ arch, executable, platform, releaseDirectory, sidecarId }),
-    ),
+    REQUIRED_SIDECAR_IDS.map(async (sidecarId) => ({
+      id: sidecarId,
+      path: await writePackagedSidecar({
+        arch,
+        executable,
+        platform,
+        releaseDirectory,
+        sidecarId,
+      }),
+    })),
   );
 
 describe("verifyPackagedElectronSidecars", () => {

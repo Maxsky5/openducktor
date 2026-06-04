@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { archiveEntryPathToFilePath } from "./electron-sidecar-archives";
 import {
   type ElectronExternalSidecarAsset,
   electronSidecarExecutableName,
@@ -25,9 +26,6 @@ const makeTempWorkspace = async (): Promise<{
 
   return { electronPackageDirectory, workspaceRoot };
 };
-
-const archiveEntryPathToFilePath = (entryPath: string): string[] =>
-  entryPath.replace(/\\/g, "/").replace(/^\.\//, "").split("/").filter(Boolean);
 
 const writeExtractedSidecar = async ({
   asset,

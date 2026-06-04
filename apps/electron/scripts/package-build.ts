@@ -216,20 +216,16 @@ export const buildElectronPackage = async ({
     env: resolveElectronBuilderEnv(signed, process.env),
   });
 
-  const verifiedSidecarPaths = await verifyPackagedElectronSidecars({
+  const verifiedSidecars = await verifyPackagedElectronSidecars({
     arch,
     platform,
     releaseDirectory,
   });
-  for (const verifiedSidecarPath of verifiedSidecarPaths) {
-    const fileName = verifiedSidecarPath.split(/[\\/]/).at(-1) ?? verifiedSidecarPath;
-    const sidecarLabel = fileName.startsWith("bd")
-      ? electronSidecarDisplayName("beads")
-      : fileName.startsWith("dolt")
-        ? electronSidecarDisplayName("dolt")
-        : electronSidecarDisplayName("openducktor-mcp");
+  for (const sidecar of verifiedSidecars) {
     console.log(
-      `Verified packaged Electron ${sidecarLabel} sidecar payload: ${verifiedSidecarPath}`,
+      `Verified packaged Electron ${electronSidecarDisplayName(sidecar.id)} sidecar payload: ${
+        sidecar.path
+      }`,
     );
   }
 
