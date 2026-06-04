@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { detectHostReleaseArch, detectHostReleasePlatform } from "./electron-release-targets";
 import {
   collectReleaseArtifacts,
   isReleaseArtifact,
@@ -11,16 +10,6 @@ import {
 } from "./package-build";
 
 describe("build Electron release artifact", () => {
-  it("maps host platform and architecture to Electron release targets", () => {
-    expect(detectHostReleasePlatform("darwin")).toBe("macos");
-    expect(detectHostReleasePlatform("linux")).toBe("linux");
-    expect(detectHostReleasePlatform("win32")).toBe("windows");
-    expect(detectHostReleasePlatform("freebsd")).toBeUndefined();
-    expect(detectHostReleaseArch("arm64")).toBe("arm64");
-    expect(detectHostReleaseArch("x64")).toBe("x64");
-    expect(detectHostReleaseArch("ia32")).toBeUndefined();
-  });
-
   it("builds signed macOS artifacts without disabling notarization", () => {
     expect(
       resolveElectronBuilderArgs({

@@ -12,6 +12,11 @@ import {
   resolveElectronSidecarBuildPlan,
 } from "./prepare-electron-sidecars";
 
+type PrepareElectronSidecarsHooks = Pick<
+  Parameters<typeof prepareElectronSidecars>[0],
+  "chmodFile" | "compileMcp" | "downloadAsset" | "extractArchive" | "verifyArchiveChecksum"
+>;
+
 const makeTempWorkspace = async (): Promise<{
   electronPackageDirectory: string;
   workspaceRoot: string;
@@ -47,6 +52,27 @@ const writeExtractedSidecar = async ({
   }
   return extractedPath;
 };
+
+const makeSideEffectingHooks = (sideEffects: string[]): PrepareElectronSidecarsHooks => ({
+  compileMcp: async ({ outputPaths }) => {
+    sideEffects.push("compile");
+    await writeFile(outputPaths["openducktor-mcp"], "binary");
+  },
+  chmodFile: async (path, mode) => {
+    sideEffects.push("chmod");
+    await chmod(path, mode);
+  },
+  downloadAsset: async ({ archivePath }) => {
+    sideEffects.push("download");
+    await mkdir(dirname(archivePath), { recursive: true });
+    await writeFile(archivePath, "archive");
+  },
+  extractArchive: async ({ asset, extractionDirectory }) => {
+    sideEffects.push("extract");
+    await writeExtractedSidecar({ asset, extractionDirectory });
+  },
+  verifyArchiveChecksum: async () => {},
+});
 
 describe("prepareElectronSidecars", () => {
   test("uses platform-specific executable names", () => {
@@ -141,24 +167,7 @@ describe("prepareElectronSidecars", () => {
         electronPackageDirectory,
         platform: "windows",
         workspaceRoot,
-        compileMcp: async ({ outputPaths }) => {
-          sideEffects.push("compile");
-          await writeFile(outputPaths["openducktor-mcp"], "binary");
-        },
-        downloadAsset: async ({ archivePath }) => {
-          sideEffects.push("download");
-          await mkdir(dirname(archivePath), { recursive: true });
-          await writeFile(archivePath, "archive");
-        },
-        extractArchive: async ({ asset, extractionDirectory }) => {
-          sideEffects.push("extract");
-          await writeExtractedSidecar({ asset, extractionDirectory });
-        },
-        chmodFile: async (path, mode) => {
-          sideEffects.push("chmod");
-          await chmod(path, mode);
-        },
-        verifyArchiveChecksum: async () => {},
+        ...makeSideEffectingHooks(sideEffects),
       }),
     ).rejects.toThrow("No pinned Electron Dolt sidecar asset for windows/arm64");
     expect(sideEffects).toEqual([]);
@@ -180,24 +189,7 @@ describe("prepareElectronSidecars", () => {
         electronPackageDirectory,
         platform: "linux",
         workspaceRoot,
-        compileMcp: async ({ outputPaths }) => {
-          sideEffects.push("compile");
-          await writeFile(outputPaths["openducktor-mcp"], "binary");
-        },
-        downloadAsset: async ({ archivePath }) => {
-          sideEffects.push("download");
-          await mkdir(dirname(archivePath), { recursive: true });
-          await writeFile(archivePath, "archive");
-        },
-        extractArchive: async ({ asset, extractionDirectory }) => {
-          sideEffects.push("extract");
-          await writeExtractedSidecar({ asset, extractionDirectory });
-        },
-        chmodFile: async (path, mode) => {
-          sideEffects.push("chmod");
-          await chmod(path, mode);
-        },
-        verifyArchiveChecksum: async () => {},
+        ...makeSideEffectingHooks(sideEffects),
       }),
     ).rejects.toThrow("OpenDucktor MCP entrypoint is missing");
     expect(sideEffects).toEqual([]);
