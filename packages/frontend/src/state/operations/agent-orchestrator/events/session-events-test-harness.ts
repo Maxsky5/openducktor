@@ -62,9 +62,7 @@ export {
   attachAgentSessionListener,
   createSessionEventBatcher,
   handleAssistantPart,
-  lastSessionMessageForTest,
   OPENCODE_RUNTIME_DESCRIPTOR,
   sessionMessageAt,
-  sessionMessagesToArray,
   withMockedToast,
 };

@@ -202,7 +202,11 @@ export function useAgentStudioSelectionController({
   clearComposerInput,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
-  const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache>(new Map());
+  const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache | null>(null);
+  if (sessionsByTaskSortCacheRef.current === null) {
+    sessionsByTaskSortCacheRef.current = new Map();
+  }
+  const sessionsByTaskSortCache = sessionsByTaskSortCacheRef.current;
   const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
   const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
   const effectiveHasExplicitRoleParam = isRepoNavigationBoundaryPending
@@ -231,11 +235,11 @@ export function useAgentStudioSelectionController({
   const sessionsByTaskId = useMemo(() => {
     const { sessionsByTaskId: grouped, nextCache } = buildSessionsByTaskIdWithCache(
       sessions,
-      sessionsByTaskSortCacheRef.current,
+      sessionsByTaskSortCache,
     );
     sessionsByTaskSortCacheRef.current = nextCache;
     return grouped;
-  }, [sessions]);
+  }, [sessions, sessionsByTaskSortCache]);
 
   const selectedSessionById = useMemo(
     () => (selectedSessionParam ? (sessionSummariesById.get(selectedSessionParam) ?? null) : null),

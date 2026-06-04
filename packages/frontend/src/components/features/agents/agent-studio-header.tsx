@@ -1,15 +1,15 @@
 import { ArrowUpRightFromSquare } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useCallback, useState } from "react";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import type { AgentStudioHeaderModel } from "./agent-studio-header.types";
 import { QuickActionsMenu } from "./agent-studio-header-quick-actions";
+import { canOpenQuickActionsMenu } from "./agent-studio-header-quick-actions-availability";
 import { SessionHistoryMenu } from "./agent-studio-header-session-history";
 import { WorkflowRail } from "./agent-studio-header-workflow-rail";
 
 export type { AgentStudioHeaderModel } from "./agent-studio-header.types";
-export { deriveSessionHistorySelectionFocusBehavior } from "./agent-studio-header-session-history";
 
 type HeaderTitleProps = {
   taskTitle: string | null;
@@ -56,8 +56,52 @@ function HeaderTitle({ taskTitle, taskId, onOpenTaskDetails }: HeaderTitleProps)
   );
 }
 
-export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }): ReactElement {
+function AgentStudioQuickActionsMenu({
+  canOpenActionsMenu,
+  model,
+}: {
+  canOpenActionsMenu: boolean;
+  model: AgentStudioHeaderModel;
+}): ReactElement {
   const [isQuickActionsMenuOpen, setIsQuickActionsMenuOpen] = useState(false);
+  const effectiveQuickActionsMenuOpen = isQuickActionsMenuOpen && canOpenActionsMenu;
+
+  const handleQuickActionsMenuOpenChange = useCallback(
+    (isOpen: boolean): void => {
+      setIsQuickActionsMenuOpen(isOpen && canOpenActionsMenu);
+    },
+    [canOpenActionsMenu],
+  );
+
+  return (
+    <QuickActionsMenu
+      canOpenActionsMenu={canOpenActionsMenu}
+      isOpen={effectiveQuickActionsMenuOpen}
+      onOpenChange={handleQuickActionsMenuOpenChange}
+      agentStudioReady={model.agentStudioReady}
+      isCreatingSession={model.isCreatingSession}
+      options={model.quickActions}
+      primaryAction={model.primaryQuickAction}
+      sessionCreateOptions={model.sessionCreateOptions}
+      onQuickAction={model.onQuickAction}
+      onPrepareMessageFirstSession={model.onPrepareMessageFirstSession}
+      onResolveGitConflictQuickAction={model.onResolveGitConflictQuickAction}
+    />
+  );
+}
+
+export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }): ReactElement {
+  const canOpenActionsMenu = canOpenQuickActionsMenu({
+    agentStudioReady: model.agentStudioReady,
+    isCreatingSession: model.isCreatingSession,
+    options: model.quickActions,
+    primaryAction: model.primaryQuickAction,
+    sessionCreateOptions: model.sessionCreateOptions,
+    onResolveGitConflictQuickAction: model.onResolveGitConflictQuickAction,
+  });
+  const quickActionsMenuStateKey = canOpenActionsMenu
+    ? "quick-actions-available"
+    : "quick-actions-unavailable";
 
   return (
     <CardHeader className="border-b border-border bg-card pb-4">
@@ -72,17 +116,10 @@ export function AgentStudioHeader({ model }: { model: AgentStudioHeaderModel }):
             selector={model.sessionSelector}
             agentStudioReady={model.agentStudioReady}
           />
-          <QuickActionsMenu
-            isOpen={isQuickActionsMenuOpen}
-            onOpenChange={setIsQuickActionsMenuOpen}
-            agentStudioReady={model.agentStudioReady}
-            isCreatingSession={model.isCreatingSession}
-            options={model.quickActions}
-            primaryAction={model.primaryQuickAction}
-            sessionCreateOptions={model.sessionCreateOptions}
-            onQuickAction={model.onQuickAction}
-            onPrepareMessageFirstSession={model.onPrepareMessageFirstSession}
-            onResolveGitConflictQuickAction={model.onResolveGitConflictQuickAction}
+          <AgentStudioQuickActionsMenu
+            key={quickActionsMenuStateKey}
+            canOpenActionsMenu={canOpenActionsMenu}
+            model={model}
           />
         </div>
       </div>

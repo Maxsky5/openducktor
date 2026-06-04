@@ -11,16 +11,13 @@ import type {
   AgentStudioOrchestrationSelectionContext,
   useAgentStudioOrchestrationController,
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
-import type { useWorkspaceState } from "@/state";
+import type { useWorkspaceState } from "@/state/app-state-provider";
 import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
 } from "@/state/queries/build-runtime";
-import {
-  type DiffDataState,
-  type GitDiffRefresh,
-  useAgentStudioDiffData,
-} from "../agent-studio-git";
+import type { DiffDataState, GitDiffRefresh } from "../agent-studio-git/contracts";
+import { useAgentStudioDiffData } from "../agent-studio-git/use-agent-studio-diff-data";
 import {
   type AgentStudioGitPanelContextMode,
   type BuildToolsOpenInTarget,

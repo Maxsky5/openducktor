@@ -41,8 +41,6 @@ type FolderPickerState = {
 };
 
 type FolderPickerAction =
-  | { type: "closed" }
-  | { type: "opened"; initialPath: string | undefined }
   | { type: "manualPathChanged"; value: string }
   | { type: "filterTextChanged"; value: string }
   | { type: "directoryRequested"; path: string }
@@ -66,15 +64,6 @@ const folderPickerReducer = (
   action: FolderPickerAction,
 ): FolderPickerState => {
   switch (action.type) {
-    case "closed":
-      return {
-        ...state,
-        confirmedListing: null,
-        hasResolvedRequestedPath: false,
-        submitError: null,
-      };
-    case "opened":
-      return initialFolderPickerState(action.initialPath);
     case "manualPathChanged":
       return { ...state, manualPath: action.value };
     case "filterTextChanged":
@@ -236,7 +225,15 @@ function FolderPickerDirectoryBrowser({
   );
 }
 
-export function FolderPickerDialog({
+const getFolderPickerSessionKey = ({
+  initialPath,
+  open,
+}: {
+  initialPath: string | undefined;
+  open: boolean;
+}): string => `${open ? "open" : "closed"}\0${initialPath ?? ""}`;
+
+function FolderPickerDialogSession({
   open,
   onOpenChange,
   title,
@@ -256,15 +253,6 @@ export function FolderPickerDialog({
     submitError,
     isSubmitting,
   } = state;
-
-  useEffect(() => {
-    if (!open) {
-      dispatch({ type: "closed" });
-      return;
-    }
-
-    dispatch({ type: "opened", initialPath });
-  }, [initialPath, open]);
 
   const directoryQuery = useQuery({
     ...directoryListingQueryOptions(requestedPath),
@@ -449,5 +437,14 @@ export function FolderPickerDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function FolderPickerDialog(props: FolderPickerDialogProps): ReactElement {
+  return (
+    <FolderPickerDialogSession
+      key={getFolderPickerSessionKey({ initialPath: props.initialPath, open: props.open })}
+      {...props}
+    />
   );
 }

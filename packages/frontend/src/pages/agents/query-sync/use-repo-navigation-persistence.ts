@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -27,17 +27,40 @@ type UseRepoNavigationPersistenceResult = {
 
 export type RepoNavigationBoundaryPhase = "idle" | "detecting" | "clearing";
 
+type RepoNavigationPersistenceState = {
+  boundaryWorkspaceId: string | null;
+  persistenceError: Error | null;
+};
+
+type RepoNavigationPersistenceAction =
+  | { type: "setBoundaryWorkspaceId"; boundaryWorkspaceId: string | null }
+  | { type: "setPersistenceError"; persistenceError: Error | null };
+
+const repoNavigationPersistenceReducer = (
+  state: RepoNavigationPersistenceState,
+  action: RepoNavigationPersistenceAction,
+): RepoNavigationPersistenceState => {
+  switch (action.type) {
+    case "setBoundaryWorkspaceId":
+      return state.boundaryWorkspaceId === action.boundaryWorkspaceId
+        ? state
+        : { ...state, boundaryWorkspaceId: action.boundaryWorkspaceId };
+    case "setPersistenceError":
+      return state.persistenceError === action.persistenceError
+        ? state
+        : { ...state, persistenceError: action.persistenceError };
+  }
+};
+
 export const resolveRepoNavigationBoundaryPhase = ({
-  activeWorkspace,
+  activeWorkspaceId,
   lastWorkspaceId,
   boundaryWorkspaceId,
 }: {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   lastWorkspaceId: string | null;
   boundaryWorkspaceId: string | null;
 }): RepoNavigationBoundaryPhase => {
-  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
-
   if (!activeWorkspaceId) {
     return "idle";
   }
@@ -86,10 +109,15 @@ export function useRepoNavigationPersistence({
   const persistedContextPayloadRef = useRef<string | null>(null);
   const pendingContextPersistRef = useRef<{ key: string; payload: string } | null>(null);
   const pendingPersistTimeoutIdRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const [boundaryWorkspaceId, setBoundaryWorkspaceId] = useState<string | null>(null);
-  const [persistenceError, setPersistenceError] = useState<Error | null>(null);
+  const [{ boundaryWorkspaceId, persistenceError }, dispatchPersistenceState] = useReducer(
+    repoNavigationPersistenceReducer,
+    {
+      boundaryWorkspaceId: null,
+      persistenceError: null,
+    },
+  );
   const repoNavigationBoundaryPhase = resolveRepoNavigationBoundaryPhase({
-    activeWorkspace,
+    activeWorkspaceId,
     lastWorkspaceId: lastWorkspaceIdRef.current,
     boundaryWorkspaceId,
   });
@@ -113,14 +141,17 @@ export function useRepoNavigationPersistence({
   const retryPersistenceRestore = useCallback((): void => {
     restoredContextWorkspaceIdRef.current = null;
     persistedContextPayloadRef.current = null;
-    setPersistenceError(null);
+    dispatchPersistenceState({ type: "setPersistenceError", persistenceError: null });
   }, []);
 
   const surfacePersistenceWriteError = useCallback((cause: unknown): void => {
     persistedContextPayloadRef.current = null;
     pendingContextPersistRef.current = null;
     pendingPersistTimeoutIdRef.current = null;
-    setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
+    dispatchPersistenceState({
+      type: "setPersistenceError",
+      persistenceError: cause instanceof Error ? cause : new Error(errorMessage(cause)),
+    });
   }, []);
 
   const tryFlushPendingContextPersist = useCallback((): boolean => {
@@ -147,10 +178,13 @@ export function useRepoNavigationPersistence({
     lastWorkspaceIdRef.current = activeWorkspaceId;
     restoredContextWorkspaceIdRef.current = null;
     persistedContextPayloadRef.current = null;
-    setBoundaryWorkspaceId(previousWorkspaceId && activeWorkspaceId ? activeWorkspaceId : null);
+    dispatchPersistenceState({
+      type: "setBoundaryWorkspaceId",
+      boundaryWorkspaceId: previousWorkspaceId && activeWorkspaceId ? activeWorkspaceId : null,
+    });
 
     if (persistenceError) {
-      setPersistenceError(null);
+      dispatchPersistenceState({ type: "setPersistenceError", persistenceError: null });
     }
   }, [activeWorkspaceId, persistenceError]);
 
@@ -159,10 +193,10 @@ export function useRepoNavigationPersistence({
       if (!tryFlushPendingContextPersist()) {
         return;
       }
-      setBoundaryWorkspaceId(null);
+      dispatchPersistenceState({ type: "setBoundaryWorkspaceId", boundaryWorkspaceId: null });
       restoredContextWorkspaceIdRef.current = null;
       persistedContextPayloadRef.current = null;
-      setPersistenceError(null);
+      dispatchPersistenceState({ type: "setPersistenceError", persistenceError: null });
     }
   }, [activeWorkspaceId, tryFlushPendingContextPersist]);
 
@@ -172,7 +206,7 @@ export function useRepoNavigationPersistence({
     }
 
     if (!hasAgentStudioNavigationSelection(navigation)) {
-      setBoundaryWorkspaceId(null);
+      dispatchPersistenceState({ type: "setBoundaryWorkspaceId", boundaryWorkspaceId: null });
       return;
     }
 
@@ -198,7 +232,10 @@ export function useRepoNavigationPersistence({
         persisted = parsePersistedContext(raw);
       }
     } catch (cause) {
-      setPersistenceError(cause instanceof Error ? cause : new Error(errorMessage(cause)));
+      dispatchPersistenceState({
+        type: "setPersistenceError",
+        persistenceError: cause instanceof Error ? cause : new Error(errorMessage(cause)),
+      });
       return;
     }
 

@@ -62,7 +62,11 @@ export function useAgentStudioSendAction({
   const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
     Record<string, number>
   >({});
-  const inFlightContextsRef = useRef(new Set<string>());
+  const inFlightContextsRef = useRef<Set<string> | null>(null);
+  if (inFlightContextsRef.current === null) {
+    inFlightContextsRef.current = new Set<string>();
+  }
+  const inFlightContexts = inFlightContextsRef.current;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
     activeWorkspace,
     taskId,
@@ -74,8 +78,7 @@ export function useAgentStudioSendAction({
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
-        (!canQueueBusyFollowups &&
-          (isSending || inFlightContextsRef.current.has(activeComposerContextKey))) ||
+        (!canQueueBusyFollowups && (isSending || inFlightContexts.has(activeComposerContextKey))) ||
         isStarting ||
         !agentStudioReady ||
         isWaitingInput ||
@@ -118,7 +121,7 @@ export function useAgentStudioSendAction({
         return false;
       }
       const sendContextKeys = new Set<string>([activeComposerContextKey]);
-      inFlightContextsRef.current.add(activeComposerContextKey);
+      inFlightContexts.add(activeComposerContextKey);
       setSendingActivityCountByContext((current) =>
         incrementActivityCountRecord(current, activeComposerContextKey),
       );
@@ -141,7 +144,7 @@ export function useAgentStudioSendAction({
         });
         if (!sendContextKeys.has(targetComposerContextKey)) {
           sendContextKeys.add(targetComposerContextKey);
-          inFlightContextsRef.current.add(targetComposerContextKey);
+          inFlightContexts.add(targetComposerContextKey);
           setSendingActivityCountByContext((current) =>
             incrementActivityCountRecord(current, targetComposerContextKey),
           );
@@ -162,7 +165,7 @@ export function useAgentStudioSendAction({
         return true;
       } finally {
         for (const contextKey of sendContextKeys) {
-          inFlightContextsRef.current.delete(contextKey);
+          inFlightContexts.delete(contextKey);
         }
         setSendingActivityCountByContext((current) => {
           let next = current;
@@ -181,6 +184,7 @@ export function useAgentStudioSendAction({
       activeSessionSelectedModel,
       agentStudioReady,
       canQueueBusyFollowups,
+      inFlightContexts,
       reusablePrompts,
       isSending,
       isStarting,

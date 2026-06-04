@@ -80,6 +80,7 @@ export const useAgentStudioDiffLoadData = ({
           ...loadContext,
           mode,
           requestKey,
+          requestContextKey: context?.requestContextKey ?? null,
           requestSequence,
           version,
         };

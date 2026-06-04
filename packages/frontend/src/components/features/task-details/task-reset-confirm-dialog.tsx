@@ -14,7 +14,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-delete-confirm-dialog";
+} from "./task-delete-confirm-dialog-model";
 
 type TaskResetConfirmDialogProps = {
   open: boolean;

@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
 
 type UseTaskDeleteDialogOptions = {
@@ -69,11 +69,9 @@ export function useTaskDeleteDialog({
   });
   const deleteRequestInFlightRef = useRef(false);
 
-  useEffect(() => {
-    if (!sheetOpen) {
-      dispatch({ type: "sheetClosed" });
-    }
-  }, [sheetOpen]);
+  if (!sheetOpen && (state.isOpen || state.error !== null)) {
+    dispatch({ type: "sheetClosed" });
+  }
 
   const openDeleteDialog = useCallback((): void => {
     dispatch({ type: "opened" });
@@ -117,7 +115,7 @@ export function useTaskDeleteDialog({
   }, [hasSubtasks, onDelete, onOpenChange, task]);
 
   return {
-    isDeleteDialogOpen: state.isOpen,
+    isDeleteDialogOpen: sheetOpen && state.isOpen,
     isDeletePending: state.isDeleting || deleteRequestInFlightRef.current,
     deleteError: state.error,
     openDeleteDialog,

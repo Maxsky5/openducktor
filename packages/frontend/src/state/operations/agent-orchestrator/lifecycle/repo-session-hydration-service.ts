@@ -33,10 +33,12 @@ const toTaskRecordKey = (taskId: string, records: AgentSessionRecord[]): string 
 };
 
 export const createRepoSessionHydrationService = ({
+  initialRepoPath,
   sessionHydration,
   prepareRepoSessionPresencePreloads,
   onRetryRequested,
 }: {
+  initialRepoPath?: string | null;
   sessionHydration: Pick<
     SessionHydrationOperations,
     "bootstrapTaskSessions" | "reconcileLiveTaskSessions"
@@ -64,6 +66,15 @@ export const createRepoSessionHydrationService = ({
     store[repoPath] = created;
     return created;
   };
+  const initializeRepoScope = (repoPath: string): void => {
+    getOrCreateRepoSet(bootstrappedSessionRecordKeysByRepo, repoPath);
+    getOrCreateRepoSet(reconciledRecordKeysByRepo, repoPath);
+    getOrCreateRepoSet(inFlightReconcileTasksByRepo, repoPath);
+  };
+
+  if (initialRepoPath) {
+    initializeRepoScope(initialRepoPath);
+  }
 
   const toTaskSessionRecordEntries = (tasks: TaskCard[]): TaskSessionRecordEntry[] => {
     const entries: TaskSessionRecordEntry[] = [];
@@ -151,23 +162,23 @@ export const createRepoSessionHydrationService = ({
         return entry.task.id;
       }),
     );
-    if (!isCurrentRepo(repoPath)) {
+    if (isCurrentRepo(repoPath)) {
+      for (const [index, result] of results.entries()) {
+        const entry = pendingEntries[index];
+        if (!entry) {
+          continue;
+        }
+        if (result.status === "fulfilled") {
+          clearRetry("bootstrap", repoPath, result.value);
+          continue;
+        }
+        bootstrappedSessionRecordKeys.delete(entry.recordKey);
+        scheduleRetry("bootstrap", repoPath, entry.task.id, result.reason);
+      }
+    } else {
       for (const entry of pendingEntries) {
         bootstrappedSessionRecordKeys.delete(entry.recordKey);
       }
-      return;
-    }
-    for (const [index, result] of results.entries()) {
-      const entry = pendingEntries[index];
-      if (!entry) {
-        continue;
-      }
-      if (result.status === "fulfilled") {
-        clearRetry("bootstrap", repoPath, result.value);
-        continue;
-      }
-      bootstrappedSessionRecordKeys.delete(entry.recordKey);
-      scheduleRetry("bootstrap", repoPath, entry.task.id, result.reason);
     }
   };
 

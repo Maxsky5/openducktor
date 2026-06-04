@@ -106,8 +106,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
   });
 
   test("passes runtime transcript requests through without task context", async () => {
-    const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
+    const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
+    );
+    const { useAgentSessionTranscriptDialog } = await import(
+      "./agent-session-transcript-dialog-context"
     );
 
     function OpenDialogButton(): ReactElement {
@@ -154,8 +157,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
       role: "build",
     };
 
-    const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
+    const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
+    );
+    const { useAgentSessionTranscriptDialog } = await import(
+      "./agent-session-transcript-dialog-context"
     );
 
     function DialogControls(): ReactElement {
@@ -201,8 +207,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
       role: "build",
     };
 
-    const { AgentSessionTranscriptDialogHost, useAgentSessionTranscriptDialog } = await import(
+    const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
+    );
+    const { useAgentSessionTranscriptDialog } = await import(
+      "./agent-session-transcript-dialog-context"
     );
 
     function DialogControls(): ReactElement {

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { hostClient } from "@/lib/host-client";
 import { invalidateRepoBranchesQuery } from "@/state/queries/git";
 import type { GitDiffRefresh } from "../contracts";
@@ -8,73 +8,103 @@ import type { DiffRefreshContext, RefreshRequest, RefreshScopeContext } from "./
 
 type UseAgentStudioDiffRefreshControllerArgs = {
   refreshContext: DiffRefreshContext | null;
-  refreshContextKey: string | null;
   preconditionError: string | null;
   shouldBlockDiffLoading: boolean;
   worktreeResolutionError: string | null;
   retryWorktreeResolution: () => void;
-  isControllerLoading: boolean;
-  activeScopeError: string | null;
   refreshActiveScope: (context: RefreshScopeContext) => Promise<void>;
   refreshActiveScopeSummary: (context: RefreshScopeContext) => Promise<void>;
+  refreshUi: DiffRefreshUiController;
 };
 
 type UseAgentStudioDiffRefreshControllerResult = {
   refresh: GitDiffRefresh;
-  refreshError: string | null;
+};
+
+type RefreshUiState = {
+  contextKey: string | null;
+  error: string | null;
   isRefreshing: boolean;
 };
 
+export type DiffRefreshUiController = {
+  clearRefreshErrorForContext: (contextKey: string) => void;
+  isRefreshing: boolean;
+  refreshError: string | null;
+  setContextRefreshError: (contextKey: string, error: string | null) => void;
+  setContextRefreshing: (contextKey: string, isRefreshing: boolean) => void;
+};
+
+export function useAgentStudioDiffRefreshUiState(
+  refreshContextKey: string | null,
+): DiffRefreshUiController {
+  const [refreshUiState, setRefreshUiState] = useState<RefreshUiState>({
+    contextKey: refreshContextKey,
+    error: null,
+    isRefreshing: false,
+  });
+
+  const setContextRefreshing = useCallback((contextKey: string, isRefreshing: boolean): void => {
+    setRefreshUiState((current) => ({
+      contextKey,
+      error: current.contextKey === contextKey ? current.error : null,
+      isRefreshing,
+    }));
+  }, []);
+
+  const setContextRefreshError = useCallback((contextKey: string, error: string | null): void => {
+    setRefreshUiState((current) => ({
+      contextKey,
+      error,
+      isRefreshing: current.contextKey === contextKey ? current.isRefreshing : false,
+    }));
+  }, []);
+
+  const clearRefreshErrorForContext = useCallback((contextKey: string): void => {
+    setRefreshUiState((current) =>
+      current.contextKey === contextKey && current.error != null
+        ? { ...current, error: null }
+        : current,
+    );
+  }, []);
+
+  return {
+    clearRefreshErrorForContext,
+    refreshError: refreshUiState.contextKey === refreshContextKey ? refreshUiState.error : null,
+    isRefreshing: refreshUiState.contextKey === refreshContextKey && refreshUiState.isRefreshing,
+    setContextRefreshError,
+    setContextRefreshing,
+  };
+}
+
 export function useAgentStudioDiffRefreshController({
   refreshContext,
-  refreshContextKey,
   preconditionError,
   shouldBlockDiffLoading,
   worktreeResolutionError,
   retryWorktreeResolution,
-  isControllerLoading,
-  activeScopeError,
   refreshActiveScope,
   refreshActiveScopeSummary,
+  refreshUi,
 }: UseAgentStudioDiffRefreshControllerArgs): UseAgentStudioDiffRefreshControllerResult {
   const queryClient = useQueryClient();
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
   const queuedRefreshRequestRef = useRef<RefreshRequest | null>(null);
   const refreshContextRef = useRef<DiffRefreshContext | null>(refreshContext);
-  const scheduledFetchAtByContextRef = useRef(new Map<string, number>());
-  const previousIsLoadingRef = useRef(isControllerLoading);
+  const scheduledFetchAtByContextRef = useRef<Map<string, number> | null>(null);
+  if (scheduledFetchAtByContextRef.current === null) {
+    scheduledFetchAtByContextRef.current = new Map<string, number>();
+  }
+  const scheduledFetchAtByContext = scheduledFetchAtByContextRef.current;
   refreshContextRef.current = refreshContext;
-
-  useEffect(() => {
-    // Skip cleanup from stale renders if a newer refresh context won the race to commit.
-    if (refreshContextKey !== (refreshContextRef.current?.requestContextKey ?? null)) {
-      return;
-    }
-
-    setRefreshError(null);
-    queuedRefreshRequestRef.current = null;
-    refreshPromiseRef.current = null;
-    setIsRefreshing(false);
-  }, [refreshContextKey]);
-
-  useEffect(() => {
-    const wasLoading = previousIsLoadingRef.current;
-    previousIsLoadingRef.current = isControllerLoading;
-
-    if (refreshError != null && wasLoading && !isControllerLoading && activeScopeError == null) {
-      setRefreshError(null);
-    }
-  }, [activeScopeError, isControllerLoading, refreshError]);
 
   const runRefreshRequest = useCallback(
     (activeRefreshRequest: RefreshRequest): Promise<boolean> =>
       runDiffRefreshRequest(activeRefreshRequest, {
         getCurrentRefreshContextKey: () => refreshContextRef.current?.requestContextKey ?? null,
-        setIsRefreshing,
-        setRefreshError,
-        scheduledFetchAtByContext: scheduledFetchAtByContextRef.current,
+        setIsRefreshing: refreshUi.setContextRefreshing,
+        setRefreshError: refreshUi.setContextRefreshError,
+        scheduledFetchAtByContext,
         nowMs: Date.now,
         fetchRemote: (context) =>
           hostClient.gitFetchRemote(
@@ -86,7 +116,14 @@ export function useAgentStudioDiffRefreshController({
         refreshActiveScope,
         refreshActiveScopeSummary,
       }),
-    [queryClient, refreshActiveScope, refreshActiveScopeSummary],
+    [
+      queryClient,
+      refreshActiveScope,
+      refreshActiveScopeSummary,
+      refreshUi.setContextRefreshError,
+      refreshUi.setContextRefreshing,
+      scheduledFetchAtByContext,
+    ],
   );
 
   const refresh = useCallback<GitDiffRefresh>(
@@ -160,7 +197,5 @@ export function useAgentStudioDiffRefreshController({
 
   return {
     refresh,
-    refreshError,
-    isRefreshing,
   };
 }

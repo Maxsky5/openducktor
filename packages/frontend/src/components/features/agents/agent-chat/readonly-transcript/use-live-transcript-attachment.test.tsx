@@ -150,6 +150,53 @@ describe("useLiveTranscriptAttachment", () => {
     }
   });
 
+  test("clears stale attach errors when retrying the same transcript", async () => {
+    const retryAttach = createDeferred<void>();
+    let attachCount = 0;
+    const attachRuntimeTranscriptSession = mock(() => {
+      attachCount += 1;
+      if (attachCount === 1) {
+        return Promise.reject(new Error("first attach failed"));
+      }
+      return retryAttach.promise;
+    });
+    const baseArgs = createBaseArgs({ attachRuntimeTranscriptSession });
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      await harness.waitFor(
+        (state) =>
+          !state.isAttachingLiveTranscript &&
+          state.liveTranscriptAttachError === "first attach failed",
+      );
+
+      await harness.update({ ...baseArgs, isOpen: false });
+      await harness.waitFor(
+        (state) => !state.isAttachingLiveTranscript && state.liveTranscriptAttachError === null,
+      );
+
+      await harness.update(baseArgs);
+      await harness.waitFor(
+        (state) =>
+          attachRuntimeTranscriptSession.mock.calls.length === 2 &&
+          state.isAttachingLiveTranscript &&
+          state.liveTranscriptAttachError === null,
+      );
+
+      await harness.run(async () => {
+        retryAttach.resolve(undefined);
+        await retryAttach.promise;
+      });
+      await harness.waitFor(
+        (state) => !state.isAttachingLiveTranscript && state.liveTranscriptAttachError === null,
+      );
+    } finally {
+      retryAttach.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
   test("ignores stale attachment failures after the transcript identity changes", async () => {
     const firstAttach = createDeferred<void>();
     const secondAttach = createDeferred<void>();

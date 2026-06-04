@@ -162,20 +162,15 @@ export const useSettingsModalSnapshotState = ({
     };
   }, [workspaceRepoPath, loadSettingsSnapshot, open]);
 
-  useEffect(() => {
-    if (!snapshotDraft) {
-      return;
-    }
-
-    if (selectedWorkspaceId && snapshotDraft.workspaces[selectedWorkspaceId]) {
-      return;
-    }
-
+  if (
+    snapshotDraft &&
+    (!selectedWorkspaceId || snapshotDraft.workspaces[selectedWorkspaceId] === undefined)
+  ) {
     const fallbackWorkspaceId = chooseInitialSettingsWorkspaceId(snapshotDraft, workspaceRepoPath);
     if (fallbackWorkspaceId !== selectedWorkspaceId) {
       dispatch({ type: "workspaceSelected", workspaceId: fallbackWorkspaceId });
     }
-  }, [workspaceRepoPath, selectedWorkspaceId, snapshotDraft]);
+  }
 
   return {
     loadedSnapshot,

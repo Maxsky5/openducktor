@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { DocumentEditorView } from "@/types/task-composer";
 
 export type TaskDocumentSection = "spec" | "plan";
@@ -42,6 +42,60 @@ type UseTaskDocumentEditorStateResult = {
 
 const DOCUMENT_LOAD_TIMEOUT_MS = 15000;
 
+type TaskDocumentEditorContext = {
+  open: boolean;
+  taskId: string | null;
+};
+
+type TaskDocumentEditorLocalState = {
+  context: TaskDocumentEditorContext;
+  documents: TaskDocumentEditorState;
+  views: TaskDocumentViewState;
+};
+
+type TaskDocumentEditorAction =
+  | {
+      type: "sectionLoadStarted";
+      context: TaskDocumentEditorContext;
+      section: TaskDocumentSection;
+    }
+  | {
+      type: "sectionLoadSucceeded";
+      context: TaskDocumentEditorContext;
+      payload: TaskDocumentPayload;
+      section: TaskDocumentSection;
+    }
+  | {
+      type: "sectionLoadFailed";
+      context: TaskDocumentEditorContext;
+      error: string;
+      section: TaskDocumentSection;
+    }
+  | {
+      type: "viewSet";
+      context: TaskDocumentEditorContext;
+      section: TaskDocumentSection;
+      view: DocumentEditorView;
+    }
+  | {
+      type: "draftUpdated";
+      context: TaskDocumentEditorContext;
+      markdown: string;
+      section: TaskDocumentSection;
+    }
+  | {
+      type: "draftDiscarded";
+      context: TaskDocumentEditorContext;
+      section: TaskDocumentSection;
+    }
+  | {
+      type: "savedApplied";
+      context: TaskDocumentEditorContext;
+      markdown: string;
+      section: TaskDocumentSection;
+      updatedAt: string;
+    };
+
 const createInitialDocumentState = (): TaskDocumentEditorState => ({
   spec: {
     serverMarkdown: "",
@@ -65,6 +119,107 @@ const createInitialViewState = (): TaskDocumentViewState => ({
   spec: "split",
   plan: "split",
 });
+
+const createTaskDocumentEditorLocalState = (
+  context: TaskDocumentEditorContext,
+): TaskDocumentEditorLocalState => ({
+  context,
+  documents: createInitialDocumentState(),
+  views: createInitialViewState(),
+});
+
+const getTaskDocumentEditorStateForContext = (
+  state: TaskDocumentEditorLocalState,
+  context: TaskDocumentEditorContext,
+): TaskDocumentEditorLocalState =>
+  state.context === context ? state : createTaskDocumentEditorLocalState(context);
+
+const updateDocumentSection = (
+  documents: TaskDocumentEditorState,
+  section: TaskDocumentSection,
+  update: (current: DocumentSectionState) => DocumentSectionState,
+): TaskDocumentEditorState => ({
+  ...documents,
+  [section]: update(documents[section]),
+});
+
+const taskDocumentEditorReducer = (
+  state: TaskDocumentEditorLocalState,
+  action: TaskDocumentEditorAction,
+): TaskDocumentEditorLocalState => {
+  const currentState = getTaskDocumentEditorStateForContext(state, action.context);
+
+  switch (action.type) {
+    case "sectionLoadStarted":
+      return {
+        ...currentState,
+        documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
+          ...section,
+          isLoading: true,
+          error: null,
+        })),
+      };
+    case "sectionLoadSucceeded":
+      return {
+        ...currentState,
+        documents: updateDocumentSection(currentState.documents, action.section, () => ({
+          serverMarkdown: action.payload.markdown,
+          draftMarkdown: action.payload.markdown,
+          updatedAt: action.payload.updatedAt,
+          isLoading: false,
+          loaded: true,
+          error: action.payload.error ?? null,
+        })),
+      };
+    case "sectionLoadFailed":
+      return {
+        ...currentState,
+        documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
+          ...section,
+          isLoading: false,
+          loaded: false,
+          error: action.error,
+        })),
+      };
+    case "viewSet":
+      return {
+        ...currentState,
+        views: {
+          ...currentState.views,
+          [action.section]: action.view,
+        },
+      };
+    case "draftUpdated":
+      return {
+        ...currentState,
+        documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
+          ...section,
+          draftMarkdown: action.markdown,
+        })),
+      };
+    case "draftDiscarded":
+      return {
+        ...currentState,
+        documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
+          ...section,
+          draftMarkdown: section.serverMarkdown,
+        })),
+      };
+    case "savedApplied":
+      return {
+        ...currentState,
+        documents: updateDocumentSection(currentState.documents, action.section, (section) => ({
+          ...section,
+          serverMarkdown: action.markdown,
+          draftMarkdown: action.markdown,
+          updatedAt: action.updatedAt,
+          loaded: true,
+          isLoading: false,
+          error: null,
+        })),
+      };
+  }
+};
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -95,107 +250,112 @@ export function useTaskDocumentEditorState({
   loadPlanDocument,
   loadTimeoutMs = DOCUMENT_LOAD_TIMEOUT_MS,
 }: UseTaskDocumentEditorStateArgs): UseTaskDocumentEditorStateResult {
-  const [documents, setDocuments] = useState<TaskDocumentEditorState>(createInitialDocumentState);
-  const [views, setViews] = useState<TaskDocumentViewState>(createInitialViewState);
-  const previousContext = useRef<{ open: boolean; taskId: string | null } | null>(null);
-  const loadSequence = useRef(0);
-  const documentsRef = useRef<TaskDocumentEditorState>(documents);
-  const inFlightSections = useRef<Record<TaskDocumentSection, boolean>>({
-    spec: false,
-    plan: false,
-  });
+  const editorContext = useMemo<TaskDocumentEditorContext>(
+    () => ({ open, taskId }),
+    [open, taskId],
+  );
+  const [localState, dispatchLocalState] = useReducer(
+    taskDocumentEditorReducer,
+    editorContext,
+    createTaskDocumentEditorLocalState,
+  );
+  const currentState = getTaskDocumentEditorStateForContext(localState, editorContext);
+  const contextRef = useRef(editorContext);
+  const documentsRef = useRef<TaskDocumentEditorState>(currentState.documents);
+  const inFlightSectionsByContextRef = useRef<WeakMap<
+    TaskDocumentEditorContext,
+    Record<TaskDocumentSection, boolean>
+  > | null>(null);
+  if (inFlightSectionsByContextRef.current === null) {
+    inFlightSectionsByContextRef.current = new WeakMap<
+      TaskDocumentEditorContext,
+      Record<TaskDocumentSection, boolean>
+    >();
+  }
 
-  documentsRef.current = documents;
+  contextRef.current = editorContext;
+  documentsRef.current = currentState.documents;
 
-  const transitionDocumentSection = useCallback(
-    (
-      section: TaskDocumentSection,
-      update: (current: DocumentSectionState) => DocumentSectionState,
-    ): void => {
-      const snapshot: TaskDocumentEditorState = {
-        ...documentsRef.current,
-        [section]: update(documentsRef.current[section]),
+  const getInFlightSectionsForContext = useCallback(
+    (context: TaskDocumentEditorContext): Record<TaskDocumentSection, boolean> => {
+      const sectionsByContext = inFlightSectionsByContextRef.current;
+      if (sectionsByContext === null) {
+        throw new Error("Expected task document in-flight section map to be initialized.");
+      }
+
+      const currentSections = sectionsByContext.get(context);
+      if (currentSections) {
+        return currentSections;
+      }
+
+      const nextSections = {
+        spec: false,
+        plan: false,
       };
-      documentsRef.current = snapshot;
-      setDocuments(snapshot);
+      sectionsByContext.set(context, nextSections);
+      return nextSections;
     },
     [],
   );
 
-  useEffect(() => {
-    const contextChanged =
-      previousContext.current?.open !== open || previousContext.current?.taskId !== taskId;
-    if (!contextChanged) {
-      return;
-    }
-
-    previousContext.current = { open, taskId };
-    loadSequence.current += 1;
-    if (!open) {
-      return;
-    }
-    const initialDocuments = createInitialDocumentState();
-    documentsRef.current = initialDocuments;
-    setDocuments(initialDocuments);
-    setViews(createInitialViewState());
-    inFlightSections.current = {
-      spec: false,
-      plan: false,
-    };
-  }, [open, taskId]);
-
   const loadSection = useCallback(
-    async (section: TaskDocumentSection, force = false): Promise<void> => {
-      if (!open || !taskId) {
-        return;
+    (section: TaskDocumentSection, force = false): Promise<void> => {
+      const loadContext = editorContext;
+      if (!loadContext.open || !loadContext.taskId || loadContext !== contextRef.current) {
+        return Promise.resolve();
       }
 
+      const inFlightSections = getInFlightSectionsForContext(loadContext);
       const current = documentsRef.current[section];
-      if (inFlightSections.current[section] || (!force && current.loaded)) {
-        return;
+      if (inFlightSections[section] || (!force && current.loaded)) {
+        return Promise.resolve();
       }
 
-      inFlightSections.current[section] = true;
-      transitionDocumentSection(section, (currentSection) => ({
-        ...currentSection,
-        isLoading: true,
-        error: null,
-      }));
+      inFlightSections[section] = true;
+      dispatchLocalState({
+        type: "sectionLoadStarted",
+        context: loadContext,
+        section,
+      });
 
-      const sequence = loadSequence.current;
-      try {
-        const payload = await withTimeout(
-          section === "spec" ? loadSpecDocument(taskId) : loadPlanDocument(taskId),
-          loadTimeoutMs,
-        );
-        if (sequence !== loadSequence.current) {
-          return;
-        }
-
-        inFlightSections.current[section] = false;
-        transitionDocumentSection(section, () => ({
-          serverMarkdown: payload.markdown,
-          draftMarkdown: payload.markdown,
-          updatedAt: payload.updatedAt,
-          isLoading: false,
-          loaded: true,
-          error: payload.error ?? null,
-        }));
-      } catch (reason) {
-        if (sequence !== loadSequence.current) {
-          return;
-        }
-
-        inFlightSections.current[section] = false;
-        transitionDocumentSection(section, (currentSection) => ({
-          ...currentSection,
-          isLoading: false,
-          loaded: false,
-          error: toErrorMessage(reason),
-        }));
-      }
+      return withTimeout(
+        section === "spec"
+          ? loadSpecDocument(loadContext.taskId)
+          : loadPlanDocument(loadContext.taskId),
+        loadTimeoutMs,
+      )
+        .then((payload) => {
+          if (loadContext !== contextRef.current) {
+            return;
+          }
+          getInFlightSectionsForContext(loadContext)[section] = false;
+          dispatchLocalState({
+            type: "sectionLoadSucceeded",
+            context: loadContext,
+            payload,
+            section,
+          });
+        })
+        .catch((reason) => {
+          if (loadContext !== contextRef.current) {
+            return;
+          }
+          getInFlightSectionsForContext(loadContext)[section] = false;
+          dispatchLocalState({
+            type: "sectionLoadFailed",
+            context: loadContext,
+            error: toErrorMessage(reason),
+            section,
+          });
+        });
     },
-    [loadPlanDocument, loadSpecDocument, loadTimeoutMs, open, taskId, transitionDocumentSection],
+    [
+      getInFlightSectionsForContext,
+      editorContext,
+      loadPlanDocument,
+      loadSpecDocument,
+      loadTimeoutMs,
+    ],
   );
 
   useEffect(() => {
@@ -205,60 +365,57 @@ export function useTaskDocumentEditorState({
     void loadSection(activeSection);
   }, [activeSection, loadSection]);
 
-  const setView = useCallback((section: TaskDocumentSection, view: DocumentEditorView): void => {
-    setViews((state) => ({
-      ...state,
-      [section]: view,
-    }));
-  }, []);
+  const setView = useCallback(
+    (section: TaskDocumentSection, view: DocumentEditorView): void => {
+      dispatchLocalState({
+        type: "viewSet",
+        context: editorContext,
+        section,
+        view,
+      });
+    },
+    [editorContext],
+  );
 
-  const updateDraft = useCallback((section: TaskDocumentSection, markdown: string): void => {
-    const snapshot: TaskDocumentEditorState = {
-      ...documentsRef.current,
-      [section]: {
-        ...documentsRef.current[section],
-        draftMarkdown: markdown,
-      },
-    };
-    documentsRef.current = snapshot;
-    setDocuments(snapshot);
-  }, []);
+  const updateDraft = useCallback(
+    (section: TaskDocumentSection, markdown: string): void => {
+      dispatchLocalState({
+        type: "draftUpdated",
+        context: editorContext,
+        markdown,
+        section,
+      });
+    },
+    [editorContext],
+  );
 
-  const discardDraft = useCallback((section: TaskDocumentSection): void => {
-    const snapshot: TaskDocumentEditorState = {
-      ...documentsRef.current,
-      [section]: {
-        ...documentsRef.current[section],
-        draftMarkdown: documentsRef.current[section].serverMarkdown,
-      },
-    };
-    documentsRef.current = snapshot;
-    setDocuments(snapshot);
-  }, []);
+  const discardDraft = useCallback(
+    (section: TaskDocumentSection): void => {
+      dispatchLocalState({
+        type: "draftDiscarded",
+        context: editorContext,
+        section,
+      });
+    },
+    [editorContext],
+  );
 
   const applySaved = useCallback(
     (section: TaskDocumentSection, markdown: string, updatedAt: string): void => {
-      const snapshot: TaskDocumentEditorState = {
-        ...documentsRef.current,
-        [section]: {
-          ...documentsRef.current[section],
-          serverMarkdown: markdown,
-          draftMarkdown: markdown,
-          updatedAt,
-          loaded: true,
-          isLoading: false,
-          error: null,
-        },
-      };
-      documentsRef.current = snapshot;
-      setDocuments(snapshot);
+      dispatchLocalState({
+        type: "savedApplied",
+        context: editorContext,
+        markdown,
+        section,
+        updatedAt,
+      });
     },
-    [],
+    [editorContext],
   );
 
   return {
-    documents,
-    views,
+    documents: currentState.documents,
+    views: currentState.views,
     loadSection,
     setView,
     updateDraft,

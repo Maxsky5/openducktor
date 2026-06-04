@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   type AgentStudioSelectionIntent,
   isSelectionIntentResolved,
@@ -41,16 +41,11 @@ export function useAgentStudioSelectionIntentState({
       ? sessionlessSelection
       : null;
 
-  useEffect(() => {
-    if (isRepoNavigationBoundaryPending) {
+  if (isRepoNavigationBoundaryPending) {
+    if (selectionIntent !== null) {
       setSelectionIntent(null);
-      return;
     }
-
-    if (!selectionIntent) {
-      return;
-    }
-
+  } else if (selectionIntent) {
     const selectionIntentResolved = isSelectionIntentResolved({
       selectionIntent,
       taskIdParam,
@@ -61,7 +56,7 @@ export function useAgentStudioSelectionIntentState({
     if (selectionIntentResolved) {
       setSelectionIntent(null);
     }
-  }, [isRepoNavigationBoundaryPending, roleFromQuery, selectionIntent, sessionParam, taskIdParam]);
+  }
 
   const isSessionSelectionResolving = Boolean(
     selectionIntent &&

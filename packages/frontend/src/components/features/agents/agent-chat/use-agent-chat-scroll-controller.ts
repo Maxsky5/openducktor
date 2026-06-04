@@ -109,6 +109,13 @@ export function useAgentChatScrollController({
     }, AUTO_SCROLL_MARK_TTL_MS);
   }, []);
 
+  const clearAutoScrollTimer = useCallback(() => {
+    if (autoScrollTimerRef.current !== null) {
+      clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+  }, []);
+
   const isAutoScrollEvent = useCallback((element: HTMLDivElement) => {
     const autoScroll = autoScrollRef.current;
     if (!autoScroll) {
@@ -332,13 +339,7 @@ export function useAgentChatScrollController({
     };
   }, [messagesContentRef, refreshScrollState, scrollToBottomNow]);
 
-  useEffect(() => {
-    return () => {
-      if (autoScrollTimerRef.current !== null) {
-        clearTimeout(autoScrollTimerRef.current);
-      }
-    };
-  }, []);
+  useEffect(() => clearAutoScrollTimer, [clearAutoScrollTimer]);
 
   return {
     isNearBottom: buttonState.nearBottom,

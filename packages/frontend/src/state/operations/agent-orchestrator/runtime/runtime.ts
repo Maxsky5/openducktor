@@ -1,6 +1,5 @@
 import type {
   BuildSessionBootstrap,
-  GitTargetBranch,
   RepoConfig,
   RepoPromptOverrides,
   RuntimeKind,
@@ -10,10 +9,10 @@ import type {
 import { type AgentModelSelection, type AgentRole, mergePromptOverrides } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { appQueryClient } from "@/lib/query-client";
+import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "@/state/queries/workspace";
 import { host } from "../../shared/host";
 import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime-readiness-publication";
-import { MISSING_BUILD_TARGET_ERROR } from "../handlers/start-session-constants";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 export type RuntimeInfo = {
@@ -66,14 +65,6 @@ export const loadTaskDocuments = async (
     planMarkdown: plan,
     qaMarkdown: qa,
   };
-};
-
-export const loadRepoDefaultTargetBranch = async (
-  workspaceId: string,
-  loadRepoConfig: RepoConfigLoader = defaultRepoConfigLoader,
-): Promise<GitTargetBranch | null> => {
-  const config = await loadRepoConfig(workspaceId);
-  return config.defaultTargetBranch ?? null;
 };
 
 export const loadRepoDefaultModel = async (

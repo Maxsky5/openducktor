@@ -1,5 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useReducer } from "react";
 import { isSameSelection } from "@/features/session-start";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import { resolveDraftModelSelection } from "./model-selection-preferences";
@@ -17,6 +17,117 @@ const emptyDraftSelectionTouchedByRole = (): Record<AgentRole, boolean> => ({
   build: false,
   qa: false,
 });
+
+type DraftModelSelectionContext = {
+  workspaceRepoPath: string | null;
+};
+
+type DraftModelSelectionInit = {
+  context: DraftModelSelectionContext;
+  repoSettingsReady: boolean;
+};
+
+type DraftModelSelectionState = {
+  context: DraftModelSelectionContext;
+  isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
+  draftSelectionByRole: Record<AgentRole, AgentModelSelection | null>;
+  draftSelectionTouchedByRole: Record<AgentRole, boolean>;
+};
+
+type DraftModelSelectionAction =
+  | {
+      type: "draftSelectionApplied";
+      context: DraftModelSelectionContext;
+      repoSettingsReady: boolean;
+      role: AgentRole;
+      selection: AgentModelSelection | null;
+    }
+  | {
+      type: "draftSelectionRepaired";
+      composerCatalog: AgentModelCatalog | null;
+      context: DraftModelSelectionContext;
+      hasActiveSession: boolean;
+      repoSettingsReady: boolean;
+      role: AgentRole;
+      roleDefaultSelection: AgentModelSelection | null;
+    };
+
+const createDraftModelSelectionState = ({
+  context,
+  repoSettingsReady,
+}: DraftModelSelectionInit): DraftModelSelectionState => ({
+  context,
+  isAwaitingRepoSettingsForWorkspaceRepoPath:
+    Boolean(context.workspaceRepoPath) && !repoSettingsReady,
+  draftSelectionByRole: emptyDraftSelections(),
+  draftSelectionTouchedByRole: emptyDraftSelectionTouchedByRole(),
+});
+
+const getDraftModelSelectionStateForContext = (
+  state: DraftModelSelectionState,
+  context: DraftModelSelectionContext,
+  repoSettingsReady: boolean,
+): DraftModelSelectionState => {
+  if (state.context !== context) {
+    return createDraftModelSelectionState({ context, repoSettingsReady });
+  }
+
+  if (state.isAwaitingRepoSettingsForWorkspaceRepoPath && repoSettingsReady) {
+    return {
+      ...state,
+      isAwaitingRepoSettingsForWorkspaceRepoPath: false,
+    };
+  }
+
+  return state;
+};
+
+const draftModelSelectionReducer = (
+  state: DraftModelSelectionState,
+  action: DraftModelSelectionAction,
+): DraftModelSelectionState => {
+  const currentState = getDraftModelSelectionStateForContext(
+    state,
+    action.context,
+    action.repoSettingsReady,
+  );
+
+  switch (action.type) {
+    case "draftSelectionApplied":
+      return {
+        ...currentState,
+        draftSelectionByRole: {
+          ...currentState.draftSelectionByRole,
+          [action.role]: action.selection,
+        },
+        draftSelectionTouchedByRole: {
+          ...currentState.draftSelectionTouchedByRole,
+          [action.role]: true,
+        },
+      };
+    case "draftSelectionRepaired": {
+      if (action.hasActiveSession || !action.composerCatalog) {
+        return currentState;
+      }
+
+      const existing = currentState.draftSelectionByRole[action.role];
+      const normalized = resolveDraftModelSelection({
+        catalog: action.composerCatalog,
+        existingSelection: currentState.draftSelectionTouchedByRole[action.role] ? existing : null,
+        roleDefaultSelection: action.roleDefaultSelection,
+      });
+      return isSameSelection(existing, normalized)
+        ? currentState
+        : {
+            ...currentState,
+            draftSelectionByRole: {
+              ...currentState.draftSelectionByRole,
+              [action.role]: normalized,
+            },
+          };
+    }
+  }
+};
 
 export const useAgentStudioDraftModelSelectionState = ({
   workspaceRepoPath,
@@ -36,52 +147,33 @@ export const useAgentStudioDraftModelSelectionState = ({
     roleDefaultSelection: AgentModelSelection | null;
   }) => void;
 } => {
-  const previousWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
-  const previousWorkspaceRepoPathForDefaultsRef = useRef<string | null>(workspaceRepoPath);
-  const [
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
-    setIsAwaitingRepoSettingsForWorkspaceRepoPath,
-  ] = useState(false);
-  const [draftSelectionByRole, setDraftSelectionByRole] =
-    useState<Record<AgentRole, AgentModelSelection | null>>(emptyDraftSelections);
-  const [draftSelectionTouchedByRole, setDraftSelectionTouchedByRole] = useState<
-    Record<AgentRole, boolean>
-  >(emptyDraftSelectionTouchedByRole);
-
-  useEffect(() => {
-    if (previousWorkspaceRepoPathRef.current === workspaceRepoPath) {
-      return;
-    }
-    previousWorkspaceRepoPathRef.current = workspaceRepoPath;
-    setDraftSelectionByRole(emptyDraftSelections());
-    setDraftSelectionTouchedByRole(emptyDraftSelectionTouchedByRole());
-  }, [workspaceRepoPath]);
-
-  useEffect(() => {
-    if (previousWorkspaceRepoPathForDefaultsRef.current !== workspaceRepoPath) {
-      previousWorkspaceRepoPathForDefaultsRef.current = workspaceRepoPath;
-      setIsAwaitingRepoSettingsForWorkspaceRepoPath(
-        Boolean(workspaceRepoPath) && repoSettings == null,
-      );
-      return;
-    }
-    if (isAwaitingRepoSettingsForWorkspaceRepoPath && repoSettings != null) {
-      setIsAwaitingRepoSettingsForWorkspaceRepoPath(false);
-    }
-  }, [workspaceRepoPath, isAwaitingRepoSettingsForWorkspaceRepoPath, repoSettings]);
-
-  const hasDraftSelectionForWorkspaceRepoPath =
-    previousWorkspaceRepoPathRef.current === workspaceRepoPath;
-  const isDraftSelectionTouched = hasDraftSelectionForWorkspaceRepoPath
-    ? draftSelectionTouchedByRole[role]
-    : false;
+  const repoSettingsReady = repoSettings != null;
+  const draftContext = useMemo<DraftModelSelectionContext>(
+    () => ({ workspaceRepoPath }),
+    [workspaceRepoPath],
+  );
+  const [draftState, dispatchDraftState] = useReducer(
+    draftModelSelectionReducer,
+    { context: draftContext, repoSettingsReady },
+    createDraftModelSelectionState,
+  );
+  const currentDraftState = getDraftModelSelectionStateForContext(
+    draftState,
+    draftContext,
+    repoSettingsReady,
+  );
 
   const applyDraftSelection = useCallback(
     (selection: AgentModelSelection | null): void => {
-      setDraftSelectionByRole((current) => ({ ...current, [role]: selection }));
-      setDraftSelectionTouchedByRole((current) => ({ ...current, [role]: true }));
+      dispatchDraftState({
+        type: "draftSelectionApplied",
+        context: draftContext,
+        repoSettingsReady,
+        role,
+        selection,
+      });
     },
-    [role],
+    [draftContext, repoSettingsReady, role],
   );
 
   const repairDraftSelection = useCallback(
@@ -94,28 +186,23 @@ export const useAgentStudioDraftModelSelectionState = ({
       composerCatalog: AgentModelCatalog | null;
       roleDefaultSelection: AgentModelSelection | null;
     }): void => {
-      if (hasActiveSession) {
-        return;
-      }
-      if (!composerCatalog) {
-        return;
-      }
-      setDraftSelectionByRole((current) => {
-        const existing = current[role];
-        const normalized = resolveDraftModelSelection({
-          catalog: composerCatalog,
-          existingSelection: isDraftSelectionTouched ? existing : null,
-          roleDefaultSelection,
-        });
-        return isSameSelection(existing, normalized) ? current : { ...current, [role]: normalized };
+      dispatchDraftState({
+        type: "draftSelectionRepaired",
+        composerCatalog,
+        context: draftContext,
+        hasActiveSession,
+        repoSettingsReady,
+        role,
+        roleDefaultSelection,
       });
     },
-    [isDraftSelectionTouched, role],
+    [draftContext, repoSettingsReady, role],
   );
 
   return {
-    draftSelection: hasDraftSelectionForWorkspaceRepoPath ? draftSelectionByRole[role] : null,
-    isAwaitingRepoSettingsForWorkspaceRepoPath,
+    draftSelection: currentDraftState.draftSelectionByRole[role],
+    isAwaitingRepoSettingsForWorkspaceRepoPath:
+      currentDraftState.isAwaitingRepoSettingsForWorkspaceRepoPath,
     applyDraftSelection,
     repairDraftSelection,
   };

@@ -8,7 +8,8 @@ import {
   AgentStudioDevServerPanel,
   type AgentStudioDevServerPanelModel,
 } from "./agent-studio-dev-server-panel";
-import { AgentStudioGitPanel, type AgentStudioGitPanelModel } from "./agent-studio-git-panel";
+import { AgentStudioGitPanel } from "./agent-studio-git-panel/agent-studio-git-panel";
+import type { AgentStudioGitPanelModel } from "./agent-studio-git-panel/types";
 import {
   AgentStudioWorkspaceSidebar,
   type AgentStudioWorkspaceSidebarModel,

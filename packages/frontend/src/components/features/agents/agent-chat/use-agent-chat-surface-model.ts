@@ -34,6 +34,12 @@ const EMPTY_SUBAGENT_PENDING_APPROVALS = Object.freeze({}) as NonNullable<
 const EMPTY_SUBAGENT_PENDING_QUESTIONS = Object.freeze({}) as NonNullable<
   AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
 >;
+const EMPTY_COMPOSER_SLASH_COMMANDS = Object.freeze(
+  [],
+) as unknown as AgentChatComposerModel["slashCommands"];
+const EMPTY_COMPOSER_SKILLS = Object.freeze([]) as unknown as AgentChatComposerModel["skills"];
+const EMPTY_COMPOSER_OPTIONS = Object.freeze([]) as unknown as ComboboxOption[];
+const EMPTY_COMPOSER_MODEL_GROUPS = Object.freeze([]) as unknown as ComboboxGroup[];
 
 const parseDraftStateKey = (draftStateKey: string) => {
   const [taskId = "", role = "", externalSessionId = "", contextSwitchVersion = ""] =
@@ -375,18 +381,18 @@ export function useAgentChatSurfaceModel({
   const composerSupportsFileSearch = composer?.supportsFileSearch ?? false;
   const composerSupportsSkillReferences = composer?.supportsSkillReferences ?? false;
   const composerSlashCommandCatalog = composer?.slashCommandCatalog ?? null;
-  const composerSlashCommands = composer?.slashCommands ?? [];
+  const composerSlashCommands = composer?.slashCommands ?? EMPTY_COMPOSER_SLASH_COMMANDS;
   const composerSlashCommandsError = composer?.slashCommandsError ?? null;
   const composerIsSlashCommandsLoading = composer?.isSlashCommandsLoading ?? false;
   const composerSkillCatalog = composer?.skillCatalog ?? null;
-  const composerSkills = composer?.skills ?? [];
+  const composerSkills = composer?.skills ?? EMPTY_COMPOSER_SKILLS;
   const composerSkillsError = composer?.skillsError ?? null;
   const composerIsSkillsLoading = composer?.isSkillsLoading ?? false;
   const composerSearchFiles = composer?.searchFiles ?? missingInteractiveComposerFileSearch;
-  const composerAgentOptions = composer?.agentOptions ?? [];
-  const composerModelOptions = composer?.modelOptions ?? [];
-  const composerModelGroups = composer?.modelGroups ?? [];
-  const composerVariantOptions = composer?.variantOptions ?? [];
+  const composerAgentOptions = composer?.agentOptions ?? EMPTY_COMPOSER_OPTIONS;
+  const composerModelOptions = composer?.modelOptions ?? EMPTY_COMPOSER_OPTIONS;
+  const composerModelGroups = composer?.modelGroups ?? EMPTY_COMPOSER_MODEL_GROUPS;
+  const composerVariantOptions = composer?.variantOptions ?? EMPTY_COMPOSER_OPTIONS;
   const composerOnSelectAgent = composer?.onSelectAgent ?? missingInteractiveComposerAction;
   const composerOnSelectModel = composer?.onSelectModel ?? missingInteractiveComposerAction;
   const composerOnSelectVariant = composer?.onSelectVariant ?? missingInteractiveComposerAction;

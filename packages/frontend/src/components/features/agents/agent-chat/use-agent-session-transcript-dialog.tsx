@@ -1,12 +1,4 @@
-import {
-  createContext,
-  type PropsWithChildren,
-  type ReactElement,
-  use,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
+import { type PropsWithChildren, type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   useActiveWorkspace,
   useAgentOperations,
@@ -14,22 +6,10 @@ import {
 } from "@/state/app-state-provider";
 import { isTranscriptAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
-
-export type OpenAgentSessionTranscriptRequest = {
-  externalSessionId: string;
-  source: RuntimeSessionTranscriptSource;
-  title?: string;
-  description?: string;
-};
-
-type AgentSessionTranscriptDialogContextValue = {
-  openSessionTranscript: (request: OpenAgentSessionTranscriptRequest) => void;
-  closeSessionTranscript: () => void;
-};
-
-const AgentSessionTranscriptDialogContext =
-  createContext<AgentSessionTranscriptDialogContextValue | null>(null);
+import {
+  AgentSessionTranscriptDialogContext,
+  type OpenAgentSessionTranscriptRequest,
+} from "./agent-session-transcript-dialog-context";
 
 const DEFAULT_TITLE = "Conversation";
 const DEFAULT_DESCRIPTION = "Read-only conversation.";
@@ -84,18 +64,3 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
 export function AgentSessionTranscriptDialogHost({ children }: PropsWithChildren): ReactElement {
   return <AgentSessionTranscriptDialogProvider>{children}</AgentSessionTranscriptDialogProvider>;
 }
-
-export const useOptionalAgentSessionTranscriptDialog =
-  (): AgentSessionTranscriptDialogContextValue | null => {
-    return use(AgentSessionTranscriptDialogContext);
-  };
-
-export const useAgentSessionTranscriptDialog = (): AgentSessionTranscriptDialogContextValue => {
-  const context = useOptionalAgentSessionTranscriptDialog();
-  if (!context) {
-    throw new Error(
-      "useAgentSessionTranscriptDialog must be used within AgentSessionTranscriptDialogHost.",
-    );
-  }
-  return context;
-};

@@ -41,13 +41,6 @@ export const findSessionMessageForTest = (
   return sessionMessagesToArray(owner).find(predicate);
 };
 
-export const filterSessionMessagesForTest = (
-  owner: SessionMessageOwner,
-  predicate: (message: AgentChatMessage) => boolean,
-): AgentChatMessage[] => {
-  return sessionMessagesToArray(owner).filter(predicate);
-};
-
 export const someSessionMessageForTest = (
   owner: SessionMessageOwner,
   predicate: (message: AgentChatMessage, index: number) => boolean,

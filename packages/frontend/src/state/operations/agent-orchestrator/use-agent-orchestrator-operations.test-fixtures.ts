@@ -32,7 +32,7 @@ export const taskFixture: TaskCard = {
   createdAt: "2026-02-22T08:00:00.000Z",
 };
 
-export const taskFixture2: TaskCard = {
+const taskFixture2: TaskCard = {
   ...taskFixture,
   id: "task-2",
   title: "Task 2",

@@ -448,15 +448,6 @@ export const appendSessionMessage = (
   return deriveStateForAppend(previous, message, nextMessages);
 };
 
-export const updateSessionMessageById = (
-  owner: SessionMessageOwner,
-  messageId: string,
-  updater: (message: AgentChatMessage) => AgentChatMessage,
-): SessionMessagesState => {
-  const index = findMessageIndexById(owner, messageId);
-  return index >= 0 ? updateMessageAtIndex(owner, index, updater) : getSessionState(owner);
-};
-
 export const removeSessionMessageById = (
   owner: SessionMessageOwner,
   messageId: string,
@@ -480,7 +471,7 @@ export const updateLastSessionMessage = (
   return lastIndex >= 0 ? updateMessageAtIndex(owner, lastIndex, updater) : getSessionState(owner);
 };
 
-export const updateLastSessionMessageByRole = (
+const updateLastSessionMessageByRole = (
   owner: SessionMessageOwner,
   role: MessageRole,
   predicate: (message: AgentChatMessage, index: number) => boolean,

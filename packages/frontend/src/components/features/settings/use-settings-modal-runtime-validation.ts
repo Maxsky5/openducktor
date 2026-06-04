@@ -14,7 +14,7 @@ export type RuntimeAvailabilityValidationState = {
   totalErrorCount: number;
 };
 
-export const EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE: RuntimeAvailabilityValidationState = {
+const EMPTY_RUNTIME_AVAILABILITY_VALIDATION_STATE: RuntimeAvailabilityValidationState = {
   errorsByWorkspaceId: {},
   errorCountByWorkspaceId: {},
   totalErrorCount: 0,

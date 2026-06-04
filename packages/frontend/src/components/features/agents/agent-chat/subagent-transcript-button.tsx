@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
-} from "./use-agent-session-transcript-dialog";
+} from "./agent-session-transcript-dialog-context";
+import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 
 type SubagentTranscriptButtonProps = {
   sessionRuntimeRef?: RuntimeRef | null;

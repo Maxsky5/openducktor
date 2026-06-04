@@ -4,12 +4,8 @@ import { useMemo, useRef } from "react";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useWorkspaceBranchProbe } from "./use-workspace-branch-probe";
 import { createBrowserListenerHarness } from "./workspace-browser-test-utils";
-import {
-  createDeferred,
-  createWorkspaceHostClient,
-  flush,
-  IsolatedQueryWrapper,
-} from "./workspace-hook-test-utils";
+import { createDeferred, createWorkspaceHostClient, flush } from "./workspace-hook-test-fixtures";
+import { IsolatedQueryWrapper } from "./workspace-hook-test-utils";
 
 let workspaceHost = createWorkspaceHostClient();
 const noopRefreshBranchesForRepo = async (): Promise<void> => {};

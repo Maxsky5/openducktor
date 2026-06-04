@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -59,9 +59,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   sendAgentMessage: async () => {},
   updateQuery: () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
-  startingSessionByTaskRef: {
-    current: new Map<string, Promise<string | undefined>>(),
-  } satisfies MutableRefObject<Map<string, Promise<string | undefined>>>,
+  startingSessionByTask: new Map<string, Promise<string | undefined>>(),
   executeRequestedSessionStart: async (_request, executeWithDecision) =>
     executeWithDecision({
       selectedModel: MODEL_SELECTION,

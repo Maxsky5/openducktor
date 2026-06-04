@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import type { GitConflict } from "@/features/agent-studio-git";
 import { getGitConflictCopy } from "./conflict-copy";
 import { GIT_CONFLICT_TEST_IDS } from "./constants";
-import { GitConflictActions, type GitConflictActionsModel } from "./git-conflict-actions";
+import { GitConflictActions } from "./git-conflict-actions";
+import type { GitConflictActionsModel } from "./git-conflict-actions-model";
 
 type GitConflictStripProps = {
   conflict: GitConflict;

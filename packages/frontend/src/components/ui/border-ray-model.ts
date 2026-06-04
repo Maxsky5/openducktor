@@ -5,8 +5,8 @@ export type BorderRaySize = {
   borderWidth: number;
 };
 
-export const BORDER_RAY_DEFAULT_PERIMETER = 1000;
-export const BORDER_RAY_DEFAULT_LENGTH = 190;
+export const BORDER_RAY_DEFAULT_PERIMETER = 2262.539816339745;
+export const BORDER_RAY_DEFAULT_LENGTH = 320;
 export const BORDER_RAY_DEFAULT_LENGTH_RATIO = 0.15;
 export const BORDER_RAY_DEFAULT_LENGTH_MIN = 50;
 export const BORDER_RAY_DEFAULT_LENGTH_MAX = 320;

@@ -32,13 +32,14 @@ export const useRepoSessionHydrationEffects = ({
   const repoSessionHydrationService = useMemo(
     () =>
       createRepoSessionHydrationService({
+        initialRepoPath: workspaceRepoPath,
         sessionHydration,
         ...(prepareRepoSessionPresencePreloads ? { prepareRepoSessionPresencePreloads } : {}),
         onRetryRequested: () => {
           setSessionRetryTick((current) => current + 1);
         },
       }),
-    [prepareRepoSessionPresencePreloads, sessionHydration],
+    [prepareRepoSessionPresencePreloads, sessionHydration, workspaceRepoPath],
   );
 
   const isCurrentActiveRepo = useCallback(
@@ -49,13 +50,6 @@ export const useRepoSessionHydrationEffects = ({
   useEffect(() => {
     return () => repoSessionHydrationService.dispose();
   }, [repoSessionHydrationService]);
-
-  useEffect(() => {
-    if (!workspaceRepoPath) {
-      return;
-    }
-    repoSessionHydrationService.resetRepo(workspaceRepoPath);
-  }, [workspaceRepoPath, repoSessionHydrationService]);
 
   useEffect(() => {
     if (!workspaceRepoPath || tasks.length === 0) {

@@ -1,5 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
 
 type UseTaskResetDialogOptions = {
@@ -16,7 +16,6 @@ type ResetDialogState = {
 };
 
 type ResetDialogAction =
-  | { type: "sheetClosed"; keepPending: boolean }
   | { type: "opened" }
   | { type: "openChanged"; open: boolean }
   | { type: "resetStarted" }
@@ -29,8 +28,6 @@ const resetDialogReducer = (
   action: ResetDialogAction,
 ): ResetDialogState => {
   switch (action.type) {
-    case "sheetClosed":
-      return { isOpen: false, error: null, isResetting: action.keepPending };
     case "opened":
       return { ...state, isOpen: true, error: null };
     case "openChanged":
@@ -66,12 +63,6 @@ export function useTaskResetDialog({
     error: null,
   });
   const resetRequestInFlightRef = useRef(false);
-
-  useEffect(() => {
-    if (!sheetOpen) {
-      dispatch({ type: "sheetClosed", keepPending: resetRequestInFlightRef.current });
-    }
-  }, [sheetOpen]);
 
   const openResetDialog = useCallback((): void => {
     dispatch({ type: "opened" });
@@ -115,7 +106,7 @@ export function useTaskResetDialog({
   }, [onOpenChange, onResetTask, task]);
 
   return {
-    isResetDialogOpen: state.isOpen,
+    isResetDialogOpen: sheetOpen && state.isOpen,
     isResetPending: state.isResetting || resetRequestInFlightRef.current,
     resetError: state.error,
     openResetDialog,

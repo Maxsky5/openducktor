@@ -5,9 +5,9 @@ import type {
   WorkflowAgentSessionState,
 } from "@/types/agent-orchestrator";
 
-export const DEFAULT_AGENT_SESSION_PURPOSE: AgentSessionPurpose = "primary";
+const DEFAULT_AGENT_SESSION_PURPOSE: AgentSessionPurpose = "primary";
 
-export const resolveAgentSessionPurpose = (
+const resolveAgentSessionPurpose = (
   purpose: AgentSessionPurpose | undefined,
 ): AgentSessionPurpose => {
   return purpose ?? DEFAULT_AGENT_SESSION_PURPOSE;

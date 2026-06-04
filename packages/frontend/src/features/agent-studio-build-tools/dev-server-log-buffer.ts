@@ -372,8 +372,3 @@ export const reconcileDevServerTerminalBufferStore = (
 
   return didChange;
 };
-
-export const getLatestBufferedTerminalSequence = (script: DevServerScriptState): number | null => {
-  const lastChunk = script.bufferedTerminalChunks.at(-1);
-  return lastChunk ? lastChunk.sequence : null;
-};

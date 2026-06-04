@@ -902,6 +902,70 @@ describe("AgentStudioGitPanel", () => {
     });
   });
 
+  test("clears optimistic diff-scope requests after model acknowledgement", async () => {
+    const setDiffScope = mock((_scope: "target" | "uncommitted") => {});
+    let renderer: RenderResult | null = null;
+
+    await act(async () => {
+      renderer = render(
+        createElement(AgentStudioGitPanel, {
+          model: baseModel({
+            diffScope: "uncommitted",
+            setDiffScope,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          }),
+        }),
+      );
+      await flush();
+    });
+
+    const root = getRoot(renderer);
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(1);
+
+    await act(async () => {
+      fireEvent.mouseDown(findDiffScopeTabs(root, "target").element, { button: 0 });
+      await flush();
+    });
+
+    expect(setDiffScope).toHaveBeenCalledWith("target");
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).rerender(
+        renderAgentStudioGitPanelElement(
+          baseModel({
+            diffScope: "target",
+            setDiffScope,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          }),
+        ),
+      );
+      await flush();
+    });
+
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(0);
+
+    await act(async () => {
+      ensureRenderer(renderer).rerender(
+        renderAgentStudioGitPanelElement(
+          baseModel({
+            diffScope: "uncommitted",
+            setDiffScope,
+            fileStatuses: [{ path: "src/a.ts", staged: false, status: "M" }],
+          }),
+        ),
+      );
+      await flush();
+    });
+
+    expect(countByTestId(root, "agent-studio-git-commit-message-input")).toBe(1);
+
+    await act(async () => {
+      ensureRenderer(renderer).unmount();
+      await flush();
+    });
+  });
+
   test("expands and collapses a diff entry without mutating selected-file state", async () => {
     let renderer: RenderResult | null = null;
 

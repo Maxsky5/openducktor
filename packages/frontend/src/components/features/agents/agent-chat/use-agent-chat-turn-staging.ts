@@ -50,7 +50,11 @@ export function useAgentChatTurnStaging({
   const countRef = useRef(count);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
-  const completedSessionIdsRef = useRef<Set<string>>(new Set());
+  const completedSessionIdsRef = useRef<Set<string> | null>(null);
+  if (completedSessionIdsRef.current === null) {
+    completedSessionIdsRef.current = new Set<string>();
+  }
+  const completedSessionIds = completedSessionIdsRef.current;
   const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
   const previousSessionId = previousSessionIdRef.current;
   const renderSwitchedSessions =
@@ -77,7 +81,7 @@ export function useAgentChatTurnStaging({
     previousSessionIdRef.current = activeExternalSessionId;
 
     if (effectSwitchedSessions && activeExternalSessionId !== null) {
-      completedSessionIdsRef.current.delete(activeExternalSessionId);
+      completedSessionIds.delete(activeExternalSessionId);
     }
 
     if (activeExternalSessionId === null) {
@@ -88,7 +92,7 @@ export function useAgentChatTurnStaging({
 
     const shouldStage = shouldStageTurns({
       activeExternalSessionId,
-      completedSessionIds: completedSessionIdsRef.current,
+      completedSessionIds,
       disabled,
       forceStage: effectSwitchedSessions,
       turnCount: turns.length,
@@ -112,7 +116,7 @@ export function useAgentChatTurnStaging({
 
     if (nextCount >= turns.length) {
       activeSessionRef.current = null;
-      completedSessionIdsRef.current.add(externalSessionId);
+      completedSessionIds.add(externalSessionId);
       return;
     }
 
@@ -129,7 +133,7 @@ export function useAgentChatTurnStaging({
       if (nextCount >= turns.length) {
         frameRef.current = null;
         activeSessionRef.current = null;
-        completedSessionIdsRef.current.add(externalSessionId);
+        completedSessionIds.add(externalSessionId);
         return;
       }
 
@@ -143,14 +147,21 @@ export function useAgentChatTurnStaging({
         frameRef.current = null;
       }
     };
-  }, [activeExternalSessionId, disabled, onBeforePrepend, turns.length, windowStart]);
+  }, [
+    activeExternalSessionId,
+    completedSessionIds,
+    disabled,
+    onBeforePrepend,
+    turns.length,
+    windowStart,
+  ]);
 
   return useMemo(() => {
     if (
       activeExternalSessionId === null ||
       !shouldStageTurns({
         activeExternalSessionId,
-        completedSessionIds: completedSessionIdsRef.current,
+        completedSessionIds,
         disabled,
         forceStage: renderSwitchedSessions,
         turnCount: turns.length,
@@ -170,5 +181,13 @@ export function useAgentChatTurnStaging({
     }
 
     return turns.slice(Math.max(0, turns.length - effectiveCount));
-  }, [activeExternalSessionId, count, disabled, renderSwitchedSessions, turns, windowStart]);
+  }, [
+    activeExternalSessionId,
+    completedSessionIds,
+    count,
+    disabled,
+    renderSwitchedSessions,
+    turns,
+    windowStart,
+  ]);
 }

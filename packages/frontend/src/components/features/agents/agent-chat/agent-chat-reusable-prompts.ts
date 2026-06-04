@@ -7,7 +7,7 @@ import {
   normalizeComposerDraft,
 } from "./agent-chat-composer-draft";
 
-export const REUSABLE_PROMPT_COMMAND_ID_PREFIX = "reusable-prompt:";
+const REUSABLE_PROMPT_COMMAND_ID_PREFIX = "reusable-prompt:";
 
 export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlashCommand => ({
   id: `${REUSABLE_PROMPT_COMMAND_ID_PREFIX}${prompt.id}`,
@@ -18,10 +18,10 @@ export const toReusablePromptSlashCommand = (prompt: ReusablePrompt): AgentSlash
   hints: [],
 });
 
-export const isReusablePromptSlashCommand = (command: AgentSlashCommand): boolean =>
+const isReusablePromptSlashCommand = (command: AgentSlashCommand): boolean =>
   command.source === "custom" && command.id.startsWith(REUSABLE_PROMPT_COMMAND_ID_PREFIX);
 
-export const readReusablePromptId = (command: AgentSlashCommand): string | null => {
+const readReusablePromptId = (command: AgentSlashCommand): string | null => {
   if (!isReusablePromptSlashCommand(command)) {
     return null;
   }

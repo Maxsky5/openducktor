@@ -1,5 +1,5 @@
 import type { PullRequest } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { host } from "../shared/host";
@@ -51,7 +51,7 @@ export function useTaskPullRequestOperations({
   const [pendingMergedPullRequestState, setPendingMergedPullRequestState] =
     useState<PendingMergedPullRequestState | null>(null);
   const activeRepoPathRef = useRef(activeRepoPath);
-  const previousActiveRepoPathRef = useRef(activeRepoPath);
+  const [previousActiveRepoPath, setPreviousActiveRepoPath] = useState(activeRepoPath);
 
   activeRepoPathRef.current = activeRepoPath;
 
@@ -77,12 +77,10 @@ export function useTaskPullRequestOperations({
     setPendingMergedPullRequestState(null);
   }, []);
 
-  useEffect(() => {
-    if (previousActiveRepoPathRef.current !== activeRepoPath) {
-      previousActiveRepoPathRef.current = activeRepoPath;
-      clearPullRequestState();
-    }
-  }, [activeRepoPath, clearPullRequestState]);
+  if (previousActiveRepoPath !== activeRepoPath) {
+    setPreviousActiveRepoPath(activeRepoPath);
+    clearPullRequestState();
+  }
 
   const syncPullRequests = useCallback(
     async (taskId: string): Promise<void> => {
@@ -91,21 +89,20 @@ export function useTaskPullRequestOperations({
         repoPath = requireActiveRepo(activeRepoPath);
         setDetectingPullRequestState({ repoPath, taskId });
         const result = await host.taskPullRequestDetect(repoPath, taskId);
-        if (activeRepoPathRef.current !== repoPath) {
-          return;
+        if (activeRepoPathRef.current === repoPath) {
+          if (result.outcome === "linked") {
+            await refreshTaskData(repoPath, taskId);
+            toast.success("Pull request linked", {
+              description: `PR #${result.pullRequest.number}`,
+            });
+          } else if (result.outcome === "merged") {
+            setPendingMergedPullRequestState({ repoPath, taskId, pullRequest: result.pullRequest });
+          } else {
+            toast.warning("No pull request found", {
+              description: `No open GitHub pull request found for ${result.sourceBranch}.`,
+            });
+          }
         }
-        if (result.outcome === "linked") {
-          await refreshTaskData(repoPath, taskId);
-          toast.success("Pull request linked", { description: `PR #${result.pullRequest.number}` });
-          return;
-        }
-        if (result.outcome === "merged") {
-          setPendingMergedPullRequestState({ repoPath, taskId, pullRequest: result.pullRequest });
-          return;
-        }
-        toast.warning("No pull request found", {
-          description: `No open GitHub pull request found for ${result.sourceBranch}.`,
-        });
       } catch (error) {
         toast.error("Failed to detect pull request", { description: errorMessage(error) });
       } finally {

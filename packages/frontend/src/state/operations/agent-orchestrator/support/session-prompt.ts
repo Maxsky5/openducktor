@@ -2,7 +2,6 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { everySessionMessage, getSessionMessageCount } from "./messages";
 
 type SessionPromptTask = Pick<
   TaskCard,
@@ -117,19 +116,4 @@ export const buildSessionHeaderMessages = ({
       timestamp: startedAt,
     },
   ];
-};
-
-export const isSessionHeaderMessageId = (messageId: string, externalSessionId: string): boolean => {
-  return messageId === `history:system-prompt:${externalSessionId}`;
-};
-
-export const hasOnlySessionHeaderMessages = (
-  session: Pick<AgentSessionState, "externalSessionId" | "messages">,
-): boolean => {
-  return (
-    getSessionMessageCount(session) > 0 &&
-    everySessionMessage(session, (message) =>
-      isSessionHeaderMessageId(message.id, session.externalSessionId),
-    )
-  );
 };

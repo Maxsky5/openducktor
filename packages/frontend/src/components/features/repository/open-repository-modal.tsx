@@ -1,5 +1,5 @@
 import { CheckCircle2, FolderOpen, Sparkles } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useReducer } from "react";
+import { type ReactElement, useMemo, useReducer } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -83,7 +83,6 @@ type OpenRepositoryState = {
 };
 
 type OpenRepositoryAction =
-  | { type: "reset" }
   | { type: "folderPickerOpened" }
   | { type: "folderPickerChanged"; open: boolean }
   | {
@@ -113,8 +112,6 @@ const openRepositoryReducer = (
   action: OpenRepositoryAction,
 ): OpenRepositoryState => {
   switch (action.type) {
-    case "reset":
-      return initialOpenRepositoryState;
     case "folderPickerOpened":
       return { ...state, error: null, isFolderPickerOpen: true };
     case "folderPickerChanged":
@@ -230,7 +227,7 @@ function OpenRepositoryWorkspaceIdentity({
   );
 }
 
-export function OpenRepositoryModal({
+function OpenRepositoryModalSession({
   open,
   canClose,
   onOpenChange,
@@ -248,12 +245,6 @@ export function OpenRepositoryModal({
     isCreatingWorkspace,
     error,
   } = state;
-
-  useEffect(() => {
-    if (!open) {
-      dispatch({ type: "reset" });
-    }
-  }, [open]);
 
   const isModalBusy = isSwitchingWorkspace || isCreatingWorkspace;
   const sortedRecent = useMemo(
@@ -497,4 +488,8 @@ export function OpenRepositoryModal({
       ) : null}
     </Dialog>
   );
+}
+
+export function OpenRepositoryModal(props: OpenRepositoryModalProps): ReactElement {
+  return <OpenRepositoryModalSession key={props.open ? "open" : "closed"} {...props} />;
 }

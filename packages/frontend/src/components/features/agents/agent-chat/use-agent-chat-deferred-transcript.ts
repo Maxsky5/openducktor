@@ -24,18 +24,11 @@ export function useAgentChatDeferredTranscript({
     (_current: string | null, next: string | null) => next,
     activeExternalSessionId,
   );
-  const frameRef = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDeferralCleanupRef = useRef<(() => void) | null>(null);
 
   const cancelPendingDeferral = useCallback((): void => {
-    if (frameRef.current !== null) {
-      globalThis.cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    pendingDeferralCleanupRef.current?.();
+    pendingDeferralCleanupRef.current = null;
   }, []);
 
   useLayoutEffect(() => {
@@ -70,26 +63,33 @@ export function useAgentChatDeferredTranscript({
     }
 
     const nextSessionId = activeExternalSessionId;
-    frameRef.current = globalThis.requestAnimationFrame(() => {
-      frameRef.current = null;
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let frameId: number | null = globalThis.requestAnimationFrame(() => {
+      frameId = null;
+      const timeoutId = setTimeout(() => {
+        timerId = null;
         startTransition(() => {
           dispatchRenderedSessionId(nextSessionId);
         });
       }, 0);
+      timerId = timeoutId;
     });
 
-    return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
+    const cleanup = () => {
+      const cleanupTimerId = timerId;
+      if (cleanupTimerId !== null) {
+        clearTimeout(cleanupTimerId);
+        timerId = null;
       }
-      if (frameRef.current !== null) {
-        globalThis.cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
+      const cleanupFrameId = frameId;
+      if (cleanupFrameId !== null) {
+        globalThis.cancelAnimationFrame(cleanupFrameId);
+        frameId = null;
       }
     };
+    pendingDeferralCleanupRef.current = cleanup;
+
+    return cleanup;
   }, [activeExternalSessionId, cancelPendingDeferral, renderedSessionId, shouldDefer]);
 
   useEffect(() => {

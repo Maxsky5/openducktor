@@ -1,6 +1,5 @@
 import type { DevServerGroupState } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { devServerGroupStateQueryOptions } from "@/state/queries/dev-servers";
 
 type UseAgentStudioDevServerStateQueryArgs = {
@@ -16,13 +15,6 @@ export function useAgentStudioDevServerStateQuery({
   queryEnabled,
   liveState,
 }: UseAgentStudioDevServerStateQueryArgs) {
-  const [activationState, setActivationState] = useState<{
-    enabled: boolean;
-    since: number;
-  }>(() => ({
-    enabled: queryEnabled,
-    since: queryEnabled ? Date.now() : 0,
-  }));
   const queryOptions =
     repoPath && taskId
       ? devServerGroupStateQueryOptions(repoPath, taskId)
@@ -30,35 +22,11 @@ export function useAgentStudioDevServerStateQuery({
   const stateQuery = useQuery({
     ...queryOptions,
     enabled: queryEnabled,
+    staleTime: 0,
   });
-  const { data, dataUpdatedAt, error, isFetching, isPending, refetch } = stateQuery;
+  const { data, error, isFetching, isPending } = stateQuery;
 
-  useEffect(() => {
-    setActivationState((current) => {
-      if (current.enabled === queryEnabled) {
-        return current;
-      }
-
-      return {
-        enabled: queryEnabled,
-        since: queryEnabled ? Date.now() : 0,
-      };
-    });
-  }, [queryEnabled]);
-
-  useEffect(() => {
-    if (!queryEnabled || repoPath === null || taskId === null) {
-      return;
-    }
-
-    if (isFetching || dataUpdatedAt >= activationState.since) {
-      return;
-    }
-
-    void refetch();
-  }, [activationState.since, dataUpdatedAt, isFetching, queryEnabled, refetch, repoPath, taskId]);
-
-  const queryData = queryEnabled && activationState.enabled ? (data ?? null) : null;
+  const queryData = queryEnabled ? (data ?? null) : null;
   const currentLiveState =
     queryEnabled && liveState?.repoPath === repoPath && liveState.taskId === taskId
       ? liveState

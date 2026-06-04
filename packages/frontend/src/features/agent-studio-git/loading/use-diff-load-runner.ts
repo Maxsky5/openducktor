@@ -23,6 +23,7 @@ type UseDiffLoadRunnerArgs = Pick<
   | "applySummaryResult"
   | "clearScopeInvalidation"
   | "markScopeInvalidated"
+  | "onLoadApplied"
   | "shouldApplyResult"
 >;
 
@@ -35,6 +36,7 @@ export const useAgentStudioDiffLoadRunner = ({
   applySummaryResult,
   clearScopeInvalidation,
   markScopeInvalidated,
+  onLoadApplied,
   shouldApplyResult,
 }: UseDiffLoadRunnerArgs): DiffLoadRunner => {
   const queryClient = useQueryClient();
@@ -66,6 +68,7 @@ export const useAgentStudioDiffLoadRunner = ({
   const runSummaryLoad = useCallback(
     async ({
       repoPath: activeRepoPath,
+      requestContextKey,
       requestSequence,
       scope,
       targetBranch: activeTargetBranch,
@@ -103,12 +106,16 @@ export const useAgentStudioDiffLoadRunner = ({
           scope,
           summaryFields: toScopeSummaryFields(summary),
         });
+        if (requestContextKey != null) {
+          onLoadApplied?.(requestContextKey);
+        }
       }
     },
     [
       applySummaryResult,
       hasLoadContextChanged,
       markScopeInvalidated,
+      onLoadApplied,
       queryClient,
       shouldApplyResult,
     ],
@@ -118,6 +125,7 @@ export const useAgentStudioDiffLoadRunner = ({
     async ({
       force = false,
       repoPath: activeRepoPath,
+      requestContextKey,
       requestSequence,
       scope,
       targetBranch: activeTargetBranch,
@@ -150,12 +158,16 @@ export const useAgentStudioDiffLoadRunner = ({
           scope,
           snapshot: toScopeSnapshot(snapshot),
         });
+        if (requestContextKey != null) {
+          onLoadApplied?.(requestContextKey);
+        }
       }
     },
     [
       applyFullResult,
       clearScopeInvalidation,
       hasLoadContextChanged,
+      onLoadApplied,
       queryClient,
       shouldApplyResult,
     ],

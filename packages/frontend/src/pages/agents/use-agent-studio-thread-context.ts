@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioThreadContextArgs = {
@@ -20,7 +20,10 @@ export const useAgentStudioThreadContext = ({
   isSessionHistoryHydrating: _isSessionHistoryHydrating,
   contextSwitchVersion,
 }: UseAgentStudioThreadContextArgs): AgentStudioThreadContext => {
-  const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useState(false);
+  const [isContextSwitchIntentActive, setIsContextSwitchIntentActive] = useReducer(
+    (_current: boolean, next: boolean) => next,
+    false,
+  );
   const contextSwitchVersionRef = useRef(contextSwitchVersion);
   const clearIntentRafRef = useRef<number | null>(null);
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
@@ -64,20 +67,22 @@ export const useAgentStudioThreadContext = ({
     clearIntentRafRef.current = rafId;
 
     return () => {
-      if (clearIntentRafRef.current !== null) {
-        window.cancelAnimationFrame(clearIntentRafRef.current);
+      const clearIntentRafId = clearIntentRafRef.current;
+      if (clearIntentRafId !== null) {
+        window.cancelAnimationFrame(clearIntentRafId);
         clearIntentRafRef.current = null;
       }
     };
   }, [isContextSwitchIntentActive, isTaskHydrating]);
 
-  useEffect(() => {
-    return () => {
-      if (clearIntentRafRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(clearIntentRafRef.current);
-      }
-    };
+  const clearContextSwitchIntentFrame = useCallback(() => {
+    if (clearIntentRafRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(clearIntentRafRef.current);
+      clearIntentRafRef.current = null;
+    }
   }, []);
+
+  useEffect(() => clearContextSwitchIntentFrame, [clearContextSwitchIntentFrame]);
 
   return {
     threadSession: activeSession,

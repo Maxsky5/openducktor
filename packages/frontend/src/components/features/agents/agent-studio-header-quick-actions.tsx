@@ -1,6 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import { ChevronDown, MessageCirclePlus, Zap } from "lucide-react";
-import { type ReactElement, useEffect, useRef } from "react";
+import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -15,8 +15,14 @@ import type {
   AgentSessionCreateOption,
   AgentStudioQuickActionOption,
 } from "./agent-studio-header.types";
+import {
+  canRunPrimaryQuickAction,
+  getQuickActionBlockedReason,
+  isGitConflictResolutionQuickAction,
+} from "./agent-studio-header-quick-actions-availability";
 
 type QuickActionsMenuProps = {
+  canOpenActionsMenu: boolean;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   agentStudioReady: boolean;
@@ -53,10 +59,6 @@ const QUICK_ACTION_ROLE_LABELS: Record<AgentRole, string> = {
   qa: "QA",
 };
 
-const isGitConflictResolutionQuickAction = (option: AgentStudioQuickActionOption): boolean => {
-  return option.launchActionId === "build_rebase_conflict_resolution";
-};
-
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
   `${entry.kind}:${entry.option.id}`;
 
@@ -68,6 +70,15 @@ const getEntryDisabledReason = (
   sessionStartBlockedReason: string | null,
   onResolveGitConflictQuickAction: (() => void) | null,
 ): string | null => {
+  if (entry.kind === "quick_action") {
+    return getQuickActionBlockedReason({
+      option: entry.option,
+      agentStudioReady,
+      sessionStartBlockedReason,
+      onResolveGitConflictQuickAction,
+    });
+  }
+
   if (!agentStudioReady) {
     return "Agent Studio is not ready.";
   }
@@ -78,12 +89,6 @@ const getEntryDisabledReason = (
 
   if (entry.option.disabled) {
     return entry.option.disabledReason ?? "Action unavailable.";
-  }
-
-  if (entry.kind === "quick_action" && isGitConflictResolutionQuickAction(entry.option)) {
-    if (!onResolveGitConflictQuickAction) {
-      return "Git conflict resolution is unavailable.";
-    }
   }
 
   return null;
@@ -148,6 +153,7 @@ function QuickActionCommandItem({
 }
 
 export function QuickActionsMenu({
+  canOpenActionsMenu,
   isOpen,
   onOpenChange,
   agentStudioReady,
@@ -163,29 +169,15 @@ export function QuickActionsMenu({
   const sessionStartBlockedReason = isCreatingSession
     ? "Session start is already in progress."
     : null;
-  const canRunPrimaryAction =
-    primaryAction !== null &&
-    getEntryDisabledReason(
-      { kind: "quick_action", option: primaryAction },
-      agentStudioReady,
-      sessionStartBlockedReason,
-      onResolveGitConflictQuickAction,
-    ) === null;
+  const canRunPrimaryAction = canRunPrimaryQuickAction({
+    agentStudioReady,
+    isCreatingSession,
+    primaryAction,
+    onResolveGitConflictQuickAction,
+  });
   const menuEntries = buildQuickActionMenuEntries(options, sessionCreateOptions);
-  const primaryActionDisabled = primaryAction !== null && !canRunPrimaryAction;
-  const canOpenActionsMenu = agentStudioReady && menuEntries.length > 0 && !primaryActionDisabled;
+  const isMenuOpen = isOpen && canOpenActionsMenu;
   const groupedMenuEntries = buildQuickActionMenuGroups(menuEntries);
-  const onOpenChangeRef = useRef(onOpenChange);
-
-  useEffect(() => {
-    onOpenChangeRef.current = onOpenChange;
-  }, [onOpenChange]);
-
-  useEffect(() => {
-    if (isOpen && !canOpenActionsMenu) {
-      onOpenChangeRef.current(false);
-    }
-  }, [canOpenActionsMenu, isOpen]);
 
   const selectMenuEntry = (entry: QuickActionMenuEntry): void => {
     if (
@@ -236,7 +228,7 @@ export function QuickActionsMenu({
         <Zap className="size-4 text-amber-400 dark:text-amber-500" />
         <span className="truncate">{primaryAction?.label ?? "Actions"}</span>
       </Button>
-      <Popover open={isOpen} onOpenChange={onOpenChange}>
+      <Popover open={isMenuOpen} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
           <Button
             type="button"

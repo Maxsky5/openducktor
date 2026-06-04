@@ -53,7 +53,7 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
   workingDirectory: "/repo",
 };
 
-export const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
+const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,
   readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],
   workflowToolAliasesByCanonical: Object.fromEntries(

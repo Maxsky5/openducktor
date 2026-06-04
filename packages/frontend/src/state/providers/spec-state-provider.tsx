@@ -1,7 +1,7 @@
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { buildSpecStateValue } from "../app-state-context-values";
 import { SpecStateContext, useActiveWorkspaceContext } from "../app-state-contexts";
-import { useSpecOperations } from "../operations";
+import { useSpecOperations } from "../operations/tasks/use-spec-operations";
 
 export function SpecStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();

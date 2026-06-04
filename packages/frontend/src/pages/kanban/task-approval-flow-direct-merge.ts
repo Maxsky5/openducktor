@@ -74,15 +74,18 @@ export async function submitDirectMergeApproval({
     };
   }
 
-  await refreshTasks();
   if (directMergeResult.task.status === "closed") {
+    await refreshTasks();
     return {
       outcome: "task_closed",
       successDescription: canonicalTargetBranch(approvalContext.targetBranch),
     };
   }
 
-  await invalidateTaskApprovalContextQuery(queryClient, repoPath, approval.taskId);
+  await Promise.all([
+    refreshTasks(),
+    invalidateTaskApprovalContextQuery(queryClient, repoPath, approval.taskId),
+  ]);
   const nextApprovalContext = await loadTaskApprovalContextFromQuery(
     queryClient,
     repoPath,

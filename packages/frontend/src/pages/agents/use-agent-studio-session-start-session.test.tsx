@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -49,9 +49,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
-  startingSessionByTaskRef: {
-    current: new Map<string, Promise<string | undefined>>(),
-  } satisfies MutableRefObject<Map<string, Promise<string | undefined>>>,
+  startingSessionByTask: new Map<string, Promise<string | undefined>>(),
   updateQuery: () => {},
   executeRequestedSessionStart: async () => undefined,
   ...overrides,
@@ -79,15 +77,13 @@ describe("useAgentStudioSessionStartSession", () => {
       },
     );
     const startAgentSession = mock(async (request: { role: string }) => `${request.role}-session`);
-    const startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>> = {
-      current: new Map<string, Promise<string | undefined>>(),
-    };
+    const startingSessionByTask = new Map<string, Promise<string | undefined>>();
 
     const harness = createHookHarness(
       createBaseArgs({
         startAgentSession,
         executeRequestedSessionStart,
-        startingSessionByTaskRef,
+        startingSessionByTask,
       }),
     );
 
@@ -103,7 +99,7 @@ describe("useAgentStudioSessionStartSession", () => {
         role: "planner",
         startAgentSession,
         executeRequestedSessionStart,
-        startingSessionByTaskRef,
+        startingSessionByTask,
       }),
     );
 
@@ -113,7 +109,7 @@ describe("useAgentStudioSessionStartSession", () => {
     });
 
     expect(executeRequestedSessionStart).toHaveBeenCalledTimes(2);
-    expect(startingSessionByTaskRef.current.size).toBe(2);
+    expect(startingSessionByTask.size).toBe(2);
     expect(specStartPromise).not.toBe(plannerStartPromise);
 
     specSelection.resolve({

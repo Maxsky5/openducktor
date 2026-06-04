@@ -209,6 +209,18 @@ export const useAgentChatLayout = ({
     });
   }, [flushComposerTextareaResize]);
 
+  const cancelPendingResizeFrames = useCallback((): void => {
+    const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
+    if (resizeFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
+      cancelAnimationFrameFn(resizeFrameIdRef.current);
+      resizeFrameIdRef.current = null;
+    }
+    if (resizeTextareaFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
+      cancelAnimationFrameFn(resizeTextareaFrameIdRef.current);
+      resizeTextareaFrameIdRef.current = null;
+    }
+  }, []);
+
   useLayoutEffect(() => {
     didInitializeComposerForSessionRef.current = false;
     composerEditorHeightRef.current = COMPOSER_EDITOR_MIN_HEIGHT_PX;
@@ -239,22 +251,7 @@ export const useAgentChatLayout = ({
     resizeComposerEditor();
   });
 
-  useEffect(() => {
-    return () => {
-      const cancelAnimationFrameFn = globalThis.cancelAnimationFrame;
-      if (resizeFrameIdRef.current !== null && typeof cancelAnimationFrameFn === "function") {
-        cancelAnimationFrameFn(resizeFrameIdRef.current);
-      }
-      resizeFrameIdRef.current = null;
-      if (
-        resizeTextareaFrameIdRef.current !== null &&
-        typeof cancelAnimationFrameFn === "function"
-      ) {
-        cancelAnimationFrameFn(resizeTextareaFrameIdRef.current);
-      }
-      resizeTextareaFrameIdRef.current = null;
-    };
-  }, []);
+  useEffect(() => cancelPendingResizeFrames, [cancelPendingResizeFrames]);
 
   return {
     messagesContainerRef,

@@ -38,32 +38,30 @@ export const reconcileLiveSessionsStage = async ({
         return;
       }
       const promptOverrides = await getRepoPromptOverrides();
-      if (isStaleRepoOperation()) {
-        return;
-      }
-      const selectedModel = normalizePersistedSelection(record.selectedModel);
-      const systemPrompt = await promptAssembler.buildHydrationSystemPrompt({
-        record,
-        promptOverrides,
-      });
-      if (isStaleRepoOperation()) {
-        return;
-      }
-      const attachInput = {
-        externalSessionId: record.externalSessionId,
-        repoPath: intent.repoPath,
-        runtimeKind,
-        workingDirectory,
-        taskId: intent.taskId,
-        role: record.role,
-        systemPrompt,
-        ...(selectedModel ? { model: selectedModel } : {}),
-      };
+      if (!isStaleRepoOperation()) {
+        const selectedModel = normalizePersistedSelection(record.selectedModel);
+        const systemPrompt = await promptAssembler.buildHydrationSystemPrompt({
+          record,
+          promptOverrides,
+        });
+        if (!isStaleRepoOperation()) {
+          const attachInput = {
+            externalSessionId: record.externalSessionId,
+            repoPath: intent.repoPath,
+            runtimeKind,
+            workingDirectory,
+            taskId: intent.taskId,
+            role: record.role,
+            systemPrompt,
+            ...(selectedModel ? { model: selectedModel } : {}),
+          };
 
-      if (intent.mode === "requested_history") {
-        await adapter.attachSession(attachInput);
-      } else {
-        await adapter.resumeSession(attachInput);
+          if (intent.mode === "requested_history") {
+            await adapter.attachSession(attachInput);
+          } else {
+            await adapter.resumeSession(attachInput);
+          }
+        }
       }
     },
     allowAttachMissingSession: options?.allowLiveSessionResume !== false,

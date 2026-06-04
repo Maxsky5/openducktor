@@ -10,20 +10,19 @@ import {
   workspaceQueryKeys,
 } from "../../queries/workspace";
 import { ensureRuntimeAndInvalidateReadinessQueries } from "../shared/runtime-readiness-publication";
-import { normalizeRepoPath } from "./workspace-operations-model";
-import type {
-  PreparedRepoSwitchRef,
-  WorkspaceSelectionOperationsHostClient,
-} from "./workspace-operations-types";
+import {
+  normalizeRepoPath,
+  shouldResetBranchStateForRepoChange,
+} from "./workspace-operations-model";
+import type { WorkspaceSelectionOperationsHostClient } from "./workspace-operations-types";
 
 type UseWorkspaceSelectionOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
   clearTaskData: () => void;
   clearActiveBeadsCheck: () => void;
-  clearBranchData: () => void;
+  clearBranchData: (repoPath?: string | null) => void;
   hostClient: WorkspaceSelectionOperationsHostClient;
-  preparedRepoSwitchRef: PreparedRepoSwitchRef;
 };
 
 type UseWorkspaceSelectionOperationsResult = {
@@ -99,7 +98,6 @@ export function useWorkspaceSelectionOperations({
   clearActiveBeadsCheck,
   clearBranchData,
   hostClient,
-  preparedRepoSwitchRef,
 }: UseWorkspaceSelectionOperationsArgs): UseWorkspaceSelectionOperationsResult {
   const queryClient = useQueryClient();
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
@@ -111,6 +109,20 @@ export function useWorkspaceSelectionOperations({
 
   activeWorkspaceRef.current = activeWorkspace;
   workspacesRef.current = workspaces;
+
+  const clearStateForWorkspaceTransition = useCallback(
+    (nextWorkspace: ActiveWorkspace | WorkspaceRecord | null): void => {
+      const previousRepo = activeWorkspaceRef.current?.repoPath ?? null;
+      const nextRepo = nextWorkspace?.repoPath ?? null;
+
+      clearTaskData();
+      clearActiveBeadsCheck();
+      if (shouldResetBranchStateForRepoChange(previousRepo, nextRepo)) {
+        clearBranchData(nextRepo);
+      }
+    },
+    [clearActiveBeadsCheck, clearBranchData, clearTaskData],
+  );
 
   const markWorkspaceActiveLocally = useCallback((workspaceId: string): void => {
     setWorkspaces((current) => {
@@ -140,9 +152,12 @@ export function useWorkspaceSelectionOperations({
         records,
         activeWorkspace: activeWorkspaceRef.current,
       });
+      if (selectedWorkspace?.repoPath !== activeWorkspaceRef.current?.repoPath) {
+        clearStateForWorkspaceTransition(selectedWorkspace);
+      }
       setActiveWorkspace(selectedWorkspace);
     },
-    [setActiveWorkspace],
+    [clearStateForWorkspaceTransition, setActiveWorkspace],
   );
 
   const applyWorkspaceRecord = useCallback(
@@ -171,10 +186,13 @@ export function useWorkspaceSelectionOperations({
       });
 
       if (record.isActive) {
+        if (record.repoPath !== activeWorkspaceRef.current?.repoPath) {
+          clearStateForWorkspaceTransition(record);
+        }
         setActiveWorkspace(record);
       }
     },
-    [setActiveWorkspace],
+    [clearStateForWorkspaceTransition, setActiveWorkspace],
   );
 
   const reorderWorkspaces = useCallback(
@@ -191,31 +209,27 @@ export function useWorkspaceSelectionOperations({
       try {
         const records = await hostClient.workspaceReorder(workspaceIds);
 
-        if (workspaceReorderVersionRef.current !== reorderVersion) {
-          return;
+        if (workspaceReorderVersionRef.current === reorderVersion) {
+          queryClient.setQueryData(workspaceQueryKeys.list(), records);
+          applyWorkspaceRecords(records);
         }
-
-        queryClient.setQueryData(workspaceQueryKeys.list(), records);
-        applyWorkspaceRecords(records);
       } catch (error) {
-        if (workspaceReorderVersionRef.current !== reorderVersion) {
-          return;
-        }
+        if (workspaceReorderVersionRef.current === reorderVersion) {
+          if (optimisticRecords) {
+            setWorkspaces(previousRecords);
+            queryClient.setQueryData(workspaceQueryKeys.list(), previousRecords);
+            const selectedWorkspace = resolveActiveWorkspaceFromRecords({
+              records: previousRecords,
+              activeWorkspace: activeWorkspaceRef.current,
+            });
+            setActiveWorkspace(selectedWorkspace);
+          }
 
-        if (optimisticRecords) {
-          setWorkspaces(previousRecords);
-          queryClient.setQueryData(workspaceQueryKeys.list(), previousRecords);
-          const selectedWorkspace = resolveActiveWorkspaceFromRecords({
-            records: previousRecords,
-            activeWorkspace: activeWorkspaceRef.current,
+          toast.error("Failed to reorder repositories", {
+            description: errorMessage(error),
           });
-          setActiveWorkspace(selectedWorkspace);
+          throw error;
         }
-
-        toast.error("Failed to reorder repositories", {
-          description: errorMessage(error),
-        });
-        throw error;
       }
     },
     [applyWorkspaceRecords, hostClient, queryClient, setActiveWorkspace],
@@ -260,7 +274,6 @@ export function useWorkspaceSelectionOperations({
     async (workspaceId: string): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
       workspaceReorderVersionRef.current += 1;
-      const previousRepo = activeWorkspaceRef.current?.repoPath ?? null;
 
       setIsSwitchingWorkspace(true);
 
@@ -268,74 +281,58 @@ export function useWorkspaceSelectionOperations({
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
         await refreshWorkspaceCachesAfterMutation();
 
-        if (workspaceSwitchVersionRef.current !== switchVersion) {
-          return;
-        }
+        if (workspaceSwitchVersionRef.current === switchVersion) {
+          clearStateForWorkspaceTransition(selectedWorkspace);
+          setActiveWorkspace(selectedWorkspace);
 
-        clearTaskData();
-        clearActiveBeadsCheck();
-        clearBranchData();
-        preparedRepoSwitchRef.current = {
-          previousRepo,
-          nextRepo: selectedWorkspace.repoPath,
-        };
-        setActiveWorkspace(selectedWorkspace);
+          void loadRepoConfigFromQuery(queryClient, selectedWorkspace.workspaceId, hostClient)
+            .then((repoConfig) => {
+              if (workspaceSwitchVersionRef.current !== switchVersion) {
+                return;
+              }
+              if (!repoConfig?.defaultRuntimeKind?.trim()) {
+                throw new Error(
+                  "Repository default runtime is not configured. Select a repository default runtime before switching repositories.",
+                );
+              }
 
-        void loadRepoConfigFromQuery(queryClient, selectedWorkspace.workspaceId, hostClient)
-          .then((repoConfig) => {
-            if (workspaceSwitchVersionRef.current !== switchVersion) {
-              return;
-            }
-            if (!repoConfig?.defaultRuntimeKind?.trim()) {
-              throw new Error(
-                "Repository default runtime is not configured. Select a repository default runtime before switching repositories.",
-              );
-            }
+              return ensureRuntimeAndInvalidateReadinessQueries({
+                repoPath: selectedWorkspace.repoPath,
+                runtimeKind: repoConfig.defaultRuntimeKind,
+                ensureRuntime: (repoPath, runtimeKind) =>
+                  hostClient.runtimeEnsure(repoPath, runtimeKind),
+                queryClient,
+              });
+            })
+            .catch((error) => {
+              if (workspaceSwitchVersionRef.current !== switchVersion) {
+                return;
+              }
 
-            return ensureRuntimeAndInvalidateReadinessQueries({
-              repoPath: selectedWorkspace.repoPath,
-              runtimeKind: repoConfig.defaultRuntimeKind,
-              ensureRuntime: (repoPath, runtimeKind) =>
-                hostClient.runtimeEnsure(repoPath, runtimeKind),
-              queryClient,
+              toast.error("Runtime unavailable", {
+                description: errorMessage(error),
+              });
             });
-          })
-          .catch((error) => {
-            if (workspaceSwitchVersionRef.current !== switchVersion) {
-              return;
+
+          try {
+            await refreshWorkspaces();
+          } catch (error) {
+            if (workspaceSwitchVersionRef.current === switchVersion) {
+              markWorkspaceActiveLocally(selectedWorkspace.workspaceId);
+              toast.error("Repository switched, but workspace refresh failed", {
+                description: errorMessage(error),
+              });
             }
-
-            toast.error("Runtime unavailable", {
-              description: errorMessage(error),
-            });
-          });
-
-        if (workspaceSwitchVersionRef.current !== switchVersion) {
-          return;
-        }
-
-        try {
-          await refreshWorkspaces();
-        } catch (error) {
-          if (workspaceSwitchVersionRef.current !== switchVersion) {
-            return;
           }
-
-          markWorkspaceActiveLocally(selectedWorkspace.workspaceId);
-          toast.error("Repository switched, but workspace refresh failed", {
-            description: errorMessage(error),
-          });
         }
       } catch (error) {
-        if (workspaceSwitchVersionRef.current !== switchVersion) {
-          return;
+        if (workspaceSwitchVersionRef.current === switchVersion) {
+          toast.error("Failed to switch repository", {
+            description: errorMessage(error),
+          });
+          setIsSwitchingWorkspace(false);
+          throw error;
         }
-
-        toast.error("Failed to switch repository", {
-          description: errorMessage(error),
-        });
-        setIsSwitchingWorkspace(false);
-        throw error;
       } finally {
         if (workspaceSwitchVersionRef.current === switchVersion) {
           setIsSwitchingWorkspace(false);
@@ -343,12 +340,9 @@ export function useWorkspaceSelectionOperations({
       }
     },
     [
-      clearActiveBeadsCheck,
-      clearBranchData,
-      clearTaskData,
+      clearStateForWorkspaceTransition,
       hostClient,
       markWorkspaceActiveLocally,
-      preparedRepoSwitchRef,
       queryClient,
       refreshWorkspaceCachesAfterMutation,
       refreshWorkspaces,

@@ -1,5 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useReducer } from "react";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -16,6 +16,85 @@ import type { RuntimeTranscriptSourceResolution } from "./use-runtime-transcript
 
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
+
+type RuntimeTranscriptInteractionState = {
+  transcriptIdentityKey: string | null;
+  repliedRuntimeApprovalRequestIds: ReadonlySet<string>;
+  repliedRuntimeQuestionRequestIds: ReadonlySet<string>;
+  isSubmittingQuestionByRequestId: Record<string, boolean>;
+};
+
+type RuntimeTranscriptInteractionAction =
+  | { type: "approvalReplied"; requestId: string; transcriptIdentityKey: string | null }
+  | { type: "questionSubmitStarted"; requestId: string; transcriptIdentityKey: string | null }
+  | { type: "questionReplied"; requestId: string; transcriptIdentityKey: string | null }
+  | { type: "questionSubmitFinished"; requestId: string; transcriptIdentityKey: string | null };
+
+const createRuntimeTranscriptInteractionState = (
+  transcriptIdentityKey: string | null,
+): RuntimeTranscriptInteractionState => ({
+  transcriptIdentityKey,
+  repliedRuntimeApprovalRequestIds: new Set(),
+  repliedRuntimeQuestionRequestIds: new Set(),
+  isSubmittingQuestionByRequestId: {},
+});
+
+const getRuntimeTranscriptInteractionStateForIdentity = (
+  state: RuntimeTranscriptInteractionState,
+  transcriptIdentityKey: string | null,
+): RuntimeTranscriptInteractionState => {
+  if (state.transcriptIdentityKey === transcriptIdentityKey) {
+    return state;
+  }
+
+  return createRuntimeTranscriptInteractionState(transcriptIdentityKey);
+};
+
+const runtimeTranscriptInteractionReducer = (
+  state: RuntimeTranscriptInteractionState,
+  action: RuntimeTranscriptInteractionAction,
+): RuntimeTranscriptInteractionState => {
+  const currentState = getRuntimeTranscriptInteractionStateForIdentity(
+    state,
+    action.transcriptIdentityKey,
+  );
+
+  switch (action.type) {
+    case "approvalReplied": {
+      if (currentState.repliedRuntimeApprovalRequestIds.has(action.requestId)) {
+        return currentState;
+      }
+      const repliedRuntimeApprovalRequestIds = new Set(
+        currentState.repliedRuntimeApprovalRequestIds,
+      );
+      repliedRuntimeApprovalRequestIds.add(action.requestId);
+      return { ...currentState, repliedRuntimeApprovalRequestIds };
+    }
+    case "questionSubmitStarted":
+      return {
+        ...currentState,
+        isSubmittingQuestionByRequestId: {
+          ...currentState.isSubmittingQuestionByRequestId,
+          [action.requestId]: true,
+        },
+      };
+    case "questionReplied": {
+      if (currentState.repliedRuntimeQuestionRequestIds.has(action.requestId)) {
+        return currentState;
+      }
+      const repliedRuntimeQuestionRequestIds = new Set(
+        currentState.repliedRuntimeQuestionRequestIds,
+      );
+      repliedRuntimeQuestionRequestIds.add(action.requestId);
+      return { ...currentState, repliedRuntimeQuestionRequestIds };
+    }
+    case "questionSubmitFinished": {
+      const isSubmittingQuestionByRequestId = { ...currentState.isSubmittingQuestionByRequestId };
+      delete isSubmittingQuestionByRequestId[action.requestId];
+      return { ...currentState, isSubmittingQuestionByRequestId };
+    }
+  }
+};
 
 type UseRuntimeTranscriptInteractionsArgs = {
   session: AgentSessionState | null;
@@ -61,27 +140,21 @@ export function useRuntimeTranscriptInteractions({
   replyAgentApproval,
   answerAgentQuestion,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
-  const [repliedRuntimeApprovalRequestIds, setRepliedRuntimeApprovalRequestIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
-  const [repliedRuntimeQuestionRequestIds, setRepliedRuntimeQuestionRequestIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
-  const [isSubmittingQuestionByRequestId, setIsSubmittingQuestionByRequestId] = useState<
-    Record<string, boolean>
-  >({});
   const transcriptIdentityKey = getRuntimeTranscriptIdentityKey({ externalSessionId, source });
-  const previousTranscriptIdentityKeyRef = useRef<string | null>(transcriptIdentityKey);
-
-  useEffect(() => {
-    if (previousTranscriptIdentityKeyRef.current === transcriptIdentityKey) {
-      return;
-    }
-    previousTranscriptIdentityKeyRef.current = transcriptIdentityKey;
-    setRepliedRuntimeApprovalRequestIds(new Set());
-    setRepliedRuntimeQuestionRequestIds(new Set());
-    setIsSubmittingQuestionByRequestId({});
-  }, [transcriptIdentityKey]);
+  const [interactionState, dispatchInteractionState] = useReducer(
+    runtimeTranscriptInteractionReducer,
+    transcriptIdentityKey,
+    createRuntimeTranscriptInteractionState,
+  );
+  const currentInteractionState = getRuntimeTranscriptInteractionStateForIdentity(
+    interactionState,
+    transcriptIdentityKey,
+  );
+  const {
+    repliedRuntimeApprovalRequestIds,
+    repliedRuntimeQuestionRequestIds,
+    isSubmittingQuestionByRequestId,
+  } = currentInteractionState;
 
   const visiblePendingApprovals = useMemo(() => {
     return mergeRuntimePendingApprovals({
@@ -130,16 +203,13 @@ export function useRuntimeTranscriptInteractions({
         throw new Error("Runtime transcript approval target is unavailable.");
       }
       await replyAgentApproval(targetExternalSessionId, requestId, outcome);
-      setRepliedRuntimeApprovalRequestIds((current) => {
-        if (current.has(requestId)) {
-          return current;
-        }
-        const next = new Set(current);
-        next.add(requestId);
-        return next;
+      dispatchInteractionState({
+        type: "approvalReplied",
+        requestId,
+        transcriptIdentityKey,
       });
     },
-    [replyAgentApproval],
+    [replyAgentApproval, transcriptIdentityKey],
   );
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
@@ -156,29 +226,27 @@ export function useRuntimeTranscriptInteractions({
       if (!activeSessionId) {
         throw new Error("Runtime transcript question target is unavailable.");
       }
-      setIsSubmittingQuestionByRequestId((current) => ({
-        ...current,
-        [requestId]: true,
-      }));
+      dispatchInteractionState({
+        type: "questionSubmitStarted",
+        requestId,
+        transcriptIdentityKey,
+      });
       try {
         await answerAgentQuestion(activeSessionId, requestId, answers);
-        setRepliedRuntimeQuestionRequestIds((current) => {
-          if (current.has(requestId)) {
-            return current;
-          }
-          const next = new Set(current);
-          next.add(requestId);
-          return next;
+        dispatchInteractionState({
+          type: "questionReplied",
+          requestId,
+          transcriptIdentityKey,
         });
       } finally {
-        setIsSubmittingQuestionByRequestId((current) => {
-          const next = { ...current };
-          delete next[requestId];
-          return next;
+        dispatchInteractionState({
+          type: "questionSubmitFinished",
+          requestId,
+          transcriptIdentityKey,
         });
       }
     },
-    [activeSessionId, answerAgentQuestion],
+    [activeSessionId, answerAgentQuestion, transcriptIdentityKey],
   );
 
   return {

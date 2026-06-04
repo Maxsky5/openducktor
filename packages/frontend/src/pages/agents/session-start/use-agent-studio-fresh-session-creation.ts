@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
+import { type Dispatch, type SetStateAction, useCallback } from "react";
 import { toast } from "sonner";
 import {
   executeSessionStartFromDecision,
@@ -39,7 +39,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
   updateQuery: (updates: QueryUpdate) => void;
   onContextSwitchIntent?: () => void;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
-  startingSessionByTaskRef: MutableRefObject<Map<string, Promise<string | undefined>>>;
+  startingSessionByTask: Map<string, Promise<string | undefined>>;
   onPostStartActionError?: (action: "kickoff", error: Error) => void;
   executeRequestedSessionStart: <T>(
     request: SessionStartFlowRequest,
@@ -62,7 +62,7 @@ export function useAgentStudioFreshSessionCreation({
   updateQuery,
   onContextSwitchIntent,
   setStartingActivityCountByContext,
-  startingSessionByTaskRef,
+  startingSessionByTask,
   onPostStartActionError,
   executeRequestedSessionStart,
 }: UseAgentStudioFreshSessionCreationArgs): {
@@ -215,7 +215,7 @@ export function useAgentStudioFreshSessionCreation({
         role: nextRole,
         launchActionId: nextLaunchActionId,
       });
-      if (startingSessionByTaskRef.current.has(startKey)) {
+      if (startingSessionByTask.has(startKey)) {
         return;
       }
 
@@ -224,10 +224,10 @@ export function useAgentStudioFreshSessionCreation({
         nextLaunchActionId,
       });
 
-      startingSessionByTaskRef.current.set(startKey, startPromise);
+      startingSessionByTask.set(startKey, startPromise);
       void startPromise.finally(() => {
-        if (startingSessionByTaskRef.current.get(startKey) === startPromise) {
-          startingSessionByTaskRef.current.delete(startKey);
+        if (startingSessionByTask.get(startKey) === startPromise) {
+          startingSessionByTask.delete(startKey);
         }
       });
     },
@@ -238,7 +238,7 @@ export function useAgentStudioFreshSessionCreation({
       isSessionWorking,
       runFreshSessionCreation,
       selectedTask,
-      startingSessionByTaskRef,
+      startingSessionByTask,
       taskId,
     ],
   );

@@ -12,7 +12,8 @@ import {
 import type { GitConflict } from "@/features/agent-studio-git";
 import { getGitConflictCopy, getGitConflictTitle } from "./conflict-copy";
 import { GIT_CONFLICT_TEST_IDS, INLINE_CODE_CLASS_NAME } from "./constants";
-import { GitConflictActions, type GitConflictActionsModel } from "./git-conflict-actions";
+import { GitConflictActions } from "./git-conflict-actions";
+import type { GitConflictActionsModel } from "./git-conflict-actions-model";
 
 type GitConflictDialogProps = {
   conflict: GitConflict | null;

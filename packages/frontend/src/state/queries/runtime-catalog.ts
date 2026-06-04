@@ -9,7 +9,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 const RUNTIME_CATALOG_STALE_TIME_MS = 5 * 60_000;
-export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
+const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,

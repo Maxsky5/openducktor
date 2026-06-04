@@ -1,5 +1,5 @@
 import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -19,23 +19,27 @@ export function useDiagnosticsToasts(
   diagnosticsToastIssues: DiagnosticsToastIssue[],
   toastApi: DiagnosticsToastApi = toast,
 ): void {
-  const issueSignaturesRef = useRef(new Map<string, string>());
+  const issueSignaturesRef = useRef<Map<string, string> | null>(null);
+  if (issueSignaturesRef.current === null) {
+    issueSignaturesRef.current = new Map<string, string>();
+  }
+  const issueSignatures = issueSignaturesRef.current;
 
   useEffect(() => {
     const nextIssueIds = new Set(diagnosticsToastIssues.map((issue) => issue.id));
 
-    for (const issueId of [...issueSignaturesRef.current.keys()]) {
+    for (const issueId of [...issueSignatures.keys()]) {
       if (nextIssueIds.has(issueId)) {
         continue;
       }
 
       toastApi.dismiss(issueId);
-      issueSignaturesRef.current.delete(issueId);
+      issueSignatures.delete(issueId);
     }
 
     for (const issue of diagnosticsToastIssues) {
       const signature = `${issue.severity}:${issue.title}:${issue.description}`;
-      if (issueSignaturesRef.current.get(issue.id) === signature) {
+      if (issueSignatures.get(issue.id) === signature) {
         continue;
       }
 
@@ -45,18 +49,18 @@ export function useDiagnosticsToasts(
         duration: Number.POSITIVE_INFINITY,
       });
 
-      issueSignaturesRef.current.set(issue.id, signature);
+      issueSignatures.set(issue.id, signature);
     }
-  }, [diagnosticsToastIssues, toastApi]);
+  }, [diagnosticsToastIssues, issueSignatures, toastApi]);
 
-  useEffect(() => {
-    return () => {
-      for (const issueId of issueSignaturesRef.current.keys()) {
-        toastApi.dismiss(issueId);
-      }
-      issueSignaturesRef.current.clear();
-    };
-  }, [toastApi]);
+  const dismissTrackedIssues = useCallback(() => {
+    for (const issueId of issueSignatures.keys()) {
+      toastApi.dismiss(issueId);
+    }
+    issueSignatures.clear();
+  }, [issueSignatures, toastApi]);
+
+  useEffect(() => dismissTrackedIssues, [dismissTrackedIssues]);
 }
 
 type UseDiagnosticsRetrySchedulerArgs = {
@@ -127,11 +131,12 @@ export function useDiagnosticsRetryScheduler({
     retryPlan,
   ]);
 
-  useEffect(() => {
-    return () => {
-      if (diagnosticsRetryTimeoutRef.current !== null) {
-        globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
-      }
-    };
+  const clearDiagnosticsRetryTimeout = useCallback(() => {
+    if (diagnosticsRetryTimeoutRef.current !== null) {
+      globalThis.clearTimeout(diagnosticsRetryTimeoutRef.current);
+      diagnosticsRetryTimeoutRef.current = null;
+    }
   }, []);
+
+  useEffect(() => clearDiagnosticsRetryTimeout, [clearDiagnosticsRetryTimeout]);
 }

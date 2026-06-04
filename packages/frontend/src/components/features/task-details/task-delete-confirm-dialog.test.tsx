@@ -3,7 +3,7 @@ import {
   formatManagedSessionCleanupLoadingMessage,
   formatManagedSessionCleanupMessage,
   formatUnknownManagedSessionCleanupMessage,
-} from "./task-delete-confirm-dialog";
+} from "./task-delete-confirm-dialog-model";
 
 describe("TaskDeleteConfirmDialog", () => {
   test("mentions worktree and related branch cleanup when managed sessions exist", () => {

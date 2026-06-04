@@ -1,6 +1,6 @@
 import type { SettingsSnapshot, Theme } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, use, useEffect, useMemo, useState } from "react";
+import { createContext, use, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
@@ -20,19 +20,15 @@ type ThemeProviderState = {
 const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 
 export function ThemeProvider({ children, defaultTheme = "light", ...props }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(() => readDocumentTheme(defaultTheme));
   const queryClient = useQueryClient();
   const { data: settingsSnapshot } = useQuery(settingsSnapshotQueryOptions());
+  const fallbackTheme = useMemo(() => readDocumentTheme(defaultTheme), [defaultTheme]);
+  const theme =
+    settingsSnapshot?.theme === "dark" ? "dark" : (settingsSnapshot?.theme ?? fallbackTheme);
 
   useEffect(() => {
-    if (!settingsSnapshot) {
-      return;
-    }
-
-    const resolved = settingsSnapshot.theme === "dark" ? "dark" : "light";
-    applyThemeToDocument(resolved);
-    setThemeState((current: Theme) => (current === resolved ? current : resolved));
-  }, [settingsSnapshot]);
+    applyThemeToDocument(theme);
+  }, [theme]);
 
   const value = useMemo(
     () => ({
@@ -42,7 +38,6 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
         const previousSnapshot = queryClient.getQueryData<SettingsSnapshot>(
           settingsSnapshotQueryOptions().queryKey,
         );
-        setThemeState(newTheme);
         applyThemeToDocument(newTheme);
         queryClient.setQueryData(
           settingsSnapshotQueryOptions().queryKey,
@@ -60,7 +55,6 @@ export function ThemeProvider({ children, defaultTheme = "light", ...props }: Th
         void hostBridge.client.setTheme(newTheme).catch((error) => {
           console.error("Failed to persist theme change.", error);
           applyThemeToDocument(previousTheme);
-          setThemeState(previousTheme);
           if (previousSnapshot) {
             queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, previousSnapshot);
           }

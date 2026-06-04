@@ -52,7 +52,11 @@ export function useAgentChatRowStaging({
   const rowCountRef = useRef(rowCount);
   const frameRef = useRef<number | null>(null);
   const activeSessionRef = useRef<string | null>(null);
-  const completedSessionIdsRef = useRef<Set<string>>(new Set());
+  const completedSessionIdsRef = useRef<Set<string> | null>(null);
+  if (completedSessionIdsRef.current === null) {
+    completedSessionIdsRef.current = new Set<string>();
+  }
+  const completedSessionIds = completedSessionIdsRef.current;
   const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
   const previousSessionId = previousSessionIdRef.current;
   const renderSwitchedSessions =
@@ -79,7 +83,7 @@ export function useAgentChatRowStaging({
     previousSessionIdRef.current = activeExternalSessionId;
 
     if (effectSwitchedSessions && activeExternalSessionId !== null) {
-      completedSessionIdsRef.current.delete(activeExternalSessionId);
+      completedSessionIds.delete(activeExternalSessionId);
     }
 
     if (activeExternalSessionId === null) {
@@ -90,7 +94,7 @@ export function useAgentChatRowStaging({
 
     const shouldStage = shouldStageRows({
       activeExternalSessionId,
-      completedSessionIds: completedSessionIdsRef.current,
+      completedSessionIds,
       disabled,
       forceStage: effectSwitchedSessions,
       rowCount: rows.length,
@@ -113,7 +117,7 @@ export function useAgentChatRowStaging({
 
     if (nextRowCount >= rows.length) {
       activeSessionRef.current = null;
-      completedSessionIdsRef.current.add(externalSessionId);
+      completedSessionIds.add(externalSessionId);
       return;
     }
 
@@ -130,7 +134,7 @@ export function useAgentChatRowStaging({
       if (nextRowCount >= rows.length) {
         frameRef.current = null;
         activeSessionRef.current = null;
-        completedSessionIdsRef.current.add(externalSessionId);
+        completedSessionIds.add(externalSessionId);
         return;
       }
 
@@ -144,14 +148,14 @@ export function useAgentChatRowStaging({
         frameRef.current = null;
       }
     };
-  }, [activeExternalSessionId, disabled, onBeforePrepend, rows.length]);
+  }, [activeExternalSessionId, completedSessionIds, disabled, onBeforePrepend, rows.length]);
 
   return useMemo(() => {
     if (
       activeExternalSessionId === null ||
       !shouldStageRows({
         activeExternalSessionId,
-        completedSessionIds: completedSessionIdsRef.current,
+        completedSessionIds,
         disabled,
         forceStage: renderSwitchedSessions,
         rowCount: rows.length,
@@ -184,5 +188,13 @@ export function useAgentChatRowStaging({
         return visibleTurns;
       }, []),
     };
-  }, [activeExternalSessionId, disabled, rowCount, rows, renderSwitchedSessions, turns]);
+  }, [
+    activeExternalSessionId,
+    completedSessionIds,
+    disabled,
+    rowCount,
+    rows,
+    renderSwitchedSessions,
+    turns,
+  ]);
 }

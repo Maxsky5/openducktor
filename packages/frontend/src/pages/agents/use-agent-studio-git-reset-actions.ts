@@ -1,5 +1,5 @@
 import type { GitResetWorktreeSelection } from "@openducktor/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { AgentStudioPendingReset, GitConflict } from "@/features/agent-studio-git";
 import { host } from "@/state/operations/shared/host";
@@ -43,22 +43,22 @@ export function useAgentStudioGitResetActions({
 }: UseAgentStudioGitResetActionsArgs) {
   const [isResetting, setIsResetting] = useState(false);
   const [pendingReset, setPendingReset] = useState<AgentStudioPendingReset | null>(null);
-  const resetSnapshotKeyRef = useRef<string | null>(null);
+  const [resetSnapshotKey, setResetSnapshotKey] = useState<string | null>(
+    worktreeStatusSnapshotKey,
+  );
 
-  useEffect(() => {
-    if (worktreeStatusSnapshotKey == null) {
-      resetSnapshotKeyRef.current = null;
-      return;
+  if (worktreeStatusSnapshotKey == null) {
+    if (resetSnapshotKey !== null) {
+      setResetSnapshotKey(null);
     }
-
-    const previousSnapshotKey = resetSnapshotKeyRef.current;
-    resetSnapshotKeyRef.current = worktreeStatusSnapshotKey;
-
-    if (previousSnapshotKey !== null && previousSnapshotKey !== worktreeStatusSnapshotKey) {
+  } else if (resetSnapshotKey !== worktreeStatusSnapshotKey) {
+    const previousSnapshotKey = resetSnapshotKey;
+    setResetSnapshotKey(worktreeStatusSnapshotKey);
+    if (previousSnapshotKey !== null) {
       setResetError(null);
       setPendingReset(null);
     }
-  }, [setResetError, worktreeStatusSnapshotKey]);
+  }
 
   const getResetBlockedReason = useCallback((): string | null => {
     if (isBuilderSessionWorking) {

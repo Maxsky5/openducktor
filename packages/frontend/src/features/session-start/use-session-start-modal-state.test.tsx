@@ -4,6 +4,7 @@ import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openduck
 import type { AgentModelCatalog, AgentSessionStartMode } from "@openducktor/core";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  createDeferred,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "../../pages/agents/agent-studio-test-utils";
@@ -285,6 +286,65 @@ describe("useSessionStartModalState", () => {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "default",
+      profileId: "spec-agent",
+    });
+
+    await harness.unmount();
+  });
+
+  test("uses the resolved visible selection as the base after catalog hydration", async () => {
+    const catalogDeferred = createDeferred<AgentModelCatalog>();
+    const loadCatalog = mock(async () => catalogDeferred.promise);
+    const props = createBaseProps({
+      loadCatalog,
+      repoSettings: createRepoSettings({
+        spec: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "does-not-exist",
+          variant: "legacy",
+          profileId: "spec-agent",
+        },
+      }),
+    });
+    delete props.initialCatalog;
+    const harness = createHookHarness(props);
+
+    await harness.mount();
+
+    await harness.run(() => {
+      harness.getLatest().openStartModal({
+        source: "kanban",
+        taskId: "TASK-2",
+        role: "spec",
+        launchActionId: "spec_initial",
+        postStartAction: "kickoff",
+        title: "Start Spec Session",
+      });
+    });
+
+    await harness.run(() => {
+      catalogDeferred.resolve(CATALOG);
+    });
+    await harness.waitFor((state) => state.selection?.modelId === "gpt-5");
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "default",
+      profileId: "spec-agent",
+    });
+
+    await harness.run(() => {
+      harness.getLatest().handleSelectVariant("high");
+    });
+
+    expect(harness.getLatest().selection).toEqual({
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
       profileId: "spec-agent",
     });
 

@@ -156,7 +156,6 @@ export const createEnsureSessionReady = ({
         externalSessionId,
       });
     };
-
     const applyConfirmedSessionPresenceSnapshot = (
       snapshot: ConfirmedAgentSessionPresenceSnapshot,
       {
@@ -195,6 +194,48 @@ export const createEnsureSessionReady = ({
     if (!isWorkflowAgentSession(session)) {
       throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
     }
+    const cleanupStaleResumedSessionIfNeeded = async (): Promise<void> => {
+      if (!isStaleRepoOperation()) {
+        return;
+      }
+
+      await cleanupAttachedSessionOrThrow({
+        action: "stop",
+        operation: "ensure-ready-stop-session-after-stale-resume",
+        cleanupErrorMessage: `${STALE_PREPARE_ERROR} Failed to stop stale resumed session '${externalSessionId}'`,
+        externalSessionId,
+        taskId: session.taskId,
+        role: session.role,
+      });
+      throw new Error(STALE_PREPARE_ERROR);
+    };
+    const resumeSessionAndReadPresence = async ({
+      promptContext,
+      requestedRuntimeKind,
+      runtime,
+    }: {
+      promptContext: Awaited<ReturnType<typeof loadSessionPromptContext>>;
+      requestedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
+      runtime: Awaited<ReturnType<typeof ensureRuntime>>;
+    }): Promise<Awaited<ReturnType<typeof readSessionPresenceSnapshot>>> => {
+      await adapter.resumeSession({
+        externalSessionId: session.externalSessionId,
+        repoPath,
+        runtimeKind: requestedRuntimeKind,
+        workingDirectory: runtime.workingDirectory,
+        taskId: session.taskId,
+        role: session.role,
+        systemPrompt: promptContext.systemPrompt,
+        ...(session.selectedModel ? { model: session.selectedModel } : {}),
+      });
+      await cleanupStaleResumedSessionIfNeeded();
+
+      return readSessionPresenceSnapshot({
+        runtimeKind: requestedRuntimeKind,
+        workingDirectory: runtime.workingDirectory,
+        externalSessionId: session.externalSessionId,
+      });
+    };
 
     if (adapter.hasSession(externalSessionId)) {
       if (session.status !== "error") {
@@ -255,6 +296,7 @@ export const createEnsureSessionReady = ({
       throw new Error(`Task not found: ${session.taskId}`);
     }
 
+    const requestedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
     const promptContext = await loadSessionPromptContext({
       workspaceId,
       role: session.role,
@@ -262,40 +304,16 @@ export const createEnsureSessionReady = ({
       loadRepoPromptOverrides,
     });
     assertNotStale();
-    const requestedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
     const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
       workspaceId,
       targetWorkingDirectory: session.workingDirectory,
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    await adapter.resumeSession({
-      externalSessionId: session.externalSessionId,
-      repoPath,
-      runtimeKind: requestedRuntimeKind,
-      workingDirectory: runtime.workingDirectory,
-      taskId: session.taskId,
-      role: session.role,
-      systemPrompt: promptContext.systemPrompt,
-      ...(session.selectedModel ? { model: session.selectedModel } : {}),
-    });
-
-    if (isStaleRepoOperation()) {
-      await cleanupAttachedSessionOrThrow({
-        action: "stop",
-        operation: "ensure-ready-stop-session-after-stale-resume",
-        cleanupErrorMessage: `${STALE_PREPARE_ERROR} Failed to stop stale resumed session '${externalSessionId}'`,
-        externalSessionId,
-        taskId: session.taskId,
-        role: session.role,
-      });
-      throw new Error(STALE_PREPARE_ERROR);
-    }
-
-    const sessionPresence = await readSessionPresenceSnapshot({
-      runtimeKind: requestedRuntimeKind,
-      workingDirectory: runtime.workingDirectory,
-      externalSessionId: session.externalSessionId,
+    const sessionPresence = await resumeSessionAndReadPresence({
+      promptContext,
+      requestedRuntimeKind,
+      runtime,
     });
     assertNotStale();
 

@@ -1,5 +1,5 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { PromptValidationState } from "./settings-modal-controller.types";
@@ -65,6 +65,11 @@ export const useSettingsModalSaveOrchestration = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasAttemptedRepoScriptSubmit, setHasAttemptedRepoScriptSubmit] = useState(false);
+  const [resetInputs, setResetInputs] = useState({
+    hasRepoScriptValidationErrors,
+    loadedSnapshot,
+    open,
+  });
   const saveInFlightRef = useRef(false);
 
   const clearSaveError = useCallback((): void => {
@@ -75,26 +80,30 @@ export const useSettingsModalSaveOrchestration = ({
     setHasAttemptedRepoScriptSubmit(true);
   }, []);
 
-  useEffect(() => {
+  if (
+    resetInputs.open !== open ||
+    resetInputs.loadedSnapshot !== loadedSnapshot ||
+    resetInputs.hasRepoScriptValidationErrors !== hasRepoScriptValidationErrors
+  ) {
+    setResetInputs({
+      hasRepoScriptValidationErrors,
+      loadedSnapshot,
+      open,
+    });
+
     if (!open) {
       setSaveError(null);
       setHasAttemptedRepoScriptSubmit(false);
     }
-  }, [open]);
 
-  useEffect(() => {
-    if (!open || !loadedSnapshot) {
-      return;
-    }
-
-    setHasAttemptedRepoScriptSubmit(false);
-  }, [loadedSnapshot, open]);
-
-  useEffect(() => {
     if (!hasRepoScriptValidationErrors) {
       setHasAttemptedRepoScriptSubmit(false);
     }
-  }, [hasRepoScriptValidationErrors]);
+
+    if (open && loadedSnapshot) {
+      setHasAttemptedRepoScriptSubmit(false);
+    }
+  }
 
   const submit = useCallback(async (): Promise<boolean> => {
     if (saveInFlightRef.current || !snapshotDraft) {

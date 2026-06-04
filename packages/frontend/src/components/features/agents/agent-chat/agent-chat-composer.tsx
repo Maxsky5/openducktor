@@ -439,7 +439,13 @@ function useAgentChatComposerFocus({
   isComposerInputDisabled: boolean;
   isSubmitting: boolean;
 }): () => void {
-  const composerAutofocusStateRef = useRef(createComposerAutofocusState());
+  const composerAutofocusStateRef = useRef<ReturnType<typeof createComposerAutofocusState> | null>(
+    null,
+  );
+  if (composerAutofocusStateRef.current === null) {
+    composerAutofocusStateRef.current = createComposerAutofocusState();
+  }
+  const composerAutofocusState = composerAutofocusStateRef.current;
 
   const focusComposerEditor = useCallback(() => {
     const editor = composerEditorRef.current;
@@ -488,7 +494,7 @@ function useAgentChatComposerFocus({
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);
 
-    const autofocusResult = resolveComposerAutofocus(composerAutofocusStateRef.current, {
+    const autofocusResult = resolveComposerAutofocus(composerAutofocusState, {
       displayedSessionId,
       isComposerInteractive,
       activeElement,
@@ -504,6 +510,7 @@ function useAgentChatComposerFocus({
     isFocusInsideComposer,
     isSubmitting,
     scheduleComposerFocus,
+    composerAutofocusState,
   ]);
 
   return scheduleComposerFocus;

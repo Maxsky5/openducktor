@@ -42,13 +42,6 @@ export type UseWorkspaceOperationsResult = {
   applyWorkspaceRecord: (record: WorkspaceRecord) => void;
 };
 
-export type PreparedRepoSwitch = {
-  previousRepo: string | null;
-  nextRepo: string;
-};
-
-export type PreparedRepoSwitchRef = MutableRefObject<PreparedRepoSwitch | null>;
-
 export type WorkspaceBranchProbeController = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   activeWorkspaceRef?: MutableRefObject<ActiveWorkspace | null>;

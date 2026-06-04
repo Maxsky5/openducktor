@@ -78,15 +78,6 @@ const fetchTaskDocumentWithMode = (
   });
 };
 
-export const fetchTaskDocumentFromQuery = (
-  queryClient: QueryClient,
-  repoPath: string,
-  taskId: string,
-  section: TaskDocumentSection,
-): Promise<TaskDocumentPayload> => {
-  return fetchTaskDocumentWithMode(queryClient, repoPath, taskId, section, "default");
-};
-
 export const fetchFreshTaskDocumentFromQuery = (
   queryClient: QueryClient,
   repoPath: string,

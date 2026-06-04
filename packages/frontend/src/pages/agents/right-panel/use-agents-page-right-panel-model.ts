@@ -1,5 +1,5 @@
 import type { GitBranch, SystemOpenInToolId } from "@openducktor/contracts";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toBranchSelectorOptions } from "@/components/features/repository/branch-selector-model";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import { useAgentStudioBuildToolsWorktreeSnapshot } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
@@ -240,15 +240,16 @@ export function useAgentsPageRightPanelModel({
     onGitConflictQuickActionContextChangeRef.current = onGitConflictQuickActionContextChange;
   }, [onGitConflictQuickActionContextChange]);
 
-  useEffect(() => {
+  const clearGitConflictQuickActionContext = useCallback(() => {
+    onGitConflictQuickActionContextChangeRef.current?.(null);
+  }, []);
+
+  const publishGitConflictQuickActionContext = useCallback(() => {
     onGitConflictQuickActionContextChange?.(gitConflictQuickActionContext);
   }, [gitConflictQuickActionContext, onGitConflictQuickActionContextChange]);
+  useEffect(publishGitConflictQuickActionContext, [publishGitConflictQuickActionContext]);
 
-  useEffect(() => {
-    return () => {
-      onGitConflictQuickActionContextChangeRef.current?.(null);
-    };
-  }, []);
+  useEffect(() => clearGitConflictQuickActionContext, [clearGitConflictQuickActionContext]);
   const diffModel = useMemo(
     () =>
       buildAgentsPageDiffModel({

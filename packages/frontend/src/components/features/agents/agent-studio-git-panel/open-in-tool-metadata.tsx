@@ -1,37 +1,10 @@
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { AppWindowMac, FolderOpen, Terminal } from "lucide-react";
 import type { ReactElement } from "react";
-
-type OpenInToolUiMetadata = {
-  label: string;
-  fallbackKind: "finder" | "terminal" | "generic";
-};
-
-const OPEN_IN_TOOL_METADATA: Record<SystemOpenInToolId, OpenInToolUiMetadata> = {
-  finder: { label: "Finder", fallbackKind: "finder" },
-  explorer: { label: "File Explorer", fallbackKind: "finder" },
-  "xdg-open": { label: "Files", fallbackKind: "finder" },
-  terminal: { label: "Terminal", fallbackKind: "terminal" },
-  iterm2: { label: "iTerm2", fallbackKind: "terminal" },
-  ghostty: { label: "Ghostty", fallbackKind: "terminal" },
-  vscode: { label: "VS Code", fallbackKind: "generic" },
-  cursor: { label: "Cursor", fallbackKind: "generic" },
-  zed: { label: "Zed", fallbackKind: "generic" },
-  "intellij-idea": { label: "IntelliJ IDEA", fallbackKind: "generic" },
-  webstorm: { label: "WebStorm", fallbackKind: "generic" },
-  pycharm: { label: "PyCharm", fallbackKind: "generic" },
-  phpstorm: { label: "PhpStorm", fallbackKind: "generic" },
-  rider: { label: "Rider", fallbackKind: "generic" },
-  rustrover: { label: "RustRover", fallbackKind: "generic" },
-  "android-studio": { label: "Android Studio", fallbackKind: "generic" },
-};
-
-export function getOpenInToolLabel(toolId: SystemOpenInToolId): string {
-  return OPEN_IN_TOOL_METADATA[toolId].label;
-}
+import { getOpenInToolFallbackKind } from "./open-in-tool-metadata-model";
 
 function fallbackIconForTool(toolId: SystemOpenInToolId) {
-  const { fallbackKind } = OPEN_IN_TOOL_METADATA[toolId];
+  const fallbackKind = getOpenInToolFallbackKind(toolId);
 
   if (fallbackKind === "finder") {
     return FolderOpen;

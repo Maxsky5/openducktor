@@ -1,5 +1,5 @@
 import type { SettingsSnapshot } from "@openducktor/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 export type DirtySections = {
   general: boolean;
@@ -40,6 +40,7 @@ export const useSettingsModalDirtyState = ({
   loadedSnapshot,
 }: UseSettingsModalDirtyStateArgs): SettingsModalDirtyState => {
   const [dirtySections, setDirtySections] = useState<DirtySections>(EMPTY_DIRTY_SECTIONS);
+  const [resetInputs, setResetInputs] = useState({ loadedSnapshot, open });
 
   const markDirty = useCallback((section: keyof DirtySections): void => {
     setDirtySections((current) => {
@@ -54,19 +55,12 @@ export const useSettingsModalDirtyState = ({
     });
   }, []);
 
-  useEffect(() => {
-    if (!open) {
+  if (resetInputs.open !== open || resetInputs.loadedSnapshot !== loadedSnapshot) {
+    setResetInputs({ loadedSnapshot, open });
+    if (!open || loadedSnapshot) {
       setDirtySections(EMPTY_DIRTY_SECTIONS);
     }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || !loadedSnapshot) {
-      return;
-    }
-
-    setDirtySections(EMPTY_DIRTY_SECTIONS);
-  }, [loadedSnapshot, open]);
+  }
 
   return {
     dirtySections,

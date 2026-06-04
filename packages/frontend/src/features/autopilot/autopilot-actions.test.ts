@@ -7,14 +7,14 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
-import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
-import { MISSING_BUILD_TARGET_ERROR } from "../operations/agent-orchestrator/handlers/start-session-constants";
+import { executeAutopilotAction } from "@/features/autopilot/autopilot-actions";
 import {
   detectAutopilotEvents,
-  executeAutopilotAction,
   shouldAdvanceAutopilotBaseline,
-} from "./autopilot-provider";
+} from "@/features/autopilot/autopilot-events";
+import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
+import { repoConfigQueryOptions, workspaceQueryKeys } from "@/state/queries/workspace";
+import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
 const startSessionWorkflowMock = mock(async () => ({
   externalSessionId: "session-new",
@@ -135,9 +135,10 @@ const createExecuteArgs = (task: TaskCard) => ({
   sendAgentMessage: mock(async () => {
     throw new Error("sendAgentMessage should not be called in this test");
   }),
+  onDetachedPostStartError: mock(() => undefined),
 });
 
-describe("autopilot provider helpers", () => {
+describe("autopilot feature helpers", () => {
   beforeEach(() => {
     startSessionWorkflowMock.mockReset();
     startSessionWorkflowMock.mockImplementation(async () => ({

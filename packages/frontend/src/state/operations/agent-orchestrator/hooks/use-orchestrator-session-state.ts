@@ -289,17 +289,17 @@ export const useOrchestratorSessionState = ({
     commitSessions({});
   }, [workspaceRepoPath, commitSessions]);
 
-  useEffect(() => {
-    return () => {
-      clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
-      for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
-        if (timeoutId !== undefined) {
-          clearTimeout(timeoutId);
-        }
+  const clearMutableSessionState = useCallback(() => {
+    clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
+    for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
       }
-      mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
-    };
+    }
+    mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
   }, []);
+
+  useEffect(() => clearMutableSessionState, [clearMutableSessionState]);
 
   return useMemo(
     () => ({

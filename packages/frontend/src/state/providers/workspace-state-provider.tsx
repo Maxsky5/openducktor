@@ -11,7 +11,8 @@ import {
   WorkspacePresenceContext,
   WorkspaceStateContext,
 } from "../app-state-contexts";
-import { useRepoSettingsOperations, useWorkspaceOperations } from "../operations";
+import { useRepoSettingsOperations } from "../operations/workspace/use-repo-settings-operations";
+import { useWorkspaceOperations } from "../operations/workspace/use-workspace-operations";
 
 export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace, setActiveWorkspace } = useActiveWorkspaceContext();

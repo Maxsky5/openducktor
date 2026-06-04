@@ -6,6 +6,7 @@ import type { AgentChatComposerDraft } from "@/components/features/agents/agent-
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -15,6 +16,13 @@ import {
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { keepStablePendingInputCounts } from "./selected-session/selected-session-context";
 import { useAgentStudioHeaderModel } from "./use-agent-studio-page-submodels";
+
+const EMPTY_ACTIVE_COMPOSER_PENDING_APPROVALS = Object.freeze(
+  [],
+) as unknown as AgentSessionState["pendingApprovals"];
+const EMPTY_ACTIVE_COMPOSER_PENDING_QUESTIONS = Object.freeze(
+  [],
+) as unknown as AgentSessionState["pendingQuestions"];
 
 const useStablePendingInputCounts = (
   nextCounts: Record<string, number>,
@@ -198,8 +206,10 @@ export function useAgentStudioPageModels({
   const activeComposerSelectedModel = selectedActiveComposerSession?.selectedModel ?? null;
   const activeComposerIsLoadingModelCatalog =
     selectedActiveComposerSession?.isLoadingModelCatalog ?? false;
-  const activeComposerPendingApprovals = selectedActiveComposerSession?.pendingApprovals ?? [];
-  const activeComposerPendingQuestions = selectedActiveComposerSession?.pendingQuestions ?? [];
+  const activeComposerPendingApprovals =
+    selectedActiveComposerSession?.pendingApprovals ?? EMPTY_ACTIVE_COMPOSER_PENDING_APPROVALS;
+  const activeComposerPendingQuestions =
+    selectedActiveComposerSession?.pendingQuestions ?? EMPTY_ACTIVE_COMPOSER_PENDING_QUESTIONS;
   const activeComposerSession = useMemo(
     () =>
       activeComposerExternalSessionId

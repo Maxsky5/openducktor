@@ -13,7 +13,7 @@ import type {
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { getNeededCatalogRuntimeKinds } from "@/components/features/settings";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import {
@@ -367,11 +367,9 @@ export const useSettingsModalController = ({
     updateSelectedRepoConfig,
   });
 
-  useEffect(() => {
-    if (!open) {
-      clearSettingsError();
-    }
-  }, [clearSettingsError, open]);
+  if (!open && settingsError !== null) {
+    clearSettingsError();
+  }
 
   return {
     isLoadingSettings,

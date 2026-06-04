@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
@@ -59,42 +59,20 @@ export function useAgentStudioQuestionActions({
     [activeExternalSessionId, agentStudioReady, answerAgentQuestion],
   );
 
-  useEffect(() => {
+  const isSubmittingQuestionByRequestId = useMemo(() => {
     if (!activeExternalSessionId) {
-      return;
+      return {};
     }
+
+    const sessionRequests = submittingQuestionBySessionId[activeExternalSessionId] ?? {};
     const activeRequestIds = new Set(pendingQuestions.map((entry) => entry.requestId));
-    setSubmittingQuestionBySessionId((current) => {
-      const sessionRequests = current[activeExternalSessionId];
-      if (!sessionRequests) {
-        return current;
-      }
-      let changed = false;
-      const next: Record<string, boolean> = {};
-      for (const [requestId, isSubmitting] of Object.entries(sessionRequests)) {
-        if (!activeRequestIds.has(requestId)) {
-          changed = true;
-          continue;
-        }
-        next[requestId] = isSubmitting;
-      }
-      if (!changed) {
-        return current;
-      }
-      const nextBySession = { ...current };
-      if (Object.keys(next).length === 0) {
-        delete nextBySession[activeExternalSessionId];
-      } else {
-        nextBySession[activeExternalSessionId] = next;
-      }
-      return nextBySession;
-    });
-  }, [activeExternalSessionId, pendingQuestions]);
+    return Object.fromEntries(
+      Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
+    );
+  }, [activeExternalSessionId, pendingQuestions, submittingQuestionBySessionId]);
 
   return {
-    isSubmittingQuestionByRequestId: activeExternalSessionId
-      ? (submittingQuestionBySessionId[activeExternalSessionId] ?? {})
-      : {},
+    isSubmittingQuestionByRequestId,
     onSubmitQuestionAnswers,
   };
 }

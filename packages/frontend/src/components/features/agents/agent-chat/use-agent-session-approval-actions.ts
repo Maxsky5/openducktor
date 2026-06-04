@@ -1,5 +1,5 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
 
 type UseAgentSessionApprovalActionsParams = {
@@ -61,26 +61,35 @@ export function useAgentSessionApprovalActions({
   const [approvalReplyErrorByRequestId, setApprovalReplyErrorByRequestId] = useState<
     Record<string, string>
   >({});
-  const previousSessionIdRef = useRef<string | null>(activeExternalSessionId);
+  const pendingApprovalRequestIdsKey = useMemo(
+    () => JSON.stringify(pendingApprovals.map((request) => request.requestId)),
+    [pendingApprovals],
+  );
+  const [resetInputs, setResetInputs] = useState({
+    activeExternalSessionId,
+    pendingApprovalRequestIdsKey,
+  });
 
-  useEffect(() => {
-    if (previousSessionIdRef.current === activeExternalSessionId) {
-      return;
+  if (
+    resetInputs.activeExternalSessionId !== activeExternalSessionId ||
+    resetInputs.pendingApprovalRequestIdsKey !== pendingApprovalRequestIdsKey
+  ) {
+    const sessionChanged = resetInputs.activeExternalSessionId !== activeExternalSessionId;
+    setResetInputs({ activeExternalSessionId, pendingApprovalRequestIdsKey });
+
+    if (sessionChanged) {
+      setIsSubmittingApprovalByRequestId({});
+      setApprovalReplyErrorByRequestId({});
+    } else {
+      const pendingRequestIds = new Set(pendingApprovals.map((request) => request.requestId));
+      setIsSubmittingApprovalByRequestId((current) =>
+        filterBooleanMapByPendingRequestIds(current, pendingRequestIds),
+      );
+      setApprovalReplyErrorByRequestId((current) =>
+        filterStringMapByPendingRequestIds(current, pendingRequestIds),
+      );
     }
-    previousSessionIdRef.current = activeExternalSessionId;
-    setIsSubmittingApprovalByRequestId({});
-    setApprovalReplyErrorByRequestId({});
-  }, [activeExternalSessionId]);
-
-  useEffect(() => {
-    const pendingRequestIds = new Set(pendingApprovals.map((request) => request.requestId));
-    setIsSubmittingApprovalByRequestId((current) =>
-      filterBooleanMapByPendingRequestIds(current, pendingRequestIds),
-    );
-    setApprovalReplyErrorByRequestId((current) =>
-      filterStringMapByPendingRequestIds(current, pendingRequestIds),
-    );
-  }, [pendingApprovals]);
+  }
 
   const onReplyApproval = useCallback(
     async (requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> => {

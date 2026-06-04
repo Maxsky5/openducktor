@@ -16,7 +16,7 @@ export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@opendu
 
 type SessionPresenceReader = (input: AgentSessionRef) => Promise<AgentSessionPresenceSnapshot>;
 
-export const toMissingRuntimeAgentSessionPresenceSnapshot = ({
+const toMissingRuntimeAgentSessionPresenceSnapshot = ({
   record,
   repoPath,
   runtimeKind,

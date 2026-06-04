@@ -5,7 +5,7 @@ import type {
   AutopilotSettings,
 } from "@openducktor/contracts";
 import { AUTOPILOT_EVENT_IDS, createDefaultAutopilotSettings } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
+import type { AgentRole, AgentSessionStartMode } from "@openducktor/core";
 import type { SessionLaunchActionId } from "@/features/session-start/session-start-launch-options";
 
 export const AUTOPILOT_DISABLED_VALUE = "disabled" as const;
@@ -18,7 +18,19 @@ export type AutopilotActionDefinition = {
   description: string;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
+  startPolicy: AutopilotActionStartPolicy;
 };
+
+export type AutopilotActionStartPolicy =
+  | {
+      kind: "launchAction";
+      missingBuildTargetOutcome: "skip";
+    }
+  | {
+      kind: "latestRoleSession";
+      missingSourceOutcome: "skip";
+      startMode: AgentSessionStartMode;
+    };
 
 export type AutopilotEventDefinition = {
   id: AutopilotEventId;
@@ -35,6 +47,7 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
       "Start the Planner workflow when a task becomes ready for implementation planning.",
     role: "planner",
     launchActionId: "planner_initial",
+    startPolicy: { kind: "launchAction", missingBuildTargetOutcome: "skip" },
   },
   startBuilder: {
     id: "startBuilder",
@@ -42,6 +55,7 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
     description: "Start or continue Builder implementation when planning is complete.",
     role: "build",
     launchActionId: "build_implementation_start",
+    startPolicy: { kind: "launchAction", missingBuildTargetOutcome: "skip" },
   },
   startQa: {
     id: "startQa",
@@ -49,6 +63,7 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
     description: "Start or continue QA review once implementation reaches AI review.",
     role: "qa",
     launchActionId: "qa_review",
+    startPolicy: { kind: "launchAction", missingBuildTargetOutcome: "skip" },
   },
   startReviewQaFeedbacks: {
     id: "startReviewQaFeedbacks",
@@ -56,6 +71,7 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
     description: "Resume Builder to address rejected QA findings at the root cause.",
     role: "build",
     launchActionId: "build_after_qa_rejected",
+    startPolicy: { kind: "launchAction", missingBuildTargetOutcome: "skip" },
   },
   startGeneratePullRequest: {
     id: "startGeneratePullRequest",
@@ -63,6 +79,7 @@ export const AUTOPILOT_ACTION_DEFINITIONS: Record<AutopilotActionId, AutopilotAc
     description: "Fork from the latest Builder session to generate or update the pull request.",
     role: "build",
     launchActionId: "build_pull_request_generation",
+    startPolicy: { kind: "latestRoleSession", missingSourceOutcome: "skip", startMode: "fork" },
   },
 };
 
@@ -98,11 +115,6 @@ export const AUTOPILOT_EVENT_DEFINITIONS: AutopilotEventDefinition[] = [
     availableActionIds: ["startGeneratePullRequest"],
   },
 ];
-
-export const AUTOPILOT_EVENT_DEFINITION_BY_ID: Record<AutopilotEventId, AutopilotEventDefinition> =
-  Object.fromEntries(
-    AUTOPILOT_EVENT_DEFINITIONS.map((definition) => [definition.id, definition]),
-  ) as Record<AutopilotEventId, AutopilotEventDefinition>;
 
 export const getAutopilotRule = (
   settings: AutopilotSettings,

@@ -12,6 +12,7 @@ export type LoadDataContext = {
   targetBranch: string;
   workingDir: string | null;
   scope: DiffScope;
+  requestContextKey?: string | null;
   mode?: LoadDataMode;
   force?: boolean;
   hydrateCachedFullLoad?: boolean;
@@ -21,6 +22,7 @@ export type LoadDataContext = {
 export type InFlightRequestContext = LoadRequestContext & {
   mode: LoadDataMode;
   requestKey: string;
+  requestContextKey: string | null;
   requestSequence: number;
   version: number;
 };
@@ -52,6 +54,7 @@ export type UseAgentStudioDiffLoaderArgs = DiffLoadRefs & {
   finishRequest: DiffRequestController["finishRequest"];
   markScopeInvalidated: DiffRequestController["markScopeInvalidated"];
   shouldApplyResult: DiffRequestController["shouldApplyResult"];
+  onLoadApplied?: ((requestContextKey: string) => void) | undefined;
 };
 
 export type UseAgentStudioDiffLoaderResult = {

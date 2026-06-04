@@ -11,10 +11,10 @@ import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
-export const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
-export const SESSION_SKILLS_STALE_TIME_MS = 5 * 60_000;
-export const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
-export const SESSION_HISTORY_STALE_TIME_MS = 0;
+const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
+const SESSION_SKILLS_STALE_TIME_MS = 5 * 60_000;
+const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
+const SESSION_HISTORY_STALE_TIME_MS = 0;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 export const agentSessionRuntimeQueryKeys = {

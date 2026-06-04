@@ -32,7 +32,7 @@ import {
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-card-tool-presenters";
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
-import { assistantRoleIcon } from "./assistant-role-icon";
+import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
@@ -159,7 +159,9 @@ export const MessageHeader = ({
       <span className="inline-flex items-center gap-1">
         {message.role === "thinking" ? <Brain className="size-3" /> : null}
         {message.role === "tool" ? <Hammer className="size-3" /> : null}
-        {message.role === "assistant" && assistantRole ? assistantRoleIcon(assistantRole) : null}
+        {message.role === "assistant" && assistantRole ? (
+          <AssistantRoleIcon role={assistantRole} />
+        ) : null}
         {roleLabel(message.role, message)}
       </span>
       {timeLabel ? <span className="font-normal normal-case">{timeLabel}</span> : null}

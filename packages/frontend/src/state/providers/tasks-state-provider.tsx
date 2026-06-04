@@ -8,7 +8,7 @@ import {
   TasksStateContext,
   useActiveWorkspaceContext,
 } from "../app-state-contexts";
-import { useTaskOperations } from "../operations";
+import { useTaskOperations } from "../operations/tasks/use-task-operations";
 
 export function TasksStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace } = useActiveWorkspaceContext();

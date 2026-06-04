@@ -29,14 +29,14 @@ export function useCopyToClipboard({
   const [copied, setCopied] = useState(false);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (resetTimeoutRef.current) {
-        clearTimeout(resetTimeoutRef.current);
-        resetTimeoutRef.current = null;
-      }
-    };
+  const clearResetTimeout = useCallback(() => {
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
   }, []);
+
+  useEffect(() => clearResetTimeout, [clearResetTimeout]);
 
   const copyToClipboard = useCallback(
     async (value: string): Promise<boolean> => {
