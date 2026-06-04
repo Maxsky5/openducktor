@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runCommand } from "@openducktor/build-tools";
 import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
 import { prepareElectronSidecars } from "./prepare-electron-sidecars";
 import { verifyPackagedElectronSidecars } from "./verify-electron-sidecar-package";
@@ -17,13 +17,6 @@ export type ElectronPackageBuildOptions = {
   signed: boolean;
   stageReleaseArtifacts: boolean;
   workspaceRoot: string;
-};
-
-type RunCommandInput = {
-  args: string[];
-  command: string;
-  cwd: string;
-  env?: NodeJS.ProcessEnv;
 };
 
 const platformFlags: Record<ElectronReleasePlatform, "--linux" | "--mac" | "--win"> = {
@@ -126,28 +119,6 @@ const readReleaseDirectoryEntries = async (releaseDirectory: string) => {
   }
 };
 
-const runCommand = ({ args, command, cwd, env = process.env }: RunCommandInput): Promise<void> =>
-  new Promise((resolveCommand, rejectCommand) => {
-    const child = spawn(command, args, {
-      cwd,
-      env,
-      shell: process.platform === "win32",
-      stdio: "inherit",
-    });
-
-    child.on("error", rejectCommand);
-    child.on("exit", (exitCode) => {
-      if (exitCode === 0) {
-        resolveCommand();
-        return;
-      }
-
-      rejectCommand(
-        new Error(`${command} ${args.join(" ")} exited with code ${exitCode ?? "unknown"}`),
-      );
-    });
-  });
-
 export const collectReleaseArtifacts = async ({
   outputDirectory,
   platform,
@@ -200,20 +171,21 @@ export const buildElectronPackage = async ({
   });
 
   await runCommand({
-    args: ["run", "build"],
-    command: "bun",
+    command: ["bun", "run", "build"],
     cwd: electronPackageDirectory,
+    label: "Electron app build",
   });
   await runCommand({
-    args: [
+    command: [
+      "bun",
       "run",
       "builder",
       "--",
       ...resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
     ],
-    command: "bun",
     cwd: electronPackageDirectory,
     env: resolveElectronBuilderEnv(signed, process.env),
+    label: "Electron Builder package",
   });
 
   const verifiedSidecars = await verifyPackagedElectronSidecars({

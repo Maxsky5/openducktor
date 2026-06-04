@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { runCommand } from "../../../scripts/package-build-helpers";
+import { runCommand } from "@openducktor/build-tools";
 import {
   type ElectronExternalSidecarAsset,
   electronExternalSidecarAssetFileName,

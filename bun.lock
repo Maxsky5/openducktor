@@ -24,6 +24,7 @@
         "@openducktor/host-client": "workspace:*",
       },
       "devDependencies": {
+        "@openducktor/build-tools": "workspace:*",
         "@tailwindcss/vite": "^4.3.0",
         "@types/node": "^25.9.1",
         "@vitejs/plugin-react": "^6.0.2",
@@ -50,6 +51,13 @@
         "@opencode-ai/sdk": "^1.15.13",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
+      },
+    },
+    "packages/build-tools": {
+      "name": "@openducktor/build-tools",
+      "version": "0.3.1",
+      "devDependencies": {
+        "bun-types": "^1.3.14",
       },
     },
     "packages/contracts": {
@@ -153,6 +161,7 @@
         "zod": "^4.4.3",
       },
       "devDependencies": {
+        "@openducktor/build-tools": "workspace:*",
         "@openducktor/contracts": "workspace:*",
         "@openducktor/path-support": "workspace:*",
         "bun-types": "^1.3.14",
@@ -166,6 +175,7 @@
         "openducktor-web": "dist/cli.js",
       },
       "devDependencies": {
+        "@openducktor/build-tools": "workspace:*",
         "@openducktor/frontend": "workspace:*",
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
@@ -327,6 +337,8 @@
     "@openducktor/adapters-codex-app-server": ["@openducktor/adapters-codex-app-server@workspace:packages/adapters-codex-app-server"],
 
     "@openducktor/adapters-opencode-sdk": ["@openducktor/adapters-opencode-sdk@workspace:packages/adapters-opencode-sdk"],
+
+    "@openducktor/build-tools": ["@openducktor/build-tools@workspace:packages/build-tools"],
 
     "@openducktor/contracts": ["@openducktor/contracts@workspace:packages/contracts"],
 
