@@ -3,18 +3,41 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
+import { resolveProcessCommandPath } from "../../../infrastructure/process/process-command-resolution";
 import { createToolDiscoveryAdapter } from "../../system/tool-discovery";
 import type { BeadsSharedServerContext } from "../beads-cli-context";
 
-export const createTestToolDiscoveryPort = (missingCommands: string[] = []) =>
-  createToolDiscoveryAdapter({
+type TestToolDiscoveryOptions = {
+  env?: NodeJS.ProcessEnv;
+  missingCommands?: string[];
+};
+
+export const createTestToolDiscoveryPort = (input: string[] | TestToolDiscoveryOptions = {}) => {
+  const missingCommands = Array.isArray(input) ? input : (input.missingCommands ?? []);
+  const env = Array.isArray(input) ? process.env : (input.env ?? process.env);
+
+  return createToolDiscoveryAdapter({
+    env,
     systemCommands: {
-      resolveCommandPath: (command) =>
-        Effect.succeed(missingCommands.includes(command) ? null : command),
+      resolveCommandPath: (command, options = {}) => {
+        if (missingCommands.includes(command)) {
+          return Effect.succeed(null);
+        }
+
+        return resolveProcessCommandPath(command, {
+          env: options.env ?? env,
+          platform: process.platform,
+          ...(options.searchPath === undefined ? {} : { searchPath: options.searchPath }),
+        }).pipe(
+          Effect.catchAll(() => Effect.succeed(null)),
+          Effect.map((resolvedCommand) => resolvedCommand ?? command),
+        );
+      },
       runCommandAllowFailure: () => Effect.succeed({ ok: false, stdout: "", stderr: "" }),
       versionCommand: () => Effect.succeed(null),
     },
   });
+};
 
 export const createTestBeadsCliContext = (
   beadsDir: string,
@@ -113,6 +136,26 @@ exit 1
   );
   await chmod(doltPath, 0o755);
   return doltPath;
+};
+
+export const createProcessEnvWithFakeDolt = async ({
+  prefix = "odt-fake-dolt-bin-",
+  tempDirectories,
+  version = "2.1.2",
+}: {
+  prefix?: string;
+  tempDirectories?: Set<string>;
+  version?: string;
+} = {}): Promise<NodeJS.ProcessEnv> => {
+  const binDir = await mkdtemp(path.join(tmpdir(), prefix));
+  tempDirectories?.add(binDir);
+  await createFakeDolt(binDir, version);
+
+  const existingPath = process.env.PATH ?? process.env.Path;
+  return {
+    ...process.env,
+    PATH: [binDir, existingPath].filter(Boolean).join(path.delimiter),
+  };
 };
 
 export const testOperationError = (cause: unknown) =>
