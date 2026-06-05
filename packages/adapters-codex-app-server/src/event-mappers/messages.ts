@@ -16,7 +16,6 @@ import { noCodexMapperState } from "../codex-event-mapper";
 import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
-  codexUserTextToDisplayParts,
 } from "../codex-user-input-display";
 
 export const userMessageMapper: CodexEventMapper = {
@@ -59,7 +58,7 @@ export const userMessageMapper: CodexEventMapper = {
           displayParts:
             parts.length > 0
               ? codexUserInputsToDisplayParts(parts, messageId)
-              : codexUserTextToDisplayParts(message),
+              : [{ kind: "text", text: message }],
           state: "read",
         },
       ],

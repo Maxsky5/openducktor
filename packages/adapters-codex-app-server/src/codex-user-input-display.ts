@@ -366,14 +366,11 @@ const codexFileReferenceFromTextElement = (
   textOffset: number,
 ): Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }> | null => {
   const sourceValue = input.text.slice(range.start, range.end);
-  const pathMarker = sourceValue.startsWith("@")
-    ? sourceValue
-    : codexTextElementMarker(input, element, range);
-  if (!pathMarker.startsWith("@")) {
+  if (!sourceValue.startsWith("@")) {
     return null;
   }
 
-  const path = pathMarker.slice(1).trim();
+  const path = sourceValue.slice(1).trim();
   if (path.length === 0 || externalMentionSchemePattern.test(path)) {
     return null;
   }
@@ -513,10 +510,6 @@ const codexTextFileEchoToDisplayParts = (
     parts.push({ kind: "text", text: suffix });
   }
   return parts;
-};
-
-export const codexUserTextToDisplayParts = (text: string): AgentUserMessageDisplayPart[] => {
-  return [{ kind: "text", text }];
 };
 
 const collectCodexMarkedSkillMarkerCounts = (input: CodexUserInput[]): Map<string, number> => {

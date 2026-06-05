@@ -30,7 +30,6 @@ import {
 import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
-  codexUserTextToDisplayParts,
   utf8ByteLength,
 } from "./codex-user-input-display";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers";
@@ -336,7 +335,7 @@ export const toHistoryMessage = (
       displayParts:
         input.length > 0
           ? codexUserInputsToDisplayParts(input, messageId)
-          : codexUserTextToDisplayParts(text),
+          : [{ kind: "text", text }],
       state: "read",
       parts: toHistoryParts(item, messageId, text),
       ...(model ? { model } : {}),
