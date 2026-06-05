@@ -1,65 +1,28 @@
 import { homedir } from "node:os";
-import { posix, win32 } from "node:path";
-import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
+import { normalizeUserPathInput } from "@openducktor/path-support";
 import { Deferred, Effect, FiberId } from "effect";
 import { HostDependencyError, HostValidationError } from "../../effect/host-errors";
 import { isExecutableCommandFile } from "../../infrastructure/process/process-command-resolution";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type {
+  ResolvedTool,
   ToolDiscoveryError,
   ToolDiscoveryId,
   ToolDiscoveryPort,
+  ToolDiscoverySourceCategory,
 } from "../../ports/tool-discovery-port";
+import {
+  DEFAULT_MACOS_APPLICATIONS_DIR,
+  describeLocations,
+  resolveUserPathForContext,
+  TOOL_DISCOVERY_DESCRIPTORS,
+  type ToolDiscoveryContext,
+  type ToolDiscoveryDescriptor,
+  type ToolDiscoveryPathOptions,
+  type ToolDiscoverySource,
+} from "./tool-discovery-descriptors";
 
-export type ToolDiscoveryPathOptions = {
-  applicationsDir?: string;
-  bundledToolBinDirs?: Partial<Record<ToolDiscoveryId, string>>;
-  homeDir?: string;
-  platform?: NodeJS.Platform;
-  providedToolPaths?: Partial<Record<ToolDiscoveryId, string>>;
-};
-
-type ToolDiscoveryContext = {
-  applicationsDir: string;
-  bundledToolBinDirs: Partial<Record<ToolDiscoveryId, string>>;
-  homeDir: string;
-  platform: NodeJS.Platform;
-  providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
-};
-
-type ToolDiscoverySource =
-  | {
-      directories: (context: ToolDiscoveryContext) => (string | undefined)[];
-      kind: "searchDirectories";
-      label?: string;
-      policy: "candidate" | "required";
-    }
-  | {
-      candidates: (context: ToolDiscoveryContext) => string[];
-      kind: "candidateFiles";
-      label: string;
-    };
-
-type ToolDiscoveryDescriptor = {
-  command: string;
-  displayName: string;
-  installHint: string;
-  overrideVariable: string;
-  sources: ToolDiscoverySource[];
-};
-
-const DEFAULT_MACOS_APPLICATIONS_DIR = "/Applications";
-
-const joinToolPath = (
-  context: Pick<ToolDiscoveryContext, "platform">,
-  ...segments: string[]
-): string => (context.platform === "win32" ? win32.join(...segments) : posix.join(...segments));
-
-const resolveUserPathForContext = (rawPath: string, context: ToolDiscoveryContext): string =>
-  resolveNormalizedUserPath(normalizeUserPathInput(rawPath), {
-    homeDir: context.homeDir,
-    joinHomePath: (homeDir, relativePath) => joinToolPath(context, homeDir, relativePath),
-  });
+export type { ToolDiscoveryPathOptions } from "./tool-discovery-descriptors";
 
 const createToolDiscoveryContext = ({
   applicationsDir,
@@ -98,9 +61,6 @@ const resolveDirectoryCommand = (
       .pipe(Effect.catchTag("HostPathAccessError", () => Effect.succeed(null)));
   });
 
-const describeLocations = (locations: string[]): string =>
-  locations.length > 0 ? locations.join(", ") : "none configured";
-
 const invalidOverrideError = (
   descriptor: ToolDiscoveryDescriptor,
   variable: string,
@@ -129,15 +89,19 @@ const resolveExplicitToolPathSource = ({
   context,
   detailKey,
   env,
+  displayLabel,
   invalidError,
   rawPath,
+  sourceCategory,
   systemCommands,
 }: {
   context: ToolDiscoveryContext;
   detailKey: string;
+  displayLabel: string;
   env: NodeJS.ProcessEnv;
   invalidError: (message: string, details?: Record<string, unknown>) => HostValidationError;
   rawPath: string;
+  sourceCategory: ToolDiscoverySourceCategory;
   systemCommands: SystemCommandPort;
 }) =>
   Effect.gen(function* () {
@@ -146,13 +110,10 @@ const resolveExplicitToolPathSource = ({
       return yield* Effect.fail(invalidError("is empty"));
     }
 
-    const resolvedPath = resolveNormalizedUserPath(normalizedPath, {
-      homeDir: context.homeDir,
-      joinHomePath: (homeDir, relativePath) => joinToolPath(context, homeDir, relativePath),
-    });
+    const resolvedPath = resolveUserPathForContext(normalizedPath, context);
     const resolved = yield* resolvePathCommand(resolvedPath, systemCommands, env);
     if (resolved !== null) {
-      return resolved;
+      return { displayLabel, path: resolved, sourceCategory } satisfies ResolvedTool;
     }
 
     return yield* Effect.fail(
@@ -174,6 +135,21 @@ const missingToolError = (
       ", ",
     )}. ${descriptor.installHint}`,
     details,
+  });
+
+const missingRequiredSourceError = (
+  descriptor: ToolDiscoveryDescriptor,
+  checked: readonly string[],
+  source: Extract<ToolDiscoverySource, { kind: "searchDirectories" }>,
+  directories: readonly string[],
+) =>
+  new HostDependencyError({
+    dependency: descriptor.command,
+    operation: "toolDiscovery.discoverTool",
+    message:
+      source.requiredMissingMessage?.({ descriptor, directories }) ??
+      `${descriptor.command} not found. Checked ${checked.join(", ")}. ${descriptor.installHint}`,
+    details: { directories },
   });
 
 const discoverDescriptorToolPath = ({
@@ -198,10 +174,12 @@ const discoverDescriptorToolPath = ({
       return yield* resolveExplicitToolPathSource({
         context,
         detailKey: "resolvedOverride",
+        displayLabel: "Environment override",
         env,
         invalidError: (message, details) =>
           invalidOverrideError(descriptor, descriptor.overrideVariable, message, details),
         rawPath: rawOverride,
+        sourceCategory: "environment_override",
         systemCommands,
       });
     }
@@ -212,10 +190,12 @@ const discoverDescriptorToolPath = ({
       return yield* resolveExplicitToolPathSource({
         context,
         detailKey: "resolvedProvidedPath",
+        displayLabel: "Provided path",
         env,
         invalidError: (message, details) =>
           invalidProvidedToolPathError(descriptor, toolId, message, details),
         rawPath: rawProvidedPath,
+        sourceCategory: "provided_path",
         systemCommands,
       });
     }
@@ -227,7 +207,11 @@ const discoverDescriptorToolPath = ({
           checked.push(`${source.label} (${describeLocations(candidates)})`);
           for (const candidate of candidates) {
             if (yield* isExecutableCommandFile(candidate, context.platform)) {
-              return candidate;
+              return {
+                displayLabel: source.displayLabel ?? source.label,
+                path: candidate,
+                sourceCategory: source.sourceCategory ?? "system_path",
+              } satisfies ResolvedTool;
             }
           }
           break;
@@ -251,10 +235,16 @@ const discoverDescriptorToolPath = ({
             env,
           );
           if (resolved !== null) {
-            return resolved;
+            return {
+              displayLabel: source.displayLabel ?? source.label ?? "Search directory",
+              path: resolved,
+              sourceCategory: source.sourceCategory ?? "system_path",
+            } satisfies ResolvedTool;
           }
           if (source.policy === "required") {
-            return yield* Effect.fail(missingToolError(descriptor, checked, { directories }));
+            return yield* Effect.fail(
+              missingRequiredSourceError(descriptor, checked, source, directories),
+            );
           }
           break;
         }
@@ -264,7 +254,11 @@ const discoverDescriptorToolPath = ({
     checked.push("PATH");
     const pathCommand = yield* resolvePathCommand(descriptor.command, systemCommands, env);
     if (pathCommand !== null) {
-      return pathCommand;
+      return {
+        displayLabel: "System PATH",
+        path: pathCommand,
+        sourceCategory: "system_path",
+      } satisfies ResolvedTool;
     }
 
     return yield* Effect.fail(missingToolError(descriptor, checked));
@@ -283,116 +277,8 @@ const discoverToolPath = (
     toolId,
   });
 
-const commandTool = ({
-  command,
-  displayName = command,
-  installHint,
-  overrideVariable,
-  sources = [],
-}: {
-  command: string;
-  displayName?: string;
-  installHint?: string;
-  overrideVariable: string;
-  sources?: ToolDiscoverySource[];
-}): ToolDiscoveryDescriptor => ({
-  command,
-  displayName,
-  installHint:
-    installHint ??
-    `Install ${command} and ensure it is available on PATH, or set ${overrideVariable}.`,
-  overrideVariable,
-  sources,
-});
-
-const BUN_TOOL_DESCRIPTOR = commandTool({
-  command: "bun",
-  overrideVariable: "OPENDUCKTOR_BUN_PATH",
-});
-const GIT_TOOL_DESCRIPTOR = commandTool({
-  command: "git",
-  overrideVariable: "OPENDUCKTOR_GIT_PATH",
-});
-const GITHUB_CLI_TOOL_DESCRIPTOR = commandTool({
-  command: "gh",
-  displayName: "GitHub CLI",
-  installHint: "Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
-  overrideVariable: "OPENDUCKTOR_GH_PATH",
-});
-const BEADS_TOOL_DESCRIPTOR = commandTool({
-  command: "bd",
-  displayName: "Beads",
-  overrideVariable: "OPENDUCKTOR_BD_PATH",
-});
-const DOLT_TOOL_DESCRIPTOR = commandTool({
-  command: "dolt",
-  displayName: "Dolt",
-  overrideVariable: "OPENDUCKTOR_DOLT_PATH",
-});
-
-const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
-  command: "opencode",
-  displayName: "OpenCode",
-  installHint: "Install opencode or set OPENDUCKTOR_OPENCODE_BINARY.",
-  overrideVariable: "OPENDUCKTOR_OPENCODE_BINARY",
-  sources: [
-    {
-      directories: (context) => [context.bundledToolBinDirs.opencode],
-      kind: "searchDirectories",
-      label: "bundled tool directory",
-      policy: "required",
-    },
-    {
-      directories: (context) => [joinToolPath(context, context.homeDir, ".opencode", "bin")],
-      kind: "searchDirectories",
-      label: "standard install directories",
-      policy: "candidate",
-    },
-  ],
-});
-
-const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
-  command: "codex",
-  displayName: "Codex",
-  installHint: "Install codex, fix PATH, or set OPENDUCKTOR_CODEX_BINARY.",
-  overrideVariable: "OPENDUCKTOR_CODEX_BINARY",
-  sources: [
-    {
-      directories: (context) => [context.bundledToolBinDirs.codex],
-      kind: "searchDirectories",
-      label: "bundled tool directory",
-      policy: "required",
-    },
-    {
-      candidates: (context) => {
-        if (context.platform !== "darwin") {
-          return [];
-        }
-        const appPath = ["Codex.app", "Contents", "Resources", "codex"];
-        const applicationsDir = resolveUserPathForContext(context.applicationsDir, context);
-        return [
-          joinToolPath(context, applicationsDir, ...appPath),
-          joinToolPath(context, context.homeDir, "Applications", ...appPath),
-        ];
-      },
-      kind: "candidateFiles",
-      label: "standard install locations",
-    },
-  ],
-});
-
-const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDescriptor> = {
-  beads: BEADS_TOOL_DESCRIPTOR,
-  bun: BUN_TOOL_DESCRIPTOR,
-  codex: CODEX_TOOL_DESCRIPTOR,
-  dolt: DOLT_TOOL_DESCRIPTOR,
-  git: GIT_TOOL_DESCRIPTOR,
-  githubCli: GITHUB_CLI_TOOL_DESCRIPTOR,
-  opencode: OPENCODE_TOOL_DESCRIPTOR,
-};
-
 type ToolDiscoveryFlight = {
-  deferred: Deferred.Deferred<string, ToolDiscoveryError>;
+  deferred: Deferred.Deferred<ResolvedTool, ToolDiscoveryError>;
 };
 
 const makeToolDiscoveryFlight = (): ToolDiscoveryFlight => ({
@@ -408,14 +294,14 @@ export const createToolDiscoveryAdapter = ({
   options?: ToolDiscoveryPathOptions;
   systemCommands: SystemCommandPort;
 }): ToolDiscoveryPort => {
-  const cachedPaths = new Map<ToolDiscoveryId, string>();
+  const cachedTools = new Map<ToolDiscoveryId, ResolvedTool>();
   const flights = new Map<ToolDiscoveryId, ToolDiscoveryFlight>();
 
   const completeFlight = (toolId: ToolDiscoveryId, flight: ToolDiscoveryFlight) =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(discoverToolPath(toolId, systemCommands, env, options));
       if (exit._tag === "Success") {
-        cachedPaths.set(toolId, exit.value);
+        cachedTools.set(toolId, exit.value);
       }
       yield* Deferred.done(flight.deferred, exit);
     }).pipe(
@@ -428,42 +314,47 @@ export const createToolDiscoveryAdapter = ({
       ),
     );
 
+  const resolveTool: ToolDiscoveryPort["resolveTool"] = (toolId) => {
+    const cachedTool = cachedTools.get(toolId);
+    if (cachedTool !== undefined) {
+      return Effect.succeed(cachedTool);
+    }
+
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const reservation = yield* Effect.sync(() => {
+          const reservedCachedTool = cachedTools.get(toolId);
+          if (reservedCachedTool !== undefined) {
+            return { _tag: "cached" as const, tool: reservedCachedTool };
+          }
+
+          const existingFlight = flights.get(toolId);
+          if (existingFlight) {
+            return { _tag: "existing" as const, flight: existingFlight };
+          }
+
+          const flight = makeToolDiscoveryFlight();
+          flights.set(toolId, flight);
+          return { _tag: "created" as const, flight };
+        });
+
+        if (reservation._tag === "cached") {
+          return reservation.tool;
+        }
+
+        if (reservation._tag === "created") {
+          yield* Effect.forkDaemon(completeFlight(toolId, reservation.flight));
+        }
+
+        return yield* restore(Deferred.await(reservation.flight.deferred));
+      }),
+    );
+  };
+
   return {
+    resolveTool,
     resolveToolPath(toolId) {
-      const cachedPath = cachedPaths.get(toolId);
-      if (cachedPath !== undefined) {
-        return Effect.succeed(cachedPath);
-      }
-
-      return Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const reservation = yield* Effect.sync(() => {
-            const reservedCachedPath = cachedPaths.get(toolId);
-            if (reservedCachedPath !== undefined) {
-              return { _tag: "cached" as const, path: reservedCachedPath };
-            }
-
-            const existingFlight = flights.get(toolId);
-            if (existingFlight) {
-              return { _tag: "existing" as const, flight: existingFlight };
-            }
-
-            const flight = makeToolDiscoveryFlight();
-            flights.set(toolId, flight);
-            return { _tag: "created" as const, flight };
-          });
-
-          if (reservation._tag === "cached") {
-            return reservation.path;
-          }
-
-          if (reservation._tag === "created") {
-            yield* Effect.forkDaemon(completeFlight(toolId, reservation.flight));
-          }
-
-          return yield* restore(Deferred.await(reservation.flight.deferred));
-        }),
-      );
+      return resolveTool(toolId).pipe(Effect.map((resolvedTool) => resolvedTool.path));
     },
   };
 };

@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cleanDirectory, runCommand } from "../../../scripts/package-build-helpers";
+import { cleanDirectory, runCommand } from "@openducktor/build-tools";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");

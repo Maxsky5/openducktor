@@ -1,30 +1,21 @@
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
-import type {
-  ResolveBeadsCliContextOptions,
-  ResolveBeadsCliContextRequestOptions,
-} from "../../infrastructure/beads/beads-context-model";
+import type { ResolveBeadsCliContextRequestOptions } from "../../infrastructure/beads/beads-context-model";
 import {
   beadsCliContextCacheKey,
   canonicalOrAbsolute,
 } from "../../infrastructure/beads/beads-context-model";
 import type { ResolveWorkspaceIdForRepoPath } from "../../infrastructure/beads/task-store/beads-raw-issue";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
-import type { BeadsToolPaths, SharedDoltToolPaths } from "./beads-cli-context";
 
 export type BeadsCliContextRequest = {
   cacheKey: string;
-  options: ResolveBeadsCliContextOptions;
+  options: ResolveBeadsCliContextRequestOptions;
   repoPath: string;
 };
 
-type ToolPathResolver<ToolPaths> = () => Effect.Effect<ToolPaths, TaskStoreError>;
-
 export type CreateBeadsCliContextRequestResolverInput = {
   isClosing: () => boolean;
-  processEnv: NodeJS.ProcessEnv;
-  resolveBeadsToolPaths: ToolPathResolver<BeadsToolPaths>;
-  resolveSharedDoltToolPaths: ToolPathResolver<SharedDoltToolPaths>;
   resolveWorkspaceIdForRepoPath?: ResolveWorkspaceIdForRepoPath;
 };
 
@@ -36,13 +27,7 @@ const closingError = () =>
   });
 
 export const createBeadsCliContextRequestResolver =
-  ({
-    isClosing,
-    processEnv,
-    resolveBeadsToolPaths,
-    resolveSharedDoltToolPaths,
-    resolveWorkspaceIdForRepoPath,
-  }: CreateBeadsCliContextRequestResolverInput) =>
+  ({ isClosing, resolveWorkspaceIdForRepoPath }: CreateBeadsCliContextRequestResolverInput) =>
   (
     repoPath: string,
     options: ResolveBeadsCliContextRequestOptions = {},
@@ -57,22 +42,6 @@ export const createBeadsCliContextRequestResolver =
         typeof requestedWorkspaceId === "string" && requestedWorkspaceId.trim().length > 0
           ? requestedWorkspaceId.trim()
           : null;
-      const tools = yield* resolveBeadsToolPaths();
-      const cliOptions: ResolveBeadsCliContextOptions =
-        optionsWithoutWorkspaceId.requireSharedServer === true
-          ? {
-              ...optionsWithoutWorkspaceId,
-              processEnv,
-              requireSharedServer: true,
-              sharedDoltTools: yield* resolveSharedDoltToolPaths(),
-              tools,
-            }
-          : {
-              ...optionsWithoutWorkspaceId,
-              processEnv,
-              requireSharedServer: false,
-              tools,
-            };
       const workspaceId = configuredWorkspaceId
         ? configuredWorkspaceId
         : resolveWorkspaceIdForRepoPath
@@ -88,8 +57,8 @@ export const createBeadsCliContextRequestResolver =
           ? workspaceId.trim()
           : null;
       const effectiveOptions = normalizedWorkspaceId
-        ? { ...cliOptions, workspaceId: normalizedWorkspaceId }
-        : cliOptions;
+        ? { ...optionsWithoutWorkspaceId, workspaceId: normalizedWorkspaceId }
+        : optionsWithoutWorkspaceId;
       const canonicalRepoPath = yield* canonicalOrAbsolute(repoPath);
       const cacheKey = beadsCliContextCacheKey({
         canonicalRepoPath,

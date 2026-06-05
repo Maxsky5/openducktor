@@ -1,4 +1,5 @@
-import { mkdtemp } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -11,10 +12,12 @@ import {
   createTestBeadsCliContext as createBeadsCliContext,
   createExistingTestBeadsCliContext as createExistingBeadsCliContext,
   createFakeBd,
+  createProcessEnvWithFakeDolt,
   createTestToolDiscoveryPort as createToolDiscoveryPort,
 } from "./test-support/beads-test-support";
 
 const encodedMarkdown = (markdown: string): string => gzipSync(markdown).toString("base64");
+const tempDirectories = new Set<string>();
 type RawTaskFixture = { [key in string]?: BeadsCommandJsonOutput };
 const rawTask = (overrides: RawTaskFixture = {}): RawTaskFixture => ({
   id: "task-1",
@@ -29,12 +32,36 @@ const rawTask = (overrides: RawTaskFixture = {}): RawTaskFixture => ({
 });
 const createTestBeadsTaskRepository = (
   input: Omit<Parameters<typeof createBeadsTaskRepository>[0], "toolDiscovery">,
-  toolDiscovery = createToolDiscoveryPort(),
+  toolDiscovery = createToolDiscoveryPort(
+    input.processEnv === undefined ? {} : { env: input.processEnv },
+  ),
 ) =>
   createBeadsTaskRepository({
     toolDiscovery,
     ...input,
   });
+
+const makeTempDirectory = async (prefix: string): Promise<string> => {
+  const directory = await mkdtemp(path.join(tmpdir(), prefix));
+  tempDirectories.add(directory);
+  return directory;
+};
+
+const createRepositoryProcessEnvWithFakeDolt = () =>
+  createProcessEnvWithFakeDolt({
+    prefix: "odt-beads-repository-dolt-bin-",
+    tempDirectories,
+  });
+
+afterEach(async () => {
+  await Promise.all(
+    Array.from(tempDirectories, (tempDirectory) =>
+      rm(tempDirectory, { force: true, recursive: true }),
+    ),
+  );
+  tempDirectories.clear();
+});
+
 describe("createBeadsTaskRepository", () => {
   test("delegates close to the Beads CLI context manager", async () => {
     const context = await createExistingBeadsCliContext();
@@ -181,9 +208,10 @@ describe("createBeadsTaskRepository", () => {
   test("trims and forwards resolved workspace id for path-edge repo inputs", async () => {
     const context = await createExistingBeadsCliContext();
     const repoPath = path.join(
-      await mkdtemp(path.join(tmpdir(), "Repo With Spaces-")),
+      await makeTempDirectory("Repo With Spaces-"),
       "C-Users\\Max Sky\\Repo Name",
     );
+    const processEnv = await createRepositoryProcessEnvWithFakeDolt();
     const workspaceResolverCalls: string[] = [];
     const contextRequests: Array<{
       repoPath: string;
@@ -191,6 +219,7 @@ describe("createBeadsTaskRepository", () => {
       requireSharedServer: boolean | undefined;
     }> = [];
     const port = createTestBeadsTaskRepository({
+      processEnv,
       resolveWorkspaceIdForRepoPath(requestedRepoPath) {
         return Effect.sync(() => {
           workspaceResolverCalls.push(requestedRepoPath);
@@ -234,8 +263,10 @@ describe("createBeadsTaskRepository", () => {
 
   test("prepares the shared Dolt server when diagnostics request preparation", async () => {
     const context = await createExistingBeadsCliContext();
+    const processEnv = await createRepositoryProcessEnvWithFakeDolt();
     const requestedSharedServerModes: Array<boolean | undefined> = [];
     const port = createTestBeadsTaskRepository({
+      processEnv,
       resolveCliContext(_repoPath, options) {
         return Effect.tryPromise({
           try: async () => {
@@ -274,7 +305,8 @@ describe("createBeadsTaskRepository", () => {
   });
   test("uses configured workspace id for default bd command runner", async () => {
     const context = await createExistingBeadsCliContext();
-    const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
+    const processEnv = await createRepositoryProcessEnvWithFakeDolt();
+    const binDir = await makeTempDirectory("odt-fake-bd-bin-");
     const bdPath = await createFakeBd(
       binDir,
       `console.log(JSON.stringify([{ id: "task-1", title: "Task", status: "open", priority: 0, issue_type: "task", labels: [], updated_at: "2026-05-10T00:00:00Z", created_at: "2026-05-10T00:00:00Z" }]));\n`,
@@ -282,6 +314,7 @@ describe("createBeadsTaskRepository", () => {
     context.tools = { beads: bdPath };
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createTestBeadsTaskRepository({
+      processEnv,
       resolveWorkspaceIdForRepoPath() {
         return Effect.tryPromise({
           try: async () => {
@@ -317,7 +350,8 @@ describe("createBeadsTaskRepository", () => {
   });
   test("reuses the prepared Beads context across default bd task-list commands", async () => {
     const context = await createExistingBeadsCliContext();
-    const binDir = await mkdtemp(path.join(tmpdir(), "odt-fake-bd-bin-"));
+    const processEnv = await createRepositoryProcessEnvWithFakeDolt();
+    const binDir = await makeTempDirectory("odt-fake-bd-bin-");
     const bdPath = await createFakeBd(
       binDir,
       `const args = process.argv.slice(2);
@@ -334,6 +368,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     context.tools = { beads: bdPath };
     const requestedWorkspaceIds: Array<string | null | undefined> = [];
     const port = createTestBeadsTaskRepository({
+      processEnv,
       resolveWorkspaceIdForRepoPath() {
         return Effect.tryPromise({
           try: async () => {
@@ -495,7 +530,7 @@ if (args.join(" ") === "list --limit 0 --json") {
     });
   });
   test("diagnoses a missing managed Beads attachment before running bd", async () => {
-    const attachmentRoot = await mkdtemp(path.join(tmpdir(), "odt-beads-missing-test-"));
+    const attachmentRoot = await makeTempDirectory("odt-beads-missing-test-");
     const context = createBeadsCliContext(path.join(attachmentRoot, ".beads"));
     const port = createTestBeadsTaskRepository({
       resolveCliContext: () =>

@@ -48,6 +48,18 @@ const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
   beadsOk: true,
   beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
   beadsError: null,
+  beadsExecutable: {
+    displayLabel: "System PATH",
+    error: null,
+    path: "/usr/local/bin/bd",
+    sourceCategory: "system_path",
+  },
+  doltExecutable: {
+    displayLabel: "System PATH",
+    error: null,
+    path: "/usr/local/bin/dolt",
+    sourceCategory: "system_path",
+  },
   repoStoreHealth: {
     category: "healthy",
     status: "ready",
@@ -171,6 +183,10 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Server name:");
     expect(html).toContain("Status:");
     expect(html).toContain("Tools detected:");
+    expect(html).toContain("Beads executable source:");
+    expect(html).toContain("Beads executable path:");
+    expect(html).toContain("Dolt executable source:");
+    expect(html).toContain("Dolt executable path:");
     expect(html).toContain("Beads attachment path:");
     expect(html).toContain("Dolt database name:");
     expect(html).toContain("Dolt server host:");

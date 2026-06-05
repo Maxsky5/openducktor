@@ -20,12 +20,7 @@ export const markExecutable = async (path: string): Promise<void> => {
   await chmod(path, 0o755);
 };
 
-export const runCommand = async ({
-  command,
-  cwd,
-  env,
-  label,
-}: RunCommandInput): Promise<void> => {
+export const runCommand = async ({ command, cwd, env, label }: RunCommandInput): Promise<void> => {
   const spawnOptions = {
     cwd,
     stderr: "inherit",

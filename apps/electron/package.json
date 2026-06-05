@@ -33,6 +33,7 @@
     "@openducktor/host": "workspace:*"
   },
   "devDependencies": {
+    "@openducktor/build-tools": "workspace:*",
     "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^25.9.1",
     "@vitejs/plugin-react": "^6.0.2",

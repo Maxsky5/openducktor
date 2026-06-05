@@ -16,9 +16,29 @@ import {
   SHARED_DOLT_SERVER_USER,
   SHARED_DOLT_TCP_TIMEOUT_MS,
 } from "./beads-context-model";
-import { type SharedDoltServerError, toSharedDoltServerError } from "./beads-shared-dolt-errors";
+import {
+  type SharedDoltServerError,
+  sharedDoltOperationError,
+  toSharedDoltServerError,
+} from "./beads-shared-dolt-errors";
 
 type BeadsCommandResult = { ok: boolean; stdout: string; stderr: string };
+
+const parseDoltBinaryVersion = (output: string): string | null => {
+  const match = output.trim().match(/^dolt version\s+(\S+)/);
+  return match?.[1] ?? null;
+};
+
+const parseDoltServerVersion = (output: string): string | null => {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2 || lines[0] !== "dolt_version()") {
+    return null;
+  }
+  return lines[1] ?? null;
+};
 
 export const pathExists = (inputPath: string) =>
   Effect.tryPromise({
@@ -188,6 +208,56 @@ export const runCommandAllowFailure: BeadsCommandRunner = ({ command, args, cwd,
     child.once("close", onClose);
   });
 
+const runDoltText = (
+  doltCommand: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Effect.Effect<string | null> =>
+  runCommandAllowFailure({ command: doltCommand, args, env }).pipe(
+    Effect.map((result) => (result.ok ? result.stdout : null)),
+    Effect.catchAll(() => Effect.succeed(null)),
+  );
+
+const commandFailureDetail = (result: BeadsCommandResult): string =>
+  result.stderr.trim() || result.stdout.trim() || "command exited unsuccessfully";
+
+export const readSelectedDoltVersion = (
+  doltCommand: string,
+  env: NodeJS.ProcessEnv,
+): Effect.Effect<string, SharedDoltServerError> =>
+  Effect.gen(function* () {
+    const result = yield* runCommandAllowFailure({
+      command: doltCommand,
+      args: ["version"],
+      env,
+    }).pipe(
+      Effect.mapError((cause) => toSharedDoltServerError(cause, "shared-dolt.read-dolt-version")),
+    );
+    if (!result.ok) {
+      return yield* Effect.fail(
+        sharedDoltOperationError(
+          `Failed reading selected Dolt version from ${doltCommand}: ${commandFailureDetail(
+            result,
+          )}`,
+          "shared-dolt.read-dolt-version",
+        ),
+      );
+    }
+
+    const selectedVersion = parseDoltBinaryVersion(result.stdout);
+    if (!selectedVersion) {
+      return yield* Effect.fail(
+        sharedDoltOperationError(
+          `Failed parsing selected Dolt version from ${doltCommand}: ${
+            result.stdout.trim() || "empty output"
+          }`,
+          "shared-dolt.read-dolt-version",
+        ),
+      );
+    }
+    return selectedVersion;
+  });
+
 const sqlProbe = (
   port: number,
   env: NodeJS.ProcessEnv,
@@ -212,6 +282,39 @@ const sqlProbe = (
     env,
   );
 
+const doltVersionMatchesServer = (
+  port: number,
+  env: NodeJS.ProcessEnv,
+  doltCommand: string,
+  selectedDoltVersion: string,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const serverVersionOutput = yield* runDoltText(
+      doltCommand,
+      [
+        "--host",
+        SHARED_DOLT_SERVER_HOST,
+        "--port",
+        String(port),
+        "--no-tls",
+        "-u",
+        SHARED_DOLT_SERVER_USER,
+        "-p",
+        "",
+        "sql",
+        "-r",
+        "csv",
+        "-q",
+        "select dolt_version();",
+      ],
+      env,
+    );
+    if (!serverVersionOutput) {
+      return false;
+    }
+    return parseDoltServerVersion(serverVersionOutput) === selectedDoltVersion;
+  });
+
 export const serverStateIsHealthy = (
   state: BeadsSharedServerState,
   paths: BeadsSharedServerPaths,
@@ -225,7 +328,13 @@ export const serverStateIsHealthy = (
     }
     if (
       !(yield* tcpProbe(state.port)) ||
-      !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt))
+      !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt)) ||
+      !(yield* doltVersionMatchesServer(
+        state.port,
+        paths.env,
+        paths.tools.dolt,
+        paths.tools.selectedDoltVersion,
+      ))
     ) {
       return false;
     }

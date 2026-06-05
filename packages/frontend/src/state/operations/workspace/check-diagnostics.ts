@@ -110,6 +110,18 @@ export const buildBeadsCheckErrorState = (beadsCheckError: string): BeadsCheck =
   beadsOk: false,
   beadsPath: null,
   beadsError: beadsCheckError,
+  beadsExecutable: {
+    displayLabel: "Unavailable",
+    error: beadsCheckError,
+    path: null,
+    sourceCategory: "unavailable",
+  },
+  doltExecutable: {
+    displayLabel: "Unavailable",
+    error: beadsCheckError,
+    path: null,
+    sourceCategory: "unavailable",
+  },
 });
 
 export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {

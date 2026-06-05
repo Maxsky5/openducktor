@@ -1,22 +1,41 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
+import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { BeadsSharedServerContext } from "./beads-cli-context";
 import { createBeadsCliContextManager } from "./beads-cli-context-manager";
 import {
   createExistingTestBeadsCliContext,
+  createFakeDolt,
+  createProcessEnvWithFakeDolt,
   createTestToolDiscoveryPort,
   testOperationError,
 } from "./test-support/beads-test-support";
 
+const tempDirectories = new Set<string>();
+
 const missingRepoPath = () =>
   path.join(tmpdir(), `odt-missing-repo-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+afterEach(async () => {
+  await Promise.all(
+    Array.from(tempDirectories, (tempDirectory) =>
+      rm(tempDirectory, { force: true, recursive: true }),
+    ),
+  );
+  tempDirectories.clear();
+});
 
 describe("createBeadsCliContextManager", () => {
   test("deduplicates concurrent shared-server context resolution", async () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
+    });
+    const processEnv = await createProcessEnvWithFakeDolt({
+      prefix: "odt-beads-manager-bin-",
+      tempDirectories,
     });
     let resolveContextRequested: () => void = () => {};
     const contextRequested = new Promise<void>((resolve) => {
@@ -28,8 +47,8 @@ describe("createBeadsCliContextManager", () => {
     });
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
-      toolDiscovery: createTestToolDiscoveryPort(),
+      processEnv,
+      toolDiscovery: createTestToolDiscoveryPort({ env: processEnv }),
       resolveCliContext(_repoPath, options) {
         return Effect.tryPromise({
           try: async () => {
@@ -61,10 +80,14 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt({
+      prefix: "odt-beads-manager-bin-",
+      tempDirectories,
+    });
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
-      toolDiscovery: createTestToolDiscoveryPort(),
+      processEnv,
+      toolDiscovery: createTestToolDiscoveryPort({ env: processEnv }),
       resolveCliContext(_repoPath, options) {
         return Effect.gen(function* () {
           expect(options.requireSharedServer).toBe(true);
@@ -86,9 +109,71 @@ describe("createBeadsCliContextManager", () => {
     expect(contextResolutionAttempts).toBe(2);
   });
 
+  test("returns cached shared-server contexts before resolving Dolt tools again", async () => {
+    const context = await createExistingTestBeadsCliContext({
+      prefix: "odt-beads-manager-test-",
+    });
+    const binDir = await mkdtemp(path.join(tmpdir(), "odt-beads-manager-bin-"));
+    tempDirectories.add(binDir);
+    const dolt = await createFakeDolt(binDir);
+    let contextResolutionAttempts = 0;
+    let beadsPathResolutions = 0;
+    let doltPathResolutions = 0;
+    const resolveToolPath: ToolDiscoveryPort["resolveToolPath"] = (toolId) => {
+      if (toolId === "beads") {
+        beadsPathResolutions += 1;
+        return Effect.succeed("bd");
+      }
+      if (toolId === "dolt") {
+        doltPathResolutions += 1;
+        return Effect.succeed(dolt);
+      }
+      return Effect.succeed(toolId);
+    };
+    const toolDiscovery: ToolDiscoveryPort = {
+      resolveToolPath,
+      resolveTool: (toolId) =>
+        resolveToolPath(toolId).pipe(
+          Effect.map((toolPath) => ({
+            displayLabel: "Test tool",
+            path: toolPath,
+            sourceCategory: "system_path",
+          })),
+        ),
+    };
+    const manager = createBeadsCliContextManager({
+      processEnv: process.env,
+      toolDiscovery,
+      resolveCliContext(_repoPath, options) {
+        return Effect.sync(() => {
+          if (options.requireSharedServer !== true) {
+            throw new Error("Expected shared-server context options.");
+          }
+          expect(options.sharedDoltTools.selectedDoltVersion).toBe("2.1.2");
+          contextResolutionAttempts += 1;
+          return context;
+        });
+      },
+    });
+
+    await expect(
+      Effect.runPromise(manager.resolveCliContext("/repo", { requireSharedServer: true })),
+    ).resolves.toBe(context);
+    await expect(
+      Effect.runPromise(manager.resolveCliContext("/repo", { requireSharedServer: true })),
+    ).resolves.toBe(context);
+    expect(contextResolutionAttempts).toBe(1);
+    expect(beadsPathResolutions).toBe(1);
+    expect(doltPathResolutions).toBe(1);
+  });
+
   test("waits for in-flight context resolution before stopping owned shared servers", async () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
+    });
+    const processEnv = await createProcessEnvWithFakeDolt({
+      prefix: "odt-beads-manager-bin-",
+      tempDirectories,
     });
     let resolveContextRequested: () => void = () => {};
     const contextRequested = new Promise<void>((resolve) => {
@@ -103,8 +188,8 @@ describe("createBeadsCliContextManager", () => {
       serverStatePath: string;
     }> = [];
     const manager = createBeadsCliContextManager({
-      processEnv: {},
-      toolDiscovery: createTestToolDiscoveryPort(),
+      processEnv,
+      toolDiscovery: createTestToolDiscoveryPort({ env: processEnv }),
       resolveCliContext() {
         return Effect.tryPromise({
           try: async () => {
@@ -142,10 +227,14 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt({
+      prefix: "odt-beads-manager-bin-",
+      tempDirectories,
+    });
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
-      toolDiscovery: createTestToolDiscoveryPort(),
+      processEnv,
+      toolDiscovery: createTestToolDiscoveryPort({ env: processEnv }),
       resolveCliContext() {
         contextResolutionAttempts += 1;
         return Effect.succeed(context);
@@ -169,10 +258,14 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt({
+      prefix: "odt-beads-manager-bin-",
+      tempDirectories,
+    });
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
-      toolDiscovery: createTestToolDiscoveryPort(),
+      processEnv,
+      toolDiscovery: createTestToolDiscoveryPort({ env: processEnv }),
       resolveCliContext() {
         contextResolutionAttempts += 1;
         return Effect.succeed(context);

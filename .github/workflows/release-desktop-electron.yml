@@ -218,14 +218,16 @@ jobs:
             exit 1
           fi
 
-          sidecar="$app_bundle/Contents/Resources/bin/openducktor-mcp"
-          if [[ ! -f "$sidecar" ]]; then
-            echo "Packaged Electron MCP sidecar was not found at $sidecar." >&2
-            exit 1
-          fi
+          sidecars=(
+            "$app_bundle/Contents/Resources/bin/openducktor-mcp"
+            "$app_bundle/Contents/Resources/bin/bd"
+            "$app_bundle/Contents/Resources/bin/dolt"
+          )
 
           codesign --verify --deep --strict --verbose=4 "$app_bundle"
-          codesign --verify --strict --verbose=4 "$sidecar"
+          for sidecar in "${sidecars[@]}"; do
+            codesign --verify --strict --verbose=4 "$sidecar"
+          done
 
       - name: Upload Electron build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -1,10 +1,13 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
-import { serverStateIsHealthy } from "./beads-shared-dolt-health";
+import { readSelectedDoltVersion, serverStateIsHealthy } from "./beads-shared-dolt-health";
 import {
+  defaultEnsureSharedDoltServerRunning,
   readSharedServerState,
   runCommandAllowFailure,
   stopOwnedSharedDoltServer,
@@ -14,6 +17,7 @@ import { writeSharedServerState } from "./beads-shared-dolt-state";
 
 const TEST_SHARED_DOLT_TOOL_PATHS = {
   dolt: "dolt",
+  selectedDoltVersion: "2.1.2",
 };
 
 const createPaths = async (): Promise<BeadsSharedServerPaths> => {
@@ -66,6 +70,133 @@ const createStopState = (
 
 const expectedYamlQuotedPath = (inputPath: string): string =>
   `'${inputPath.replaceAll("'", "''")}'`;
+
+const processIsRunning = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const spawnLongRunningProcess = async (): Promise<number> => {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    detached: process.platform !== "win32",
+    stdio: "ignore",
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", reject);
+  });
+  if (!child.pid) {
+    throw new Error("Test process started without a pid.");
+  }
+  child.unref();
+  return child.pid;
+};
+
+const stopTestProcess = async (pid: number): Promise<void> => {
+  if (!processIsRunning(pid)) {
+    return;
+  }
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore" });
+      return;
+    }
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Best-effort cleanup for failed tests.
+    }
+  }
+};
+
+const createFakeDoltCommand = async ({
+  selectedVersion,
+  serverVersion,
+}: {
+  selectedVersion: string;
+  serverVersion: string;
+}): Promise<string> => {
+  const root = await mkdtemp(path.join(tmpdir(), "odt-fake-dolt-"));
+  if (process.platform === "win32") {
+    const script = path.join(root, "dolt.mjs");
+    const command = path.join(root, "dolt.cmd");
+    await writeFile(
+      script,
+      [
+        "const args = process.argv.slice(2);",
+        'if (args[0] === "version") {',
+        `  console.log(${JSON.stringify(`dolt version ${selectedVersion}`)});`,
+        "  process.exit(0);",
+        "}",
+        'const queryIndex = args.indexOf("-q");',
+        'const query = queryIndex === -1 ? "" : args[queryIndex + 1] ?? "";',
+        'if (query === "select dolt_version();") {',
+        '  console.log("dolt_version()");',
+        `  console.log(${JSON.stringify(serverVersion)});`,
+        "  process.exit(0);",
+        "}",
+        'if (query === "show databases") {',
+        "  process.exit(0);",
+        "}",
+        "process.exit(1);",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(command, ["@echo off", 'bun "%~dp0dolt.mjs" %*', ""].join("\r\n"));
+    return command;
+  }
+
+  const command = path.join(root, "dolt");
+  await writeFile(
+    command,
+    `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "dolt version ${selectedVersion}"
+  exit 0
+fi
+
+case " $* " in
+  *"select dolt_version();"*)
+    printf 'dolt_version()\\n${serverVersion}\\n'
+    exit 0
+    ;;
+  *"show databases"*)
+    exit 0
+    ;;
+esac
+
+exit 1
+`,
+  );
+  await chmod(command, 0o755);
+  return command;
+};
+
+const withTcpServer = async <T>(fn: (port: number) => Promise<T>): Promise<T> => {
+  const server = net.createServer((socket) => socket.destroy());
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Test TCP server did not expose a port.");
+    }
+    return await fn(address.port);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+};
 
 describe("readSharedServerState", () => {
   test("preserves path-edge strings from valid server state", async () => {
@@ -124,6 +255,17 @@ describe("readSharedServerState", () => {
 });
 
 describe("serverStateIsHealthy", () => {
+  test("reads the selected Dolt binary version once from the configured command", async () => {
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "2.1.2",
+    });
+
+    await expect(Effect.runPromise(readSelectedDoltVersion(fakeDolt, process.env))).resolves.toBe(
+      "2.1.2",
+    );
+  });
+
   test("rejects mismatched host, user, shared root, and data dir before probing services", async () => {
     const paths = await createPaths();
     const state = createState(paths);
@@ -147,6 +289,48 @@ describe("serverStateIsHealthy", () => {
         serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
       ),
     ).resolves.toBe(false);
+  });
+
+  test("rejects a reachable server running a stale Dolt version", async () => {
+    const paths = await createPaths();
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "1.86.0",
+    });
+
+    await withTcpServer(async (port) => {
+      const state = createState(paths, { port });
+
+      await expect(
+        Effect.runPromise(
+          serverStateIsHealthy(state, {
+            ...paths,
+            tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+          }),
+        ),
+      ).resolves.toBe(false);
+    });
+  });
+
+  test("accepts a reachable server matching the selected Dolt version", async () => {
+    const paths = await createPaths();
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "2.1.2",
+    });
+
+    await withTcpServer(async (port) => {
+      const state = createState(paths, { port });
+
+      await expect(
+        Effect.runPromise(
+          serverStateIsHealthy(state, {
+            ...paths,
+            tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+          }),
+        ),
+      ).resolves.toBe(true);
+    });
   });
 });
 
@@ -185,6 +369,35 @@ describe("stopOwnedSharedDoltServer", () => {
       Effect.runPromise(stopOwnedSharedDoltServer(createStopState({ pid: 0 }), statePath)),
     ).rejects.toThrow("invalid process pid 0");
     await expect(readFile(statePath, "utf8")).resolves.toBe("state");
+  });
+});
+
+describe("defaultEnsureSharedDoltServerRunning", () => {
+  test("refuses to replace an unhealthy server owned by another live process", async () => {
+    const paths = await createPaths();
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "1.86.0",
+    });
+    const ownerPid = await spawnLongRunningProcess();
+    const state = createState(paths, { ownerPid, pid: 999_999_992 });
+    await Effect.runPromise(writeSharedServerState(paths, state));
+
+    try {
+      await expect(
+        Effect.runPromise(
+          defaultEnsureSharedDoltServerRunning({
+            ...paths,
+            tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+          }),
+        ),
+      ).rejects.toThrow(`still owned by live pid ${ownerPid}`);
+      await expect(
+        Effect.runPromise(readSharedServerState(paths.serverStatePath)),
+      ).resolves.toMatchObject({ ownerPid });
+    } finally {
+      await stopTestProcess(ownerPid);
+    }
   });
 });
 

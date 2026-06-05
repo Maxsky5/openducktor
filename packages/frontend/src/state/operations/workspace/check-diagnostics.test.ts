@@ -62,6 +62,18 @@ describe("check-diagnostics helpers", () => {
       beadsOk: false,
       beadsPath: null,
       beadsError: "beads offline",
+      beadsExecutable: {
+        displayLabel: "Unavailable",
+        error: "beads offline",
+        path: null,
+        sourceCategory: "unavailable",
+      },
+      doltExecutable: {
+        displayLabel: "Unavailable",
+        error: "beads offline",
+        path: null,
+        sourceCategory: "unavailable",
+      },
     });
   });
 

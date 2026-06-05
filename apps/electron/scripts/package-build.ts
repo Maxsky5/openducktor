@@ -1,12 +1,16 @@
-import { spawn } from "node:child_process";
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { prepareMcpSidecar } from "./prepare-mcp-sidecar";
-import { verifyPackagedMcpSidecar } from "./verify-mcp-sidecar-package";
-
-export type ElectronReleasePlatform = "linux" | "macos" | "windows";
-export type ElectronReleaseArch = "arm64" | "x64";
+import { runCommand } from "@openducktor/build-tools";
+import {
+  detectHostReleaseArch,
+  detectHostReleasePlatform,
+  type ElectronReleaseArch,
+  type ElectronReleasePlatform,
+} from "./electron-release-targets";
+import { electronSidecarDisplayName } from "./electron-sidecar-manifest";
+import { prepareElectronSidecars } from "./prepare-electron-sidecars";
+import { verifyPackagedElectronSidecars } from "./verify-electron-sidecar-package";
 
 export type ElectronPackageBuildOptions = {
   arch: ElectronReleaseArch;
@@ -16,13 +20,6 @@ export type ElectronPackageBuildOptions = {
   signed: boolean;
   stageReleaseArtifacts: boolean;
   workspaceRoot: string;
-};
-
-type RunCommandInput = {
-  args: string[];
-  command: string;
-  cwd: string;
-  env?: NodeJS.ProcessEnv;
 };
 
 const platformFlags: Record<ElectronReleasePlatform, "--linux" | "--mac" | "--win"> = {
@@ -41,23 +38,6 @@ const artifactExtensions: Record<ElectronReleasePlatform, ReadonlySet<string>> =
   linux: new Set([".AppImage", ".deb", ".blockmap"]),
   macos: new Set([".dmg", ".zip", ".blockmap"]),
   windows: new Set([".exe", ".zip", ".blockmap"]),
-};
-
-export const detectHostReleasePlatform = (
-  platform: NodeJS.Platform,
-): ElectronReleasePlatform | undefined => {
-  if (platform === "darwin") return "macos";
-  if (platform === "linux") return "linux";
-  if (platform === "win32") return "windows";
-  return undefined;
-};
-
-export const detectHostReleaseArch = (
-  arch: NodeJS.Architecture,
-): ElectronReleaseArch | undefined => {
-  if (arch === "arm64") return "arm64";
-  if (arch === "x64") return "x64";
-  return undefined;
 };
 
 export const resolveElectronBuilderArgs = ({
@@ -125,28 +105,6 @@ const readReleaseDirectoryEntries = async (releaseDirectory: string) => {
   }
 };
 
-const runCommand = ({ args, command, cwd, env = process.env }: RunCommandInput): Promise<void> =>
-  new Promise((resolveCommand, rejectCommand) => {
-    const child = spawn(command, args, {
-      cwd,
-      env,
-      shell: process.platform === "win32",
-      stdio: "inherit",
-    });
-
-    child.on("error", rejectCommand);
-    child.on("exit", (exitCode) => {
-      if (exitCode === 0) {
-        resolveCommand();
-        return;
-      }
-
-      rejectCommand(
-        new Error(`${command} ${args.join(" ")} exited with code ${exitCode ?? "unknown"}`),
-      );
-    });
-  });
-
 export const collectReleaseArtifacts = async ({
   outputDirectory,
   platform,
@@ -191,36 +149,42 @@ export const buildElectronPackage = async ({
   const releaseDirectory = join(electronPackageDirectory, "release");
 
   await rm(releaseDirectory, { force: true, recursive: true });
-  await prepareMcpSidecar({
+  await prepareElectronSidecars({
+    arch,
     electronPackageDirectory,
-    platform: process.platform,
+    platform,
     workspaceRoot,
   });
 
   await runCommand({
-    args: ["run", "build"],
-    command: "bun",
+    command: ["bun", "run", "build"],
     cwd: electronPackageDirectory,
+    label: "Electron app build",
   });
   await runCommand({
-    args: [
+    command: [
+      "bun",
       "run",
       "builder",
       "--",
       ...resolveElectronBuilderArgs({ arch, platform, signed, stageReleaseArtifacts }),
     ],
-    command: "bun",
     cwd: electronPackageDirectory,
     env: resolveElectronBuilderEnv(signed, process.env),
+    label: "Electron Builder package",
   });
 
-  const verifiedSidecarPath = await verifyPackagedMcpSidecar({
+  const verifiedSidecars = await verifyPackagedElectronSidecars({
     arch,
     platform,
     releaseDirectory,
   });
-  if (verifiedSidecarPath) {
-    console.log(`Verified Electron MCP sidecar package payload: ${verifiedSidecarPath}`);
+  for (const sidecar of verifiedSidecars) {
+    console.log(
+      `Verified packaged Electron ${electronSidecarDisplayName(sidecar.id)} sidecar payload: ${
+        sidecar.path
+      }`,
+    );
   }
 
   if (!stageReleaseArtifacts) {

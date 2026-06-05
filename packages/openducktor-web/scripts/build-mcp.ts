@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { markExecutable, runCommand } from "../../../scripts/package-build-helpers";
+import { markExecutable, runCommand } from "@openducktor/build-tools";
 import { WEB_PACKAGE_MCP_ENTRYPOINT } from "../src/web-runtime-distribution";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));

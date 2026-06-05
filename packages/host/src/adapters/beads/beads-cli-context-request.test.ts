@@ -12,9 +12,6 @@ const createResolver = ({
 } = {}) =>
   createBeadsCliContextRequestResolver({
     isClosing: () => false,
-    processEnv: { OPENDUCKTOR_CONFIG_DIR: "/config" },
-    resolveBeadsToolPaths: () => Effect.succeed({ beads: "bd" }),
-    resolveSharedDoltToolPaths: () => Effect.succeed({ dolt: "dolt" }),
     resolveWorkspaceIdForRepoPath: () => Effect.succeed(resolvedWorkspaceId),
   });
 

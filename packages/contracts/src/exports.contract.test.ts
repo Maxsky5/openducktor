@@ -138,6 +138,8 @@ import type {
   TaskStatus,
   TaskUpdatePatch,
   TaskWorktreeSummary,
+  ToolExecutableProvenance,
+  ToolExecutableSourceCategory,
   WorkspaceRecord,
 } from "./index";
 import * as contracts from "./index";
@@ -429,6 +431,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "taskWorktreeSummarySchema",
   "tasksUpdatedEventSchema",
   "themeSchema",
+  "toolExecutableProvenanceSchema",
+  "toolExecutableSourceCategorySchema",
   "toOpencodeExposedOdtToolIds",
   "toOpencodeOdtToolAliases",
   "pullRequestSchema",
@@ -579,6 +583,8 @@ type ExportedTypeContract = {
   TaskStatus: TaskStatus;
   TaskWorktreeSummary: TaskWorktreeSummary;
   TaskUpdatePatch: TaskUpdatePatch;
+  ToolExecutableProvenance: ToolExecutableProvenance;
+  ToolExecutableSourceCategory: ToolExecutableSourceCategory;
   WorkspaceRecord: WorkspaceRecord;
 };
 

@@ -38,12 +38,15 @@ describe("resolveElectronRuntimeDistribution", () => {
 
     expect(distribution).toMatchObject({
       mode: "artifact",
+      bundledToolBinDirs: {
+        beads: join(resourcesPath, "bin"),
+        dolt: join(resourcesPath, "bin"),
+      },
       mcpLauncher: {
         kind: "executable",
         executablePath: join(resourcesPath, "bin", "openducktor-mcp"),
       },
     });
-    expect("bundledToolBinDirs" in distribution).toBe(false);
     expect(resolveElectronMcpSidecarPath({ platform: "darwin", resourcesPath })).toBe(
       join(resourcesPath, "bin", "openducktor-mcp"),
     );

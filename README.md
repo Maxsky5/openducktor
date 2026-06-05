@@ -70,7 +70,7 @@ OpenDucktor is macOS-first. Windows and Linux support is experimental.
 
 OpenDucktor supports local OpenCode and Codex runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
 
-[Beads](https://github.com/steveyegge/beads) is bundled with the desktop app, so installing `bd` separately is not required.
+[Beads](https://github.com/steveyegge/beads) and Dolt are bundled with released desktop builds, so installing `bd` or `dolt` separately is not required for the app.
 
 ## Core Features
 

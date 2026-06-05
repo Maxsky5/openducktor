@@ -16,6 +16,18 @@ const BASE_BEADS_CHECK_FIXTURE: BeadsCheck = {
   beadsOk: true,
   beadsPath: "/repo/.beads",
   beadsError: null,
+  beadsExecutable: {
+    displayLabel: "System PATH",
+    error: null,
+    path: "/usr/local/bin/bd",
+    sourceCategory: "system_path",
+  },
+  doltExecutable: {
+    displayLabel: "System PATH",
+    error: null,
+    path: "/usr/local/bin/dolt",
+    sourceCategory: "system_path",
+  },
   repoStoreHealth: {
     category: "healthy",
     status: "ready",

@@ -63,6 +63,7 @@ export type BeadsCliContext = {
 
 export type SharedDoltToolPaths = {
   dolt: string;
+  selectedDoltVersion: string;
 };
 
 export type BeadsSharedServerContext = Omit<BeadsCliContext, "sharedServer"> & {
