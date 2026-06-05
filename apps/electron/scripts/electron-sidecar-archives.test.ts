@@ -28,8 +28,11 @@ const fileIsMissing = async (path: string): Promise<boolean> => {
   try {
     await stat(path);
     return false;
-  } catch {
-    return true;
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return true;
+    }
+    throw error;
   }
 };
 
