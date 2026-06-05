@@ -4,9 +4,9 @@ import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
   makeBeadsCheck,
   makeRepoHealth,
+  makeRuntimeDefinitions,
+  makeRuntimeSummary,
   makeWorkspace,
-  runtimeDefinitions,
-  runtimeSummary,
 } from "./diagnostics-panel-model-test-fixtures";
 
 const readyRuntimeCheck: RuntimeCheck = {
@@ -25,7 +25,7 @@ const buildBeadsDiagnosticsModel = (beadsCheck: BeadsCheck) =>
   buildDiagnosticsPanelModel({
     workspaceRepoPath: "/repo",
     activeWorkspace: makeWorkspace("/repo"),
-    runtimeDefinitions,
+    runtimeDefinitions: makeRuntimeDefinitions(),
     isLoadingRuntimeDefinitions: false,
     runtimeDefinitionsError: null,
     runtimeCheck: readyRuntimeCheck,
@@ -34,7 +34,7 @@ const buildBeadsDiagnosticsModel = (beadsCheck: BeadsCheck) =>
     beadsCheckFailureKind: null,
     runtimeHealthByRuntime: {
       opencode: makeRepoHealth({
-        runtime: { instance: runtimeSummary },
+        runtime: { instance: makeRuntimeSummary() },
         mcp: { toolIds: [] },
       }),
     },

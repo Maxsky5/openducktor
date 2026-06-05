@@ -11,9 +11,11 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
-export const runtimeDefinitions: RuntimeDescriptor[] = [OPENCODE_RUNTIME_DESCRIPTOR];
+export const makeRuntimeDefinitions = (): RuntimeDescriptor[] => [
+  structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
+];
 
-export const runtimeSummary: RuntimeInstanceSummary = {
+export const makeRuntimeSummary = (): RuntimeInstanceSummary => ({
   kind: "opencode",
   runtimeId: "runtime-1",
   repoPath: "/repo",
@@ -25,12 +27,37 @@ export const runtimeSummary: RuntimeInstanceSummary = {
     endpoint: "http://127.0.0.1:49700",
   },
   startedAt: "2026-02-20T12:00:00.000Z",
-  descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-};
+  descriptor: structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
+});
 
 type RepoHealthOverrides = Omit<Partial<RepoRuntimeHealthCheck>, "runtime" | "mcp"> & {
   runtime?: Partial<RepoRuntimeHealthCheck["runtime"]>;
   mcp?: Partial<NonNullable<RepoRuntimeHealthCheck["mcp"]>>;
+};
+
+const repoHealthStatusFor = ({
+  mcp,
+  overrides,
+  runtime,
+}: {
+  mcp: NonNullable<RepoRuntimeHealthCheck["mcp"]>;
+  overrides: RepoHealthOverrides;
+  runtime: RepoRuntimeHealthCheck["runtime"];
+}): RepoRuntimeHealthCheck["status"] => {
+  if (overrides.status) {
+    return overrides.status;
+  }
+  if (runtime.status === "error" || mcp.status === "error") {
+    return "error";
+  }
+  if (
+    mcp.status === "checking" ||
+    mcp.status === "reconnecting" ||
+    mcp.status === "waiting_for_runtime"
+  ) {
+    return "checking";
+  }
+  return runtime.status;
 };
 
 export const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthCheck => {
@@ -61,15 +88,7 @@ export const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntime
   };
 
   return {
-    status:
-      overrides.status ??
-      (runtime.status === "error" || mcp.status === "error"
-        ? "error"
-        : mcp.status === "checking" ||
-            mcp.status === "reconnecting" ||
-            mcp.status === "waiting_for_runtime"
-          ? "checking"
-          : runtime.status),
+    status: repoHealthStatusFor({ mcp, overrides, runtime }),
     checkedAt,
     runtime,
     mcp,

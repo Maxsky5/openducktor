@@ -131,7 +131,7 @@ export const createBeadsCliContextManager = ({
           ),
     );
   const resolveBeadsToolPaths = createBeadsToolPathResolver(toolDiscovery);
-  const resolveSharedDoltToolPaths = createSharedDoltToolPathResolver(toolDiscovery);
+  const resolveSharedDoltToolPaths = createSharedDoltToolPathResolver(toolDiscovery, processEnv);
   const resolveContextRequest = createBeadsCliContextRequestResolver({
     isClosing: () => closing,
     processEnv,

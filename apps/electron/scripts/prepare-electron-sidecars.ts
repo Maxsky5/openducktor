@@ -102,7 +102,7 @@ const assertSidecarFile = async ({
     if (metadata.size === 0) {
       throw new Error("expected a non-empty file");
     }
-    if (platform !== "windows" && (metadata.mode & 0o111) === 0) {
+    if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
       throw new Error("expected an executable file");
     }
     return metadata;

@@ -58,7 +58,7 @@ export const ELECTRON_EXTERNAL_SIDECAR_ASSETS = [
     url: assetUrl(BEADS_RELEASE_BASE_URL, "beads_1.0.4_darwin_amd64.tar.gz"),
     sha256: "8a52f7e54fe038d369cc9ea0e65f76853b75f5469c70c9c693d64671623c4ce9",
     archiveType: "tar.gz",
-    executablePath: "./bd",
+    executablePath: "bd",
   },
   {
     id: "beads",
@@ -68,7 +68,7 @@ export const ELECTRON_EXTERNAL_SIDECAR_ASSETS = [
     url: assetUrl(BEADS_RELEASE_BASE_URL, "beads_1.0.4_darwin_arm64.tar.gz"),
     sha256: "0c53479fea070a1cabe8eb31e3824d74c5643b1deca71a5fe832ebd38e9ef877",
     archiveType: "tar.gz",
-    executablePath: "./bd",
+    executablePath: "bd",
   },
   {
     id: "beads",
@@ -78,7 +78,7 @@ export const ELECTRON_EXTERNAL_SIDECAR_ASSETS = [
     url: assetUrl(BEADS_RELEASE_BASE_URL, "beads_1.0.4_linux_amd64.tar.gz"),
     sha256: "643e602e27f666c8726abff0f22001e2b5883988fa960204bde20a3129d448a5",
     archiveType: "tar.gz",
-    executablePath: "./bd",
+    executablePath: "bd",
   },
   {
     id: "beads",
@@ -88,7 +88,7 @@ export const ELECTRON_EXTERNAL_SIDECAR_ASSETS = [
     url: assetUrl(BEADS_RELEASE_BASE_URL, "beads_1.0.4_linux_arm64.tar.gz"),
     sha256: "48cdf571cd8b64bae81da829c1309e402bc12e6a4cc6b87606dfc9220b7ece60",
     archiveType: "tar.gz",
-    executablePath: "./bd",
+    executablePath: "bd",
   },
   {
     id: "beads",
@@ -97,16 +97,6 @@ export const ELECTRON_EXTERNAL_SIDECAR_ASSETS = [
     version: "1.0.4",
     url: assetUrl(BEADS_RELEASE_BASE_URL, "beads_1.0.4_windows_amd64.zip"),
     sha256: "7bf67e6dc965813278ee651dff3a75f410f02f5b669ac295bb9e08d7bc7b39a3",
-    archiveType: "zip",
-    executablePath: "bd.exe",
-  },
-  {
-    id: "beads",
-    platform: "windows",
-    arch: "arm64",
-    version: "1.0.4",
-    url: assetUrl(BEADS_RELEASE_BASE_URL, "beads_1.0.4_windows_arm64.zip"),
-    sha256: "09aecc19407d4b7515ca31e0dab82b35576d9a3ec45f230261c662859ebd5b9c",
     archiveType: "zip",
     executablePath: "bd.exe",
   },

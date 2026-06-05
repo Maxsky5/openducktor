@@ -58,6 +58,7 @@ const TEST_BEADS_TOOL_PATHS = {
 
 const TEST_SHARED_DOLT_TOOL_PATHS = {
   dolt: "dolt",
+  selectedDoltVersion: "2.1.2",
 };
 
 describe("resolveBeadsCliContext", () => {

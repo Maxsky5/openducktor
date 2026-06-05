@@ -49,7 +49,7 @@ export type ToolDiscoveryDescriptor = {
 
 export const DEFAULT_MACOS_APPLICATIONS_DIR = "/Applications";
 
-export const joinToolPath = (
+const joinToolPath = (
   context: Pick<ToolDiscoveryContext, "platform">,
   ...segments: string[]
 ): string => (context.platform === "win32" ? win32.join(...segments) : posix.join(...segments));

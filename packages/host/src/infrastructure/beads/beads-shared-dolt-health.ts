@@ -16,16 +16,20 @@ import {
   SHARED_DOLT_SERVER_USER,
   SHARED_DOLT_TCP_TIMEOUT_MS,
 } from "./beads-context-model";
-import { type SharedDoltServerError, toSharedDoltServerError } from "./beads-shared-dolt-errors";
+import {
+  type SharedDoltServerError,
+  sharedDoltOperationError,
+  toSharedDoltServerError,
+} from "./beads-shared-dolt-errors";
 
 type BeadsCommandResult = { ok: boolean; stdout: string; stderr: string };
 
-export const parseDoltBinaryVersion = (output: string): string | null => {
+const parseDoltBinaryVersion = (output: string): string | null => {
   const match = output.trim().match(/^dolt version\s+(\S+)/);
   return match?.[1] ?? null;
 };
 
-export const parseDoltServerVersion = (output: string): string | null => {
+const parseDoltServerVersion = (output: string): string | null => {
   const lines = output
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -214,6 +218,46 @@ const runDoltText = (
     Effect.catchAll(() => Effect.succeed(null)),
   );
 
+const commandFailureDetail = (result: BeadsCommandResult): string =>
+  result.stderr.trim() || result.stdout.trim() || "command exited unsuccessfully";
+
+export const readSelectedDoltVersion = (
+  doltCommand: string,
+  env: NodeJS.ProcessEnv,
+): Effect.Effect<string, SharedDoltServerError> =>
+  Effect.gen(function* () {
+    const result = yield* runCommandAllowFailure({
+      command: doltCommand,
+      args: ["version"],
+      env,
+    }).pipe(
+      Effect.mapError((cause) => toSharedDoltServerError(cause, "shared-dolt.read-dolt-version")),
+    );
+    if (!result.ok) {
+      return yield* Effect.fail(
+        sharedDoltOperationError(
+          `Failed reading selected Dolt version from ${doltCommand}: ${commandFailureDetail(
+            result,
+          )}`,
+          "shared-dolt.read-dolt-version",
+        ),
+      );
+    }
+
+    const selectedVersion = parseDoltBinaryVersion(result.stdout);
+    if (!selectedVersion) {
+      return yield* Effect.fail(
+        sharedDoltOperationError(
+          `Failed parsing selected Dolt version from ${doltCommand}: ${
+            result.stdout.trim() || "empty output"
+          }`,
+          "shared-dolt.read-dolt-version",
+        ),
+      );
+    }
+    return selectedVersion;
+  });
+
 const sqlProbe = (
   port: number,
   env: NodeJS.ProcessEnv,
@@ -242,17 +286,9 @@ const doltVersionMatchesServer = (
   port: number,
   env: NodeJS.ProcessEnv,
   doltCommand: string,
+  selectedDoltVersion: string,
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const selectedVersionOutput = yield* runDoltText(doltCommand, ["version"], env);
-    if (!selectedVersionOutput) {
-      return false;
-    }
-    const selectedVersion = parseDoltBinaryVersion(selectedVersionOutput);
-    if (!selectedVersion) {
-      return false;
-    }
-
     const serverVersionOutput = yield* runDoltText(
       doltCommand,
       [
@@ -276,12 +312,13 @@ const doltVersionMatchesServer = (
     if (!serverVersionOutput) {
       return false;
     }
-    return parseDoltServerVersion(serverVersionOutput) === selectedVersion;
+    return parseDoltServerVersion(serverVersionOutput) === selectedDoltVersion;
   });
 
 export const serverStateIsHealthy = (
   state: BeadsSharedServerState,
   paths: BeadsSharedServerPaths,
+  selectedDoltVersion: string,
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     if (state.host !== SHARED_DOLT_SERVER_HOST || state.user !== SHARED_DOLT_SERVER_USER) {
@@ -293,7 +330,12 @@ export const serverStateIsHealthy = (
     if (
       !(yield* tcpProbe(state.port)) ||
       !(yield* sqlProbe(state.port, paths.env, paths.tools.dolt)) ||
-      !(yield* doltVersionMatchesServer(state.port, paths.env, paths.tools.dolt))
+      !(yield* doltVersionMatchesServer(
+        state.port,
+        paths.env,
+        paths.tools.dolt,
+        selectedDoltVersion,
+      ))
     ) {
       return false;
     }

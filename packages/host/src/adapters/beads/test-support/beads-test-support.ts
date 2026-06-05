@@ -51,6 +51,7 @@ export const createTestBeadsCliContext = (
   },
   sharedDoltTools: {
     dolt: "dolt",
+    selectedDoltVersion: "2.1.2",
   },
 });
 
@@ -79,6 +80,39 @@ export const createFakeBd = async (binDir: string, script: string): Promise<stri
   await writeFile(bdPath, `#!/bin/sh\nexec bun "$(dirname "$0")/bd.mjs" "$@"\n`);
   await chmod(bdPath, 0o755);
   return bdPath;
+};
+
+export const createFakeDolt = async (binDir: string, version = "2.1.2"): Promise<string> => {
+  if (process.platform === "win32") {
+    const doltPath = path.join(binDir, "dolt.cmd");
+    await writeFile(
+      doltPath,
+      [
+        "@echo off",
+        'if "%1"=="version" (',
+        `  echo dolt version ${version}`,
+        "  exit /b 0",
+        ")",
+        "exit /b 1",
+        "",
+      ].join("\r\n"),
+    );
+    return doltPath;
+  }
+
+  const doltPath = path.join(binDir, "dolt");
+  await writeFile(
+    doltPath,
+    `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "dolt version ${version}"
+  exit 0
+fi
+exit 1
+`,
+  );
+  await chmod(doltPath, 0o755);
+  return doltPath;
 };
 
 export const testOperationError = (cause: unknown) =>

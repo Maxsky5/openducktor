@@ -4,9 +4,9 @@ import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
   makeBeadsCheck,
   makeRepoHealth,
+  makeRuntimeDefinitions,
+  makeRuntimeSummary,
   makeWorkspace,
-  runtimeDefinitions,
-  runtimeSummary,
 } from "./diagnostics-panel-model-test-fixtures";
 
 describe("buildDiagnosticsPanelModel", () => {
@@ -14,7 +14,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: null,
       activeWorkspace: null,
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: null,
@@ -37,7 +37,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: null,
@@ -56,7 +56,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -85,7 +85,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -156,7 +156,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeCheckFailureKind: null,
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
-        opencode: makeRepoHealth({ runtime: { instance: runtimeSummary } }),
+        opencode: makeRepoHealth({ runtime: { instance: makeRuntimeSummary() } }),
       },
       isLoadingChecks: false,
     });
@@ -188,7 +188,7 @@ describe("buildDiagnosticsPanelModel", () => {
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
       }),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -207,7 +207,7 @@ describe("buildDiagnosticsPanelModel", () => {
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: { toolIds: [] },
         }),
       },
@@ -227,7 +227,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -264,7 +264,7 @@ describe("buildDiagnosticsPanelModel", () => {
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: { toolIds: [] },
         }),
       },
@@ -307,7 +307,7 @@ describe("buildDiagnosticsPanelModel", () => {
         configuredWorktreeBasePath: null,
         effectiveWorktreeBasePath: "/Users/dev/.openducktor/worktrees/repo",
       }),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -326,7 +326,7 @@ describe("buildDiagnosticsPanelModel", () => {
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: { toolIds: [] },
         }),
       },
@@ -353,7 +353,7 @@ describe("buildDiagnosticsPanelModel", () => {
         defaultWorktreeBasePath: "/Users/dev/.openducktor/worktrees/fairnest",
         effectiveWorktreeBasePath: "/Users/dev/worktrees",
       }),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -381,7 +381,7 @@ describe("buildDiagnosticsPanelModel", () => {
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: { toolIds: ["openducktor_odt_read_task", "openducktor_odt_set_spec"] },
         }),
       },
@@ -415,7 +415,7 @@ describe("buildDiagnosticsPanelModel", () => {
         defaultWorktreeBasePath: null,
         effectiveWorktreeBasePath: null,
       }),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -487,7 +487,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -507,7 +507,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: {
             supported: true,
             status: "error",
@@ -530,7 +530,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -606,7 +606,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -630,7 +630,7 @@ describe("buildDiagnosticsPanelModel", () => {
             status: "ready",
             stage: "runtime_ready",
             observation: "started_by_diagnostics",
-            instance: runtimeSummary,
+            instance: makeRuntimeSummary(),
             startedAt: "2026-02-20T12:00:59.000Z",
             updatedAt: "2026-02-20T12:01:00.000Z",
             elapsedMs: 886,
@@ -684,7 +684,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -704,7 +704,7 @@ describe("buildDiagnosticsPanelModel", () => {
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "checking",
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: {
             supported: true,
             status: "checking",
@@ -727,7 +727,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -759,7 +759,7 @@ describe("buildDiagnosticsPanelModel", () => {
       beadsCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: { toolIds: [] },
         }),
       },
@@ -779,7 +779,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -803,8 +803,8 @@ describe("buildDiagnosticsPanelModel", () => {
             status: "error",
             stage: "startup_failed",
             observation: null,
-            instance: runtimeSummary,
-            startedAt: runtimeSummary.startedAt,
+            instance: makeRuntimeSummary(),
+            startedAt: makeRuntimeSummary().startedAt,
             updatedAt: "2026-02-22T08:00:00.000Z",
             elapsedMs: 20_000,
             attempts: 4,
@@ -835,7 +835,7 @@ describe("buildDiagnosticsPanelModel", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
-      runtimeDefinitions,
+      runtimeDefinitions: makeRuntimeDefinitions(),
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: {
@@ -854,7 +854,7 @@ describe("buildDiagnosticsPanelModel", () => {
       beadsCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
-          runtime: { instance: runtimeSummary },
+          runtime: { instance: makeRuntimeSummary() },
           mcp: { toolIds: [] },
         }),
       },

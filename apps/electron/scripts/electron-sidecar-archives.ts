@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { runCommand } from "@openducktor/build-tools";
 import {
@@ -35,10 +35,36 @@ export type VerifyElectronSidecarArchiveChecksum = (
 export const archiveEntryPathToFilePath = (entryPath: string): string[] =>
   entryPath.replace(/\\/g, "/").replace(/^\.\//, "").split("/").filter(Boolean);
 
+const hasErrorCode = (cause: unknown, code: string): boolean =>
+  cause !== null && typeof cause === "object" && "code" in cause && cause.code === code;
+
 const sha256File = async (path: string): Promise<string> =>
   createHash("sha256")
     .update(await readFile(path))
     .digest("hex");
+
+const electronSidecarExtractionCommand = ({
+  archivePath,
+  asset,
+  extractionDirectory,
+}: ExtractElectronSidecarArchiveInput): [string, ...string[]] => {
+  if (asset.archiveType === "tar.gz") {
+    return ["tar", "-xzf", archivePath, "-C", extractionDirectory, asset.executablePath];
+  }
+  if (process.platform === "win32") {
+    return [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
+      archivePath,
+      extractionDirectory,
+    ];
+  }
+  return ["unzip", "-o", archivePath, asset.executablePath, "-d", extractionDirectory];
+};
 
 export const verifyElectronSidecarArchiveChecksum = async (
   asset: ElectronExternalSidecarAsset,
@@ -102,8 +128,8 @@ export const prepareCachedElectronSidecarArchive = async ({
     await verifyChecksum(asset, archivePath);
     return;
   } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw cause;
+    if (!hasErrorCode(cause, "ENOENT")) {
+      await rm(archivePath, { force: true, recursive: true });
     }
   }
 
@@ -116,12 +142,8 @@ export const extractElectronSidecarArchive = async ({
   asset,
   extractionDirectory,
 }: ExtractElectronSidecarArchiveInput): Promise<void> => {
-  const extractArgs: [string, string, string, string, string] =
-    asset.archiveType === "tar.gz"
-      ? ["-xzf", archivePath, "-C", extractionDirectory, asset.executablePath]
-      : ["-xf", archivePath, "-C", extractionDirectory, asset.executablePath];
   await runCommand({
-    command: ["tar", ...extractArgs],
+    command: electronSidecarExtractionCommand({ archivePath, asset, extractionDirectory }),
     cwd: extractionDirectory,
     label: `Electron ${electronSidecarDisplayName(asset.id)} sidecar archive extraction`,
   });

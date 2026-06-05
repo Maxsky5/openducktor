@@ -5,13 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import type { BeadsSharedServerPaths, BeadsSharedServerState } from "./beads-context-model";
+import { readSelectedDoltVersion, serverStateIsHealthy } from "./beads-shared-dolt-health";
 import {
-  parseDoltBinaryVersion,
-  parseDoltServerVersion,
-  serverStateIsHealthy,
-} from "./beads-shared-dolt-health";
-import {
-  cleanupReplaceableUnhealthySharedDoltServer,
+  defaultEnsureSharedDoltServerRunning,
   readSharedServerState,
   runCommandAllowFailure,
   stopOwnedSharedDoltServer,
@@ -21,6 +17,7 @@ import { writeSharedServerState } from "./beads-shared-dolt-state";
 
 const TEST_SHARED_DOLT_TOOL_PATHS = {
   dolt: "dolt",
+  selectedDoltVersion: "2.1.2",
 };
 
 const createPaths = async (): Promise<BeadsSharedServerPaths> => {
@@ -254,20 +251,15 @@ describe("readSharedServerState", () => {
 });
 
 describe("serverStateIsHealthy", () => {
-  test.each([
-    ["dolt version 2.1.2\n", "2.1.2"],
-    ["dolt version 1.86.0", "1.86.0"],
-    ["unexpected", null],
-  ])("parses Dolt binary version output %#", (output, expected) => {
-    expect(parseDoltBinaryVersion(output)).toBe(expected);
-  });
+  test("reads the selected Dolt binary version once from the configured command", async () => {
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "2.1.2",
+    });
 
-  test.each([
-    ["dolt_version()\n2.1.2\n", "2.1.2"],
-    ["dolt_version()\r\n1.86.0\r\n", "1.86.0"],
-    ["+----------------+\n| dolt_version() |", null],
-  ])("parses Dolt server version CSV output %#", (output, expected) => {
-    expect(parseDoltServerVersion(output)).toBe(expected);
+    await expect(Effect.runPromise(readSelectedDoltVersion(fakeDolt, process.env))).resolves.toBe(
+      "2.1.2",
+    );
   });
 
   test("rejects mismatched host, user, shared root, and data dir before probing services", async () => {
@@ -275,22 +267,23 @@ describe("serverStateIsHealthy", () => {
     const state = createState(paths);
 
     await expect(
-      Effect.runPromise(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths)),
+      Effect.runPromise(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths, "2.1.2")),
     ).resolves.toBe(false);
     await expect(
-      Effect.runPromise(serverStateIsHealthy({ ...state, user: "other" }, paths)),
+      Effect.runPromise(serverStateIsHealthy({ ...state, user: "other" }, paths, "2.1.2")),
     ).resolves.toBe(false);
     await expect(
       Effect.runPromise(
         serverStateIsHealthy(
           { ...state, sharedServerRoot: `${paths.sharedServerRoot}-other` },
           paths,
+          "2.1.2",
         ),
       ),
     ).resolves.toBe(false);
     await expect(
       Effect.runPromise(
-        serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
+        serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths, "2.1.2"),
       ),
     ).resolves.toBe(false);
   });
@@ -307,10 +300,14 @@ describe("serverStateIsHealthy", () => {
 
       await expect(
         Effect.runPromise(
-          serverStateIsHealthy(state, {
-            ...paths,
-            tools: { dolt: fakeDolt },
-          }),
+          serverStateIsHealthy(
+            state,
+            {
+              ...paths,
+              tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+            },
+            "2.1.2",
+          ),
         ),
       ).resolves.toBe(false);
     });
@@ -328,10 +325,14 @@ describe("serverStateIsHealthy", () => {
 
       await expect(
         Effect.runPromise(
-          serverStateIsHealthy(state, {
-            ...paths,
-            tools: { dolt: fakeDolt },
-          }),
+          serverStateIsHealthy(
+            state,
+            {
+              ...paths,
+              tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+            },
+            "2.1.2",
+          ),
         ),
       ).resolves.toBe(true);
     });
@@ -376,47 +377,31 @@ describe("stopOwnedSharedDoltServer", () => {
   });
 });
 
-describe("cleanupReplaceableUnhealthySharedDoltServer", () => {
+describe("defaultEnsureSharedDoltServerRunning", () => {
   test("refuses to replace an unhealthy server owned by another live process", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-unhealthy-"));
-    const statePath = path.join(root, "server.json");
-    await writeFile(statePath, "state");
+    const paths = await createPaths();
+    const fakeDolt = await createFakeDoltCommand({
+      selectedVersion: "2.1.2",
+      serverVersion: "1.86.0",
+    });
     const ownerPid = await spawnLongRunningProcess();
+    const state = createState(paths, { ownerPid, pid: 999_999_992 });
+    await Effect.runPromise(writeSharedServerState(paths, state));
 
     try {
       await expect(
         Effect.runPromise(
-          cleanupReplaceableUnhealthySharedDoltServer(
-            createStopState({ ownerPid, pid: 999_999_992 }),
-            statePath,
-          ),
+          defaultEnsureSharedDoltServerRunning({
+            ...paths,
+            tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+          }),
         ),
       ).rejects.toThrow(`still owned by live pid ${ownerPid}`);
-      await expect(readFile(statePath, "utf8")).resolves.toBe("state");
+      await expect(
+        Effect.runPromise(readSharedServerState(paths.serverStatePath)),
+      ).resolves.toMatchObject({ ownerPid });
     } finally {
       await stopTestProcess(ownerPid);
-    }
-  });
-
-  test("terminates an orphaned unhealthy server before removing stale state", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "odt-shared-dolt-unhealthy-"));
-    const statePath = path.join(root, "server.json");
-    await writeFile(statePath, "state");
-    const serverPid = await spawnLongRunningProcess();
-
-    try {
-      await expect(
-        Effect.runPromise(
-          cleanupReplaceableUnhealthySharedDoltServer(
-            createStopState({ ownerPid: 999_999_993, pid: serverPid }),
-            statePath,
-          ),
-        ),
-      ).resolves.toBeUndefined();
-      expect(processIsRunning(serverPid)).toBe(false);
-      await expect(readFile(statePath, "utf8")).rejects.toThrow();
-    } finally {
-      await stopTestProcess(serverPid);
     }
   });
 });

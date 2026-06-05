@@ -169,7 +169,7 @@ describe("prepareElectronSidecars", () => {
         workspaceRoot,
         ...makeSideEffectingHooks(sideEffects),
       }),
-    ).rejects.toThrow("No pinned Electron Dolt sidecar asset for windows/arm64");
+    ).rejects.toThrow("No pinned Electron Beads sidecar asset for windows/arm64");
     expect(sideEffects).toEqual([]);
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });

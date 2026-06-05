@@ -44,6 +44,8 @@ export type { SharedDoltServerError } from "./beads-shared-dolt-errors";
 export { pathExists, runCommandAllowFailure } from "./beads-shared-dolt-health";
 export { readSharedServerState } from "./beads-shared-dolt-state";
 
+const isProcessPid = (pid: number): boolean => Number.isInteger(pid) && pid > 0;
+
 const waitForProcessExit = (pid: number, timeoutMs: number): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
@@ -61,8 +63,12 @@ const terminateSharedDoltProcess = (
   pid: number,
   label: string,
   stopTimeoutMs = 2_000,
-): Effect.Effect<void, SharedDoltServerError> =>
-  terminateProcessTree({
+): Effect.Effect<void, SharedDoltServerError> => {
+  if (!isProcessPid(pid)) {
+    return Effect.fail(sharedDoltValidationError(`invalid process pid ${pid}`, "pid"));
+  }
+
+  return terminateProcessTree({
     pid,
     label,
     isClosed: () => !processIsAlive(pid),
@@ -71,6 +77,7 @@ const terminateSharedDoltProcess = (
   }).pipe(
     Effect.mapError((cause) => toSharedDoltServerError(cause, "shared-dolt.terminate-process")),
   );
+};
 
 const errorHasCode = (error: unknown, code: string): boolean =>
   typeof error === "object" && error !== null && "code" in error && error.code === code;
@@ -114,12 +121,16 @@ export const stopOwnedSharedDoltServer: StopSharedDoltServer = (state, serverSta
     yield* removeSharedServerStateFile(serverStatePath);
   });
 
-export const cleanupReplaceableUnhealthySharedDoltServer = (
+const cleanupReplaceableUnhealthySharedDoltServer = (
   state: BeadsSharedServerState,
   serverStatePath: string,
 ): Effect.Effect<void, SharedDoltServerError> =>
   Effect.gen(function* () {
-    if (state.ownerPid !== process.pid && processIsAlive(state.ownerPid)) {
+    if (
+      state.ownerPid !== process.pid &&
+      isProcessPid(state.ownerPid) &&
+      processIsAlive(state.ownerPid)
+    ) {
       return yield* Effect.fail(
         sharedDoltValidationError(
           `Shared Dolt server ${state.pid} is unhealthy but still owned by live pid ${state.ownerPid}`,
@@ -128,7 +139,7 @@ export const cleanupReplaceableUnhealthySharedDoltServer = (
       );
     }
 
-    if (processIsAlive(state.pid)) {
+    if (isProcessPid(state.pid) && processIsAlive(state.pid)) {
       yield* terminateSharedDoltProcess(state.pid, `unhealthy shared Dolt server ${state.pid}`);
     }
     yield* removeSharedServerStateFile(serverStatePath);
@@ -322,7 +333,14 @@ export const defaultEnsureSharedDoltServerRunning: EnsureSharedDoltServer = (pat
     });
 
     const existing = yield* readSharedServerState(paths.serverStatePath);
-    const existingHealthy = existing ? yield* serverStateIsHealthy(existing, paths) : false;
+    let existingHealthy = false;
+    if (existing) {
+      existingHealthy = yield* serverStateIsHealthy(
+        existing,
+        paths,
+        paths.tools.selectedDoltVersion,
+      );
+    }
     if (existing && existingHealthy) {
       if (existing.ownerPid !== process.pid && !processIsAlive(existing.ownerPid)) {
         const adopted = {

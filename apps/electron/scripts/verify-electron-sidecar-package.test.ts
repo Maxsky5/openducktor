@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ElectronSidecarId } from "./electron-sidecar-manifest";
@@ -10,11 +10,24 @@ import {
 } from "./verify-electron-sidecar-package";
 
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
+const releaseDirectories = new Set<string>();
 
-const makeReleaseDirectory = async (): Promise<string> =>
-  mkdtemp(join(tmpdir(), "openducktor-electron-package-sidecars-"));
+const makeReleaseDirectory = async (): Promise<string> => {
+  const releaseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-package-sidecars-"));
+  releaseDirectories.add(releaseDirectory);
+  return releaseDirectory;
+};
 
 const REQUIRED_SIDECAR_IDS = ["openducktor-mcp", "beads", "dolt"] as const;
+
+afterEach(async () => {
+  await Promise.all(
+    Array.from(releaseDirectories, (releaseDirectory) =>
+      rm(releaseDirectory, { force: true, recursive: true }),
+    ),
+  );
+  releaseDirectories.clear();
+});
 
 const writePackagedSidecar = async ({
   arch = "x64",

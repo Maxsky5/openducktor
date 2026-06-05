@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
@@ -6,18 +7,38 @@ import type { BeadsSharedServerContext } from "./beads-cli-context";
 import { createBeadsCliContextManager } from "./beads-cli-context-manager";
 import {
   createExistingTestBeadsCliContext,
+  createFakeDolt,
   createTestToolDiscoveryPort,
   testOperationError,
 } from "./test-support/beads-test-support";
 
+const tempDirectories = new Set<string>();
+
 const missingRepoPath = () =>
   path.join(tmpdir(), `odt-missing-repo-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+const createProcessEnvWithFakeDolt = async (): Promise<NodeJS.ProcessEnv> => {
+  const binDir = await mkdtemp(path.join(tmpdir(), "odt-beads-manager-bin-"));
+  tempDirectories.add(binDir);
+  await createFakeDolt(binDir);
+  return { PATH: binDir };
+};
+
+afterEach(async () => {
+  await Promise.all(
+    Array.from(tempDirectories, (tempDirectory) =>
+      rm(tempDirectory, { force: true, recursive: true }),
+    ),
+  );
+  tempDirectories.clear();
+});
 
 describe("createBeadsCliContextManager", () => {
   test("deduplicates concurrent shared-server context resolution", async () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt();
     let resolveContextRequested: () => void = () => {};
     const contextRequested = new Promise<void>((resolve) => {
       resolveContextRequested = resolve;
@@ -28,7 +49,7 @@ describe("createBeadsCliContextManager", () => {
     });
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
+      processEnv,
       toolDiscovery: createTestToolDiscoveryPort(),
       resolveCliContext(_repoPath, options) {
         return Effect.tryPromise({
@@ -61,9 +82,10 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt();
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
+      processEnv,
       toolDiscovery: createTestToolDiscoveryPort(),
       resolveCliContext(_repoPath, options) {
         return Effect.gen(function* () {
@@ -90,6 +112,7 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt();
     let resolveContextRequested: () => void = () => {};
     const contextRequested = new Promise<void>((resolve) => {
       resolveContextRequested = resolve;
@@ -103,7 +126,7 @@ describe("createBeadsCliContextManager", () => {
       serverStatePath: string;
     }> = [];
     const manager = createBeadsCliContextManager({
-      processEnv: {},
+      processEnv,
       toolDiscovery: createTestToolDiscoveryPort(),
       resolveCliContext() {
         return Effect.tryPromise({
@@ -142,9 +165,10 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt();
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
+      processEnv,
       toolDiscovery: createTestToolDiscoveryPort(),
       resolveCliContext() {
         contextResolutionAttempts += 1;
@@ -169,9 +193,10 @@ describe("createBeadsCliContextManager", () => {
     const context = await createExistingTestBeadsCliContext({
       prefix: "odt-beads-manager-test-",
     });
+    const processEnv = await createProcessEnvWithFakeDolt();
     let contextResolutionAttempts = 0;
     const manager = createBeadsCliContextManager({
-      processEnv: {},
+      processEnv,
       toolDiscovery: createTestToolDiscoveryPort(),
       resolveCliContext() {
         contextResolutionAttempts += 1;
