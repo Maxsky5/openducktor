@@ -85,6 +85,41 @@ describe("Codex App Server transcript parsing", () => {
     ]);
   });
 
+  test("adds a text boundary after Codex file markers before adjacent words", () => {
+    const input = toCodexTurnInputList([
+      { kind: "text", text: "Tell me what's in " },
+      {
+        kind: "file_reference",
+        file: {
+          id: "apps/api/src/routes/auth.ts",
+          path: "apps/api/src/routes/auth.ts",
+          name: "auth.ts",
+          kind: "code",
+        },
+      },
+      { kind: "text", text: "please" },
+    ]);
+
+    expect(input).toEqual([
+      { type: "text", text: "Tell me what's in " },
+      {
+        type: "text",
+        text: "@apps/api/src/routes/auth.ts ",
+        text_elements: [
+          {
+            byteRange: { start: 0, end: 28 },
+            placeholder: "@auth.ts",
+          },
+        ],
+      },
+      { type: "mention", name: "auth.ts", path: "apps/api/src/routes/auth.ts" },
+      { type: "text", text: "please" },
+    ]);
+    expect(codexUserInputListToText(input)).toBe(
+      "Tell me what's in @apps/api/src/routes/auth.ts please",
+    );
+  });
+
   test("keeps a text skill marker in Codex turn input for history hydration", () => {
     const skill = {
       id: "/skills/review/SKILL.md",

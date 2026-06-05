@@ -981,9 +981,26 @@ export const toCodexUserInputList = (parts: AgentUserMessagePart[]): CodexUserIn
   return parts.map(toCodexUserInput);
 };
 
-const toCodexMarkedTextInput = (marker: string, placeholder: string): CodexUserInput => ({
+const wordlikeTextStartPattern = /[\p{L}\p{N}_]/u;
+
+const codexMarkerNeedsTrailingSpaceBefore = (part: AgentUserMessagePart | undefined): boolean => {
+  if (!part) {
+    return false;
+  }
+  if (part.kind === "text") {
+    const firstCharacter = part.text.at(0);
+    return firstCharacter !== undefined && wordlikeTextStartPattern.test(firstCharacter);
+  }
+  return part.kind === "file_reference" || part.kind === "skill_mention";
+};
+
+const toCodexMarkedTextInput = (
+  text: string,
+  placeholder: string,
+  marker = text,
+): CodexUserInput => ({
   type: "text",
-  text: marker,
+  text,
   text_elements: [
     {
       byteRange: { start: 0, end: utf8ByteLength(marker) },
@@ -993,16 +1010,18 @@ const toCodexMarkedTextInput = (marker: string, placeholder: string): CodexUserI
 });
 
 export const toCodexTurnInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] => {
-  return parts.flatMap((part): CodexUserInput[] => {
+  return parts.flatMap((part, index): CodexUserInput[] => {
     if (part.kind === "file_reference") {
       const marker = `@${part.file.path}`;
       const placeholder = `@${part.file.name || part.file.path}`;
-      return [toCodexMarkedTextInput(marker, placeholder), toCodexUserInput(part)];
+      const text = codexMarkerNeedsTrailingSpaceBefore(parts[index + 1]) ? `${marker} ` : marker;
+      return [toCodexMarkedTextInput(text, placeholder, marker), toCodexUserInput(part)];
     }
     if (part.kind !== "skill_mention") {
       return [toCodexUserInput(part)];
     }
     const marker = `$${part.skill.name}`;
-    return [toCodexMarkedTextInput(marker, marker), toCodexUserInput(part)];
+    const text = codexMarkerNeedsTrailingSpaceBefore(parts[index + 1]) ? `${marker} ` : marker;
+    return [toCodexMarkedTextInput(text, marker, marker), toCodexUserInput(part)];
   });
 };
