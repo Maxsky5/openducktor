@@ -21,8 +21,6 @@ type ScopedPartId = {
 };
 
 type ToolStatus = "pending" | "running" | "completed" | "error";
-type UserMessageMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }>;
-type UserDisplayPart = NonNullable<UserMessageMeta["parts"]>[number];
 
 const parseScopedPartId = (id: string, prefix: string): ScopedPartId | null => {
   if (!id.startsWith(prefix)) {
@@ -199,49 +197,6 @@ const mergeSubagentMessages = (
     ...hydratedMessage,
     content: formatSubagentContent(resolvedMeta),
     meta: resolvedMeta,
-  };
-};
-
-const hasReferenceDisplayPart = (parts: readonly UserDisplayPart[] | undefined): boolean => {
-  return (
-    parts?.some((part) => part.kind === "file_reference" || part.kind === "skill_mention") ?? false
-  );
-};
-
-const mergeUserMessageWithHydratedReferences = (
-  hydratedMessage: AgentChatMessage,
-  currentMessage: AgentChatMessage,
-): AgentChatMessage | null => {
-  if (hydratedMessage.role !== "user" || currentMessage.role !== "user") {
-    return null;
-  }
-
-  const hydratedMeta = hydratedMessage.meta?.kind === "user" ? hydratedMessage.meta : null;
-  if (!hydratedMeta || !hasReferenceDisplayPart(hydratedMeta.parts)) {
-    return null;
-  }
-
-  const currentMeta = currentMessage.meta?.kind === "user" ? currentMessage.meta : null;
-  const hydratedParts = hydratedMeta.parts ?? [];
-  const preservedAttachments = (currentMeta?.parts ?? []).filter(
-    (part) =>
-      part.kind === "attachment" &&
-      !hydratedParts.some(
-        (hydratedPart) =>
-          hydratedPart.kind === "attachment" && hydratedPart.attachment.id === part.attachment.id,
-      ),
-  );
-  const mergedMeta = {
-    ...(currentMeta ?? {}),
-    ...hydratedMeta,
-    parts:
-      preservedAttachments.length > 0 ? [...hydratedParts, ...preservedAttachments] : hydratedParts,
-  } satisfies UserMessageMeta;
-
-  return {
-    ...currentMessage,
-    ...hydratedMessage,
-    meta: mergedMeta,
   };
 };
 
@@ -456,11 +411,6 @@ const mergeSameMessageId = (
       ...hydratedMessage,
       ...(mergedMeta ? { meta: mergedMeta } : {}),
     };
-  }
-
-  const mergedUserMessage = mergeUserMessageWithHydratedReferences(hydratedMessage, currentMessage);
-  if (mergedUserMessage) {
-    return mergedUserMessage;
   }
 
   if (isFinalAssistantChatMessage(hydratedMessage) && currentMessage.role === "assistant") {

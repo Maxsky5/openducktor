@@ -359,6 +359,38 @@ const codexFileMentionFromTextElement = (
   };
 };
 
+const codexFileReferenceFromTextElement = (
+  input: CodexTextInput,
+  element: CodexTextElement,
+  range: { start: number; end: number },
+  textOffset: number,
+): Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }> | null => {
+  const sourceValue = input.text.slice(range.start, range.end);
+  const pathMarker = sourceValue.startsWith("@")
+    ? sourceValue
+    : codexTextElementMarker(input, element, range);
+  if (!pathMarker.startsWith("@")) {
+    return null;
+  }
+
+  const path = pathMarker.slice(1).trim();
+  if (path.length === 0 || externalMentionSchemePattern.test(path)) {
+    return null;
+  }
+
+  const marker = codexTextElementMarker(input, element, range);
+  const displayName = marker.startsWith("@") ? marker.slice(1).trim() : undefined;
+  return {
+    kind: "file_reference",
+    file: codexFileReferenceFromPath(path, displayName),
+    sourceText: {
+      value: sourceValue,
+      start: textOffset + range.start,
+      end: textOffset + range.end,
+    },
+  };
+};
+
 const codexTextInputToDisplayParts = (
   input: CodexTextInput,
   textOffset: number,
@@ -405,7 +437,11 @@ const codexTextInputToDisplayParts = (
             renderedFileMentions,
           )
         : null;
-    const referencePart = skillMention?.part ?? fileMention?.part ?? null;
+    const fileReference =
+      skillMention === null && fileMention === null
+        ? codexFileReferenceFromTextElement(input, element, range, textOffset)
+        : null;
+    const referencePart = skillMention?.part ?? fileMention?.part ?? fileReference;
     if (!referencePart) {
       continue;
     }
@@ -479,101 +515,8 @@ const codexTextFileEchoToDisplayParts = (
   return parts;
 };
 
-const additionalRawFileMarkerExtensions = new Set(["env", "lock", "md", "mdx", "txt"]);
-const rawFileMarkerPattern = /@[^\s@]+/g;
-const trailingRawFileMarkerPunctuationPattern = /[\])},.;:!?]+$/;
-const pathSeparatorPattern = /[\\/]/;
-const gluedTextSuffixPattern = /^[A-Za-z]/;
-
-const readLowercaseExtension = (filePath: string): string | null => {
-  const normalizedPath = filePath.trim().toLowerCase();
-  const extensionIndex = normalizedPath.lastIndexOf(".");
-  if (extensionIndex < 0 || extensionIndex === normalizedPath.length - 1) {
-    return null;
-  }
-  return normalizedPath.slice(extensionIndex + 1);
-};
-
-const hasKnownRawFileMarkerExtension = (filePath: string): boolean => {
-  if (detectAgentFileReferenceKind({ filePath }) !== "default") {
-    return true;
-  }
-  const extension = readLowercaseExtension(filePath);
-  return extension !== null && additionalRawFileMarkerExtensions.has(extension);
-};
-
-const rawFileMarkerPathLength = (body: string): number | null => {
-  for (let end = body.length; end > 0; end -= 1) {
-    const path = body.slice(0, end);
-    if (!hasKnownRawFileMarkerExtension(path)) {
-      continue;
-    }
-    const suffix = body.slice(end);
-    if (suffix.length === 0 || gluedTextSuffixPattern.test(suffix)) {
-      return end;
-    }
-  }
-  return pathSeparatorPattern.test(body) ? body.length : null;
-};
-
-const findRawFileMarkerRanges = (
-  text: string,
-): Array<{ start: number; end: number; path: string }> => {
-  const ranges: Array<{ start: number; end: number; path: string }> = [];
-  for (const match of text.matchAll(rawFileMarkerPattern)) {
-    const start = match.index;
-    if (start === undefined) {
-      continue;
-    }
-    const token = match[0];
-    const body = token.slice(1).replace(trailingRawFileMarkerPunctuationPattern, "");
-    if (body.length === 0 || externalMentionSchemePattern.test(body)) {
-      continue;
-    }
-    const pathLength = rawFileMarkerPathLength(body);
-    if (pathLength === null) {
-      continue;
-    }
-    const path = body.slice(0, pathLength);
-    ranges.push({ start, end: start + 1 + path.length, path });
-  }
-  return ranges;
-};
-
-const codexRawFileMarkersToDisplayParts = (
-  input: CodexTextInput,
-  textOffset: number,
-): AgentUserMessageDisplayPart[] | null => {
-  const ranges = findRawFileMarkerRanges(input.text);
-  if (ranges.length === 0) {
-    return null;
-  }
-
-  const parts: AgentUserMessageDisplayPart[] = [];
-  let cursor = 0;
-  for (const range of ranges) {
-    if (range.start > cursor) {
-      parts.push({ kind: "text", text: input.text.slice(cursor, range.start) });
-    }
-    parts.push({
-      kind: "file_reference",
-      file: codexFileReferenceFromPath(range.path),
-      sourceText: {
-        value: input.text.slice(range.start, range.end),
-        start: textOffset + range.start,
-        end: textOffset + range.end,
-      },
-    });
-    cursor = range.end;
-  }
-  if (cursor < input.text.length) {
-    parts.push({ kind: "text", text: input.text.slice(cursor) });
-  }
-  return parts;
-};
-
 export const codexUserTextToDisplayParts = (text: string): AgentUserMessageDisplayPart[] => {
-  return codexRawFileMarkersToDisplayParts({ type: "text", text }, 0) ?? [{ kind: "text", text }];
+  return [{ kind: "text", text }];
 };
 
 const collectCodexMarkedSkillMarkerCounts = (input: CodexUserInput[]): Map<string, number> => {
@@ -714,14 +657,6 @@ export const codexUserInputsToDisplayParts = (
         accumulatedText = appendUserInputText(accumulatedText, partText);
         accumulatedText = appendUserInputText(accumulatedText, textContributions[index + 1] ?? "");
         index += 1;
-        continue;
-      }
-    }
-    if (current.type === "text") {
-      const rawFileMarkerParts = codexRawFileMarkersToDisplayParts(current, textOffset);
-      if (rawFileMarkerParts) {
-        parts.push(...rawFileMarkerParts);
-        accumulatedText = appendUserInputText(accumulatedText, partText);
         continue;
       }
     }

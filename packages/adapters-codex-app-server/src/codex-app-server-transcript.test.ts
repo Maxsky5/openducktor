@@ -300,6 +300,61 @@ describe("Codex App Server transcript parsing", () => {
     });
   });
 
+  test("hydrates Codex persisted text element file markers without replayed mentions", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: "Now tell me what's in @apps/web/src/contexts/ExpenseContext.tsx please",
+          text_elements: [
+            {
+              byteRange: { start: 22, end: 63 },
+              placeholder: "@ExpenseContext.tsx",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(codexUserInputListToText(input)).toBe(
+      "Now tell me what's in @apps/web/src/contexts/ExpenseContext.tsx please",
+    );
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Now tell me what's in @apps/web/src/contexts/ExpenseContext.tsx please",
+      displayParts: [
+        { kind: "text", text: "Now tell me what's in " },
+        {
+          kind: "file_reference",
+          file: {
+            id: "apps/web/src/contexts/ExpenseContext.tsx",
+            name: "ExpenseContext.tsx",
+            path: "apps/web/src/contexts/ExpenseContext.tsx",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@apps/web/src/contexts/ExpenseContext.tsx",
+            start: 22,
+            end: 63,
+          },
+        },
+        { kind: "text", text: " please" },
+      ],
+    });
+  });
+
   test("hydrates standalone Codex file mentions as structured file display parts", () => {
     const input = codexUserInputsFromItem({
       id: "user-1",
@@ -389,108 +444,6 @@ describe("Codex App Server transcript parsing", () => {
         },
       ],
     });
-  });
-
-  test("hydrates Codex raw-only file markers as inline structured file display parts", () => {
-    const input = codexUserInputsFromItem({
-      id: "user-1",
-      type: "userMessage",
-      content: [
-        {
-          type: "text",
-          text: "Tell me what's in @apps/api/src/routes/auth.tsplease",
-        },
-      ],
-    });
-
-    expect(codexUserInputListToText(input)).toBe(
-      "Tell me what's in @apps/api/src/routes/auth.tsplease",
-    );
-
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
-
-    expect(message).toMatchObject({
-      role: "user",
-      text: "Tell me what's in @apps/api/src/routes/auth.tsplease",
-      displayParts: [
-        { kind: "text", text: "Tell me what's in " },
-        {
-          kind: "file_reference",
-          file: {
-            id: "apps/api/src/routes/auth.ts",
-            name: "auth.ts",
-            path: "apps/api/src/routes/auth.ts",
-            kind: "code",
-          },
-          sourceText: {
-            value: "@apps/api/src/routes/auth.ts",
-            start: 18,
-            end: 46,
-          },
-        },
-        { kind: "text", text: "please" },
-      ],
-    });
-  });
-
-  test("hydrates generic Codex user text file markers as inline structured file display parts", () => {
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        role: "user",
-        text: "Tell me what's in @apps/api/src/routes/auth.tsplease",
-      },
-      "fallback-id",
-    );
-
-    expect(message).toMatchObject({
-      role: "user",
-      text: "Tell me what's in @apps/api/src/routes/auth.tsplease",
-      displayParts: [
-        { kind: "text", text: "Tell me what's in " },
-        {
-          kind: "file_reference",
-          file: {
-            id: "apps/api/src/routes/auth.ts",
-            name: "auth.ts",
-            path: "apps/api/src/routes/auth.ts",
-            kind: "code",
-          },
-          sourceText: {
-            value: "@apps/api/src/routes/auth.ts",
-            start: 18,
-            end: 46,
-          },
-        },
-        { kind: "text", text: "please" },
-      ],
-    });
-  });
-
-  test("keeps non-path Codex raw @ markers as text", () => {
-    const input = codexUserInputsFromItem({
-      id: "user-1",
-      type: "userMessage",
-      content: [{ type: "text", text: "Ask @alice please" }],
-    });
-
-    const message = toHistoryMessage(
-      {
-        id: "user-1",
-        type: "userMessage",
-        content: input,
-      },
-      "fallback-id",
-    );
-
-    expect(message?.displayParts).toEqual([{ kind: "text", text: "Ask @alice please" }]);
   });
 
   test("collapses Codex persisted marker plus skill echoes", () => {
