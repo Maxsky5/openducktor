@@ -12,6 +12,8 @@ type CodexTextInput = Extract<CodexUserInput, { type: "text" }>;
 type CodexMentionInput = Extract<CodexUserInput, { type: "mention" }>;
 type CodexSkillInput = Extract<CodexUserInput, { type: "skill" }>;
 
+const wordlikeTextStartPattern = /[\p{L}\p{N}_]/u;
+
 const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart | null => {
   if (part.kind === "text") {
     return { kind: "text", text: part.text };
@@ -29,9 +31,27 @@ const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart 
 };
 
 export const toDisplayParts = (parts: AgentUserMessagePart[]): AgentUserMessageDisplayPart[] => {
-  return parts
-    .map(toDisplayPart)
-    .filter((part): part is AgentUserMessageDisplayPart => Boolean(part));
+  const displayParts: AgentUserMessageDisplayPart[] = [];
+  let previousPart: AgentUserMessagePart | null = null;
+  for (const part of parts) {
+    const displayPart = toDisplayPart(part);
+    if (!displayPart) {
+      previousPart = part;
+      continue;
+    }
+    if (
+      previousPart &&
+      (previousPart.kind === "file_reference" || previousPart.kind === "skill_mention") &&
+      displayPart.kind === "text" &&
+      wordlikeTextStartPattern.test(displayPart.text.at(0) ?? "")
+    ) {
+      displayParts.push({ ...displayPart, text: ` ${displayPart.text}` });
+    } else {
+      displayParts.push(displayPart);
+    }
+    previousPart = part;
+  }
+  return displayParts;
 };
 const userInputText = (input: CodexUserInput): string => {
   if (input.type === "text") {

@@ -6,7 +6,7 @@ import {
   toCodexUserInputList,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
-import { codexUserInputListToText } from "./codex-user-input-display";
+import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
 
 describe("Codex App Server transcript parsing", () => {
   test("maps skill message parts to structured Codex skill input", () => {
@@ -118,6 +118,36 @@ describe("Codex App Server transcript parsing", () => {
     expect(codexUserInputListToText(input)).toBe(
       "Tell me what's in @apps/api/src/routes/auth.ts please",
     );
+  });
+
+  test("adds a display boundary after Codex file chips before adjacent words", () => {
+    expect(
+      toDisplayParts([
+        { kind: "text", text: "Now tell me what's in " },
+        {
+          kind: "file_reference",
+          file: {
+            id: "apps/api/src/lib/validation/schemas/group.ts",
+            path: "apps/api/src/lib/validation/schemas/group.ts",
+            name: "group.ts",
+            kind: "code",
+          },
+        },
+        { kind: "text", text: "please" },
+      ]),
+    ).toEqual([
+      { kind: "text", text: "Now tell me what's in " },
+      {
+        kind: "file_reference",
+        file: {
+          id: "apps/api/src/lib/validation/schemas/group.ts",
+          path: "apps/api/src/lib/validation/schemas/group.ts",
+          name: "group.ts",
+          kind: "code",
+        },
+      },
+      { kind: "text", text: " please" },
+    ]);
   });
 
   test("keeps a text skill marker in Codex turn input for history hydration", () => {
