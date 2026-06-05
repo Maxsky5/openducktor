@@ -125,27 +125,31 @@ const createFakeDoltCommand = async ({
 }): Promise<string> => {
   const root = await mkdtemp(path.join(tmpdir(), "odt-fake-dolt-"));
   if (process.platform === "win32") {
+    const script = path.join(root, "dolt.mjs");
     const command = path.join(root, "dolt.cmd");
     await writeFile(
-      command,
+      script,
       [
-        "@echo off",
-        'if "%~1"=="version" (',
-        `  echo dolt version ${selectedVersion}`,
-        "  exit /b 0",
-        ")",
-        'echo %* | findstr /C:"select dolt_version();" >nul',
-        "if not errorlevel 1 (",
-        "  echo dolt_version()",
-        `  echo ${serverVersion}`,
-        "  exit /b 0",
-        ")",
-        'echo %* | findstr /C:"show databases" >nul',
-        "if not errorlevel 1 exit /b 0",
-        "exit /b 1",
+        "const args = process.argv.slice(2);",
+        'if (args[0] === "version") {',
+        `  console.log(${JSON.stringify(`dolt version ${selectedVersion}`)});`,
+        "  process.exit(0);",
+        "}",
+        'const queryIndex = args.indexOf("-q");',
+        'const query = queryIndex === -1 ? "" : args[queryIndex + 1] ?? "";',
+        'if (query === "select dolt_version();") {',
+        '  console.log("dolt_version()");',
+        `  console.log(${JSON.stringify(serverVersion)});`,
+        "  process.exit(0);",
+        "}",
+        'if (query === "show databases") {',
+        "  process.exit(0);",
+        "}",
+        "process.exit(1);",
         "",
-      ].join("\r\n"),
+      ].join("\n"),
     );
+    await writeFile(command, ["@echo off", 'bun "%~dp0dolt.mjs" %*', ""].join("\r\n"));
     return command;
   }
 
