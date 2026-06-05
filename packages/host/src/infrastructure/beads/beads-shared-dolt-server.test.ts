@@ -130,7 +130,7 @@ const createFakeDoltCommand = async ({
       command,
       [
         "@echo off",
-        'if "%1"=="version" (',
+        'if "%~1"=="version" (',
         `  echo dolt version ${selectedVersion}`,
         "  exit /b 0",
         ")",

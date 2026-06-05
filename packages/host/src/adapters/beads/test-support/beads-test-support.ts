@@ -112,7 +112,7 @@ export const createFakeDolt = async (binDir: string, version = "2.1.2"): Promise
       doltPath,
       [
         "@echo off",
-        'if "%1"=="version" (',
+        'if "%~1"=="version" (',
         `  echo dolt version ${version}`,
         "  exit /b 0",
         ")",
