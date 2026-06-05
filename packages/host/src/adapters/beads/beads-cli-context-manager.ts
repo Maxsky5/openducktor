@@ -5,6 +5,11 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type {
+  ResolveBeadsCliContextRequestOptions,
+  ResolveBeadsOptionalServerContextOptions,
+  ResolveBeadsSharedServerContextOptions,
+} from "../../infrastructure/beads/beads-context-model";
+import type {
   BeadsTaskRepositoryShutdownResult,
   ResolveBeadsCliContext,
   ResolveRawBeadsCliContext,
@@ -134,11 +139,33 @@ export const createBeadsCliContextManager = ({
   const resolveSharedDoltToolPaths = createSharedDoltToolPathResolver(toolDiscovery, processEnv);
   const resolveContextRequest = createBeadsCliContextRequestResolver({
     isClosing: () => closing,
-    processEnv,
-    resolveBeadsToolPaths,
-    resolveSharedDoltToolPaths,
     ...(resolveWorkspaceIdForRepoPath === undefined ? {} : { resolveWorkspaceIdForRepoPath }),
   });
+  const resolveOptionalCliOptions = (
+    requestOptions: ResolveBeadsCliContextRequestOptions,
+  ): Effect.Effect<ResolveBeadsOptionalServerContextOptions, TaskStoreError> =>
+    Effect.gen(function* () {
+      const tools = yield* resolveBeadsToolPaths();
+      return {
+        ...requestOptions,
+        processEnv,
+        requireSharedServer: false,
+        tools,
+      };
+    });
+  const resolveSharedCliOptions = (
+    requestOptions: ResolveBeadsCliContextRequestOptions & { requireSharedServer: true },
+  ): Effect.Effect<ResolveBeadsSharedServerContextOptions, TaskStoreError> =>
+    Effect.gen(function* () {
+      const tools = yield* resolveBeadsToolPaths();
+      return {
+        ...requestOptions,
+        processEnv,
+        requireSharedServer: true,
+        sharedDoltTools: yield* resolveSharedDoltToolPaths(),
+        tools,
+      };
+    });
   const rememberOwnedContext = (context: BeadsCliContext): BeadsCliContext => {
     if (context.sharedServer?.ownerPid === process.pid) {
       ownedSharedDoltServers.set(context.serverStatePath, context.sharedServer);
@@ -164,12 +191,19 @@ export const createBeadsCliContextManager = ({
     Effect.gen(function* () {
       const request = yield* resolveContextRequest(repoPath, options);
       if (request.options.requireSharedServer !== true) {
-        const optionalServerOptions = request.options;
         return yield* trackCliContextResolution(() =>
-          resolveCliContext(request.repoPath, optionalServerOptions),
+          Effect.gen(function* () {
+            const optionalServerOptions = yield* resolveOptionalCliOptions(request.options);
+            return yield* resolveCliContext(request.repoPath, optionalServerOptions);
+          }),
         );
       }
-      const sharedServerOptions = request.options;
+      const sharedRequestOptions: ResolveBeadsCliContextRequestOptions & {
+        requireSharedServer: true;
+      } = {
+        ...request.options,
+        requireSharedServer: true,
+      };
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const reservation = yield* reserveReadyCliContextFlightIfOpen(request.cacheKey);
@@ -185,7 +219,10 @@ export const createBeadsCliContextManager = ({
             }),
             flight: reservation.flight,
             rememberOwnedContext,
-            resolveContext: resolveCliContext(request.repoPath, sharedServerOptions),
+            resolveContext: Effect.gen(function* () {
+              const sharedServerOptions = yield* resolveSharedCliOptions(sharedRequestOptions);
+              return yield* resolveCliContext(request.repoPath, sharedServerOptions);
+            }),
           });
           return yield* restore(awaitBeadsCliContextFlight(reservation.flight));
         }),

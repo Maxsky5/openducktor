@@ -9,8 +9,6 @@ import {
   electronSidecarExecutableName,
 } from "./electron-sidecar-manifest";
 
-type PackagedSidecarPlatform = Exclude<ElectronReleasePlatform, "macos">;
-
 type VerifyPackagedElectronSidecarsInput = {
   arch: ElectronReleaseArch;
   platform: ElectronReleasePlatform;
@@ -24,7 +22,7 @@ export type VerifiedPackagedElectronSidecar = {
 
 type PackagedSidecarInput = {
   arch: ElectronReleaseArch;
-  platform: PackagedSidecarPlatform;
+  platform: ElectronReleasePlatform;
   releaseDirectory: string;
   sidecarId: ElectronSidecarId;
 };
@@ -33,6 +31,10 @@ const unpackedDirectoryName = ({
   arch,
   platform,
 }: Pick<PackagedSidecarInput, "arch" | "platform">): string => {
+  if (platform === "macos") {
+    return arch === "x64" ? "mac" : `mac-${arch}`;
+  }
+
   const prefix = platform === "windows" ? "win" : "linux";
   return arch === "x64" ? `${prefix}-unpacked` : `${prefix}-${arch}-unpacked`;
 };
@@ -44,6 +46,18 @@ export const resolvePackagedElectronSidecarPath = ({
   sidecarId,
 }: PackagedSidecarInput): string => {
   const unpackedDirectory = unpackedDirectoryName({ arch, platform });
+  if (platform === "macos") {
+    return join(
+      releaseDirectory,
+      unpackedDirectory,
+      "OpenDucktor.app",
+      "Contents",
+      "Resources",
+      "bin",
+      electronSidecarExecutableName(sidecarId, platform),
+    );
+  }
+
   return join(
     releaseDirectory,
     unpackedDirectory,
@@ -89,10 +103,6 @@ export const verifyPackagedElectronSidecars = async ({
   platform,
   releaseDirectory,
 }: VerifyPackagedElectronSidecarsInput): Promise<VerifiedPackagedElectronSidecar[]> => {
-  if (platform === "macos") {
-    return [];
-  }
-
   const verifiedSidecars: VerifiedPackagedElectronSidecar[] = [];
   for (const sidecarId of ELECTRON_SIDECAR_IDS) {
     const sidecarPath = resolvePackagedElectronSidecarPath({
@@ -103,9 +113,9 @@ export const verifyPackagedElectronSidecars = async ({
     });
     const metadata = await assertPackagedSidecarFile({ path: sidecarPath, platform, sidecarId });
 
-    if (platform === "linux" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
+    if (platform !== "windows" && process.platform !== "win32" && (metadata.mode & 0o111) === 0) {
       throw new Error(
-        `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for linux: expected an executable file. Expected path: ${sidecarPath}`,
+        `Invalid packaged Electron ${electronSidecarDisplayName(sidecarId)} sidecar payload for ${platform}: expected an executable file. Expected path: ${sidecarPath}`,
       );
     }
 

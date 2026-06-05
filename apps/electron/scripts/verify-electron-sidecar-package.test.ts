@@ -40,7 +40,7 @@ const writePackagedSidecar = async ({
   arch?: "arm64" | "x64";
   contents?: string;
   executable?: boolean;
-  platform: "linux" | "windows";
+  platform: "linux" | "macos" | "windows";
   releaseDirectory: string;
   sidecarId: ElectronSidecarId;
 }): Promise<string> => {
@@ -52,7 +52,7 @@ const writePackagedSidecar = async ({
   });
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents);
-  if (platform === "linux") {
+  if (platform !== "windows") {
     await chmod(path, executable ? 0o755 : 0o644);
   }
   return path;
@@ -66,7 +66,7 @@ const writeRequiredPackagedSidecars = async ({
 }: {
   arch?: "arm64" | "x64";
   executable?: boolean;
-  platform: "linux" | "windows";
+  platform: "linux" | "macos" | "windows";
   releaseDirectory: string;
 }): Promise<VerifiedPackagedElectronSidecar[]> =>
   Promise.all(
@@ -118,6 +118,42 @@ describe("verifyPackagedElectronSidecars", () => {
         sidecarId: "beads",
       }),
     ).toBe(join(releaseDirectory, "linux-arm64-unpacked", "resources", "bin", "bd"));
+    expect(
+      resolvePackagedElectronSidecarPath({
+        arch: "x64",
+        platform: "macos",
+        releaseDirectory,
+        sidecarId: "openducktor-mcp",
+      }),
+    ).toBe(
+      join(
+        releaseDirectory,
+        "mac",
+        "OpenDucktor.app",
+        "Contents",
+        "Resources",
+        "bin",
+        "openducktor-mcp",
+      ),
+    );
+    expect(
+      resolvePackagedElectronSidecarPath({
+        arch: "arm64",
+        platform: "macos",
+        releaseDirectory,
+        sidecarId: "dolt",
+      }),
+    ).toBe(
+      join(
+        releaseDirectory,
+        "mac-arm64",
+        "OpenDucktor.app",
+        "Contents",
+        "Resources",
+        "bin",
+        "dolt",
+      ),
+    );
   });
 
   test("accepts non-empty Windows sidecars without Unix executable-bit validation", async () => {
@@ -237,11 +273,54 @@ describe("verifyPackagedElectronSidecars", () => {
     ).rejects.toThrow("expected an executable file");
   });
 
-  test("does not validate macOS unpacked package paths", async () => {
+  test("accepts non-empty executable macOS sidecars", async () => {
     const releaseDirectory = await makeReleaseDirectory();
+    const sidecarPaths = await writeRequiredPackagedSidecars({
+      arch: "arm64",
+      platform: "macos",
+      releaseDirectory,
+    });
 
     await expect(
       verifyPackagedElectronSidecars({ arch: "arm64", platform: "macos", releaseDirectory }),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual(sidecarPaths);
+  });
+
+  test("rejects a missing required macOS sidecar at the expected app bundle path", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    await writePackagedSidecar({
+      arch: "arm64",
+      platform: "macos",
+      releaseDirectory,
+      sidecarId: "openducktor-mcp",
+    });
+    await writePackagedSidecar({
+      arch: "arm64",
+      platform: "macos",
+      releaseDirectory,
+      sidecarId: "dolt",
+    });
+
+    await expect(
+      verifyPackagedElectronSidecars({ arch: "arm64", platform: "macos", releaseDirectory }),
+    ).rejects.toThrow(join("mac-arm64", "OpenDucktor.app", "Contents", "Resources", "bin", "bd"));
+  });
+
+  testIfUnixModeIsAvailable("rejects a non-executable required macOS sidecar", async () => {
+    const releaseDirectory = await makeReleaseDirectory();
+    await writeRequiredPackagedSidecars({
+      platform: "macos",
+      releaseDirectory,
+    });
+    await writePackagedSidecar({
+      executable: false,
+      platform: "macos",
+      releaseDirectory,
+      sidecarId: "dolt",
+    });
+
+    await expect(
+      verifyPackagedElectronSidecars({ arch: "x64", platform: "macos", releaseDirectory }),
+    ).rejects.toThrow("expected an executable file");
   });
 });

@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { archiveEntryPathToFilePath } from "./electron-sidecar-archives";
 import {
+  ELECTRON_EXTERNAL_SIDECAR_TARGETS,
   type ElectronExternalSidecarAsset,
+  EXTERNAL_ELECTRON_SIDECAR_IDS,
   electronSidecarExecutableName,
 } from "./electron-sidecar-manifest";
 import {
@@ -36,10 +38,12 @@ const writeExtractedSidecar = async ({
   asset,
   extractionDirectory,
   executable = true,
+  platform,
 }: {
   asset: ElectronExternalSidecarAsset;
   executable?: boolean;
   extractionDirectory: string;
+  platform: "linux" | "macos" | "windows";
 }): Promise<string> => {
   const extractedPath = join(
     extractionDirectory,
@@ -47,7 +51,7 @@ const writeExtractedSidecar = async ({
   );
   await mkdir(dirname(extractedPath), { recursive: true });
   await writeFile(extractedPath, "binary");
-  if (asset.platform !== "windows") {
+  if (platform !== "windows") {
     await chmod(extractedPath, executable ? 0o755 : 0o644);
   }
   return extractedPath;
@@ -69,7 +73,7 @@ const makeSideEffectingHooks = (sideEffects: string[]): PrepareElectronSidecarsH
   },
   extractArchive: async ({ asset, extractionDirectory }) => {
     sideEffects.push("extract");
-    await writeExtractedSidecar({ asset, extractionDirectory });
+    await writeExtractedSidecar({ asset, extractionDirectory, platform: "linux" });
   },
   verifyArchiveChecksum: async () => {},
 });
@@ -79,6 +83,18 @@ describe("prepareElectronSidecars", () => {
     expect(electronSidecarExecutableName("openducktor-mcp", "macos")).toBe("openducktor-mcp");
     expect(electronSidecarExecutableName("beads", "linux")).toBe("bd");
     expect(electronSidecarExecutableName("dolt", "windows")).toBe("dolt.exe");
+  });
+
+  test("defines sidecar release targets as complete Beads and Dolt bundles", () => {
+    expect(
+      ELECTRON_EXTERNAL_SIDECAR_TARGETS.map(({ arch, platform }) => `${platform}/${arch}`),
+    ).toEqual(["macos/x64", "macos/arm64", "linux/x64", "linux/arm64", "windows/x64"]);
+    for (const target of ELECTRON_EXTERNAL_SIDECAR_TARGETS) {
+      expect(Object.keys(target.assets).sort()).toEqual([...EXTERNAL_ELECTRON_SIDECAR_IDS].sort());
+      for (const sidecarId of EXTERNAL_ELECTRON_SIDECAR_IDS) {
+        expect(target.assets[sidecarId].id).toBe(sidecarId);
+      }
+    }
   });
 
   test("stages sidecars under the Electron package build directory", async () => {
@@ -130,7 +146,7 @@ describe("prepareElectronSidecars", () => {
       },
       extractArchive: async ({ asset, extractionDirectory }) => {
         extractedAssets.push(asset.id);
-        await writeExtractedSidecar({ asset, extractionDirectory });
+        await writeExtractedSidecar({ asset, extractionDirectory, platform: "linux" });
       },
       verifyArchiveChecksum: async () => {},
     });
@@ -141,7 +157,7 @@ describe("prepareElectronSidecars", () => {
       "beads",
       "dolt",
     ]);
-    expect(downloadedAssets).toEqual(["beads", "dolt"]);
+    expect([...downloadedAssets].sort()).toEqual(["beads", "dolt"]);
     expect(extractedAssets.sort()).toEqual(["beads", "dolt"]);
     await expect(stat(prepared.plan.outputPaths.beads)).resolves.toMatchObject({ size: 6 });
     await expect(stat(prepared.plan.outputPaths.dolt)).resolves.toMatchObject({ size: 6 });
@@ -169,7 +185,7 @@ describe("prepareElectronSidecars", () => {
         workspaceRoot,
         ...makeSideEffectingHooks(sideEffects),
       }),
-    ).rejects.toThrow("No pinned Electron Beads sidecar asset for windows/arm64");
+    ).rejects.toThrow("No pinned Electron sidecar target for windows/arm64");
     expect(sideEffects).toEqual([]);
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
@@ -216,7 +232,7 @@ describe("prepareElectronSidecars", () => {
         await writeFile(archivePath, "archive");
       },
       extractArchive: async ({ asset, extractionDirectory }) => {
-        await writeExtractedSidecar({ asset, extractionDirectory });
+        await writeExtractedSidecar({ asset, extractionDirectory, platform: "windows" });
       },
       verifyArchiveChecksum: async () => {},
     });

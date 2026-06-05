@@ -223,12 +223,6 @@ jobs:
             "$app_bundle/Contents/Resources/bin/bd"
             "$app_bundle/Contents/Resources/bin/dolt"
           )
-          for sidecar in "${sidecars[@]}"; do
-            if [[ ! -f "$sidecar" ]]; then
-              echo "Packaged Electron sidecar was not found at $sidecar." >&2
-              exit 1
-            fi
-          done
 
           codesign --verify --deep --strict --verbose=4 "$app_bundle"
           for sidecar in "${sidecars[@]}"; do

@@ -318,7 +318,6 @@ const doltVersionMatchesServer = (
 export const serverStateIsHealthy = (
   state: BeadsSharedServerState,
   paths: BeadsSharedServerPaths,
-  selectedDoltVersion: string,
 ): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     if (state.host !== SHARED_DOLT_SERVER_HOST || state.user !== SHARED_DOLT_SERVER_USER) {
@@ -334,7 +333,7 @@ export const serverStateIsHealthy = (
         state.port,
         paths.env,
         paths.tools.dolt,
-        selectedDoltVersion,
+        paths.tools.selectedDoltVersion,
       ))
     ) {
       return false;

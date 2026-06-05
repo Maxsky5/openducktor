@@ -271,23 +271,22 @@ describe("serverStateIsHealthy", () => {
     const state = createState(paths);
 
     await expect(
-      Effect.runPromise(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths, "2.1.2")),
+      Effect.runPromise(serverStateIsHealthy({ ...state, host: "127.0.0.2" }, paths)),
     ).resolves.toBe(false);
     await expect(
-      Effect.runPromise(serverStateIsHealthy({ ...state, user: "other" }, paths, "2.1.2")),
+      Effect.runPromise(serverStateIsHealthy({ ...state, user: "other" }, paths)),
     ).resolves.toBe(false);
     await expect(
       Effect.runPromise(
         serverStateIsHealthy(
           { ...state, sharedServerRoot: `${paths.sharedServerRoot}-other` },
           paths,
-          "2.1.2",
         ),
       ),
     ).resolves.toBe(false);
     await expect(
       Effect.runPromise(
-        serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths, "2.1.2"),
+        serverStateIsHealthy({ ...state, doltDataDir: `${paths.doltRoot}-other` }, paths),
       ),
     ).resolves.toBe(false);
   });
@@ -304,14 +303,10 @@ describe("serverStateIsHealthy", () => {
 
       await expect(
         Effect.runPromise(
-          serverStateIsHealthy(
-            state,
-            {
-              ...paths,
-              tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
-            },
-            "2.1.2",
-          ),
+          serverStateIsHealthy(state, {
+            ...paths,
+            tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+          }),
         ),
       ).resolves.toBe(false);
     });
@@ -329,14 +324,10 @@ describe("serverStateIsHealthy", () => {
 
       await expect(
         Effect.runPromise(
-          serverStateIsHealthy(
-            state,
-            {
-              ...paths,
-              tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
-            },
-            "2.1.2",
-          ),
+          serverStateIsHealthy(state, {
+            ...paths,
+            tools: { dolt: fakeDolt, selectedDoltVersion: "2.1.2" },
+          }),
         ),
       ).resolves.toBe(true);
     });

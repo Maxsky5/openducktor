@@ -335,11 +335,7 @@ export const defaultEnsureSharedDoltServerRunning: EnsureSharedDoltServer = (pat
     const existing = yield* readSharedServerState(paths.serverStatePath);
     let existingHealthy = false;
     if (existing) {
-      existingHealthy = yield* serverStateIsHealthy(
-        existing,
-        paths,
-        paths.tools.selectedDoltVersion,
-      );
+      existingHealthy = yield* serverStateIsHealthy(existing, paths);
     }
     if (existing && existingHealthy) {
       if (existing.ownerPid !== process.pid && !processIsAlive(existing.ownerPid)) {

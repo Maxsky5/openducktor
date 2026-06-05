@@ -22,12 +22,13 @@ import {
 import {
   ELECTRON_SIDECAR_IDS,
   type ElectronExternalSidecarAsset,
+  type ElectronExternalSidecarTarget,
   type ElectronSidecarId,
-  type ExternalElectronSidecarId,
+  EXTERNAL_ELECTRON_SIDECAR_IDS,
   electronExternalSidecarAssetFileName,
   electronSidecarDisplayName,
   electronSidecarExecutableName,
-  resolveElectronExternalSidecarAsset,
+  resolveElectronExternalSidecarTarget,
 } from "./electron-sidecar-manifest";
 
 export type ElectronSidecarBuildPlan = {
@@ -162,24 +163,17 @@ const compileAndVerifyMcpSidecar = async ({
   return { id: "openducktor-mcp", outputPath };
 };
 
-const EXTERNAL_ELECTRON_SIDECAR_IDS = [
-  "beads",
-  "dolt",
-] as const satisfies readonly ExternalElectronSidecarId[];
-
 const resolveExternalSidecarStagingPlans = ({
-  arch,
   electronPackageDirectory,
   plan,
-  platform,
+  target,
 }: {
-  arch: ElectronReleaseArch;
   electronPackageDirectory: string;
   plan: ElectronSidecarBuildPlan;
-  platform: ElectronReleasePlatform;
+  target: ElectronExternalSidecarTarget;
 }): ExternalElectronSidecarStagingPlan[] =>
   EXTERNAL_ELECTRON_SIDECAR_IDS.map((sidecarId) => {
-    const asset = resolveElectronExternalSidecarAsset({ arch, id: sidecarId, platform });
+    const asset = target.assets[sidecarId];
 
     return {
       archivePath: join(
@@ -195,7 +189,7 @@ const resolveExternalSidecarStagingPlans = ({
         electronPackageDirectory,
         "build",
         "sidecar-extract",
-        `${sidecarId}-${platform}-${arch}`,
+        `${sidecarId}-${target.platform}-${target.arch}`,
       ),
       outputPath: plan.outputPaths[sidecarId],
     };
@@ -256,11 +250,11 @@ export const prepareElectronSidecars = async ({
   sidecars: PreparedElectronSidecar[];
 }> => {
   const plan = resolveElectronSidecarBuildPlan(input);
+  const target = resolveElectronExternalSidecarTarget({ arch, platform: input.platform });
   const externalSidecarPlans = resolveExternalSidecarStagingPlans({
-    arch,
     electronPackageDirectory: input.electronPackageDirectory,
     plan,
-    platform: input.platform,
+    target,
   });
 
   await resetSidecarOutput(plan);
