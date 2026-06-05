@@ -552,6 +552,10 @@ const codexRawFileMarkersToDisplayParts = (
   return parts;
 };
 
+export const codexUserTextToDisplayParts = (text: string): AgentUserMessageDisplayPart[] => {
+  return codexRawFileMarkersToDisplayParts({ type: "text", text }, 0) ?? [{ kind: "text", text }];
+};
+
 const collectCodexMarkedSkillMarkerCounts = (input: CodexUserInput[]): Map<string, number> => {
   const markers = new Map<string, number>();
   for (const entry of input) {

@@ -410,6 +410,40 @@ describe("Codex App Server transcript parsing", () => {
     });
   });
 
+  test("hydrates generic Codex user text file markers as inline structured file display parts", () => {
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        role: "user",
+        text: "Tell me what's in @apps/api/src/routes/auth.tsplease",
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      text: "Tell me what's in @apps/api/src/routes/auth.tsplease",
+      displayParts: [
+        { kind: "text", text: "Tell me what's in " },
+        {
+          kind: "file_reference",
+          file: {
+            id: "apps/api/src/routes/auth.ts",
+            name: "auth.ts",
+            path: "apps/api/src/routes/auth.ts",
+            kind: "code",
+          },
+          sourceText: {
+            value: "@apps/api/src/routes/auth.ts",
+            start: 18,
+            end: 46,
+          },
+        },
+        { kind: "text", text: "please" },
+      ],
+    });
+  });
+
   test("keeps non-path Codex raw @ markers as text", () => {
     const input = codexUserInputsFromItem({
       id: "user-1",
