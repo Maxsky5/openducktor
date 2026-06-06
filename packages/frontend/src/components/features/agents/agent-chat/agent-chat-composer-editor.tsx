@@ -77,6 +77,8 @@ type ComposerFileReferenceTooltipState = {
   side: "top" | "bottom";
 };
 type AgentChatComposerSegments = AgentChatComposerDraft["segments"];
+type AgentChatComposerSegment = AgentChatComposerSegments[number];
+type AgentChatComposerTextSegment = Extract<AgentChatComposerSegment, { kind: "text" }>;
 
 const readComposerFileReferenceChipElement = (target: EventTarget | null): HTMLElement | null => {
   if (!(target instanceof Element)) {
@@ -85,6 +87,31 @@ const readComposerFileReferenceChipElement = (target: EventTarget | null): HTMLE
 
   const chip = target.closest("[data-file-reference-path]");
   return chip instanceof HTMLElement ? chip : null;
+};
+
+const isChipSegment = (segment: AgentChatComposerSegment | undefined): boolean => {
+  return segment !== undefined && segment.kind !== "text";
+};
+
+const isEmptyTextSegmentAdjacentToChip = (
+  segment: AgentChatComposerTextSegment,
+  segments: AgentChatComposerSegments,
+  index: number,
+): boolean => {
+  return (
+    segment.text.length === 0 &&
+    (isChipSegment(segments[index - 1]) || isChipSegment(segments[index + 1]))
+  );
+};
+
+const renderTextSegmentContent = (
+  segment: AgentChatComposerTextSegment,
+  segments: AgentChatComposerSegments,
+  index: number,
+): string => {
+  return isEmptyTextSegmentAdjacentToChip(segment, segments, index)
+    ? ""
+    : renderEditableTextContent(segment.text);
 };
 
 const readComposerFileReferenceTooltipState = (
@@ -131,9 +158,10 @@ const buildComposerContentMarkup = (segments: AgentChatComposerSegments): string
       }
 
       const className = readExpectedTextSegmentClassName(segments, index);
+      const textContent = renderTextSegmentContent(segment, segments, index);
 
       return `<span data-segment-id="${escapeHtml(segment.id)}" data-text-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(className)}">${escapeHtml(
-        renderEditableTextContent(segment.text),
+        textContent,
       )}</span>`;
     })
     .join("");
@@ -183,6 +211,13 @@ const syncComposerDomInPlace = (
 
         if (node.className !== expectedClassName) {
           node.className = expectedClassName;
+        }
+
+        if (
+          isEmptyTextSegmentAdjacentToChip(segment, segments, draftIndex) &&
+          (node.textContent ?? "").length > 0
+        ) {
+          return false;
         }
 
         return (

@@ -87,4 +87,36 @@ describe("agent-chat-composer-selection", () => {
     expect(range?.endContainer).toBe(textNode);
     expect(range?.endOffset).toBe((textNode.textContent ?? "").length);
   });
+
+  test("places the caret on empty text segments next to chips without adding sentinel text", () => {
+    const root = document.createElement("div");
+    root.setAttribute("contenteditable", "true");
+    const beforeChip = document.createElement("span");
+    beforeChip.dataset.textSegmentId = "before";
+    const chip = document.createElement("span");
+    chip.dataset.chipSegmentId = "file";
+    chip.setAttribute("contenteditable", "false");
+    const afterChip = document.createElement("span");
+    afterChip.dataset.textSegmentId = "after";
+    root.append(beforeChip, chip, afterChip);
+    document.body.append(root);
+
+    selectionModule.setCaretOffsetWithinElement(beforeChip, 0);
+
+    let selection = globalThis.getSelection?.();
+    let range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    expect(beforeChip.textContent).toBe("");
+    expect(beforeChip.childNodes).toHaveLength(0);
+    expect(range?.endContainer).toBe(beforeChip);
+    expect(range?.endOffset).toBe(0);
+
+    selectionModule.setCaretOffsetWithinElement(afterChip, 0);
+
+    selection = globalThis.getSelection?.();
+    range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    expect(afterChip.textContent).toBe("");
+    expect(afterChip.childNodes).toHaveLength(0);
+    expect(range?.endContainer).toBe(afterChip);
+    expect(range?.endOffset).toBe(0);
+  });
 });
