@@ -143,11 +143,37 @@ describe("PierreDiffViewer", () => {
 
     render(<PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />);
 
-    await waitFor(() => {
-      expect(primeDiffHighlightCache).toHaveBeenCalledTimes(1);
-    });
+    await waitFor(
+      () => {
+        expect(primeDiffHighlightCache).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
     const [fileDiff] = primeDiffHighlightCache.mock.calls[0] ?? [];
+    expect(fileDiff).toBeDefined();
     expect(fileDiff?.cacheKey).toBeString();
+    expect(workerPoolMock.getDiffResultCache).toHaveBeenCalledWith(fileDiff);
+  });
+
+  test("skips preloading when the worker already cached the parsed diff", async () => {
+    const { PierreDiffPreloader } = pierreViewerModule;
+    const cachedHighlightResult = {};
+    const getDiffResultCache = mock(() => cachedHighlightResult);
+    const primeDiffHighlightCache = mock();
+    workerPoolMock = {
+      getDiffResultCache,
+      primeDiffHighlightCache,
+    };
+
+    render(<PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />);
+
+    await waitFor(
+      () => {
+        expect(getDiffResultCache).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 1000 },
+    );
+    expect(primeDiffHighlightCache).not.toHaveBeenCalled();
   });
 
   test("keeps controlled selected lines in sync while dragging from the gutter utility", () => {
@@ -310,6 +336,25 @@ describe("getRenderableFileDiff", () => {
     expect(cacheKey?.length).toBeLessThan(120);
     expect(cacheKey).not.toContain("new-199");
     expect(cacheKey).not.toBe(changedResult.fileDiff?.cacheKey);
+  });
+
+  test("keeps worker cache keys stable after renderable diff cache eviction", async () => {
+    const { getRenderableFileDiff } = pierreViewerModelModule;
+    const originalPatch =
+      "diff --git a/src/stable.ts b/src/stable.ts\n--- a/src/stable.ts\n+++ b/src/stable.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    const firstResult = getRenderableFileDiff(originalPatch, "src/stable.ts");
+    for (let index = 0; index < 80; index += 1) {
+      const filePath = `src/evict-${index}.ts`;
+      getRenderableFileDiff(
+        `diff --git a/${filePath} b/${filePath}\n--- a/${filePath}\n+++ b/${filePath}\n@@ -1 +1 @@\n-old-${index}\n+new-${index}\n`,
+        filePath,
+      );
+    }
+    const reloadedResult = getRenderableFileDiff(originalPatch, "src/stable.ts");
+
+    expect(firstResult).not.toBe(reloadedResult);
+    expect(firstResult.fileDiff?.cacheKey).toBe(reloadedResult.fileDiff?.cacheKey);
   });
 
   test("keeps normalized raw diff text when parsing still fails", async () => {

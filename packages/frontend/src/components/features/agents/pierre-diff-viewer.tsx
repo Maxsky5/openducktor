@@ -89,13 +89,10 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   filePath,
 }: PierreDiffPreloaderProps): null {
   const workerPool = useWorkerPool();
-  const { fileDiff, normalizedPatch } = useMemo(
-    () => getRenderableFileDiff(patch, filePath),
-    [filePath, patch],
-  );
+  const { fileDiff } = useMemo(() => getRenderableFileDiff(patch, filePath), [filePath, patch]);
 
   useEffect(() => {
-    if (workerPool == null || fileDiff == null || normalizedPatch == null) {
+    if (workerPool == null || fileDiff == null) {
       return;
     }
     if (workerPool.getDiffResultCache(fileDiff) != null) {
@@ -103,7 +100,7 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
     }
 
     workerPool.primeDiffHighlightCache(fileDiff);
-  }, [fileDiff, normalizedPatch, workerPool]);
+  }, [fileDiff, workerPool]);
 
   return null;
 });

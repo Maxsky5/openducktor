@@ -112,13 +112,20 @@ const tryGetSingularPatch = (patch: string) => {
 const normalizeDiffLineText = (value: string): string => value.replace(/\n$/, "");
 
 const renderableFileDiffCache = new Map<string, RenderableFileDiff>();
-let nextRenderableDiffWorkerCacheKeyId = 0;
+
+const hashRenderableDiffCacheInput = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+};
 
 const workerCacheKeyForRenderableDiff = (filePath: string, normalizedPatch: string): string => {
-  nextRenderableDiffWorkerCacheKeyId += 1;
-  const cacheKeyId = nextRenderableDiffWorkerCacheKeyId.toString(36);
+  const patchHash = hashRenderableDiffCacheInput(normalizedPatch);
   const patchLength = normalizedPatch.length.toString(36);
-  return `renderable-diff:${cacheKeyId}:${patchLength}:${filePath}`;
+  return `renderable-diff:${patchHash}:${patchLength}:${filePath}`;
 };
 
 const withWorkerCacheKey = (
