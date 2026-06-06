@@ -8,6 +8,7 @@ import type {
   SkillDescriptor as ContractsSkillDescriptor,
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
+  FileDiff,
   RepoRuntimeRef,
   RuntimeApprovalReplyOutcome,
   RuntimeApprovalRequestType,
@@ -326,6 +327,7 @@ export type AgentStreamPart =
       input?: Record<string, unknown>;
       output?: string;
       error?: string;
+      fileChanges?: FileDiff[];
       metadata?: Record<string, unknown>;
       startedAtMs?: number;
       endedAtMs?: number;

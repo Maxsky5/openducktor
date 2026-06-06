@@ -1,4 +1,3 @@
-import type { FileDiff } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentStreamPart, AgentUserMessagePart } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -14,6 +13,12 @@ import {
   stringifyJsonValue,
 } from "./codex-app-server-shared";
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
+import {
+  CodexFileDiffParseError,
+  codexFileChangeDiff,
+  codexFileChangeEntries,
+  toFileDiffs,
+} from "./codex-file-diffs";
 import {
   codexDynamicToolDisplayPayload,
   codexDynamicToolErrorFromItem,
@@ -610,20 +615,6 @@ const webSearchInput = (value: Record<string, unknown>): Record<string, unknown>
   return webSearchActionInput(value.action);
 };
 
-const fileChangeDiff = (changes: unknown[]): string | null => {
-  const diffs = changes
-    .filter(isPlainObject)
-    .map((change) => extractStringField(change, ["diff", "patch"]))
-    .filter((diff): diff is string => Boolean(diff));
-  return diffs.length > 0 ? diffs.join("\n") : null;
-};
-
-const fileChangeEntries = (value: Record<string, unknown>): unknown[] => {
-  const changes = arrayFromUnknown(value.changes);
-  const diffs = arrayFromUnknown(value.diffs);
-  return changes.length > 0 ? changes : diffs;
-};
-
 export const extractCodexTokenUsageTotals = (params: unknown): CodexTokenUsageTotals | null => {
   if (!isPlainObject(params)) {
     return null;
@@ -763,9 +754,19 @@ const codexFileChangeStreamParts = (
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
-  const changes = fileChangeEntries(value);
-  const diff = fileChangeDiff(changes);
-  const error = codexFileChangeErrorFromItem(value);
+  const changes = codexFileChangeEntries(value);
+  const diff = codexFileChangeDiff(changes);
+  const fileChangesResult = (() => {
+    try {
+      return { fileChanges: toFileDiffs(changes), error: null };
+    } catch (error) {
+      if (error instanceof CodexFileDiffParseError) {
+        return { fileChanges: [], error: error.message };
+      }
+      throw error;
+    }
+  })();
+  const error = fileChangesResult.error ?? codexFileChangeErrorFromItem(value);
   return normalizedCodexToolPart({
     messageId,
     partId,
@@ -774,10 +775,10 @@ const codexFileChangeStreamParts = (
     title: "File changes",
     status: error ? "error" : statusFromCodexStatus(value.status),
     preview: `${changes.length} file change${changes.length === 1 ? "" : "s"}`,
-    ...(diff ? { input: { patch: diff } } : {}),
-    output: diff,
+    ...(fileChangesResult.error ? {} : diff ? { input: { patch: diff }, output: diff } : {}),
     error,
-    metadata: { codexItem: value, changes, diffs: changes, ...(diff ? { diff } : {}) },
+    fileChanges: fileChangesResult.fileChanges,
+    metadata: { codexItem: value },
   });
 };
 
@@ -929,34 +930,6 @@ export const toStreamPart = (
   return [];
 };
 
-export const toFileDiffs = (value: unknown): FileDiff[] => {
-  const entries = arrayFromUnknown(value).flatMap((entry) => {
-    if (!isPlainObject(entry)) {
-      return [entry];
-    }
-    const nested = arrayFromUnknown(entry.fileChanges ?? entry.changes ?? entry.files);
-    return nested.length > 0 ? nested : [entry];
-  });
-  return entries.flatMap((entry): FileDiff[] => {
-    if (!isPlainObject(entry)) {
-      return [];
-    }
-    const file = entry.file ?? entry.path;
-    const diff = entry.diff ?? entry.patch;
-    if (typeof file !== "string" || typeof diff !== "string") {
-      return [];
-    }
-    return [
-      {
-        file,
-        type: typeof entry.type === "string" ? entry.type : "modified",
-        additions: typeof entry.additions === "number" ? entry.additions : 0,
-        deletions: typeof entry.deletions === "number" ? entry.deletions : 0,
-        diff,
-      },
-    ];
-  });
-};
 const toCodexUserInput = (part: AgentUserMessagePart): CodexUserInput => {
   if (part.kind === "text") {
     return { type: "text", text: part.text };

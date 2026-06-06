@@ -83,10 +83,10 @@ import {
   codexTodosFromThreadRead,
   codexTurnItemsFromThreadRead,
   extractCodexTokenUsageTotals,
-  toFileDiffs,
   toHistoryMessage,
 } from "./codex-app-server-transcript";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
+import { toFileDiffs } from "./codex-file-diffs";
 import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import {

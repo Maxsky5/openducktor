@@ -1,3 +1,4 @@
+import type { FileDiff } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -41,6 +42,7 @@ export type NormalizedCodexToolInvocation = {
   input?: Record<string, unknown>;
   output?: string | null;
   error?: string | null;
+  fileChanges?: FileDiff[];
   metadata?: Record<string, unknown>;
   startedAtMs?: number;
   endedAtMs?: number;
@@ -271,6 +273,7 @@ export const normalizeCodexToolInvocation = ({
   input,
   output,
   error,
+  fileChanges,
   title,
   displayLabel,
   preview,
@@ -301,6 +304,7 @@ export const normalizeCodexToolInvocation = ({
     ...(resolvedPreview ? { preview: resolvedPreview } : {}),
     ...(resolvedOutput ? { output: resolvedOutput } : {}),
     ...(resolvedError ? { error: resolvedError } : {}),
+    ...(fileChanges && fileChanges.length > 0 ? { fileChanges } : {}),
     metadata: {
       ...(metadata ?? {}),
       rawToolName,

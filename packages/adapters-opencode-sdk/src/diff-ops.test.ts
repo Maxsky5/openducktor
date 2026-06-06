@@ -9,8 +9,10 @@ afterEach(() => {
 
 describe("diff-ops", () => {
   test("loadSessionDiff parses wrapped diff payloads", async () => {
-    globalThis.fetch = (async () =>
-      ({
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (url: URL | RequestInfo) => {
+      requestedUrls.push(url.toString());
+      return {
         ok: true,
         status: 200,
         statusText: "OK",
@@ -25,7 +27,8 @@ describe("diff-ops", () => {
             },
           ],
         }),
-      }) as Response) as typeof fetch;
+      } as Response;
+    }) as typeof fetch;
 
     await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
       {
@@ -36,6 +39,56 @@ describe("diff-ops", () => {
         diff: "@@ -1 +1 @@",
       },
     ]);
+    expect(requestedUrls).toEqual(["http://127.0.0.1:12345/session/session-1/diff"]);
+  });
+
+  test("loadSessionDiff parses OpenCode snapshot diff payloads", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: "@@ -1 +1 @@",
+            additions: 2,
+            deletions: 1,
+            status: "modified",
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "@@ -1 +1 @@",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: "@@ -1 +1 @@",
+            additions: 2,
+            deletions: 1,
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: missing file diff fields",
+    );
   });
 
   test("loadSessionDiff rejects HTTP failures with status context", async () => {
@@ -55,17 +108,21 @@ describe("diff-ops", () => {
   });
 
   test("loadFileStatus rejects malformed payloads", async () => {
-    globalThis.fetch = (async () =>
-      ({
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (url: URL | RequestInfo) => {
+      requestedUrls.push(url.toString());
+      return {
         ok: true,
         status: 200,
         statusText: "OK",
         json: async () => ({ items: [] }),
-      }) as Response) as typeof fetch;
+      } as Response;
+    }) as typeof fetch;
 
     await expect(loadFileStatus("http://127.0.0.1:12345")).rejects.toThrow(
       "OpenCode request failed: load file status: unexpected response payload shape",
     );
+    expect(requestedUrls).toEqual(["http://127.0.0.1:12345/file/status"]);
   });
 
   test("loadFileStatus rejects transport errors", async () => {

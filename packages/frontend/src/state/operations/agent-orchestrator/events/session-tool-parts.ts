@@ -113,6 +113,7 @@ const composeToolMessageMeta = (
     ...(input ? { input } : {}),
     ...(output ? { output } : {}),
     ...(error ? { error } : {}),
+    ...(part.fileChanges ? { fileChanges: part.fileChanges } : {}),
     ...(part.metadata ? { metadata: part.metadata } : {}),
     ...(typeof part.startedAtMs === "number" ? { startedAtMs: part.startedAtMs } : {}),
     ...(typeof part.endedAtMs === "number" ? { endedAtMs: part.endedAtMs } : {}),

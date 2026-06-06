@@ -401,11 +401,22 @@ describe("AgentChatMessageCard tool duration", () => {
             tool: "apply_patch",
             toolType: "file_edit",
             status: "completed",
-            input: {
-              patch:
-                "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
-                "diff --git a/src/second.ts b/src/second.ts\n--- a/src/second.ts\n+++ b/src/second.ts\n@@ -1 +1,2 @@\n-old\n+new\n+line\n",
-            },
+            fileChanges: [
+              {
+                file: "src/first.ts",
+                type: "modified",
+                additions: 1,
+                deletions: 1,
+                diff: "@@ -1 +1 @@\n-old\n+new\n",
+              },
+              {
+                file: "src/second.ts",
+                type: "modified",
+                additions: 2,
+                deletions: 1,
+                diff: "@@ -1 +1,2 @@\n-old\n+new\n+line\n",
+              },
+            ],
             output: "Updated 2 files",
           },
         },

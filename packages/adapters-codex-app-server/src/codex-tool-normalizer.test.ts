@@ -161,7 +161,7 @@ describe("Codex tool normalization", () => {
         type: "fileChange",
         id: "change-1",
         status: "completed",
-        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@" }],
+        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@\n-old\n+new" }],
         content: [
           {
             type: "text",
@@ -185,10 +185,46 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         status: "completed",
-        output: "@@ -1 +1 @@",
+        output: "@@ -1 +1 @@\n-old\n+new",
+        fileChanges: [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "@@ -1 +1 @@\n-old\n+new",
+          },
+        ],
       }),
     );
     expect(part).not.toHaveProperty("error");
+  });
+
+  test("marks malformed Codex file changes as tool errors", () => {
+    const part = toStreamPart(
+      {
+        type: "fileChange",
+        id: "change-1",
+        status: "completed",
+        changes: [{ file: "src/app.ts" }],
+      },
+      "message-live",
+      "change-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        status: "error",
+        error:
+          "Malformed Codex file change: entry 0 is missing string file/path or diff/patch fields.",
+      }),
+    );
+    expect(part).not.toHaveProperty("input");
+    expect(part).not.toHaveProperty("output");
+    expect(part).not.toHaveProperty("fileChanges");
   });
 
   test("parses non-patch dynamic tool string input without treating it as a patch", () => {

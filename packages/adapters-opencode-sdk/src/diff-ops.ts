@@ -17,7 +17,7 @@ export const loadSessionDiff = async (
   runtimeHistoryAnchor?: string,
 ): Promise<FileDiff[]> => {
   const url = new URL(
-    `/api/session/${externalSessionId}/diff`,
+    `/session/${externalSessionId}/diff`,
     normalizeRuntimeEndpoint(runtimeEndpoint),
   );
   if (runtimeHistoryAnchor) {
@@ -37,7 +37,7 @@ export const loadSessionDiff = async (
  * Endpoint: GET /file/status
  */
 export const loadFileStatus = async (runtimeEndpoint: string): Promise<FileStatus[]> => {
-  const url = new URL("/api/file/status", normalizeRuntimeEndpoint(runtimeEndpoint));
+  const url = new URL("/file/status", normalizeRuntimeEndpoint(runtimeEndpoint));
 
   try {
     const body = await fetchJson("load file status", url, 10_000);
@@ -69,7 +69,13 @@ const fetchJson = async (action: string, url: URL, timeoutMs: number): Promise<u
 };
 
 function parseFileDiffArray(body: unknown): FileDiff[] {
-  return fileDiffSchema.array().parse(readArrayPayload("load session diff", body));
+  const payload = readArrayPayload("load session diff", body);
+  const standardPayload = fileDiffSchema.array().safeParse(payload);
+  if (standardPayload.success) {
+    return standardPayload.data;
+  }
+
+  return payload.map((entry, index) => parseSnapshotFileDiff(entry, index));
 }
 
 function parseFileStatusArray(body: unknown): FileStatus[] {
@@ -89,4 +95,34 @@ function readArrayPayload(action: string, body: unknown): unknown[] {
   }
 
   throw toOpenCodeRequestError(action, new Error("unexpected response payload shape"));
+}
+
+function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`unexpected OpenCode diff entry at index ${index}: expected an object`);
+  }
+
+  const record = entry as Record<string, unknown>;
+  const file = record.file;
+  const patch = record.patch;
+  const additions = record.additions;
+  const deletions = record.deletions;
+  const status = record.status;
+  if (
+    typeof file !== "string" ||
+    typeof patch !== "string" ||
+    typeof additions !== "number" ||
+    typeof deletions !== "number" ||
+    typeof status !== "string"
+  ) {
+    throw new Error(`unexpected OpenCode diff entry at index ${index}: missing file diff fields`);
+  }
+
+  return {
+    file,
+    type: status,
+    additions,
+    deletions,
+    diff: patch,
+  };
 }

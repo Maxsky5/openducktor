@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  FileDiff,
   RepoPromptOverrides,
   RuntimeInstanceSummary,
   RuntimeKind,
@@ -47,6 +48,7 @@ export type AgentChatMessageMeta =
       input?: Record<string, unknown>;
       output?: string;
       error?: string;
+      fileChanges?: FileDiff[];
       metadata?: Record<string, unknown>;
       startedAtMs?: number;
       endedAtMs?: number;

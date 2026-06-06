@@ -90,11 +90,15 @@ describe("CodexAppServerAdapter history hydration", () => {
             toolType: "file_edit",
             input: expect.objectContaining({ patch: expect.stringContaining("@@") }),
             output: expect.stringContaining("@@"),
-            metadata: expect.objectContaining({
-              changes: expect.arrayContaining([
-                expect.objectContaining({ path: "/repo/src/app.ts" }),
-              ]),
-            }),
+            fileChanges: [
+              {
+                file: "/repo/src/app.ts",
+                type: "update",
+                additions: 1,
+                deletions: 1,
+                diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
+              },
+            ],
           }),
         ],
       }),
