@@ -179,6 +179,11 @@ export type CodexThreadForkParams = {
   effort: string;
 };
 
+export type CodexThreadSetNameParams = {
+  threadId: string;
+  name: string;
+};
+
 export type CodexTurnStartParams = {
   threadId: string;
   input: CodexUserInput[];
@@ -260,6 +265,7 @@ export type CodexAppServerClient = {
   threadStart(params: CodexThreadStartParams): Promise<CodexThreadStartResult>;
   threadResume(params: CodexThreadResumeParams): Promise<CodexThreadResumeResult>;
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
+  threadSetName(params: CodexThreadSetNameParams): Promise<Record<string, never>>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
   turnInterrupt(params: CodexTurnInterruptParams): Promise<Record<string, never>>;

@@ -230,6 +230,7 @@ export type EventUnsubscribe = () => void;
 export type AgentSessionSummary = {
   externalSessionId: ExternalSessionId;
   runtimeKind?: RuntimeKind;
+  title?: string;
   role: AgentRole | null;
   startedAt: string;
   status: "starting" | "running" | "idle" | "error" | "stopped";

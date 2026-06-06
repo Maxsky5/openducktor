@@ -1,5 +1,6 @@
 import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
+import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
 import {
   assertGlobalEventSupport,
@@ -319,6 +320,14 @@ export const registerSession = (input: {
 }): AgentSessionSummary => {
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
+    ...(input.sessionInput.role
+      ? {
+          title: formatWorkflowAgentSessionTitle(
+            input.sessionInput.role,
+            input.sessionInput.taskId,
+          ),
+        }
+      : {}),
     role: input.sessionInput.role,
     startedAt: input.startedAt,
     status: "running",

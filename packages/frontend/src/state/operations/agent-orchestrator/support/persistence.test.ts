@@ -31,6 +31,7 @@ describe("agent-orchestrator/support/persistence", () => {
   test("hydrates persisted sessions as stopped until runtime reconciliation", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
     expect(hydrated.status).toBe("stopped");
+    expect(hydrated.title).toBe("BUILD task-1");
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.runtimeId).toBeNull();
     expect(hydrated.pendingApprovals).toEqual([]);

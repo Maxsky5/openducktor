@@ -29,12 +29,14 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     expect(summary.externalSessionId).toBe("thread/start-runtime-ensure");
+    expect(summary.title).toBe("BUILD task-1");
     expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
     expect(requireRepoRuntime).not.toHaveBeenCalled();
     expect(transports.has("runtime-ensure")).toBe(true);
     expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
+      "thread/name/set",
     ]);
     expect(transports.get("runtime-ensure")?.calls[1]).toEqual({
       method: "thread/start",
@@ -43,6 +45,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
         developerInstructions: "Use the repo rules.",
         model: "gpt-5",
         effort: "medium",
+      },
+    });
+    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+      method: "thread/name/set",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        name: "BUILD task-1",
       },
     });
   });
@@ -179,9 +188,10 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
+      "thread/name/set",
       "turn/start",
     ]);
-    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+    expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
       method: "turn/start",
       params: {
         threadId: "thread/start-runtime-ensure",
@@ -215,7 +225,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       parts: [{ kind: "text", text: "Use deeper reasoning" }],
     });
 
-    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+    expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
       method: "turn/start",
       params: {
         threadId: "thread/start-runtime-ensure",
@@ -440,6 +450,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
         developerInstructions: "Use the repo rules.",
         model: "gpt-5",
         effort: "medium",
+      },
+    });
+    expect(transport.calls[2]).toEqual({
+      method: "thread/name/set",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        name: "BUILD task-1",
       },
     });
   });

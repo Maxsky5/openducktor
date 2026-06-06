@@ -8,6 +8,7 @@ import type {
   CodexSkillsListResponse,
   CodexThreadForkParams,
   CodexThreadResumeParams,
+  CodexThreadSetNameParams,
   CodexThreadStartParams,
   CodexTurnInterruptParams,
   CodexTurnStartParams,
@@ -29,6 +30,9 @@ export const createCodexAppServerClient = (
     },
     async threadStart(params: CodexThreadStartParams) {
       return transport.request({ method: "thread/start", params });
+    },
+    async threadSetName(params: CodexThreadSetNameParams) {
+      return transport.request({ method: "thread/name/set", params });
     },
     async threadResume(params: CodexThreadResumeParams) {
       return transport.request({ method: "thread/resume", params });

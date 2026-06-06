@@ -5,6 +5,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
+import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type {
   AgentChatMessage,
@@ -83,6 +84,7 @@ export const fromPersistedSessionRecord = (
   return createRepoScopedAgentSessionState(
     {
       externalSessionId: session.externalSessionId,
+      title: formatWorkflowAgentSessionTitle(session.role, fallbackTaskId),
       purpose: "primary",
       taskId: fallbackTaskId,
       role: session.role,

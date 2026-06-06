@@ -23,6 +23,26 @@ describe("createCodexAppServerClient", () => {
     ]);
   });
 
+  test("sends thread/name/set requests", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request(request) {
+        calls.push(request);
+        return {};
+      },
+    };
+    const client = createCodexAppServerClient(transport);
+    await expect(
+      client.threadSetName({ threadId: "thread-1", name: "BUILD task-1" }),
+    ).resolves.toEqual({});
+    expect(calls).toEqual([
+      {
+        method: "thread/name/set",
+        params: { threadId: "thread-1", name: "BUILD task-1" },
+      },
+    ]);
+  });
+
   test("sends cwd-scoped skills/list requests", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {

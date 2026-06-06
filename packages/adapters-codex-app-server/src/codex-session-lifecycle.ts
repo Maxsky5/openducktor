@@ -55,11 +55,13 @@ export const sessionStateFromThreadStart = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadStartResult,
+  title: string,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response, "thread/start");
   const summary = toSessionSummary({
     externalSessionId,
     startedAt: startedAt ?? new Date().toISOString(),
+    title,
     role: input.role,
     status: "running",
   });
@@ -182,6 +184,7 @@ const sessionStateFromThreadResumeResponse = (
   const summary = toSessionSummary({
     externalSessionId,
     startedAt: startedAt ?? threadSnapshot.startedAt,
+    title: threadSnapshot.title,
     role: input.role,
     status: threadSnapshot.status.agentSessionStatus,
   });

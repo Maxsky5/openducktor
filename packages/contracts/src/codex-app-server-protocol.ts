@@ -148,6 +148,11 @@ export type CodexAppServerThreadForkParams = CodexAppServerThreadResumeParams & 
   ephemeral?: boolean | null;
   threadSource?: CodexAppServerThreadSource | null;
 };
+export type CodexAppServerThreadSetNameParams = {
+  threadId: string;
+  name: string;
+};
+export type CodexAppServerThreadSetNameResult = Record<string, never>;
 export type CodexAppServerThreadStartResult = {
   approvalPolicy: CodexAppServerAskForApproval;
   approvalsReviewer: CodexAppServerApprovalsReviewer;
@@ -503,6 +508,10 @@ export type CodexAppServerClientRequestMap = {
   "thread/start": {
     params: CodexAppServerThreadStartParams;
     result: CodexAppServerThreadStartResult;
+  };
+  "thread/name/set": {
+    params: CodexAppServerThreadSetNameParams;
+    result: CodexAppServerThreadSetNameResult;
   };
   "thread/turns/list": {
     params: CodexAppServerThreadTurnsListParams;

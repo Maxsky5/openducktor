@@ -19,6 +19,7 @@ export type {
   CodexThreadForkResult,
   CodexThreadResumeParams,
   CodexThreadResumeResult,
+  CodexThreadSetNameParams,
   CodexThreadStartParams,
   CodexThreadStartResult,
   CodexTurnStartParams,
