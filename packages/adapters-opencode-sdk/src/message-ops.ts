@@ -332,7 +332,7 @@ const removePendingSubagentCorrelationKey = (
 
 const toComparableFilePath = (filePath: string, workingDirectory: string): string => {
   const trimmed = filePath.trim();
-  return toProjectRelativePath(trimmed, workingDirectory).replace(/^\.\//, "");
+  return toProjectRelativePath(trimmed, workingDirectory).replace(/\\/g, "/").replace(/^\.\//, "");
 };
 
 const readToolInputFilePath = (part: Extract<AgentStreamPart, { kind: "tool" }>): string | null => {
@@ -356,7 +356,7 @@ const readPatchMessageIds = (parts: Part[]): string[] => {
 
     const messageId = readPartMessageId(part);
     if (!messageId) {
-      throw new Error("Malformed OpenCode patch history part: missing messageID.");
+      continue;
     }
     messageIds.add(messageId);
   }
@@ -369,13 +369,15 @@ const loadSessionDiffByMessageId = async (
   externalSessionId: string,
   messageIds: string[],
 ): Promise<Map<string, FileDiff[]>> => {
-  const entries = await Promise.all(
+  const results = await Promise.allSettled(
     messageIds.map(
       async (messageId) =>
         [messageId, await loadSessionDiff(runtimeEndpoint, externalSessionId, messageId)] as const,
     ),
   );
-  return new Map(entries);
+  return new Map(
+    results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
+  );
 };
 
 const withHistoryFileChanges = (

@@ -227,6 +227,47 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("fileChanges");
   });
 
+  test("attaches structured file changes to dynamic apply_patch calls", () => {
+    const patch = `*** Begin Patch
+*** Update File: src/app.ts
+@@
+-old
++new
+*** End Patch`;
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "patch-1",
+        namespace: "functions",
+        tool: "apply_patch",
+        input: patch,
+        success: true,
+        status: "completed",
+      },
+      "message-live",
+      "patch-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        input: { patch },
+        output: patch,
+        fileChanges: [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "*** Update File: src/app.ts\n@@\n-old\n+new",
+          },
+        ],
+      }),
+    );
+  });
+
   test("parses non-patch dynamic tool string input without treating it as a patch", () => {
     const part = toStreamPart(
       {

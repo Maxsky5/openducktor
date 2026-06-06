@@ -15,6 +15,7 @@ import {
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import {
   CodexFileDiffParseError,
+  codexApplyPatchFileDiffs,
   codexFileChangeDiff,
   codexFileChangeEntries,
   toFileDiffs,
@@ -857,6 +858,7 @@ const codexDynamicToolCallStreamParts = (
   const patch =
     isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
   const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
+  const fileChanges = patch ? codexApplyPatchFileDiffs(patch) : [];
   const resultPayload = codexDynamicToolDisplayPayload(value);
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
@@ -871,6 +873,7 @@ const codexDynamicToolCallStreamParts = (
     ...(input ? { input } : {}),
     output: failed ? null : (patch ?? output),
     error: error ?? (failed ? output : null),
+    fileChanges,
     metadata: { codexItem: value },
   });
 };

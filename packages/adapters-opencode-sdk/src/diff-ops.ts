@@ -108,21 +108,43 @@ function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
   const additions = record.additions;
   const deletions = record.deletions;
   const status = record.status;
+  const parsedFile = typeof file === "string" ? file : null;
+  const parsedPatch = typeof patch === "string" ? patch : null;
+  const parsedAdditions =
+    typeof additions === "number" && Number.isFinite(additions) ? additions : null;
+  const parsedDeletions =
+    typeof deletions === "number" && Number.isFinite(deletions) ? deletions : null;
+  const type =
+    typeof status === "string" && status.trim().length > 0
+      ? status
+      : status == null
+        ? "modified"
+        : null;
+  const invalidFields = [
+    parsedFile === null ? "file" : null,
+    parsedPatch === null ? "patch" : null,
+    parsedAdditions === null ? "additions" : null,
+    parsedDeletions === null ? "deletions" : null,
+    type ? null : "status",
+  ].filter((field): field is string => Boolean(field));
   if (
-    typeof file !== "string" ||
-    typeof patch !== "string" ||
-    typeof additions !== "number" ||
-    typeof deletions !== "number" ||
-    typeof status !== "string"
+    invalidFields.length > 0 ||
+    parsedFile === null ||
+    parsedPatch === null ||
+    parsedAdditions === null ||
+    parsedDeletions === null ||
+    type === null
   ) {
-    throw new Error(`unexpected OpenCode diff entry at index ${index}: missing file diff fields`);
+    throw new Error(
+      `unexpected OpenCode diff entry at index ${index}: invalid ${invalidFields.join(", ")} fields`,
+    );
   }
 
   return {
-    file,
-    type: status,
-    additions,
-    deletions,
-    diff: patch,
+    file: parsedFile,
+    type,
+    additions: parsedAdditions,
+    deletions: parsedDeletions,
+    diff: parsedPatch,
   };
 }

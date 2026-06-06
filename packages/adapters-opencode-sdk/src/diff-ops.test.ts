@@ -70,7 +70,7 @@ describe("diff-ops", () => {
     ]);
   });
 
-  test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {
+  test("loadSessionDiff defaults missing OpenCode snapshot diff status to modified", async () => {
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -86,8 +86,36 @@ describe("diff-ops", () => {
         ],
       }) as Response) as typeof fetch;
 
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "@@ -1 +1 @@",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: "@@ -1 +1 @@",
+            additions: Number.NaN,
+            deletions: 1,
+            status: 5,
+          },
+        ],
+      }) as Response) as typeof fetch;
+
     await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
-      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: missing file diff fields",
+      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: invalid additions, status fields",
     );
   });
 
