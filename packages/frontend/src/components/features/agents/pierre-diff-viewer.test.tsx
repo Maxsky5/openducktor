@@ -296,6 +296,22 @@ describe("getRenderableFileDiff", () => {
     expect(firstResult.fileDiff?.cacheKey).not.toBe(renamedResult.fileDiff?.cacheKey);
   });
 
+  test("keeps worker cache keys compact for large parsed diffs", async () => {
+    const { getRenderableFileDiff } = pierreViewerModelModule;
+    const addedLines = Array.from({ length: 200 }, (_, index) => `+new-${index}`).join("\n");
+    const patch = `diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -0,0 +1,200 @@\n${addedLines}\n`;
+    const changedPatch = patch.replace("+new-199", "+changed");
+
+    const result = getRenderableFileDiff(patch, "src/app.ts");
+    const changedResult = getRenderableFileDiff(changedPatch, "src/app.ts");
+    const cacheKey = result.fileDiff?.cacheKey;
+
+    expect(cacheKey).toBeString();
+    expect(cacheKey?.length).toBeLessThan(120);
+    expect(cacheKey).not.toContain("new-199");
+    expect(cacheKey).not.toBe(changedResult.fileDiff?.cacheKey);
+  });
+
   test("keeps normalized raw diff text when parsing still fails", async () => {
     const { getRenderableFileDiff } = pierreViewerModelModule;
     const result = await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
