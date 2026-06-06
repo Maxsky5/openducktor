@@ -5,7 +5,7 @@ import {
   type AgentUserMessagePart,
   detectAgentFileReferenceKind,
 } from "@openducktor/core";
-import { basenameForPath } from "@openducktor/path-support";
+import { basenameForPath, normalizePathSeparators } from "@openducktor/path-support";
 import type { CodexTextElement, CodexUserInput } from "./types";
 
 type CodexTextInput = Extract<CodexUserInput, { type: "text" }>;
@@ -153,16 +153,18 @@ const codexSkillInputToDisplayPart = (input: CodexSkillInput): AgentUserMessageD
 const externalMentionSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 const isCodexFileMentionInput = (input: CodexMentionInput): boolean => {
-  return !externalMentionSchemePattern.test(input.path.trim());
+  const path = input.path.trim();
+  return path.length > 0 && !externalMentionSchemePattern.test(path);
 };
 
 const codexFileReferenceFromPath = (path: string, displayName?: string): AgentFileReference => {
-  const name = displayName?.trim() || basenameForPath(path) || path;
+  const normalizedPath = normalizePathSeparators(path);
+  const name = displayName?.trim() || basenameForPath(normalizedPath) || normalizedPath;
   return {
-    id: path,
-    path,
+    id: normalizedPath,
+    path: normalizedPath,
     name,
-    kind: detectAgentFileReferenceKind({ filePath: path }),
+    kind: detectAgentFileReferenceKind({ filePath: normalizedPath }),
   };
 };
 

@@ -8,6 +8,10 @@ describe("agent file references", () => {
     expect(detectAgentFileReferenceKind({ filePath: "assets/diagram.png" })).toBe("image");
     expect(detectAgentFileReferenceKind({ filePath: "recordings/demo.mov" })).toBe("video");
     expect(detectAgentFileReferenceKind({ filePath: "README", mime: "image/webp" })).toBe("image");
+    expect(detectAgentFileReferenceKind({ filePath: "README", mime: "video/mp4" })).toBe("video");
+    expect(
+      detectAgentFileReferenceKind({ filePath: "src/components", mime: "inode/directory" }),
+    ).toBe("directory");
     expect(detectAgentFileReferenceKind({ filePath: "src/components", isDirectory: true })).toBe(
       "directory",
     );

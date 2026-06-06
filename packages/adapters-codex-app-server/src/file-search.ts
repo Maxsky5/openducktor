@@ -8,20 +8,12 @@ type CodexFileSearchInput = {
   workingDirectory: string;
 };
 
-const normalizeReferencePath = (
-  rawPath: string,
-  workingDirectory: string,
-  index: number,
-): string => {
+const normalizeReferencePath = (rawPath: string, root: string, index: number): string => {
   const trimmedPath = rawPath.trim();
   if (trimmedPath.length === 0) {
     throw new Error(`Codex fuzzyFileSearch result ${index} has an empty path.`);
   }
-  const referencePath = toProjectRelativePath(trimmedPath, workingDirectory);
-  if (referencePath.trim().length === 0) {
-    throw new Error(`Codex fuzzyFileSearch result ${index} has an empty path.`);
-  }
-  return referencePath;
+  return toProjectRelativePath(trimmedPath, root);
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -35,7 +27,7 @@ const requireStringField = (
 ): string => {
   const value = record[field];
   if (typeof value !== "string") {
-    throw new Error(`Codex fuzzyFileSearch result ${index} is missing string field '${field}'.`);
+    throw new Error(`Codex fuzzyFileSearch result ${index} must include string field '${field}'.`);
   }
   return value;
 };
@@ -104,10 +96,9 @@ const requireCodexFileSearchResult = (
 
 const mapCodexFileSearchResult = (
   entry: CodexAppServerFuzzyFileSearchResult,
-  workingDirectory: string,
   index: number,
 ): AgentFileSearchResult => {
-  const path = normalizeReferencePath(entry.path, workingDirectory, index);
+  const path = normalizeReferencePath(entry.path, entry.root, index);
   const fallbackName = basenameForPath(path);
   const name = entry.file_name.trim().length > 0 ? entry.file_name : fallbackName || path;
   return {
@@ -121,15 +112,12 @@ const mapCodexFileSearchResult = (
   };
 };
 
-export const toCodexFileSearchResults = (
-  response: unknown,
-  workingDirectory: string,
-): AgentFileSearchResult[] => {
+const toCodexFileSearchResults = (response: unknown): AgentFileSearchResult[] => {
   if (!isRecord(response) || !Array.isArray(response.files)) {
     throw new Error("Codex fuzzyFileSearch response must include a files array.");
   }
   return response.files.map((entry, index) =>
-    mapCodexFileSearchResult(requireCodexFileSearchResult(entry, index), workingDirectory, index),
+    mapCodexFileSearchResult(requireCodexFileSearchResult(entry, index), index),
   );
 };
 
@@ -142,5 +130,5 @@ export const searchCodexFiles = async (
     roots: [input.workingDirectory],
     cancellationToken: null,
   });
-  return toCodexFileSearchResults(response, input.workingDirectory);
+  return toCodexFileSearchResults(response);
 };

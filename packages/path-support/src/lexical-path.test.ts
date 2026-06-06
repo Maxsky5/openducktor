@@ -40,6 +40,7 @@ describe("lexical path helpers", () => {
     ["repo/worktree/../task", "repo/task"],
     ["../repo/task", "repo/task"],
     ["../../a", "a"],
+    ["../../../a", "a"],
     ["../..", ""],
     ["/../repo/task", "/repo/task"],
     [" /repo/worktree/../task/ ", "/repo/task"],
@@ -47,6 +48,7 @@ describe("lexical path helpers", () => {
     ["", ""],
     ["   ", ""],
     ["/", "/"],
+    ["C:/", "c:/"],
     [".", ""],
     ["..", ""],
   ])("normalizes %p to %p for comparison", (input, expected) => {
@@ -101,6 +103,7 @@ describe("lexical path helpers", () => {
     expect(toProjectRelativePath("C:\\Repo\\Worktree\\src\\main.ts", "c:/repo/worktree")).toBe(
       "src/main.ts",
     );
+    expect(toProjectRelativePath("C:/repo/main.ts", "C:/")).toBe("repo/main.ts");
     expect(toProjectRelativePath("/repo/worktree/./src/main.ts", "/repo/worktree")).toBe(
       "src/main.ts",
     );

@@ -1,6 +1,7 @@
 import type {
   CodexAppServerClient,
   CodexAppServerFuzzyFileSearchParams,
+  CodexAppServerFuzzyFileSearchResponse,
   CodexJsonRpcTransport,
   CodexModelListResponse,
   CodexSkillsListParams,
@@ -45,7 +46,10 @@ export const createCodexAppServerClient = (
       return transport.request({ method: "turn/interrupt", params });
     },
     async fuzzyFileSearch(params: CodexAppServerFuzzyFileSearchParams) {
-      return transport.request({ method: "fuzzyFileSearch", params });
+      return transport.request<CodexAppServerFuzzyFileSearchResponse>({
+        method: "fuzzyFileSearch",
+        params,
+      });
     },
     async threadRead(params) {
       return transport.request({ method: "thread/read", params });

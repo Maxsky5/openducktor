@@ -80,6 +80,7 @@ describe("searchCodexFiles", () => {
   });
 
   test("does not map escaped absolute paths to project-relative references", async () => {
+    const calls: Array<{ query: string; roots: string[]; cancellationToken: string | null }> = [];
     const client = createClient(
       {
         files: [
@@ -93,7 +94,7 @@ describe("searchCodexFiles", () => {
           },
         ],
       },
-      [],
+      calls,
     );
 
     await expect(
@@ -109,6 +110,36 @@ describe("searchCodexFiles", () => {
         kind: "code",
       },
     ]);
+    expect(calls).toEqual([
+      { query: "outside", roots: ["/repo/worktree"], cancellationToken: null },
+    ]);
+  });
+
+  test("normalizes file paths against the server-reported root", async () => {
+    const calls: Array<{ query: string; roots: string[]; cancellationToken: string | null }> = [];
+    const client = createClient(
+      {
+        files: [
+          {
+            root: "/resolved/repo",
+            path: "/resolved/repo/src/main.ts",
+            match_type: "file",
+            file_name: "main.ts",
+            score: 4,
+            indices: null,
+          },
+        ],
+      },
+      calls,
+    );
+
+    await expect(
+      searchCodexFiles(client, {
+        query: "main",
+        workingDirectory: "/repo/worktree",
+      }),
+    ).resolves.toEqual([{ id: "src/main.ts", path: "src/main.ts", name: "main.ts", kind: "code" }]);
+    expect(calls).toEqual([{ query: "main", roots: ["/repo/worktree"], cancellationToken: null }]);
   });
 
   test("rejects malformed Codex fuzzyFileSearch payloads", async () => {

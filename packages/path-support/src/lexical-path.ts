@@ -33,6 +33,7 @@ const toLexicalPath = (
   { preserveLeadingParents }: { preserveLeadingParents: boolean },
 ): LexicalPath => {
   const trimmed = value.trim();
+  const hasTrailingSeparator = /[\\/]$/.test(trimmed);
   const leadingSeparatorRoot = /^[\\/]/.test(trimmed);
   const windowsDrivePath = WINDOWS_DRIVE_PATH_PATTERN.test(trimmed);
   const segments: string[] = [];
@@ -51,7 +52,13 @@ const toLexicalPath = (
     }
     segments.push(segment);
   }
-  const path = leadingSeparatorRoot ? `/${segments.join("/")}` : segments.join("/");
+  const joined = segments.join("/");
+  const isWindowsDriveRoot =
+    windowsDrivePath &&
+    hasTrailingSeparator &&
+    segments.length === 1 &&
+    /^[A-Za-z]:$/.test(segments[0] ?? "");
+  const path = leadingSeparatorRoot ? `/${joined}` : isWindowsDriveRoot ? `${joined}/` : joined;
   return {
     path,
     comparisonPath: windowsDrivePath ? path.toLowerCase() : path,

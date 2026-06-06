@@ -393,6 +393,70 @@ describe("Codex App Server transcript parsing", () => {
     });
   });
 
+  test("normalizes Codex file mention paths for hydrated display parts", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        { type: "text", text: "Tell me about" },
+        { type: "mention", name: "main.ts", path: "src\\main.ts" },
+      ],
+    });
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      displayParts: [
+        { kind: "text", text: "Tell me about" },
+        {
+          kind: "file_reference",
+          file: {
+            id: "src/main.ts",
+            name: "main.ts",
+            path: "src/main.ts",
+            kind: "code",
+          },
+        },
+      ],
+    });
+  });
+
+  test("does not hydrate empty Codex mention paths as file display parts", () => {
+    const input = codexUserInputsFromItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        { type: "text", text: "Tell me about" },
+        { type: "mention", name: "missing", path: "" },
+      ],
+    });
+
+    const message = toHistoryMessage(
+      {
+        id: "user-1",
+        type: "userMessage",
+        content: input,
+      },
+      "fallback-id",
+    );
+
+    expect(message).toMatchObject({
+      role: "user",
+      displayParts: [
+        { kind: "text", text: "Tell me about" },
+        { kind: "text", text: "@missing", synthetic: true },
+      ],
+    });
+  });
+
   test("hydrates Codex raw file markers as inline structured file display parts", () => {
     const input = codexUserInputsFromItem({
       id: "user-1",
