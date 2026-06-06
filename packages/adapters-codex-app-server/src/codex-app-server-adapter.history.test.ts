@@ -96,7 +96,7 @@ describe("CodexAppServerAdapter history hydration", () => {
                 type: "update",
                 additions: 1,
                 deletions: 1,
-                diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
+                diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
               },
             ],
           }),
@@ -205,7 +205,13 @@ describe("CodexAppServerAdapter history hydration", () => {
         externalSessionId: "thread/start-runtime-ensure",
       }),
     ).resolves.toEqual([
-      { file: "src/app.ts", type: "modified", additions: 1, deletions: 0, diff: "@@" },
+      {
+        file: "src/app.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 0,
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n",
+      },
     ]);
   });
 

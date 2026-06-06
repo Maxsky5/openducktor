@@ -197,7 +197,7 @@ describe("OpencodeSdkAdapter session history", () => {
             type: "modified",
             additions: 1,
             deletions: 1,
-            diff: "@@ -1 +1 @@\n-old\n+new",
+            diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
           },
         ],
       });
@@ -393,7 +393,7 @@ describe("OpencodeSdkAdapter session history", () => {
         fileChanges: [
           {
             file: "src/ok.ts",
-            diff: "@@ -1 +1 @@\n-before\n+after",
+            diff: "--- a/src/ok.ts\n+++ b/src/ok.ts\n@@ -1 +1 @@\n-before\n+after\n",
           },
         ],
       });
@@ -516,7 +516,7 @@ describe("OpencodeSdkAdapter session history", () => {
         fileChanges: [
           {
             file: "src/main.ts",
-            diff: "@@ -1 +1 @@\n-first\n+second",
+            diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-first\n+second\n",
           },
         ],
       });
@@ -525,7 +525,7 @@ describe("OpencodeSdkAdapter session history", () => {
         fileChanges: [
           {
             file: "src/main.ts",
-            diff: "@@ -1 +1 @@\n-second\n+third",
+            diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-second\n+third\n",
           },
         ],
       });

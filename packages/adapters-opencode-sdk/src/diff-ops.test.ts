@@ -36,7 +36,7 @@ describe("diff-ops", () => {
         type: "modified",
         additions: 3,
         deletions: 1,
-        diff: "@@ -1 +1 @@",
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
       },
     ]);
     expect(requestedUrls).toEqual(["http://127.0.0.1:12345/session/session-1/diff"]);
@@ -65,7 +65,7 @@ describe("diff-ops", () => {
         type: "modified",
         additions: 2,
         deletions: 1,
-        diff: "@@ -1 +1 @@",
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
       },
     ]);
   });
@@ -92,9 +92,55 @@ describe("diff-ops", () => {
         type: "modified",
         additions: 2,
         deletions: 1,
-        diff: "@@ -1 +1 @@",
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
       },
     ]);
+  });
+
+  test("loadSessionDiff rejects standard payloads with full-file text instead of a diff", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          data: [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 3,
+              deletions: 1,
+              diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+            },
+          ],
+        }),
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: diff for 'src/main.ts' is not a renderable file diff",
+    );
+  });
+
+  test("loadSessionDiff rejects snapshot payloads with full-file text instead of a diff", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+            additions: 2,
+            deletions: 1,
+            status: "modified",
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: diff for 'src/main.ts' is not a renderable file diff",
+    );
   });
 
   test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {

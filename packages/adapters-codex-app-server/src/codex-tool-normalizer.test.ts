@@ -185,14 +185,14 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         status: "completed",
-        output: "@@ -1 +1 @@\n-old\n+new",
+        output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new",
         fileChanges: [
           {
             file: "src/app.ts",
             type: "modified",
             additions: 1,
             deletions: 1,
-            diff: "@@ -1 +1 @@\n-old\n+new",
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
           },
         ],
       }),
@@ -254,18 +254,58 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         input: { patch },
-        output: patch,
+        output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
         fileChanges: [
           {
             file: "src/app.ts",
             type: "modified",
             additions: 1,
             deletions: 1,
-            diff: "*** Update File: src/app.ts\n@@\n-old\n+new",
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
           },
         ],
       }),
     );
+  });
+
+  test("does not echo non-renderable apply_patch input as tool output", () => {
+    const patch = `*** Begin Patch
+*** Update File: src/app.ts
+import { render } from "@testing-library/react";
+function AuthConsumer() {}
+*** End Patch`;
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "patch-1",
+        namespace: "functions",
+        tool: "apply_patch",
+        input: patch,
+        success: true,
+        status: "completed",
+      },
+      "message-live",
+      "patch-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        input: { patch },
+        fileChanges: [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 0,
+            deletions: 0,
+            diff: "",
+          },
+        ],
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
   });
 
   test("parses non-patch dynamic tool string input without treating it as a patch", () => {

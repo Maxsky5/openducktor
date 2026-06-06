@@ -17,7 +17,7 @@ describe("Codex file diffs", () => {
         type: "update",
         additions: 2,
         deletions: 1,
-        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line",
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line\n",
       },
     ]);
   });
@@ -45,7 +45,7 @@ describe("Codex file diffs", () => {
         type: "modified",
         additions: 1,
         deletions: 0,
-        diff: "@@\n+new",
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n+new\n",
       },
     ]);
   });
@@ -75,14 +75,52 @@ describe("Codex file diffs", () => {
         type: "added",
         additions: 1,
         deletions: 0,
-        diff: "--- /dev/null\r\n+++ b/src/new.ts\r\n@@\r\n+new",
+        diff: "--- /dev/null\n+++ b/src/new.ts\n@@\n+new\n",
       },
       {
         file: "src/old.ts",
         type: "deleted",
         additions: 0,
         deletions: 1,
-        diff: "--- a/src/old.ts\r\n+++ /dev/null\r\n@@\r\n-old",
+        diff: "--- a/src/old.ts\n+++ /dev/null\n@@\n-old\n",
+      },
+    ]);
+  });
+
+  test("rejects Codex file changes that contain full file text instead of a diff", () => {
+    expect(() =>
+      toFileDiffs([
+        {
+          file: "src/app.ts",
+          diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+        },
+      ]),
+    ).toThrow(
+      "Malformed Codex file change: entry 0 diff/patch for 'src/app.ts' is not a renderable file diff.",
+    );
+  });
+
+  test("strips Codex full-file preambles before hunk-only diffs", () => {
+    expect(
+      toFileDiffs([
+        {
+          file: "src/AuthContext.test.tsx",
+          diff: `import { render } from "@testing-library/react";
+function AuthConsumer() {}
+
+@@ -1,2 +1,3 @@
+ import { render } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
+ function AuthConsumer() {}`,
+        },
+      ]),
+    ).toEqual([
+      {
+        file: "src/AuthContext.test.tsx",
+        type: "modified",
+        additions: 1,
+        deletions: 0,
+        diff: '--- a/src/AuthContext.test.tsx\n+++ b/src/AuthContext.test.tsx\n@@ -1,2 +1,3 @@\n import { render } from "@testing-library/react";\n+import userEvent from "@testing-library/user-event";\n function AuthConsumer() {}\n',
       },
     ]);
   });
@@ -103,14 +141,32 @@ describe("Codex file diffs", () => {
         type: "modified",
         additions: 1,
         deletions: 1,
-        diff: "*** Update File: src/app.ts\n@@\n-old\n+new",
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
       },
       {
         file: "src/new.ts",
         type: "added",
         additions: 1,
         deletions: 0,
-        diff: "*** Add File: src/new.ts\n+created",
+        diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created\n",
+      },
+    ]);
+  });
+
+  test("keeps apply_patch file entries path-only when the body has no renderable diff", () => {
+    expect(
+      codexApplyPatchFileDiffs(`*** Begin Patch
+*** Update File: src/app.ts
+import { render } from "@testing-library/react";
+function AuthConsumer() {}
+*** End Patch`),
+    ).toEqual([
+      {
+        file: "src/app.ts",
+        type: "modified",
+        additions: 0,
+        deletions: 0,
+        diff: "",
       },
     ]);
   });

@@ -454,7 +454,7 @@ describe("CodexAppServerAdapter streaming", () => {
           tool: "apply_patch",
           toolType: "file_edit",
           input: { patch },
-          output: patch,
+          output: "--- a/repo/src/app.ts\n+++ b/repo/src/app.ts\n@@\n-old\n+new",
         }),
         expect.objectContaining({
           tool: "webSearch",

@@ -10,6 +10,7 @@ export * from "./services/approval-policy";
 export * from "./services/kanban-mapper";
 export * from "./services/odt-workflow-tools";
 export * from "./services/planner-spec-service";
+export * from "./services/renderable-file-diffs";
 export * from "./services/runtime-connections";
 export * from "./types/agent-orchestrator";
 export * from "./types/planner";

@@ -1,5 +1,6 @@
 import type { FileDiff } from "@openducktor/contracts";
-import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
+import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
+import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
 
 export class CodexFileDiffParseError extends Error {
   constructor(message: string) {
@@ -8,38 +9,10 @@ export class CodexFileDiffParseError extends Error {
   }
 }
 
-export const codexFileChangeDiff = (changes: unknown[]): string | null => {
-  const diffs = changes
-    .filter(isPlainObject)
-    .map((change) => extractStringField(change, ["diff", "patch"]))
-    .filter((diff): diff is string => Boolean(diff));
-  return diffs.length > 0 ? diffs.join("\n") : null;
-};
-
 export const codexFileChangeEntries = (value: Record<string, unknown>): unknown[] => {
   const changes = arrayFromUnknown(value.changes);
   const diffs = arrayFromUnknown(value.diffs);
   return changes.length > 0 ? changes : diffs;
-};
-
-const countDiffLines = (diff: string): Pick<FileDiff, "additions" | "deletions"> => {
-  let additions = 0;
-  let deletions = 0;
-
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("+++ ") || line.startsWith("--- ")) {
-      continue;
-    }
-    if (line.startsWith("+")) {
-      additions++;
-      continue;
-    }
-    if (line.startsWith("-")) {
-      deletions++;
-    }
-  }
-
-  return { additions, deletions };
 };
 
 const inferDiffType = (entry: Record<string, unknown>, diff: string): string => {
@@ -69,13 +42,20 @@ const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
     );
   }
 
-  const counts = countDiffLines(diff);
+  const renderableDiff = selectRenderableFileDiff(diff, file);
+  if (!renderableDiff) {
+    throw new CodexFileDiffParseError(
+      `entry ${location} diff/patch for '${file}' is not a renderable file diff.`,
+    );
+  }
+
+  const counts = countRenderableFileDiffLines(renderableDiff);
   return {
     file,
-    type: inferDiffType(entry, diff),
+    type: inferDiffType(entry, renderableDiff),
     additions: typeof entry.additions === "number" ? entry.additions : counts.additions,
     deletions: typeof entry.deletions === "number" ? entry.deletions : counts.deletions,
-    diff,
+    diff: renderableDiff,
   };
 };
 
@@ -131,8 +111,11 @@ const finishApplyPatchEntry = (entry: ApplyPatchFileEntry): FileDiff | null => {
     return null;
   }
 
-  const diff = [`*** ${entry.operation} File: ${entry.file}`, ...entry.lines].join("\n").trimEnd();
-  const counts = countDiffLines(diff);
+  const rawDiff = [`*** ${entry.operation} File: ${entry.file}`, ...entry.lines]
+    .join("\n")
+    .trimEnd();
+  const diff = selectRenderableFileDiff(rawDiff, entry.file) ?? "";
+  const counts = countRenderableFileDiffLines(diff);
   return {
     file: entry.file,
     type: APPLY_PATCH_FILE_TYPES[entry.operation],

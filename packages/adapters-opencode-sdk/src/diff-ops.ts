@@ -4,6 +4,7 @@ import {
   fileDiffSchema,
   fileStatusSchema,
 } from "@openducktor/contracts";
+import { selectRenderableFileDiff } from "@openducktor/core";
 import { toOpenCodeRequestError } from "./request-errors";
 
 /**
@@ -72,7 +73,7 @@ function parseFileDiffArray(body: unknown): FileDiff[] {
   const payload = readArrayPayload("load session diff", body);
   const standardPayload = fileDiffSchema.array().safeParse(payload);
   if (standardPayload.success) {
-    return standardPayload.data;
+    return standardPayload.data.map((entry, index) => requireRenderableFileDiff(entry, index));
   }
 
   return payload.map((entry, index) => parseSnapshotFileDiff(entry, index));
@@ -140,11 +141,31 @@ function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
     );
   }
 
+  return requireRenderableFileDiff(
+    {
+      file: parsedFile,
+      type,
+      additions: parsedAdditions,
+      deletions: parsedDeletions,
+      diff: parsedPatch,
+    },
+    index,
+  );
+}
+
+function requireRenderableFileDiff(entry: FileDiff, index: number): FileDiff {
+  const diff = selectRenderableFileDiff(entry.diff, entry.file);
+  if (!diff) {
+    throw new Error(
+      `unexpected OpenCode diff entry at index ${index}: diff for '${entry.file}' is not a renderable file diff`,
+    );
+  }
+
   return {
-    file: parsedFile,
-    type,
-    additions: parsedAdditions,
-    deletions: parsedDeletions,
-    diff: parsedPatch,
+    file: entry.file,
+    type: entry.type,
+    additions: entry.additions,
+    deletions: entry.deletions,
+    diff,
   };
 }

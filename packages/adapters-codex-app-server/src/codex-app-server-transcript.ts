@@ -16,7 +16,6 @@ import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import {
   CodexFileDiffParseError,
   codexApplyPatchFileDiffs,
-  codexFileChangeDiff,
   codexFileChangeEntries,
   toFileDiffs,
 } from "./codex-file-diffs";
@@ -750,13 +749,19 @@ const codexCommandExecutionStreamParts = (
   });
 };
 
+const fileChangesPatchOutput = (fileChanges: ReadonlyArray<{ diff: string }>): string | null => {
+  const diffs = fileChanges
+    .map((fileChange) => fileChange.diff.trim())
+    .filter((diff) => diff.length > 0);
+  return diffs.length > 0 ? diffs.join("\n") : null;
+};
+
 const codexFileChangeStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
   const changes = codexFileChangeEntries(value);
-  const diff = codexFileChangeDiff(changes);
   const fileChangesResult = (() => {
     try {
       return { fileChanges: toFileDiffs(changes), error: null };
@@ -767,6 +772,7 @@ const codexFileChangeStreamParts = (
       throw error;
     }
   })();
+  const diff = fileChangesPatchOutput(fileChangesResult.fileChanges);
   const error = fileChangesResult.error ?? codexFileChangeErrorFromItem(value);
   return normalizedCodexToolPart({
     messageId,
@@ -859,6 +865,7 @@ const codexDynamicToolCallStreamParts = (
     isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
   const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
   const fileChanges = patch ? codexApplyPatchFileDiffs(patch) : [];
+  const patchOutput = fileChangesPatchOutput(fileChanges);
   const resultPayload = codexDynamicToolDisplayPayload(value);
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
@@ -871,7 +878,7 @@ const codexDynamicToolCallStreamParts = (
     rawToolName: rawTool,
     status: failed ? "error" : statusFromCodexStatus(value.status),
     ...(input ? { input } : {}),
-    output: failed ? null : (patch ?? output),
+    output: failed ? null : patch ? patchOutput : output,
     error: error ?? (failed ? output : null),
     fileChanges,
     metadata: { codexItem: value },
