@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   withCapturedConsoleMethods,
   withCapturedOutputStreams,
@@ -8,6 +8,10 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 
 let pierreViewerModule: typeof import("./pierre-diff-viewer");
 let pierreViewerModelModule: typeof import("./pierre-diff-viewer-model");
+let workerPoolMock: {
+  getDiffResultCache: ReturnType<typeof mock>;
+  primeDiffHighlightCache: ReturnType<typeof mock>;
+} | null = null;
 
 const OMITTED_SELECTED_LINES_LABEL = "__omitted__";
 const mockedGutterSelection = {
@@ -76,7 +80,7 @@ beforeEach(async () => {
             );
           },
           Virtualizer: ({ children }: { children: React.ReactNode }) => children,
-          useWorkerPool: () => null,
+          useWorkerPool: () => workerPoolMock,
         }));
         mock.module("@/components/layout/theme-provider", () => ({
           useTheme: () => ({ theme: "light", setTheme: () => undefined }),
@@ -101,6 +105,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   cleanup();
+  workerPoolMock = null;
 
   await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
     await withCapturedConsoleMethods(
@@ -128,6 +133,23 @@ afterEach(async () => {
 });
 
 describe("PierreDiffViewer", () => {
+  test("preloads parsed diffs by priming the worker cache", async () => {
+    const { PierreDiffPreloader } = pierreViewerModule;
+    const primeDiffHighlightCache = mock();
+    workerPoolMock = {
+      getDiffResultCache: mock(() => null),
+      primeDiffHighlightCache,
+    };
+
+    render(<PierreDiffPreloader patch={selectionPatch} filePath="src/app.ts" />);
+
+    await waitFor(() => {
+      expect(primeDiffHighlightCache).toHaveBeenCalledTimes(1);
+    });
+    const [fileDiff] = primeDiffHighlightCache.mock.calls[0] ?? [];
+    expect(fileDiff?.cacheKey).toBeString();
+  });
+
   test("keeps controlled selected lines in sync while dragging from the gutter utility", () => {
     const { PierreDiffViewer } = pierreViewerModule;
 
@@ -258,6 +280,20 @@ describe("getRenderableFileDiff", () => {
       "--- a/src/hunk.ts\n+++ b/src/hunk.ts\n@@ -1 +1 @@\n-old\n+new\n",
     );
     expect(result.fileDiff?.name.endsWith("src/hunk.ts")).toBe(true);
+  });
+
+  test("assigns stable cache keys to parsed diffs for worker preloading", async () => {
+    const { getRenderableFileDiff } = pierreViewerModelModule;
+    const patch =
+      "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n";
+
+    const firstResult = getRenderableFileDiff(patch, "src/app.ts");
+    const secondResult = getRenderableFileDiff(patch, "src/app.ts");
+    const renamedResult = getRenderableFileDiff(patch, "src/other.ts");
+
+    expect(firstResult.fileDiff?.cacheKey).toBeString();
+    expect(firstResult.fileDiff?.cacheKey).toBe(secondResult.fileDiff?.cacheKey);
+    expect(firstResult.fileDiff?.cacheKey).not.toBe(renamedResult.fileDiff?.cacheKey);
   });
 
   test("keeps normalized raw diff text when parsing still fails", async () => {

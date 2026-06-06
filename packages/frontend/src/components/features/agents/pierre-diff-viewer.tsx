@@ -1,6 +1,5 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
 import { FileDiff as PierreReactFileDiff, useWorkerPool } from "@pierre/diffs/react";
-import type { DiffRendererInstance } from "@pierre/diffs/worker";
 import { Undo2 } from "lucide-react";
 import {
   type CSSProperties,
@@ -8,7 +7,6 @@ import {
   type ReactElement,
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useState,
 } from "react";
@@ -91,18 +89,9 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   filePath,
 }: PierreDiffPreloaderProps): null {
   const workerPool = useWorkerPool();
-  const preloadRendererId = useId();
   const { fileDiff, normalizedPatch } = useMemo(
     () => getRenderableFileDiff(patch, filePath),
     [filePath, patch],
-  );
-  const preloadRenderer = useMemo<DiffRendererInstance>(
-    () => ({
-      __id: `pierre-diff-preloader:${preloadRendererId}`,
-      onHighlightSuccess: (_diff: unknown, _result: unknown, _options: unknown) => undefined,
-      onHighlightError: (_error: unknown) => undefined,
-    }),
-    [preloadRendererId],
   );
 
   useEffect(() => {
@@ -113,8 +102,8 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
       return;
     }
 
-    workerPool.highlightDiffAST(preloadRenderer, fileDiff);
-  }, [fileDiff, normalizedPatch, preloadRenderer, workerPool]);
+    workerPool.primeDiffHighlightCache(fileDiff);
+  }, [fileDiff, normalizedPatch, workerPool]);
 
   return null;
 });
