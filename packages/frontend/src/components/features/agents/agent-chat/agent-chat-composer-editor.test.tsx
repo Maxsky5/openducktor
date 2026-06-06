@@ -27,10 +27,31 @@ const readMockEditableTextContent = (element: HTMLElement): string => {
   return (element.textContent ?? "").replace(/\u200B/g, "");
 };
 
+const isMockChipElement = (element: Element | null): boolean => {
+  return element instanceof HTMLElement && element.hasAttribute("data-chip-segment-id");
+};
+
+const isMockEmptyTextSegmentNextToChip = (element: HTMLElement): boolean => {
+  return (
+    (element.textContent ?? "").length === 0 &&
+    (isMockChipElement(element.previousElementSibling) ||
+      isMockChipElement(element.nextElementSibling))
+  );
+};
+
 const setCaretOffsetWithinElementMock = mock((element: HTMLElement, logicalOffset: number) => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
   if (!selection) {
+    return;
+  }
+
+  if (isMockEmptyTextSegmentNextToChip(element)) {
+    const range = element.ownerDocument.createRange();
+    range.setStart(element, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
     return;
   }
 
@@ -1365,6 +1386,7 @@ describe("AgentChatComposerEditor", () => {
         const trailingEditable = editables.at(-1);
         expect(trailingEditable?.className).toContain("inline-block");
         expect(trailingEditable?.className).toContain("min-w-[1px]");
+        expect(trailingEditable?.textContent).toBe("");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1498,6 +1520,49 @@ describe("AgentChatComposerEditor", () => {
         const trailingEditable = editables.at(-1);
         expect(trailingEditable?.className).toContain("inline-block");
         expect(trailingEditable?.className).toContain("min-w-[1px]");
+        expect(trailingEditable?.textContent).toBe("");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
+  test("rebuilds placeholder children in empty text segments after file chips", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "main.ts",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    const trailingEditable = getLastTextSegment(rendered.container);
+    trailingEditable.append(document.createElement("br"));
+    fireEvent.input(getEditorRoot(rendered.container));
+
+    await waitFor(
+      () => {
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
+        expect(updatedTrailingEditable.textContent).toBe("");
+        expect(updatedTrailingEditable.childNodes).toHaveLength(0);
+        expect(updatedTrailingEditable.className).toContain("inline-block");
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
@@ -1523,6 +1588,8 @@ describe("AgentChatComposerEditor", () => {
     if (!(firstTextSegment instanceof HTMLElement)) {
       throw new Error("Expected leading text segment");
     }
+
+    expect(firstTextSegment.textContent).toBe("");
 
     firstTextSegment.textContent = "before ";
     fireEvent.input(firstTextSegment);
@@ -1663,7 +1730,7 @@ describe("AgentChatComposerEditor", () => {
       () => {
         const updatedTrailingEditable = getLastTextSegment(rendered.container);
         expect(updatedTrailingEditable).toBeInstanceOf(HTMLElement);
-        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("\u200B");
+        expect((updatedTrailingEditable as HTMLElement).textContent).toBe("");
         expect((updatedTrailingEditable as HTMLElement).className).toContain("inline-block");
         expect((updatedTrailingEditable as HTMLElement).className).not.toContain("after:w-px");
       },

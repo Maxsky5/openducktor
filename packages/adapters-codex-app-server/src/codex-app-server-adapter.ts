@@ -29,6 +29,7 @@ import type {
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
+  SearchAgentFilesInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
@@ -102,6 +103,7 @@ import {
   flushQueuedUserMessagesLater as flushQueuedUserMessagesLaterImpl,
   startCodexTurnForSession,
 } from "./codex-turn-lifecycle";
+import { searchCodexFiles } from "./file-search";
 import {
   CodexModels,
   requireModelSelection,
@@ -296,10 +298,14 @@ export class CodexAppServerAdapter
     );
   }
 
-  async searchFiles(
-    _: import("@openducktor/core").SearchAgentFilesInput,
-  ): Promise<AgentFileSearchResult[]> {
-    return unsupported("searchFiles");
+  async searchFiles(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]> {
+    const { client } = await this.runtimeClients.resolve(input, "search files", {
+      requireLive: true,
+    });
+    return searchCodexFiles(client, {
+      query: input.query,
+      workingDirectory: input.workingDirectory,
+    });
   }
 
   async loadSessionHistory(

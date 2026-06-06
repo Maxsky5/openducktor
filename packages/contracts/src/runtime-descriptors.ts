@@ -152,9 +152,9 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     pendingVisibility: ["live_snapshot"],
   },
   promptInput: {
-    supportedParts: ["text", "skill_mention"],
+    supportedParts: ["text", "skill_mention", "file_reference", "folder_reference"],
     supportsSlashCommands: false,
-    supportsFileSearch: false,
+    supportsFileSearch: true,
     supportsSkillReferences: true,
   },
   optionalSurfaces: {

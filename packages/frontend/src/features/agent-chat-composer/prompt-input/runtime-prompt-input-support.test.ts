@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeKind } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import { resolveRuntimePromptInputSupport } from "./runtime-prompt-input-support";
 
 describe("runtime-prompt-input-support", () => {
@@ -15,6 +19,21 @@ describe("runtime-prompt-input-support", () => {
       runtimeSupportsSlashCommands: true,
       supportsFileSearch: true,
       supportsSkillReferences: false,
+    });
+  });
+
+  test("derives Codex file search and skill reference capabilities", () => {
+    expect(
+      resolveRuntimePromptInputSupport({
+        runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
+        hasActiveSession: false,
+        activeSessionRuntimeKind: null,
+        selectedRuntimeKind: "codex",
+      }),
+    ).toEqual({
+      runtimeSupportsSlashCommands: false,
+      supportsFileSearch: true,
+      supportsSkillReferences: true,
     });
   });
 

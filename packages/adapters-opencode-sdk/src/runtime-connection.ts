@@ -1,5 +1,6 @@
 import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
+import { normalizePathForComparison } from "@openducktor/path-support";
 
 export type OpencodeRuntimeClientInput = {
   runtimeEndpoint: string;
@@ -8,11 +9,6 @@ export type OpencodeRuntimeClientInput = {
 
 export type OpencodeRuntimeResolutionInput = RepoRuntimeRef & {
   workingDirectory?: string | null;
-};
-
-const normalizeRepoPathForComparison = (repoPath: string): string => {
-  const trimmed = repoPath.trim();
-  return trimmed.length > 1 ? trimmed.replace(/\/+$/, "") : trimmed;
 };
 
 const requireOpencodeRuntimeEndpoint = (
@@ -26,10 +22,7 @@ const requireOpencodeRuntimeEndpoint = (
       `Resolved runtime kind '${runtime.kind}' cannot be used to ${action}; '${ref.runtimeKind}' was requested for repo '${ref.repoPath}'.`,
     );
   }
-  if (
-    normalizeRepoPathForComparison(runtime.repoPath) !==
-    normalizeRepoPathForComparison(ref.repoPath)
-  ) {
+  if (normalizePathForComparison(runtime.repoPath) !== normalizePathForComparison(ref.repoPath)) {
     throw new Error(
       `Resolved runtime repo '${runtime.repoPath}' cannot be used to ${action}; repo '${ref.repoPath}' was requested.`,
     );

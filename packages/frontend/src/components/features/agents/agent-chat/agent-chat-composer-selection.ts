@@ -25,6 +25,17 @@ const focusEditableTarget = (element: HTMLElement): void => {
   focusTarget.focus();
 };
 
+const isChipElement = (element: Element | null): boolean => {
+  return element instanceof HTMLElement && element.hasAttribute("data-chip-segment-id");
+};
+
+const isEmptyTextSegmentNextToChip = (element: HTMLElement): boolean => {
+  return (
+    (element.textContent ?? "").length === 0 &&
+    (isChipElement(element.previousElementSibling) || isChipElement(element.nextElementSibling))
+  );
+};
+
 export const getCaretOffsetWithinElement = (element: HTMLElement): number | null => {
   const selection =
     element.ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
@@ -74,6 +85,16 @@ export const setCaretOffsetWithinElement = (element: HTMLElement, logicalOffset:
   const ownerDocument = element.ownerDocument;
   const selection = ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
   if (!selection) {
+    return;
+  }
+
+  if (isEmptyTextSegmentNextToChip(element)) {
+    focusEditableTarget(element);
+    const range = ownerDocument.createRange();
+    range.setStart(element, 0);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
     return;
   }
 

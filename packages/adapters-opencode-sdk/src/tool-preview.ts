@@ -1,4 +1,5 @@
 import type { AgentToolType } from "@openducktor/core";
+import { basenameForPath } from "@openducktor/path-support";
 import { asUnknownRecord } from "./guards";
 
 const SHELL_TOOL_NAMES = new Set(["bash", "shell", "exec", "command"]);
@@ -90,8 +91,7 @@ const extractPathFromInput = (input: Record<string, unknown> | undefined): strin
 };
 
 const extractBaseName = (value: string): string => {
-  const normalized = value.replace(/\\/g, "/");
-  const lastSegment = normalized.split("/").filter(Boolean).at(-1) ?? normalized;
+  const lastSegment = basenameForPath(value) || value;
   return lastSegment.replace(/\.[^.]+$/, "");
 };
 

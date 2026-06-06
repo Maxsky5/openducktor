@@ -3,6 +3,7 @@ import {
   buildComposerAttachmentFromFile,
   buildComposerAttachmentFromPath,
   readAttachmentFileName,
+  readAttachmentNameFromPath,
   validateComposerAttachments,
 } from "./agent-chat-attachments";
 
@@ -60,6 +61,14 @@ describe("agent-chat-attachments", () => {
       mime: "image/avif",
       path: "/tmp/preview.avif",
     });
+  });
+
+  test("reads attachment names from slash and backslash separated paths", () => {
+    expect(readAttachmentNameFromPath("/tmp/screenshots/preview.png")).toBe("preview.png");
+    expect(readAttachmentNameFromPath("C:\\Users\\max\\Downloads\\recording.webm")).toBe(
+      "recording.webm",
+    );
+    expect(readAttachmentNameFromPath("/tmp/screenshots/")).toBe("screenshots");
   });
 
   test("prefers persisted metadata when rebuilding from path", () => {

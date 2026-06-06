@@ -1,4 +1,5 @@
-const normalizeSlashes = (value: string): string => value.replace(/\\/g, "/");
+import { toDisplayRelativePath } from "@openducktor/path-support";
+
 const DISPLAY_PATH_KEYS = new Set([
   "filePath",
   "file_path",
@@ -15,40 +16,8 @@ const DISPLAY_PATH_KEYS = new Set([
   "workingDirectory",
 ]);
 
-const trimTrailingSlash = (value: string): string => {
-  if (value === "/") {
-    return value;
-  }
-  return value.replace(/\/+$/, "");
-};
-
-const normalizeAbsolutePath = (value: string): string => trimTrailingSlash(normalizeSlashes(value));
-
-export const relativizeDisplayPath = (
-  filePath: string,
-  workingDirectory?: string | null,
-): string => {
-  const trimmedPath = filePath.trim();
-  const trimmedWorkingDirectory = workingDirectory?.trim() ?? "";
-  if (trimmedPath.length === 0 || trimmedWorkingDirectory.length === 0) {
-    return trimmedPath;
-  }
-
-  const normalizedPath = normalizeAbsolutePath(trimmedPath);
-  if (!normalizedPath.startsWith("/")) {
-    return trimmedPath;
-  }
-
-  const normalizedWorkingDirectory = normalizeAbsolutePath(trimmedWorkingDirectory);
-  if (normalizedPath === normalizedWorkingDirectory) {
-    return ".";
-  }
-  if (!normalizedPath.startsWith(`${normalizedWorkingDirectory}/`)) {
-    return trimmedPath;
-  }
-
-  return normalizedPath.slice(normalizedWorkingDirectory.length + 1);
-};
+export const relativizeDisplayPath = (filePath: string, workingDirectory?: string | null): string =>
+  toDisplayRelativePath(filePath, workingDirectory);
 
 export const relativizeSearchSummary = (
   summary: string,

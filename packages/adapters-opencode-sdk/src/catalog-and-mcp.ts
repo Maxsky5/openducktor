@@ -8,7 +8,7 @@ import type {
 import { unwrapData } from "./data-utils";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { asUnknownRecord, readStringArrayProp, readStringProp } from "./guards";
-import { basename, isAbsolutePath, toProjectRelativePath } from "./path-utils";
+import { basename, toProjectRelativePath } from "./path-utils";
 import { mapProviderListToCatalog, toToolIdList } from "./payload-mappers";
 import { toOpenCodeRequestError } from "./request-errors";
 import type { OpencodeRuntimeClientInput } from "./runtime-connection";
@@ -70,13 +70,7 @@ const normalizeFileSearchPath = (rawPath: string, workingDirectory: string): str
     throw new Error("Invalid file search payload: expected non-empty file paths.");
   }
 
-  const withoutTrailingSlash = trimmedPath.replace(/[\\/]+$/, "");
-  const normalizedPath = withoutTrailingSlash.length > 0 ? withoutTrailingSlash : trimmedPath;
-  if (isAbsolutePath(normalizedPath)) {
-    return toProjectRelativePath(normalizedPath, workingDirectory);
-  }
-
-  return normalizedPath;
+  return toProjectRelativePath(trimmedPath, workingDirectory);
 };
 
 const toFileSearchResult = (rawPath: string, workingDirectory: string): AgentFileSearchResult => {

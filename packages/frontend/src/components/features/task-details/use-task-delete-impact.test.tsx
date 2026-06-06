@@ -73,6 +73,30 @@ describe("getManagedTaskDeleteImpact", () => {
     });
   });
 
+  test("uses shared path comparison semantics when deduplicating managed worktrees", () => {
+    const impact = getManagedTaskDeleteImpact("/repo", [
+      makeSession({
+        runtimeKind: "opencode",
+        externalSessionId: "build-1",
+        role: "build",
+        workingDirectory: "/repo/worktrees/./task-1",
+      }),
+      makeSession({
+        runtimeKind: "opencode",
+        externalSessionId: "qa-1",
+        role: "qa",
+        workingDirectory: "/repo//worktrees/task-1/",
+      }),
+    ]);
+
+    expect(impact).toEqual({
+      hasManagedSessionCleanup: true,
+      managedWorktreeCount: 1,
+      impactError: null,
+      isLoadingImpact: false,
+    });
+  });
+
   test("aggregates managed worktrees across multiple task session lists", () => {
     const impact = getManagedTaskDeleteImpactFromTasks("/repo", [
       [makeSession({ externalSessionId: "parent", workingDirectory: "/repo" })],

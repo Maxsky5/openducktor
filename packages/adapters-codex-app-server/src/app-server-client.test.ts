@@ -44,4 +44,36 @@ describe("createCodexAppServerClient", () => {
       },
     ]);
   });
+
+  test("sends one-shot fuzzy file search requests unchanged", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const response = {
+      files: [
+        {
+          root: "/repo",
+          path: "src/main.ts",
+          match_type: "file" as const,
+          file_name: "main.ts",
+          score: 8,
+          indices: [0, 1],
+        },
+      ],
+    };
+    const transport: CodexJsonRpcTransport = {
+      async request(request) {
+        calls.push(request);
+        return response;
+      },
+    };
+    const client = createCodexAppServerClient(transport);
+    const params = { query: "src", roots: ["/repo"], cancellationToken: null };
+
+    await expect(client.fuzzyFileSearch(params)).resolves.toEqual(response);
+    expect(calls).toEqual([
+      {
+        method: "fuzzyFileSearch",
+        params,
+      },
+    ]);
+  });
 });

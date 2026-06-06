@@ -1,15 +1,17 @@
-import type {
-  AttachAgentSessionInput,
-  ForkAgentSessionInput,
-  ListAgentModelsInput,
-  ListLiveAgentSessionsInput,
-  ListSessionPresenceInput,
-  LoadAgentSessionDiffInput,
-  LoadAgentSessionHistoryInput,
-  LoadAgentSessionTodosInput,
-  ReadSessionPresenceInput,
-  ResumeAgentSessionInput,
-  StartAgentSessionInput,
+import {
+  type AttachAgentSessionInput,
+  type ForkAgentSessionInput,
+  type ListAgentModelsInput,
+  type ListLiveAgentSessionsInput,
+  type ListSessionPresenceInput,
+  type LoadAgentSessionDiffInput,
+  type LoadAgentSessionHistoryInput,
+  type LoadAgentSessionTodosInput,
+  type ReadSessionPresenceInput,
+  type ResumeAgentSessionInput,
+  requireRepoRuntimeRef,
+  type SearchAgentFilesInput,
+  type StartAgentSessionInput,
 } from "@openducktor/core";
 import { createCodexAppServerClient } from "./app-server-client";
 import { resolveCodexRuntimeClientInput } from "./runtime-connection";
@@ -30,7 +32,8 @@ type RuntimeClientInput =
   | ReadSessionPresenceInput
   | LoadAgentSessionHistoryInput
   | LoadAgentSessionDiffInput
-  | LoadAgentSessionTodosInput;
+  | LoadAgentSessionTodosInput
+  | SearchAgentFilesInput;
 
 type RuntimeRef = { repoPath: string; runtimeKind: "codex" };
 
@@ -65,7 +68,14 @@ export class CodexRuntimeClientResolver {
       );
     }
 
-    const runtimeRef: RuntimeRef = { repoPath: input.repoPath, runtimeKind: "codex" };
+    const requestedRuntimeRef = requireRepoRuntimeRef(input, action);
+    if (requestedRuntimeRef.runtimeKind !== "codex") {
+      throw new Error(`Codex App Server can only ${action} for runtime 'codex'.`);
+    }
+    const runtimeRef: RuntimeRef = {
+      repoPath: requestedRuntimeRef.repoPath,
+      runtimeKind: requestedRuntimeRef.runtimeKind,
+    };
     const requestedRuntimeId = "runtimeId" in input ? input.runtimeId : undefined;
     const runtime = requestedRuntimeId
       ? await this.requireRuntimeById(resolver, runtimeRef, requestedRuntimeId)
@@ -76,8 +86,8 @@ export class CodexRuntimeClientResolver {
     const { runtimeId } = resolveCodexRuntimeClientInput(
       runtime,
       {
-        repoPath: input.repoPath,
-        runtimeKind: "codex",
+        repoPath: runtimeRef.repoPath,
+        runtimeKind: runtimeRef.runtimeKind,
         ...("workingDirectory" in input ? { workingDirectory: input.workingDirectory } : {}),
       },
       action,

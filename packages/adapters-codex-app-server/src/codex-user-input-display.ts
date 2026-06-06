@@ -1,12 +1,18 @@
-import type {
-  AgentSkillReference,
-  AgentUserMessageDisplayPart,
-  AgentUserMessagePart,
+import {
+  type AgentFileReference,
+  type AgentSkillReference,
+  type AgentUserMessageDisplayPart,
+  type AgentUserMessagePart,
+  detectAgentFileReferenceKind,
 } from "@openducktor/core";
+import { basenameForPath, normalizePathSeparators } from "@openducktor/path-support";
 import type { CodexTextElement, CodexUserInput } from "./types";
 
 type CodexTextInput = Extract<CodexUserInput, { type: "text" }>;
+type CodexMentionInput = Extract<CodexUserInput, { type: "mention" }>;
 type CodexSkillInput = Extract<CodexUserInput, { type: "skill" }>;
+
+const wordlikeTextStartPattern = /[\p{L}\p{N}_]/u;
 
 const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart | null => {
   if (part.kind === "text") {
@@ -25,15 +31,36 @@ const toDisplayPart = (part: AgentUserMessagePart): AgentUserMessageDisplayPart 
 };
 
 export const toDisplayParts = (parts: AgentUserMessagePart[]): AgentUserMessageDisplayPart[] => {
-  return parts
-    .map(toDisplayPart)
-    .filter((part): part is AgentUserMessageDisplayPart => Boolean(part));
+  const displayParts: AgentUserMessageDisplayPart[] = [];
+  let previousPart: AgentUserMessagePart | null = null;
+  for (const part of parts) {
+    const displayPart = toDisplayPart(part);
+    if (!displayPart) {
+      previousPart = part;
+      continue;
+    }
+    if (
+      previousPart &&
+      (previousPart.kind === "file_reference" || previousPart.kind === "skill_mention") &&
+      displayPart.kind === "text" &&
+      wordlikeTextStartPattern.test(displayPart.text.at(0) ?? "")
+    ) {
+      displayParts.push({ ...displayPart, text: ` ${displayPart.text}` });
+    } else {
+      displayParts.push(displayPart);
+    }
+    previousPart = part;
+  }
+  return displayParts;
 };
 const userInputText = (input: CodexUserInput): string => {
   if (input.type === "text") {
     return input.text;
   }
   if (input.type === "mention") {
+    if (isCodexFileMentionInput(input)) {
+      return `@${input.path}`;
+    }
     return `@${input.name}`;
   }
   if (input.type === "skill") {
@@ -46,7 +73,7 @@ const stagedAttachmentUuidPrefixPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
 
 const codexLocalImageNameFromPath = (path: string): string => {
-  const fileName = path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path;
+  const fileName = basenameForPath(path) || path;
   if (fileName.length <= 37 || !stagedAttachmentUuidPrefixPattern.test(fileName)) {
     return fileName;
   }
@@ -123,6 +150,35 @@ const codexSkillInputToDisplayPart = (input: CodexSkillInput): AgentUserMessageD
   skill: codexSkillReferenceFromInput(input),
 });
 
+const externalMentionSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+const isCodexFileMentionInput = (input: CodexMentionInput): boolean => {
+  const path = input.path.trim();
+  return path.length > 0 && !externalMentionSchemePattern.test(path);
+};
+
+const codexFileReferenceFromPath = (path: string, displayName?: string): AgentFileReference => {
+  const normalizedPath = normalizePathSeparators(path);
+  const name = displayName?.trim() || basenameForPath(normalizedPath) || normalizedPath;
+  return {
+    id: normalizedPath,
+    path: normalizedPath,
+    name,
+    kind: detectAgentFileReferenceKind({ filePath: normalizedPath }),
+  };
+};
+
+const codexFileReferenceFromMentionInput = (input: CodexMentionInput): AgentFileReference => {
+  return codexFileReferenceFromPath(input.path, input.name);
+};
+
+const codexFileMentionInputToDisplayPart = (
+  input: CodexMentionInput,
+): AgentUserMessageDisplayPart => ({
+  kind: "file_reference",
+  file: codexFileReferenceFromMentionInput(input),
+});
+
 const codexUserInputToDisplayPart = (
   input: CodexUserInput,
   messageId: string,
@@ -133,6 +189,9 @@ const codexUserInputToDisplayPart = (
   }
   if (input.type === "skill") {
     return codexSkillInputToDisplayPart(input);
+  }
+  if (input.type === "mention" && isCodexFileMentionInput(input)) {
+    return codexFileMentionInputToDisplayPart(input);
   }
   if (input.type === "localImage") {
     return {
@@ -181,6 +240,32 @@ const buildCodexSkillsByMarker = (input: CodexUserInput[]): Map<string, AgentSki
   return skillsByMarker;
 };
 
+const codexFileMentionMarkers = (input: CodexMentionInput): string[] => {
+  return [...new Set([`@${input.path}`, `@${input.name}`])].filter((marker) => marker.length > 1);
+};
+
+const findCodexFileMentionMarkerRange = (
+  text: string,
+  mention: CodexMentionInput,
+): { start: number; end: number } | null => {
+  let selected: { start: number; end: number } | null = null;
+  for (const marker of codexFileMentionMarkers(mention)) {
+    const start = text.indexOf(marker);
+    if (start < 0) {
+      continue;
+    }
+    const end = start + marker.length;
+    if (
+      selected === null ||
+      start < selected.start ||
+      (start === selected.start && end > selected.end)
+    ) {
+      selected = { start, end };
+    }
+  }
+  return selected;
+};
+
 type CodexTextDisplayParts = {
   parts: AgentUserMessageDisplayPart[];
   renderedSkillIds: Set<string>;
@@ -225,10 +310,92 @@ const codexSkillMentionFromTextElement = (
   };
 };
 
+const codexTextElementMatchesFileMention = (
+  input: CodexTextInput,
+  element: CodexTextElement,
+  range: { start: number; end: number },
+  mention: CodexMentionInput,
+): boolean => {
+  const rangeText = input.text.slice(range.start, range.end);
+  return codexFileMentionMarkers(mention).some(
+    (marker) => marker === rangeText || marker === codexTextElementMarker(input, element, range),
+  );
+};
+
+const codexFileMentionFromTextElement = (
+  input: CodexTextInput,
+  element: CodexTextElement,
+  range: { start: number; end: number },
+  textOffset: number,
+  fileMentions: CodexMentionInput[],
+  renderedFileMentions: Set<CodexMentionInput>,
+): {
+  input: CodexMentionInput;
+  part: Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }>;
+} | null => {
+  const marker = codexTextElementMarker(input, element, range);
+  if (!marker.startsWith("@")) {
+    return null;
+  }
+
+  const fileMention = fileMentions.find(
+    (mention) =>
+      !renderedFileMentions.has(mention) &&
+      codexTextElementMatchesFileMention(input, element, range, mention),
+  );
+  if (!fileMention) {
+    return null;
+  }
+
+  return {
+    input: fileMention,
+    part: {
+      kind: "file_reference",
+      file: codexFileReferenceFromMentionInput(fileMention),
+      sourceText: {
+        value: input.text.slice(range.start, range.end),
+        start: textOffset + range.start,
+        end: textOffset + range.end,
+      },
+    },
+  };
+};
+
+const codexFileReferenceFromTextElement = (
+  input: CodexTextInput,
+  element: CodexTextElement,
+  range: { start: number; end: number },
+  textOffset: number,
+): Extract<AgentUserMessageDisplayPart, { kind: "file_reference" }> | null => {
+  const sourceValue = input.text.slice(range.start, range.end);
+  if (!sourceValue.startsWith("@")) {
+    return null;
+  }
+
+  const path = sourceValue.slice(1).trim();
+  if (path.length === 0 || externalMentionSchemePattern.test(path)) {
+    return null;
+  }
+
+  const marker = codexTextElementMarker(input, element, range);
+  const displayName = marker.startsWith("@") ? marker.slice(1).trim() : undefined;
+  return {
+    kind: "file_reference",
+    file: codexFileReferenceFromPath(path, displayName),
+    sourceText: {
+      value: sourceValue,
+      start: textOffset + range.start,
+      end: textOffset + range.end,
+    },
+  };
+};
+
 const codexTextInputToDisplayParts = (
   input: CodexTextInput,
   textOffset: number,
   skillsByMarker: Map<string, AgentSkillReference[]>,
+  fileMentions: CodexMentionInput[],
+  renderedFileMentions: Set<CodexMentionInput>,
 ): CodexTextDisplayParts => {
   const elements = [...(input.text_elements ?? [])].sort(
     (left, right) => left.byteRange.start - right.byteRange.start,
@@ -258,15 +425,35 @@ const codexTextInputToDisplayParts = (
       textOffset,
       skillsByMarker,
     );
-    if (!skillMention) {
+    const fileMention =
+      skillMention === null
+        ? codexFileMentionFromTextElement(
+            input,
+            element,
+            range,
+            textOffset,
+            fileMentions,
+            renderedFileMentions,
+          )
+        : null;
+    const fileReference =
+      skillMention === null && fileMention === null
+        ? codexFileReferenceFromTextElement(input, element, range, textOffset)
+        : null;
+    const referencePart = skillMention?.part ?? fileMention?.part ?? fileReference;
+    if (!referencePart) {
       continue;
     }
 
     if (start > cursor) {
       parts.push({ kind: "text", text: input.text.slice(cursor, start) });
     }
-    parts.push(skillMention.part);
-    renderedSkillIds.add(skillMention.part.skill.id);
+    parts.push(referencePart);
+    if (referencePart.kind === "skill_mention") {
+      renderedSkillIds.add(referencePart.skill.id);
+    } else if (fileMention) {
+      renderedFileMentions.add(fileMention.input);
+    }
     cursor = end;
   }
   if (parts.length === 0) {
@@ -293,6 +480,37 @@ const codexTextSkillEchoToDisplayParts = (
     parts.push({ kind: "text", text: prefix });
   }
   parts.push(codexSkillInputToDisplayPart(skillInput));
+  return parts;
+};
+
+const codexTextFileEchoToDisplayParts = (
+  input: CodexTextInput,
+  fileInput: CodexMentionInput,
+  textOffset: number,
+): AgentUserMessageDisplayPart[] | null => {
+  const range = findCodexFileMentionMarkerRange(input.text, fileInput);
+  if (!range) {
+    return null;
+  }
+
+  const parts: AgentUserMessageDisplayPart[] = [];
+  const prefix = input.text.slice(0, range.start);
+  if (prefix.length > 0) {
+    parts.push({ kind: "text", text: prefix });
+  }
+  parts.push({
+    kind: "file_reference",
+    file: codexFileReferenceFromMentionInput(fileInput),
+    sourceText: {
+      value: input.text.slice(range.start, range.end),
+      start: textOffset + range.start,
+      end: textOffset + range.end,
+    },
+  });
+  const suffix = input.text.slice(range.end);
+  if (suffix.length > 0) {
+    parts.push({ kind: "text", text: suffix });
+  }
   return parts;
 };
 
@@ -329,10 +547,41 @@ const consumeMarker = (markers: Map<string, number>, marker: string): boolean =>
   return true;
 };
 
+const textInputHasFileMentionMarker = (
+  input: CodexTextInput,
+  mention: CodexMentionInput,
+): boolean => {
+  return findCodexFileMentionMarkerRange(input.text, mention) !== null;
+};
+
+const textInputHasFileMentionElement = (
+  input: CodexTextInput,
+  mention: CodexMentionInput,
+): boolean => {
+  return (input.text_elements ?? []).some((element) => {
+    const range = codexTextElementRange(input, element);
+    return range ? codexTextElementMatchesFileMention(input, element, range, mention) : false;
+  });
+};
+
 const codexUserInputTextContributions = (input: CodexUserInput[]): string[] => {
   const markedSkills = collectCodexMarkedSkillMarkerCounts(input);
   return input.map((current, index) => {
-    if (current.type !== "skill") {
+    if (current.type !== "skill" && current.type !== "mention") {
+      return userInputText(current);
+    }
+    if (current.type === "mention") {
+      if (!isCodexFileMentionInput(current)) {
+        return userInputText(current);
+      }
+      const previous = input[index - 1];
+      if (
+        previous?.type === "text" &&
+        (textInputHasFileMentionElement(previous, current) ||
+          textInputHasFileMentionMarker(previous, current))
+      ) {
+        return "";
+      }
       return userInputText(current);
     }
 
@@ -364,7 +613,12 @@ export const codexUserInputsToDisplayParts = (
 ): AgentUserMessageDisplayPart[] => {
   const parts: AgentUserMessageDisplayPart[] = [];
   const skillsByMarker = buildCodexSkillsByMarker(input);
+  const fileMentions = input.filter(
+    (entry): entry is CodexMentionInput =>
+      entry.type === "mention" && isCodexFileMentionInput(entry),
+  );
   const renderedSkillIds = new Set<string>();
+  const renderedFileMentions = new Set<CodexMentionInput>();
   const textContributions = codexUserInputTextContributions(input);
   let accumulatedText = "";
   for (let index = 0; index < input.length; index += 1) {
@@ -376,7 +630,13 @@ export const codexUserInputsToDisplayParts = (
     const partText = textContributions[index] ?? "";
     const textOffset = appendedTextStartOffset(accumulatedText, partText);
     if (current.type === "text" && (current.text_elements?.length ?? 0) > 0) {
-      const textResult = codexTextInputToDisplayParts(current, textOffset, skillsByMarker);
+      const textResult = codexTextInputToDisplayParts(
+        current,
+        textOffset,
+        skillsByMarker,
+        fileMentions,
+        renderedFileMentions,
+      );
       parts.push(...textResult.parts);
       for (const skillId of textResult.renderedSkillIds) {
         renderedSkillIds.add(skillId);
@@ -384,7 +644,26 @@ export const codexUserInputsToDisplayParts = (
       accumulatedText = appendUserInputText(accumulatedText, partText);
       continue;
     }
+    if (current.type === "text" && next?.type === "mention" && isCodexFileMentionInput(next)) {
+      const echoParts = codexTextFileEchoToDisplayParts(current, next, textOffset);
+      if (echoParts) {
+        parts.push(...echoParts);
+        renderedFileMentions.add(next);
+        accumulatedText = appendUserInputText(accumulatedText, partText);
+        accumulatedText = appendUserInputText(accumulatedText, textContributions[index + 1] ?? "");
+        index += 1;
+        continue;
+      }
+    }
     if (current.type === "skill" && renderedSkillIds.has(current.path)) {
+      accumulatedText = appendUserInputText(accumulatedText, partText);
+      continue;
+    }
+    if (
+      current.type === "mention" &&
+      isCodexFileMentionInput(current) &&
+      renderedFileMentions.has(current)
+    ) {
       accumulatedText = appendUserInputText(accumulatedText, partText);
       continue;
     }

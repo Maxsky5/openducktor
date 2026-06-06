@@ -11,7 +11,10 @@ describe("createRuntimeDefinitionsService", () => {
     expect(definitions[1]?.capabilities.promptInput.supportedParts).toEqual([
       "text",
       "skill_mention",
+      "file_reference",
+      "folder_reference",
     ]);
+    expect(definitions[1]?.capabilities.promptInput.supportsFileSearch).toBe(true);
     expect(definitions[1]?.capabilities.promptInput.supportsSkillReferences).toBe(true);
   });
 });

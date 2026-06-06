@@ -306,6 +306,24 @@ export type CodexAppServerGitDiffToRemoteResponse = {
   sha: string;
 };
 
+export type CodexAppServerFuzzyFileSearchMatchType = "file" | "directory";
+export type CodexAppServerFuzzyFileSearchParams = {
+  query: string;
+  roots: string[];
+  cancellationToken: string | null;
+};
+export type CodexAppServerFuzzyFileSearchResult = {
+  root: string;
+  path: string;
+  match_type: CodexAppServerFuzzyFileSearchMatchType;
+  file_name: string;
+  score: number;
+  indices: number[] | null;
+};
+export type CodexAppServerFuzzyFileSearchResponse = {
+  files: CodexAppServerFuzzyFileSearchResult[];
+};
+
 export type CodexAppServerThreadTokenUsageUpdatedNotification = {
   threadId: string;
   tokenUsage: {
@@ -509,6 +527,10 @@ export type CodexAppServerClientRequestMap = {
   gitDiffToRemote: {
     params: CodexAppServerGitDiffToRemoteParams;
     result: CodexAppServerGitDiffToRemoteResponse;
+  };
+  fuzzyFileSearch: {
+    params: CodexAppServerFuzzyFileSearchParams;
+    result: CodexAppServerFuzzyFileSearchResponse;
   };
 };
 export type CodexAppServerRequestMethod = keyof CodexAppServerClientRequestMap;
