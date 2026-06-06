@@ -23,6 +23,8 @@ describe("lexical path helpers", () => {
     [" \\repo\\worktree\\task ", "/repo/worktree/task"],
     ["C:\\Repo\\Worktree\\Task", "c:/repo/worktree/task"],
     ["c:/Repo//Worktree/../Task", "c:/repo/task"],
+    ["C:/repo/..", "c:/"],
+    ["C:/.", "c:/"],
     ["C:\\repo\\..\\task", "c:/task"],
     ["C:\\..\\task", "c:/task"],
     ["C:\\subdir\\..\\..\\task", "c:/task"],

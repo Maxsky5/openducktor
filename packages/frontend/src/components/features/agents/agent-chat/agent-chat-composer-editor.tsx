@@ -215,7 +215,7 @@ const syncComposerDomInPlace = (
 
         if (
           isEmptyTextSegmentAdjacentToChip(segment, segments, draftIndex) &&
-          (node.textContent ?? "").length > 0
+          ((node.textContent ?? "").length > 0 || node.childNodes.length > 0)
         ) {
           return false;
         }

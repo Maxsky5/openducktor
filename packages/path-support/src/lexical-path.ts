@@ -53,11 +53,12 @@ const toLexicalPath = (
     segments.push(segment);
   }
   const joined = segments.join("/");
+  const sourceWasDriveAbsolute = WINDOWS_DRIVE_ABSOLUTE_PATH_PATTERN.test(trimmed);
   const isWindowsDriveRoot =
     windowsDrivePath &&
-    hasTrailingSeparator &&
     segments.length === 1 &&
-    /^[A-Za-z]:$/.test(segments[0] ?? "");
+    /^[A-Za-z]:$/.test(segments[0] ?? "") &&
+    (hasTrailingSeparator || sourceWasDriveAbsolute);
   const path = leadingSeparatorRoot ? `/${joined}` : isWindowsDriveRoot ? `${joined}/` : joined;
   return {
     path,

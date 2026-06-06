@@ -1526,6 +1526,48 @@ describe("AgentChatComposerEditor", () => {
     );
   });
 
+  test("rebuilds placeholder children in empty text segments after file chips", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        searchFiles={async () => [buildFileSearchResult()]}
+      />,
+    );
+
+    const editable = typeIntoEditor(rendered.container, "@");
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /main.ts/i })).toBeDefined();
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+    fireEvent.keyDown(editable, { key: "Enter" });
+
+    await waitFor(
+      () => {
+        expect(rendered.container.querySelector("[data-chip-segment-id]")?.textContent).toContain(
+          "main.ts",
+        );
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+
+    const trailingEditable = getLastTextSegment(rendered.container);
+    trailingEditable.append(document.createElement("br"));
+    fireEvent.input(getEditorRoot(rendered.container));
+
+    await waitFor(
+      () => {
+        const updatedTrailingEditable = getLastTextSegment(rendered.container);
+        expect(updatedTrailingEditable.textContent).toBe("");
+        expect(updatedTrailingEditable.childNodes).toHaveLength(0);
+        expect(updatedTrailingEditable.className).toContain("inline-block");
+      },
+      { timeout: COMPOSER_WAIT_TIMEOUT_MS },
+    );
+  });
+
   test("renders an editable leading text segment before a file chip", async () => {
     const rendered = render(
       <EditorHarness
