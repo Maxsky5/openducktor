@@ -113,6 +113,36 @@ const normalizeDiffLineText = (value: string): string => value.replace(/\n$/, ""
 
 const renderableFileDiffCache = new Map<string, RenderableFileDiff>();
 
+const hashRenderableDiffCacheInput = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+};
+
+const workerCacheKeyForRenderableDiff = (filePath: string, normalizedPatch: string): string => {
+  const patchHash = hashRenderableDiffCacheInput(normalizedPatch);
+  const patchLength = normalizedPatch.length.toString(36);
+  return `renderable-diff:${patchHash}:${patchLength}:${filePath}`;
+};
+
+const withWorkerCacheKey = (
+  fileDiff: FileDiffMetadata | null,
+  filePath: string,
+  normalizedPatch: string | null,
+): FileDiffMetadata | null => {
+  if (fileDiff == null || normalizedPatch == null) {
+    return fileDiff;
+  }
+
+  return {
+    ...fileDiff,
+    cacheKey: fileDiff.cacheKey ?? workerCacheKeyForRenderableDiff(filePath, normalizedPatch),
+  };
+};
+
 export const getRenderableFileDiff = (patch: string, filePath: string) => {
   const cacheKey = `${filePath}\u0000${patch}`;
   const cached = renderableFileDiffCache.get(cacheKey);
@@ -123,7 +153,11 @@ export const getRenderableFileDiff = (patch: string, filePath: string) => {
   }
 
   const normalizedPatch = selectRenderableDiff(patch, filePath);
-  const fileDiff = normalizedPatch ? tryGetSingularPatch(normalizedPatch) : null;
+  const fileDiff = withWorkerCacheKey(
+    normalizedPatch ? tryGetSingularPatch(normalizedPatch) : null,
+    filePath,
+    normalizedPatch,
+  );
   const result = {
     fileDiff,
     normalizedPatch,
