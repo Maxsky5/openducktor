@@ -73,7 +73,8 @@ const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
 const HUNK_RESET_BUTTON_CLASS_NAME =
   "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
-const DIFF_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(70vh,48rem)] overflow-auto";
+const DIFF_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(60vh,40rem)] overflow-auto";
+const FILE_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(70vh,48rem)] overflow-auto";
 const HUNK_RESET_FLOATING_CSS = `
 [data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]),
 [data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) {
@@ -150,7 +151,7 @@ export const PierreFileViewer = memo(function PierreFileViewer({
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
-      <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
+      <div className={FILE_SCROLL_CONTAINER_CLASS_NAME}>
         <PierreReactFile file={file} options={options} />
       </div>
     </div>

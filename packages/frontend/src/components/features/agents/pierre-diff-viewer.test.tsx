@@ -303,6 +303,7 @@ describe("PierreDiffViewer", () => {
     expect(file.getAttribute("data-disable-file-header")).toBe("true");
     expect(file.getAttribute("data-overflow")).toBe("wrap");
     expect(file.getAttribute("data-theme-type")).toBe("light");
+    expect(file.parentElement?.className).toContain("max-h-[min(70vh,48rem)]");
 
     const firstCacheKey = file.getAttribute("data-cache-key");
     rerender(
@@ -344,7 +345,7 @@ describe("PierreDiffViewer", () => {
 
     const fallback = screen.getByText(/invalid diff body/);
     expect(fallback.parentElement?.className).toContain("overflow-auto");
-    expect(fallback.parentElement?.className).toContain("max-h-[min(70vh,48rem)]");
+    expect(fallback.parentElement?.className).toContain("max-h-[min(60vh,40rem)]");
   });
 });
 
