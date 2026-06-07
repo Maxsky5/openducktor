@@ -394,6 +394,7 @@ describe("CodexAppServerAdapter presence", () => {
     ).resolves.toMatchObject({
       presence: "runtime",
       agentSessionStatus: "running",
+      title: "BUILD task-1",
       ref: expect.objectContaining({ externalSessionId: summary.externalSessionId }),
     });
   });

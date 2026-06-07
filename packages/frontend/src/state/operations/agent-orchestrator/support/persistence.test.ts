@@ -90,6 +90,7 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(persisted.runtimeKind).toBe("opencode");
     expect(persisted.selectedModel).toEqual(recordFixture.selectedModel);
     expect("taskId" in persisted).toBe(false);
+    expect("title" in persisted).toBe(false);
   });
 
   test("preserves non-default runtime kind across persistence", () => {

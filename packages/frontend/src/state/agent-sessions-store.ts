@@ -96,7 +96,7 @@ const areSummariesEquivalent = (
 ): boolean => {
   return (
     left?.externalSessionId === right.externalSessionId &&
-    left.title === right.title &&
+    left?.title === right.title &&
     left.taskId === right.taskId &&
     left.role === right.role &&
     left.status === right.status &&

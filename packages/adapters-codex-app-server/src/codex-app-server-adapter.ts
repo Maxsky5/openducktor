@@ -199,14 +199,14 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
-    await client.threadSetName({
-      threadId: session.threadId,
-      name: title,
-    });
     const { summary } = session;
     this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
+    await client.threadSetName({
+      threadId: session.threadId,
+      name: title,
+    });
 
     return summary;
   }
@@ -252,11 +252,16 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const session = sessionStateFromThreadFork(input, runtimeId, model, response);
+    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
+    await client.threadSetName({
+      threadId: session.threadId,
+      name: title,
+    });
 
     return summary;
   }

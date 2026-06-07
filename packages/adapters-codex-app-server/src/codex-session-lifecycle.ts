@@ -80,11 +80,13 @@ export const sessionStateFromThreadFork = (
   runtimeId: string,
   model: AgentModelSelection,
   response: CodexThreadForkResult,
+  title: string,
 ): CodexSessionState => {
   const { externalSessionId, startedAt } = extractThreadId(response, "thread/fork");
   const summary = toSessionSummary({
     externalSessionId,
     startedAt: startedAt ?? new Date().toISOString(),
+    title,
     role: input.role,
     status: "running",
   });
