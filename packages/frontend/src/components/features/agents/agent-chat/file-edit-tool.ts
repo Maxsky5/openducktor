@@ -35,6 +35,7 @@ export type FileEditData =
   | (FileEditDataBase & {
       kind: "content";
       content: string;
+      changeType: string;
     })
   | (FileEditDataBase & {
       kind: "path";
@@ -80,6 +81,7 @@ const buildFileContentEditData = (
   kind: "content",
   filePath: relativizeDisplayPath(fileContent.file, workingDirectory),
   content: fileContent.content,
+  changeType: fileContent.type,
   additions: 0,
   deletions: 0,
 });

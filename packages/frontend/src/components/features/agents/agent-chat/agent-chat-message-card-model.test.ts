@@ -1031,6 +1031,7 @@ describe("agent-chat-message-card-model", () => {
           kind: "content",
           filePath: "src/app.ts",
           content: "export const value = 1;\n",
+          changeType: "modified",
           additions: 0,
           deletions: 0,
         },

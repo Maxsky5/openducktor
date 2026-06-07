@@ -17,6 +17,9 @@ const STATUS_CONFIG: Record<string, { icon: typeof FileText; color: string; badg
 };
 
 function inferStatus(data: FileEditData): string {
+  if (data.kind === "content" && data.changeType in STATUS_CONFIG) {
+    return data.changeType;
+  }
   if (data.deletions === 0 && data.additions > 0) {
     return "added";
   }

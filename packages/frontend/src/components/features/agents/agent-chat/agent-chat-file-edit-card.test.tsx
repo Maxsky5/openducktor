@@ -48,6 +48,7 @@ const buildContentFileEditData = (
   kind: "content",
   filePath: "src/example.ts",
   content: "export const value = 1;\n",
+  changeType: "modified",
   additions: 0,
   deletions: 0,
   ...overrides,
@@ -170,6 +171,17 @@ describe("AgentChatFileEditCard", () => {
 
     expect(container.querySelector("pre")).not.toBeNull();
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+  });
+
+  test("uses full-file content change type for the status badge", () => {
+    renderFileEditCard(
+      buildContentFileEditData({
+        changeType: "deleted",
+      }),
+      true,
+    );
+
+    expect(screen.getByText("D")).toBeDefined();
   });
 
   test("collapses an expanded diff card without changing metadata", () => {

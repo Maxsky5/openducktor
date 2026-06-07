@@ -87,7 +87,10 @@ const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
   }
 
   const movePath = movePathFromKind(entry.kind);
-  const file = movePath ?? rawFile;
+  const file = movePath ?? rawFile.trim();
+  if (file.length === 0) {
+    throw new CodexFileDiffParseError(`entry ${location} has empty file path.`);
+  }
   const type = inferDiffType(entry, diff);
   const renderableDiff =
     selectRenderableFileDiff(stripMoveTrailer(diff, movePath), file, {

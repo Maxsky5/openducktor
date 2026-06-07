@@ -55,6 +55,9 @@ describe("Codex file diffs", () => {
     expect(() => toFileDiffs([{ file: "src/app.ts" }])).toThrow(
       "Malformed Codex file change: entry 0 is missing string file/path or diff/patch fields.",
     );
+    expect(() => toFileDiffs([{ file: "   ", diff: "@@\n+new" }])).toThrow(
+      "Malformed Codex file change: entry 0 has empty file path.",
+    );
   });
 
   test("infers added and deleted file diffs with CRLF headers", () => {
