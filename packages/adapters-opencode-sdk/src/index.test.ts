@@ -99,6 +99,7 @@ describe("OpencodeSdkAdapter index", () => {
 
     expect(summary.externalSessionId).toBe("session-opencode-1");
     expect(summary.role).toBe("planner");
+    expect(summary.title).toBe("PLANNER task-1");
     expect(mock.session.createCalls).toHaveLength(1);
     expect(mock.session.createCalls[0]).toMatchObject({
       directory: "/repo",

@@ -116,7 +116,13 @@ describe("agent-runtime-registry", () => {
           nextCursor: null,
         };
       }
-      return { thread: { id: "thread-codex" }, startedAt: "2026-02-22T09:00:00.000Z" };
+      if (method === "thread/start") {
+        return { thread: { id: "thread-codex" }, startedAt: "2026-02-22T09:00:00.000Z" };
+      }
+      if (method === "thread/name/set") {
+        return {};
+      }
+      throw new Error(`Unexpected Codex app-server request method: ${method}`);
     }) as typeof host.codexAppServerRequest;
     configureShellBridge({
       client: {} as HostClient,
@@ -156,9 +162,16 @@ describe("agent-runtime-registry", () => {
 
       expect(runtimeEnsureCalls).toEqual([["/repo", "codex"]]);
       expect(runtimeListCalls).toEqual([["/repo", "codex"]]);
-      expect(codexRequestCalls[0]?.[0]).toBe("runtime-codex-ensure");
-      expect(codexRequestCalls[1]?.[0]).toBe("runtime-codex-ensure");
-      expect(codexRequestCalls[2]?.[0]).toBe("runtime-codex-live");
+      expect(codexRequestCalls.map(([runtimeId, method]) => [runtimeId, method])).toEqual([
+        ["runtime-codex-ensure", "model/list"],
+        ["runtime-codex-ensure", "thread/start"],
+        ["runtime-codex-ensure", "thread/name/set"],
+        ["runtime-codex-live", "model/list"],
+      ]);
+      expect(codexRequestCalls[2]?.[2]).toEqual({
+        threadId: "thread-codex",
+        name: "BUILD task-1",
+      });
     } finally {
       host.runtimeEnsure = originalRuntimeEnsure;
       host.runtimeList = originalRuntimeList;

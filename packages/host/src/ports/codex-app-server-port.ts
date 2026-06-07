@@ -24,6 +24,7 @@ export const CODEX_APP_SERVER_REQUEST_METHODS = [
   "thread/read",
   "thread/resume",
   "thread/start",
+  "thread/name/set",
   "thread/turns/list",
   "skills/list",
   "turn/start",

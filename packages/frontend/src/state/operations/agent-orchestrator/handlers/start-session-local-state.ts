@@ -30,6 +30,7 @@ export const buildInitialSession = ({
   createRepoScopedAgentSessionState(
     {
       externalSessionId: startedCtx.summary.externalSessionId,
+      ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
       taskId: startedCtx.taskId,
       runtimeKind: requireConfiguredRuntimeKind(
         runtime.runtimeKind ?? selectedModel?.runtimeKind,

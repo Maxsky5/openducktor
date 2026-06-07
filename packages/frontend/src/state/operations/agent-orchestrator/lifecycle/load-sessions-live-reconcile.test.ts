@@ -50,7 +50,10 @@ describe("agent-orchestrator live session reconciliation", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-stale": {
-          ...persistedRecord,
+          externalSessionId: persistedRecord.externalSessionId,
+          role: persistedRecord.role,
+          startedAt: persistedRecord.startedAt,
+          workingDirectory: persistedRecord.workingDirectory,
           repoPath: "/tmp/repo",
           taskId: "task-1",
           status: "stopped",
@@ -165,8 +168,10 @@ describe("agent-orchestrator live session reconciliation", () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-1": {
-          ...persistedRecord,
-          externalSessionId: "external-1",
+          externalSessionId: persistedRecord.externalSessionId,
+          role: persistedRecord.role,
+          startedAt: persistedRecord.startedAt,
+          workingDirectory: persistedRecord.workingDirectory,
           runtimeKind: "opencode",
           repoPath: "/tmp/repo",
           taskId: "task-1",

@@ -27,6 +27,10 @@ describe("createCodexAppServerCommandHandlers", () => {
     const service: CodexAppServerService = {
       request(input) {
         calls.push({ method: "request", input });
+        if (input.method === "thread/name/set") {
+          const result: Record<string, never> = {};
+          return Effect.succeed(result);
+        }
         return Effect.succeed({ data: [], nextCursor: null });
       },
       listLoadedThreads(input) {
@@ -82,6 +86,13 @@ describe("createCodexAppServerCommandHandlers", () => {
       }),
     ).resolves.toEqual({ data: [], nextCursor: null });
     await expect(
+      router.invoke("codex_app_server_request", {
+        runtimeId: "runtime-1",
+        method: "thread/name/set",
+        params: { threadId: "thread-1", name: "BUILD task-1" },
+      }),
+    ).resolves.toEqual({});
+    await expect(
       router.invoke("codex_app_server_notifications", { runtimeId: "runtime-1" }),
     ).resolves.toEqual([codexStatusNotification]);
     await expect(
@@ -121,6 +132,14 @@ describe("createCodexAppServerCommandHandlers", () => {
           runtimeId: "runtime-1",
           method: "fuzzyFileSearch",
           params: { query: "src", roots: ["/repo"], cancellationToken: null },
+        },
+      },
+      {
+        method: "request",
+        input: {
+          runtimeId: "runtime-1",
+          method: "thread/name/set",
+          params: { threadId: "thread-1", name: "BUILD task-1" },
         },
       },
       {

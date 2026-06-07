@@ -1,11 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createAdapterWithTransport,
   createHarness,
   makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
 import { codexTurnKey } from "./codex-app-server-requests";
 import { CodexAppServerAdapter } from "./index";
+
+class NameFailingTransport extends RecordingTransport {
+  async request<Response>(
+    request: Parameters<RecordingTransport["request"]>[0],
+  ): Promise<Response> {
+    if (request.method === "thread/name/set") {
+      this.calls.push(request);
+      throw new Error("name failed");
+    }
+    return super.request<Response>(request);
+  }
+}
 
 describe("CodexAppServerAdapter lifecycle", () => {
   test("returns the Codex runtime definition", () => {
@@ -29,12 +42,14 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     expect(summary.externalSessionId).toBe("thread/start-runtime-ensure");
+    expect(summary.title).toBe("BUILD task-1");
     expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
     expect(requireRepoRuntime).not.toHaveBeenCalled();
     expect(transports.has("runtime-ensure")).toBe(true);
     expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
+      "thread/name/set",
     ]);
     expect(transports.get("runtime-ensure")?.calls[1]).toEqual({
       method: "thread/start",
@@ -45,6 +60,37 @@ describe("CodexAppServerAdapter lifecycle", () => {
         effort: "medium",
       },
     });
+    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+      method: "thread/name/set",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        name: "BUILD task-1",
+      },
+    });
+  });
+
+  test("keeps started sessions addressable when thread naming fails", async () => {
+    const transport = new NameFailingTransport("runtime-ensure", false);
+    const adapter = createAdapterWithTransport(transport);
+
+    await expect(
+      adapter.startSession({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        taskId: "task-1",
+        role: "build",
+        systemPrompt: "Use the repo rules.",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    ).rejects.toThrow("name failed");
+
+    expect(adapter.hasSession("thread/start-runtime-ensure")).toBe(true);
+    expect(transport.calls.map((call) => call.method)).toEqual([
+      "model/list",
+      "thread/start",
+      "thread/name/set",
+    ]);
   });
 
   test("caches Codex model lists per runtime", async () => {
@@ -124,7 +170,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    await adapter.forkSession({
+    const forkSummary = await adapter.forkSession({
       repoPath: "/repo",
       runtimeKind: "codex",
       workingDirectory: "/repo",
@@ -136,10 +182,12 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     expect(requireRepoRuntime).toHaveBeenCalledTimes(2);
+    expect(forkSummary.title).toBe("QA task-1");
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/resume",
       "thread/fork",
+      "thread/name/set",
     ]);
     expect(transports.get("runtime-live")?.calls[1]?.params).toEqual({
       threadId: "thread-9",
@@ -154,6 +202,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
       developerInstructions: "Review the fork.",
       model: "gpt-5",
       effort: "medium",
+    });
+    expect(transports.get("runtime-live")?.calls[3]).toEqual({
+      method: "thread/name/set",
+      params: {
+        threadId: "thread/fork-runtime-live",
+        name: "QA task-1",
+      },
     });
   });
 
@@ -179,9 +234,10 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
+      "thread/name/set",
       "turn/start",
     ]);
-    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+    expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
       method: "turn/start",
       params: {
         threadId: "thread/start-runtime-ensure",
@@ -215,7 +271,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       parts: [{ kind: "text", text: "Use deeper reasoning" }],
     });
 
-    expect(transports.get("runtime-ensure")?.calls[2]).toEqual({
+    expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
       method: "turn/start",
       params: {
         threadId: "thread/start-runtime-ensure",
@@ -440,6 +496,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
         developerInstructions: "Use the repo rules.",
         model: "gpt-5",
         effort: "medium",
+      },
+    });
+    expect(transport.calls[2]).toEqual({
+      method: "thread/name/set",
+      params: {
+        threadId: "thread/start-runtime-ensure",
+        name: "BUILD task-1",
       },
     });
   });

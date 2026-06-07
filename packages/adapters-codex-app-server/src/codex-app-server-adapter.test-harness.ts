@@ -94,6 +94,8 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           startedAt: "2026-05-07T00:00:00.000Z",
         } as Response;
       }
+      case "thread/name/set":
+        return {} as Response;
       case "turn/start": {
         if (
           !Array.isArray((params as { input?: unknown })?.input) ||

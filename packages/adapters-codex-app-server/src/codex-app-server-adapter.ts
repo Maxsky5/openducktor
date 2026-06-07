@@ -34,6 +34,7 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
+import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import {
@@ -187,19 +188,25 @@ export class CodexAppServerAdapter
     const { client, runtimeId } = await this.runtimeClients.resolve(input, "start session");
     this.ensureRuntimeEventSubscription(runtimeId);
     await this.models.validate(client, runtimeId, model);
+    const transportModel = toTransportModelSelection(model);
 
     const response = await client.threadStart({
       cwd: input.workingDirectory,
       developerInstructions: input.systemPrompt,
-      model: toTransportModelSelection(model).model,
-      effort: toTransportModelSelection(model).effort,
+      model: transportModel.model,
+      effort: transportModel.effort,
     });
     this.clearThreadInventory(runtimeId);
-    const session = sessionStateFromThreadStart(input, runtimeId, model, response);
+    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
     this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
+    await client.threadSetName({
+      threadId: session.threadId,
+      name: title,
+    });
 
     return summary;
   }
@@ -245,11 +252,16 @@ export class CodexAppServerAdapter
       effort: toTransportModelSelection(model).effort,
     });
     this.clearThreadInventory(runtimeId);
-    const session = sessionStateFromThreadFork(input, runtimeId, model, response);
+    const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
+    const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
     this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
+    await client.threadSetName({
+      threadId: session.threadId,
+      name: title,
+    });
 
     return summary;
   }

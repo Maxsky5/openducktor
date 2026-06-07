@@ -30,7 +30,10 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
+import {
+  formatWorkflowAgentSessionTitle,
+  toAgentSessionPresenceSnapshotFromLiveSnapshot,
+} from "@openducktor/core";
 import {
   connectMcpServer,
   getMcpStatus,
@@ -223,7 +226,7 @@ export class OpencodeSdkAdapter
     return {
       externalSessionId: session.externalSessionId,
       title: session.input.role
-        ? `${session.input.role.toUpperCase()} ${session.input.taskId}`
+        ? formatWorkflowAgentSessionTitle(session.input.role, session.input.taskId)
         : "OpenCode",
       workingDirectory: session.input.workingDirectory,
       startedAt: session.summary.startedAt,
@@ -302,7 +305,7 @@ export class OpencodeSdkAdapter
     const client = this.createClient(runtimeClientInput);
     const created = await client.session.create({
       directory: input.workingDirectory,
-      title: `${input.role.toUpperCase()} ${input.taskId}`,
+      title: formatWorkflowAgentSessionTitle(input.role, input.taskId),
       permission: buildRoleScopedPermissionRules({
         role: input.role,
         runtimeDescriptor: runtimeDefinition,
