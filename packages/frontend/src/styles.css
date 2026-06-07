@@ -369,7 +369,7 @@ pre {
 }
 
 ::selection {
-  background: oklch(from var(--primary) l c h / 25%);
+  background: var(--selected-surface);
 }
 
 ::-webkit-scrollbar {
