@@ -40,6 +40,24 @@ beforeEach(async () => {
       ["debug", "error", "info", "log", "warn"],
       async (consoleCalls) => {
         mock.module("@pierre/diffs/react", () => ({
+          File: (props: {
+            file: { name: string; contents: string; cacheKey?: string };
+            options?: {
+              disableFileHeader?: boolean;
+              overflow?: string;
+              themeType?: string;
+            };
+          }) => (
+            <div
+              data-testid="pierre-file"
+              data-cache-key={props.file.cacheKey ?? ""}
+              data-disable-file-header={String(props.options?.disableFileHeader ?? "")}
+              data-file-contents={props.file.contents}
+              data-file-name={props.file.name}
+              data-overflow={String(props.options?.overflow ?? "")}
+              data-theme-type={String(props.options?.themeType ?? "")}
+            />
+          ),
           FileDiff: (props: {
             options?: {
               onGutterUtilityClick?: (range: unknown) => void;
@@ -270,6 +288,64 @@ describe("PierreDiffViewer", () => {
       ],
       language: null,
     });
+  });
+
+  test("renders plain file content through Pierre File with a worker cache key", () => {
+    const { PierreFileViewer } = pierreViewerModule;
+    const { rerender } = render(
+      <PierreFileViewer filePath="src/AuthContext.test.tsx" content="export const value = 1;" />,
+    );
+
+    const file = screen.getByTestId("pierre-file");
+    expect(file.getAttribute("data-file-name")).toBe("src/AuthContext.test.tsx");
+    expect(file.getAttribute("data-file-contents")).toBe("export const value = 1;");
+    expect(file.getAttribute("data-cache-key")).toContain("src/AuthContext.test.tsx:");
+    expect(file.getAttribute("data-disable-file-header")).toBe("true");
+    expect(file.getAttribute("data-overflow")).toBe("wrap");
+    expect(file.getAttribute("data-theme-type")).toBe("light");
+    expect(file.parentElement?.className).toContain("max-h-[min(50vh,32rem)]");
+
+    const firstCacheKey = file.getAttribute("data-cache-key");
+    rerender(
+      <PierreFileViewer filePath="src/AuthContext.test.tsx" content="export const value = 2;" />,
+    );
+
+    expect(screen.getByTestId("pierre-file").getAttribute("data-cache-key")).not.toBe(
+      firstCacheKey,
+    );
+  });
+
+  test("keeps raw fallback diffs inside the Pierre scroll container", async () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
+      await withCapturedConsoleMethods(
+        ["debug", "error", "info", "log", "warn"],
+        async (consoleCalls) => {
+          render(
+            <PierreDiffViewer
+              patch="Index: src/app.ts\n=====\ninvalid diff body"
+              filePath="src/app.ts"
+            />,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          for (const calls of Object.values(consoleCalls)) {
+            for (const call of calls) {
+              expect(call).toEqual([[]]);
+            }
+          }
+        },
+      );
+
+      for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
+        expect(chunk).toBe("[]\n");
+      }
+    });
+
+    const fallback = screen.getByText(/invalid diff body/);
+    expect(fallback.parentElement?.className).toContain("overflow-auto");
+    expect(fallback.parentElement?.className).toContain("max-h-[min(50vh,32rem)]");
   });
 });
 

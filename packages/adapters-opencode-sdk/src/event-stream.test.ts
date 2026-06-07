@@ -120,6 +120,42 @@ test("runEventStreamWithSession uses the configured session input", async () => 
   });
 });
 
+test("runEventStreamWithSession emits permission v2 approval events", async () => {
+  const { emitted } = await runEventStreamWithSession([
+    {
+      type: "permission.v2.asked",
+      properties: {
+        sessionID: "external-session-1",
+        id: "perm-v2-1",
+        permission: "edit",
+        patterns: ["src/**"],
+        metadata: {
+          filepath: "/repo/src/app.ts",
+          diff: "--- /repo/src/app.ts\n+++ /repo/src/app.ts\n@@\n-old\n+new",
+        },
+      },
+    } as unknown as Event,
+  ]);
+
+  expect(emitted).toContainEqual(
+    expect.objectContaining({
+      type: "approval_required",
+      externalSessionId: "external-session-1",
+      requestId: "perm-v2-1",
+      action: { name: "edit" },
+      affectedPaths: ["src/**"],
+      metadata: expect.objectContaining({
+        opencode: expect.objectContaining({
+          metadata: expect.objectContaining({
+            filepath: "/repo/src/app.ts",
+            diff: "--- /repo/src/app.ts\n+++ /repo/src/app.ts\n@@\n-old\n+new",
+          }),
+        }),
+      }),
+    }),
+  );
+});
+
 test("flushPendingSubagentInputEventsForSession preserves original timestamps", () => {
   const emitted: AgentEvent[] = [];
   const runtime: EventStreamRuntime = {
@@ -2476,6 +2512,39 @@ describe("event-stream", () => {
       type: "approval_required",
       externalSessionId: "external-session-1",
       requestId: "perm-child-1",
+      childExternalSessionId: "external-child-session",
+      parentExternalSessionId: "external-session-1",
+      subagentCorrelationKey: "part:assistant-1:subtask-1",
+    });
+  });
+
+  test("runtime event transport forwards known child permission v2 events to parent subscribers", async () => {
+    const { emitted } = await runEventStreamWithSession(
+      [
+        {
+          type: "permission.v2.asked",
+          properties: {
+            sessionID: "external-child-session",
+            id: "perm-child-v2-1",
+            permission: "edit",
+            patterns: ["src/**"],
+          },
+        } as unknown as Event,
+      ],
+      (session) => {
+        session.subagentCorrelationKeyByExternalSessionId.set(
+          "external-child-session",
+          "part:assistant-1:subtask-1",
+        );
+      },
+    );
+
+    const permissionEvents = emitted.filter((event) => event.type === "approval_required");
+    expect(permissionEvents).toHaveLength(1);
+    expect(permissionEvents[0]).toMatchObject({
+      type: "approval_required",
+      externalSessionId: "external-session-1",
+      requestId: "perm-child-v2-1",
       childExternalSessionId: "external-child-session",
       parentExternalSessionId: "external-session-1",
       subagentCorrelationKey: "part:assistant-1:subtask-1",

@@ -1,4 +1,4 @@
-import { patchMatchesFile, selectRenderableDiff, splitPatchCandidates } from "../renderable-patch";
+import type { FileContent, FileDiff } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput } from "./tool-input-utils";
 import { relativizeDisplayPath } from "./tool-path-utils";
@@ -21,207 +21,89 @@ export const isFileEditTool = (toolName: string): boolean => {
   return FILE_EDIT_TOOLS.has(toolName.toLowerCase());
 };
 
-const HEADER_ADDITION_PREFIX = "+++ ";
-const HEADER_DELETION_PREFIX = "--- ";
-
-export type FileEditData = {
+type FileEditDataBase = {
   filePath: string;
-  diff: string | null;
   additions: number;
   deletions: number;
 };
 
-const extractRawDiff = (meta: ToolMeta): string | null => {
-  return typeof meta.metadata?.diff === "string"
-    ? meta.metadata.diff
-    : typeof meta.input?.patch === "string"
-      ? (meta.input.patch as string)
-      : typeof meta.output === "string" && meta.output.includes("@@")
-        ? meta.output
-        : null;
-};
+export type FileEditData =
+  | (FileEditDataBase & {
+      kind: "diff";
+      diff: string;
+    })
+  | (FileEditDataBase & {
+      kind: "content";
+      content: string;
+      changeType: string;
+    })
+  | (FileEditDataBase & {
+      kind: "path";
+    });
 
-const extractStringField = (value: Record<string, unknown>, keys: string[]): string | null => {
-  for (const key of keys) {
-    const field = value[key];
-    if (typeof field === "string" && field.trim().length > 0) {
-      return field;
-    }
-  }
-  return null;
-};
-
-type MetadataFileChange = {
-  filePath: string;
-  diff: string;
-};
-
-const extractMetadataFileChanges = (meta: ToolMeta): MetadataFileChange[] => {
-  const changes = Array.isArray(meta.metadata?.changes)
-    ? meta.metadata.changes
-    : Array.isArray(meta.metadata?.diffs)
-      ? meta.metadata.diffs
-      : null;
-  if (!Array.isArray(changes)) {
-    return [];
-  }
-
-  return changes.flatMap((change): MetadataFileChange[] => {
-    if (!change || typeof change !== "object" || Array.isArray(change)) {
-      return [];
-    }
-    const record = change as Record<string, unknown>;
-    const filePath = extractStringField(record, ["path", "file"]);
-    const diff = extractStringField(record, ["diff", "patch"]);
-    if (!filePath || !diff) {
-      return [];
-    }
-    return [{ filePath, diff }];
-  });
-};
-
-const countDiffChanges = (diff: string | null): Pick<FileEditData, "additions" | "deletions"> => {
-  let additions = 0;
-  let deletions = 0;
-
-  if (!diff) {
-    return { additions, deletions };
-  }
-
-  for (const line of diff.split("\n")) {
-    if (line.startsWith(HEADER_ADDITION_PREFIX) || line.startsWith(HEADER_DELETION_PREFIX)) {
-      continue;
-    }
-
-    if (line.startsWith("+")) {
-      additions++;
-    } else if (line.startsWith("-")) {
-      deletions++;
-    }
-  }
-
-  return { additions, deletions };
-};
-
-const buildFileEditData = (
+const buildPathOnlyFileEditData = (
   filePath: string,
-  rawDiff: string | null,
+  workingDirectory?: string | null,
+): FileEditData => ({
+  kind: "path",
+  filePath: relativizeDisplayPath(filePath, workingDirectory),
+  additions: 0,
+  deletions: 0,
+});
+
+const buildFileDiffEditData = (
+  fileDiff: FileDiff,
   workingDirectory?: string | null,
 ): FileEditData => {
-  const displayPath = relativizeDisplayPath(filePath, workingDirectory);
-  const diff = rawDiff
-    ? (selectRenderableDiff(rawDiff, displayPath) ??
-      (displayPath !== filePath ? selectRenderableDiff(rawDiff, filePath) : null))
-    : null;
-  const { additions, deletions } = countDiffChanges(diff);
+  const filePath = relativizeDisplayPath(fileDiff.file, workingDirectory);
+  if (fileDiff.diff.trim().length === 0) {
+    return {
+      kind: "path",
+      filePath,
+      additions: fileDiff.additions,
+      deletions: fileDiff.deletions,
+    };
+  }
 
   return {
-    filePath: displayPath,
-    diff,
-    additions,
-    deletions,
+    kind: "diff",
+    filePath,
+    diff: fileDiff.diff,
+    additions: fileDiff.additions,
+    deletions: fileDiff.deletions,
   };
 };
 
-const normalizePatchPath = (value: string | undefined): string | null => {
-  if (!value) {
-    return null;
-  }
-
-  let trimmed = value.trim().replace(/\t.*$/, "");
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    trimmed = trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-  }
-
-  if (trimmed.length === 0 || trimmed === "/dev/null") {
-    return null;
-  }
-
-  return trimmed.replace(/^[ab]\//, "");
-};
-
-const extractDiffGitPaths = (
-  candidate: string,
-): { previousPath: string; nextPath: string } | null => {
-  const line = /^diff --git\s+(.+)$/m.exec(candidate)?.[1];
-  if (!line) {
-    return null;
-  }
-
-  const match = /^(?:"((?:[^"\\]|\\.)*)"|(\S+))\s+(?:"((?:[^"\\]|\\.)*)"|(\S+))$/.exec(line.trim());
-  if (!match) {
-    return null;
-  }
-
-  const previousPath = normalizePatchPath(match[1] ?? match[2]);
-  const nextPath = normalizePatchPath(match[3] ?? match[4]);
-  if (!previousPath || !nextPath) {
-    return null;
-  }
-
-  return { previousPath, nextPath };
-};
-
-const extractPatchFilePath = (candidate: string): string | null => {
-  const nextPath = normalizePatchPath(/^\+\+\+\s+(.+)$/m.exec(candidate)?.[1]);
-  if (nextPath) {
-    return nextPath;
-  }
-
-  const previousPath = normalizePatchPath(/^---\s+(.+)$/m.exec(candidate)?.[1]);
-  if (previousPath) {
-    return previousPath;
-  }
-
-  const indexPath = normalizePatchPath(/^Index:\s+(.+)$/m.exec(candidate)?.[1]);
-  if (indexPath) {
-    return indexPath;
-  }
-
-  const applyPatchPath = normalizePatchPath(
-    /^\*\*\*\s+(?:Update|Add|Delete) File:\s+(.+)$/m.exec(candidate)?.[1],
-  );
-  if (applyPatchPath) {
-    return applyPatchPath;
-  }
-
-  return extractDiffGitPaths(candidate)?.nextPath ?? null;
-};
+const buildFileContentEditData = (
+  fileContent: FileContent,
+  workingDirectory?: string | null,
+): FileEditData => ({
+  kind: "content",
+  filePath: relativizeDisplayPath(fileContent.file, workingDirectory),
+  content: fileContent.content,
+  changeType: fileContent.type,
+  additions: 0,
+  deletions: 0,
+});
 
 export const extractAllFileEditData = (
   meta: ToolMeta,
   workingDirectory?: string | null,
 ): FileEditData[] => {
-  const metadataFileChanges = extractMetadataFileChanges(meta).map((change) =>
-    buildFileEditData(change.filePath, change.diff, workingDirectory),
-  );
-  if (metadataFileChanges.length > 0) {
-    return metadataFileChanges;
+  if (meta.fileDiffs && meta.fileDiffs.length > 0) {
+    return meta.fileDiffs.map((fileDiff) => buildFileDiffEditData(fileDiff, workingDirectory));
   }
 
-  const rawDiff = extractRawDiff(meta);
-  if (rawDiff) {
-    const fileEditData: FileEditData[] = [];
-    const seenPaths = new Set<string>();
+  if (meta.fileChanges && meta.fileChanges.length > 0) {
+    return meta.fileChanges.map((fileChange) =>
+      buildFileDiffEditData(fileChange, workingDirectory),
+    );
+  }
 
-    for (const candidate of splitPatchCandidates(rawDiff)) {
-      const filePath = extractPatchFilePath(candidate);
-      if (!filePath || !patchMatchesFile(candidate, filePath)) {
-        continue;
-      }
-
-      const data = buildFileEditData(filePath, candidate, workingDirectory);
-      if (seenPaths.has(data.filePath)) {
-        continue;
-      }
-
-      fileEditData.push(data);
-      seenPaths.add(data.filePath);
-    }
-
-    if (fileEditData.length > 0) {
-      return fileEditData;
-    }
+  if (meta.fileContent && meta.fileContent.length > 0) {
+    return meta.fileContent.map((fileContent) =>
+      buildFileContentEditData(fileContent, workingDirectory),
+    );
   }
 
   const fileEditData = extractFileEditData(meta, workingDirectory);
@@ -232,27 +114,10 @@ export const extractFileEditData = (
   meta: ToolMeta,
   workingDirectory?: string | null,
 ): FileEditData | null => {
-  let filePath = extractPathFromInput(meta.input);
-
-  if (!filePath && typeof meta.input?.patch === "string") {
-    const patchContent = meta.input.patch as string;
-    const patchFilePath = extractPatchFilePath(patchContent);
-    if (patchFilePath) {
-      filePath = patchFilePath;
-    }
-  }
-
-  if (!filePath && typeof meta.output === "string") {
-    const outputFileMatch =
-      /(?:Updated|Modified|Created|Changed)[^:]*:\s*(?:[MADRCU]\s+)?(.+?)$/m.exec(meta.output);
-    if (outputFileMatch?.[1]) {
-      filePath = outputFileMatch[1].trim();
-    }
-  }
-
+  const filePath = extractPathFromInput(meta.input);
   if (!filePath) {
     return null;
   }
 
-  return buildFileEditData(filePath, extractRawDiff(meta), workingDirectory);
+  return buildPathOnlyFileEditData(filePath, workingDirectory);
 };

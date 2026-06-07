@@ -8,6 +8,8 @@ import type {
   SkillDescriptor as ContractsSkillDescriptor,
   SlashCommandCatalog as ContractsSlashCommandCatalog,
   SlashCommandDescriptor as ContractsSlashCommandDescriptor,
+  FileContent,
+  FileDiff,
   RepoRuntimeRef,
   RuntimeApprovalReplyOutcome,
   RuntimeApprovalRequestType,
@@ -326,6 +328,12 @@ export type AgentStreamPart =
       input?: Record<string, unknown>;
       output?: string;
       error?: string;
+      /** Renderable unified diffs emitted by runtime adapters. */
+      fileDiffs?: FileDiff[];
+      /** Full file content emitted when a runtime tool provides content but no diff. */
+      fileContent?: FileContent[];
+      /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
+      fileChanges?: FileDiff[];
       metadata?: Record<string, unknown>;
       startedAtMs?: number;
       endedAtMs?: number;

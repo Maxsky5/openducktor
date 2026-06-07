@@ -9,8 +9,10 @@ afterEach(() => {
 
 describe("diff-ops", () => {
   test("loadSessionDiff parses wrapped diff payloads", async () => {
-    globalThis.fetch = (async () =>
-      ({
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (url: URL | RequestInfo) => {
+      requestedUrls.push(url.toString());
+      return {
         ok: true,
         status: 200,
         statusText: "OK",
@@ -25,6 +27,93 @@ describe("diff-ops", () => {
             },
           ],
         }),
+      } as Response;
+    }) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 3,
+        deletions: 1,
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
+      },
+    ]);
+    expect(requestedUrls).toEqual(["http://127.0.0.1:12345/session/session-1/diff"]);
+  });
+
+  test("loadSessionDiff parses OpenCode snapshot diff payloads", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: "@@ -1 +1 @@",
+            additions: 2,
+            deletions: 1,
+            status: "modified",
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff defaults missing OpenCode snapshot diff status to modified", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: "@@ -1 +1 @@",
+            additions: 2,
+            deletions: 1,
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff keeps modified full-file standard payloads path-only", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          data: [
+            {
+              file: "src/main.ts",
+              type: "modified",
+              additions: 3,
+              deletions: 1,
+              diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+            },
+          ],
+        }),
       }) as Response) as typeof fetch;
 
     await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
@@ -33,9 +122,118 @@ describe("diff-ops", () => {
         type: "modified",
         additions: 3,
         deletions: 1,
-        diff: "@@ -1 +1 @@",
+        diff: "",
       },
     ]);
+  });
+
+  test("loadSessionDiff renders added full-file standard payloads as added-file diffs", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          data: [
+            {
+              file: "src/LandingPage.test.tsx",
+              type: "added",
+              additions: 2,
+              deletions: 0,
+              diff: "import LandingPage from '@/components/LandingPage';\ntest('renders', () => {});\n",
+            },
+          ],
+        }),
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/LandingPage.test.tsx",
+        type: "added",
+        additions: 2,
+        deletions: 0,
+        diff: "--- /dev/null\n+++ b/src/LandingPage.test.tsx\n@@ -0,0 +1,2 @@\n+import LandingPage from '@/components/LandingPage';\n+test('renders', () => {});\n",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff keeps modified full-file snapshot payloads path-only", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+            additions: 2,
+            deletions: 1,
+            status: "modified",
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff renders added full-file snapshot payloads as added-file diffs", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/LandingPage.test.tsx",
+            patch:
+              "import LandingPage from '@/components/LandingPage';\ntest('renders', () => {});\n",
+            additions: 2,
+            deletions: 0,
+            status: "added",
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/LandingPage.test.tsx",
+        type: "added",
+        additions: 2,
+        deletions: 0,
+        diff: "--- /dev/null\n+++ b/src/LandingPage.test.tsx\n@@ -0,0 +1,2 @@\n+import LandingPage from '@/components/LandingPage';\n+test('renders', () => {});\n",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/main.ts",
+            patch: "@@ -1 +1 @@",
+            additions: Number.NaN,
+            deletions: 1,
+            status: 5,
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
+      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: invalid additions, status fields",
+    );
   });
 
   test("loadSessionDiff rejects HTTP failures with status context", async () => {
@@ -55,17 +253,21 @@ describe("diff-ops", () => {
   });
 
   test("loadFileStatus rejects malformed payloads", async () => {
-    globalThis.fetch = (async () =>
-      ({
+    const requestedUrls: string[] = [];
+    globalThis.fetch = (async (url: URL | RequestInfo) => {
+      requestedUrls.push(url.toString());
+      return {
         ok: true,
         status: 200,
         statusText: "OK",
         json: async () => ({ items: [] }),
-      }) as Response) as typeof fetch;
+      } as Response;
+    }) as typeof fetch;
 
     await expect(loadFileStatus("http://127.0.0.1:12345")).rejects.toThrow(
       "OpenCode request failed: load file status: unexpected response payload shape",
     );
+    expect(requestedUrls).toEqual(["http://127.0.0.1:12345/file/status"]);
   });
 
   test("loadFileStatus rejects transport errors", async () => {

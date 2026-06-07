@@ -1,5 +1,9 @@
-import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
-import { FileDiff as PierreReactFileDiff, useWorkerPool } from "@pierre/diffs/react";
+import type { DiffLineAnnotation, FileContents, SelectedLineRange } from "@pierre/diffs";
+import {
+  File as PierreReactFile,
+  FileDiff as PierreReactFileDiff,
+  useWorkerPool,
+} from "@pierre/diffs/react";
 import { Undo2 } from "lucide-react";
 import {
   type CSSProperties,
@@ -50,6 +54,12 @@ type PierreDiffPreloaderProps = {
   filePath: string;
 };
 
+type PierreFileViewerProps = {
+  filePath: string;
+  content: string;
+  className?: string;
+};
+
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const DIFF_WRAPPER_STYLE = {
   "--diffs-font-size": "12px",
@@ -57,13 +67,13 @@ const DIFF_WRAPPER_STYLE = {
   "--diffs-tab-size": 2,
 } as CSSProperties;
 const RAW_DIFF_FALLBACK_CLASS_NAME =
-  "overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
+  "whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
 const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
 const HUNK_RESET_BUTTON_CLASS_NAME =
   "pointer-events-auto absolute right-3 top-1 h-7 gap-1.5 px-2.5 text-[11px] shadow-sm";
-const DIFF_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(70vh,48rem)] overflow-auto";
+const PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME = "max-h-[min(50vh,32rem)] overflow-auto";
 const HUNK_RESET_FLOATING_CSS = `
 [data-line-annotation]:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]),
 [data-gutter-buffer='annotation']:has([${HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE}]) {
@@ -84,6 +94,15 @@ const HUNK_RESET_FLOATING_CSS = `
 }
 `;
 
+const contentHash = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+};
+
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   patch,
   filePath,
@@ -103,6 +122,39 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   }, [fileDiff, workerPool]);
 
   return null;
+});
+
+export const PierreFileViewer = memo(function PierreFileViewer({
+  filePath,
+  content,
+  className,
+}: PierreFileViewerProps): ReactElement {
+  const { theme } = useTheme();
+  const file = useMemo<FileContents>(
+    () => ({
+      name: filePath,
+      contents: content,
+      cacheKey: `${filePath}:${content.length}:${contentHash(content)}`,
+    }),
+    [content, filePath],
+  );
+  const options = useMemo(
+    () => ({
+      theme: DIFF_THEME,
+      themeType: theme,
+      overflow: "wrap" as const,
+      disableFileHeader: true,
+    }),
+    [theme],
+  );
+
+  return (
+    <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
+      <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>
+        <PierreReactFile file={file} options={options} />
+      </div>
+    </div>
+  );
 });
 
 // ─── Component ─────────────────────────────────────────────────────────────────
@@ -252,21 +304,19 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     content = <pre className={RAW_DIFF_FALLBACK_CLASS_NAME}>{fallbackPatch}</pre>;
   } else {
     content = (
-      <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
-        <PierreReactFileDiff
-          fileDiff={fileDiff}
-          {...selectedLinesProps}
-          options={options}
-          lineAnnotations={mergedLineAnnotations}
-          renderAnnotation={handleRenderAnnotation}
-        />
-      </div>
+      <PierreReactFileDiff
+        fileDiff={fileDiff}
+        {...selectedLinesProps}
+        options={options}
+        lineAnnotations={mergedLineAnnotations}
+        renderAnnotation={handleRenderAnnotation}
+      />
     );
   }
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
-      {content}
+      <div className={PIERRE_VIEWER_SCROLL_CONTAINER_CLASS_NAME}>{content}</div>
     </div>
   );
 });

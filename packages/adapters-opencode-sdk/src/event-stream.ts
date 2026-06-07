@@ -214,10 +214,11 @@ export const isRelevantSubscriberEvent = (
 
   const eventExternalSessionId = readEventSessionId(event);
   if (eventExternalSessionId) {
+    const eventType = String(event.type);
     const properties = "properties" in event ? event.properties : undefined;
     const parentExternalSessionId = readEventParentExternalSessionId(properties);
 
-    if (event.type === "question.asked" && parentExternalSessionId) {
+    if (eventType === "question.asked" && parentExternalSessionId) {
       return parentExternalSessionId === subscriber.externalSessionId;
     }
 
@@ -226,10 +227,11 @@ export const isRelevantSubscriberEvent = (
     }
 
     if (
-      (event.type === "permission.asked" ||
-        event.type === "permission.replied" ||
-        event.type === "question.asked" ||
-        event.type === "question.replied") &&
+      (eventType === "permission.asked" ||
+        eventType === "permission.v2.asked" ||
+        eventType === "permission.replied" ||
+        eventType === "question.asked" ||
+        eventType === "question.replied") &&
       options?.isKnownChildExternalSessionId?.(eventExternalSessionId)
     ) {
       return true;

@@ -333,6 +333,10 @@ const normalizeHistoryStreamParts = (
   const unmatchedChildSessionLinks = [...childSessionLinks];
 
   for (const rawPart of parts) {
+    if (rawPart.type === "patch") {
+      continue;
+    }
+
     const rawMapped = mapPartToAgentStreamPart(rawPart);
     if (!rawMapped || rawMapped.kind === "text") {
       continue;
@@ -533,13 +537,13 @@ export const loadSessionHistory = async (
       return aTime - bTime;
     });
 
+  const assistantRawParts = normalizedEntries.flatMap((item) =>
+    item.entry.info.role === "assistant" ? item.rawParts : [],
+  );
   const assistantNormalizedPartsByMessageId = new Map(
-    normalizeHistoryStreamParts(
-      normalizedEntries.flatMap((item) =>
-        item.entry.info.role === "assistant" ? item.rawParts : [],
-      ),
-      childSessionLinks,
-    ).reduce<Map<string, AgentStreamPart[]>>((byMessageId, part) => {
+    normalizeHistoryStreamParts(assistantRawParts, childSessionLinks).reduce<
+      Map<string, AgentStreamPart[]>
+    >((byMessageId, part) => {
       const existing = byMessageId.get(part.messageId) ?? [];
       existing.push(part);
       byMessageId.set(part.messageId, existing);

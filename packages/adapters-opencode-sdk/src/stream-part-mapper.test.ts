@@ -165,6 +165,298 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps edit tool filediff metadata to canonical file changes", () => {
+    const part = createToolPart({
+      id: "tool-edit-1",
+      tool: "edit",
+      status: "completed",
+      input: { filePath: "/repo/src/main.ts" },
+      output: "Edited src/main.ts",
+      metadata: {
+        filediff: {
+          file: "/repo/src/main.ts",
+          patch: "@@ -1 +1 @@\n-old\n+new",
+          additions: 1,
+          deletions: 1,
+        },
+      },
+      time: { start: 10, end: 20 },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "edit",
+      toolType: "file_edit",
+      output: "Edited src/main.ts",
+      fileDiffs: [
+        {
+          file: "/repo/src/main.ts",
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: "--- a/repo/src/main.ts\n+++ b/repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        },
+      ],
+    });
+  });
+
+  test("keeps modified full-file tool metadata path-only instead of rendering file contents", () => {
+    const part = createToolPart({
+      id: "tool-edit-full-file-1",
+      tool: "edit",
+      status: "completed",
+      input: { filePath: "/repo/src/main.ts" },
+      output: "Edited src/main.ts",
+      metadata: {
+        filediff: {
+          file: "/repo/src/main.ts",
+          patch: "import { render } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
+          additions: 2,
+          deletions: 0,
+        },
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "edit",
+      toolType: "file_edit",
+      fileDiffs: [
+        {
+          file: "/repo/src/main.ts",
+          type: "modified",
+          additions: 2,
+          deletions: 0,
+          diff: "",
+        },
+      ],
+    });
+  });
+
+  test("maps edit-created files to added canonical file changes", () => {
+    const part = createToolPart({
+      id: "tool-edit-created-1",
+      tool: "edit",
+      status: "completed",
+      input: { filePath: "/repo/src/new.ts", oldString: "", newString: "created\n" },
+      output: "Edit applied successfully.",
+      metadata: {
+        filediff: {
+          file: "/repo/src/new.ts",
+          patch: "--- /repo/src/new.ts\n+++ /repo/src/new.ts\n@@ -0,0 +1 @@\n+created",
+          additions: 1,
+          deletions: 0,
+        },
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "edit",
+      toolType: "file_edit",
+      fileDiffs: [
+        {
+          file: "/repo/src/new.ts",
+          type: "added",
+          additions: 1,
+          deletions: 0,
+          diff: "--- /repo/src/new.ts\n+++ /repo/src/new.ts\n@@ -0,0 +1 @@\n+created\n",
+        },
+      ],
+    });
+  });
+
+  test("maps write tool diff metadata to canonical file diffs", () => {
+    const part = createToolPart({
+      id: "tool-write-1",
+      tool: "write",
+      status: "completed",
+      input: {
+        filePath: "/repo/src/main.ts",
+        content: "new\n",
+      },
+      output: "Wrote file successfully.",
+      metadata: {
+        filepath: "/repo/src/main.ts",
+        diff: "--- /repo/src/main.ts\n+++ /repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new",
+        exists: true,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "write",
+      toolType: "file_edit",
+      fileDiffs: [
+        {
+          file: "/repo/src/main.ts",
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: "--- /repo/src/main.ts\n+++ /repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        },
+      ],
+    });
+  });
+
+  test("maps existing-file write tool content to canonical file content when no diff exists", () => {
+    const part = createToolPart({
+      id: "tool-write-content-1",
+      tool: "write",
+      status: "completed",
+      input: {
+        filePath: "/repo/src/main.ts",
+        content: "export const value = 1;\n",
+      },
+      output: "Wrote file successfully.",
+      metadata: {
+        filepath: "/repo/src/main.ts",
+        exists: true,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "write",
+      toolType: "file_edit",
+      fileContent: [
+        {
+          file: "/repo/src/main.ts",
+          type: "modified",
+          content: "export const value = 1;\n",
+        },
+      ],
+    });
+    expect(mapped).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
+  });
+
+  test("renders completed new-file write tool input as an added-file diff", () => {
+    const part = createToolPart({
+      id: "tool-write-new-file-1",
+      tool: "write",
+      status: "completed",
+      input: {
+        filePath: "/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx",
+        content: "import { render } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
+      },
+      output: "Wrote file successfully.",
+      metadata: {
+        filepath: "/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx",
+        exists: false,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "write",
+      toolType: "file_edit",
+      fileDiffs: [
+        {
+          file: "/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx",
+          type: "added",
+          additions: 2,
+          deletions: 0,
+          diff: "--- /dev/null\n+++ b/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx\n@@ -0,0 +1,2 @@\n+import { render } from '@testing-library/react';\n+function AuthConsumer() {}\n",
+        },
+      ],
+    });
+  });
+
+  test("maps apply_patch files metadata to canonical file changes", () => {
+    const part = createToolPart({
+      id: "tool-patch-1",
+      tool: "apply_patch",
+      status: "completed",
+      input: { patch: "*** Begin Patch\n*** Add File: src/new.ts\n+created\n*** End Patch" },
+      output: "Patch applied",
+      metadata: {
+        files: [
+          {
+            filePath: "/repo/src/new.ts",
+            relativePath: "src/new.ts",
+            type: "add",
+            patch: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+created",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "apply_patch",
+      toolType: "file_edit",
+      output: "Patch applied",
+      fileDiffs: [
+        {
+          file: "src/new.ts",
+          type: "added",
+          additions: 1,
+          deletions: 0,
+          diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+created\n",
+        },
+      ],
+    });
+  });
+
+  test("maps apply_patch move metadata to the target path", () => {
+    const part = createToolPart({
+      id: "tool-patch-move-1",
+      tool: "apply_patch",
+      status: "completed",
+      input: {
+        patch:
+          "*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: src/new.ts\n@@\n-old\n+new\n*** End Patch",
+      },
+      output: "Patch applied",
+      metadata: {
+        files: [
+          {
+            filePath: "/repo/src/old.ts",
+            relativePath: "src/new.ts",
+            type: "move",
+            patch: "--- /repo/src/old.ts\n+++ /repo/src/old.ts\n@@\n-old\n+new",
+            additions: 1,
+            deletions: 1,
+            movePath: "/repo/src/new.ts",
+          },
+        ],
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "apply_patch",
+      toolType: "file_edit",
+      fileDiffs: [
+        {
+          file: "src/new.ts",
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: "--- /repo/src/old.ts\n+++ /repo/src/old.ts\n@@\n-old\n+new\n",
+        },
+      ],
+    });
+  });
+
   test("preserves cancelled subagent tool statuses", () => {
     const part = createToolPart({
       id: "tool-subagent-cancelled-1",

@@ -59,6 +59,22 @@ describe("Codex tool normalization", () => {
     expect(part?.toolType ?? null).toBe(expected);
   });
 
+  test.each([
+    ["inProgress", "running"],
+    ["in_progress", "running"],
+    ["declined", "error"],
+  ] as const)("maps Codex status %s to %s", (status, expected) => {
+    expect(
+      normalizeCodexToolInvocation({
+        messageId: "message-1",
+        partId: "part-1",
+        callId: "call-1",
+        rawToolName: "functions.apply_patch",
+        status,
+      })?.status,
+    ).toBe(expected);
+  });
+
   test("normalizes ODT tool display identity", () => {
     expect(
       normalizeCodexToolInvocation({
@@ -161,7 +177,7 @@ describe("Codex tool normalization", () => {
         type: "fileChange",
         id: "change-1",
         status: "completed",
-        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@" }],
+        changes: [{ file: "src/app.ts", diff: "@@ -1 +1 @@\n-old\n+new" }],
         content: [
           {
             type: "text",
@@ -185,10 +201,206 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         status: "completed",
-        output: "@@ -1 +1 @@",
+        output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new",
+        fileDiffs: [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ],
       }),
     );
     expect(part).not.toHaveProperty("error");
+  });
+
+  test("marks malformed Codex file changes as tool errors", () => {
+    const part = toStreamPart(
+      {
+        type: "fileChange",
+        id: "change-1",
+        status: "completed",
+        changes: [{ file: "src/app.ts" }],
+      },
+      "message-live",
+      "change-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        status: "error",
+        error:
+          "Malformed Codex file change: entry 0 is missing string file/path or diff/patch fields.",
+      }),
+    );
+    expect(part).not.toHaveProperty("input");
+    expect(part).not.toHaveProperty("output");
+    expect(part).not.toHaveProperty("fileDiffs");
+  });
+
+  test("keeps non-renderable Codex modified file changes out of tool errors", () => {
+    const part = toStreamPart(
+      {
+        type: "fileChange",
+        id: "change-1",
+        status: "completed",
+        changes: [
+          {
+            file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
+            type: "modified",
+            diff: "import { render, screen } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
+          },
+        ],
+      },
+      "message-live",
+      "change-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        status: "completed",
+        fileDiffs: [
+          {
+            file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
+            type: "modified",
+            additions: 0,
+            deletions: 0,
+            diff: "",
+          },
+        ],
+      }),
+    );
+    expect(part).not.toHaveProperty("error");
+    expect(part).not.toHaveProperty("input");
+    expect(part).not.toHaveProperty("output");
+  });
+
+  test("attaches structured file changes to dynamic apply_patch calls", () => {
+    const patch = `*** Begin Patch
+*** Update File: src/app.ts
+@@
+-old
++new
+*** End Patch`;
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "patch-1",
+        namespace: "functions",
+        tool: "apply_patch",
+        input: patch,
+        success: true,
+        status: "completed",
+      },
+      "message-live",
+      "patch-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        input: { patch },
+        output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
+        fileDiffs: [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 1,
+            deletions: 1,
+            diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("attaches structured file changes to dynamic apply_patch arguments", () => {
+    const patch = `*** Begin Patch
+*** Add File: src/new.ts
++created
+*** End Patch`;
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "patch-1",
+        namespace: "functions",
+        tool: "apply_patch",
+        arguments: { patch },
+        success: true,
+        status: "completed",
+      },
+      "message-live",
+      "patch-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        input: { patch },
+        output: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created",
+        fileDiffs: [
+          {
+            file: "src/new.ts",
+            type: "added",
+            additions: 1,
+            deletions: 0,
+            diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created\n",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("does not echo non-renderable apply_patch input as tool output", () => {
+    const patch = `*** Begin Patch
+*** Update File: src/app.ts
+import { render } from "@testing-library/react";
+function AuthConsumer() {}
+*** End Patch`;
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "patch-1",
+        namespace: "functions",
+        tool: "apply_patch",
+        input: patch,
+        success: true,
+        status: "completed",
+      },
+      "message-live",
+      "patch-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        input: { patch },
+        fileDiffs: [
+          {
+            file: "src/app.ts",
+            type: "modified",
+            additions: 0,
+            deletions: 0,
+            diff: "",
+          },
+        ],
+      }),
+    );
+    expect(part).not.toHaveProperty("output");
   });
 
   test("parses non-patch dynamic tool string input without treating it as a patch", () => {

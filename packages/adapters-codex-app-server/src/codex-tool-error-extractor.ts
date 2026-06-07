@@ -139,8 +139,16 @@ const failedStatus = (value: unknown): boolean => {
   if (typeof value !== "string") {
     return false;
   }
-  const normalized = value.toLowerCase().replace(/-/g, "_");
-  return normalized === "failed" || normalized === "failure" || normalized === "error";
+  const normalized = value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/-/g, "_");
+  return (
+    normalized === "failed" ||
+    normalized === "failure" ||
+    normalized === "error" ||
+    normalized === "declined"
+  );
 };
 
 const mcpToolErrorFromValue = (value: unknown): string | null => {

@@ -1,3 +1,4 @@
+import type { FileDiff } from "@openducktor/contracts";
 import type { AgentToolType } from "@openducktor/core";
 import {
   arrayFromUnknown,
@@ -41,14 +42,26 @@ export type NormalizedCodexToolInvocation = {
   input?: Record<string, unknown>;
   output?: string | null;
   error?: string | null;
+  fileDiffs?: FileDiff[];
   metadata?: Record<string, unknown>;
   startedAtMs?: number;
   endedAtMs?: number;
 };
 
 export const statusFromCodexStatus = (status: unknown): AgentToolStatus => {
-  const normalized = typeof status === "string" ? status.toLowerCase().replace(/-/g, "_") : "";
-  if (normalized === "failed" || normalized === "failure" || normalized === "error") {
+  const normalized =
+    typeof status === "string"
+      ? status
+          .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+          .toLowerCase()
+          .replace(/-/g, "_")
+      : "";
+  if (
+    normalized === "failed" ||
+    normalized === "failure" ||
+    normalized === "error" ||
+    normalized === "declined"
+  ) {
     return "error";
   }
   if (normalized === "running" || normalized === "pending" || normalized === "in_progress") {
@@ -271,6 +284,7 @@ export const normalizeCodexToolInvocation = ({
   input,
   output,
   error,
+  fileDiffs,
   title,
   displayLabel,
   preview,
@@ -301,6 +315,7 @@ export const normalizeCodexToolInvocation = ({
     ...(resolvedPreview ? { preview: resolvedPreview } : {}),
     ...(resolvedOutput ? { output: resolvedOutput } : {}),
     ...(resolvedError ? { error: resolvedError } : {}),
+    ...(fileDiffs && fileDiffs.length > 0 ? { fileDiffs } : {}),
     metadata: {
       ...(metadata ?? {}),
       rawToolName,

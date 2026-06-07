@@ -273,7 +273,7 @@ export const gitConflictAbortResultSchema = z.object({
 });
 export type GitConflictAbortResult = z.infer<typeof gitConflictAbortResultSchema>;
 
-/** A single file diff entry from `GET /session/:id/diff`. */
+/** A single structured file diff entry emitted by runtime adapters or diff endpoints. */
 export const fileDiffSchema = z.object({
   file: z.string(),
   type: z.string(),
@@ -283,6 +283,14 @@ export const fileDiffSchema = z.object({
   diff: z.string(),
 });
 export type FileDiff = z.infer<typeof fileDiffSchema>;
+
+/** Full file content emitted by runtime adapters when the tool contract has no diff. */
+export const fileContentSchema = z.object({
+  file: z.string(),
+  type: z.string(),
+  content: z.string(),
+});
+export type FileContent = z.infer<typeof fileContentSchema>;
 
 /** Git file status entry from `GET /file/status`. */
 export const fileStatusSchema = z.object({

@@ -306,7 +306,13 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           data: [
             {
               fileChanges: [
-                { file: "src/app.ts", type: "modified", additions: 1, deletions: 0, diff: "@@" },
+                {
+                  file: "src/app.ts",
+                  type: "modified",
+                  additions: 1,
+                  deletions: 0,
+                  diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n",
+                },
               ],
             },
           ],

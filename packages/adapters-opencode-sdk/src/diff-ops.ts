@@ -4,6 +4,7 @@ import {
   fileDiffSchema,
   fileStatusSchema,
 } from "@openducktor/contracts";
+import { selectRenderableFileDiff } from "@openducktor/core";
 import { toOpenCodeRequestError } from "./request-errors";
 
 /**
@@ -17,7 +18,7 @@ export const loadSessionDiff = async (
   runtimeHistoryAnchor?: string,
 ): Promise<FileDiff[]> => {
   const url = new URL(
-    `/api/session/${externalSessionId}/diff`,
+    `/session/${externalSessionId}/diff`,
     normalizeRuntimeEndpoint(runtimeEndpoint),
   );
   if (runtimeHistoryAnchor) {
@@ -37,7 +38,7 @@ export const loadSessionDiff = async (
  * Endpoint: GET /file/status
  */
 export const loadFileStatus = async (runtimeEndpoint: string): Promise<FileStatus[]> => {
-  const url = new URL("/api/file/status", normalizeRuntimeEndpoint(runtimeEndpoint));
+  const url = new URL("/file/status", normalizeRuntimeEndpoint(runtimeEndpoint));
 
   try {
     const body = await fetchJson("load file status", url, 10_000);
@@ -69,7 +70,13 @@ const fetchJson = async (action: string, url: URL, timeoutMs: number): Promise<u
 };
 
 function parseFileDiffArray(body: unknown): FileDiff[] {
-  return fileDiffSchema.array().parse(readArrayPayload("load session diff", body));
+  const payload = readArrayPayload("load session diff", body);
+  const standardPayload = fileDiffSchema.array().safeParse(payload);
+  if (standardPayload.success) {
+    return standardPayload.data.map(toRenderableFileDiff);
+  }
+
+  return payload.map((entry, index) => parseSnapshotFileDiff(entry, index));
 }
 
 function parseFileStatusArray(body: unknown): FileStatus[] {
@@ -89,4 +96,66 @@ function readArrayPayload(action: string, body: unknown): unknown[] {
   }
 
   throw toOpenCodeRequestError(action, new Error("unexpected response payload shape"));
+}
+
+function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`unexpected OpenCode diff entry at index ${index}: expected an object`);
+  }
+
+  const record = entry as Record<string, unknown>;
+  const file = record.file;
+  const patch = record.patch;
+  const additions = record.additions;
+  const deletions = record.deletions;
+  const status = record.status;
+  const parsedFile = typeof file === "string" ? file : null;
+  const parsedPatch = typeof patch === "string" ? patch : null;
+  const parsedAdditions =
+    typeof additions === "number" && Number.isFinite(additions) ? additions : null;
+  const parsedDeletions =
+    typeof deletions === "number" && Number.isFinite(deletions) ? deletions : null;
+  const type =
+    typeof status === "string" && status.trim().length > 0
+      ? status
+      : status == null
+        ? "modified"
+        : null;
+  const invalidFields = [
+    parsedFile === null ? "file" : null,
+    parsedPatch === null ? "patch" : null,
+    parsedAdditions === null ? "additions" : null,
+    parsedDeletions === null ? "deletions" : null,
+    type ? null : "status",
+  ].filter((field): field is string => Boolean(field));
+  if (
+    invalidFields.length > 0 ||
+    parsedFile === null ||
+    parsedPatch === null ||
+    parsedAdditions === null ||
+    parsedDeletions === null ||
+    type === null
+  ) {
+    throw new Error(
+      `unexpected OpenCode diff entry at index ${index}: invalid ${invalidFields.join(", ")} fields`,
+    );
+  }
+
+  return toRenderableFileDiff({
+    file: parsedFile,
+    type,
+    additions: parsedAdditions,
+    deletions: parsedDeletions,
+    diff: parsedPatch,
+  });
+}
+
+function toRenderableFileDiff(entry: FileDiff): FileDiff {
+  return {
+    file: entry.file,
+    type: entry.type,
+    additions: entry.additions,
+    deletions: entry.deletions,
+    diff: selectRenderableFileDiff(entry.diff, entry.file, { changeType: entry.type }) ?? "",
+  };
 }

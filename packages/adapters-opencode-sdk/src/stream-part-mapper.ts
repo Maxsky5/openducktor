@@ -1,6 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { odtToolErrorPayloadSchema } from "@openducktor/contracts";
-import type { AgentStreamPart } from "@openducktor/core";
+import { type FileContent, type FileDiff, odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import {
+  type AgentStreamPart,
+  countRenderableFileDiffLines,
+  selectRenderableFileDiff,
+} from "@openducktor/core";
 import {
   asUnknownRecord,
   readBooleanProp,
@@ -180,6 +184,213 @@ const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined 
     return undefined;
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
+  if (typeof value !== "string") {
+    return "modified";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "add" || normalized === "added") {
+    return "added";
+  }
+  if (normalized === "delete" || normalized === "deleted") {
+    return "deleted";
+  }
+  return "modified";
+};
+
+const readFileDiffPatch = (value: Record<string, unknown>): string | null => {
+  const patch = readStringProp(value, ["patch"]);
+  if (patch !== undefined) {
+    return patch;
+  }
+  return readStringProp(value, ["diff"]) ?? null;
+};
+
+const normalizeToolMetadataFileDiff = (input: {
+  file: string | undefined;
+  diffFile?: string | undefined;
+  type: FileDiff["type"];
+  patch: string | null;
+  additions: number | undefined;
+  deletions: number | undefined;
+}): FileDiff | null => {
+  const file = input.file?.trim();
+  if (!file || input.patch === null) {
+    return null;
+  }
+
+  const diffFile = input.diffFile?.trim();
+  const fileCandidates = diffFile && diffFile !== file ? [diffFile, file] : [file];
+  let diff = "";
+  for (const fileCandidate of fileCandidates) {
+    const renderableDiff = selectRenderableFileDiff(input.patch, fileCandidate, {
+      changeType: input.type,
+    });
+    if (renderableDiff) {
+      diff = renderableDiff;
+      break;
+    }
+  }
+  const counts = countRenderableFileDiffLines(diff);
+  return {
+    file,
+    type: input.type,
+    additions: input.additions ?? counts.additions,
+    deletions: input.deletions ?? counts.deletions,
+    diff,
+  };
+};
+
+const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  return normalizeToolMetadataFileDiff({
+    file: readStringProp(record, ["relativePath"]) ?? readStringProp(record, ["filePath"]),
+    diffFile: readStringProp(record, ["filePath"]),
+    type: normalizeFileDiffType(readUnknownProp(record, "type")),
+    patch: readFileDiffPatch(record),
+    additions: readNumberProp(record, ["additions"]),
+    deletions: readNumberProp(record, ["deletions"]),
+  });
+};
+
+const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileDiff | null => {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return null;
+  }
+  const inputRecord = asUnknownRecord(input);
+  const oldString = readUnknownProp(inputRecord, "oldString");
+
+  return normalizeToolMetadataFileDiff({
+    file:
+      readStringProp(record, ["file"]) ??
+      readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]),
+    type:
+      typeof oldString === "string" && oldString.length === 0
+        ? "added"
+        : normalizeFileDiffType(readUnknownProp(record, "status")),
+    patch: readFileDiffPatch(record),
+    additions: readNumberProp(record, ["additions"]),
+    deletions: readNumberProp(record, ["deletions"]),
+  });
+};
+
+const fileDiffFromWriteMetadata = (
+  metadata: Record<string, unknown>,
+  input: unknown,
+): FileDiff | null => {
+  const inputRecord = asUnknownRecord(input);
+  const exists = readBooleanProp(metadata, ["exists"]);
+  const file =
+    readStringProp(metadata, ["filepath", "filePath", "file"]) ??
+    readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]);
+  const type: FileDiff["type"] = exists === false ? "added" : "modified";
+  const diff = readStringProp(metadata, ["diff"]);
+
+  if (diff !== undefined) {
+    return normalizeToolMetadataFileDiff({
+      file,
+      type,
+      patch: diff,
+      additions: readNumberProp(metadata, ["additions"]),
+      deletions: readNumberProp(metadata, ["deletions"]),
+    });
+  }
+
+  if (exists !== false) {
+    return null;
+  }
+
+  return normalizeToolMetadataFileDiff({
+    file,
+    type,
+    patch: readStringProp(inputRecord, ["content"]) ?? null,
+    additions: readNumberProp(metadata, ["additions"]),
+    deletions: readNumberProp(metadata, ["deletions"]),
+  });
+};
+
+const fileContentFromWriteMetadata = (
+  metadata: Record<string, unknown>,
+  input: unknown,
+): FileContent | null => {
+  const inputRecord = asUnknownRecord(input);
+  const exists = readBooleanProp(metadata, ["exists"]);
+  if (!inputRecord || exists !== true || readStringProp(metadata, ["diff"]) !== undefined) {
+    return null;
+  }
+
+  const file =
+    readStringProp(metadata, ["filepath", "filePath", "file"]) ??
+    readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]);
+  const content = readStringProp(inputRecord, ["content"]);
+  if (!file || content === undefined) {
+    return null;
+  }
+
+  return {
+    file,
+    type: "modified",
+    content,
+  };
+};
+
+type FileEditPayloadFields = {
+  fileDiffs?: FileDiff[];
+  fileContent?: FileContent[];
+};
+
+const readToolMetadataFileEditPayload = (
+  metadata: Record<string, unknown> | undefined,
+  toolState: Record<string, unknown>,
+  tool: string,
+): FileEditPayloadFields => {
+  if (!metadata) {
+    return {};
+  }
+
+  const fileDiffs: FileDiff[] = [];
+  if (tool === "write") {
+    const writeDiff = fileDiffFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
+    if (writeDiff) {
+      fileDiffs.push(writeDiff);
+    }
+  }
+
+  const filediff = fileDiffFromToolFileDiffMetadata(
+    readUnknownProp(metadata, "filediff"),
+    readUnknownProp(toolState, "input"),
+  );
+  if (filediff) {
+    fileDiffs.push(filediff);
+  }
+
+  const files = readUnknownProp(metadata, "files");
+  if (Array.isArray(files)) {
+    for (const file of files) {
+      const fileDiff = fileDiffFromToolFileMetadata(file);
+      if (fileDiff) {
+        fileDiffs.push(fileDiff);
+      }
+    }
+  }
+
+  if (fileDiffs.length > 0) {
+    return { fileDiffs };
+  }
+
+  if (tool !== "write") {
+    return {};
+  }
+
+  const fileContent = fileContentFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
+  return fileContent ? { fileContent: [fileContent] } : {};
 };
 
 const extractPartTiming = (
@@ -484,6 +695,9 @@ const buildToolStreamPart = (
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
 ): ToolStreamPart => {
+  const toolType = deriveToolType(part.tool);
+  const fileEditPayload =
+    toolType === "file_edit" ? readToolMetadataFileEditPayload(metadata, toolState, part.tool) : {};
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput: readUnknownProp(toolState, "input"),
@@ -496,11 +710,12 @@ const buildToolStreamPart = (
     partId: part.id,
     callId: part.callID,
     tool: part.tool,
-    toolType: deriveToolType(part.tool),
+    toolType,
     status: normalizedStatus,
     input: part.state.input,
     ...(preview ? { preview } : {}),
     ...(metadata ? { metadata } : {}),
+    ...fileEditPayload,
     ...timing,
   };
 
