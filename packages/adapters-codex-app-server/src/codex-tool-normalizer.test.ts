@@ -59,6 +59,22 @@ describe("Codex tool normalization", () => {
     expect(part?.toolType ?? null).toBe(expected);
   });
 
+  test.each([
+    ["inProgress", "running"],
+    ["in_progress", "running"],
+    ["declined", "error"],
+  ] as const)("maps Codex status %s to %s", (status, expected) => {
+    expect(
+      normalizeCodexToolInvocation({
+        messageId: "message-1",
+        partId: "part-1",
+        callId: "call-1",
+        rawToolName: "functions.apply_patch",
+        status,
+      })?.status,
+    ).toBe(expected);
+  });
+
   test("normalizes ODT tool display identity", () => {
     expect(
       normalizeCodexToolInvocation({
@@ -186,7 +202,7 @@ describe("Codex tool normalization", () => {
         toolType: "file_edit",
         status: "completed",
         output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "src/app.ts",
             type: "modified",
@@ -224,7 +240,7 @@ describe("Codex tool normalization", () => {
     );
     expect(part).not.toHaveProperty("input");
     expect(part).not.toHaveProperty("output");
-    expect(part).not.toHaveProperty("fileChanges");
+    expect(part).not.toHaveProperty("fileDiffs");
   });
 
   test("keeps non-renderable Codex modified file changes out of tool errors", () => {
@@ -251,7 +267,7 @@ describe("Codex tool normalization", () => {
         tool: "apply_patch",
         toolType: "file_edit",
         status: "completed",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
             type: "modified",
@@ -295,13 +311,52 @@ describe("Codex tool normalization", () => {
         toolType: "file_edit",
         input: { patch },
         output: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "src/app.ts",
             type: "modified",
             additions: 1,
             deletions: 1,
             diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("attaches structured file changes to dynamic apply_patch arguments", () => {
+    const patch = `*** Begin Patch
+*** Add File: src/new.ts
++created
+*** End Patch`;
+    const part = toStreamPart(
+      {
+        type: "dynamicToolCall",
+        id: "patch-1",
+        namespace: "functions",
+        tool: "apply_patch",
+        arguments: { patch },
+        success: true,
+        status: "completed",
+      },
+      "message-live",
+      "patch-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        input: { patch },
+        output: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created",
+        fileDiffs: [
+          {
+            file: "src/new.ts",
+            type: "added",
+            additions: 1,
+            deletions: 0,
+            diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created\n",
           },
         ],
       }),
@@ -334,7 +389,7 @@ function AuthConsumer() {}
         tool: "apply_patch",
         toolType: "file_edit",
         input: { patch },
-        fileChanges: [
+        fileDiffs: [
           {
             file: "src/app.ts",
             type: "modified",

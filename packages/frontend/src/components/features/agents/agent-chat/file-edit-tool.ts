@@ -1,4 +1,4 @@
-import type { FileDiff } from "@openducktor/contracts";
+import type { FileContent, FileDiff } from "@openducktor/contracts";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractPathFromInput } from "./tool-input-utils";
 import { relativizeDisplayPath } from "./tool-path-utils";
@@ -21,40 +21,86 @@ export const isFileEditTool = (toolName: string): boolean => {
   return FILE_EDIT_TOOLS.has(toolName.toLowerCase());
 };
 
-export type FileEditData = {
+type FileEditDataBase = {
   filePath: string;
-  diff: string | null;
   additions: number;
   deletions: number;
 };
+
+export type FileEditData =
+  | (FileEditDataBase & {
+      kind: "diff";
+      diff: string;
+    })
+  | (FileEditDataBase & {
+      kind: "content";
+      content: string;
+    })
+  | (FileEditDataBase & {
+      kind: "path";
+    });
 
 const buildPathOnlyFileEditData = (
   filePath: string,
   workingDirectory?: string | null,
 ): FileEditData => ({
+  kind: "path",
   filePath: relativizeDisplayPath(filePath, workingDirectory),
-  diff: null,
   additions: 0,
   deletions: 0,
 });
 
-const buildStructuredFileEditData = (
-  fileChange: FileDiff,
+const buildFileDiffEditData = (
+  fileDiff: FileDiff,
+  workingDirectory?: string | null,
+): FileEditData => {
+  const filePath = relativizeDisplayPath(fileDiff.file, workingDirectory);
+  if (fileDiff.diff.trim().length === 0) {
+    return {
+      kind: "path",
+      filePath,
+      additions: fileDiff.additions,
+      deletions: fileDiff.deletions,
+    };
+  }
+
+  return {
+    kind: "diff",
+    filePath,
+    diff: fileDiff.diff,
+    additions: fileDiff.additions,
+    deletions: fileDiff.deletions,
+  };
+};
+
+const buildFileContentEditData = (
+  fileContent: FileContent,
   workingDirectory?: string | null,
 ): FileEditData => ({
-  filePath: relativizeDisplayPath(fileChange.file, workingDirectory),
-  diff: fileChange.diff.trim().length > 0 ? fileChange.diff : null,
-  additions: fileChange.additions,
-  deletions: fileChange.deletions,
+  kind: "content",
+  filePath: relativizeDisplayPath(fileContent.file, workingDirectory),
+  content: fileContent.content,
+  additions: 0,
+  deletions: 0,
 });
 
 export const extractAllFileEditData = (
   meta: ToolMeta,
   workingDirectory?: string | null,
 ): FileEditData[] => {
+  if (meta.fileDiffs && meta.fileDiffs.length > 0) {
+    return meta.fileDiffs.map((fileDiff) => buildFileDiffEditData(fileDiff, workingDirectory));
+  }
+
   if (meta.fileChanges && meta.fileChanges.length > 0) {
     return meta.fileChanges.map((fileChange) =>
-      buildStructuredFileEditData(fileChange, workingDirectory),
+      buildFileDiffEditData(fileChange, workingDirectory),
+    );
+  }
+
+  if (meta.fileContent && meta.fileContent.length > 0) {
+    return meta.fileContent.map((fileContent) =>
+      buildFileContentEditData(fileContent, workingDirectory),
     );
   }
 

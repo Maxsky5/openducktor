@@ -184,7 +184,7 @@ describe("OpencodeSdkAdapter session history", () => {
         tool: "edit",
         toolType: "file_edit",
         output: "Edited src/main.ts",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "/repo/src/main.ts",
             type: "modified",
@@ -257,7 +257,7 @@ describe("OpencodeSdkAdapter session history", () => {
         toolType: "file_edit",
         output: "Edited src/main.ts",
       });
-      expect(editPart).not.toEqual(expect.objectContaining({ fileChanges: expect.any(Array) }));
+      expect(editPart).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -358,11 +358,11 @@ describe("OpencodeSdkAdapter session history", () => {
         kind: "tool",
         output: "Edited src/fail.ts",
       });
-      expect(failedEdit).not.toEqual(expect.objectContaining({ fileChanges: expect.any(Array) }));
+      expect(failedEdit).not.toEqual(expect.objectContaining({ fileDiffs: expect.any(Array) }));
       expect(loadedEdit).toMatchObject({
         kind: "tool",
         output: "Edited src/ok.ts",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "src/ok.ts",
             diff: "--- a/src/ok.ts\n+++ b/src/ok.ts\n@@ -1 +1 @@\n-before\n+after\n",
@@ -475,7 +475,7 @@ describe("OpencodeSdkAdapter session history", () => {
       const secondEdit = history[1]?.parts.find((part) => part.kind === "tool");
       expect(firstEdit).toMatchObject({
         kind: "tool",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "src/main.ts",
             diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-first\n+second\n",
@@ -484,7 +484,7 @@ describe("OpencodeSdkAdapter session history", () => {
       });
       expect(secondEdit).toMatchObject({
         kind: "tool",
-        fileChanges: [
+        fileDiffs: [
           {
             file: "src/main.ts",
             diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-second\n+third\n",

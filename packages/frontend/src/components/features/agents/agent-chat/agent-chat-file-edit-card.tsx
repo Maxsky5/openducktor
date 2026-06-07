@@ -36,8 +36,8 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
 }: AgentChatFileEditCardProps): ReactElement {
   const { expandFileDiffsByDefault } = useAgentChatSettings();
-  const hasDiff = Boolean(data.diff);
-  const [isExpanded, setIsExpanded] = useState(hasDiff && expandFileDiffsByDefault);
+  const hasContent = data.kind !== "path";
+  const [isExpanded, setIsExpanded] = useState(hasContent && expandFileDiffsByDefault);
   const hasSyncedInitialDefaultRef = useRef(false);
   const userToggledRef = useRef(false);
 
@@ -56,11 +56,11 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       return;
     }
 
-    setIsExpanded(hasDiff && expandFileDiffsByDefault);
-  }, [expandFileDiffsByDefault, hasDiff]);
+    setIsExpanded(hasContent && expandFileDiffsByDefault);
+  }, [expandFileDiffsByDefault, hasContent]);
 
   const handleToggle = (): void => {
-    if (!hasDiff) {
+    if (!hasContent) {
       return;
     }
 
@@ -87,7 +87,7 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
         )}
         onClick={handleToggle}
       >
-        {hasDiff ? <ExpandIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
+        {hasContent ? <ExpandIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
         <Icon className={cn("size-3.5 shrink-0", config.color)} />
         <span className="flex-1 truncate font-mono text-[11px]">
           {dirName ? <span className="text-muted-foreground">{dirName}/</span> : null}
@@ -104,10 +104,15 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
         ) : null}
       </button>
 
-      {isExpanded && data.diff ? (
+      {isExpanded && data.kind === "diff" ? (
         <div className="overflow-auto max-h-[60vh]">
           <PierreDiffViewer patch={data.diff} filePath={data.filePath} diffStyle="split" />
         </div>
+      ) : null}
+      {isExpanded && data.kind === "content" ? (
+        <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words bg-background p-3 font-mono text-[11px] leading-relaxed text-foreground">
+          {data.content}
+        </pre>
       ) : null}
     </div>
   );

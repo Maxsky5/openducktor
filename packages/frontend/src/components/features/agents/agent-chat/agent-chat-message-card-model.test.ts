@@ -943,8 +943,8 @@ describe("agent-chat-message-card-model", () => {
       );
 
       expect(data).toEqual({
+        kind: "path",
         filePath: "src/app.ts",
-        diff: null,
         additions: 0,
         deletions: 0,
       });
@@ -961,19 +961,19 @@ describe("agent-chat-message-card-model", () => {
       );
 
       expect(data).toEqual({
+        kind: "path",
         filePath: "apps/web/src/contexts/AuthContext.tsx",
-        diff: null,
         additions: 0,
         deletions: 0,
       });
     });
 
-    test("extracts structured file changes from tool metadata", () => {
+    test("extracts structured file diffs from tool metadata", () => {
       const data = extractAllFileEditData(
         createToolMeta({
           tool: "edit",
           toolType: "file_edit",
-          fileChanges: [
+          fileDiffs: [
             {
               file: "/repo/src/app.ts",
               type: "modified",
@@ -995,14 +995,42 @@ describe("agent-chat-message-card-model", () => {
 
       expect(data).toEqual([
         {
+          kind: "diff",
           filePath: "src/app.ts",
           diff: "@@ -1 +1,3 @@\n-old\n+new\n+line\n",
           additions: 4,
           deletions: 2,
         },
         {
+          kind: "path",
           filePath: "src/empty.ts",
-          diff: null,
+          additions: 0,
+          deletions: 0,
+        },
+      ]);
+    });
+
+    test("extracts structured file content from tool metadata", () => {
+      const data = extractAllFileEditData(
+        createToolMeta({
+          tool: "write",
+          toolType: "file_edit",
+          fileContent: [
+            {
+              file: "/repo/src/app.ts",
+              type: "modified",
+              content: "export const value = 1;\n",
+            },
+          ],
+        }),
+        "/repo",
+      );
+
+      expect(data).toEqual([
+        {
+          kind: "content",
+          filePath: "src/app.ts",
+          content: "export const value = 1;\n",
           additions: 0,
           deletions: 0,
         },
@@ -1059,7 +1087,7 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "apply_patch",
             toolType: "file_edit",
-            fileChanges: [
+            fileDiffs: [
               {
                 file: "src/first.ts",
                 type: "modified",
@@ -1088,7 +1116,7 @@ describe("agent-chat-message-card-model", () => {
           createToolMeta({
             tool: "apply_patch",
             toolType: "file_edit",
-            fileChanges: [
+            fileDiffs: [
               {
                 file: "src/patch.ts",
                 type: "modified",
@@ -1111,7 +1139,7 @@ describe("agent-chat-message-card-model", () => {
             tool: "apply_patch",
             toolType: "file_edit",
             status: "running",
-            fileChanges: [
+            fileDiffs: [
               {
                 file: "src/first.ts",
                 type: "modified",

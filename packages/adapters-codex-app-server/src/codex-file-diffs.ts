@@ -1,6 +1,6 @@
 import type { FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines, selectRenderableFileDiff } from "@openducktor/core";
-import { arrayFromUnknown, isPlainObject } from "./codex-app-server-shared";
+import { arrayFromUnknown, extractStringField, isPlainObject } from "./codex-app-server-shared";
 
 export class CodexFileDiffParseError extends Error {
   constructor(message: string) {
@@ -55,21 +55,44 @@ const inferDiffType = (entry: Record<string, unknown>, diff: string): string => 
   return "modified";
 };
 
+const movePathFromKind = (value: unknown): string | null => {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  const movePath = value.movePath ?? value.move_path;
+  return typeof movePath === "string" && movePath.trim().length > 0 ? movePath.trim() : null;
+};
+
+const stripMoveTrailer = (diff: string, movePath: string | null): string => {
+  if (!movePath) {
+    return diff;
+  }
+
+  const trailer = `\n\nMoved to: ${movePath}`;
+  return diff.endsWith(trailer) ? diff.slice(0, -trailer.length) : diff;
+};
+
 const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
   if (!isPlainObject(entry)) {
     throw new CodexFileDiffParseError(`entry ${location} must be an object.`);
   }
 
-  const file = entry.file ?? entry.path;
+  const rawFile = entry.file ?? entry.path;
   const diff = entry.diff ?? entry.patch;
-  if (typeof file !== "string" || typeof diff !== "string") {
+  if (typeof rawFile !== "string" || typeof diff !== "string") {
     throw new CodexFileDiffParseError(
       `entry ${location} is missing string file/path or diff/patch fields.`,
     );
   }
 
+  const movePath = movePathFromKind(entry.kind);
+  const file = movePath ?? rawFile;
   const type = inferDiffType(entry, diff);
-  const renderableDiff = selectRenderableFileDiff(diff, file, { changeType: type }) ?? "";
+  const renderableDiff =
+    selectRenderableFileDiff(stripMoveTrailer(diff, movePath), file, {
+      changeType: type,
+    }) ?? "";
   const counts = countRenderableFileDiffLines(renderableDiff);
   return {
     file,
@@ -95,6 +118,11 @@ export const toFileDiffs = (value: unknown): FileDiff[] => {
 
     return [parseFileDiffEntry(entry, String(entryIndex))];
   });
+};
+
+export const fileDiffsPatchOutput = (fileDiffs: ReadonlyArray<{ diff: string }>): string | null => {
+  const diffs = fileDiffs.map((fileDiff) => fileDiff.diff.trim()).filter((diff) => diff.length > 0);
+  return diffs.length > 0 ? diffs.join("\n") : null;
 };
 
 const APPLY_PATCH_FILE_TYPES = {
@@ -173,6 +201,7 @@ export const codexApplyPatchFileDiffs = (patch: string): FileDiff[] => {
     const movedFile = moveMatch?.[1];
     if (movedFile) {
       current.file = movedFile.trim();
+      continue;
     }
     current.lines.push(line);
   }
@@ -185,4 +214,21 @@ export const codexApplyPatchFileDiffs = (patch: string): FileDiff[] => {
   }
 
   return diffs;
+};
+
+const patchInputFromObject = (value: Record<string, unknown> | null | undefined): string | null =>
+  value
+    ? (extractStringField(value, ["patch"]) ??
+      extractStringField(value, ["patchText", "patch_text"]) ??
+      null)
+    : null;
+
+export const codexPatchInputFromToolPayload = (
+  value: Record<string, unknown>,
+  input: Record<string, unknown> | null | undefined,
+): string | null => {
+  if (typeof value.input === "string") {
+    return value.input;
+  }
+  return patchInputFromObject(input);
 };

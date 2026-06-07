@@ -260,7 +260,8 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
 };
 
 const handlePermissionAskedEvent = (event: Event, runtime: EventStreamRuntime): boolean => {
-  if (event.type !== "permission.asked") {
+  const eventType = String(event.type);
+  if (eventType !== "permission.asked" && eventType !== "permission.v2.asked") {
     return false;
   }
 

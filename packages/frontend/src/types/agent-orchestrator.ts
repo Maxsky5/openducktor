@@ -1,5 +1,6 @@
 import type {
   AgentSessionRecord,
+  FileContent,
   FileDiff,
   RepoPromptOverrides,
   RuntimeInstanceSummary,
@@ -48,6 +49,9 @@ export type AgentChatMessageMeta =
       input?: Record<string, unknown>;
       output?: string;
       error?: string;
+      fileDiffs?: FileDiff[];
+      fileContent?: FileContent[];
+      /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
       fileChanges?: FileDiff[];
       metadata?: Record<string, unknown>;
       startedAtMs?: number;

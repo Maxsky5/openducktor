@@ -167,6 +167,26 @@ describe("Codex file diffs", () => {
     ]);
   });
 
+  test("uses Codex app-server move targets as the displayed file path", () => {
+    expect(
+      toFileDiffs([
+        {
+          path: "src/old.ts",
+          kind: { type: "update", movePath: "src/new.ts" },
+          diff: "--- a/src/old.ts\n+++ b/src/old.ts\n@@\n-old\n+new\n\nMoved to: src/new.ts",
+        },
+      ]),
+    ).toEqual([
+      {
+        file: "src/new.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "--- a/src/old.ts\n+++ b/src/old.ts\n@@\n-old\n+new\n",
+      },
+    ]);
+  });
+
   test("strips Codex full-file preambles before hunk-only diffs", () => {
     expect(
       toFileDiffs([
@@ -234,6 +254,26 @@ function AuthConsumer() {}
         additions: 0,
         deletions: 0,
         diff: "",
+      },
+    ]);
+  });
+
+  test("parses Codex apply_patch move targets into structured file diffs", () => {
+    expect(
+      codexApplyPatchFileDiffs(`*** Begin Patch
+*** Update File: src/old.ts
+*** Move to: src/new.ts
+@@
+-old
++new
+*** End Patch`),
+    ).toEqual([
+      {
+        file: "src/new.ts",
+        type: "modified",
+        additions: 1,
+        deletions: 1,
+        diff: "--- a/src/new.ts\n+++ b/src/new.ts\n@@\n-old\n+new\n",
       },
     ]);
   });

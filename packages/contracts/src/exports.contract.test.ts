@@ -29,6 +29,7 @@ import type {
   ExternalTaskSyncEvent,
   ExternalTaskSyncEventKind,
   FailureKind,
+  FileContent,
   FileDiff,
   FileStatus,
   GeneralSettings,
@@ -245,6 +246,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitTargetBranchSchema",
   "defaultSpecTemplateMarkdown",
   "extractPromptTemplatePlaceholders",
+  "fileContentSchema",
   "fileDiffSchema",
   "fileStatusSchema",
   "gitFileStatusCountsSchema",
@@ -481,6 +483,7 @@ type ExportedTypeContract = {
   GitConflictAbortRequest: GitConflictAbortRequest;
   GitConflictAbortResult: GitConflictAbortResult;
   GitConflictOperation: GitConflictOperation;
+  FileContent: FileContent;
   FileDiff: FileDiff;
   FileStatus: FileStatus;
   FailureKind: FailureKind;

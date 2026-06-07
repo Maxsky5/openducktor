@@ -1,5 +1,5 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { type FileDiff, odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import { type FileContent, type FileDiff, odtToolErrorPayloadSchema } from "@openducktor/contracts";
 import {
   type AgentStreamPart,
   countRenderableFileDiffLines,
@@ -252,12 +252,16 @@ const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileD
     return null;
   }
   const inputRecord = asUnknownRecord(input);
+  const oldString = readUnknownProp(inputRecord, "oldString");
 
   return normalizeToolMetadataFileDiff({
     file:
       readStringProp(record, ["file"]) ??
       readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]),
-    type: normalizeFileDiffType(readUnknownProp(record, "status")),
+    type:
+      typeof oldString === "string" && oldString.length === 0
+        ? "added"
+        : normalizeFileDiffType(readUnknownProp(record, "status")),
     patch: readFileDiffPatch(record),
     additions: readNumberProp(record, ["additions"]),
     deletions: readNumberProp(record, ["deletions"]),
@@ -299,20 +303,50 @@ const fileDiffFromWriteMetadata = (
   });
 };
 
-const readToolMetadataFileChanges = (
+const fileContentFromWriteMetadata = (
+  metadata: Record<string, unknown>,
+  input: unknown,
+): FileContent | null => {
+  const inputRecord = asUnknownRecord(input);
+  const exists = readBooleanProp(metadata, ["exists"]);
+  if (!inputRecord || exists !== true || readStringProp(metadata, ["diff"]) !== undefined) {
+    return null;
+  }
+
+  const file =
+    readStringProp(metadata, ["filepath", "filePath", "file"]) ??
+    readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]);
+  const content = readStringProp(inputRecord, ["content"]);
+  if (!file || content === undefined) {
+    return null;
+  }
+
+  return {
+    file,
+    type: "modified",
+    content,
+  };
+};
+
+type FileEditPayloadFields = {
+  fileDiffs?: FileDiff[];
+  fileContent?: FileContent[];
+};
+
+const readToolMetadataFileEditPayload = (
   metadata: Record<string, unknown> | undefined,
   toolState: Record<string, unknown>,
   tool: string,
-): FileDiff[] => {
+): FileEditPayloadFields => {
   if (!metadata) {
-    return [];
+    return {};
   }
 
-  const fileChanges: FileDiff[] = [];
+  const fileDiffs: FileDiff[] = [];
   if (tool === "write") {
     const writeDiff = fileDiffFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
     if (writeDiff) {
-      fileChanges.push(writeDiff);
+      fileDiffs.push(writeDiff);
     }
   }
 
@@ -321,7 +355,7 @@ const readToolMetadataFileChanges = (
     readUnknownProp(toolState, "input"),
   );
   if (filediff) {
-    fileChanges.push(filediff);
+    fileDiffs.push(filediff);
   }
 
   const files = readUnknownProp(metadata, "files");
@@ -329,12 +363,21 @@ const readToolMetadataFileChanges = (
     for (const file of files) {
       const fileDiff = fileDiffFromToolFileMetadata(file);
       if (fileDiff) {
-        fileChanges.push(fileDiff);
+        fileDiffs.push(fileDiff);
       }
     }
   }
 
-  return fileChanges;
+  if (fileDiffs.length > 0) {
+    return { fileDiffs };
+  }
+
+  if (tool !== "write") {
+    return {};
+  }
+
+  const fileContent = fileContentFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
+  return fileContent ? { fileContent: [fileContent] } : {};
 };
 
 const extractPartTiming = (
@@ -640,8 +683,8 @@ const buildToolStreamPart = (
   metadata: Record<string, unknown> | undefined,
 ): ToolStreamPart => {
   const toolType = deriveToolType(part.tool);
-  const fileChanges =
-    toolType === "file_edit" ? readToolMetadataFileChanges(metadata, toolState, part.tool) : [];
+  const fileEditPayload =
+    toolType === "file_edit" ? readToolMetadataFileEditPayload(metadata, toolState, part.tool) : {};
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput: readUnknownProp(toolState, "input"),
@@ -659,7 +702,7 @@ const buildToolStreamPart = (
     input: part.state.input,
     ...(preview ? { preview } : {}),
     ...(metadata ? { metadata } : {}),
-    ...(fileChanges.length > 0 ? { fileChanges } : {}),
+    ...fileEditPayload,
     ...timing,
   };
 

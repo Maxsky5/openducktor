@@ -90,7 +90,7 @@ describe("CodexAppServerAdapter history hydration", () => {
             toolType: "file_edit",
             input: expect.objectContaining({ patch: expect.stringContaining("@@") }),
             output: expect.stringContaining("@@"),
-            fileChanges: [
+            fileDiffs: [
               {
                 file: "/repo/src/app.ts",
                 type: "modified",

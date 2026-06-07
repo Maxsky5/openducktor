@@ -401,7 +401,7 @@ describe("AgentChatMessageCard tool duration", () => {
             tool: "apply_patch",
             toolType: "file_edit",
             status: "completed",
-            fileChanges: [
+            fileDiffs: [
               {
                 file: "src/first.ts",
                 type: "modified",

@@ -284,6 +284,14 @@ export const fileDiffSchema = z.object({
 });
 export type FileDiff = z.infer<typeof fileDiffSchema>;
 
+/** Full file content emitted by runtime adapters when the tool contract has no diff. */
+export const fileContentSchema = z.object({
+  file: z.string(),
+  type: z.string(),
+  content: z.string(),
+});
+export type FileContent = z.infer<typeof fileContentSchema>;
+
 /** Git file status entry from `GET /file/status`. */
 export const fileStatusSchema = z.object({
   path: z.string(),

@@ -185,6 +185,59 @@ describe("Codex todo event mapper", () => {
   });
 });
 
+describe("Codex file change event mapper", () => {
+  test("projects live patch updates to running file-change tool parts", () => {
+    const pipeline = createCodexEventMapperPipeline();
+    const events = projectCodexCanonicalEvents(
+      pipeline.runLive(
+        {
+          kind: "notification",
+          notification: {
+            method: "item/fileChange/patchUpdated",
+            params: {
+              itemId: "patch-1",
+              changes: [
+                {
+                  path: "src/new.ts",
+                  kind: { type: "add" },
+                  diff: "created\n",
+                },
+              ],
+            },
+          },
+        },
+        {
+          source: "live",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          timestamp: "2026-05-09T00:00:00.000Z",
+        },
+      ),
+    );
+
+    expect(projectedTool(events)).toEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          kind: "tool",
+          tool: "apply_patch",
+          toolType: "file_edit",
+          status: "running",
+          fileDiffs: [
+            {
+              file: "src/new.ts",
+              type: "added",
+              additions: 1,
+              deletions: 0,
+              diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created\n",
+            },
+          ],
+        }),
+      }),
+    );
+  });
+});
+
 describe("Codex compaction event mapper", () => {
   test("projects live context compaction starts to session events", () => {
     const pipeline = createCodexEventMapperPipeline();

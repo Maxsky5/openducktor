@@ -29,11 +29,35 @@ const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
 };
 const previousActEnvironmentValue = reactActEnvironmentGlobal.IS_REACT_ACT_ENVIRONMENT;
 
-const buildFileEditData = (overrides: Partial<FileEditData> = {}): FileEditData => ({
+type DiffFileEditData = Extract<FileEditData, { kind: "diff" }>;
+type ContentFileEditData = Extract<FileEditData, { kind: "content" }>;
+type PathFileEditData = Extract<FileEditData, { kind: "path" }>;
+
+const buildFileEditData = (overrides: Partial<DiffFileEditData> = {}): DiffFileEditData => ({
+  kind: "diff",
   filePath: "src/example.ts",
   diff: "@@ -1 +1 @@\n-old\n+new\n",
   additions: 1,
   deletions: 1,
+  ...overrides,
+});
+
+const buildContentFileEditData = (
+  overrides: Partial<ContentFileEditData> = {},
+): ContentFileEditData => ({
+  kind: "content",
+  filePath: "src/example.ts",
+  content: "export const value = 1;\n",
+  additions: 0,
+  deletions: 0,
+  ...overrides,
+});
+
+const buildPathFileEditData = (overrides: Partial<PathFileEditData> = {}): PathFileEditData => ({
+  kind: "path",
+  filePath: "src/no-diff.ts",
+  additions: 0,
+  deletions: 0,
   ...overrides,
 });
 
@@ -123,6 +147,31 @@ describe("AgentChatFileEditCard", () => {
     expect(viewerMock).toHaveBeenCalledTimes(1);
   });
 
+  test("renders full file content without invoking the diff viewer", () => {
+    renderFileEditCard(
+      buildContentFileEditData({
+        content: "export const value = 1;\n",
+      }),
+      true,
+    );
+
+    expect(screen.getByText("export const value = 1;")).toBeDefined();
+    expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+    expect(viewerMock).not.toHaveBeenCalled();
+  });
+
+  test("treats empty file content as expandable content", () => {
+    const { container } = renderFileEditCard(
+      buildContentFileEditData({
+        content: "",
+      }),
+      true,
+    );
+
+    expect(container.querySelector("pre")).not.toBeNull();
+    expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
+  });
+
   test("collapses an expanded diff card without changing metadata", () => {
     renderFileEditCard(buildFileEditData(), true);
 
@@ -163,11 +212,8 @@ describe("AgentChatFileEditCard", () => {
     false,
   ])("keeps no-diff cards on the metadata-only path when expandFileDiffsByDefault is %p", (expandFileDiffsByDefault) => {
     renderFileEditCard(
-      buildFileEditData({
-        diff: null,
+      buildPathFileEditData({
         filePath: "src/no-diff.ts",
-        additions: 0,
-        deletions: 0,
       }),
       expandFileDiffsByDefault,
     );

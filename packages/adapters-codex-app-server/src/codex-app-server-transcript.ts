@@ -17,6 +17,8 @@ import {
   CodexFileDiffParseError,
   codexApplyPatchFileDiffs,
   codexFileChangeEntries,
+  codexPatchInputFromToolPayload,
+  fileDiffsPatchOutput,
   toFileDiffs,
 } from "./codex-file-diffs";
 import {
@@ -749,31 +751,24 @@ const codexCommandExecutionStreamParts = (
   });
 };
 
-const fileChangesPatchOutput = (fileChanges: ReadonlyArray<{ diff: string }>): string | null => {
-  const diffs = fileChanges
-    .map((fileChange) => fileChange.diff.trim())
-    .filter((diff) => diff.length > 0);
-  return diffs.length > 0 ? diffs.join("\n") : null;
-};
-
 const codexFileChangeStreamParts = (
   value: Record<string, unknown>,
   messageId: string,
   partId: string,
 ): AgentStreamPart[] => {
   const changes = codexFileChangeEntries(value);
-  const fileChangesResult = (() => {
+  const fileDiffsResult = (() => {
     try {
-      return { fileChanges: toFileDiffs(changes), error: null };
+      return { fileDiffs: toFileDiffs(changes), error: null };
     } catch (error) {
       if (error instanceof CodexFileDiffParseError) {
-        return { fileChanges: [], error: error.message };
+        return { fileDiffs: [], error: error.message };
       }
       throw error;
     }
   })();
-  const diff = fileChangesPatchOutput(fileChangesResult.fileChanges);
-  const error = fileChangesResult.error ?? codexFileChangeErrorFromItem(value);
+  const diff = fileDiffsPatchOutput(fileDiffsResult.fileDiffs);
+  const error = fileDiffsResult.error ?? codexFileChangeErrorFromItem(value);
   return normalizedCodexToolPart({
     messageId,
     partId,
@@ -782,9 +777,9 @@ const codexFileChangeStreamParts = (
     title: "File changes",
     status: error ? "error" : statusFromCodexStatus(value.status),
     preview: `${changes.length} file change${changes.length === 1 ? "" : "s"}`,
-    ...(fileChangesResult.error ? {} : diff ? { input: { patch: diff }, output: diff } : {}),
+    ...(fileDiffsResult.error ? {} : diff ? { input: { patch: diff }, output: diff } : {}),
     error,
-    fileChanges: fileChangesResult.fileChanges,
+    fileDiffs: fileDiffsResult.fileDiffs,
     metadata: { codexItem: value },
   });
 };
@@ -861,11 +856,13 @@ const codexDynamicToolCallStreamParts = (
   );
   const args = extractOptionalObject(value, "arguments") ?? codexObjectInput(value.arguments);
   const parsedInput = parseObjectString(value.input);
-  const patch =
-    isCodexApplyPatchTool(rawTool) && typeof value.input === "string" ? value.input : null;
-  const input = patch ? { ...(args ?? {}), patch } : (args ?? parsedInput ?? undefined);
-  const fileChanges = patch ? codexApplyPatchFileDiffs(patch) : [];
-  const patchOutput = fileChangesPatchOutput(fileChanges);
+  const inputObject = args ?? parsedInput;
+  const patch = isCodexApplyPatchTool(rawTool)
+    ? codexPatchInputFromToolPayload(value, inputObject)
+    : null;
+  const input = patch ? { ...(inputObject ?? {}), patch } : (inputObject ?? undefined);
+  const fileDiffs = patch ? codexApplyPatchFileDiffs(patch) : [];
+  const patchOutput = fileDiffsPatchOutput(fileDiffs);
   const resultPayload = codexDynamicToolDisplayPayload(value);
   const output = codexToolResultText(resultPayload);
   const error = codexDynamicToolErrorFromItem(value);
@@ -880,7 +877,7 @@ const codexDynamicToolCallStreamParts = (
     ...(input ? { input } : {}),
     output: failed ? null : patch ? patchOutput : output,
     error: error ?? (failed ? output : null),
-    fileChanges,
+    fileDiffs,
     metadata: { codexItem: value },
   });
 };
