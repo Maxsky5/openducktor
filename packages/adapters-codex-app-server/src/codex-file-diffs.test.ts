@@ -87,17 +87,44 @@ describe("Codex file diffs", () => {
     ]);
   });
 
-  test("rejects Codex file changes that contain full file text instead of a diff", () => {
-    expect(() =>
+  test("keeps modified Codex full-file text metadata-only instead of failing the tool", () => {
+    expect(
       toFileDiffs([
         {
           file: "src/app.ts",
+          type: "modified",
           diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
         },
       ]),
-    ).toThrow(
-      "Malformed Codex file change: entry 0 diff/patch for 'src/app.ts' is not a renderable file diff.",
-    );
+    ).toEqual([
+      {
+        file: "src/app.ts",
+        type: "modified",
+        additions: 0,
+        deletions: 0,
+        diff: "",
+      },
+    ]);
+  });
+
+  test("renders added Codex full-file text as an added-file diff", () => {
+    expect(
+      toFileDiffs([
+        {
+          file: "src/AuthContext.test.tsx",
+          type: "added",
+          diff: 'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+        },
+      ]),
+    ).toEqual([
+      {
+        file: "src/AuthContext.test.tsx",
+        type: "added",
+        additions: 2,
+        deletions: 0,
+        diff: '--- /dev/null\n+++ b/src/AuthContext.test.tsx\n@@ -0,0 +1,2 @@\n+import { render } from "@testing-library/react";\n+function AuthConsumer() {}\n',
+      },
+    ]);
   });
 
   test("strips Codex full-file preambles before hunk-only diffs", () => {

@@ -3,6 +3,10 @@ export type FileDiffLineCounts = {
   deletions: number;
 };
 
+export type SelectRenderableFileDiffOptions = {
+  changeType?: string | null;
+};
+
 const GIT_DIFF_HEADER = /^diff --git /m;
 const CLASSIC_DIFF_HEADER = /^Index: /m;
 const UNIFIED_MULTI_FILE_HEADER = /^--- .+\n\+\+\+ .+/m;
@@ -12,6 +16,40 @@ const normalizeNewlines = (value: string): string => value.replace(/\r\n?/g, "\n
 
 const toDiffHeaderPath = (filePath: string): string =>
   filePath.replaceAll("\\", "/").replace(/^\/+/, "").replace(/^\.\//, "");
+
+const fullFileDiffModeFromChangeType = (changeType?: string | null): "added" | "deleted" | null => {
+  const normalized = changeType?.trim().toLowerCase();
+  if (normalized === "added") {
+    return "added";
+  }
+  if (normalized === "deleted") {
+    return "deleted";
+  }
+  return null;
+};
+
+const fullFileContentDiff = (
+  rawContent: string,
+  filePath: string,
+  mode: "added" | "deleted",
+): string => {
+  const diffPath = toDiffHeaderPath(filePath);
+  const normalized = normalizeNewlines(rawContent).replace(/\n$/, "");
+  const lines = normalized.length > 0 ? normalized.split("\n") : [];
+  const lineCount = lines.length;
+  const prefix = mode === "added" ? "+" : "-";
+  const body = lines.map((line) => `${prefix}${line}`);
+
+  if (mode === "added") {
+    return ["--- /dev/null", `+++ b/${diffPath}`, `@@ -0,0 +1,${lineCount} @@`, ...body, ""].join(
+      "\n",
+    );
+  }
+
+  return [`--- a/${diffPath}`, "+++ /dev/null", `@@ -1,${lineCount} +0,0 @@`, ...body, ""].join(
+    "\n",
+  );
+};
 
 const splitTrimmedNonEmpty = (value: string, separator: RegExp): string[] => {
   return value.split(separator).reduce<string[]>((chunks, chunk) => {
@@ -134,7 +172,11 @@ export const fileDiffCandidateMatchesFile = (candidate: string, filePath: string
   return suffixPattern.test(headerLines.join("\n"));
 };
 
-export const selectRenderableFileDiff = (rawDiff: string, filePath: string): string | null => {
+export const selectRenderableFileDiff = (
+  rawDiff: string,
+  filePath: string,
+  options: SelectRenderableFileDiffOptions = {},
+): string | null => {
   const candidates = splitFileDiffCandidates(rawDiff);
   if (candidates.length === 0) {
     return null;
@@ -152,6 +194,11 @@ export const selectRenderableFileDiff = (rawDiff: string, filePath: string): str
     if (normalizedCandidate) {
       return normalizedCandidate;
     }
+  }
+
+  const fullFileDiffMode = fullFileDiffModeFromChangeType(options.changeType);
+  if (fullFileDiffMode) {
+    return fullFileContentDiff(rawDiff, filePath, fullFileDiffMode);
   }
 
   return null;

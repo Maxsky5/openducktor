@@ -73,7 +73,7 @@ function parseFileDiffArray(body: unknown): FileDiff[] {
   const payload = readArrayPayload("load session diff", body);
   const standardPayload = fileDiffSchema.array().safeParse(payload);
   if (standardPayload.success) {
-    return standardPayload.data.map((entry, index) => requireRenderableFileDiff(entry, index));
+    return standardPayload.data.map(toRenderableFileDiff);
   }
 
   return payload.map((entry, index) => parseSnapshotFileDiff(entry, index));
@@ -141,31 +141,21 @@ function parseSnapshotFileDiff(entry: unknown, index: number): FileDiff {
     );
   }
 
-  return requireRenderableFileDiff(
-    {
-      file: parsedFile,
-      type,
-      additions: parsedAdditions,
-      deletions: parsedDeletions,
-      diff: parsedPatch,
-    },
-    index,
-  );
+  return toRenderableFileDiff({
+    file: parsedFile,
+    type,
+    additions: parsedAdditions,
+    deletions: parsedDeletions,
+    diff: parsedPatch,
+  });
 }
 
-function requireRenderableFileDiff(entry: FileDiff, index: number): FileDiff {
-  const diff = selectRenderableFileDiff(entry.diff, entry.file);
-  if (!diff) {
-    throw new Error(
-      `unexpected OpenCode diff entry at index ${index}: diff for '${entry.file}' is not a renderable file diff`,
-    );
-  }
-
+function toRenderableFileDiff(entry: FileDiff): FileDiff {
   return {
     file: entry.file,
     type: entry.type,
     additions: entry.additions,
     deletions: entry.deletions,
-    diff,
+    diff: selectRenderableFileDiff(entry.diff, entry.file, { changeType: entry.type }) ?? "",
   };
 }

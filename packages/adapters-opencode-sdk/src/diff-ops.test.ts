@@ -97,7 +97,7 @@ describe("diff-ops", () => {
     ]);
   });
 
-  test("loadSessionDiff rejects standard payloads with full-file text instead of a diff", async () => {
+  test("loadSessionDiff keeps modified full-file standard payloads path-only", async () => {
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -116,12 +116,48 @@ describe("diff-ops", () => {
         }),
       }) as Response) as typeof fetch;
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
-      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: diff for 'src/main.ts' is not a renderable file diff",
-    );
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 3,
+        deletions: 1,
+        diff: "",
+      },
+    ]);
   });
 
-  test("loadSessionDiff rejects snapshot payloads with full-file text instead of a diff", async () => {
+  test("loadSessionDiff renders added full-file standard payloads as added-file diffs", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({
+          data: [
+            {
+              file: "src/LandingPage.test.tsx",
+              type: "added",
+              additions: 2,
+              deletions: 0,
+              diff: "import LandingPage from '@/components/LandingPage';\ntest('renders', () => {});\n",
+            },
+          ],
+        }),
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/LandingPage.test.tsx",
+        type: "added",
+        additions: 2,
+        deletions: 0,
+        diff: "--- /dev/null\n+++ b/src/LandingPage.test.tsx\n@@ -0,0 +1,2 @@\n+import LandingPage from '@/components/LandingPage';\n+test('renders', () => {});\n",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff keeps modified full-file snapshot payloads path-only", async () => {
     globalThis.fetch = (async () =>
       ({
         ok: true,
@@ -138,9 +174,44 @@ describe("diff-ops", () => {
         ],
       }) as Response) as typeof fetch;
 
-    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).rejects.toThrow(
-      "OpenCode request failed: load session diff: unexpected OpenCode diff entry at index 0: diff for 'src/main.ts' is not a renderable file diff",
-    );
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/main.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "",
+      },
+    ]);
+  });
+
+  test("loadSessionDiff renders added full-file snapshot payloads as added-file diffs", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => [
+          {
+            file: "src/LandingPage.test.tsx",
+            patch:
+              "import LandingPage from '@/components/LandingPage';\ntest('renders', () => {});\n",
+            additions: 2,
+            deletions: 0,
+            status: "added",
+          },
+        ],
+      }) as Response) as typeof fetch;
+
+    await expect(loadSessionDiff("http://127.0.0.1:12345", "session-1")).resolves.toEqual([
+      {
+        file: "src/LandingPage.test.tsx",
+        type: "added",
+        additions: 2,
+        deletions: 0,
+        diff: "--- /dev/null\n+++ b/src/LandingPage.test.tsx\n@@ -0,0 +1,2 @@\n+import LandingPage from '@/components/LandingPage';\n+test('renders', () => {});\n",
+      },
+    ]);
   });
 
   test("loadSessionDiff rejects malformed OpenCode snapshot diff entries", async () => {

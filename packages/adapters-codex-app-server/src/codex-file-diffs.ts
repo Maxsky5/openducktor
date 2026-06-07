@@ -42,17 +42,12 @@ const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
     );
   }
 
-  const renderableDiff = selectRenderableFileDiff(diff, file);
-  if (!renderableDiff) {
-    throw new CodexFileDiffParseError(
-      `entry ${location} diff/patch for '${file}' is not a renderable file diff.`,
-    );
-  }
-
+  const type = inferDiffType(entry, diff);
+  const renderableDiff = selectRenderableFileDiff(diff, file, { changeType: type }) ?? "";
   const counts = countRenderableFileDiffLines(renderableDiff);
   return {
     file,
-    type: inferDiffType(entry, renderableDiff),
+    type,
     additions: typeof entry.additions === "number" ? entry.additions : counts.additions,
     deletions: typeof entry.deletions === "number" ? entry.deletions : counts.deletions,
     diff: renderableDiff,
@@ -114,11 +109,12 @@ const finishApplyPatchEntry = (entry: ApplyPatchFileEntry): FileDiff | null => {
   const rawDiff = [`*** ${entry.operation} File: ${entry.file}`, ...entry.lines]
     .join("\n")
     .trimEnd();
-  const diff = selectRenderableFileDiff(rawDiff, entry.file) ?? "";
+  const type = APPLY_PATCH_FILE_TYPES[entry.operation];
+  const diff = selectRenderableFileDiff(rawDiff, entry.file, { changeType: type }) ?? "";
   const counts = countRenderableFileDiffLines(diff);
   return {
     file: entry.file,
-    type: APPLY_PATCH_FILE_TYPES[entry.operation],
+    type,
     additions: counts.additions,
     deletions: counts.deletions,
     diff,

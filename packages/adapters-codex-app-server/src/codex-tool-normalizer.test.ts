@@ -227,6 +227,46 @@ describe("Codex tool normalization", () => {
     expect(part).not.toHaveProperty("fileChanges");
   });
 
+  test("keeps non-renderable Codex modified file changes out of tool errors", () => {
+    const part = toStreamPart(
+      {
+        type: "fileChange",
+        id: "change-1",
+        status: "completed",
+        changes: [
+          {
+            file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
+            type: "modified",
+            diff: "import { render, screen } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
+          },
+        ],
+      },
+      "message-live",
+      "change-1",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        kind: "tool",
+        tool: "apply_patch",
+        toolType: "file_edit",
+        status: "completed",
+        fileChanges: [
+          {
+            file: "/Users/maxsky5/.openducktor-local/worktrees/fairnest/apps/web/__tests__/contexts/AuthContext.test.tsx",
+            type: "modified",
+            additions: 0,
+            deletions: 0,
+            diff: "",
+          },
+        ],
+      }),
+    );
+    expect(part).not.toHaveProperty("error");
+    expect(part).not.toHaveProperty("input");
+    expect(part).not.toHaveProperty("output");
+  });
+
   test("attaches structured file changes to dynamic apply_patch calls", () => {
     const patch = `*** Begin Patch
 *** Update File: src/app.ts

@@ -74,6 +74,24 @@ function AuthConsumer() {}
     ).toBeNull();
   });
 
+  test("converts full file text to an added-file diff when the adapter marks it added", () => {
+    expect(
+      selectRenderableFileDiff(
+        'import { render } from "@testing-library/react";\nfunction AuthConsumer() {}\n',
+        "src/AuthContext.test.tsx",
+        { changeType: "added" },
+      ),
+    ).toBe(
+      '--- /dev/null\n+++ b/src/AuthContext.test.tsx\n@@ -0,0 +1,2 @@\n+import { render } from "@testing-library/react";\n+function AuthConsumer() {}\n',
+    );
+  });
+
+  test("converts full file text to a deleted-file diff when the adapter marks it deleted", () => {
+    expect(
+      selectRenderableFileDiff("old\ncontent\n", "src/old.ts", { changeType: "deleted" }),
+    ).toBe("--- a/src/old.ts\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-old\n-content\n");
+  });
+
   test("counts changed lines without counting file headers", () => {
     expect(
       countRenderableFileDiffLines("--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line\n"),
