@@ -155,21 +155,78 @@ export const splitFileDiffCandidates = (rawDiff: string): string[] => {
   return [trimmed];
 };
 
-export const fileDiffCandidateMatchesFile = (candidate: string, filePath: string): boolean => {
-  const normalizedPath = filePath.replaceAll("\\", "/");
-  const quotedPath = normalizedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const suffixPattern = new RegExp(`(^|[\\s"'])((a|b)/)?${quotedPath}($|[\\s"'])`, "m");
-  const headerLines: string[] = [];
+const normalizeDiffFilePath = (filePath: string): string =>
+  filePath
+    .trim()
+    .replaceAll("\\", "/")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^\.\//, "");
 
+const normalizeHeaderFilePath = (filePath: string): string =>
+  normalizeDiffFilePath(filePath).replace(/^(?:a|b)\//, "");
+
+const isAbsoluteDiffPath = (filePath: string): boolean =>
+  filePath.startsWith("/") || /^[A-Za-z]:\//.test(filePath);
+
+const diffPathsMatch = (headerPath: string, filePath: string): boolean => {
+  const header = normalizeHeaderFilePath(headerPath);
+  const requested = normalizeDiffFilePath(filePath);
+  if (header.length === 0 || requested.length === 0 || header === "/dev/null") {
+    return false;
+  }
+  if (header === requested) {
+    return true;
+  }
+  if (isAbsoluteDiffPath(requested) && !isAbsoluteDiffPath(header)) {
+    return requested.endsWith(`/${header}`);
+  }
+  if (isAbsoluteDiffPath(header) && !isAbsoluteDiffPath(requested)) {
+    return header.endsWith(`/${requested}`);
+  }
+  return false;
+};
+
+const diffHeaderPaths = (line: string): string[] => {
+  const gitHeader = /^diff --git\s+(\S+)\s+(\S+)$/.exec(line);
+  if (gitHeader) {
+    return [gitHeader[1] ?? "", gitHeader[2] ?? ""];
+  }
+
+  for (const prefix of ["--- ", "+++ ", "Index: "]) {
+    if (line.startsWith(prefix)) {
+      return [line.slice(prefix.length).split(/\s+/)[0] ?? ""];
+    }
+  }
+
+  const applyPatchHeader = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/.exec(line);
+  return applyPatchHeader ? [applyPatchHeader[1] ?? ""] : [];
+};
+
+export const fileDiffCandidateMatchesFile = (candidate: string, filePath: string): boolean => {
   for (const line of normalizeNewlines(candidate).replaceAll("\\", "/").split("\n")) {
     if (line.startsWith("@@")) {
       break;
     }
 
-    headerLines.push(line);
+    if (diffHeaderPaths(line).some((headerPath) => diffPathsMatch(headerPath, filePath))) {
+      return true;
+    }
   }
 
-  return suffixPattern.test(headerLines.join("\n"));
+  return false;
+};
+
+const hasExplicitFileHeader = (candidate: string): boolean => {
+  for (const line of normalizeNewlines(candidate).trim().split("\n")) {
+    if (line.startsWith("@@")) {
+      return false;
+    }
+    if (diffHeaderPaths(line).length > 0) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 export const selectRenderableFileDiff = (
@@ -189,8 +246,9 @@ export const selectRenderableFileDiff = (
     return normalizeRenderableFileDiffCandidate(matchingCandidate, filePath);
   }
 
-  for (const candidate of candidates) {
-    const normalizedCandidate = normalizeRenderableFileDiffCandidate(candidate, filePath);
+  const fallbackCandidate = candidates.length === 1 ? candidates[0] : null;
+  if (fallbackCandidate && !hasExplicitFileHeader(fallbackCandidate)) {
+    const normalizedCandidate = normalizeRenderableFileDiffCandidate(fallbackCandidate, filePath);
     if (normalizedCandidate) {
       return normalizedCandidate;
     }

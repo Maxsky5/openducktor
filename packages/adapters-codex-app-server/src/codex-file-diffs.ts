@@ -73,6 +73,24 @@ const stripMoveTrailer = (diff: string, movePath: string | null): string => {
   return diff.endsWith(trailer) ? diff.slice(0, -trailer.length) : diff;
 };
 
+const selectCodexRenderableDiff = (
+  diff: string,
+  displayedFile: string,
+  sourceFile: string,
+  type: string,
+): string => {
+  const fileCandidates =
+    sourceFile === displayedFile ? [displayedFile] : [sourceFile, displayedFile];
+  for (const fileCandidate of fileCandidates) {
+    const renderableDiff = selectRenderableFileDiff(diff, fileCandidate, { changeType: type });
+    if (renderableDiff) {
+      return renderableDiff;
+    }
+  }
+
+  return "";
+};
+
 const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
   if (!isPlainObject(entry)) {
     throw new CodexFileDiffParseError(`entry ${location} must be an object.`);
@@ -87,21 +105,32 @@ const parseFileDiffEntry = (entry: unknown, location: string): FileDiff => {
   }
 
   const movePath = movePathFromKind(entry.kind);
-  const file = movePath ?? rawFile.trim();
+  const sourceFile = rawFile.trim();
+  const file = movePath ?? sourceFile;
   if (file.length === 0) {
     throw new CodexFileDiffParseError(`entry ${location} has empty file path.`);
   }
   const type = inferDiffType(entry, diff);
-  const renderableDiff =
-    selectRenderableFileDiff(stripMoveTrailer(diff, movePath), file, {
-      changeType: type,
-    }) ?? "";
+  const renderableDiff = selectCodexRenderableDiff(
+    stripMoveTrailer(diff, movePath),
+    file,
+    sourceFile,
+    type,
+  );
   const counts = countRenderableFileDiffLines(renderableDiff);
+  const additions =
+    typeof entry.additions === "number" && Number.isFinite(entry.additions)
+      ? entry.additions
+      : counts.additions;
+  const deletions =
+    typeof entry.deletions === "number" && Number.isFinite(entry.deletions)
+      ? entry.deletions
+      : counts.deletions;
   return {
     file,
     type,
-    additions: typeof entry.additions === "number" ? entry.additions : counts.additions,
-    deletions: typeof entry.deletions === "number" ? entry.deletions : counts.deletions,
+    additions,
+    deletions,
     diff: renderableDiff,
   };
 };

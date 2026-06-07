@@ -22,6 +22,27 @@ describe("Codex file diffs", () => {
     ]);
   });
 
+  test("derives counts when Codex runtime counts are not finite", () => {
+    expect(
+      toFileDiffs([
+        {
+          path: "src/app.ts",
+          additions: Number.NaN,
+          deletions: Number.POSITIVE_INFINITY,
+          diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line",
+        },
+      ]),
+    ).toEqual([
+      {
+        file: "src/app.ts",
+        type: "modified",
+        additions: 2,
+        deletions: 1,
+        diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line\n",
+      },
+    ]);
+  });
+
   test("parses nested Codex turn diff entries", () => {
     expect(
       toFileDiffs({
