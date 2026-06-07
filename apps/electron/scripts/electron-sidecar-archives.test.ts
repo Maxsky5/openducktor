@@ -9,7 +9,7 @@ const tempDirectories = new Set<string>();
 
 const asset = {
   id: "beads",
-  version: "1.0.4",
+  version: "1.0.5",
   url: "https://example.test/beads.tar.gz",
   sha256: "checksum",
   archiveType: "tar.gz",
