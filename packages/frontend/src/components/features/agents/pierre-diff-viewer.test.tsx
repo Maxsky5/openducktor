@@ -313,6 +313,39 @@ describe("PierreDiffViewer", () => {
       firstCacheKey,
     );
   });
+
+  test("keeps raw fallback diffs inside the Pierre scroll container", async () => {
+    const { PierreDiffViewer } = pierreViewerModule;
+
+    await withCapturedOutputStreams(["stdout", "stderr"], async (chunksByStream) => {
+      await withCapturedConsoleMethods(
+        ["debug", "error", "info", "log", "warn"],
+        async (consoleCalls) => {
+          render(
+            <PierreDiffViewer
+              patch="Index: src/app.ts\n=====\ninvalid diff body"
+              filePath="src/app.ts"
+            />,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          for (const calls of Object.values(consoleCalls)) {
+            for (const call of calls) {
+              expect(call).toEqual([[]]);
+            }
+          }
+        },
+      );
+
+      for (const chunk of [...chunksByStream.stdout, ...chunksByStream.stderr]) {
+        expect(chunk).toBe("[]\n");
+      }
+    });
+
+    const fallback = screen.getByText(/invalid diff body/);
+    expect(fallback.parentElement?.className).toContain("overflow-auto");
+    expect(fallback.parentElement?.className).toContain("max-h-[min(70vh,48rem)]");
+  });
 });
 
 const requireFileDiff = (

@@ -141,6 +141,7 @@ describe("AgentChatFileEditCard", () => {
     expect(viewer.getAttribute("data-file-path")).toBe("src/example.ts");
     expect(viewer.getAttribute("data-patch")).toBe("@@ -1 +1 @@\n-old\n+new\n");
     expect(viewer.getAttribute("data-diff-style")).toBe("split");
+    expect(viewer.parentElement).toBe(screen.getByTestId("agent-chat-file-edit-card"));
     expect(preloaderMock).not.toHaveBeenCalled();
     expect(viewerMock).toHaveBeenCalledTimes(1);
   });

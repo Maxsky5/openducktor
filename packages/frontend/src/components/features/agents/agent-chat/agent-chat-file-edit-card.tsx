@@ -111,9 +111,7 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
       </button>
 
       {isExpanded && data.kind === "diff" ? (
-        <div className="overflow-auto max-h-[60vh]">
-          <PierreDiffViewer patch={data.diff} filePath={data.filePath} diffStyle="split" />
-        </div>
+        <PierreDiffViewer patch={data.diff} filePath={data.filePath} diffStyle="split" />
       ) : null}
       {isExpanded && data.kind === "content" ? (
         <PierreFileViewer filePath={data.filePath} content={data.content} />

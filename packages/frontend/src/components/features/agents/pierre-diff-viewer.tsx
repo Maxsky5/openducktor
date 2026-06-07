@@ -67,7 +67,7 @@ const DIFF_WRAPPER_STYLE = {
   "--diffs-tab-size": 2,
 } as CSSProperties;
 const RAW_DIFF_FALLBACK_CLASS_NAME =
-  "overflow-x-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
+  "whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-5 text-foreground";
 const HUNK_RESET_ANNOTATION_CLASS_NAME = "pointer-events-none relative h-0";
 const HUNK_RESET_ANNOTATION_WRAPPER_CLASS_NAME = "contents";
 const HUNK_RESET_ANNOTATION_MARKER_ATTRIBUTE = "data-hunk-reset-annotation";
@@ -304,21 +304,19 @@ export const PierreDiffViewer = memo(function PierreDiffViewer({
     content = <pre className={RAW_DIFF_FALLBACK_CLASS_NAME}>{fallbackPatch}</pre>;
   } else {
     content = (
-      <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
-        <PierreReactFileDiff
-          fileDiff={fileDiff}
-          {...selectedLinesProps}
-          options={options}
-          lineAnnotations={mergedLineAnnotations}
-          renderAnnotation={handleRenderAnnotation}
-        />
-      </div>
+      <PierreReactFileDiff
+        fileDiff={fileDiff}
+        {...selectedLinesProps}
+        options={options}
+        lineAnnotations={mergedLineAnnotations}
+        renderAnnotation={handleRenderAnnotation}
+      />
     );
   }
 
   return (
     <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
-      {content}
+      <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>{content}</div>
     </div>
   );
 });
