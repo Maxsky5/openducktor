@@ -58,6 +58,7 @@ import type {
   TransitionTaskInput,
   UpdateTaskInput,
 } from "./task-inputs";
+import { createTaskCloseUseCase } from "./use-cases/close-task";
 import { createTaskCompleteDirectMergeUseCase } from "./use-cases/complete-direct-merge";
 import { createTaskDeleteUseCase } from "./use-cases/delete-task";
 import { createTaskPullRequestDetectionUseCase } from "./use-cases/detect-pull-request";
@@ -118,6 +119,7 @@ export type TaskService = {
     },
     TaskServiceError
   >;
+  closeTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetImplementation(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   resetTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
   updateTask(input: UpdateTaskInput): Effect.Effect<TaskCard, TaskServiceError>;
@@ -200,6 +202,7 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     ...createTaskCompleteDirectMergeUseCase(useCaseInput),
     ...createTaskCrudUseCases(useCaseInput),
     ...createTaskDeleteUseCase(useCaseInput),
+    ...createTaskCloseUseCase(useCaseInput),
     ...createTaskImplementationResetUseCase(useCaseInput),
     ...createTaskFullResetUseCase(useCaseInput),
     ...createTaskDocumentUseCases(useCaseInput),
@@ -217,6 +220,7 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskServiceErrors(service.createTask(input)),
+    closeTask: (input) => mapTaskServiceErrors(service.closeTask(input)),
     deleteTask: (input) => mapTaskServiceErrors(service.deleteTask(input)),
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),
     directMerge: (input) => mapTaskServiceErrors(service.directMerge(input)),

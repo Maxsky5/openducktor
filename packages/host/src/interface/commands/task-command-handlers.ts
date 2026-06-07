@@ -42,6 +42,7 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
     taskService.repoPullRequestSync(parseRepoPathInput(args, "repo_pull_request_sync input")),
   task_approval_context_get: (args) =>
     taskService.getApprovalContext(parseTaskIdInput(args, "task_approval_context_get input")),
+  task_close: (args) => taskService.closeTask(parseTaskIdInput(args, "task_close input")),
   task_pull_request_detect: (args) =>
     taskService.detectPullRequest(parseTaskIdInput(args, "task_pull_request_detect input")),
   task_direct_merge: (args) => taskService.directMerge(parseDirectMergeInput(args)),

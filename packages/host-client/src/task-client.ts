@@ -149,6 +149,14 @@ export class HostTaskClient {
     return parseOkResult(payload, "task_delete");
   }
 
+  async taskClose(repoPath: string, taskId: string): Promise<TaskCard> {
+    const payload = await this.invokeFn("task_close", {
+      repoPath,
+      taskId,
+    });
+    return taskCardSchema.parse(payload);
+  }
+
   async taskResetImplementation(repoPath: string, taskId: string): Promise<TaskCard> {
     const payload = await this.invokeFn("task_reset_implementation", {
       repoPath,

@@ -39,6 +39,7 @@ Human actions:
 Native task actions:
 - `reset_implementation(taskId)`
 - `reset_task(taskId)`
+- `close_task(taskId)`
 
 ## Transition Matrix
 | Trigger | From | Guards | To |
@@ -63,6 +64,7 @@ Native task actions:
 | `odt_qa_approved` | `blocked`, `ai_review`, `human_review` | report markdown required | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | note optional | `in_progress` |
 | `human_approve` | `ai_review`, `human_review` | epic completion guard passes | `closed` |
+| `close_task` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | manual override from task detail sheet only; reject while live spec/planner/build/QA activity exists; epic completion guard passes; cleanup of task-scoped dev servers, task-managed worktrees, and related local branches succeeds | `closed` |
 
 ## Guardrails
 - Epic completion guard: block close if direct children are still open states.
@@ -70,9 +72,9 @@ Native task actions:
 - Subtasks cannot have children.
 
 ## Invalid Transition Examples
-- `open -> closed` without human approval.
+- `open -> closed` without human approval or `close_task`.
 - `ai_review -> closed` without an explicit `human_approve` action.
-- `blocked -> closed` directly.
+- `blocked -> closed` directly without `close_task`.
 
 ## Board Semantics
 UI labels are presentation only:

@@ -23,6 +23,7 @@ Notes:
 - `open` is used as the persisted backlog state.
 - UI displays `open` as `Backlog`.
 - `human_review` is considered in-progress work from an orchestration perspective.
+- Manual close is an administrative override to `closed`/Done. It is not evidence that code was merged, QA was approved, or unfinished workflow steps were completed.
 
 ## UI Mapping
 - `open` -> `Backlog`

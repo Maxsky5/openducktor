@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import {
   ensurePullRequestManagementStatus,
   TaskPolicyError,
+  validateManualCloseTask,
   validateParentRelationshipsForCreate,
   validateParentRelationshipsForUpdate,
   validateTransition,
@@ -27,6 +28,14 @@ export const validateTaskTransitionEffect = (
 ): Effect.Effect<void, TaskTransitionValidationError> =>
   Effect.try({
     try: () => validateTransition(...args),
+    catch: taskPolicyValidationError,
+  });
+
+export const validateManualCloseTaskEffect = (
+  ...args: Parameters<typeof validateManualCloseTask>
+): Effect.Effect<void, TaskPolicyValidationError> =>
+  Effect.try({
+    try: () => validateManualCloseTask(...args),
     catch: taskPolicyValidationError,
   });
 

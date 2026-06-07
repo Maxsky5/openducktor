@@ -4,6 +4,7 @@ import {
   deriveAgentWorkflows,
   deriveAvailableActions,
   TaskPolicyError,
+  validateManualCloseTask,
   validateTransition,
 } from "./index";
 
@@ -146,5 +147,68 @@ describe("task domain policy", () => {
     const reviewTask = task({ status: "human_review" });
 
     expect(deriveAvailableActions(reviewTask, [reviewTask])).toContain("human_approve");
+  });
+
+  test("derives manual close for every non-closed task status", () => {
+    const nonClosedStatuses = [
+      "open",
+      "spec_ready",
+      "ready_for_dev",
+      "in_progress",
+      "blocked",
+      "ai_review",
+      "human_review",
+    ] as const;
+
+    for (const status of nonClosedStatuses) {
+      const workItem = task({ status });
+
+      expect(deriveAvailableActions(workItem, [workItem])).toContain("close_task");
+    }
+  });
+
+  test("does not derive manual close for closed tasks", () => {
+    const closedTask = task({ status: "closed" });
+
+    expect(deriveAvailableActions(closedTask, [closedTask])).not.toContain("close_task");
+  });
+
+  test("keeps human approval review-only while manual close supports early states", () => {
+    const openTask = task({ status: "open" });
+
+    expect(deriveAvailableActions(openTask, [openTask])).toContain("close_task");
+    expect(deriveAvailableActions(openTask, [openTask])).not.toContain("human_approve");
+    expect(() => validateTransition(openTask, [openTask], "open", "closed")).toThrow(
+      "Transition not allowed",
+    );
+    expect(() => validateManualCloseTask(openTask, [openTask])).not.toThrow();
+  });
+
+  test("keeps manual close blocked for epics with active direct subtasks", () => {
+    const epic = task({ id: "epic-1", issueType: "epic", status: "ready_for_dev" });
+    const activeSubtask = task({
+      id: "task-2",
+      issueType: "task",
+      parentId: epic.id,
+      status: "blocked",
+    });
+
+    expect(deriveAvailableActions(epic, [epic, activeSubtask])).not.toContain("close_task");
+    expect(() => validateManualCloseTask(epic, [epic, activeSubtask])).toThrow(
+      "Epic cannot be completed",
+    );
+  });
+
+  test("allows manual close for epics with closed direct subtasks", () => {
+    const epic = task({ id: "epic-1", issueType: "epic", status: "ready_for_dev" });
+    const closedSubtask = task({
+      id: "task-2",
+      issueType: "task",
+      parentId: epic.id,
+      status: "closed",
+    });
+
+    expect(deriveAvailableActions(epic, [epic, closedSubtask])).toContain("close_task");
+    expect(() => validateManualCloseTask(epic, [epic, closedSubtask])).not.toThrow();
   });
 });

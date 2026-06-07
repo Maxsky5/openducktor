@@ -47,7 +47,11 @@ export const collectTaskDeleteTargets = (
   }
   return tasks.filter((task) => targetIds.has(task.id));
 };
-const relatedTaskBranch = (branchName: string, branchPrefix: string, taskId: string): boolean => {
+export const isRelatedTaskBranch = (
+  branchName: string,
+  branchPrefix: string,
+  taskId: string,
+): boolean => {
   const cleanPrefix = branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
   const taskPrefix = `${cleanPrefix}/${taskId}`;
   return branchName === taskPrefix || branchName.startsWith(`${taskPrefix}-`);
@@ -65,7 +69,7 @@ export const collectRelatedTaskBranches = (
       if (branch.isRemote) {
         continue;
       }
-      if (taskIds.some((taskId) => relatedTaskBranch(branch.name, branchPrefix, taskId))) {
+      if (taskIds.some((taskId) => isRelatedTaskBranch(branch.name, branchPrefix, taskId))) {
         names.add(branch.name);
       }
     }
@@ -100,7 +104,7 @@ export const collectDeleteWorktreePaths = (
         if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
           const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
           const branchName = currentBranch.name?.trim();
-          if (!branchName || !relatedTaskBranch(branchName, branchPrefix, taskId)) {
+          if (!branchName || !isRelatedTaskBranch(branchName, branchPrefix, taskId)) {
             continue;
           }
         }
@@ -152,7 +156,7 @@ export const collectResetWorktreePaths = (
             }),
           );
         }
-        if (!relatedTaskBranch(branchName, branchPrefix, taskId)) {
+        if (!isRelatedTaskBranch(branchName, branchPrefix, taskId)) {
           continue;
         }
       }
@@ -207,6 +211,32 @@ export const appendResetCleanupProgress = <E>(
   progress.push("Retry reset to finish cleanup safely.");
   return new HostOperationError({
     operation: "task_reset.cleanup",
+    message: `${errorMessage(error)}\n${progress.join("\n")}`,
+    cause: error,
+  });
+};
+export const appendCloseCleanupProgress = <E>(
+  error: E,
+  removedWorktrees: string[],
+  deletedBranches: string[],
+  completedSteps: string[] = [],
+): E | HostOperationError => {
+  const progress: string[] = [];
+  if (removedWorktrees.length > 0) {
+    progress.push(`Close cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
+  }
+  if (deletedBranches.length > 0) {
+    progress.push(`Close cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
+  }
+  if (completedSteps.length > 0) {
+    progress.push(`Close cleanup already completed: ${completedSteps.join(", ")}.`);
+  }
+  if (progress.length === 0) {
+    return error;
+  }
+  progress.push("Retry close to finish cleanup safely.");
+  return new HostOperationError({
+    operation: "task_close.cleanup",
     message: `${errorMessage(error)}\n${progress.join("\n")}`,
     cause: error,
   });

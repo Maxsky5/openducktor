@@ -44,6 +44,7 @@ export function TaskDetailsSheetController({
   onHumanRequestChanges,
   onResetImplementation,
   onResetTask,
+  onCloseTask,
   onDetectPullRequest,
   onUnlinkPullRequest,
   detectingPullRequestTaskId,
@@ -115,6 +116,7 @@ export function TaskDetailsSheetController({
       {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
       {...(onResetImplementation ? { onResetImplementation } : {})}
       {...(onResetTask ? { onResetTask } : {})}
+      {...(onCloseTask ? { onCloseTask } : {})}
       {...(onDetectPullRequest ? { onDetectPullRequest } : {})}
       {...(onUnlinkPullRequest ? { onUnlinkPullRequest } : {})}
       {...(detectingPullRequestTaskId !== undefined ? { detectingPullRequestTaskId } : {})}

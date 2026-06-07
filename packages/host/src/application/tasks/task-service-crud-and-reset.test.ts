@@ -188,7 +188,14 @@ describe("createTaskService task mutations and reset", () => {
     ]);
     expect(created).toMatchObject({
       id: "task-2",
-      availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
+      availableActions: [
+        "view_details",
+        "set_spec",
+        "set_plan",
+        "build_start",
+        "reset_task",
+        "close_task",
+      ],
     });
   });
   test("creates a task with a blank parent id as a standalone task", async () => {

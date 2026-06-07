@@ -234,6 +234,7 @@ describe("HostClient", () => {
       "taskCreate",
       "taskUpdate",
       "taskDelete",
+      "taskClose",
       "taskResetImplementation",
       "taskReset",
       "taskTransition",
@@ -872,6 +873,28 @@ describe("HostClient", () => {
     expect(calls).toEqual([
       {
         command: "task_reset",
+        args: {
+          repoPath: "/repo",
+          taskId: "task-1",
+        },
+      },
+    ]);
+  });
+
+  test("taskClose uses the dedicated IPC route", async () => {
+    const { client, calls } = createClient((command) => {
+      if (command === "task_close") {
+        return { ...makeTaskCardPayload(), status: "closed" };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    const task = await client.taskClose("/repo", "task-1");
+
+    expect(task.status).toBe("closed");
+    expect(calls).toEqual([
+      {
+        command: "task_close",
         args: {
           repoPath: "/repo",
           taskId: "task-1",

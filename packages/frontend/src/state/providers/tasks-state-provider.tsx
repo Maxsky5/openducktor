@@ -34,6 +34,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     updateTask,
     setTaskTargetBranch,
     deleteTask,
+    closeTask,
     resetTaskImplementation,
     resetTask,
     transitionTask,
@@ -63,6 +64,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
         updateTask,
         setTaskTargetBranch,
         deleteTask,
+        closeTask,
         resetTaskImplementation,
         resetTask,
         transitionTask,
@@ -72,6 +74,7 @@ export function TasksStateProvider({ children }: PropsWithChildren): ReactElemen
     [
       createTask,
       cancelLinkMergedPullRequest,
+      closeTask,
       deleteTask,
       detectingPullRequestTaskId,
       humanApproveTask,

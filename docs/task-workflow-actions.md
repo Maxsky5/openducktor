@@ -23,6 +23,7 @@ The backend is the single source of truth for which actions are currently allowe
 - `reset_task`
 - `qa_start`
 - `open_qa`
+- `close_task`
 - `human_request_changes`
 - `human_approve`
 
@@ -88,6 +89,23 @@ The backend is the single source of truth for which actions are currently allowe
 - Purpose: open existing QA context/run UX.
 - Transition: none.
 
+### `close_task`
+- Purpose: manually close a task as an administrative override from the task detail sheet only.
+- Allowed from every non-`closed` status.
+- Transition: any non-`closed` status -> `closed`.
+- Semantics:
+  - marks the task as Done without merging code, creating or updating a pull request, or approving QA.
+  - bypasses unfinished workflow steps explicitly; it is not proof of merge, QA approval, or implementation completion.
+  - preserves the task record, user-authored fields, workflow documents, QA reports, linked history, pull request metadata, and direct-merge metadata.
+- Cleanup:
+  - stop task-scoped dev servers.
+  - remove task-managed worktrees and related local branches when present.
+  - fail with an actionable error when cleanup is unsafe or incomplete.
+- Guardrails:
+  - reject while live spec/planner/build/QA activity still owns mutable runtime state.
+  - epic completion checks direct children and blocks while any direct child is not `closed`.
+- UI placement: task detail sheet workflow actions only. Kanban cards, Agent Studio quick actions, bulk actions, headers, and command palettes must not render this action.
+
 ### `human_request_changes`
 - Purpose: human review rejects current output and requests a rework loop.
 - Transition: `ai_review -> in_progress` or `human_review -> in_progress`.
@@ -114,6 +132,7 @@ Current card/detail primary+menu rendering uses workflow actions:
 - `reset_task`
 - `qa_start`
 - `open_qa`
+- `close_task` (detail sheet only)
 - `human_request_changes`
 - `human_approve`
 

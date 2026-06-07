@@ -5,6 +5,7 @@ import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import type { DevServerService } from "../../dev-servers/dev-server-service";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
+import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 
 const missingTaskDependency = (message: string): HostDependencyError =>
   new HostDependencyError({
@@ -41,13 +42,51 @@ export const requireTaskDeleteDependencies = (
 
 export const requireTaskWorktreeCleanupFiles = (
   worktreeFiles: WorktreeFilePort | undefined,
-  operation: "task_delete" | "task_reset" | "task_reset_implementation",
+  operation: "task_close" | "task_delete" | "task_reset" | "task_reset_implementation",
 ): WorktreeFilePort => {
   if (!worktreeFiles) {
     throw missingTaskDependency(`Worktree file port is required for ${operation}.`);
   }
 
   return worktreeFiles;
+};
+
+export const requireTaskCloseDependencies = (
+  devServerService: DevServerService | undefined,
+  gitPort: GitPort | undefined,
+  settingsConfig: SettingsConfigPort | undefined,
+  taskWorktreeService: TaskWorktreeService | undefined,
+  workspaceSettingsService: WorkspaceSettingsService | undefined,
+): {
+  devServerService: DevServerService;
+  gitPort: GitPort;
+  settingsConfig: SettingsConfigPort;
+  taskWorktreeService: TaskWorktreeService;
+  workspaceSettingsService: WorkspaceSettingsService;
+} => {
+  if (!devServerService) {
+    throw missingTaskDependency("Dev server service is required for task_close.");
+  }
+  if (!gitPort) {
+    throw missingTaskDependency("Git port is required for task_close.");
+  }
+  if (!settingsConfig) {
+    throw missingTaskDependency("Settings config port is required for task_close.");
+  }
+  if (!taskWorktreeService) {
+    throw missingTaskDependency("Task worktree service is required for task_close.");
+  }
+  if (!workspaceSettingsService) {
+    throw missingTaskDependency("Workspace settings service is required for task_close.");
+  }
+
+  return {
+    devServerService,
+    gitPort,
+    settingsConfig,
+    taskWorktreeService,
+    workspaceSettingsService,
+  };
 };
 
 export const requireImplementationResetStoreDependencies = (
