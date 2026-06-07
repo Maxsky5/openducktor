@@ -24,10 +24,10 @@ const viewerMock = mock(
   ),
 );
 
-const syntaxBlockMock = mock(
-  ({ code, language }: { code: string; language: string; className?: string }) => (
-    <div data-testid="markdown-syntax-block" data-code={code} data-language={language}>
-      {code}
+const fileViewerMock = mock(
+  ({ content, filePath }: { content: string; filePath: string; className?: string }) => (
+    <div data-testid="pierre-file-viewer" data-content={content} data-file-path={filePath}>
+      {content}
     </div>
   ),
 );
@@ -93,9 +93,7 @@ beforeEach(async () => {
   mock.module("@/components/features/agents/pierre-diff-viewer", () => ({
     PierreDiffPreloader: preloaderMock,
     PierreDiffViewer: viewerMock,
-  }));
-  mock.module("@/components/ui/markdown-syntax-block", () => ({
-    default: syntaxBlockMock,
+    PierreFileViewer: fileViewerMock,
   }));
 
   ({ AgentChatFileEditCard } = await import("./agent-chat-file-edit-card"));
@@ -106,7 +104,7 @@ afterEach(() => {
   cleanup();
   preloaderMock.mockClear();
   viewerMock.mockClear();
-  syntaxBlockMock.mockClear();
+  fileViewerMock.mockClear();
 });
 
 afterAll(() => {
@@ -122,10 +120,6 @@ afterEach(async () => {
     [
       "@/components/features/agents/pierre-diff-viewer",
       () => import("@/components/features/agents/pierre-diff-viewer"),
-    ],
-    [
-      "@/components/ui/markdown-syntax-block",
-      () => import("@/components/ui/markdown-syntax-block"),
     ],
   ]);
 });
@@ -174,10 +168,12 @@ describe("AgentChatFileEditCard", () => {
     );
 
     expect(screen.getByText("export const value = 1;")).toBeDefined();
-    expect(screen.getByTestId("markdown-syntax-block").getAttribute("data-language")).toBe("tsx");
+    expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-file-path")).toBe(
+      "src/AuthContext.test.tsx",
+    );
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
     expect(viewerMock).not.toHaveBeenCalled();
-    expect(syntaxBlockMock).toHaveBeenCalledTimes(1);
+    expect(fileViewerMock).toHaveBeenCalledTimes(1);
   });
 
   test("treats empty file content as expandable content", () => {
@@ -188,7 +184,7 @@ describe("AgentChatFileEditCard", () => {
       true,
     );
 
-    expect(screen.getByTestId("markdown-syntax-block").getAttribute("data-code")).toBe("");
+    expect(screen.getByTestId("pierre-file-viewer").getAttribute("data-content")).toBe("");
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
   });
 

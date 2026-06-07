@@ -1,5 +1,9 @@
-import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs";
-import { FileDiff as PierreReactFileDiff, useWorkerPool } from "@pierre/diffs/react";
+import type { DiffLineAnnotation, FileContents, SelectedLineRange } from "@pierre/diffs";
+import {
+  File as PierreReactFile,
+  FileDiff as PierreReactFileDiff,
+  useWorkerPool,
+} from "@pierre/diffs/react";
 import { Undo2 } from "lucide-react";
 import {
   type CSSProperties,
@@ -50,6 +54,12 @@ type PierreDiffPreloaderProps = {
   filePath: string;
 };
 
+type PierreFileViewerProps = {
+  filePath: string;
+  content: string;
+  className?: string;
+};
+
 const DIFF_THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const DIFF_WRAPPER_STYLE = {
   "--diffs-font-size": "12px",
@@ -84,6 +94,15 @@ const HUNK_RESET_FLOATING_CSS = `
 }
 `;
 
+const contentHash = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+};
+
 export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   patch,
   filePath,
@@ -103,6 +122,39 @@ export const PierreDiffPreloader = memo(function PierreDiffPreloader({
   }, [fileDiff, workerPool]);
 
   return null;
+});
+
+export const PierreFileViewer = memo(function PierreFileViewer({
+  filePath,
+  content,
+  className,
+}: PierreFileViewerProps): ReactElement {
+  const { theme } = useTheme();
+  const file = useMemo<FileContents>(
+    () => ({
+      name: filePath,
+      contents: content,
+      cacheKey: `${filePath}:${content.length}:${contentHash(content)}`,
+    }),
+    [content, filePath],
+  );
+  const options = useMemo(
+    () => ({
+      theme: DIFF_THEME,
+      themeType: theme,
+      overflow: "wrap" as const,
+      disableFileHeader: true,
+    }),
+    [theme],
+  );
+
+  return (
+    <div className={cn("min-w-0", className)} style={DIFF_WRAPPER_STYLE}>
+      <div className={DIFF_SCROLL_CONTAINER_CLASS_NAME}>
+        <PierreReactFile file={file} options={options} />
+      </div>
+    </div>
+  );
 });
 
 // ─── Component ─────────────────────────────────────────────────────────────────
