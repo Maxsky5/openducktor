@@ -237,6 +237,75 @@ describe("stream-part-mapper", () => {
     });
   });
 
+  test("maps write tool diff metadata to canonical file changes", () => {
+    const part = createToolPart({
+      id: "tool-write-1",
+      tool: "write",
+      status: "completed",
+      input: {
+        filePath: "/repo/src/main.ts",
+        content: "new\n",
+      },
+      output: "Wrote file successfully.",
+      metadata: {
+        filepath: "/repo/src/main.ts",
+        diff: "--- /repo/src/main.ts\n+++ /repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new",
+        exists: true,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "write",
+      toolType: "file_edit",
+      fileChanges: [
+        {
+          file: "/repo/src/main.ts",
+          type: "modified",
+          additions: 1,
+          deletions: 1,
+          diff: "--- /repo/src/main.ts\n+++ /repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+        },
+      ],
+    });
+  });
+
+  test("renders completed new-file write tool input as an added-file diff", () => {
+    const part = createToolPart({
+      id: "tool-write-new-file-1",
+      tool: "write",
+      status: "completed",
+      input: {
+        filePath: "/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx",
+        content: "import { render } from '@testing-library/react';\nfunction AuthConsumer() {}\n",
+      },
+      output: "Wrote file successfully.",
+      metadata: {
+        filepath: "/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx",
+        exists: false,
+      },
+    });
+
+    const mapped = mapPartToAgentStreamPart(part);
+
+    expect(mapped).toMatchObject({
+      kind: "tool",
+      tool: "write",
+      toolType: "file_edit",
+      fileChanges: [
+        {
+          file: "/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx",
+          type: "added",
+          additions: 2,
+          deletions: 0,
+          diff: "--- /dev/null\n+++ b/repo/apps/web/src/contexts/__tests__/AuthContext.test.tsx\n@@ -0,0 +1,2 @@\n+import { render } from '@testing-library/react';\n+function AuthConsumer() {}\n",
+        },
+      ],
+    });
+  });
+
   test("maps apply_patch files metadata to canonical file changes", () => {
     const part = createToolPart({
       id: "tool-patch-1",

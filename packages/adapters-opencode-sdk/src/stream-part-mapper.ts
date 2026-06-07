@@ -264,15 +264,58 @@ const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileD
   });
 };
 
+const fileDiffFromWriteMetadata = (
+  metadata: Record<string, unknown>,
+  input: unknown,
+): FileDiff | null => {
+  const inputRecord = asUnknownRecord(input);
+  const exists = readBooleanProp(metadata, ["exists"]);
+  const file =
+    readStringProp(metadata, ["filepath", "filePath", "file"]) ??
+    readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]);
+  const type: FileDiff["type"] = exists === false ? "added" : "modified";
+  const diff = readStringProp(metadata, ["diff"]);
+
+  if (diff !== undefined) {
+    return normalizeToolMetadataFileDiff({
+      file,
+      type,
+      patch: diff,
+      additions: readNumberProp(metadata, ["additions"]),
+      deletions: readNumberProp(metadata, ["deletions"]),
+    });
+  }
+
+  if (exists !== false) {
+    return null;
+  }
+
+  return normalizeToolMetadataFileDiff({
+    file,
+    type,
+    patch: readStringProp(inputRecord, ["content"]) ?? null,
+    additions: readNumberProp(metadata, ["additions"]),
+    deletions: readNumberProp(metadata, ["deletions"]),
+  });
+};
+
 const readToolMetadataFileChanges = (
   metadata: Record<string, unknown> | undefined,
   toolState: Record<string, unknown>,
+  tool: string,
 ): FileDiff[] => {
   if (!metadata) {
     return [];
   }
 
   const fileChanges: FileDiff[] = [];
+  if (tool === "write") {
+    const writeDiff = fileDiffFromWriteMetadata(metadata, readUnknownProp(toolState, "input"));
+    if (writeDiff) {
+      fileChanges.push(writeDiff);
+    }
+  }
+
   const filediff = fileDiffFromToolFileDiffMetadata(
     readUnknownProp(metadata, "filediff"),
     readUnknownProp(toolState, "input"),
@@ -598,7 +641,7 @@ const buildToolStreamPart = (
 ): ToolStreamPart => {
   const toolType = deriveToolType(part.tool);
   const fileChanges =
-    toolType === "file_edit" ? readToolMetadataFileChanges(metadata, toolState) : [];
+    toolType === "file_edit" ? readToolMetadataFileChanges(metadata, toolState, part.tool) : [];
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput: readUnknownProp(toolState, "input"),
