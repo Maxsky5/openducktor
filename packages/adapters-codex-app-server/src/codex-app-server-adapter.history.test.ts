@@ -93,7 +93,7 @@ describe("CodexAppServerAdapter history hydration", () => {
             fileChanges: [
               {
                 file: "/repo/src/app.ts",
-                type: "update",
+                type: "modified",
                 additions: 1,
                 deletions: 1,
                 diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n",

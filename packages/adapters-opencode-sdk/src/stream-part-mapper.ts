@@ -1,6 +1,10 @@
 import type { Part } from "@opencode-ai/sdk/v2/client";
-import { odtToolErrorPayloadSchema } from "@openducktor/contracts";
-import type { AgentStreamPart } from "@openducktor/core";
+import { type FileDiff, odtToolErrorPayloadSchema } from "@openducktor/contracts";
+import {
+  type AgentStreamPart,
+  countRenderableFileDiffLines,
+  selectRenderableFileDiff,
+} from "@openducktor/core";
 import {
   asUnknownRecord,
   readBooleanProp,
@@ -180,6 +184,114 @@ const normalizeMetadata = (value: unknown): Record<string, unknown> | undefined 
     return undefined;
   }
   return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const normalizeFileDiffType = (value: unknown): FileDiff["type"] => {
+  if (typeof value !== "string") {
+    return "modified";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "add" || normalized === "added") {
+    return "added";
+  }
+  if (normalized === "delete" || normalized === "deleted") {
+    return "deleted";
+  }
+  return "modified";
+};
+
+const readFileDiffPatch = (value: Record<string, unknown>): string | null => {
+  const patch = readStringProp(value, ["patch"]);
+  if (patch !== undefined) {
+    return patch;
+  }
+  return readStringProp(value, ["diff"]) ?? null;
+};
+
+const normalizeToolMetadataFileDiff = (input: {
+  file: string | undefined;
+  type: FileDiff["type"];
+  patch: string | null;
+  additions: number | undefined;
+  deletions: number | undefined;
+}): FileDiff | null => {
+  const file = input.file?.trim();
+  if (!file || input.patch === null) {
+    return null;
+  }
+
+  const diff = selectRenderableFileDiff(input.patch, file, { changeType: input.type }) ?? "";
+  const counts = countRenderableFileDiffLines(diff);
+  return {
+    file,
+    type: input.type,
+    additions: input.additions ?? counts.additions,
+    deletions: input.deletions ?? counts.deletions,
+    diff,
+  };
+};
+
+const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  return normalizeToolMetadataFileDiff({
+    file: readStringProp(record, ["relativePath"]) ?? readStringProp(record, ["filePath"]),
+    type: normalizeFileDiffType(readUnknownProp(record, "type")),
+    patch: readFileDiffPatch(record),
+    additions: readNumberProp(record, ["additions"]),
+    deletions: readNumberProp(record, ["deletions"]),
+  });
+};
+
+const fileDiffFromToolFileDiffMetadata = (value: unknown, input: unknown): FileDiff | null => {
+  const record = asUnknownRecord(value);
+  if (!record) {
+    return null;
+  }
+  const inputRecord = asUnknownRecord(input);
+
+  return normalizeToolMetadataFileDiff({
+    file:
+      readStringProp(record, ["file"]) ??
+      readStringProp(inputRecord, ["filePath", "file_path", "path", "file"]),
+    type: normalizeFileDiffType(readUnknownProp(record, "status")),
+    patch: readFileDiffPatch(record),
+    additions: readNumberProp(record, ["additions"]),
+    deletions: readNumberProp(record, ["deletions"]),
+  });
+};
+
+const readToolMetadataFileChanges = (
+  metadata: Record<string, unknown> | undefined,
+  toolState: Record<string, unknown>,
+): FileDiff[] => {
+  if (!metadata) {
+    return [];
+  }
+
+  const fileChanges: FileDiff[] = [];
+  const filediff = fileDiffFromToolFileDiffMetadata(
+    readUnknownProp(metadata, "filediff"),
+    readUnknownProp(toolState, "input"),
+  );
+  if (filediff) {
+    fileChanges.push(filediff);
+  }
+
+  const files = readUnknownProp(metadata, "files");
+  if (Array.isArray(files)) {
+    for (const file of files) {
+      const fileDiff = fileDiffFromToolFileMetadata(file);
+      if (fileDiff) {
+        fileChanges.push(fileDiff);
+      }
+    }
+  }
+
+  return fileChanges;
 };
 
 const extractPartTiming = (
@@ -484,6 +596,9 @@ const buildToolStreamPart = (
   timing: ReturnType<typeof extractPartTiming>,
   metadata: Record<string, unknown> | undefined,
 ): ToolStreamPart => {
+  const toolType = deriveToolType(part.tool);
+  const fileChanges =
+    toolType === "file_edit" ? readToolMetadataFileChanges(metadata, toolState) : [];
   const preview = deriveToolPreview({
     tool: part.tool,
     rawInput: readUnknownProp(toolState, "input"),
@@ -496,11 +611,12 @@ const buildToolStreamPart = (
     partId: part.id,
     callId: part.callID,
     tool: part.tool,
-    toolType: deriveToolType(part.tool),
+    toolType,
     status: normalizedStatus,
     input: part.state.input,
     ...(preview ? { preview } : {}),
     ...(metadata ? { metadata } : {}),
+    ...(fileChanges.length > 0 ? { fileChanges } : {}),
     ...timing,
   };
 

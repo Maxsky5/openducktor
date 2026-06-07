@@ -1,5 +1,4 @@
 import type { OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client";
-import type { FileDiff } from "@openducktor/contracts";
 import type {
   AgentPendingApprovalRequest,
   AgentPendingQuestionRequest,
@@ -15,7 +14,6 @@ import {
   toOpenCodePermissionReply,
 } from "./approval-translation";
 import { unwrapData } from "./data-utils";
-import { loadSessionDiff } from "./diff-ops";
 import { bindSubagentExternalSession, bindSubagentPartCorrelation } from "./event-stream/shared";
 import {
   ensureVisibleUserTextDisplayParts,
@@ -28,7 +26,6 @@ import {
   readVisibleUserTextFromDisplayParts,
   sanitizeAssistantMessage,
 } from "./message-normalizers";
-import { toProjectRelativePath } from "./path-utils";
 import { toOpenCodeRequestError } from "./request-errors";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import { mapPartToAgentStreamPart } from "./stream-part-mapper";
@@ -166,10 +163,6 @@ type MappedSubagentPart = Extract<AgentStreamPart, { kind: "subagent" }>;
 type ChildSessionLink = {
   externalSessionId: string;
   createdAtMs: number;
-};
-type HistoryPatchContext = {
-  workingDirectory: string;
-  sessionDiffByMessageId: Map<string, FileDiff[]>;
 };
 
 const CHILD_SESSION_START_TOLERANCE_MS = 5_000;
@@ -330,93 +323,9 @@ const removePendingSubagentCorrelationKey = (
   }
 };
 
-const toComparableFilePath = (filePath: string, workingDirectory: string): string => {
-  const trimmed = filePath.trim();
-  return toProjectRelativePath(trimmed, workingDirectory).replace(/\\/g, "/").replace(/^\.\//, "");
-};
-
-const readToolInputFilePath = (part: Extract<AgentStreamPart, { kind: "tool" }>): string | null => {
-  if (!part.input) {
-    return null;
-  }
-  return readString(part.input, ["filePath", "file_path", "path", "file"]) ?? null;
-};
-
-const readPartMessageId = (part: Part): string | null => {
-  const record = asRecord(part);
-  return record ? (readString(record, ["messageID", "messageId", "message_id"]) ?? null) : null;
-};
-
-const readPatchMessageIds = (parts: Part[]): string[] => {
-  const messageIds = new Set<string>();
-  for (const part of parts) {
-    if (part.type !== "patch") {
-      continue;
-    }
-
-    const messageId = readPartMessageId(part);
-    if (!messageId) {
-      continue;
-    }
-    messageIds.add(messageId);
-  }
-
-  return [...messageIds];
-};
-
-const loadSessionDiffByMessageId = async (
-  runtimeEndpoint: string,
-  externalSessionId: string,
-  messageIds: string[],
-): Promise<Map<string, FileDiff[]>> => {
-  const results = await Promise.allSettled(
-    messageIds.map(
-      async (messageId) =>
-        [messageId, await loadSessionDiff(runtimeEndpoint, externalSessionId, messageId)] as const,
-    ),
-  );
-  return new Map(
-    results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
-  );
-};
-
-const withHistoryFileChanges = (
-  part: AgentStreamPart,
-  patchContext?: HistoryPatchContext,
-): AgentStreamPart => {
-  if (!patchContext || part.kind !== "tool" || part.toolType !== "file_edit") {
-    return part;
-  }
-  if (part.fileChanges && part.fileChanges.length > 0) {
-    return part;
-  }
-  const sessionDiff = patchContext.sessionDiffByMessageId.get(part.messageId);
-  if (!sessionDiff) {
-    return part;
-  }
-  const inputPath = readToolInputFilePath(part);
-  if (!inputPath) {
-    return part;
-  }
-  const inputComparablePath = toComparableFilePath(inputPath, patchContext.workingDirectory);
-  const fileChanges = sessionDiff.filter(
-    (fileChange) =>
-      toComparableFilePath(fileChange.file, patchContext.workingDirectory) === inputComparablePath,
-  );
-  if (fileChanges.length === 0) {
-    return part;
-  }
-
-  return {
-    ...part,
-    fileChanges: [...(part.fileChanges ?? []), ...fileChanges],
-  };
-};
-
 const normalizeHistoryStreamParts = (
   parts: Part[],
   childSessionLinks: ChildSessionLink[] = [],
-  patchContext?: HistoryPatchContext,
 ): AgentStreamPart[] => {
   const pendingBySignature = new Map<string, string[]>();
   const correlationByExternalSessionId = new Map<string, string>();
@@ -434,7 +343,7 @@ const normalizeHistoryStreamParts = (
     }
 
     if (rawMapped.kind !== "subagent") {
-      normalized.push(withHistoryFileChanges(rawMapped, patchContext));
+      normalized.push(rawMapped);
       continue;
     }
 
@@ -631,21 +540,8 @@ export const loadSessionHistory = async (
   const assistantRawParts = normalizedEntries.flatMap((item) =>
     item.entry.info.role === "assistant" ? item.rawParts : [],
   );
-  const patchMessageIds = readPatchMessageIds(assistantRawParts);
-  const sessionDiffByMessageId =
-    patchMessageIds.length > 0
-      ? await loadSessionDiffByMessageId(
-          input.runtimeEndpoint,
-          input.externalSessionId,
-          patchMessageIds,
-        )
-      : new Map<string, FileDiff[]>();
-  const patchContext =
-    sessionDiffByMessageId.size > 0
-      ? { workingDirectory: input.workingDirectory, sessionDiffByMessageId }
-      : undefined;
   const assistantNormalizedPartsByMessageId = new Map(
-    normalizeHistoryStreamParts(assistantRawParts, childSessionLinks, patchContext).reduce<
+    normalizeHistoryStreamParts(assistantRawParts, childSessionLinks).reduce<
       Map<string, AgentStreamPart[]>
     >((byMessageId, part) => {
       const existing = byMessageId.get(part.messageId) ?? [];

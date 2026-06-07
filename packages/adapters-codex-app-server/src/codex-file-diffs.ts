@@ -15,11 +15,37 @@ export const codexFileChangeEntries = (value: Record<string, unknown>): unknown[
   return changes.length > 0 ? changes : diffs;
 };
 
+const normalizeExplicitDiffType = (value: unknown): string | null => {
+  if (typeof value === "string" && value.trim().length > 0) {
+    const normalized = value.trim();
+    if (normalized === "add") {
+      return "added";
+    }
+    if (normalized === "delete") {
+      return "deleted";
+    }
+    if (normalized === "update") {
+      return "modified";
+    }
+    return normalized;
+  }
+
+  if (isPlainObject(value)) {
+    return normalizeExplicitDiffType(value.type);
+  }
+
+  return null;
+};
+
 const inferDiffType = (entry: Record<string, unknown>, diff: string): string => {
-  const explicitType = entry.type ?? entry.status ?? entry.kind;
-  if (typeof explicitType === "string" && explicitType.trim().length > 0) {
+  const explicitType =
+    normalizeExplicitDiffType(entry.type) ??
+    normalizeExplicitDiffType(entry.status) ??
+    normalizeExplicitDiffType(entry.kind);
+  if (explicitType) {
     return explicitType;
   }
+
   if (/^---\s+\/dev\/null\r?$/m.test(diff)) {
     return "added";
   }

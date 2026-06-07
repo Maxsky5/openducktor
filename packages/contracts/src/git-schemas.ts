@@ -273,7 +273,7 @@ export const gitConflictAbortResultSchema = z.object({
 });
 export type GitConflictAbortResult = z.infer<typeof gitConflictAbortResultSchema>;
 
-/** A single file diff entry from `GET /session/:id/diff`. */
+/** A single structured file diff entry emitted by runtime adapters or diff endpoints. */
 export const fileDiffSchema = z.object({
   file: z.string(),
   type: z.string(),

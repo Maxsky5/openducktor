@@ -116,23 +116,8 @@ describe("OpencodeSdkAdapter session history", () => {
 
   test("loadSessionHistory attaches OpenCode patch diffs to edit tool parts", async () => {
     const originalFetch = globalThis.fetch;
-    const requestedUrls: string[] = [];
-    globalThis.fetch = (async (url: URL | RequestInfo) => {
-      requestedUrls.push(url.toString());
-      return {
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => [
-          {
-            file: ".\\src\\main.ts",
-            patch: "@@ -1 +1 @@\n-old\n+new",
-            additions: 1,
-            deletions: 1,
-            status: "modified",
-          },
-        ],
-      } as Response;
+    globalThis.fetch = (async () => {
+      throw new Error("Transcript history must not call the session diff endpoint.");
     }) as typeof fetch;
 
     try {
@@ -156,6 +141,14 @@ describe("OpencodeSdkAdapter session history", () => {
                   status: "completed",
                   input: { filePath: "/repo/src/main.ts" },
                   output: "Edited src/main.ts",
+                  metadata: {
+                    filediff: {
+                      file: "/repo/src/main.ts",
+                      patch: "@@ -1 +1 @@\n-old\n+new",
+                      additions: 1,
+                      deletions: 1,
+                    },
+                  },
                 },
               } as unknown as Part,
               {
@@ -193,17 +186,14 @@ describe("OpencodeSdkAdapter session history", () => {
         output: "Edited src/main.ts",
         fileChanges: [
           {
-            file: ".\\src\\main.ts",
+            file: "/repo/src/main.ts",
             type: "modified",
             additions: 1,
             deletions: 1,
-            diff: "--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            diff: "--- a/repo/src/main.ts\n+++ b/repo/src/main.ts\n@@ -1 +1 @@\n-old\n+new\n",
           },
         ],
       });
-      expect(requestedUrls).toEqual([
-        "http://127.0.0.1:12345/session/session-opencode-1/diff?messageID=msg-200",
-      ]);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -273,36 +263,10 @@ describe("OpencodeSdkAdapter session history", () => {
     }
   });
 
-  test("loadSessionHistory preserves history when one OpenCode patch diff request fails", async () => {
+  test("loadSessionHistory uses only tool metadata when patch parts are present", async () => {
     const originalFetch = globalThis.fetch;
-    const requestedUrls: string[] = [];
-    globalThis.fetch = (async (url: URL | RequestInfo) => {
-      requestedUrls.push(url.toString());
-      const messageId = new URL(url.toString()).searchParams.get("messageID");
-      if (messageId === "msg-200") {
-        return {
-          ok: false,
-          status: 502,
-          statusText: "Bad Gateway",
-          json: async () => {
-            throw new Error("should not read body");
-          },
-        } as Response;
-      }
-      return {
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => [
-          {
-            file: "src/ok.ts",
-            patch: "@@ -1 +1 @@\n-before\n+after",
-            additions: 1,
-            deletions: 1,
-            status: "modified",
-          },
-        ],
-      } as Response;
+    globalThis.fetch = (async () => {
+      throw new Error("Transcript history must not call the session diff endpoint.");
     }) as typeof fetch;
 
     try {
@@ -355,6 +319,14 @@ describe("OpencodeSdkAdapter session history", () => {
                   status: "completed",
                   input: { filePath: "/repo/src/ok.ts" },
                   output: "Edited src/ok.ts",
+                  metadata: {
+                    filediff: {
+                      file: "src/ok.ts",
+                      patch: "@@ -1 +1 @@\n-before\n+after",
+                      additions: 1,
+                      deletions: 1,
+                    },
+                  },
                 },
               } as unknown as Part,
               {
@@ -397,41 +369,15 @@ describe("OpencodeSdkAdapter session history", () => {
           },
         ],
       });
-      expect(requestedUrls).toEqual([
-        "http://127.0.0.1:12345/session/session-opencode-1/diff?messageID=msg-200",
-        "http://127.0.0.1:12345/session/session-opencode-1/diff?messageID=msg-201",
-      ]);
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  test("loadSessionHistory scopes OpenCode patch diffs to the patch message", async () => {
+  test("loadSessionHistory scopes OpenCode tool diffs to their tool metadata", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (url: URL | RequestInfo) => {
-      const messageId = new URL(url.toString()).searchParams.get("messageID");
-      const diffByMessageId: Record<string, string> = {
-        "msg-200": "@@ -1 +1 @@\n-first\n+second",
-        "msg-201": "@@ -1 +1 @@\n-second\n+third",
-      };
-      const patch = messageId ? diffByMessageId[messageId] : undefined;
-      if (!patch) {
-        throw new Error(`Unexpected diff request for message '${messageId ?? ""}'.`);
-      }
-      return {
-        ok: true,
-        status: 200,
-        statusText: "OK",
-        json: async () => [
-          {
-            file: "src/main.ts",
-            patch,
-            additions: 1,
-            deletions: 1,
-            status: "modified",
-          },
-        ],
-      } as Response;
+    globalThis.fetch = (async () => {
+      throw new Error("Transcript history must not call the session diff endpoint.");
     }) as typeof fetch;
 
     try {
@@ -455,6 +401,14 @@ describe("OpencodeSdkAdapter session history", () => {
                   status: "completed",
                   input: { filePath: "/repo/src/main.ts" },
                   output: "Edited src/main.ts",
+                  metadata: {
+                    filediff: {
+                      file: "src/main.ts",
+                      patch: "@@ -1 +1 @@\n-first\n+second",
+                      additions: 1,
+                      deletions: 1,
+                    },
+                  },
                 },
               } as unknown as Part,
               {
@@ -484,6 +438,14 @@ describe("OpencodeSdkAdapter session history", () => {
                   status: "completed",
                   input: { filePath: "/repo/src/main.ts" },
                   output: "Edited src/main.ts again",
+                  metadata: {
+                    filediff: {
+                      file: "src/main.ts",
+                      patch: "@@ -1 +1 @@\n-second\n+third",
+                      additions: 1,
+                      deletions: 1,
+                    },
+                  },
                 },
               } as unknown as Part,
               {

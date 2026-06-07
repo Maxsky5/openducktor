@@ -14,7 +14,7 @@ describe("Codex file diffs", () => {
     ).toEqual([
       {
         file: "src/app.ts",
-        type: "update",
+        type: "modified",
         additions: 2,
         deletions: 1,
         diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@\n-old\n+new\n+line\n",
@@ -123,6 +123,46 @@ describe("Codex file diffs", () => {
         additions: 2,
         deletions: 0,
         diff: '--- /dev/null\n+++ b/src/AuthContext.test.tsx\n@@ -0,0 +1,2 @@\n+import { render } from "@testing-library/react";\n+function AuthConsumer() {}\n',
+      },
+    ]);
+  });
+
+  test("renders Codex app-server object-kind added file content as an added-file diff", () => {
+    expect(
+      toFileDiffs([
+        {
+          path: "src/new.ts",
+          kind: { type: "add" },
+          diff: "created\n",
+        },
+      ]),
+    ).toEqual([
+      {
+        file: "src/new.ts",
+        type: "added",
+        additions: 1,
+        deletions: 0,
+        diff: "--- /dev/null\n+++ b/src/new.ts\n@@ -0,0 +1,1 @@\n+created\n",
+      },
+    ]);
+  });
+
+  test("renders Codex app-server object-kind deleted file content as a deleted-file diff", () => {
+    expect(
+      toFileDiffs([
+        {
+          path: "src/old.ts",
+          kind: { type: "delete" },
+          diff: "removed\n",
+        },
+      ]),
+    ).toEqual([
+      {
+        file: "src/old.ts",
+        type: "deleted",
+        additions: 0,
+        deletions: 1,
+        diff: "--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-removed\n",
       },
     ]);
   });
