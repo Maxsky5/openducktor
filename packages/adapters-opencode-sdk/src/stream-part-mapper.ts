@@ -210,6 +210,7 @@ const readFileDiffPatch = (value: Record<string, unknown>): string | null => {
 
 const normalizeToolMetadataFileDiff = (input: {
   file: string | undefined;
+  diffFile?: string | undefined;
   type: FileDiff["type"];
   patch: string | null;
   additions: number | undefined;
@@ -220,7 +221,18 @@ const normalizeToolMetadataFileDiff = (input: {
     return null;
   }
 
-  const diff = selectRenderableFileDiff(input.patch, file, { changeType: input.type }) ?? "";
+  const diffFile = input.diffFile?.trim();
+  const fileCandidates = diffFile && diffFile !== file ? [diffFile, file] : [file];
+  let diff = "";
+  for (const fileCandidate of fileCandidates) {
+    const renderableDiff = selectRenderableFileDiff(input.patch, fileCandidate, {
+      changeType: input.type,
+    });
+    if (renderableDiff) {
+      diff = renderableDiff;
+      break;
+    }
+  }
   const counts = countRenderableFileDiffLines(diff);
   return {
     file,
@@ -239,6 +251,7 @@ const fileDiffFromToolFileMetadata = (value: unknown): FileDiff | null => {
 
   return normalizeToolMetadataFileDiff({
     file: readStringProp(record, ["relativePath"]) ?? readStringProp(record, ["filePath"]),
+    diffFile: readStringProp(record, ["filePath"]),
     type: normalizeFileDiffType(readUnknownProp(record, "type")),
     patch: readFileDiffPatch(record),
     additions: readNumberProp(record, ["additions"]),
