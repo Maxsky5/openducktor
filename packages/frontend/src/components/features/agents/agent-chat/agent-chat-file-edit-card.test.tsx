@@ -24,6 +24,14 @@ const viewerMock = mock(
   ),
 );
 
+const syntaxBlockMock = mock(
+  ({ code, language }: { code: string; language: string; className?: string }) => (
+    <div data-testid="markdown-syntax-block" data-code={code} data-language={language}>
+      {code}
+    </div>
+  ),
+);
+
 const reactActEnvironmentGlobal = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
@@ -86,6 +94,9 @@ beforeEach(async () => {
     PierreDiffPreloader: preloaderMock,
     PierreDiffViewer: viewerMock,
   }));
+  mock.module("@/components/ui/markdown-syntax-block", () => ({
+    default: syntaxBlockMock,
+  }));
 
   ({ AgentChatFileEditCard } = await import("./agent-chat-file-edit-card"));
   ({ AgentChatSettingsProvider } = await import("./agent-chat-settings-context"));
@@ -95,6 +106,7 @@ afterEach(() => {
   cleanup();
   preloaderMock.mockClear();
   viewerMock.mockClear();
+  syntaxBlockMock.mockClear();
 });
 
 afterAll(() => {
@@ -110,6 +122,10 @@ afterEach(async () => {
     [
       "@/components/features/agents/pierre-diff-viewer",
       () => import("@/components/features/agents/pierre-diff-viewer"),
+    ],
+    [
+      "@/components/ui/markdown-syntax-block",
+      () => import("@/components/ui/markdown-syntax-block"),
     ],
   ]);
 });
@@ -151,25 +167,28 @@ describe("AgentChatFileEditCard", () => {
   test("renders full file content without invoking the diff viewer", () => {
     renderFileEditCard(
       buildContentFileEditData({
+        filePath: "src/AuthContext.test.tsx",
         content: "export const value = 1;\n",
       }),
       true,
     );
 
     expect(screen.getByText("export const value = 1;")).toBeDefined();
+    expect(screen.getByTestId("markdown-syntax-block").getAttribute("data-language")).toBe("tsx");
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
     expect(viewerMock).not.toHaveBeenCalled();
+    expect(syntaxBlockMock).toHaveBeenCalledTimes(1);
   });
 
   test("treats empty file content as expandable content", () => {
-    const { container } = renderFileEditCard(
+    renderFileEditCard(
       buildContentFileEditData({
         content: "",
       }),
       true,
     );
 
-    expect(container.querySelector("pre")).not.toBeNull();
+    expect(screen.getByTestId("markdown-syntax-block").getAttribute("data-code")).toBe("");
     expect(screen.queryByTestId("pierre-diff-viewer")).toBeNull();
   });
 

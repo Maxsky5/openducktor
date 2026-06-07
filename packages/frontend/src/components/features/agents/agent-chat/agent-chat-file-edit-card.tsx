@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-rea
 import { memo, type ReactElement, useEffect, useRef, useState } from "react";
 import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
 import { Badge } from "@/components/ui/badge";
+import MarkdownSyntaxBlock from "@/components/ui/markdown-syntax-block";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "./agent-chat-message-card-model";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
@@ -34,6 +35,12 @@ const DEFAULT_CONFIG = {
   color: "text-blue-400",
   badge: "M",
 } as const;
+
+const languageFromFilePath = (filePath: string): string => {
+  const fileName = filePath.split("/").pop() ?? filePath;
+  const extension = fileName.includes(".") ? (fileName.split(".").pop() ?? "") : "";
+  return extension.toLowerCase();
+};
 
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
@@ -113,9 +120,13 @@ export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
         </div>
       ) : null}
       {isExpanded && data.kind === "content" ? (
-        <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words bg-background p-3 font-mono text-[11px] leading-relaxed text-foreground">
-          {data.content}
-        </pre>
+        <div className="max-h-[60vh] overflow-auto">
+          <MarkdownSyntaxBlock
+            language={languageFromFilePath(data.filePath)}
+            code={data.content}
+            className="rounded-none border-0 bg-background"
+          />
+        </div>
       ) : null}
     </div>
   );
