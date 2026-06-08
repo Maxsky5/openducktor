@@ -128,7 +128,10 @@ const createGitPort = (input: {
 }): GitPort =>
   ({
     listBranches: () => Effect.succeed(input.branches ?? []),
-    getCurrentBranch: () => Effect.succeed({ name: input.currentBranch ?? "odt/task-1" }),
+    getCurrentBranch: () =>
+      Effect.succeed({
+        name: Object.hasOwn(input, "currentBranch") ? input.currentBranch : "odt/task-1",
+      }),
     removeWorktree: (_repoPath: string, worktreePath: string) => {
       input.calls?.push(`remove-worktree:${worktreePath}`);
       return Effect.succeed(undefined);
@@ -224,6 +227,108 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({
+        calls,
+        branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+        currentBranch: "odt/task-1",
+      }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }));
+
+    expect(calls).toEqual([
+      "stop-dev:task-1",
+      "remove-worktree:/worktrees/repo/task-1",
+      "remove-path:/worktrees/repo/task-1",
+      "delete-branch:odt/task-1",
+      "transition:task-1:closed",
+    ]);
+  });
+
+  test("rejects task worktrees that resolve to the repository root before cleanup", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(new Set(["/repo"])),
+      taskWorktreeService: createTaskWorktreeService("/repo"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "resolves to the repository root",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  test("rejects detached or unnamed task worktrees before cleanup", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls, currentBranch: null }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "is detached or has no active branch",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  test("rejects task worktrees on unrelated branches before cleanup", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({ calls, currentBranch: "feature/other" }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "is on unrelated branch feature/other",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  test("dedupes task and session worktree paths before cleanup", async () => {
+    const calls: string[] = [];
+    const activityGuard: TaskActivityGuardPort = {
+      ensureNoActiveTaskDeleteRuns: () => Effect.succeed(undefined),
+      ensureNoActiveTaskResetActivity: () => Effect.succeed(undefined),
+    };
+    const service = createTaskService({
+      taskStore: createTaskStore(
+        [
+          task({
+            agentSessions: [
+              {
+                externalSessionId: "session-1",
+                role: "build",
+                runtimeKind: "opencode",
+                startedAt: "2026-05-10T10:00:00.000Z",
+                workingDirectory: "/worktrees/repo/task-1/",
+                selectedModel: null,
+              },
+            ],
+          }),
+        ],
+        calls,
+      ),
+      taskActivityGuard: activityGuard,
       devServerService: createDevServerService(calls),
       gitPort: createGitPort({
         calls,
