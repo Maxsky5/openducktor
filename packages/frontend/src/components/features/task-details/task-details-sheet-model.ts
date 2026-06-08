@@ -121,7 +121,7 @@ export const collectDeleteImpactTaskIds = (
   return collectedIds;
 };
 
-export const collectResetImpactTaskIds = (task: TaskCard | null): string[] => {
+export const collectSingleTaskCleanupImpactTaskIds = (task: TaskCard | null): string[] => {
   if (!task) {
     return [];
   }

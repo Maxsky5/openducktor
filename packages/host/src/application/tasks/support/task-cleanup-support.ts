@@ -11,9 +11,9 @@ import { errorMessage, HostOperationError, HostValidationError } from "../../../
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 export const implementationSessionRoleNames = ["build", "qa"] as const;
-export const taskResetSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
+export const workflowCleanupSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
-export const taskResetSessionRoles = new Set<string>(taskResetSessionRoleNames);
+export const workflowCleanupSessionRoles = new Set<string>(workflowCleanupSessionRoleNames);
 export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];

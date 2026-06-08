@@ -9,8 +9,8 @@ import {
   managedWorktreeBaseForRepoConfig,
   replaceTaskInList,
   taskHasSessionsForRoles,
-  taskResetSessionRoleNames,
-  taskResetSessionRoles,
+  workflowCleanupSessionRoleNames,
+  workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import { collectCloseWorktreePaths } from "../support/task-close-cleanup";
 import {
@@ -54,7 +54,7 @@ export const createTaskCloseUseCase = ({
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
 
-      if (taskHasSessionsForRoles(currentSessions, taskResetSessionRoles)) {
+      if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -71,7 +71,7 @@ export const createTaskCloseUseCase = ({
           taskId,
           sessions: currentSessions,
           operationLabel: "close task",
-          sessionRoles: [...taskResetSessionRoleNames],
+          sessionRoles: [...workflowCleanupSessionRoleNames],
         });
       }
 

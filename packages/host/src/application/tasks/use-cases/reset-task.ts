@@ -11,8 +11,8 @@ import {
   managedWorktreeBaseForRepoConfig,
   replaceTaskInList,
   taskHasSessionsForRoles,
-  taskResetSessionRoleNames,
-  taskResetSessionRoles,
+  workflowCleanupSessionRoleNames,
+  workflowCleanupSessionRoles,
 } from "../support/task-cleanup-support";
 import {
   requireTaskDeleteDependencies,
@@ -66,7 +66,7 @@ export const createTaskFullResetUseCase = ({
 
       const currentMetadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
       const currentSessions = currentMetadata.agentSessions;
-      if (taskHasSessionsForRoles(currentSessions, taskResetSessionRoles)) {
+      if (taskHasSessionsForRoles(currentSessions, workflowCleanupSessionRoles)) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -83,7 +83,7 @@ export const createTaskFullResetUseCase = ({
           taskId,
           sessions: currentSessions,
           operationLabel: "reset task",
-          sessionRoles: [...taskResetSessionRoleNames],
+          sessionRoles: [...workflowCleanupSessionRoleNames],
         });
       }
 
@@ -101,7 +101,7 @@ export const createTaskFullResetUseCase = ({
         branchPrefix,
         current.id,
         currentSessions,
-        taskResetSessionRoles,
+        workflowCleanupSessionRoles,
         "reset task",
       );
       const branchNames = yield* collectRelatedTaskBranches(
@@ -142,7 +142,7 @@ export const createTaskFullResetUseCase = ({
         yield* storeDependencies.clearAgentSessionsByRoles({
           repoPath: effectiveRepoPath,
           taskId,
-          roles: [...taskResetSessionRoleNames],
+          roles: [...workflowCleanupSessionRoleNames],
         });
         completedSteps.push("cleared linked agent sessions");
         yield* storeDependencies.setPullRequest({

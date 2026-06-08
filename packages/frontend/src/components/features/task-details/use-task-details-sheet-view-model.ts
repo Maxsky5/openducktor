@@ -5,7 +5,7 @@ import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-tas
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import {
   collectDeleteImpactTaskIds,
-  collectResetImpactTaskIds,
+  collectSingleTaskCleanupImpactTaskIds,
   runTaskWorkflowAction,
   shouldLoadDocumentSection,
   toSubtasks,
@@ -134,7 +134,10 @@ export function useTaskDetailsSheetViewModel({
     () => collectDeleteImpactTaskIds(task, taskById),
     [task, taskById],
   );
-  const resetImpactTaskIds = useMemo(() => collectResetImpactTaskIds(task), [task]);
+  const singleTaskCleanupImpactTaskIds = useMemo(
+    () => collectSingleTaskCleanupImpactTaskIds(task),
+    [task],
+  );
   const {
     hasManagedSessionCleanup: hasManagedDeleteSessionCleanup,
     managedWorktreeCount: deleteManagedWorktreeCount,
@@ -142,15 +145,11 @@ export function useTaskDetailsSheetViewModel({
     isLoadingImpact: isLoadingDeleteImpact,
   } = taskDeleteImpactHook(deleteImpactTaskIds, open);
   const {
-    hasManagedSessionCleanup: hasManagedResetSessionCleanup,
-    managedWorktreeCount: resetManagedWorktreeCount,
-    impactError: resetImpactError,
-    isLoadingImpact: isLoadingResetImpact,
-  } = taskDeleteImpactHook(resetImpactTaskIds, open);
-  const hasManagedCloseSessionCleanup = hasManagedResetSessionCleanup;
-  const closeManagedWorktreeCount = resetManagedWorktreeCount;
-  const closeImpactError = resetImpactError;
-  const isLoadingCloseImpact = isLoadingResetImpact;
+    hasManagedSessionCleanup: hasManagedSingleTaskCleanup,
+    managedWorktreeCount: singleTaskCleanupWorktreeCount,
+    impactError: singleTaskCleanupImpactError,
+    isLoadingImpact: isLoadingSingleTaskCleanupImpact,
+  } = taskDeleteImpactHook(singleTaskCleanupImpactTaskIds, open);
   const subtasks = useMemo(() => toSubtasks(task, taskById), [task, taskById]);
   const hasSubtasks = subtasks.length > 0;
   const shouldRenderSubtasks = task?.issueType === "epic";
@@ -291,20 +290,20 @@ export function useTaskDetailsSheetViewModel({
     hasManagedDeleteSessionCleanup,
     deleteManagedWorktreeCount,
     deleteImpactError,
-    isLoadingResetImpact,
-    hasManagedResetSessionCleanup,
-    resetManagedWorktreeCount,
-    resetImpactError,
+    isLoadingResetImpact: isLoadingSingleTaskCleanupImpact,
+    hasManagedResetSessionCleanup: hasManagedSingleTaskCleanup,
+    resetManagedWorktreeCount: singleTaskCleanupWorktreeCount,
+    resetImpactError: singleTaskCleanupImpactError,
     isResetDialogOpen,
     isResetPending,
     resetError,
     isCloseDialogOpen,
     isClosePending,
     closeError,
-    isLoadingCloseImpact,
-    hasManagedCloseSessionCleanup,
-    closeManagedWorktreeCount,
-    closeImpactError,
+    isLoadingCloseImpact: isLoadingSingleTaskCleanupImpact,
+    hasManagedCloseSessionCleanup: hasManagedSingleTaskCleanup,
+    closeManagedWorktreeCount: singleTaskCleanupWorktreeCount,
+    closeImpactError: singleTaskCleanupImpactError,
     openDeleteDialog,
     closeDeleteDialog,
     handleDeleteDialogOpenChange,

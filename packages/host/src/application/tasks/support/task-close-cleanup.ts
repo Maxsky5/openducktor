@@ -2,12 +2,12 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
-import { isRelatedTaskBranch, taskResetSessionRoles } from "./task-cleanup-support";
+import { isRelatedTaskBranch, workflowCleanupSessionRoles } from "./task-cleanup-support";
 import type { requireTaskCloseDependencies } from "./task-reset-dependencies";
 
 const collectCloseSessionWorktreePaths = (sessions: AgentSessionRecord[]): string[] =>
   sessions
-    .filter((session) => taskResetSessionRoles.has(session.role.trim()))
+    .filter((session) => workflowCleanupSessionRoles.has(session.role.trim()))
     .map((session) => session.workingDirectory.trim())
     .filter((workingDirectory) => workingDirectory.length > 0);
 
