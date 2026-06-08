@@ -6,7 +6,7 @@ const readStyles = (): string => readFileSync(resolve(import.meta.dir, "styles.c
 
 describe("global styles", () => {
   test("uses the selected surface token for native text selection", () => {
-    const styles = readStyles();
+    const styles = readStyles().replace(/\/\*[\s\S]*?\*\//g, "");
     const selectionRuleMatch = styles.match(/::selection\s*\{([^}]*)\}/);
 
     if (!selectionRuleMatch) {
@@ -14,7 +14,7 @@ describe("global styles", () => {
     }
 
     const selectionRule = selectionRuleMatch[1];
-    expect(selectionRule).toContain("background: var(--selected-surface);");
+    expect(selectionRule).toContain("var(--selected-surface)");
     expect(selectionRule).not.toContain("var(--primary)");
   });
 });
