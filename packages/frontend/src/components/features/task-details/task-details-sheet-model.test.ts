@@ -90,6 +90,8 @@ describe("task-details-sheet-model", () => {
     const onHumanApprove = mock(() => {});
     const onHumanRequestChanges = mock(() => {});
     const onResetImplementation = mock(() => {});
+    const onResetTask = mock(() => {});
+    const onCloseTask = mock(() => {});
 
     runTaskWorkflowAction("set_spec", "T-1", {
       onPlan,
@@ -197,6 +199,12 @@ describe("task-details-sheet-model", () => {
     expect(onResetImplementation).toHaveBeenCalledWith("T-1", {
       closeDetailsAfterReset: true,
     });
+
+    runTaskWorkflowAction("reset_task", "T-1", makeWorkflowCallbacks({ onResetTask }));
+    runTaskWorkflowAction("close_task", "T-1", makeWorkflowCallbacks({ onCloseTask }));
+
+    expect(onResetTask).toHaveBeenCalledWith("T-1");
+    expect(onCloseTask).toHaveBeenCalledWith("T-1");
   });
 
   test("loads document sections only when summary reports content", () => {

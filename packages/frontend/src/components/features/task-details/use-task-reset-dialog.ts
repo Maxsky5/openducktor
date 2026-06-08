@@ -1,46 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { useCallback } from "react";
+import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 
 type UseTaskResetDialogOptions = {
   sheetOpen: boolean;
   task: TaskCard | null;
   onOpenChange: (open: boolean) => void;
   onResetTask: ((taskId: string) => Promise<void>) | undefined;
-};
-
-type ResetDialogState = {
-  isOpen: boolean;
-  isResetting: boolean;
-  error: string | null;
-};
-
-type ResetDialogAction =
-  | { type: "opened" }
-  | { type: "openChanged"; open: boolean }
-  | { type: "resetStarted" }
-  | { type: "resetSucceeded" }
-  | { type: "resetFailed"; error: string }
-  | { type: "resetFinished" };
-
-const resetDialogReducer = (
-  state: ResetDialogState,
-  action: ResetDialogAction,
-): ResetDialogState => {
-  switch (action.type) {
-    case "opened":
-      return { ...state, isOpen: true, error: null };
-    case "openChanged":
-      return { ...state, isOpen: action.open, error: action.open ? state.error : null };
-    case "resetStarted":
-      return { ...state, isResetting: true, error: null };
-    case "resetSucceeded":
-      return { ...state, isOpen: false };
-    case "resetFailed":
-      return { ...state, error: action.error };
-    case "resetFinished":
-      return { ...state, isResetting: false };
-  }
 };
 
 export function useTaskResetDialog({
@@ -57,61 +23,25 @@ export function useTaskResetDialog({
   handleResetDialogOpenChange: (nextOpen: boolean) => void;
   confirmReset: () => void;
 } {
-  const [state, dispatch] = useReducer(resetDialogReducer, {
-    isOpen: false,
-    isResetting: false,
-    error: null,
+  const runReset = useCallback((): Promise<void> => {
+    if (!task || !onResetTask) {
+      return Promise.resolve();
+    }
+    return onResetTask(task.id);
+  }, [onResetTask, task]);
+  const dialog = useTaskAsyncConfirmDialog({
+    sheetOpen,
+    onOpenChange,
+    run: task && onResetTask ? runReset : undefined,
   });
-  const resetRequestInFlightRef = useRef(false);
-
-  const openResetDialog = useCallback((): void => {
-    dispatch({ type: "opened" });
-  }, []);
-
-  const closeResetDialog = useCallback((): void => {
-    if (resetRequestInFlightRef.current) {
-      return;
-    }
-    dispatch({ type: "openChanged", open: false });
-  }, []);
-
-  const handleResetDialogOpenChange = useCallback((nextOpen: boolean): void => {
-    if (resetRequestInFlightRef.current) {
-      return;
-    }
-
-    dispatch({ type: "openChanged", open: nextOpen });
-  }, []);
-
-  const confirmReset = useCallback((): void => {
-    if (!task || !onResetTask || resetRequestInFlightRef.current) {
-      return;
-    }
-
-    resetRequestInFlightRef.current = true;
-    dispatch({ type: "resetStarted" });
-
-    void onResetTask(task.id)
-      .then(() => {
-        dispatch({ type: "resetSucceeded" });
-        onOpenChange(false);
-      })
-      .catch((error: unknown) => {
-        dispatch({ type: "resetFailed", error: errorMessage(error) });
-      })
-      .finally(() => {
-        resetRequestInFlightRef.current = false;
-        dispatch({ type: "resetFinished" });
-      });
-  }, [onOpenChange, onResetTask, task]);
 
   return {
-    isResetDialogOpen: sheetOpen && state.isOpen,
-    isResetPending: state.isResetting || resetRequestInFlightRef.current,
-    resetError: state.error,
-    openResetDialog,
-    closeResetDialog,
-    handleResetDialogOpenChange,
-    confirmReset,
+    isResetDialogOpen: dialog.isDialogOpen,
+    isResetPending: dialog.isPending,
+    resetError: dialog.error,
+    openResetDialog: dialog.openDialog,
+    closeResetDialog: dialog.closeDialog,
+    handleResetDialogOpenChange: dialog.handleDialogOpenChange,
+    confirmReset: dialog.confirm,
   };
 }

@@ -167,76 +167,42 @@ export const collectResetWorktreePaths = (
     }
     return paths;
   });
-export const appendDeleteCleanupProgress = <E>(
-  error: E,
-  removedWorktrees: string[],
-  deletedBranches: string[],
-): E | HostOperationError => {
-  const progress: string[] = [];
-  if (removedWorktrees.length > 0) {
-    progress.push(`Delete cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
-  }
-  if (deletedBranches.length > 0) {
-    progress.push(`Delete cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
-  }
-  if (progress.length === 0) {
-    return error;
-  }
-  progress.push("Retry delete to finish cleanup safely.");
-  return new HostOperationError({
-    operation: "task_delete.cleanup",
-    message: `${errorMessage(error)}\n${progress.join("\n")}`,
-    cause: error,
-  });
+type TaskCleanupProgressInput = {
+  operation: "task_close" | "task_delete" | "task_reset";
+  label: "Close" | "Delete" | "Reset";
+  retryVerb: "close" | "delete" | "reset";
+  removedWorktrees: string[];
+  deletedBranches: string[];
+  completedSteps?: string[];
 };
-export const appendResetCleanupProgress = <E>(
+
+export const appendTaskCleanupProgress = <E>(
   error: E,
-  removedWorktrees: string[],
-  deletedBranches: string[],
-  completedSteps: string[] = [],
+  {
+    operation,
+    label,
+    retryVerb,
+    removedWorktrees,
+    deletedBranches,
+    completedSteps = [],
+  }: TaskCleanupProgressInput,
 ): E | HostOperationError => {
   const progress: string[] = [];
   if (removedWorktrees.length > 0) {
-    progress.push(`Reset cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
+    progress.push(`${label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
   }
   if (deletedBranches.length > 0) {
-    progress.push(`Reset cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
+    progress.push(`${label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
   }
   if (completedSteps.length > 0) {
-    progress.push(`Reset cleanup already completed: ${completedSteps.join(", ")}.`);
+    progress.push(`${label} cleanup already completed: ${completedSteps.join(", ")}.`);
   }
   if (progress.length === 0) {
     return error;
   }
-  progress.push("Retry reset to finish cleanup safely.");
+  progress.push(`Retry ${retryVerb} to finish cleanup safely.`);
   return new HostOperationError({
-    operation: "task_reset.cleanup",
-    message: `${errorMessage(error)}\n${progress.join("\n")}`,
-    cause: error,
-  });
-};
-export const appendCloseCleanupProgress = <E>(
-  error: E,
-  removedWorktrees: string[],
-  deletedBranches: string[],
-  completedSteps: string[] = [],
-): E | HostOperationError => {
-  const progress: string[] = [];
-  if (removedWorktrees.length > 0) {
-    progress.push(`Close cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
-  }
-  if (deletedBranches.length > 0) {
-    progress.push(`Close cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
-  }
-  if (completedSteps.length > 0) {
-    progress.push(`Close cleanup already completed: ${completedSteps.join(", ")}.`);
-  }
-  if (progress.length === 0) {
-    return error;
-  }
-  progress.push("Retry close to finish cleanup safely.");
-  return new HostOperationError({
-    operation: "task_close.cleanup",
+    operation: `${operation}.cleanup`,
     message: `${errorMessage(error)}\n${progress.join("\n")}`,
     cause: error,
   });

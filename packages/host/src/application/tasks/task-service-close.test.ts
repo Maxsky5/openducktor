@@ -250,6 +250,27 @@ describe("TaskService.closeTask", () => {
     ]);
   });
 
+  test("requires worktree file cleanup dependencies before stopping dev servers", async () => {
+    const calls: string[] = [];
+    const service = createTaskService({
+      taskStore: createTaskStore([task()], calls),
+      devServerService: createDevServerService(calls),
+      gitPort: createGitPort({
+        calls,
+        branches: [{ name: "odt/task-1", isCurrent: false, isRemote: false }],
+        currentBranch: "odt/task-1",
+      }),
+      settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
+      taskWorktreeService: createTaskWorktreeService("/worktrees/repo/task-1"),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+    });
+
+    await expect(run(service.closeTask({ repoPath: "/repo", taskId: "task-1" }))).rejects.toThrow(
+      "Worktree file port is required for task_close.",
+    );
+    expect(calls).toEqual([]);
+  });
+
   test("rejects task worktrees that resolve to the repository root before cleanup", async () => {
     const calls: string[] = [];
     const service = createTaskService({

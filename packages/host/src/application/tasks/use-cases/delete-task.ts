@@ -4,14 +4,14 @@ import { HostDependencyError, HostValidationError } from "../../../effect/host-e
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
-  appendDeleteCleanupProgress,
+  appendTaskCleanupProgress,
   collectDeleteWorktreePaths,
   collectRelatedTaskBranches,
   collectTaskDeleteTargets,
   managedWorktreeBaseForRepoConfig,
   type TaskSessionRecords,
   taskHasImplementationSessions,
-} from "../support/reset-cleanup";
+} from "../support/task-cleanup-support";
 import {
   requireTaskDeleteDependencies,
   requireTaskWorktreeCleanupFiles,
@@ -154,7 +154,15 @@ export const createTaskDeleteUseCase = ({
         return { ok: true };
       }).pipe(
         Effect.catchAll((error) =>
-          Effect.fail(appendDeleteCleanupProgress(error, removedWorktrees, deletedBranches)),
+          Effect.fail(
+            appendTaskCleanupProgress(error, {
+              operation: "task_delete",
+              label: "Delete",
+              retryVerb: "delete",
+              removedWorktrees,
+              deletedBranches,
+            }),
+          ),
         ),
       );
     });

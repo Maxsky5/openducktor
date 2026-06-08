@@ -18,6 +18,8 @@ type TaskWorkflowCallbacks = {
   onResetImplementation:
     | ((taskId: string, options?: { closeDetailsAfterReset?: boolean }) => void)
     | undefined;
+  onResetTask?: ((taskId: string) => void) | undefined;
+  onCloseTask?: ((taskId: string) => void) | undefined;
 };
 
 type TaskWorkflowActionContext = {
@@ -162,6 +164,12 @@ export const runTaskWorkflowAction = (
       return;
     case "reset_implementation":
       callbacks.onResetImplementation?.(taskId, { closeDetailsAfterReset: true });
+      return;
+    case "reset_task":
+      callbacks.onResetTask?.(taskId);
+      return;
+    case "close_task":
+      callbacks.onCloseTask?.(taskId);
       return;
     default:
       return;

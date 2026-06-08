@@ -1,49 +1,12 @@
 import type { TaskCard } from "@openducktor/contracts";
-import { useCallback, useReducer, useRef } from "react";
-import { errorMessage } from "@/lib/errors";
+import { useCallback } from "react";
+import { useTaskAsyncConfirmDialog } from "./use-task-async-confirm-dialog";
 
 type UseTaskCloseDialogOptions = {
   sheetOpen: boolean;
   task: TaskCard | null;
   onOpenChange: (open: boolean) => void;
   onCloseTask: ((taskId: string) => Promise<void>) | undefined;
-};
-
-type CloseDialogState = {
-  isOpen: boolean;
-  isClosing: boolean;
-  error: string | null;
-};
-
-type CloseDialogAction =
-  | { type: "sheetClosed" }
-  | { type: "opened" }
-  | { type: "openChanged"; open: boolean }
-  | { type: "closeStarted" }
-  | { type: "closeSucceeded" }
-  | { type: "closeFailed"; error: string }
-  | { type: "closeFinished" };
-
-const closeDialogReducer = (
-  state: CloseDialogState,
-  action: CloseDialogAction,
-): CloseDialogState => {
-  switch (action.type) {
-    case "sheetClosed":
-      return { isOpen: false, isClosing: state.isClosing, error: null };
-    case "opened":
-      return { ...state, isOpen: true, error: null };
-    case "openChanged":
-      return { ...state, isOpen: action.open, error: action.open ? state.error : null };
-    case "closeStarted":
-      return { ...state, isClosing: true, error: null };
-    case "closeSucceeded":
-      return { ...state, isOpen: false };
-    case "closeFailed":
-      return { ...state, error: action.error };
-    case "closeFinished":
-      return { ...state, isClosing: false };
-  }
 };
 
 export function useTaskCloseDialog({
@@ -60,65 +23,25 @@ export function useTaskCloseDialog({
   handleCloseDialogOpenChange: (nextOpen: boolean) => void;
   confirmClose: () => void;
 } {
-  const [state, dispatch] = useReducer(closeDialogReducer, {
-    isOpen: false,
-    isClosing: false,
-    error: null,
+  const runClose = useCallback((): Promise<void> => {
+    if (!task || !onCloseTask) {
+      return Promise.resolve();
+    }
+    return onCloseTask(task.id);
+  }, [onCloseTask, task]);
+  const dialog = useTaskAsyncConfirmDialog({
+    sheetOpen,
+    onOpenChange,
+    run: task && onCloseTask ? runClose : undefined,
   });
-  const closeRequestInFlightRef = useRef(false);
-
-  if (!sheetOpen && (state.isOpen || state.error !== null)) {
-    dispatch({ type: "sheetClosed" });
-  }
-
-  const openCloseDialog = useCallback((): void => {
-    dispatch({ type: "opened" });
-  }, []);
-
-  const closeCloseDialog = useCallback((): void => {
-    if (closeRequestInFlightRef.current) {
-      return;
-    }
-    dispatch({ type: "openChanged", open: false });
-  }, []);
-
-  const handleCloseDialogOpenChange = useCallback((nextOpen: boolean): void => {
-    if (closeRequestInFlightRef.current) {
-      return;
-    }
-
-    dispatch({ type: "openChanged", open: nextOpen });
-  }, []);
-
-  const confirmClose = useCallback((): void => {
-    if (!task || !onCloseTask || closeRequestInFlightRef.current) {
-      return;
-    }
-
-    closeRequestInFlightRef.current = true;
-    dispatch({ type: "closeStarted" });
-
-    void onCloseTask(task.id)
-      .then(() => {
-        dispatch({ type: "closeSucceeded" });
-        onOpenChange(false);
-      })
-      .catch((error: unknown) => {
-        dispatch({ type: "closeFailed", error: errorMessage(error) });
-      })
-      .finally(() => {
-        closeRequestInFlightRef.current = false;
-        dispatch({ type: "closeFinished" });
-      });
-  }, [onCloseTask, onOpenChange, task]);
 
   return {
-    isCloseDialogOpen: sheetOpen && state.isOpen,
-    isClosePending: state.isClosing || closeRequestInFlightRef.current,
-    closeError: state.error,
-    openCloseDialog,
-    closeCloseDialog,
-    handleCloseDialogOpenChange,
-    confirmClose,
+    isCloseDialogOpen: dialog.isDialogOpen,
+    isClosePending: dialog.isPending,
+    closeError: dialog.error,
+    openCloseDialog: dialog.openDialog,
+    closeCloseDialog: dialog.closeDialog,
+    handleCloseDialogOpenChange: dialog.handleDialogOpenChange,
+    confirmClose: dialog.confirm,
   };
 }

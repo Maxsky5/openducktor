@@ -202,15 +202,6 @@ export function useTaskDetailsSheetViewModel({
 
   const runWorkflowAction = useCallback(
     (action: TaskWorkflowAction): void => {
-      if (action === "reset_task") {
-        openResetDialog();
-        return;
-      }
-      if (action === "close_task") {
-        openCloseDialog();
-        return;
-      }
-
       runTaskWorkflowAction(
         action,
         taskId,
@@ -224,6 +215,8 @@ export function useTaskDetailsSheetViewModel({
           onHumanApprove,
           onHumanRequestChanges,
           onResetImplementation,
+          onResetTask: openResetDialog,
+          onCloseTask: openCloseDialog,
         },
         {
           resolveSessionOptions: resolveSessionOptionsByRole,

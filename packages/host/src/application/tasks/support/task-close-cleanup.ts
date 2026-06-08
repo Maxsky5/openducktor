@@ -2,7 +2,7 @@ import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
-import { isRelatedTaskBranch, taskResetSessionRoles } from "./reset-cleanup";
+import { isRelatedTaskBranch, taskResetSessionRoles } from "./task-cleanup-support";
 import type { requireTaskCloseDependencies } from "./task-reset-dependencies";
 
 const collectCloseSessionWorktreePaths = (sessions: AgentSessionRecord[]): string[] =>

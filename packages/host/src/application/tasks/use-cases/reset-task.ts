@@ -5,7 +5,7 @@ import { HostDependencyError, HostValidationError } from "../../../effect/host-e
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
-  appendResetCleanupProgress,
+  appendTaskCleanupProgress,
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
   managedWorktreeBaseForRepoConfig,
@@ -13,7 +13,7 @@ import {
   taskHasSessionsForRoles,
   taskResetSessionRoleNames,
   taskResetSessionRoles,
-} from "../support/reset-cleanup";
+} from "../support/task-cleanup-support";
 import {
   requireTaskDeleteDependencies,
   requireTaskResetStoreDependencies,
@@ -165,7 +165,14 @@ export const createTaskFullResetUseCase = ({
       }).pipe(
         Effect.catchAll((error) =>
           Effect.fail(
-            appendResetCleanupProgress(error, removedWorktrees, deletedBranches, completedSteps),
+            appendTaskCleanupProgress(error, {
+              operation: "task_reset",
+              label: "Reset",
+              retryVerb: "reset",
+              removedWorktrees,
+              deletedBranches,
+              completedSteps,
+            }),
           ),
         ),
       );
