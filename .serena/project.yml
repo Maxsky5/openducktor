@@ -48,7 +48,7 @@ line_ending:
 # Valid values: LSP, JetBrains
 # Note: the backend is fixed at startup. If a project with a different backend
 # is activated post-init, an error will be returned.
-language_backend:
+language_backend: LSP
 
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
@@ -68,7 +68,19 @@ ls_specific_settings: {}
 #   additional_workspace_folders:
 #     - ../sibling-package
 #     - ../shared-lib
-additional_workspace_folders: []
+additional_workspace_folders:
+- apps/electron
+- packages/adapters-codex-app-server
+- packages/adapters-opencode-sdk
+- packages/build-tools
+- packages/contracts
+- packages/core
+- packages/frontend
+- packages/host
+- packages/host-client
+- packages/openducktor-mcp
+- packages/openducktor-web
+- packages/path-support
 
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.

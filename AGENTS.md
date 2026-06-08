@@ -30,6 +30,8 @@ Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 - `packages/host-client`: Frontend IPC adapter.
 - `packages/openducktor-mcp`: MCP server exposing `odt_*` workflow tools.
 
+When adding a new workspace app/package under `apps/*` or `packages/*`, update `.serena/project.yml` `additional_workspace_folders` and run `serena project health-check .` so Serena keeps monorepo cross-package references working.
+
 ## Architecture
 
 ### Hexagonal rules

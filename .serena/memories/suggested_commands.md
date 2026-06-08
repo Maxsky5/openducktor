@@ -1,0 +1,26 @@
+# Suggested Commands
+
+- Install: `bun install`.
+- Main dev app: `bun run dev` (aliases to Electron dev) or `bun run electron:dev`.
+- Browser runner dev: ask the user to start `bun run browser:dev`; do not start it yourself for browser-mode UI validation.
+- Full repo checks from root:
+  - `bun run typecheck`
+  - `bun run lint`
+  - `bun run test`
+  - `bun run build`
+- Focused workspace commands:
+  - `bun run --filter @openducktor/frontend test|typecheck|lint|build`
+  - `bun run --filter @openducktor/host test|typecheck|lint|build`
+  - `bun run --filter @openducktor/contracts test|typecheck|lint|build`
+  - `bun run --filter @openducktor/core test|typecheck|lint|build`
+  - `bun run --filter @openducktor/electron test|typecheck|lint|build`
+  - `bun run --filter @openducktor/mcp test|typecheck|lint|build`
+  - `bun run --filter @openducktor/web test|typecheck|lint|build`
+- Dependency hygiene:
+  - `bun run deps:unused:deps`
+  - `bun run deps:unused:exports`
+  - `bun run deps:check`
+- React review tooling:
+  - `bun run react-doctor:diff`
+  - `bun run react-doctor:full`
+- Prefer `rg`/`rg --files` for local exact searches. In this repo, start code exploration with Semble MCP before grep/glob/read when available.
