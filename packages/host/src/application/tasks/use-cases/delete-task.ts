@@ -157,8 +157,6 @@ export const createTaskDeleteUseCase = ({
           Effect.fail(
             appendTaskCleanupProgress(error, {
               operation: "task_delete",
-              label: "Delete",
-              retryVerb: "delete",
               removedWorktrees,
               deletedBranches,
             }),

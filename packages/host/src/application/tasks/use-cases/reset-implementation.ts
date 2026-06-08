@@ -168,8 +168,6 @@ export const createTaskImplementationResetUseCase = ({
           Effect.fail(
             appendTaskCleanupProgress(error, {
               operation: "task_reset",
-              label: "Reset",
-              retryVerb: "reset",
               removedWorktrees,
               deletedBranches,
             }),

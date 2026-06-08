@@ -152,8 +152,6 @@ export const createTaskCloseUseCase = ({
           Effect.fail(
             appendTaskCleanupProgress(error, {
               operation: "task_close",
-              label: "Close",
-              retryVerb: "close",
               removedWorktrees,
               deletedBranches,
               completedSteps,

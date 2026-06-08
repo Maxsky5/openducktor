@@ -23,8 +23,9 @@ export function useTaskResetDialog({
   handleResetDialogOpenChange: (nextOpen: boolean) => void;
   confirmReset: () => void;
 } {
+  const canReset = task !== null && onResetTask !== undefined;
   const runReset = useCallback((): Promise<void> => {
-    if (!task || !onResetTask) {
+    if (task === null || onResetTask === undefined) {
       return Promise.resolve();
     }
     return onResetTask(task.id);
@@ -32,7 +33,7 @@ export function useTaskResetDialog({
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
     onOpenChange,
-    run: task && onResetTask ? runReset : undefined,
+    run: canReset ? runReset : undefined,
   });
 
   return {

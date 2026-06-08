@@ -23,8 +23,9 @@ export function useTaskCloseDialog({
   handleCloseDialogOpenChange: (nextOpen: boolean) => void;
   confirmClose: () => void;
 } {
+  const canClose = task !== null && onCloseTask !== undefined;
   const runClose = useCallback((): Promise<void> => {
-    if (!task || !onCloseTask) {
+    if (task === null || onCloseTask === undefined) {
       return Promise.resolve();
     }
     return onCloseTask(task.id);
@@ -32,7 +33,7 @@ export function useTaskCloseDialog({
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
     onOpenChange,
-    run: task && onCloseTask ? runClose : undefined,
+    run: canClose ? runClose : undefined,
   });
 
   return {

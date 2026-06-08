@@ -167,10 +167,14 @@ export const collectResetWorktreePaths = (
     }
     return paths;
   });
+const taskCleanupProgressCopy = {
+  task_close: { label: "Close", retryVerb: "close" },
+  task_delete: { label: "Delete", retryVerb: "delete" },
+  task_reset: { label: "Reset", retryVerb: "reset" },
+} as const;
+
 type TaskCleanupProgressInput = {
-  operation: "task_close" | "task_delete" | "task_reset";
-  label: "Close" | "Delete" | "Reset";
-  retryVerb: "close" | "delete" | "reset";
+  operation: keyof typeof taskCleanupProgressCopy;
   removedWorktrees: string[];
   deletedBranches: string[];
   completedSteps?: string[];
@@ -178,29 +182,25 @@ type TaskCleanupProgressInput = {
 
 export const appendTaskCleanupProgress = <E>(
   error: E,
-  {
-    operation,
-    label,
-    retryVerb,
-    removedWorktrees,
-    deletedBranches,
-    completedSteps = [],
-  }: TaskCleanupProgressInput,
+  { operation, removedWorktrees, deletedBranches, completedSteps = [] }: TaskCleanupProgressInput,
 ): E | HostOperationError => {
+  const copy = taskCleanupProgressCopy[operation];
   const progress: string[] = [];
   if (removedWorktrees.length > 0) {
-    progress.push(`${label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`);
+    progress.push(
+      `${copy.label} cleanup already removed worktrees: ${removedWorktrees.join(", ")}.`,
+    );
   }
   if (deletedBranches.length > 0) {
-    progress.push(`${label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
+    progress.push(`${copy.label} cleanup already deleted branches: ${deletedBranches.join(", ")}.`);
   }
   if (completedSteps.length > 0) {
-    progress.push(`${label} cleanup already completed: ${completedSteps.join(", ")}.`);
+    progress.push(`${copy.label} cleanup already completed: ${completedSteps.join(", ")}.`);
   }
   if (progress.length === 0) {
     return error;
   }
-  progress.push(`Retry ${retryVerb} to finish cleanup safely.`);
+  progress.push(`Retry ${copy.retryVerb} to finish cleanup safely.`);
   return new HostOperationError({
     operation: `${operation}.cleanup`,
     message: `${errorMessage(error)}\n${progress.join("\n")}`,

@@ -25,8 +25,9 @@ export function useTaskDeleteDialog({
   handleDeleteDialogOpenChange: (nextOpen: boolean) => void;
   confirmDelete: () => void;
 } {
+  const canDelete = task !== null && onDelete !== undefined;
   const runDelete = useCallback((): Promise<void> => {
-    if (!task || !onDelete) {
+    if (task === null || onDelete === undefined) {
       return Promise.resolve();
     }
     return onDelete(task.id, { deleteSubtasks: hasSubtasks });
@@ -34,7 +35,7 @@ export function useTaskDeleteDialog({
   const dialog = useTaskAsyncConfirmDialog({
     sheetOpen,
     onOpenChange,
-    run: task && onDelete ? runDelete : undefined,
+    run: canDelete ? runDelete : undefined,
   });
 
   return {
