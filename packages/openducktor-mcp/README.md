@@ -6,13 +6,11 @@ The MCP package is a thin client of the running OpenDucktor host.
 
 The published package is intentionally a standalone CLI/server package. It does not expose a supported JavaScript or TypeScript library API from `@openducktor/mcp`.
 
-Desktop-managed sessions launch this same package as a sidecar. In both desktop-managed and standalone use, the package validates `odt_*` inputs and forwards them to the host bridge instead of talking to Beads or Dolt directly.
+Desktop-managed sessions launch this same package as a sidecar. In both desktop-managed and standalone use, the package validates `odt_*` inputs and forwards them to the host bridge instead of talking to the SQLite task store directly.
 
 - Desktop-managed launches receive `ODT_HOST_URL` from the host automatically.
 - Standalone use auto-discovers the current host bridge from the local discovery file.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
-
-For the full Beads and shared Dolt lifecycle, see `../../docs/beads-shared-dolt-lifecycle.md`.
 
 ## Usage
 
@@ -74,7 +72,7 @@ Startup behavior:
 - When both a startup default and a tool-input `workspaceId` are present, the tool input wins.
 - Workspace-scoped tools fail fast with an explicit error when neither a startup default nor a tool-input `workspaceId` is available.
 
-The OpenDucktor host owns Beads attachment verification, shared Dolt lifecycle, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
+The OpenDucktor host owns SQLite task-store readiness, workflow transitions, and document persistence. This package owns MCP transport and schema validation only.
 
 ## Public Tools
 

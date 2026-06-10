@@ -2,7 +2,7 @@
 
 OpenDucktor is an Agentic Development Environment built around tasks, repositories, and local agent runtimes.
 
-It uses [Beads](https://github.com/steveyegge/beads) as the task source of truth, orchestrates Specification, Planner, Builder, and QA sessions, and keeps documents, approvals, and delivery state attached to each task instead of scattered across chat threads.
+It uses a workspace-scoped SQLite task store as the task source of truth, orchestrates Specification, Planner, Builder, and QA sessions, and keeps documents, approvals, and delivery state attached to each task instead of scattered across chat threads.
 
 ![Kanban board placeholder](docs/assets/screenshots/kanban-board.png)
 
@@ -70,7 +70,7 @@ OpenDucktor is macOS-first. Windows and Linux support is experimental.
 
 OpenDucktor supports local OpenCode and Codex runtimes. OpenCode remains the default runtime. Runtime discovery checks configured overrides, common local install locations, and `PATH`.
 
-[Beads](https://github.com/steveyegge/beads) and Dolt are bundled with released desktop builds, so installing `bd` or `dolt` separately is not required for the app.
+Task data is stored in an OpenDucktor-managed SQLite database, so no external task-store CLI is required for normal app use.
 
 ## Core Features
 
@@ -86,11 +86,11 @@ OpenDucktor supports local OpenCode and Codex runtimes. OpenCode remains the def
 
 ## How It Works
 
-OpenDucktor is built around [Beads](https://github.com/steveyegge/beads) tasks, with the desktop app orchestrating the workflow around them.
+OpenDucktor is built around local tasks stored in the OpenDucktor task store, with the desktop app orchestrating the workflow around them.
 
 At a high level:
 
-1. Tasks and workflow state live in Beads.
+1. Tasks and workflow state live in a workspace-scoped SQLite database.
 2. OpenDucktor starts role-specific sessions for Specification, Planner, Builder, and QA.
 3. Agent-authored outputs such as specs, plans, and QA reports are stored back on the task.
 4. Builder work happens in a dedicated Git worktree for the task, so implementation stays isolated from the main checkout.
@@ -112,7 +112,7 @@ The TypeScript host in `packages/host` is the Effect-native host boundary used b
 
 - Platform support today: macOS is the primary supported desktop target.
 - Windows and Linux: experimental Electron desktop builds. Feedback is welcome, but these builds are not stable yet.
-- [Beads](https://github.com/steveyegge/beads) is the V1 task source of truth
+- The SQLite task store is the V1 task source of truth
 - Supported runtimes today: OpenCode (`opencode`) and Codex (`codex`)
   - OpenCode remains the default runtime.
   - More runtimes may be added through the runtime descriptor and adapter model.

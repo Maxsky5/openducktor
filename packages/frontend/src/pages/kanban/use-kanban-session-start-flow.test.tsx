@@ -12,9 +12,9 @@ import type { RepoSettingsInput } from "@/types/state-slices";
 import { toTabsStorageKey } from "../agents/agent-studio-navigation";
 import {
   createAgentSessionFixture,
-  createBeadsCheckFixture,
   createDeferred,
   createTaskCardFixture,
+  createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 import { parsePersistedTaskTabs } from "../agents/agents-page-session-tabs";
@@ -82,13 +82,13 @@ const createHookHarness = (initialProps: HookArgs) => {
             runtimes: [],
             errors: [],
           }),
-          refreshBeadsCheckForRepo: async () => createBeadsCheckFixture(),
+          refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
           refreshRepoRuntimeHealthForRepo: async () => ({}),
-          clearActiveBeadsCheck: () => {},
+          clearActiveTaskStoreCheck: () => {},
           clearActiveRepoRuntimeHealth: () => {},
           setIsLoadingChecks: () => {},
           hasRuntimeCheck: () => false,
-          hasCachedBeadsCheck: () => false,
+          hasCachedTaskStoreCheck: () => false,
           hasCachedRepoRuntimeHealth: () => false,
         },
       },

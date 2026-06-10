@@ -1,12 +1,12 @@
 type ChecksLoadingArgs = {
   hasRuntimeCheck: boolean;
-  hasCachedBeadsCheck: boolean;
+  hasCachedTaskStoreCheck: boolean;
   hasCachedRepoRuntimeHealth: boolean;
 };
 
 export const shouldLoadChecks = ({
   hasRuntimeCheck,
-  hasCachedBeadsCheck,
+  hasCachedTaskStoreCheck,
   hasCachedRepoRuntimeHealth,
 }: ChecksLoadingArgs): boolean =>
-  !hasRuntimeCheck || !hasCachedBeadsCheck || !hasCachedRepoRuntimeHealth;
+  !hasRuntimeCheck || !hasCachedTaskStoreCheck || !hasCachedRepoRuntimeHealth;

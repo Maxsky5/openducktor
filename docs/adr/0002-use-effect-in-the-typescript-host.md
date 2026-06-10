@@ -9,7 +9,7 @@ OpenDucktor will use Effect as the internal execution model for `packages/host`,
 
 ## Context
 
-`packages/host` is the transport-neutral TypeScript host used by Electron and the local browser shell. It owns command routing, application use cases, ports, adapters, runtime lifecycle, Beads/Dolt access, git operations, filesystem operations, MCP bridge behavior, dev-server process control, and shutdown coordination.
+`packages/host` is the transport-neutral TypeScript host used by Electron and the local browser shell. It owns command routing, application use cases, ports, adapters, runtime lifecycle, SQLite task-store access, git operations, filesystem operations, MCP bridge behavior, dev-server process control, and shutdown coordination.
 
 Before adopting Effect, this host boundary was largely Promise-based. That made I/O sequencing familiar, but expected failures, dependency wiring, resource cleanup, background coordination, and transport-boundary error mapping were spread across `async` functions, `try`/`catch`, ad hoc error objects, and manually composed ports.
 
@@ -46,7 +46,7 @@ The main benefit is that host failures are now part of function signatures inste
 
 Effect also fits the existing hexagonal host architecture. Ports map naturally to Effect service interfaces, adapters remain responsible for external systems, and the composition root can provide concrete dependencies without making application services import infrastructure modules.
 
-Resource and lifecycle code becomes easier to reason about. Runtime registries, dev-server shutdown, MCP bridge startup/close, shared Dolt lifecycle, single-flight coordination, and background work can use Effect primitives for sequencing, interruption, and cleanup instead of open-coded Promise state.
+Resource and lifecycle code becomes easier to reason about. Runtime registries, dev-server shutdown, MCP bridge startup/close, task-store lifecycle, single-flight coordination, and background work can use Effect primitives for sequencing, interruption, and cleanup instead of open-coded Promise state.
 
 The host migration establishes OpenDucktor's first Effect conventions. Future packages can adopt those conventions when they have similar pressure: runtime adapters with event streams and session lifecycle, `packages/openducktor-web` with launcher/readiness/SSE orchestration, and `packages/openducktor-mcp` with CLI, discovery, bridge health, and host-call error handling. Those migrations should be separate decisions or implementation slices, not incidental spillover from this ADR.
 

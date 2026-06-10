@@ -11,8 +11,8 @@ type KanbanPageHeaderProps = {
 
 export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement {
   const { activeWorkspace } = useWorkspaceState();
-  const { beadsCheck } = useChecksState();
-  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, beadsCheck);
+  const { taskStoreCheck } = useChecksState();
+  const isCreateTaskDisabled = isKanbanTaskCreationDisabled(activeWorkspace, taskStoreCheck);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 pl-2 pr-4">

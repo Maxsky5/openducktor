@@ -3,7 +3,6 @@ import type {
   RepoStoreHealth,
   RuntimeDescriptor,
   RuntimeHealth,
-  ToolExecutableProvenance,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createToolDiscoveryAdapter } from "../../adapters/system/tool-discovery";
@@ -149,30 +148,12 @@ const createToolDiscoveryPort = ({
       versionForCommand: (command) => versionForCommand?.(command) ?? `${command} version 1.0.0`,
     }),
   });
-const toolProvenance = (
-  path: string | null,
-  overrides: Partial<ToolExecutableProvenance> = {},
-): ToolExecutableProvenance => ({
-  displayLabel: path === null ? "Unavailable" : "System PATH",
-  error: null,
-  path,
-  sourceCategory: path === null ? "unavailable" : "system_path",
-  ...overrides,
-});
 const healthyRepoStoreHealth: RepoStoreHealth = {
   category: "healthy",
   status: "ready",
   isReady: true,
-  detail: "Beads attachment is healthy.",
-  attachment: {
-    path: "/repo/.beads",
-    databaseName: null,
-  },
-  sharedServer: {
-    host: null,
-    port: null,
-    ownershipState: "unavailable",
-  },
+  detail: "SQLite task store is ready.",
+  databasePath: "/config/task-stores/workspace-1/database.sqlite",
 };
 const createTaskStore = (
   health: RepoStoreHealth = healthyRepoStoreHealth,
@@ -309,83 +290,13 @@ describe("createSystemDiagnosticsService", () => {
       "Failed reading gh --version from gh.",
     ]);
   });
-  test("beadsCheck returns structured blocking health when bd is missing", async () => {
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort({ missingCommands: ["bd"] }),
-      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["bd"] }),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-    const check = await Effect.runPromise(service.beadsCheck("/repo"));
-    expect(check).toEqual({
-      beadsOk: false,
-      beadsPath: null,
-      beadsError:
-        "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
-      beadsExecutable: toolProvenance(null, {
-        error:
-          "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
-      }),
-      doltExecutable: toolProvenance("dolt"),
-      repoStoreHealth: {
-        category: "attachment_verification_failed",
-        status: "blocking",
-        isReady: false,
-        detail:
-          "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
-        attachment: { path: null, databaseName: null },
-        sharedServer: { host: null, port: null, ownershipState: "unavailable" },
-      },
-    });
-  });
-  test("beadsCheck returns structured blocking health when dolt is missing", async () => {
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort({ missingCommands: ["dolt"] }),
-      toolDiscovery: createToolDiscoveryPort({ missingCommands: ["dolt"] }),
-      repoStoreDiagnostics: createTaskStore(),
-    });
-    const check = await Effect.runPromise(service.beadsCheck("/repo"));
-    expect(check).toEqual({
-      beadsOk: false,
-      beadsPath: null,
-      beadsError:
-        "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
-      beadsExecutable: toolProvenance("bd"),
-      doltExecutable: toolProvenance(null, {
-        error:
-          "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
-      }),
-      repoStoreHealth: {
-        category: "attachment_verification_failed",
-        status: "blocking",
-        isReady: false,
-        detail:
-          "dolt not found. Checked OPENDUCKTOR_DOLT_PATH, PATH. Install dolt and ensure it is available on PATH, or set OPENDUCKTOR_DOLT_PATH.",
-        attachment: { path: null, databaseName: null },
-        sharedServer: { host: null, port: null, ownershipState: "unavailable" },
-      },
-    });
-  });
-  test("beadsCheck delegates active repo store readiness through the task store", async () => {
-    const restoreNeededHealth: RepoStoreHealth = {
-      category: "missing_shared_database",
-      status: "restore_needed",
+  test("taskStoreCheck delegates active repo store readiness through the task store", async () => {
+    const blockingHealth: RepoStoreHealth = {
+      category: "database_unavailable",
+      status: "blocking",
       isReady: false,
-      detail: "Shared Dolt database odt_repo is missing and restore is required",
-      attachment: {
-        path: "/repo/.beads",
-        databaseName: "odt_repo",
-      },
-      sharedServer: {
-        host: "127.0.0.1",
-        port: 36000,
-        ownershipState: "owned_by_current_process",
-      },
+      detail: "SQLite task store database is unavailable",
+      databasePath: "/config/task-stores/workspace-1/database.sqlite",
     };
     const calls: Array<{
       repoPath: string;
@@ -396,60 +307,14 @@ describe("createSystemDiagnosticsService", () => {
       runtimeHealth: createRuntimeHealthPort(),
       settingsConfig: createSettingsConfig(null),
       systemCommands: createSystemCommandPort(),
-      repoStoreDiagnostics: createTaskStore(restoreNeededHealth, calls),
+      repoStoreDiagnostics: createTaskStore(blockingHealth, calls),
     });
-    await expect(Effect.runPromise(service.beadsCheck("/repo"))).resolves.toEqual({
-      beadsOk: false,
-      beadsPath: "/repo/.beads",
-      beadsError: "Shared Dolt database odt_repo is missing and restore is required",
-      beadsExecutable: toolProvenance("bd"),
-      doltExecutable: toolProvenance("dolt"),
-      repoStoreHealth: restoreNeededHealth,
+    await expect(Effect.runPromise(service.taskStoreCheck("/repo"))).resolves.toEqual({
+      taskStoreOk: false,
+      taskStorePath: "/config/task-stores/workspace-1/database.sqlite",
+      taskStoreError: "SQLite task store database is unavailable",
+      repoStoreHealth: blockingHealth,
     });
     expect(calls).toEqual([{ repoPath: "/repo", prepare: true }]);
-  });
-
-  test("beadsCheck includes executable provenance for resolved Beads and Dolt tools", async () => {
-    const toolDiscovery: ToolDiscoveryPort = {
-      resolveTool: (toolId) =>
-        Effect.succeed(
-          toolId === "beads"
-            ? {
-                displayLabel: "Bundled with OpenDucktor",
-                path: "/Applications/OpenDucktor.app/Contents/Resources/bin/bd",
-                sourceCategory: "bundled_electron_resource",
-              }
-            : {
-                displayLabel: "Environment override",
-                path: "/opt/dolt/bin/dolt",
-                sourceCategory: "environment_override",
-              },
-        ),
-      resolveToolPath: (toolId) =>
-        toolDiscovery.resolveTool(toolId).pipe(Effect.map((tool) => tool.path)),
-    };
-    const service = createSystemDiagnosticsServiceForTest({
-      runtimeDefinitionsService: createRuntimeDefinitions(),
-      runtimeHealth: createRuntimeHealthPort(),
-      settingsConfig: createSettingsConfig(null),
-      systemCommands: createSystemCommandPort(),
-      toolDiscovery,
-      repoStoreDiagnostics: createTaskStore(),
-    });
-
-    const check = await Effect.runPromise(service.beadsCheck("/repo"));
-
-    expect(check.beadsExecutable).toEqual({
-      displayLabel: "Bundled with OpenDucktor",
-      error: null,
-      path: "/Applications/OpenDucktor.app/Contents/Resources/bin/bd",
-      sourceCategory: "bundled_electron_resource",
-    });
-    expect(check.doltExecutable).toEqual({
-      displayLabel: "Environment override",
-      error: null,
-      path: "/opt/dolt/bin/dolt",
-      sourceCategory: "environment_override",
-    });
   });
 });

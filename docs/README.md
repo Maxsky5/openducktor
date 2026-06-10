@@ -5,7 +5,7 @@ This folder contains the project documentation for OpenDucktor's current archite
 ## Read This First
 
 - [../README.md](../README.md): public project overview, install guide, and contribution entry point.
-- [architecture-overview.md](architecture-overview.md): high-level map of the shared frontend, Electron/browser shells, TypeScript host, Beads persistence, and runtime data flows.
+- [architecture-overview.md](architecture-overview.md): high-level map of the shared frontend, Electron/browser shells, TypeScript host, SQLite task-store persistence, and runtime data flows.
 - [cli-tool-discovery.md](cli-tool-discovery.md): host-owned CLI discovery architecture, descriptor source order, distribution-mode boundaries, and the checklist for adding new tools.
 - [effect.md](effect.md): current Effect conventions for host ports, services, adapters, lifecycle, testing, and public boundaries.
 - [tanstack-query-cache-strategy.md](tanstack-query-cache-strategy.md): frontend cache strategy and the boundary between Query-owned reads and host/runtime execution.
@@ -22,7 +22,6 @@ This folder contains the project documentation for OpenDucktor's current archite
 ## Runtime And Architecture Docs
 
 - [agent-orchestrator-module-map.md](agent-orchestrator-module-map.md): maintainer map for the shared frontend agent orchestration modules.
-- [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md): detailed Beads attachment and shared Dolt lifecycle, command inventory, startup, hydration, and shutdown rules.
 - [cli-tool-discovery.md](cli-tool-discovery.md): TypeScript host CLI/tool discovery map for Electron, web, and source/package distributions.
 - [external-mcp.md](external-mcp.md): public MCP package usage, host-bridge startup contract, and the external task tools.
 - [runtime-integration-guide.md](runtime-integration-guide.md): runtime vocabulary, capability model, integration checklist, and verification path.

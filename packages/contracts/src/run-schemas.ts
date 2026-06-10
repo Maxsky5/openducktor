@@ -16,56 +16,21 @@ export const runtimeHealthSchema = z.object({
 export type RuntimeHealth = z.infer<typeof runtimeHealthSchema>;
 
 export const repoStoreHealthCategorySchema = z.enum([
-  "initializing",
   "healthy",
   "check_call_failed",
-  "missing_attachment",
-  "missing_shared_database",
-  "attachment_contract_invalid",
-  "attachment_verification_failed",
-  "shared_server_unavailable",
+  "database_unavailable",
 ]);
 export type RepoStoreHealthCategory = z.infer<typeof repoStoreHealthCategorySchema>;
 
-export const repoStoreHealthStatusSchema = z.enum([
-  "initializing",
-  "ready",
-  "degraded",
-  "blocking",
-  "restore_needed",
-]);
+export const repoStoreHealthStatusSchema = z.enum(["ready", "degraded", "blocking"]);
 export type RepoStoreHealthStatus = z.infer<typeof repoStoreHealthStatusSchema>;
-
-export const repoStoreSharedServerOwnershipStateSchema = z.enum([
-  "owned_by_current_process",
-  "reused_existing_server",
-  "adopted_orphaned_server",
-  "unavailable",
-]);
-export type RepoStoreSharedServerOwnershipState = z.infer<
-  typeof repoStoreSharedServerOwnershipStateSchema
->;
-
-export const repoStoreAttachmentHealthSchema = z.object({
-  path: z.string().nullable(),
-  databaseName: z.string().nullable(),
-});
-export type RepoStoreAttachmentHealth = z.infer<typeof repoStoreAttachmentHealthSchema>;
-
-export const repoStoreSharedServerHealthSchema = z.object({
-  host: z.string().nullable(),
-  port: z.number().int().positive().nullable(),
-  ownershipState: repoStoreSharedServerOwnershipStateSchema,
-});
-export type RepoStoreSharedServerHealth = z.infer<typeof repoStoreSharedServerHealthSchema>;
 
 export const repoStoreHealthSchema = z.object({
   category: repoStoreHealthCategorySchema,
   status: repoStoreHealthStatusSchema,
   isReady: z.boolean(),
   detail: z.string().nullable(),
-  attachment: repoStoreAttachmentHealthSchema,
-  sharedServer: repoStoreSharedServerHealthSchema,
+  databasePath: z.string().nullable(),
 });
 export type RepoStoreHealth = z.infer<typeof repoStoreHealthSchema>;
 
@@ -96,11 +61,9 @@ export const systemCheckSchema = z.object({
   ghAuthError: z.string().nullable().default(null),
   runtimes: z.array(runtimeHealthSchema).default([]),
   repoStoreHealth: repoStoreHealthSchema,
-  beadsOk: z.boolean(),
-  beadsPath: z.string().nullable(),
-  beadsError: z.string().nullable(),
-  beadsExecutable: toolExecutableProvenanceSchema,
-  doltExecutable: toolExecutableProvenanceSchema,
+  taskStoreOk: z.boolean(),
+  taskStorePath: z.string().nullable(),
+  taskStoreError: z.string().nullable(),
   errors: z.array(z.string()),
 });
 export type SystemCheck = z.infer<typeof systemCheckSchema>;
@@ -118,15 +81,13 @@ export const runtimeCheckSchema = z.object({
 });
 export type RuntimeCheck = z.infer<typeof runtimeCheckSchema>;
 
-export const beadsCheckSchema = z.object({
+export const taskStoreCheckSchema = z.object({
   repoStoreHealth: repoStoreHealthSchema,
-  beadsOk: z.boolean(),
-  beadsPath: z.string().nullable(),
-  beadsError: z.string().nullable(),
-  beadsExecutable: toolExecutableProvenanceSchema,
-  doltExecutable: toolExecutableProvenanceSchema,
+  taskStoreOk: z.boolean(),
+  taskStorePath: z.string().nullable(),
+  taskStoreError: z.string().nullable(),
 });
-export type BeadsCheck = z.infer<typeof beadsCheckSchema>;
+export type TaskStoreCheck = z.infer<typeof taskStoreCheckSchema>;
 
 export const runtimeRouteSchema = z.discriminatedUnion("type", [
   z

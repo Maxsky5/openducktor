@@ -1,13 +1,13 @@
 import type {
-  BeadsCheck,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
+  TaskStoreCheck,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
-  type BeadsCheckFixtureOverrides,
-  createBeadsCheckFixture,
+  createTaskStoreCheckFixture,
+  type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
@@ -95,15 +95,14 @@ export const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntime
   };
 };
 
-export const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
-  createBeadsCheckFixture(
+export const makeTaskStoreCheck = (
+  overrides: TaskStoreCheckFixtureOverrides = {},
+): TaskStoreCheck =>
+  createTaskStoreCheckFixture(
     {
-      beadsPath: "/Users/dev/.openducktor/beads/repo/.beads",
+      taskStorePath: "/Users/dev/.openducktor/task-stores/repo/database.sqlite",
       repoStoreHealth: {
-        attachment: {
-          path: "/Users/dev/.openducktor/beads/repo/.beads",
-          databaseName: "repo_db",
-        },
+        databasePath: "/Users/dev/.openducktor/task-stores/repo/database.sqlite",
       },
     },
     overrides,

@@ -5,7 +5,6 @@
 OpenDucktor depends on local command line tools:
 
 - Git and GitHub CLI for repository and pull request workflows
-- Beads and Dolt for task storage
 - Bun for source-mode MCP startup
 - OpenCode and Codex for agent runtimes
 
@@ -26,7 +25,7 @@ toolDiscovery.resolveToolPath("codex")
 Diagnostics that need to explain where an executable came from call:
 
 ```ts
-toolDiscovery.resolveTool("beads")
+toolDiscovery.resolveTool("githubCli")
 ```
 
 The host resolves that tool by walking its descriptor:
@@ -150,10 +149,8 @@ It uses `SystemCommandPort.resolveCommandPath`, so platform details stay central
 
 | Tool id | Command | Override variable | Extra descriptor sources | Main consumers |
 | --- | --- | --- | --- | --- |
-| `beads` | `bd` | `OPENDUCKTOR_BD_PATH` | bundled Electron resources when provided | Beads task store, diagnostics |
 | `bun` | `bun` | `OPENDUCKTOR_BUN_PATH` | none | source-mode and web artifact OpenDucktor MCP command |
 | `codex` | `codex` | `OPENDUCKTOR_CODEX_BINARY` | bundled directory when provided, macOS Codex.app candidates | Codex runtime startup and health |
-| `dolt` | `dolt` | `OPENDUCKTOR_DOLT_PATH` | bundled Electron resources when provided | shared Dolt server, Beads diagnostics |
 | `git` | `git` | `OPENDUCKTOR_GIT_PATH` | none | Git adapter, diagnostics |
 | `githubCli` | `gh` | `OPENDUCKTOR_GH_PATH` | none | GitHub auth, PR detection and sync |
 | `opencode` | `opencode` | `OPENDUCKTOR_OPENCODE_BINARY` | bundled directory when provided, `~/.opencode/bin` | OpenCode runtime startup and health |
@@ -176,9 +173,7 @@ Discovery uses environment overrides, shell-provided tool paths, descriptor conv
 Electron packaged mode passes an artifact runtime distribution.
 
 The packaged MCP launcher is resolved from Electron resources.
-Released Electron builds also package the Beads (`bd`) and Dolt (`dolt`) sidecars under the resources `bin` directory.
-Electron passes that package-owned directory through `bundledToolBinDirs` for both `beads` and `dolt`, and their descriptors require the bundled source before `PATH`.
-If a configured packaged Beads or Dolt sidecar is missing, empty, or non-executable where the platform can validate executable mode, discovery reports an OpenDucktor packaging defect instead of asking the user to install a local CLI.
+Released Electron builds do not package task-store CLIs; task storage is provided by the host-owned SQLite adapter.
 
 Packaged Electron must never point discovery at a development worktree.
 Resource paths must come from the packaged app resources for that run.
@@ -191,7 +186,7 @@ The MCP launcher is the package-owned `dist/openducktor-mcp.js` script executed 
 The web launcher provides the active Bun executable to `ToolDiscoveryPort`, so `bunx @openducktor/web` launches its MCP script with the same Bun executable that started the package.
 The web package does not use Electron resources and does not currently provide bundled runtime tool directories.
 
-Therefore, runtime CLIs such as Git, Beads, Dolt, OpenCode, Codex, and GitHub CLI are discovered through their descriptor overrides, descriptor conventional locations, and PATH unless the web shell has an exact provided path for that tool.
+Therefore, runtime CLIs such as Git, OpenCode, Codex, and GitHub CLI are discovered through their descriptor overrides, descriptor conventional locations, and PATH unless the web shell has an exact provided path for that tool.
 If the web package ever bundles a CLI, its resolver must provide package-owned paths from the npm package layout, not desktop app paths.
 
 ## Error Model
@@ -298,11 +293,10 @@ If the missing tool blocks a user-visible setup or runtime path, add it to the r
 
 - runtime health for agent runtime CLIs
 - system diagnostics for repository/GitHub tools
-- Beads diagnostics for Beads or Dolt storage tools
+- task-store diagnostics for the SQLite database path and readiness
 
 Diagnostics should call `ToolDiscoveryPort`.
 They should not duplicate descriptor logic.
-For Beads diagnostics, include the structured executable provenance from `resolveTool("beads")` and `resolveTool("dolt")` so the panel can distinguish bundled Electron resources, environment overrides, provided paths, external `PATH`, and unavailable tools.
 
 ### 6. Handle Distribution Ownership
 

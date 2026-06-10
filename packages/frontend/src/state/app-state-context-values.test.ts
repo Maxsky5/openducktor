@@ -69,9 +69,9 @@ describe("app-state-context-values", () => {
   test("returns identity for other context builders", () => {
     const checksValue: ChecksStateContextValue = {
       runtimeCheck: null,
-      beadsCheck: null,
+      taskStoreCheck: null,
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
       refreshChecks: async () => {},

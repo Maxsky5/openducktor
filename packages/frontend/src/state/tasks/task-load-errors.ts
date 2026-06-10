@@ -1,9 +1,9 @@
-import type { BeadsCheck, RepoStoreHealth } from "@openducktor/contracts";
+import type { RepoStoreHealth, TaskStoreCheck } from "@openducktor/contracts";
 import { errorMessage } from "@/lib/errors";
 import { buildRepoStoreUnavailableDescription } from "@/lib/repo-store-health";
 
 const TASK_STORE_HINT =
-  "OpenDucktor uses centralized Beads at ~/.openducktor/beads/<repo-id>/.beads. Initialization is automatic on repo open; retry if this is the first load.";
+  "OpenDucktor stores tasks in ~/.openducktor/task-stores/<workspaceId>/database.sqlite. Initialization is automatic on repo open; retry if this is the first load.";
 
 export type TaskLoadFailureContext = {
   error: unknown;
@@ -11,19 +11,17 @@ export type TaskLoadFailureContext = {
 };
 
 export const getBlockingRepoStoreHealth = (
-  input: BeadsCheck | RepoStoreHealth | null,
+  input: TaskStoreCheck | RepoStoreHealth | null,
 ): RepoStoreHealth | null => {
   if (!input) {
     return null;
   }
 
-  if ("beadsOk" in input) {
-    return input.repoStoreHealth.isReady || input.repoStoreHealth.status === "initializing"
-      ? null
-      : input.repoStoreHealth;
+  if ("taskStoreOk" in input) {
+    return input.repoStoreHealth.isReady ? null : input.repoStoreHealth;
   }
 
-  return input.isReady || input.status === "initializing" ? null : input;
+  return input.isReady ? null : input;
 };
 
 export const summarizeTaskLoadError = ({
@@ -31,13 +29,13 @@ export const summarizeTaskLoadError = ({
   repoStoreHealth = null,
 }: TaskLoadFailureContext): string => {
   const message = (errorMessage(error).split("\n").at(0) ?? "Unknown error").trim();
-  const beadsFailure = /beads|beads_dir|\bbd\b|task store|repo store/i.test(message);
+  const taskStoreFailure = /sqlite|database\.sqlite|task store|repo store/i.test(message);
 
-  if (repoStoreHealth && beadsFailure) {
+  if (repoStoreHealth && taskStoreFailure) {
     return buildRepoStoreUnavailableDescription(repoStoreHealth);
   }
 
-  if (beadsFailure) {
+  if (taskStoreFailure) {
     return `Task store unavailable. ${message} ${TASK_STORE_HINT}`;
   }
 

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
   type RuntimeDescriptor,
+  type TaskStoreCheck,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -11,8 +11,8 @@ import type { DiagnosticsToastApi } from "@/state/operations/workspace/use-check
 import { useChecks } from "@/state/operations/workspace/use-checks";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  createBeadsCheckFixture,
   createRepoRuntimeHealthFixture,
+  createTaskStoreCheckFixture,
   type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
@@ -236,7 +236,7 @@ describe("useAgentStudioReadiness", () => {
       runtimes: [{ kind: "opencode", ok: true, version: "0.12.0" }],
       errors: [],
     });
-    const beadsCheck = async (): Promise<BeadsCheck> => createBeadsCheckFixture();
+    const taskStoreCheck = async (): Promise<TaskStoreCheck> => createTaskStoreCheckFixture();
 
     const checkRepoRuntimeHealth = async (): Promise<RepoRuntimeHealthCheck> => {
       repoHealthCallCount += 1;
@@ -269,7 +269,7 @@ describe("useAgentStudioReadiness", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         checkRepoRuntimeHealth,
         runtimeCheck,
-        beadsCheck,
+        taskStoreCheck,
         toastApi: testToastApi,
       });
       latest = useAgentStudioReadiness({

@@ -315,7 +315,7 @@ Catalog/query helpers, session-start UI, settings, and diagnostics consumers may
 
 ### 4. Session persistence and hydration
 
-Persistence and hydration live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the TypeScript host session document/store services under `packages/host/src/application` and `packages/host/src/infrastructure/beads`.
+Persistence and hydration live across the session lifecycle/persistence modules under `packages/frontend/src/state/operations/agent-orchestrator/` and the TypeScript host session document/store services under `packages/host/src/application` and `packages/host/src/adapters/sqlite`.
 
 This layer must ensure that:
 

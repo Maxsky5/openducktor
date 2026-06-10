@@ -14,6 +14,7 @@ export const createSystemDiagnosticsCommandHandlers = (
   systemDiagnosticsService: SystemDiagnosticsService,
 ): HostCommandHandlers => ({
   runtime_check: (args) => systemDiagnosticsService.runtimeCheck(parseRuntimeCheckForce(args)),
-  beads_check: (args) => systemDiagnosticsService.beadsCheck(parseRepoPath(args, "beads_check")),
+  task_store_check: (args) =>
+    systemDiagnosticsService.taskStoreCheck(parseRepoPath(args, "task_store_check")),
   system_check: (args) => systemDiagnosticsService.systemCheck(parseRepoPath(args, "system_check")),
 });

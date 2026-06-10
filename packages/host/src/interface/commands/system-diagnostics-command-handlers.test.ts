@@ -26,7 +26,7 @@ const createDiagnosticsService = (): SystemDiagnosticsService =>
             cause: cause,
           }),
       }),
-    beadsCheck: (repoPath: string) =>
+    taskStoreCheck: (repoPath: string) =>
       Effect.tryPromise({
         try: async () => {
           return { repoPath };
@@ -59,7 +59,7 @@ describe("createSystemDiagnosticsCommandHandlers", () => {
     await expect(router.invoke("runtime_check", { force: true })).resolves.toEqual({
       forceRefresh: true,
     });
-    await expect(router.invoke("beads_check", { repoPath: "/repo" })).resolves.toEqual({
+    await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toEqual({
       repoPath: "/repo",
     });
     await expect(router.invoke("system_check", { repoPath: "/repo" })).resolves.toEqual({
@@ -70,7 +70,7 @@ describe("createSystemDiagnosticsCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createSystemDiagnosticsCommandHandlers(createDiagnosticsService()),
     });
-    await expect(router.invoke("beads_check", {})).rejects.toThrow("repoPath is required.");
+    await expect(router.invoke("task_store_check", {})).rejects.toThrow("repoPath is required.");
     await expect(router.invoke("system_check")).rejects.toThrow(
       "system_check input must be an object.",
     );

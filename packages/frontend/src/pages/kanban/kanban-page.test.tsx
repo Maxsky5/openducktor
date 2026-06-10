@@ -17,8 +17,8 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  createBeadsCheckFixture,
   createTaskCardFixture,
+  createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 
@@ -503,14 +503,12 @@ describe("KanbanPage session start modal flow", () => {
         humanRequestChangesTask: humanRequestChangesTaskMock,
       }),
       useChecksState: () => ({
-        beadsCheck: createBeadsCheckFixture(
+        taskStoreCheck: createTaskStoreCheckFixture(
           {},
           {
-            beadsPath: "/tmp/beads.db",
+            taskStorePath: "/tmp/task-store/database.sqlite",
             repoStoreHealth: {
-              attachment: {
-                path: "/tmp/beads.db",
-              },
+              databasePath: "/tmp/task-store/database.sqlite",
             },
           },
         ),

@@ -1,9 +1,7 @@
 import {
   type AgentSessionStopTarget,
   agentSessionStopTargetSchema,
-  type BeadsCheck,
   type BuildSessionBootstrap,
-  beadsCheckSchema,
   buildSessionBootstrapSchema,
   type DevServerGroupState,
   devServerGroupStateSchema,
@@ -28,12 +26,14 @@ import {
   type TaskCard,
   type TaskDirectMergeInput,
   type TaskDirectMergeResult,
+  type TaskStoreCheck,
   type TaskWorktreeSummary,
   taskApprovalContextLoadResultSchema,
   taskCardSchema,
   taskDirectMergeInputSchema,
   taskDirectMergeResultSchema,
   taskPullRequestDetectResultSchema,
+  taskStoreCheckSchema,
   taskWorktreeSummarySchema,
 } from "@openducktor/contracts";
 import type { InvokeFn } from "./invoke-utils";
@@ -159,9 +159,9 @@ const runtimeCheck = async (invokeFn: InvokeFn, force = false): Promise<RuntimeC
   return runtimeCheckSchema.parse(payload);
 };
 
-const beadsCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<BeadsCheck> => {
-  const payload = await invokeFn("beads_check", { repoPath });
-  return beadsCheckSchema.parse(payload);
+const taskStoreCheck = async (invokeFn: InvokeFn, repoPath: string): Promise<TaskStoreCheck> => {
+  const payload = await invokeFn("task_store_check", { repoPath });
+  return taskStoreCheckSchema.parse(payload);
 };
 
 const runtimeList = async (
@@ -525,8 +525,8 @@ export class HostAgentClient {
     return runtimeCheck(this.invokeFn, force);
   }
 
-  async beadsCheck(repoPath: string): Promise<BeadsCheck> {
-    return beadsCheck(this.invokeFn, repoPath);
+  async taskStoreCheck(repoPath: string): Promise<TaskStoreCheck> {
+    return taskStoreCheck(this.invokeFn, repoPath);
   }
 
   async runtimeList(

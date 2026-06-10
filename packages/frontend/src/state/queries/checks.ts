@@ -1,8 +1,8 @@
 import type {
-  BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
+  TaskStoreCheck,
 } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
@@ -17,18 +17,18 @@ import { host } from "../operations/host";
 
 export type ChecksQueryDependencies = {
   runtimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
-  beadsCheck: (repoPath: string) => Promise<BeadsCheck>;
+  taskStoreCheck: (repoPath: string) => Promise<TaskStoreCheck>;
 };
 
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
-const BEADS_CHECK_STALE_TIME_MS = 60_000;
+const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_TRANSIENT_REFETCH_INTERVAL_MS = 1_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
   runtimeCheck: (force = false) => host.runtimeCheck(force),
-  beadsCheck: (repoPath) => host.beadsCheck(repoPath),
+  taskStoreCheck: (repoPath) => host.taskStoreCheck(repoPath),
 };
 
 const buildRuntimeHealthErrorCheck = (
@@ -124,7 +124,7 @@ const withDiagnosticsQueryTimeout = async <T>(promise: Promise<T>): Promise<T> =
 export const checksQueryKeys = {
   all: ["checks"] as const,
   runtime: () => [...checksQueryKeys.all, "runtime"] as const,
-  beads: (repoPath: string) => [...checksQueryKeys.all, "beads", repoPath] as const,
+  taskStore: (repoPath: string) => [...checksQueryKeys.all, "task-store", repoPath] as const,
   runtimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) =>
     [
       ...checksQueryKeys.all,
@@ -144,14 +144,14 @@ export const runtimeCheckQueryOptions = (
     staleTime: RUNTIME_CHECK_STALE_TIME_MS,
   });
 
-export const beadsCheckQueryOptions = (
+export const taskStoreCheckQueryOptions = (
   repoPath: string,
-  beadsCheck: ChecksQueryDependencies["beadsCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.beadsCheck,
+  taskStoreCheck: ChecksQueryDependencies["taskStoreCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.taskStoreCheck,
 ) =>
   queryOptions({
-    queryKey: checksQueryKeys.beads(repoPath),
-    queryFn: (): Promise<BeadsCheck> => withDiagnosticsQueryTimeout(beadsCheck(repoPath)),
-    staleTime: BEADS_CHECK_STALE_TIME_MS,
+    queryKey: checksQueryKeys.taskStore(repoPath),
+    queryFn: (): Promise<TaskStoreCheck> => withDiagnosticsQueryTimeout(taskStoreCheck(repoPath)),
+    staleTime: TASK_STORE_CHECK_STALE_TIME_MS,
   });
 
 export const repoRuntimeHealthQueryOptions = (
@@ -197,11 +197,12 @@ export const loadRuntimeCheckFromQuery = (
   runtimeCheck: ChecksQueryDependencies["runtimeCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.runtimeCheck,
 ): Promise<RuntimeCheck> => queryClient.fetchQuery(runtimeCheckQueryOptions(false, runtimeCheck));
 
-export const loadBeadsCheckFromQuery = (
+export const loadTaskStoreCheckFromQuery = (
   queryClient: QueryClient,
   repoPath: string,
-  beadsCheck: ChecksQueryDependencies["beadsCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.beadsCheck,
-): Promise<BeadsCheck> => queryClient.fetchQuery(beadsCheckQueryOptions(repoPath, beadsCheck));
+  taskStoreCheck: ChecksQueryDependencies["taskStoreCheck"] = DEFAULT_CHECKS_QUERY_DEPENDENCIES.taskStoreCheck,
+): Promise<TaskStoreCheck> =>
+  queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck));
 
 export const loadRepoRuntimeHealthFromQuery = (
   queryClient: QueryClient,

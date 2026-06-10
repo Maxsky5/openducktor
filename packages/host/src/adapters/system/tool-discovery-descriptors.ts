@@ -85,19 +85,6 @@ const commandTool = ({
   sources,
 });
 
-const bundledElectronResourceSource = (toolId: ToolDiscoveryId): ToolDiscoverySource => ({
-  directories: (context) => [context.bundledToolBinDirs[toolId]],
-  displayLabel: "Bundled with OpenDucktor",
-  kind: "searchDirectories",
-  label: "bundled Electron resource directory",
-  policy: "required",
-  requiredMissingMessage: ({ descriptor, directories }) =>
-    `Packaged Electron ${descriptor.displayName} sidecar is missing or invalid: expected ${
-      descriptor.command
-    } in ${describeLocations([...directories])}. This is an OpenDucktor packaging defect.`,
-  sourceCategory: "bundled_electron_resource",
-});
-
 const BUN_TOOL_DESCRIPTOR = commandTool({
   command: "bun",
   overrideVariable: "OPENDUCKTOR_BUN_PATH",
@@ -111,18 +98,6 @@ const GITHUB_CLI_TOOL_DESCRIPTOR = commandTool({
   displayName: "GitHub CLI",
   installHint: "Install GitHub CLI and ensure gh is available on PATH, or set OPENDUCKTOR_GH_PATH.",
   overrideVariable: "OPENDUCKTOR_GH_PATH",
-});
-const BEADS_TOOL_DESCRIPTOR = commandTool({
-  command: "bd",
-  displayName: "Beads",
-  overrideVariable: "OPENDUCKTOR_BD_PATH",
-  sources: [bundledElectronResourceSource("beads")],
-});
-const DOLT_TOOL_DESCRIPTOR = commandTool({
-  command: "dolt",
-  displayName: "Dolt",
-  overrideVariable: "OPENDUCKTOR_DOLT_PATH",
-  sources: [bundledElectronResourceSource("dolt")],
 });
 
 const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
@@ -177,10 +152,8 @@ const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
 });
 
 export const TOOL_DISCOVERY_DESCRIPTORS: Record<ToolDiscoveryId, ToolDiscoveryDescriptor> = {
-  beads: BEADS_TOOL_DESCRIPTOR,
   bun: BUN_TOOL_DESCRIPTOR,
   codex: CODEX_TOOL_DESCRIPTOR,
-  dolt: DOLT_TOOL_DESCRIPTOR,
   git: GIT_TOOL_DESCRIPTOR,
   githubCli: GITHUB_CLI_TOOL_DESCRIPTOR,
   opencode: OPENCODE_TOOL_DESCRIPTOR,

@@ -474,19 +474,11 @@ const createTaskStore = (): TaskStorePort => ({
   listPullRequestSyncCandidates: () => Effect.succeed([]),
   diagnoseRepoStore: () =>
     Effect.succeed({
-      category: "attachment_verification_failed",
+      category: "database_unavailable",
       status: "blocking",
       isReady: false,
-      detail: "Required command `bd` not found.",
-      attachment: {
-        path: null,
-        databaseName: null,
-      },
-      sharedServer: {
-        host: null,
-        port: null,
-        ownershipState: "unavailable",
-      },
+      detail: "SQLite task store database is unavailable.",
+      databasePath: null,
     }),
 });
 
@@ -573,7 +565,6 @@ describe("createElectronHostCommandRouter", () => {
         "Stopping registered agent runtimes",
         "Stopped opencode runtime runtime-1 for task workspace (workspace)",
         "No MCP host bridge server is running",
-        "No shared Dolt server owned by this OpenDucktor process",
         "OpenDucktor host services stopped",
       ]),
     );
@@ -1126,10 +1117,9 @@ describe("createElectronHostCommandRouter", () => {
         { kind: "codex", ok: true },
       ],
     });
-    await expect(router.invoke("beads_check", { repoPath: "/repo" })).resolves.toMatchObject({
-      beadsOk: false,
-      beadsError:
-        "bd not found. Checked OPENDUCKTOR_BD_PATH, PATH. Install bd and ensure it is available on PATH, or set OPENDUCKTOR_BD_PATH.",
+    await expect(router.invoke("task_store_check", { repoPath: "/repo" })).resolves.toMatchObject({
+      taskStoreOk: false,
+      taskStoreError: "Workspace is not configured for repository: /repo",
       repoStoreHealth: { status: "blocking" },
     });
   });

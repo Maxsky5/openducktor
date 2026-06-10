@@ -2,13 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { archiveEntryPathToFilePath } from "./electron-sidecar-archives";
-import {
-  ELECTRON_EXTERNAL_SIDECAR_TARGETS,
-  type ElectronExternalSidecarAsset,
-  EXTERNAL_ELECTRON_SIDECAR_IDS,
-  electronSidecarExecutableName,
-} from "./electron-sidecar-manifest";
+import { electronSidecarExecutableName } from "./electron-sidecar-manifest";
 import {
   prepareElectronSidecars,
   resolveElectronSidecarBuildPlan,
@@ -16,7 +10,7 @@ import {
 
 type PrepareElectronSidecarsHooks = Pick<
   Parameters<typeof prepareElectronSidecars>[0],
-  "chmodFile" | "compileMcp" | "downloadAsset" | "extractArchive" | "verifyArchiveChecksum"
+  "chmodFile" | "compileMcp"
 >;
 
 const makeTempWorkspace = async (): Promise<{
@@ -34,29 +28,6 @@ const makeTempWorkspace = async (): Promise<{
   return { electronPackageDirectory, workspaceRoot };
 };
 
-const writeExtractedSidecar = async ({
-  asset,
-  extractionDirectory,
-  executable = true,
-  platform,
-}: {
-  asset: ElectronExternalSidecarAsset;
-  executable?: boolean;
-  extractionDirectory: string;
-  platform: "linux" | "macos" | "windows";
-}): Promise<string> => {
-  const extractedPath = join(
-    extractionDirectory,
-    ...archiveEntryPathToFilePath(asset.executablePath),
-  );
-  await mkdir(dirname(extractedPath), { recursive: true });
-  await writeFile(extractedPath, "binary");
-  if (platform !== "windows") {
-    await chmod(extractedPath, executable ? 0o755 : 0o644);
-  }
-  return extractedPath;
-};
-
 const makeSideEffectingHooks = (sideEffects: string[]): PrepareElectronSidecarsHooks => ({
   compileMcp: async ({ outputPaths }) => {
     sideEffects.push("compile");
@@ -66,38 +37,15 @@ const makeSideEffectingHooks = (sideEffects: string[]): PrepareElectronSidecarsH
     sideEffects.push("chmod");
     await chmod(path, mode);
   },
-  downloadAsset: async ({ archivePath }) => {
-    sideEffects.push("download");
-    await mkdir(dirname(archivePath), { recursive: true });
-    await writeFile(archivePath, "archive");
-  },
-  extractArchive: async ({ asset, extractionDirectory }) => {
-    sideEffects.push("extract");
-    await writeExtractedSidecar({ asset, extractionDirectory, platform: "linux" });
-  },
-  verifyArchiveChecksum: async () => {},
 });
 
 describe("prepareElectronSidecars", () => {
-  test("uses platform-specific executable names", () => {
+  test("uses platform-specific MCP executable names", () => {
     expect(electronSidecarExecutableName("openducktor-mcp", "macos")).toBe("openducktor-mcp");
-    expect(electronSidecarExecutableName("beads", "linux")).toBe("bd");
-    expect(electronSidecarExecutableName("dolt", "windows")).toBe("dolt.exe");
+    expect(electronSidecarExecutableName("openducktor-mcp", "windows")).toBe("openducktor-mcp.exe");
   });
 
-  test("defines sidecar release targets as complete Beads and Dolt bundles", () => {
-    expect(
-      ELECTRON_EXTERNAL_SIDECAR_TARGETS.map(({ arch, platform }) => `${platform}/${arch}`),
-    ).toEqual(["macos/x64", "macos/arm64", "linux/x64", "linux/arm64", "windows/x64"]);
-    for (const target of ELECTRON_EXTERNAL_SIDECAR_TARGETS) {
-      expect(Object.keys(target.assets).sort()).toEqual([...EXTERNAL_ELECTRON_SIDECAR_IDS].sort());
-      for (const sidecarId of EXTERNAL_ELECTRON_SIDECAR_IDS) {
-        expect(target.assets[sidecarId].id).toBe(sidecarId);
-      }
-    }
-  });
-
-  test("stages sidecars under the Electron package build directory", async () => {
+  test("stages the MCP sidecar under the Electron package build directory", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
 
     expect(
@@ -106,24 +54,20 @@ describe("prepareElectronSidecars", () => {
         platform: "macos",
         workspaceRoot,
       }),
-    ).toMatchObject({
+    ).toEqual({
       entrypoint: join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),
       outputDirectory: join(electronPackageDirectory, "build", "sidecars"),
       outputPaths: {
         "openducktor-mcp": join(electronPackageDirectory, "build", "sidecars", "openducktor-mcp"),
-        beads: join(electronPackageDirectory, "build", "sidecars", "bd"),
-        dolt: join(electronPackageDirectory, "build", "sidecars", "dolt"),
       },
       workspaceRoot,
     });
   });
 
-  test("cleans, compiles, downloads, extracts, and marks Linux sidecars executable", async () => {
+  test("cleans, compiles, and marks Linux MCP sidecar executable", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
     const chmodCalls: Array<{ mode: number; path: string }> = [];
-    const downloadedAssets: string[] = [];
-    const extractedAssets: string[] = [];
     await mkdir(join(electronPackageDirectory, "build", "sidecars"), { recursive: true });
     await writeFile(staleOutput, "stale");
 
@@ -139,55 +83,19 @@ describe("prepareElectronSidecars", () => {
         chmodCalls.push({ mode, path });
         await chmod(path, mode);
       },
-      downloadAsset: async ({ archivePath, asset }) => {
-        downloadedAssets.push(asset.id);
-        await mkdir(dirname(archivePath), { recursive: true });
-        await writeFile(archivePath, "archive");
-      },
-      extractArchive: async ({ asset, extractionDirectory }) => {
-        extractedAssets.push(asset.id);
-        await writeExtractedSidecar({ asset, extractionDirectory, platform: "linux" });
-      },
-      verifyArchiveChecksum: async () => {},
     });
 
     await expect(stat(staleOutput)).rejects.toThrow();
-    expect(prepared.sidecars.map((sidecar) => sidecar.id)).toEqual([
-      "openducktor-mcp",
-      "beads",
-      "dolt",
+    expect(prepared.sidecars.map((sidecar) => sidecar.id)).toEqual(["openducktor-mcp"]);
+    await expect(stat(prepared.plan.outputPaths["openducktor-mcp"])).resolves.toMatchObject({
+      size: 17,
+    });
+    expect(chmodCalls).toEqual([
+      {
+        mode: 0o755,
+        path: prepared.plan.outputPaths["openducktor-mcp"],
+      },
     ]);
-    expect([...downloadedAssets].sort()).toEqual(["beads", "dolt"]);
-    expect(extractedAssets.sort()).toEqual(["beads", "dolt"]);
-    await expect(stat(prepared.plan.outputPaths.beads)).resolves.toMatchObject({ size: 6 });
-    await expect(stat(prepared.plan.outputPaths.dolt)).resolves.toMatchObject({ size: 6 });
-    expect(chmodCalls.map((call) => call.path).sort()).toEqual(
-      [
-        prepared.plan.outputPaths["openducktor-mcp"],
-        prepared.plan.outputPaths.beads,
-        prepared.plan.outputPaths.dolt,
-      ].sort(),
-    );
-  });
-
-  test("rejects unsupported target assets before mutating sidecar output", async () => {
-    const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
-    const staleOutput = join(electronPackageDirectory, "build", "sidecars", "stale");
-    const sideEffects: string[] = [];
-    await mkdir(dirname(staleOutput), { recursive: true });
-    await writeFile(staleOutput, "stale");
-
-    await expect(
-      prepareElectronSidecars({
-        arch: "arm64",
-        electronPackageDirectory,
-        platform: "windows",
-        workspaceRoot,
-        ...makeSideEffectingHooks(sideEffects),
-      }),
-    ).rejects.toThrow("No pinned Electron sidecar target for windows/arm64");
-    expect(sideEffects).toEqual([]);
-    await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
 
   test("rejects a missing MCP entrypoint before mutating sidecar output", async () => {
@@ -212,7 +120,7 @@ describe("prepareElectronSidecars", () => {
     await expect(stat(staleOutput)).resolves.toMatchObject({ size: 5 });
   });
 
-  test("does not chmod Windows sidecars", async () => {
+  test("does not chmod Windows MCP sidecar", async () => {
     const { electronPackageDirectory, workspaceRoot } = await makeTempWorkspace();
     const chmodCalls: Array<{ mode: number; path: string }> = [];
 
@@ -227,14 +135,6 @@ describe("prepareElectronSidecars", () => {
       chmodFile: async (path, mode) => {
         chmodCalls.push({ mode, path });
       },
-      downloadAsset: async ({ archivePath }) => {
-        await mkdir(dirname(archivePath), { recursive: true });
-        await writeFile(archivePath, "archive");
-      },
-      extractArchive: async ({ asset, extractionDirectory }) => {
-        await writeExtractedSidecar({ asset, extractionDirectory, platform: "windows" });
-      },
-      verifyArchiveChecksum: async () => {},
     });
 
     expect(chmodCalls).toEqual([]);

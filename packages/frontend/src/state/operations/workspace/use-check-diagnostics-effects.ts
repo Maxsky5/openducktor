@@ -1,4 +1,4 @@
-import type { BeadsCheck, RuntimeCheck } from "@openducktor/contracts";
+import type { RuntimeCheck, TaskStoreCheck } from "@openducktor/contracts";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
@@ -67,7 +67,7 @@ type UseDiagnosticsRetrySchedulerArgs = {
   activeWorkspace: ActiveWorkspace | null;
   retryPlan: DiagnosticsRetryPlan;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
+  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   refreshRepoRuntimeHealthForRepo: (
     repoPath: string,
     force?: boolean,
@@ -78,7 +78,7 @@ export function useDiagnosticsRetryScheduler({
   activeWorkspace,
   retryPlan,
   refreshRuntimeCheck,
-  refreshBeadsCheckForRepo,
+  refreshTaskStoreCheckForRepo,
   refreshRepoRuntimeHealthForRepo,
 }: UseDiagnosticsRetrySchedulerArgs): void {
   const diagnosticsRetryTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -92,7 +92,7 @@ export function useDiagnosticsRetryScheduler({
 
     if (
       !retryPlan.retryRuntimeCheck &&
-      !retryPlan.retryBeadsCheck &&
+      !retryPlan.retryTaskStoreCheck &&
       !retryPlan.retryRuntimeHealth
     ) {
       return;
@@ -106,8 +106,8 @@ export function useDiagnosticsRetryScheduler({
         retries.push(refreshRuntimeCheck(true));
       }
 
-      if (retryPlan.retryBeadsCheck && activeRepoPath !== null) {
-        retries.push(refreshBeadsCheckForRepo(activeRepoPath, true));
+      if (retryPlan.retryTaskStoreCheck && activeRepoPath !== null) {
+        retries.push(refreshTaskStoreCheckForRepo(activeRepoPath, true));
       }
 
       if (retryPlan.retryRuntimeHealth && activeRepoPath !== null) {
@@ -125,7 +125,7 @@ export function useDiagnosticsRetryScheduler({
     };
   }, [
     activeRepoPath,
-    refreshBeadsCheckForRepo,
+    refreshTaskStoreCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
     refreshRuntimeCheck,
     retryPlan,

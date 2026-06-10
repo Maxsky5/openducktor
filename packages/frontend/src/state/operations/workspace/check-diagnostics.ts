@@ -1,4 +1,4 @@
-import type { BeadsCheck, RuntimeCheck, RuntimeDescriptor } from "@openducktor/contracts";
+import type { RuntimeCheck, RuntimeDescriptor, TaskStoreCheck } from "@openducktor/contracts";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
 import { isRepoStoreReady } from "@/lib/repo-store-health";
 import type {
@@ -21,7 +21,7 @@ export type DiagnosticsToastIssue = {
 
 export type DiagnosticsRetryPlan = {
   retryRuntimeCheck: boolean;
-  retryBeadsCheck: boolean;
+  retryTaskStoreCheck: boolean;
   retryRuntimeHealth: boolean;
 };
 
@@ -42,9 +42,9 @@ type BuildDiagnosticsToastIssuesArgs = {
   runtimeCheck: RuntimeCheck | null;
   runtimeCheckError: string | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheck: BeadsCheck | null;
-  beadsCheckError: string | null;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  taskStoreCheck: TaskStoreCheck | null;
+  taskStoreCheckError: string | null;
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
 };
 
@@ -53,8 +53,8 @@ type BuildDiagnosticsRetryPlanArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
   runtimeCheckFetching: boolean;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheckFetching: boolean;
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
+  taskStoreCheckFetching: boolean;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   runtimeHealthFetching: boolean;
 };
@@ -65,9 +65,9 @@ const CLI_TOOLS_ISSUE_META: DiagnosticsIssueMeta = {
   availabilityVerb: "are",
 };
 
-const BEADS_STORE_ISSUE_META: DiagnosticsIssueMeta = {
-  id: "diagnostics:beads-store",
-  label: "Beads store",
+const TASK_STORE_ISSUE_META: DiagnosticsIssueMeta = {
+  id: "diagnostics:task-store",
+  label: "Task store",
   availabilityVerb: "is",
 };
 
@@ -91,37 +91,17 @@ export const buildRuntimeCheckErrorState = (
   errors: [runtimeCheckError],
 });
 
-export const buildBeadsCheckErrorState = (beadsCheckError: string): BeadsCheck => ({
+export const buildTaskStoreCheckErrorState = (taskStoreCheckError: string): TaskStoreCheck => ({
   repoStoreHealth: {
     category: "check_call_failed",
     status: "degraded",
     isReady: false,
-    detail: beadsCheckError,
-    attachment: {
-      path: null,
-      databaseName: null,
-    },
-    sharedServer: {
-      host: null,
-      port: null,
-      ownershipState: "unavailable",
-    },
+    detail: taskStoreCheckError,
+    databasePath: null,
   },
-  beadsOk: false,
-  beadsPath: null,
-  beadsError: beadsCheckError,
-  beadsExecutable: {
-    displayLabel: "Unavailable",
-    error: beadsCheckError,
-    path: null,
-    sourceCategory: "unavailable",
-  },
-  doltExecutable: {
-    displayLabel: "Unavailable",
-    error: beadsCheckError,
-    path: null,
-    sourceCategory: "unavailable",
-  },
+  taskStoreOk: false,
+  taskStorePath: null,
+  taskStoreError: taskStoreCheckError,
 });
 
 export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boolean => {
@@ -134,12 +114,8 @@ export const hasRuntimeCheckFailure = (runtimeCheck: RuntimeCheck | null): boole
   );
 };
 
-export const hasBeadsCheckFailure = (beadsCheck: BeadsCheck | null): boolean => {
-  return (
-    beadsCheck !== null &&
-    !isRepoStoreReady(beadsCheck) &&
-    beadsCheck.repoStoreHealth.status !== "initializing"
-  );
+export const hasTaskStoreCheckFailure = (taskStoreCheck: TaskStoreCheck | null): boolean => {
+  return taskStoreCheck !== null && !isRepoStoreReady(taskStoreCheck);
 };
 
 export const buildRuntimeHealthErrorMap = (
@@ -240,16 +216,23 @@ const getRuntimeCheckIssueCandidate = (
   return buildDiagnosticsIssueCandidate(CLI_TOOLS_ISSUE_META, detail, failureKind);
 };
 
-const getBeadsCheckIssueCandidate = (
-  beadsCheck: BeadsCheck | null,
-  beadsCheckError: string | null,
-  beadsCheckFailureKind: RepoRuntimeFailureKind,
+const getTaskStoreCheckIssueCandidate = (
+  taskStoreCheck: TaskStoreCheck | null,
+  taskStoreCheckError: string | null,
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind,
 ): DiagnosticsIssueCandidate | null => {
-  const detail = hasBeadsCheckFailure(beadsCheck)
-    ? (beadsCheck?.repoStoreHealth?.detail ?? beadsCheckError ?? beadsCheck?.beadsError ?? null)
-    : (beadsCheckError ?? beadsCheck?.repoStoreHealth?.detail ?? beadsCheck?.beadsError ?? null);
-  const failureKind = beadsCheckFailureKind ?? (hasBeadsCheckFailure(beadsCheck) ? "error" : null);
-  return buildDiagnosticsIssueCandidate(BEADS_STORE_ISSUE_META, detail, failureKind);
+  const detail = hasTaskStoreCheckFailure(taskStoreCheck)
+    ? (taskStoreCheck?.repoStoreHealth?.detail ??
+      taskStoreCheckError ??
+      taskStoreCheck?.taskStoreError ??
+      null)
+    : (taskStoreCheckError ??
+      taskStoreCheck?.repoStoreHealth?.detail ??
+      taskStoreCheck?.taskStoreError ??
+      null);
+  const failureKind =
+    taskStoreCheckFailureKind ?? (hasTaskStoreCheckFailure(taskStoreCheck) ? "error" : null);
+  return buildDiagnosticsIssueCandidate(TASK_STORE_ISSUE_META, detail, failureKind);
 };
 
 const getRuntimeHealthIssueCandidates = (
@@ -307,9 +290,9 @@ export const buildDiagnosticsToastIssues = ({
   runtimeCheck,
   runtimeCheckError,
   runtimeCheckFailureKind,
-  beadsCheck,
-  beadsCheckError,
-  beadsCheckFailureKind,
+  taskStoreCheck,
+  taskStoreCheckError,
+  taskStoreCheckFailureKind,
   runtimeHealthByRuntime,
 }: BuildDiagnosticsToastIssuesArgs): DiagnosticsToastIssue[] => {
   if (activeWorkspace === null) {
@@ -318,7 +301,7 @@ export const buildDiagnosticsToastIssues = ({
 
   return [
     getRuntimeCheckIssueCandidate(runtimeCheck, runtimeCheckError, runtimeCheckFailureKind),
-    getBeadsCheckIssueCandidate(beadsCheck, beadsCheckError, beadsCheckFailureKind),
+    getTaskStoreCheckIssueCandidate(taskStoreCheck, taskStoreCheckError, taskStoreCheckFailureKind),
     ...getRuntimeHealthIssueCandidates(runtimeDefinitions, runtimeHealthByRuntime),
   ].reduce<DiagnosticsToastIssue[]>((issues, issueCandidate) => {
     if (issueCandidate !== null && issueCandidate.failureKind === "error") {
@@ -351,17 +334,17 @@ const hasRuntimeHealthTimeoutIssue = (
 export const hasDiagnosticsRetryingState = ({
   runtimeDefinitions,
   runtimeCheckFailureKind,
-  beadsCheckFailureKind,
+  taskStoreCheckFailureKind,
   runtimeHealthByRuntime,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
 }): boolean => {
   return (
     runtimeCheckFailureKind === "timeout" ||
-    beadsCheckFailureKind === "timeout" ||
+    taskStoreCheckFailureKind === "timeout" ||
     hasRuntimeHealthTimeoutIssue(runtimeDefinitions, runtimeHealthByRuntime)
   );
 };
@@ -371,14 +354,14 @@ export const buildDiagnosticsRetryPlan = ({
   runtimeDefinitions,
   runtimeCheckFailureKind,
   runtimeCheckFetching,
-  beadsCheckFailureKind,
-  beadsCheckFetching,
+  taskStoreCheckFailureKind,
+  taskStoreCheckFetching,
   runtimeHealthByRuntime,
   runtimeHealthFetching,
 }: BuildDiagnosticsRetryPlanArgs): DiagnosticsRetryPlan => {
   const retryRuntimeCheck = runtimeCheckFailureKind === "timeout" && !runtimeCheckFetching;
-  const retryBeadsCheck =
-    activeWorkspace !== null && beadsCheckFailureKind === "timeout" && !beadsCheckFetching;
+  const retryTaskStoreCheck =
+    activeWorkspace !== null && taskStoreCheckFailureKind === "timeout" && !taskStoreCheckFetching;
   const retryRuntimeHealth =
     activeWorkspace !== null &&
     runtimeDefinitions.length > 0 &&
@@ -389,7 +372,7 @@ export const buildDiagnosticsRetryPlan = ({
 
   return {
     retryRuntimeCheck,
-    retryBeadsCheck,
+    retryTaskStoreCheck,
     retryRuntimeHealth,
   };
 };

@@ -139,9 +139,9 @@ const createHookHarness = (
 
   const checksState = {
     runtimeCheck: null,
-    beadsCheck: null,
+    taskStoreCheck: null,
     runtimeCheckFailureKind: null,
-    beadsCheckFailureKind: null,
+    taskStoreCheckFailureKind: null,
     runtimeHealthByRuntime: {},
     isLoadingChecks: false,
     refreshChecks,

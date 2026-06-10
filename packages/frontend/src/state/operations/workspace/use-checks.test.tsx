@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-  type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeCheck,
   type RuntimeKind,
+  type TaskStoreCheck,
 } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
-  type BeadsCheckFixtureOverrides,
-  createBeadsCheckFixture,
   createDeferred,
   createRepoRuntimeHealthFixture,
+  createTaskStoreCheckFixture,
   type RepoRuntimeHealthFixtureOverrides,
+  type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -38,8 +38,8 @@ const makeRuntimeCheck = (overrides: Partial<RuntimeCheck> = {}): RuntimeCheck =
   ...overrides,
 });
 
-const makeBeadsCheck = (overrides: BeadsCheckFixtureOverrides = {}): BeadsCheck =>
-  createBeadsCheckFixture({}, overrides);
+const makeTaskStoreCheck = (overrides: TaskStoreCheckFixtureOverrides = {}): TaskStoreCheck =>
+  createTaskStoreCheckFixture({}, overrides);
 
 const makeRepoHealth = (
   overrides: RepoRuntimeHealthFixtureOverrides = {},
@@ -58,9 +58,10 @@ const testToastApi: DiagnosticsToastApi = {
   dismiss: (toastId) => toastDismiss(toastId),
 };
 let runtimeCheckHandler = async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck();
-let beadsCheckHandler = async (_repoPath: string): Promise<BeadsCheck> => makeBeadsCheck();
+let taskStoreCheckHandler = async (_repoPath: string): Promise<TaskStoreCheck> =>
+  makeTaskStoreCheck();
 const runtimeCheckMock = mock((force?: boolean) => runtimeCheckHandler(force));
-const beadsCheckMock = mock((repoPath: string) => beadsCheckHandler(repoPath));
+const taskStoreCheckMock = mock((repoPath: string) => taskStoreCheckHandler(repoPath));
 let repoHealthHandler = async (
   _repoPath: string,
   _runtimeKind: RuntimeKind,
@@ -77,7 +78,9 @@ type HookHarnessArgs = Partial<Omit<HookArgs, "checkRepoRuntimeHealth">> & {
   activeRepo?: string | null;
 };
 type ResolvedHookArgs = HookArgs &
-  Required<Pick<HookArgs, "runtimeCheck" | "beadsCheck" | "toastApi" | "checkRepoRuntimeHealth">>;
+  Required<
+    Pick<HookArgs, "runtimeCheck" | "taskStoreCheck" | "toastApi" | "checkRepoRuntimeHealth">
+  >;
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
   workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -110,7 +113,7 @@ const buildHookArgs = (
     activeWorkspace,
     runtimeDefinitions,
     runtimeCheck: args.runtimeCheck ?? previous?.runtimeCheck ?? runtimeCheckMock,
-    beadsCheck: args.beadsCheck ?? previous?.beadsCheck ?? beadsCheckMock,
+    taskStoreCheck: args.taskStoreCheck ?? previous?.taskStoreCheck ?? taskStoreCheckMock,
     toastApi: args.toastApi ?? previous?.toastApi ?? testToastApi,
     checkRepoRuntimeHealth:
       args.checkRepoRuntimeHealth ??
@@ -185,7 +188,7 @@ const waitForInitialChecksToSettle = async (
   await harness.waitFor((value) => {
     return (
       value.runtimeCheck !== null &&
-      value.activeBeadsCheck !== null &&
+      value.activeTaskStoreCheck !== null &&
       runtimeKinds.every(
         (runtimeKind) => value.activeRepoRuntimeHealthByRuntime[runtimeKind] != null,
       ) &&
@@ -199,10 +202,10 @@ beforeEach(async () => {
   toastError.mockClear();
   toastDismiss.mockClear();
   runtimeCheckMock.mockClear();
-  beadsCheckMock.mockClear();
+  taskStoreCheckMock.mockClear();
   checkRepoRuntimeHealthMock.mockClear();
   runtimeCheckHandler = async (_force?: boolean) => makeRuntimeCheck();
-  beadsCheckHandler = async (_repoPath: string) => makeBeadsCheck();
+  taskStoreCheckHandler = async (_repoPath: string) => makeTaskStoreCheck();
   repoHealthHandler = async () => makeRepoHealth();
 });
 
@@ -211,10 +214,10 @@ describe("use-checks", () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: null,
@@ -224,7 +227,7 @@ describe("use-checks", () => {
     try {
       await harness.mount();
       runtimeCheck.mockClear();
-      beadsCheck.mockClear();
+      taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
         await value.refreshChecks();
@@ -232,60 +235,10 @@ describe("use-checks", () => {
       await harness.waitFor((value) => value.isLoadingChecks === false);
 
       expect(runtimeCheck).not.toHaveBeenCalled();
-      expect(beadsCheck).not.toHaveBeenCalled();
+      expect(taskStoreCheck).not.toHaveBeenCalled();
       expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
       expect(harness.getLatest().isLoadingChecks).toBe(false);
-    } finally {
-      await harness.unmount();
-    }
-  }, 5000);
-
-  test("does not surface Beads failures while backend reports initialization in progress", async () => {
-    const runtimeCheck = mock(
-      async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
-    );
-    const beadsCheck = mock(
-      async (): Promise<BeadsCheck> =>
-        makeBeadsCheck({
-          beadsOk: false,
-          beadsPath: "/repo/.beads",
-          beadsError: "Beads task store initialization is in progress for /repo-a",
-          repoStoreHealth: {
-            category: "initializing",
-            status: "initializing",
-            isReady: false,
-            detail: "Beads task store initialization is in progress for /repo-a",
-            attachment: {
-              path: "/repo/.beads",
-              databaseName: "repo_db",
-            },
-            sharedServer: {
-              host: "127.0.0.1",
-              port: 38240,
-              ownershipState: "unavailable",
-            },
-          },
-        }),
-    );
-    runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
-
-    const harness = createHookHarness({
-      activeRepo: "/repo-a",
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-    });
-
-    try {
-      await harness.mount();
-      await harness.waitFor(
-        (value) => value.runtimeCheck !== null && value.activeBeadsCheck !== null,
-      );
-
-      const current = harness.getLatest();
-      expect(current.activeBeadsCheck?.repoStoreHealth.status).toBe("initializing");
-      expect(current.beadsCheckFailureKind).toBeNull();
-      expect(toastError).not.toHaveBeenCalledWith("Beads store unavailable", expect.anything());
     } finally {
       await harness.unmount();
     }
@@ -324,7 +277,7 @@ describe("use-checks", () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
     let repoHealthCallCount = 0;
     repoHealthHandler = async () => {
       repoHealthCallCount += 1;
@@ -351,7 +304,7 @@ describe("use-checks", () => {
     };
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -380,14 +333,16 @@ describe("use-checks", () => {
   }, 5000);
 
   test("tracks per-repo cache and projects cached checks when active repo changes", async () => {
-    const beadsCheck = mock(
-      async (repoPath: string): Promise<BeadsCheck> =>
-        makeBeadsCheck({ beadsPath: `${repoPath}/.beads` }),
+    const taskStoreCheck = mock(
+      async (repoPath: string): Promise<TaskStoreCheck> =>
+        makeTaskStoreCheck({
+          taskStorePath: `${repoPath}/.openducktor/task-stores/workspace/database.sqlite`,
+        }),
     );
     repoHealthHandler = async (repoPath: string) =>
       makeRepoHealth({ checkedAt: `${repoPath}-checked`, mcp: { toolIds: [repoPath] } });
 
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -396,39 +351,47 @@ describe("use-checks", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((value) => value.activeBeadsCheck?.beadsPath === "/repo-a/.beads");
-      beadsCheck.mockClear();
+      await harness.waitFor(
+        (value) =>
+          value.activeTaskStoreCheck?.taskStorePath ===
+          "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
+      );
+      taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
-        await value.refreshBeadsCheckForRepo("/repo-b");
+        await value.refreshTaskStoreCheckForRepo("/repo-b");
         await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
-      await harness.waitFor((value) => value.hasCachedBeadsCheck("/repo-b"));
+      await harness.waitFor((value) => value.hasCachedTaskStoreCheck("/repo-b"));
       await harness.waitFor((value) => value.hasCachedRepoRuntimeHealth("/repo-b", ["opencode"]));
 
-      expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-a/.beads");
+      expect(harness.getLatest().activeTaskStoreCheck?.taskStorePath).toBe(
+        "/repo-a/.openducktor/task-stores/workspace/database.sqlite",
+      );
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
         "/repo-a",
       ]);
-      expect(harness.getLatest().hasCachedBeadsCheck("/repo-b")).toBe(true);
+      expect(harness.getLatest().hasCachedTaskStoreCheck("/repo-b")).toBe(true);
       expect(harness.getLatest().hasCachedRepoRuntimeHealth("/repo-b", ["opencode"])).toBe(true);
-      expect(beadsCheck).toHaveBeenCalledTimes(1);
+      expect(taskStoreCheck).toHaveBeenCalledTimes(1);
       expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 
       await harness.updateArgs({ activeRepo: "/repo-b" });
-      expect(harness.getLatest().activeBeadsCheck?.beadsPath).toBe("/repo-b/.beads");
+      expect(harness.getLatest().activeTaskStoreCheck?.taskStorePath).toBe(
+        "/repo-b/.openducktor/task-stores/workspace/database.sqlite",
+      );
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.mcp?.toolIds).toEqual([
         "/repo-b",
       ]);
 
-      beadsCheck.mockClear();
+      taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
       await harness.run(async (value) => {
-        await value.refreshBeadsCheckForRepo("/repo-b");
+        await value.refreshTaskStoreCheckForRepo("/repo-b");
         await value.refreshRepoRuntimeHealthForRepo("/repo-b");
       });
 
-      expect(beadsCheck).not.toHaveBeenCalled();
+      expect(taskStoreCheck).not.toHaveBeenCalled();
       expect(checkRepoRuntimeHealthMock).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
@@ -439,7 +402,7 @@ describe("use-checks", () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
     repoHealthHandler = async () =>
       makeRepoHealth({
         status: "error",
@@ -455,7 +418,7 @@ describe("use-checks", () => {
       });
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -486,7 +449,7 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("shows cli and beads toasts for unhealthy successful payloads", async () => {
+  test("shows cli and task-store toasts for unhealthy successful payloads", async () => {
     let runtimeCallCount = 0;
     let beadsCallCount = 0;
     const runtimeCheck = mock(async (): Promise<RuntimeCheck> => {
@@ -505,28 +468,26 @@ describe("use-checks", () => {
             errors: ["git missing"],
           });
     });
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
       beadsCallCount += 1;
       return beadsCallCount === 1
-        ? makeBeadsCheck()
-        : makeBeadsCheck({
-            beadsOk: false,
-            beadsPath: null,
-            beadsError: "beads offline",
+        ? makeTaskStoreCheck()
+        : makeTaskStoreCheck({
+            taskStoreOk: false,
+            taskStorePath: null,
+            taskStoreError: "task store offline",
             repoStoreHealth: {
-              category: "attachment_verification_failed",
+              category: "database_unavailable",
               status: "blocking",
               isReady: false,
-              detail: "beads offline",
-              attachment: {
-                path: null,
-              },
+              detail: "task store offline",
+              databasePath: null,
             },
           });
     });
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -549,10 +510,10 @@ describe("use-checks", () => {
         }),
       );
       expect(toastError).toHaveBeenCalledWith(
-        "Beads store unavailable",
+        "Task store unavailable",
         expect.objectContaining({
-          id: "diagnostics:beads-store",
-          description: "beads offline",
+          id: "diagnostics:task-store",
+          description: "task store offline",
         }),
       );
     } finally {
@@ -562,7 +523,7 @@ describe("use-checks", () => {
 
   test("refreshChecks starts independent probes in parallel", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
-    const beadsDeferred = createDeferred<BeadsCheck>();
+    const beadsDeferred = createDeferred<TaskStoreCheck>();
     const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthCheck>();
     let runtimeCallCount = 0;
     let beadsCallCount = 0;
@@ -571,9 +532,9 @@ describe("use-checks", () => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
     });
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
       beadsCallCount += 1;
-      return beadsCallCount === 1 ? makeBeadsCheck() : beadsDeferred.promise;
+      return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
     });
     repoHealthHandler = async () => {
       runtimeHealthCallCount += 1;
@@ -581,7 +542,7 @@ describe("use-checks", () => {
     };
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -593,7 +554,7 @@ describe("use-checks", () => {
     try {
       await waitForInitialChecksToSettle(harness);
       runtimeCheck.mockClear();
-      beadsCheck.mockClear();
+      taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
@@ -603,12 +564,12 @@ describe("use-checks", () => {
 
       expect(runtimeCheck).toHaveBeenCalledTimes(1);
       expect(runtimeCheck.mock.calls[0]).toEqual([true]);
-      expect(beadsCheck).toHaveBeenCalledTimes(1);
+      expect(taskStoreCheck).toHaveBeenCalledTimes(1);
       expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
       expect(checkRepoRuntimeHealthMock.mock.calls[0]).toEqual(["/repo-a", "opencode"]);
 
       runtimeDeferred.resolve(makeRuntimeCheck());
-      beadsDeferred.resolve(makeBeadsCheck());
+      beadsDeferred.resolve(makeTaskStoreCheck());
       runtimeHealthDeferred.resolve(makeRepoHealth());
       await harness.run(async () => {
         await refreshPromise;
@@ -632,11 +593,11 @@ describe("use-checks", () => {
           reject(new Error("runtime down"));
         }),
     );
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => makeBeadsCheck());
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => makeTaskStoreCheck());
     repoHealthHandler = async () => makeRepoHealth();
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -671,7 +632,7 @@ describe("use-checks", () => {
 
   test("refreshChecks waits for all failed probes before surfacing unavailable diagnostics", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
-    const beadsDeferred = createDeferred<BeadsCheck>();
+    const beadsDeferred = createDeferred<TaskStoreCheck>();
     const runtimeHealthDeferred = createDeferred<RepoRuntimeHealthCheck>();
     let runtimeCallCount = 0;
     let beadsCallCount = 0;
@@ -680,9 +641,9 @@ describe("use-checks", () => {
       runtimeCallCount += 1;
       return runtimeCallCount === 1 ? makeRuntimeCheck() : runtimeDeferred.promise;
     });
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
       beadsCallCount += 1;
-      return beadsCallCount === 1 ? makeBeadsCheck() : beadsDeferred.promise;
+      return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
     });
     repoHealthHandler = async () => {
       runtimeHealthCallCount += 1;
@@ -690,7 +651,7 @@ describe("use-checks", () => {
     };
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
 
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -702,7 +663,7 @@ describe("use-checks", () => {
     try {
       await waitForInitialChecksToSettle(harness);
       runtimeCheck.mockClear();
-      beadsCheck.mockClear();
+      taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
@@ -714,7 +675,7 @@ describe("use-checks", () => {
       await Promise.resolve();
       expect(toastError).not.toHaveBeenCalled();
 
-      beadsDeferred.reject(new Error("beads down"));
+      beadsDeferred.reject(new Error("task store down"));
       runtimeHealthDeferred.resolve(makeRepoHealth());
       await harness.run(async () => {
         return expect(refreshPromise).rejects.toThrow("runtime down");
@@ -726,8 +687,11 @@ describe("use-checks", () => {
         expect.objectContaining({ id: "diagnostics:cli-tools", description: "runtime down" }),
       );
       expect(toastError).toHaveBeenCalledWith(
-        "Beads store unavailable",
-        expect.objectContaining({ id: "diagnostics:beads-store", description: "beads down" }),
+        "Task store unavailable",
+        expect.objectContaining({
+          id: "diagnostics:task-store",
+          description: "task store down",
+        }),
       );
       expect(harness.getLatest().isLoadingChecks).toBe(false);
     } finally {
@@ -744,7 +708,7 @@ describe("use-checks", () => {
   test("refreshChecks times out hung probes and clears loading state", async () => {
     let runtimeCallCount = 0;
     let beadsCallCount = 0;
-    const beadsDeferred = createDeferred<BeadsCheck>();
+    const beadsDeferred = createDeferred<TaskStoreCheck>();
     const runtimeCheck = mock(async (_force?: boolean): Promise<RuntimeCheck> => {
       runtimeCallCount += 1;
       if (runtimeCallCount === 1) {
@@ -752,9 +716,9 @@ describe("use-checks", () => {
       }
       throw new Error("runtime down");
     });
-    const beadsCheck = mock(async (): Promise<BeadsCheck> => {
+    const taskStoreCheck = mock(async (): Promise<TaskStoreCheck> => {
       beadsCallCount += 1;
-      return beadsCallCount === 1 ? makeBeadsCheck() : beadsDeferred.promise;
+      return beadsCallCount === 1 ? makeTaskStoreCheck() : beadsDeferred.promise;
     });
     repoHealthHandler = async () => makeRepoHealth();
 
@@ -790,7 +754,7 @@ describe("use-checks", () => {
     });
 
     runtimeCheckHandler = runtimeCheck;
-    beadsCheckHandler = beadsCheck;
+    taskStoreCheckHandler = taskStoreCheck;
     globalThis.setTimeout = setTimeoutMock as unknown as typeof globalThis.setTimeout;
     globalThis.clearTimeout = clearTimeoutMock as unknown as typeof globalThis.clearTimeout;
 
@@ -805,7 +769,7 @@ describe("use-checks", () => {
       await waitForInitialChecksToSettle(harness);
       diagnosticsTimeoutHandlers.clear();
       runtimeCheck.mockClear();
-      beadsCheck.mockClear();
+      taskStoreCheck.mockClear();
       checkRepoRuntimeHealthMock.mockClear();
 
       await harness.run((value) => {
@@ -842,14 +806,14 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("projects runtime and beads query timeouts into concrete states instead of leaving checks pending", async () => {
+  test("projects runtime and task-store query timeouts into concrete states instead of leaving checks pending", async () => {
     const runtimeDeferred = createDeferred<RuntimeCheck>();
-    const beadsDeferred = createDeferred<BeadsCheck>();
+    const beadsDeferred = createDeferred<TaskStoreCheck>();
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
 
     runtimeCheckHandler = mock(async () => runtimeDeferred.promise);
-    beadsCheckHandler = mock(async () => beadsDeferred.promise);
+    taskStoreCheckHandler = mock(async () => beadsDeferred.promise);
     repoHealthHandler = async () => makeRepoHealth();
 
     globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
@@ -885,9 +849,9 @@ describe("use-checks", () => {
       await harness.waitFor(
         (value) =>
           value.runtimeCheck?.errors[0] === "Timed out after 15000ms" &&
-          value.activeBeadsCheck?.beadsError === "Timed out after 15000ms" &&
+          value.activeTaskStoreCheck?.taskStoreError === "Timed out after 15000ms" &&
           value.runtimeCheckFailureKind === "timeout" &&
-          value.beadsCheckFailureKind === "timeout" &&
+          value.taskStoreCheckFailureKind === "timeout" &&
           value.isLoadingChecks === false,
       );
 

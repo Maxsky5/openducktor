@@ -1,5 +1,4 @@
 import {
-  type BeadsCheck,
   type ChatSettings,
   DEFAULT_AGENT_RUNTIMES,
   DEFAULT_CHAT_SETTINGS,
@@ -7,53 +6,28 @@ import {
   DEFAULT_KANBAN_SETTINGS,
   type SettingsSnapshot,
   type TaskCard,
+  type TaskStoreCheck,
 } from "@openducktor/contracts";
 import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
-const BASE_BEADS_CHECK_FIXTURE: BeadsCheck = {
-  beadsOk: true,
-  beadsPath: "/repo/.beads",
-  beadsError: null,
-  beadsExecutable: {
-    displayLabel: "System PATH",
-    error: null,
-    path: "/usr/local/bin/bd",
-    sourceCategory: "system_path",
-  },
-  doltExecutable: {
-    displayLabel: "System PATH",
-    error: null,
-    path: "/usr/local/bin/dolt",
-    sourceCategory: "system_path",
-  },
+const BASE_TASK_STORE_CHECK_FIXTURE: TaskStoreCheck = {
+  taskStoreOk: true,
+  taskStorePath: "/repo/.openducktor/task-stores/workspace-1/database.sqlite",
+  taskStoreError: null,
   repoStoreHealth: {
     category: "healthy",
     status: "ready",
     isReady: true,
-    detail: "Beads attachment and shared Dolt server are healthy.",
-    attachment: {
-      path: "/repo/.beads",
-      databaseName: "repo_db",
-    },
-    sharedServer: {
-      host: "127.0.0.1",
-      port: 3307,
-      ownershipState: "owned_by_current_process",
-    },
+    detail: "SQLite task store is ready.",
+    databasePath: "/repo/.openducktor/task-stores/workspace-1/database.sqlite",
   },
 };
 
-type RepoStoreHealthFixtureOverrides = Omit<
-  Partial<BeadsCheck["repoStoreHealth"]>,
-  "attachment" | "sharedServer"
-> & {
-  attachment?: Partial<BeadsCheck["repoStoreHealth"]["attachment"]>;
-  sharedServer?: Partial<BeadsCheck["repoStoreHealth"]["sharedServer"]>;
-};
+type RepoStoreHealthFixtureOverrides = Partial<TaskStoreCheck["repoStoreHealth"]>;
 
-export type BeadsCheckFixtureOverrides = Omit<Partial<BeadsCheck>, "repoStoreHealth"> & {
+export type TaskStoreCheckFixtureOverrides = Omit<Partial<TaskStoreCheck>, "repoStoreHealth"> & {
   repoStoreHealth?: RepoStoreHealthFixtureOverrides;
 };
 
@@ -219,30 +193,20 @@ export const createDeferred = <T>() => {
   };
 };
 
-export const createBeadsCheckFixture = (
-  defaults: BeadsCheckFixtureOverrides = {},
-  overrides: BeadsCheckFixtureOverrides = {},
-): BeadsCheck => {
+export const createTaskStoreCheckFixture = (
+  defaults: TaskStoreCheckFixtureOverrides = {},
+  overrides: TaskStoreCheckFixtureOverrides = {},
+): TaskStoreCheck => {
   const merged = {
-    ...BASE_BEADS_CHECK_FIXTURE,
+    ...BASE_TASK_STORE_CHECK_FIXTURE,
     ...defaults,
     ...overrides,
     repoStoreHealth: {
-      ...BASE_BEADS_CHECK_FIXTURE.repoStoreHealth,
+      ...BASE_TASK_STORE_CHECK_FIXTURE.repoStoreHealth,
       ...defaults.repoStoreHealth,
       ...overrides.repoStoreHealth,
-      attachment: {
-        ...BASE_BEADS_CHECK_FIXTURE.repoStoreHealth.attachment,
-        ...defaults.repoStoreHealth?.attachment,
-        ...overrides.repoStoreHealth?.attachment,
-      },
-      sharedServer: {
-        ...BASE_BEADS_CHECK_FIXTURE.repoStoreHealth.sharedServer,
-        ...defaults.repoStoreHealth?.sharedServer,
-        ...overrides.repoStoreHealth?.sharedServer,
-      },
     },
-  } satisfies BeadsCheck;
+  } satisfies TaskStoreCheck;
 
   return structuredClone(merged);
 };
