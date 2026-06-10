@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
-import { HostInvariantError } from "../../effect/host-errors";
+import { Cause, Chunk, Effect, Exit } from "effect";
+import { HostInvariantError, HostOperationError } from "../../effect/host-errors";
 import {
   resolveSqliteTaskStoreDatabasePath,
   TASK_STORE_DATABASE_FILENAME,
@@ -60,6 +60,83 @@ const readDocumentCount = (databasePath: string, taskId: string, kind: string): 
       typeof row.count === "number"
       ? row.count
       : 0;
+  } finally {
+    database.close();
+  }
+};
+
+const firstFailure = async <A, E>(effect: Effect.Effect<A, E>): Promise<E> => {
+  const exit = await Effect.runPromiseExit(effect);
+  if (!Exit.isFailure(exit)) {
+    throw new Error("Expected Effect failure.");
+  }
+  const failureOption = Chunk.head(Cause.failures(exit.cause));
+  if (failureOption._tag !== "Some") {
+    throw new Error("Expected Effect failure cause.");
+  }
+  return failureOption.value;
+};
+
+const readTag = (value: unknown): string | undefined => {
+  if (typeof value !== "object" || value === null || !("_tag" in value)) {
+    return undefined;
+  }
+  const tag = value._tag;
+  return typeof tag === "string" ? tag : undefined;
+};
+
+const expectFailureTag = async <A, E>(
+  effect: Effect.Effect<A, E>,
+  expectedTag: string,
+): Promise<E> => {
+  const failure = await firstFailure(effect);
+  expect(readTag(failure)).toBe(expectedTag);
+  return failure;
+};
+
+const insertRawTask = ({
+  databasePath,
+  ignoreCheckConstraints = false,
+  qaRequired,
+  taskId,
+}: {
+  databasePath: string;
+  ignoreCheckConstraints?: boolean;
+  qaRequired: number;
+  taskId: string;
+}): void => {
+  const database = new Database(databasePath);
+  try {
+    if (ignoreCheckConstraints) {
+      database.exec("PRAGMA ignore_check_constraints = ON;");
+    }
+    const timestampMs = Date.parse("2026-06-10T10:00:00.000Z");
+    database
+      .prepare(
+        `insert into tasks (
+          id, title, description, notes, status, issue_type, priority, parent_id, qa_required,
+          labels_json, agent_sessions_json, target_branch_json, pull_request_json,
+          direct_merge_json, created_at_ms, updated_at_ms
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        taskId,
+        "Task",
+        "",
+        "",
+        "open",
+        "task",
+        2,
+        null,
+        qaRequired,
+        "[]",
+        "[]",
+        null,
+        null,
+        null,
+        timestampMs,
+        timestampMs,
+      );
   } finally {
     database.close();
   }
@@ -144,6 +221,90 @@ describe("createSqliteTaskRepository", () => {
       expect.objectContaining({ id: "fair-nest-2" }),
       expect.objectContaining({ id: "fair-nest-1", subtaskIds: ["fair-nest-2"] }),
     ]);
+  });
+
+  test("fails recursive delete when the root task is missing", async () => {
+    const configDir = await makeTempDirectory();
+    const { repository } = createRepository(configDir);
+
+    const failure = await expectFailureTag(
+      repository.deleteTask({
+        repoPath: "/repos/fairnest",
+        taskId: "fairnest-missing",
+        deleteSubtasks: true,
+      }),
+      "HostResourceError",
+    );
+    expect(failure).toMatchObject({ message: "Task not found: fairnest-missing" });
+  });
+
+  test("fails clearing an empty agent-session role set when the task is missing", async () => {
+    const configDir = await makeTempDirectory();
+    const { repository } = createRepository(configDir);
+
+    const failure = await expectFailureTag(
+      repository.clearAgentSessionsByRoles({
+        repoPath: "/repos/fairnest",
+        taskId: "fairnest-missing",
+        roles: [" ", ""],
+      }),
+      "HostResourceError",
+    );
+    expect(failure).toMatchObject({ message: "Task not found: fairnest-missing" });
+  });
+
+  test("preserves validation errors for invalid persisted SQLite task rows", async () => {
+    const configDir = await makeTempDirectory();
+    const { databasePath, repository } = createRepository(configDir);
+
+    await Effect.runPromise(repository.diagnoseRepoStore({ repoPath: "/repos/fairnest" }));
+    insertRawTask({
+      databasePath,
+      ignoreCheckConstraints: true,
+      qaRequired: 2,
+      taskId: "fairnest-invalid",
+    });
+
+    const failure = await expectFailureTag(
+      repository.getTask({ repoPath: "/repos/fairnest", taskId: "fairnest-invalid" }),
+      "HostValidationError",
+    );
+    expect(failure).toMatchObject({ field: "qa_required" });
+  });
+
+  test("adds a SQLite constraint for boolean task columns", async () => {
+    const configDir = await makeTempDirectory();
+    const { databasePath, repository } = createRepository(configDir);
+
+    await Effect.runPromise(repository.diagnoseRepoStore({ repoPath: "/repos/fairnest" }));
+    expect(() =>
+      insertRawTask({
+        databasePath,
+        qaRequired: 2,
+        taskId: "fairnest-invalid",
+      }),
+    ).toThrow();
+  });
+
+  test("wraps raw SQLite execution failures as operation errors", async () => {
+    const configDir = await makeTempDirectory();
+    const { databasePath, repository } = createRepository(configDir);
+    await mkdir(path.dirname(databasePath), { recursive: true });
+    const database = new Database(databasePath);
+    try {
+      database.exec("create table tasks (id text primary key);");
+    } finally {
+      database.close();
+    }
+
+    const failure = await expectFailureTag(
+      repository.listTasks({ repoPath: "/repos/fairnest" }),
+      "HostOperationError",
+    );
+    expect(failure).toBeInstanceOf(HostOperationError);
+    if (failure instanceof HostOperationError) {
+      expect(failure.operation).toBe("sqliteTaskRepository.ensureSchema");
+    }
   });
 
   test("stores document history while reading the latest workflow documents", async () => {

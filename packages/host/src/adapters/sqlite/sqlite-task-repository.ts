@@ -162,11 +162,11 @@ export const createSqliteTaskRepository = ({
         "sqliteTaskRepository.clearAgentSessionsByRoles",
         ({ database }) =>
           transaction(database, () => {
+            const row = requireTaskRow(database, input.taskId, input.repoPath);
             const roleSet = new Set(input.roles.map((role) => role.trim()).filter(Boolean));
             if (roleSet.size === 0) {
               return true;
             }
-            const row = requireTaskRow(database, input.taskId, input.repoPath);
             const remaining = agentSessionsFromRow(row).filter(
               (session) => !roleSet.has(session.role.trim()),
             );
@@ -240,9 +240,10 @@ export const createSqliteTaskRepository = ({
     deleteTask(input) {
       return withDatabase(input.repoPath, "sqliteTaskRepository.deleteTask", ({ database }) =>
         transaction(database, () => {
+          const root = requireTaskRow(database, input.taskId, input.repoPath);
           const targetIds = input.deleteSubtasks
-            ? descendantTaskIds(database, input.taskId)
-            : new Set<string>([requireTaskRow(database, input.taskId, input.repoPath).id]);
+            ? descendantTaskIds(database, root.id)
+            : new Set<string>([root.id]);
           for (const taskId of targetIds) {
             database.prepare("delete from tasks where id = ?").run(taskId);
           }

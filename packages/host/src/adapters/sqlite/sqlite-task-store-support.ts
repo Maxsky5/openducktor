@@ -2,8 +2,11 @@ import type { RepoStoreHealth } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   errorMessage,
+  HostDependencyError,
   HostInvariantError,
   HostOperationError,
+  HostPathAccessError,
+  HostPathNotFoundError,
   HostResourceError,
   HostValidationError,
 } from "../../effect/host-errors";
@@ -21,7 +24,7 @@ export type TaskRow = {
   issue_type: string;
   priority: number;
   parent_id: string | null;
-  qa_required: number;
+  qa_required: SqliteBoolean;
   labels_json: string;
   agent_sessions_json: string;
   target_branch_json: string | null;
@@ -30,6 +33,8 @@ export type TaskRow = {
   created_at_ms: number;
   updated_at_ms: number;
 };
+
+export type SqliteBoolean = 0 | 1;
 
 export type TaskDocumentRow = {
   task_id: string;
@@ -53,7 +58,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   issue_type text not null,
   priority integer not null,
   parent_id text null,
-  qa_required integer not null,
+  qa_required integer not null check (qa_required in (0, 1)),
   labels_json text not null,
   agent_sessions_json text not null,
   target_branch_json text null,
@@ -87,13 +92,17 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 export const hasRow = (value: unknown): boolean => value !== null && value !== undefined;
 
+const isTaskStoreError = (cause: unknown): cause is TaskStoreError =>
+  cause instanceof HostDependencyError ||
+  cause instanceof HostInvariantError ||
+  cause instanceof HostOperationError ||
+  cause instanceof HostPathAccessError ||
+  cause instanceof HostPathNotFoundError ||
+  cause instanceof HostResourceError ||
+  cause instanceof HostValidationError;
+
 export const toTaskStoreError = (cause: unknown): TaskStoreError => {
-  if (
-    cause instanceof HostInvariantError ||
-    cause instanceof HostOperationError ||
-    cause instanceof HostResourceError ||
-    cause instanceof HostValidationError
-  ) {
+  if (isTaskStoreError(cause)) {
     return cause;
   }
 
@@ -115,13 +124,18 @@ export const executeSql = <A>(
 ): Effect.Effect<A, TaskStoreError> =>
   Effect.try({
     try: run,
-    catch: (cause) =>
-      new HostOperationError({
+    catch: (cause) => {
+      if (isTaskStoreError(cause)) {
+        return cause;
+      }
+
+      return new HostOperationError({
         operation,
         message: errorMessage(cause),
         cause,
         details: { databasePath },
-      }),
+      });
+    },
   });
 
 export const ensureSchema = (database: SqliteDatabase, databasePath: string) =>
@@ -185,6 +199,21 @@ export const requireNumber = (record: Record<string, unknown>, field: string): n
     throw new HostValidationError({ message: `${field} must be a number.`, field });
   }
   return value;
+};
+
+export const requireSqliteBoolean = (
+  record: Record<string, unknown>,
+  field: string,
+): SqliteBoolean => {
+  const value = requireNumber(record, field);
+  if (value === 0 || value === 1) {
+    return value;
+  }
+  throw new HostValidationError({
+    message: `${field} must be 0 or 1.`,
+    field,
+    details: { value },
+  });
 };
 
 export const optionalNumber = (record: Record<string, unknown>, field: string): number | null => {

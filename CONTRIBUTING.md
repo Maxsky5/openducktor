@@ -11,13 +11,13 @@ Thanks for contributing. This project is public, but it is still early and the c
 ## Current Product Constraints
 
 - OpenDucktor is macOS-first, with Windows and Linux Electron builds treated as experimental.
-- Beads is the V1 source of truth for tasks.
+- The workspace-scoped SQLite task store is the V1 source of truth for tasks.
 - OpenCode and Codex are the supported local agent runtimes.
 - OpenDucktor will support open-source agent runtimes only.
 
 ## Quick Start
 
-1. Install the core tooling: Bun `1.3.11`, Xcode Command Line Tools, `git`, `bd`, and at least one supported runtime (`opencode` or `codex`).
+1. Install the core tooling: Bun `1.3.11`, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode` or `codex`).
 2. Install workspace dependencies from the repository root:
 
 ```sh
@@ -49,15 +49,13 @@ Core tooling:
 - Bun `1.3.11`
 - Xcode Command Line Tools
 - `git`
-- `bd`
 - `opencode` or `codex`
 
 Notes:
 
-- Local source builds expect a local `bd` install. The released desktop app bundles Beads and Dolt sidecars for end users, but contributor builds do not rely on those packaged sidecars.
+- Task data is stored in an OpenDucktor-managed SQLite database. No external task-store CLI is required for normal development.
 - OpenDucktor resolves `opencode` from `PATH` first, then falls back to `~/.opencode/bin/opencode`.
 - You can override the OpenCode binary path with `OPENDUCKTOR_OPENCODE_BINARY`.
-- OpenDucktor manages its own Beads and Dolt storage under the OpenDucktor config directory. You do not need a separate local Dolt install for normal development.
 
 ## Main Development Commands
 
@@ -124,15 +122,14 @@ Example commit messages:
 
 OpenDucktor resolves its base directory to `~/.openducktor` by default. You can override this with `OPENDUCKTOR_CONFIG_DIR`.
 
-For local development, it is recommended to use a separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` so contributor state, Beads data, and runtime caches stay isolated from your normal app usage.
+For local development, it is recommended to use a separate config root such as `OPENDUCKTOR_CONFIG_DIR="$HOME/.openducktor-dev"` so contributor state, task-store databases, and runtime caches stay isolated from your normal app usage.
 
 Important paths:
 
 - config file: `$OPENDUCKTOR_CONFIG_DIR/config.json` or `~/.openducktor/config.json`
-- managed Beads root: `$OPENDUCKTOR_CONFIG_DIR/beads/` or `~/.openducktor/beads/`
-- shared Dolt data: `$OPENDUCKTOR_CONFIG_DIR/beads/shared-server/dolt/`
+- workspace task-store databases: `$OPENDUCKTOR_CONFIG_DIR/task-stores/<workspaceId>/database.sqlite` or `~/.openducktor/task-stores/<workspaceId>/database.sqlite`
 
-OpenDucktor uses one shared Dolt server per config root and keeps repository-specific Beads attachment state under the same managed root. Existing repo-local `.beads` folders are not the V1 source of truth.
+OpenDucktor uses one SQLite database per configured workspace. Existing repo-local `.beads` folders are not the V1 source of truth.
 
 ## Development Expectations
 
