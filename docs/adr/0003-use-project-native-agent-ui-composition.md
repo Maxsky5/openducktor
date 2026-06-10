@@ -12,7 +12,7 @@ OpenDucktor's agent surfaces are workflow tools, not generic chat widgets: they 
 At the start of the project, it was reasonable to ask whether OpenDucktor should use an agent UI library instead of building its own Agent Studio surfaces. Since then, the product surface has become more specific:
 
 - task roles map to OpenDucktor workflow states and `odt_*` tools,
-- sessions are tied to local runtimes, build worktrees, task documents, and host-managed shell actions,
+- sessions are tied to local runtimes, build worktrees, Beads metadata, and host-managed shell actions,
 - permission prompts, structured questions, queued user turns, task documents, todos, git status, and runtime diagnostics all need product-specific rendering and refresh behavior,
 - OpenCode and Codex expose different runtime-native event and transport shapes behind the same `AgentEnginePort`.
 
@@ -35,7 +35,7 @@ Third-party UI libraries may still be used for focused primitives when they fit 
 ## Considered Options
 
 - Vercel AI SDK UI (`@ai-sdk/react`). Rejected as the primary UI layer because it is a headless message/state layer, not a complete OpenDucktor workflow surface. It may still be useful as a reference for streaming and message-state ideas.
-- Assistant-focused component libraries. Rejected as the primary UI layer because they optimize for generic chat assistants, while OpenDucktor needs local runtime lifecycle, task workflow transitions, task documents, and host-command semantics on screen.
+- Assistant-focused component libraries. Rejected as the primary UI layer because they optimize for generic chat assistants, while OpenDucktor needs local runtime lifecycle, Beads workflow transitions, task documents, and host-command semantics on screen.
 - Project-native shadcn + Tailwind composition. Accepted because it matches the existing app shell, keeps UI ownership close to OpenDucktor's workflow model, and preserves runtime replaceability at the adapter boundary.
 
 ## Consequences
