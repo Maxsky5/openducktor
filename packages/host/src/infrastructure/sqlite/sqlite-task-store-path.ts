@@ -21,13 +21,16 @@ export const assertSqliteTaskStoreWorkspaceId = (workspaceId: string): string =>
   return workspaceId;
 };
 
+export const sqliteTaskStoreDatabasePathSegments = (
+  workspaceId: string,
+): [string, string, typeof TASK_STORE_DATABASE_FILENAME] => [
+  "task-stores",
+  assertSqliteTaskStoreWorkspaceId(workspaceId),
+  TASK_STORE_DATABASE_FILENAME,
+];
+
 export const resolveSqliteTaskStoreDatabasePath = ({
   configDir,
   workspaceId,
 }: ResolveSqliteTaskStoreDatabasePathInput): string =>
-  path.join(
-    configDir,
-    "task-stores",
-    assertSqliteTaskStoreWorkspaceId(workspaceId),
-    TASK_STORE_DATABASE_FILENAME,
-  );
+  path.join(configDir, ...sqliteTaskStoreDatabasePathSegments(workspaceId));

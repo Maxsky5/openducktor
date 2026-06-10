@@ -7,6 +7,7 @@ import { Cause, Chunk, Effect, Exit } from "effect";
 import { HostInvariantError, HostOperationError } from "../../effect/host-errors";
 import {
   resolveSqliteTaskStoreDatabasePath,
+  sqliteTaskStoreDatabasePathSegments,
   TASK_STORE_DATABASE_FILENAME,
 } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
@@ -152,13 +153,26 @@ describe("resolveSqliteTaskStoreDatabasePath", () => {
     ).toBe(path.join("/config", "task-stores", "repo-alpha", TASK_STORE_DATABASE_FILENAME));
   });
 
+  test("builds native task store paths from safe segments for POSIX and Windows", () => {
+    const segments = sqliteTaskStoreDatabasePathSegments("repo-alpha");
+
+    expect(path.posix.join("/home/dev/.openducktor", ...segments)).toBe(
+      "/home/dev/.openducktor/task-stores/repo-alpha/database.sqlite",
+    );
+    expect(path.win32.join("C:\\Users\\dev\\AppData\\Roaming\\OpenDucktor", ...segments)).toBe(
+      "C:\\Users\\dev\\AppData\\Roaming\\OpenDucktor\\task-stores\\repo-alpha\\database.sqlite",
+    );
+  });
+
   test("rejects invalid workspace ids instead of normalizing them", () => {
-    expect(() =>
-      resolveSqliteTaskStoreDatabasePath({
-        configDir: "/config",
-        workspaceId: " Repo Alpha ",
-      }),
-    ).toThrow(HostInvariantError);
+    for (const workspaceId of [" Repo Alpha ", "Repo-Alpha", "repo/alpha", "repo\\alpha", ".."]) {
+      expect(() =>
+        resolveSqliteTaskStoreDatabasePath({
+          configDir: "/config",
+          workspaceId,
+        }),
+      ).toThrow(HostInvariantError);
+    }
   });
 });
 
