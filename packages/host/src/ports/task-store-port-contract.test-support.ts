@@ -101,8 +101,9 @@ export const describeTaskStorePortContract = (
     };
 
     afterEach(async () => {
-      await Promise.all(Array.from(cleanups, (cleanup) => cleanup()));
+      const pendingCleanups = Array.from(cleanups);
       cleanups.clear();
+      await Promise.all(pendingCleanups.map((cleanup) => cleanup()));
     });
 
     test("creates, updates, lists, and derives subtasks through the port", async () => {

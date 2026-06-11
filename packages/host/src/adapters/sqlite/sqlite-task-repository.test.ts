@@ -32,8 +32,9 @@ const createRepositoryHarness = async (
 };
 
 afterEach(async () => {
-  await Promise.all(Array.from(cleanups, (cleanup) => cleanup()));
+  const pendingCleanups = Array.from(cleanups);
   cleanups.clear();
+  await Promise.all(pendingCleanups.map((cleanup) => cleanup()));
 });
 
 describe("resolveSqliteTaskStoreDatabasePath", () => {

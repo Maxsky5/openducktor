@@ -14,6 +14,7 @@ export type SqliteDriverRuntime = "bun" | "node";
 
 export type SqliteStatement = {
   all(...params: SqliteValue[]): Effect.Effect<SqliteRow[], HostOperationError>;
+  close(): Effect.Effect<void, HostOperationError>;
   get(...params: SqliteValue[]): Effect.Effect<SqliteRow | null, HostOperationError>;
   run(...params: SqliteValue[]): Effect.Effect<SqliteRunResult, HostOperationError>;
   values(...params: SqliteValue[]): Effect.Effect<SqliteValueRow[], HostOperationError>;
@@ -27,6 +28,7 @@ export type SqliteDatabase = {
 
 type BunSqliteStatement = {
   all(...params: SqliteValue[]): SqliteRow[];
+  finalize(): void;
   get(...params: SqliteValue[]): SqliteRow | null;
   run(...params: SqliteValue[]): SqliteRunResult;
   values(...params: SqliteValue[]): SqliteValueRow[];
@@ -163,6 +165,7 @@ const runSqliteOperation = <A>(
 
 const adaptBunStatement = (statement: BunSqliteStatement): SqliteStatement => ({
   all: (...params) => runSqliteOperation("sqlite.bunStatement.all", () => statement.all(...params)),
+  close: () => runSqliteOperation("sqlite.bunStatement.finalize", () => statement.finalize()),
   get: (...params) => runSqliteOperation("sqlite.bunStatement.get", () => statement.get(...params)),
   run: (...params) => runSqliteOperation("sqlite.bunStatement.run", () => statement.run(...params)),
   values: (...params) =>
@@ -172,6 +175,7 @@ const adaptBunStatement = (statement: BunSqliteStatement): SqliteStatement => ({
 const adaptNodeStatement = (statement: NodeSqliteStatement): SqliteStatement => ({
   all: (...params) =>
     runSqliteOperation("sqlite.nodeStatement.all", () => statement.all(...params)),
+  close: () => Effect.void,
   get: (...params) =>
     runSqliteOperation("sqlite.nodeStatement.get", () => statement.get(...params) ?? null),
   run: (...params) =>

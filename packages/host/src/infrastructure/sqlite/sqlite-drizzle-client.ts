@@ -87,19 +87,21 @@ const executeRemoteQuery = (
 ): Effect.Effect<SqliteRemoteRows, HostOperationError> =>
   Effect.gen(function* () {
     const statement = yield* database.prepare(query);
-    const sqliteParams = yield* toSqliteValues(params);
+    return yield* Effect.gen(function* () {
+      const sqliteParams = yield* toSqliteValues(params);
 
-    if (method === "run") {
-      yield* statement.run(...sqliteParams);
-      return { rows: [] };
-    }
+      if (method === "run") {
+        yield* statement.run(...sqliteParams);
+        return { rows: [] };
+      }
 
-    if (method === "get") {
-      const rows = yield* statement.values(...sqliteParams);
-      return { rows: rows[0] ?? [] };
-    }
+      if (method === "get") {
+        const rows = yield* statement.values(...sqliteParams);
+        return { rows: rows[0] ?? [] };
+      }
 
-    return { rows: yield* statement.values(...sqliteParams) };
+      return { rows: yield* statement.values(...sqliteParams) };
+    }).pipe(Effect.ensuring(statement.close().pipe(Effect.ignore)));
   });
 
 const makeRemoteCallback =

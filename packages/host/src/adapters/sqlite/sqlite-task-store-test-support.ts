@@ -7,8 +7,23 @@ import { resolveSqliteTaskStoreDatabasePath } from "../../infrastructure/sqlite/
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
 
+type BunSqliteStatement = ReturnType<Database["prepare"]>;
+
 const makeTempDirectory = async (): Promise<string> => {
   return mkdtemp(path.join(tmpdir(), "odt-sqlite-task-store-"));
+};
+
+const useStatement = <A>(
+  database: Database,
+  sql: string,
+  use: (statement: BunSqliteStatement) => A,
+): A => {
+  const statement = database.prepare(sql);
+  try {
+    return use(statement);
+  } finally {
+    statement.finalize();
+  }
 };
 
 const createClock = (): (() => Date) => {
@@ -59,9 +74,11 @@ export const createSqliteTaskStoreHarness = async ({
 export const readDocumentCount = (databasePath: string, taskId: string, kind: string): number => {
   const database = new Database(databasePath, { readonly: true });
   try {
-    const row = database
-      .prepare("select count(*) as count from task_documents where task_id = ? and kind = ?")
-      .get(taskId, kind);
+    const row = useStatement(
+      database,
+      "select count(*) as count from task_documents where task_id = ? and kind = ?",
+      (statement) => statement.get(taskId, kind),
+    );
     return typeof row === "object" &&
       row !== null &&
       "count" in row &&
@@ -76,7 +93,11 @@ export const readDocumentCount = (databasePath: string, taskId: string, kind: st
 export const readTableNames = (databasePath: string): string[] => {
   const database = new Database(databasePath, { readonly: true });
   try {
-    const rows = database.prepare("select name from sqlite_master where type = 'table'").all();
+    const rows = useStatement(
+      database,
+      "select name from sqlite_master where type = 'table'",
+      (statement) => statement.all(),
+    );
     return rows
       .map((row) =>
         typeof row === "object" && row !== null && "name" in row && typeof row.name === "string"
@@ -92,7 +113,11 @@ export const readTableNames = (databasePath: string): string[] => {
 export const readDrizzleMigrationRows = (databasePath: string): Array<{ hash: string }> => {
   const database = new Database(databasePath, { readonly: true });
   try {
-    const rows = database.prepare("select hash from __drizzle_migrations order by id").all();
+    const rows = useStatement(
+      database,
+      "select hash from __drizzle_migrations order by id",
+      (statement) => statement.all(),
+    );
     return rows
       .map((row) =>
         typeof row === "object" && row !== null && "hash" in row && typeof row.hash === "string"
@@ -111,7 +136,7 @@ export const readTaskColumnNullability = (
 ): boolean | undefined => {
   const database = new Database(databasePath, { readonly: true });
   try {
-    const rows = database.prepare("PRAGMA table_info(tasks)").all();
+    const rows = useStatement(database, "PRAGMA table_info(tasks)", (statement) => statement.all());
     const column = rows.find(
       (row) =>
         typeof row === "object" &&
@@ -150,31 +175,32 @@ export const insertRawTask = ({
   const database = new Database(databasePath);
   try {
     const timestampMs = Date.parse("2026-06-10T10:00:00.000Z");
-    database
-      .prepare(
-        `insert into tasks (
+    useStatement(
+      database,
+      `insert into tasks (
           id, title, description, status, issue_type, priority, parent_id, qa_required,
           labels_json, agent_sessions_json, target_branch_json, pull_request_json,
           direct_merge_json, created_at_ms, updated_at_ms
         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        taskId,
-        "Task",
-        "",
-        status,
-        issueType,
-        2,
-        null,
-        qaRequired,
-        "[]",
-        "[]",
-        null,
-        null,
-        null,
-        timestampMs,
-        timestampMs,
-      );
+      (statement) =>
+        statement.run(
+          taskId,
+          "Task",
+          "",
+          status,
+          issueType,
+          2,
+          null,
+          qaRequired,
+          "[]",
+          "[]",
+          null,
+          null,
+          null,
+          timestampMs,
+          timestampMs,
+        ),
+    );
   } finally {
     database.close();
   }
