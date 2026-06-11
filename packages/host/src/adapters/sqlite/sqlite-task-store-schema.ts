@@ -14,14 +14,14 @@ const nonEmptyEnumOptions = <T extends string>(
   return [first, ...options.slice(1)];
 };
 
-export const TASK_STATUSES = nonEmptyEnumOptions(taskStatusSchema.options, "taskStatusSchema");
+const TASK_STATUSES = nonEmptyEnumOptions(taskStatusSchema.options, "taskStatusSchema");
 
-export const TASK_ISSUE_TYPES = nonEmptyEnumOptions(issueTypeSchema.options, "issueTypeSchema");
+const TASK_ISSUE_TYPES = nonEmptyEnumOptions(issueTypeSchema.options, "issueTypeSchema");
 
-export const TASK_DOCUMENT_KINDS = ["implementation_plan", "qa_report", "spec"] as const;
+const TASK_DOCUMENT_KINDS = ["implementation_plan", "qa_report", "spec"] as const;
 export const TASK_DOCUMENT_FORMAT_PLAIN_TEXT = "plain_text";
-export const TASK_DOCUMENT_FORMATS = [TASK_DOCUMENT_FORMAT_PLAIN_TEXT] as const;
-export const TASK_QA_REPORT_VERDICTS = nonEmptyEnumOptions(
+const TASK_DOCUMENT_FORMATS = [TASK_DOCUMENT_FORMAT_PLAIN_TEXT] as const;
+const TASK_QA_REPORT_VERDICTS = nonEmptyEnumOptions(
   qaReportVerdictSchema.options,
   "qaReportVerdictSchema",
 );

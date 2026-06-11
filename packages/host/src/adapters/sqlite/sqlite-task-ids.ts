@@ -5,7 +5,7 @@ import { HostOperationError } from "../../effect/host-errors";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
-export const TASK_ID_PREFIX_MAX_LENGTH = 10;
+const TASK_ID_PREFIX_MAX_LENGTH = 10;
 
 const MAX_HASH_LENGTH = 8;
 const NONCE_ATTEMPTS_PER_LENGTH = 10;
@@ -60,7 +60,7 @@ const taskIdHashInput = ({
   return `${title}|${description ?? ""}|${TASK_ID_CREATOR}|${createdAt.getTime()}|${nonce}`;
 };
 
-export const generateTaskIdCandidate = ({
+const generateTaskIdCandidate = ({
   createdAt,
   description,
   length,

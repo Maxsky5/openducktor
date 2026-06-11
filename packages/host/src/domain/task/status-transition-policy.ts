@@ -4,8 +4,6 @@ import { TaskPolicyError } from "./task-policy-error";
 const canSkipSpecAndPlanning = (task: TaskCard): boolean =>
   task.issueType === "task" || task.issueType === "bug";
 
-export const isOpenState = (status: TaskStatus): boolean => status !== "closed";
-
 export const isActiveOrReviewStatus = (status: TaskStatus): boolean =>
   status === "in_progress" ||
   status === "blocked" ||

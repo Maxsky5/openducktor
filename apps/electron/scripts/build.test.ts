@@ -6,14 +6,25 @@ import { copySqliteTaskStoreMigrations, resolveSqliteTaskStoreMigrationCopyPlan 
 
 describe("Electron build", () => {
   it("places SQLite task-store migrations next to the bundled main process", () => {
+    const workspaceRoot = join("/", "workspace");
+    const electronPackageRoot = join(workspaceRoot, "apps", "electron");
+
     expect(
       resolveSqliteTaskStoreMigrationCopyPlan({
-        electronPackageRoot: "/workspace/apps/electron",
-        workspaceRoot: "/workspace",
+        electronPackageRoot,
+        workspaceRoot,
       }),
     ).toEqual({
-      sourceDirectory: "/workspace/packages/host/src/adapters/sqlite/drizzle",
-      targetDirectory: "/workspace/apps/electron/dist/drizzle",
+      sourceDirectory: join(
+        workspaceRoot,
+        "packages",
+        "host",
+        "src",
+        "adapters",
+        "sqlite",
+        "drizzle",
+      ),
+      targetDirectory: join(electronPackageRoot, "dist", "drizzle"),
     });
   });
 

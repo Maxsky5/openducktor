@@ -17,15 +17,6 @@ import { type TaskInsert, type TaskStoreSession, tasks } from "./sqlite-task-sto
 type SetDirectMergeInput = Parameters<TaskStorePort["setDirectMerge"]>[0];
 type SetPullRequestInput = Parameters<TaskStorePort["setPullRequest"]>[0];
 
-export const insertTask = (
-  session: TaskStoreSession,
-  task: TaskInsert,
-): Effect.Effect<void, SqliteTaskStoreWriteError> =>
-  session.execute(
-    (database) => database.insert(tasks).values(task),
-    "sqliteTaskRepository.createTask.insertTask",
-  );
-
 export const insertTaskIfAbsent = (
   session: TaskStoreSession,
   task: TaskInsert,

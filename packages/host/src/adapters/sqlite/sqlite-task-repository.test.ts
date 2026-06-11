@@ -6,14 +6,12 @@ import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
   resolveSqliteTaskStoreDatabasePath,
-  sqliteTaskStoreDatabasePathSegments,
   TASK_STORE_DATABASE_FILENAME,
 } from "../../infrastructure/sqlite/sqlite-task-store-path";
 import {
   createPullRequestRecord,
   expectFailureTag,
 } from "../../ports/task-store-port-contract.test-support";
-import { generateTaskIdCandidate } from "./sqlite-task-ids";
 import {
   createSqliteTaskStoreHarness,
   insertRawTask,
@@ -50,14 +48,24 @@ describe("resolveSqliteTaskStoreDatabasePath", () => {
     ).toBe(path.join("/config", "task-stores", "repo-alpha", TASK_STORE_DATABASE_FILENAME));
   });
 
-  test("builds native task store paths from safe segments for POSIX and Windows", () => {
-    const segments = Effect.runSync(sqliteTaskStoreDatabasePathSegments("repo-alpha"));
-
-    expect(path.posix.join("/home/dev/.openducktor", ...segments)).toBe(
-      "/home/dev/.openducktor/task-stores/repo-alpha/database.sqlite",
-    );
-    expect(path.win32.join("C:\\Users\\dev\\AppData\\Roaming\\OpenDucktor", ...segments)).toBe(
-      "C:\\Users\\dev\\AppData\\Roaming\\OpenDucktor\\task-stores\\repo-alpha\\database.sqlite",
+  test("builds native task store paths from safe segments", () => {
+    expect(
+      Effect.runSync(
+        resolveSqliteTaskStoreDatabasePath({
+          configDir: path.join(path.sep, "home", "dev", ".openducktor"),
+          workspaceId: "repo-alpha",
+        }),
+      ),
+    ).toBe(
+      path.join(
+        path.sep,
+        "home",
+        "dev",
+        ".openducktor",
+        "task-stores",
+        "repo-alpha",
+        "database.sqlite",
+      ),
     );
   });
 
@@ -143,27 +151,27 @@ describe("createSqliteTaskRepository SQLite integration", () => {
   });
 
   test("retries task id candidates when SQLite reports an id conflict", async () => {
-    const { databasePath, repoPath, store } = await createRepositoryHarness();
-    await Effect.runPromise(store.diagnoseRepoStore({ repoPath }));
-    const firstCandidate = generateTaskIdCandidate({
-      createdAt: new Date("2026-06-10T10:00:00.000Z"),
-      length: 4,
-      nonce: 0,
-      prefix: "fairnest",
-      title: "Task",
+    const fixedNow = () => new Date("2026-06-10T10:00:00.000Z");
+    const { repoPath, store } = await createRepositoryHarness({
+      now: fixedNow,
     });
 
-    insertRawTask({ databasePath, taskId: firstCandidate });
-
-    const task = await Effect.runPromise(
+    const first = await Effect.runPromise(
+      store.createTask({
+        repoPath,
+        task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
+      }),
+    );
+    const second = await Effect.runPromise(
       store.createTask({
         repoPath,
         task: { title: "Task", issueType: "task", priority: 2, aiReviewEnabled: true },
       }),
     );
 
-    expect(task.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
-    expect(task.id).not.toBe(firstCandidate);
+    expect(first.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
+    expect(second.id).toMatch(/^fairnest-[0-9a-z]{4}$/);
+    expect(second.id).not.toBe(first.id);
   });
 
   test("enforces SQLite constraints for boolean and enum task columns", async () => {

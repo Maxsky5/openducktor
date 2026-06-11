@@ -45,7 +45,7 @@ const defaultSignalProcessTreeDependencies = (): SignalProcessTreeDependencies =
   };
 };
 
-export const processIsAlive = (pid: number, kill: KillProcess = process.kill): boolean => {
+const processIsAlive = (pid: number, kill: KillProcess = process.kill): boolean => {
   try {
     kill(pid, 0);
     return true;

@@ -28,7 +28,7 @@ export const taskRows = (
     return rows;
   });
 
-export const getTaskRow = (
+const getTaskRow = (
   session: TaskStoreSession,
   taskId: string,
 ): Effect.Effect<TaskRow | null, SqliteTaskStoreReadError> =>

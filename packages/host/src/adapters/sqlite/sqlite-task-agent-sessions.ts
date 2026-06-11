@@ -26,7 +26,7 @@ const requireTrimmed = (
   );
 };
 
-export const compactAgentSessionForStorage = (
+const compactAgentSessionForStorage = (
   session: AgentSessionRecord,
 ): Effect.Effect<AgentSessionRecord, SqliteTaskStoreDataError> =>
   Effect.gen(function* () {

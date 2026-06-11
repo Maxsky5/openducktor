@@ -19,7 +19,7 @@ export const resolveSqliteTaskStoreMigrationCopyPlan = ({
   electronPackageRoot: string;
   workspaceRoot: string;
 }): SqliteTaskStoreMigrationCopyPlan => ({
-  sourceDirectory: join(workspaceRoot, "packages/host/src/adapters/sqlite/drizzle"),
+  sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", "drizzle"),
   targetDirectory: join(electronPackageRoot, "dist", "drizzle"),
 });
 

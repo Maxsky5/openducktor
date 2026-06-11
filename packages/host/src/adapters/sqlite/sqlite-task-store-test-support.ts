@@ -29,9 +29,11 @@ export type SqliteTaskStoreTestHarness = {
 };
 
 export const createSqliteTaskStoreHarness = async ({
+  now = createClock(),
   repoPath = "/repos/Fair Nest",
   workspaceId = "fairnest",
 }: {
+  readonly now?: () => Date;
   readonly repoPath?: string;
   readonly workspaceId?: string;
 } = {}): Promise<SqliteTaskStoreTestHarness> => {
@@ -40,7 +42,7 @@ export const createSqliteTaskStoreHarness = async ({
     resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
   );
   const store = createSqliteTaskRepository({
-    now: createClock(),
+    now,
     resolveDatabasePath: ({ workspaceId }) =>
       resolveSqliteTaskStoreDatabasePath({ configDir, workspaceId }),
     resolveWorkspaceIdForRepoPath: () => Effect.succeed(workspaceId),

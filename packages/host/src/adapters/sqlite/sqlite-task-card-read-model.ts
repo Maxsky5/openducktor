@@ -19,7 +19,7 @@ import { requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
 import { type TaskRow, type TaskStoreSession, tasks } from "./sqlite-task-store-schema";
 
-export const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
+const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
   const subtasksByParent = new Map<string, string[]>();
   for (const task of tasks) {
     if (task.parentId !== undefined) {
@@ -34,7 +34,7 @@ export const finalizeTaskCards = (tasks: TaskCard[]): TaskCard[] => {
   }));
 };
 
-export const rowToTaskCard = (
+const rowToTaskCard = (
   session: TaskStoreSession,
   row: TaskRow,
   documentSummaryOverride?: TaskDocumentSummary,
