@@ -1,7 +1,6 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
-import { toVisibleTasks } from "../read-models/task-read-model";
 
 const TASK_DATA_STALE_TIME_MS = 30_000;
 
@@ -23,7 +22,7 @@ export const repoTaskDataQueryOptions = (repoPath: string, doneVisibleDays: numb
     queryKey: taskQueryKeys.repoData(repoPath, doneVisibleDays),
     queryFn: async (): Promise<RepoTaskData> => {
       return {
-        tasks: toVisibleTasks(await host.tasksList(repoPath, doneVisibleDays)),
+        tasks: await host.tasksList(repoPath, doneVisibleDays),
       };
     },
     staleTime: TASK_DATA_STALE_TIME_MS,

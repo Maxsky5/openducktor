@@ -282,7 +282,6 @@ const createTaskStore = (): TaskStorePort => ({
       id: "task-1",
       title: "Task 1",
       description: "",
-      notes: "",
       status: "blocked",
       priority: 2,
       issueType: "task",
@@ -315,7 +314,6 @@ const createTaskStore = (): TaskStorePort => ({
       id: "task-2",
       title: "Task 2",
       description: "",
-      notes: "",
       status: "open",
       priority: 2,
       issueType: "task",
@@ -343,7 +341,6 @@ const createTaskStore = (): TaskStorePort => ({
         id: "task-1",
         title: "Task 1",
         description: "",
-        notes: "",
         status: "open",
         priority: 2,
         issueType: "task",
@@ -371,7 +368,6 @@ const createTaskStore = (): TaskStorePort => ({
       id: "task-1",
       title: "Updated task",
       description: "",
-      notes: "",
       status: "ready_for_dev",
       priority: 2,
       issueType: "task",
@@ -410,7 +406,6 @@ const createTaskStore = (): TaskStorePort => ({
       id: input.taskId,
       title: "Task 1",
       description: "",
-      notes: "",
       status: input.status,
       priority: 2,
       issueType: "task",
@@ -448,7 +443,6 @@ const createTaskStore = (): TaskStorePort => ({
       id: input.taskId,
       title: "Task 1",
       description: "",
-      notes: "",
       status: input.status,
       priority: 2,
       issueType: "task",
@@ -1136,14 +1130,7 @@ describe("createElectronHostCommandRouter", () => {
     await expect(router.invoke("tasks_list", { repoPath: "/repo" })).resolves.toMatchObject([
       {
         id: "task-1",
-        availableActions: [
-          "view_details",
-          "set_spec",
-          "set_plan",
-          "build_start",
-          "reset_task",
-          "defer_issue",
-        ],
+        availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
       },
     ]);
     await expect(
@@ -1153,14 +1140,7 @@ describe("createElectronHostCommandRouter", () => {
       }),
     ).resolves.toMatchObject({
       id: "task-2",
-      availableActions: [
-        "view_details",
-        "set_spec",
-        "set_plan",
-        "build_start",
-        "reset_task",
-        "defer_issue",
-      ],
+      availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
     });
     await expect(
       router.invoke("agent_session_upsert", {
@@ -1704,7 +1684,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "human_review",
               priority: 2,
               issueType: "task",
@@ -1761,7 +1740,6 @@ describe("createElectronHostCommandRouter", () => {
             id: "task-1",
             title: "Task 1",
             description: "",
-            notes: "",
             status: "human_review",
             priority: 2,
             issueType: "task",
@@ -1789,7 +1767,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "human_review",
               priority: 2,
               issueType: "task",
@@ -1883,7 +1860,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "ai_review",
               priority: 2,
               issueType: "task",
@@ -1953,7 +1929,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "in_progress",
               priority: 2,
               issueType: "task",
@@ -2010,7 +1985,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "human_review",
               priority: 2,
               issueType: "task",
@@ -2077,7 +2051,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "human_review",
               priority: 2,
               issueType: "task",
@@ -2121,18 +2094,6 @@ describe("createElectronHostCommandRouter", () => {
       status: "closed",
     });
 
-    await expect(
-      router.invoke("task_defer", {
-        repoPath: "/repo",
-        taskId: "task-1",
-        reason: "Later",
-      }),
-    ).resolves.toMatchObject({
-      id: "task-1",
-      status: "deferred",
-      availableActions: expect.arrayContaining(["resume_deferred"]),
-    });
-
     const blockRouter = createElectronHostCommandRouter({
       filesystem: createFilesystem(),
       git: createGit(),
@@ -2146,7 +2107,6 @@ describe("createElectronHostCommandRouter", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "in_progress",
               priority: 2,
               issueType: "task",
@@ -2191,63 +2151,7 @@ describe("createElectronHostCommandRouter", () => {
     ).resolves.toMatchObject({
       id: "task-1",
       title: "Updated task",
-      availableActions: [
-        "view_details",
-        "set_spec",
-        "set_plan",
-        "build_start",
-        "reset_task",
-        "defer_issue",
-      ],
-    });
-
-    const resumeRouter = createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      settingsConfig: createSettingsConfig(),
-      taskStore: {
-        ...createTaskStore(),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              title: "Task 1",
-              description: "",
-              notes: "",
-              status: "deferred",
-              priority: 2,
-              issueType: "task",
-              aiReviewEnabled: true,
-              availableActions: [],
-              labels: [],
-              subtaskIds: [],
-              documentSummary: {
-                spec: { has: false },
-                plan: { has: false },
-                qaReport: { has: false, verdict: "not_reviewed" },
-              },
-              agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      },
-    });
-    await expect(
-      resumeRouter.invoke("task_resume_deferred", {
-        repoPath: "/repo",
-        taskId: "task-1",
-      }),
-    ).resolves.toMatchObject({
-      id: "task-1",
-      status: "open",
-      availableActions: expect.arrayContaining(["defer_issue"]),
+      availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
     });
   });
 

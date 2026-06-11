@@ -174,7 +174,6 @@ describe("createRuntimeTaskActivityGuard", () => {
               id: "task-1",
               title: "Task 1",
               description: "",
-              notes: "",
               status: "ai_review",
               priority: 2,
               issueType: "task",

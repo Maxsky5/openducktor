@@ -35,6 +35,11 @@ export type TaskStoreListTasksInput = {
   repoPath: string;
   doneVisibleDays?: number;
 };
+export type PullRequestSyncCandidate = {
+  id: string;
+  pullRequest: PullRequest;
+  status: TaskStatus;
+};
 export type TaskReader = {
   getTask(input: { repoPath: string; taskId: string }): Effect.Effect<TaskCard, TaskStoreError>;
   getTaskMetadata(input: {
@@ -106,7 +111,7 @@ export type AgentSessionRepository = {
 export type PullRequestRepository = {
   listPullRequestSyncCandidates(input: {
     repoPath: string;
-  }): Effect.Effect<TaskCard[], TaskStoreError>;
+  }): Effect.Effect<PullRequestSyncCandidate[], TaskStoreError>;
   setPullRequest(input: {
     repoPath: string;
     taskId: string;

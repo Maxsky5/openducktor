@@ -55,7 +55,6 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   id: "task-1",
   title: "Task",
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",
@@ -65,7 +64,6 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   parentId: undefined,
   subtaskIds: [],
   agentSessions: [],
-  assignee: undefined,
   pullRequest: undefined,
   documentSummary: {
     spec: { has: false },

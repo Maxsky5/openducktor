@@ -14,7 +14,6 @@ const createTaskCard = (id: string): TaskCard => ({
   id,
   title: `Task ${id}`,
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",
@@ -23,7 +22,6 @@ const createTaskCard = (id: string): TaskCard => ({
   labels: [],
   parentId: undefined,
   subtaskIds: [],
-  assignee: undefined,
   documentSummary: {
     spec: { has: false },
     plan: { has: false },

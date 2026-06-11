@@ -23,8 +23,6 @@ The backend is the single source of truth for which actions are currently allowe
 - `reset_task`
 - `qa_start`
 - `open_qa`
-- `defer_issue`
-- `resume_deferred`
 - `human_request_changes`
 - `human_approve`
 
@@ -90,16 +88,6 @@ The backend is the single source of truth for which actions are currently allowe
 - Purpose: open existing QA context/run UX.
 - Transition: none.
 
-### `defer_issue`
-- Purpose: park a task without closing it.
-- Transition: open states -> `deferred`.
-- Guardrail: not allowed for subtasks.
-
-### `resume_deferred`
-- Purpose: restore deferred task into active workflow.
-- Transition: `deferred -> open`.
-- Guardrail: not allowed for subtasks.
-
 ### `human_request_changes`
 - Purpose: human review rejects current output and requests a rework loop.
 - Transition: `ai_review -> in_progress` or `human_review -> in_progress`.
@@ -107,7 +95,7 @@ The backend is the single source of truth for which actions are currently allowe
 ### `human_approve`
 - Purpose: human review accepts completion.
 - Transition: `ai_review -> closed` or `human_review -> closed`.
-- Guardrail: epic completion checks direct children and ignores deferred children.
+- Guardrail: epic completion checks direct children and blocks while any direct child is not `closed`.
 
 ## UI Mapping Guidance
 - A task can expose multiple actions at once.
@@ -126,8 +114,6 @@ Current card/detail primary+menu rendering uses workflow actions:
 - `reset_task`
 - `qa_start`
 - `open_qa`
-- `defer_issue`
-- `resume_deferred`
 - `human_request_changes`
 - `human_approve`
 

@@ -77,7 +77,6 @@ const makeTask = (id: string, status: TaskCard["status"]): TaskCard => ({
   id,
   title: id,
   description: "",
-  notes: "",
   status,
   priority: 2,
   issueType: "task",
@@ -396,8 +395,8 @@ describe("use-task-operations", () => {
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 
-  test("refreshTaskData filters deferred tasks", async () => {
-    const tasksList = mock(async () => [makeTask("A", "open"), makeTask("B", "deferred")]);
+  test("refreshTaskData keeps host task results intact", async () => {
+    const tasksList = mock(async () => [makeTask("A", "open"), makeTask("B", "blocked")]);
     const runsList = mock(
       async (): Promise<RunSummary[]> => [
         {
@@ -449,9 +448,9 @@ describe("use-task-operations", () => {
       await harness.run(async (value) => {
         await value.refreshTaskData("/repo");
       });
-      await harness.waitFor((value) => value.tasks.map((task) => task.id).join(",") === "A");
+      await harness.waitFor((value) => value.tasks.map((task) => task.id).join(",") === "A,B");
 
-      expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A"]);
+      expect(harness.getLatest().tasks.map((task) => task.id)).toEqual(["A", "B"]);
       expect(tasksList).toHaveBeenCalledWith("/repo", 1);
     } finally {
       await harness.unmount();

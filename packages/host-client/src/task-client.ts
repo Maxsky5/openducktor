@@ -184,23 +184,6 @@ export class HostTaskClient {
     return taskCardSchema.parse(payload);
   }
 
-  async taskDefer(repoPath: string, taskId: string, reason?: string): Promise<TaskCard> {
-    const payload = await this.invokeFn("task_defer", {
-      repoPath,
-      taskId,
-      reason,
-    });
-    return taskCardSchema.parse(payload);
-  }
-
-  async taskResumeDeferred(repoPath: string, taskId: string): Promise<TaskCard> {
-    const payload = await this.invokeFn("task_resume_deferred", {
-      repoPath,
-      taskId,
-    });
-    return taskCardSchema.parse(payload);
-  }
-
   async specGet(repoPath: string, taskId: string): Promise<TaskDocumentReadResult> {
     return this.readTaskDocument(repoPath, taskId, "spec");
   }

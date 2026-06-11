@@ -57,8 +57,6 @@ export function useTaskOperations({
     resetTaskImplementation: resetOperations.resetTaskImplementation,
     resetTask: resetOperations.resetTask,
     transitionTask: mutationCommands.transitionTask,
-    deferTask: mutationCommands.deferTask,
-    resumeDeferredTask: mutationCommands.resumeDeferredTask,
     humanApproveTask: mutationCommands.humanApproveTask,
     humanRequestChangesTask: mutationCommands.humanRequestChangesTask,
   };

@@ -10,7 +10,6 @@ import { host } from "../shared/host";
 import { collectTaskDeletionIds } from "./task-deletion-ids";
 import type { TaskMutationRunner } from "./task-mutation-runner";
 import {
-  DEFERRED_BY_USER_REASON,
   requireActiveRepo,
   toNormalizedTitle,
   toUpdateSuccessDescription,
@@ -28,8 +27,6 @@ export type TaskMutationCommands = {
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   deleteTask: (taskId: string, deleteSubtasks?: boolean) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
-  deferTask: (taskId: string) => Promise<void>;
-  resumeDeferredTask: (taskId: string) => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };
@@ -120,36 +117,6 @@ export function useTaskMutationCommands({
     [runTaskMutation],
   );
 
-  const deferTask = useCallback(
-    async (taskId: string): Promise<void> => {
-      await runTaskMutation({
-        refreshStrategy: { kind: "task", taskId },
-        run: async (repoPath) => {
-          await host.taskDefer(repoPath, taskId, DEFERRED_BY_USER_REASON);
-        },
-        successTitle: "Task deferred",
-        successDescription: taskId,
-        failureTitle: "Failed to defer task",
-      });
-    },
-    [runTaskMutation],
-  );
-
-  const resumeDeferredTask = useCallback(
-    async (taskId: string): Promise<void> => {
-      await runTaskMutation({
-        refreshStrategy: { kind: "task", taskId },
-        run: async (repoPath) => {
-          await host.taskResumeDeferred(repoPath, taskId);
-        },
-        successTitle: "Task resumed",
-        successDescription: taskId,
-        failureTitle: "Failed to resume task",
-      });
-    },
-    [runTaskMutation],
-  );
-
   const humanApproveTask = useCallback(
     async (taskId: string): Promise<void> => {
       await runTaskMutation({
@@ -186,8 +153,6 @@ export function useTaskMutationCommands({
     setTaskTargetBranch,
     deleteTask,
     transitionTask,
-    deferTask,
-    resumeDeferredTask,
     humanApproveTask,
     humanRequestChangesTask,
   };

@@ -97,8 +97,6 @@ describe("app-state-context-values", () => {
       resetTaskImplementation: async () => {},
       resetTask: async () => {},
       transitionTask: async () => {},
-      deferTask: async () => {},
-      resumeDeferredTask: async () => {},
       humanApproveTask: async () => {},
       humanRequestChangesTask: async () => {},
     };

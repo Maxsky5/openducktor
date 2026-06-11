@@ -16,7 +16,7 @@ It is the source of truth for:
 
 ## Persisted Statuses
 OpenDucktor uses the following task statuses:
-- Built-in: `open`, `in_progress`, `blocked`, `deferred`, `closed`
+- Built-in: `open`, `in_progress`, `blocked`, `closed`
 - Custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
 
 Notes:
@@ -33,7 +33,6 @@ Notes:
 - `ai_review` -> `AI Review`
 - `human_review` -> `Human Review`
 - `closed` -> `Done`
-- `deferred` -> hidden from main Kanban (for now)
 
 ## Task Capability Contract (Backend-Driven)
 - Backend computes allowed task actions and returns them on each `TaskCard` as `availableActions`.
@@ -73,15 +72,8 @@ When `qaRequired=false`, or when the latest QA verdict is already `approved`, bu
 - Only `epic` can have subtasks.
 - Max hierarchy depth is 1 level.
 - Subtasks cannot have subtasks.
-- Subtasks cannot be deferred through OpenDucktor actions.
 - Epic completion guard checks direct children only.
-- For completion guard, deferred children are ignored.
-
-## Deferred Rules
-- Any non-closed parent issue can be deferred by user action.
-- Deferred issues are excluded from Kanban for now.
-- Resuming deferred issues returns them to `open`.
-- Subtasks are not allowed to be deferred by OpenDucktor.
+- Epic completion guard blocks while any direct child is not `closed`.
 
 ## Document Contract (Agent-Owned Documents)
 Agent-authored documents are stored as task documents only, never in user-authored task fields.

@@ -133,7 +133,7 @@ When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceI
 
 ## `odt_search_tasks`
 
-Searches active tasks only. Closed and deferred tasks are excluded.
+Searches active tasks only. Closed tasks are excluded.
 Active epics may appear in search results.
 
 Optional filters:
@@ -203,11 +203,9 @@ Use `odt_read_task_documents` only when you need document bodies:
 - Requested document keys are returned consistently even when no persisted body exists yet.
 - Missing spec and plan return empty markdown with `updatedAt: null`.
 - Missing latest QA report returns empty markdown with `updatedAt: null` and `verdict: "not_reviewed"`.
-- Legacy markdown-only metadata remains readable.
-- New or updated workflow documents are stored by the OpenDucktor host as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
-- Successful MCP reads still return plain markdown because the OpenDucktor host owns the encode/decode translation.
-- When the latest stored document cannot be decoded, the returned document includes an optional `error` field with the host-supplied decode failure.
-- There is no automatic backfill migration for older markdown-only entries.
+- Legacy Beads documents encoded as `gzip-base64-v1` are decoded during the SQLite migration.
+- New or updated SQLite workflow documents are stored as `plain_text` markdown by the OpenDucktor host.
+- Successful MCP reads return plain markdown from the SQLite task store.
 
 ```json
 {

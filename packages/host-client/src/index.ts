@@ -49,8 +49,6 @@ const TASK_METHODS = [
   "taskResetImplementation",
   "taskReset",
   "taskTransition",
-  "taskDefer",
-  "taskResumeDeferred",
   "specGet",
   "setSpec",
   "saveSpecDocument",

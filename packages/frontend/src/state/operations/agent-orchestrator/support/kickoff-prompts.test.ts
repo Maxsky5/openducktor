@@ -10,7 +10,6 @@ const taskFixture: TaskCard = {
   id: "task-1",
   title: "Implement feature",
   description: "desc",
-  notes: "",
   status: "in_progress",
   priority: 1,
   issueType: "task",

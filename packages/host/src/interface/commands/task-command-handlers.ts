@@ -58,11 +58,8 @@ export const createTaskCommandHandlers = (taskService: TaskService): HostCommand
     taskService.upsertPullRequest(parsePullRequestUpsertInput(args)),
   task_create: (args) => taskService.createTask(parseCreateTaskInput(args)),
   task_delete: (args) => taskService.deleteTask(parseDeleteTaskInput(args)),
-  task_defer: (args) => taskService.deferTask(parseTaskIdInput(args, "task_defer input")),
   task_metadata_get: (args) =>
     taskService.getTaskMetadata(parseTaskIdInput(args, "task_metadata_get input")),
-  task_resume_deferred: (args) =>
-    taskService.resumeDeferredTask(parseTaskIdInput(args, "task_resume_deferred input")),
   task_reset: (args) => taskService.resetTask(parseTaskIdInput(args, "task_reset input")),
   task_reset_implementation: (args) =>
     taskService.resetImplementation(parseTaskIdInput(args, "task_reset_implementation input")),

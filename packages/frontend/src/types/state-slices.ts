@@ -147,8 +147,6 @@ export type TasksStateContextValue = {
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
-  deferTask: (taskId: string) => Promise<void>;
-  resumeDeferredTask: (taskId: string) => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };

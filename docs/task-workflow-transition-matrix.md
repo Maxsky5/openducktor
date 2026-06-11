@@ -35,8 +35,6 @@ Read flow:
 Human actions:
 - `human_request_changes(taskId, note)`
 - `human_approve(taskId)`
-- `defer_issue(taskId, reason?)`
-- `resume_deferred(taskId)`
 
 Native task actions:
 - `reset_implementation(taskId)`
@@ -65,21 +63,16 @@ Native task actions:
 | `odt_qa_approved` | `blocked`, `ai_review`, `human_review` | report markdown required | `human_review` |
 | `human_request_changes` | `ai_review`, `human_review` | note optional | `in_progress` |
 | `human_approve` | `ai_review`, `human_review` | epic completion guard passes | `closed` |
-| `defer_issue` | `open`, `spec_ready`, `ready_for_dev`, `in_progress`, `blocked`, `ai_review`, `human_review` | not subtask | `deferred` |
-| `resume_deferred` | `deferred` | not subtask | `open` |
 
 ## Guardrails
 - Epic completion guard: block close if direct children are still open states.
-- Epic completion guard ignores deferred direct children.
 - Only epics can have direct children.
 - Subtasks cannot have children.
-- Subtasks cannot be deferred via OpenDucktor actions.
 
 ## Invalid Transition Examples
 - `open -> closed` without human approval.
 - `ai_review -> closed` without an explicit `human_approve` action.
 - `blocked -> closed` directly.
-- `deferred -> in_progress` directly (must resume to `open` first).
 
 ## Board Semantics
 UI labels are presentation only:

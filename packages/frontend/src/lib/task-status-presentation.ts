@@ -135,10 +135,6 @@ const TASK_STATUS_PRESENTATION: Record<TaskCard["status"], TaskStatusPresentatio
         "border-emerald-300 dark:border-emerald-800 bg-card/80 text-emerald-700 dark:text-emerald-300",
     },
   },
-  deferred: {
-    label: "Deferred",
-    badgeClassName: "border-border bg-muted text-muted-foreground",
-  },
 };
 
 export const statusLabel = (status: TaskCard["status"]): string =>

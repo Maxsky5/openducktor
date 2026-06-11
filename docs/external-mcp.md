@@ -170,7 +170,6 @@ This is a discovery-only summary. Call `odt_read_task` first, then call `odt_rea
 Public MCP task snapshots intentionally do not expose:
 
 - `parentId`
-- `assignee`
 - `availableActions`
 - `agentWorkflows`
 
@@ -262,7 +261,6 @@ Search semantics:
 Excluded statuses:
 
 - `closed`
-- `deferred`
 
 When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
 

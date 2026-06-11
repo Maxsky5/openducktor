@@ -15,7 +15,6 @@ export const taskStatusSchema = z.enum([
   "blocked",
   "ai_review",
   "human_review",
-  "deferred",
   "closed",
 ]);
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
@@ -33,8 +32,6 @@ export const taskActionSchema = z.enum([
   "open_qa",
   "reset_implementation",
   "reset_task",
-  "defer_issue",
-  "resume_deferred",
   "human_request_changes",
   "human_approve",
 ]);
@@ -166,14 +163,12 @@ export const taskCardSchema = z.object({
   id: z.string(),
   title: z.string(),
   description: z.string().optional().default(""),
-  notes: z.string().optional().default(""),
   status: taskStatusSchema,
   priority: taskPrioritySchema.default(2),
   issueType: issueTypeSchema,
   aiReviewEnabled: z.boolean().optional().default(true),
   availableActions: z.array(taskActionSchema).default([]),
   labels: z.array(z.string()).default([]),
-  assignee: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   parentId: z.preprocess((value) => (value === null ? undefined : value), z.string().optional()),
   subtaskIds: z.array(z.string()).default([]),
   agentSessions: z.array(agentSessionRecordSchema).optional(),
@@ -231,12 +226,10 @@ export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
 export const taskUpdatePatchSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
-  notes: z.string().optional(),
   priority: taskPrioritySchema.optional(),
   issueType: issueTypeSchema.optional(),
   aiReviewEnabled: z.boolean().optional(),
   labels: z.array(z.string()).optional(),
-  assignee: z.string().optional(),
   parentId: z.string().optional(),
   targetBranch: z.preprocess(
     (value) => (value === null ? undefined : value),

@@ -34,8 +34,6 @@ const DETAIL_ACTIONS: readonly TaskWorkflowAction[] = [
   "human_request_changes",
   "reset_implementation",
   "reset_task",
-  "defer_issue",
-  "resume_deferred",
 ];
 
 const DETAIL_ACTIONS_WITHOUT_TASK_RESET = DETAIL_ACTIONS.filter(
@@ -60,8 +58,6 @@ export function TaskDetailsSheet({
   onOpenSession,
   onDelegate,
   onEdit,
-  onDefer,
-  onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
@@ -90,8 +86,6 @@ export function TaskDetailsSheet({
         }
       : {}),
     onDelegate,
-    onDefer,
-    onResumeDeferred,
     onHumanApprove,
     onHumanRequestChanges,
     onResetImplementation,

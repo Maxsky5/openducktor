@@ -266,20 +266,6 @@ describe("createTaskCommandHandlers", () => {
             }),
         });
       },
-      deferTask(input: unknown) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "task_defer", input });
-            return {} as never;
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
       listTasks(input: unknown) {
         return Effect.tryPromise({
           try: async () => {
@@ -481,20 +467,6 @@ describe("createTaskCommandHandlers", () => {
           try: async () => {
             calls.push({ command: "repo_pull_request_sync_detailed", input });
             return { ran: true, changedTaskIds: [] };
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
-      },
-      resumeDeferredTask(input: unknown) {
-        return Effect.tryPromise({
-          try: async () => {
-            calls.push({ command: "task_resume_deferred", input });
-            return {} as never;
           },
           catch: (cause) =>
             new HostOperationError({
@@ -767,28 +739,6 @@ describe("createTaskCommandHandlers", () => {
           {
             command: "task_transition",
             args: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.task_defer?.(
-          { repoPath: "/repo", taskId: "task-1", reason: "Later" },
-          {
-            command: "task_defer",
-            args: { repoPath: "/repo", taskId: "task-1", reason: "Later" },
-          },
-        ),
-      ),
-    ).resolves.toEqual({});
-    await expect(
-      runHandler(
-        handlers.task_resume_deferred?.(
-          { repoPath: "/repo", taskId: "task-1" },
-          {
-            command: "task_resume_deferred",
-            args: { repoPath: "/repo", taskId: "task-1" },
           },
         ),
       ),
@@ -1070,14 +1020,6 @@ describe("createTaskCommandHandlers", () => {
       {
         command: "task_transition",
         input: { repoPath: "/repo", taskId: "task-1", status: "in_progress" },
-      },
-      {
-        command: "task_defer",
-        input: { repoPath: "/repo", taskId: "task-1" },
-      },
-      {
-        command: "task_resume_deferred",
-        input: { repoPath: "/repo", taskId: "task-1" },
       },
       {
         command: "build_blocked",

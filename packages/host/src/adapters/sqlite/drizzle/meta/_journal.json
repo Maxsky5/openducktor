@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1781105112308,
+      "tag": "0000_create_task_store_tables",
+      "breakpoints": true
+    }
+  ]
+}

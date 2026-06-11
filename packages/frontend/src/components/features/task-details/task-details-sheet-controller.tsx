@@ -41,8 +41,6 @@ export function TaskDetailsSheetController({
   onBuild,
   onDelegate,
   onEdit,
-  onDefer,
-  onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
@@ -113,8 +111,6 @@ export function TaskDetailsSheetController({
       {...(onOpenSession ? { onOpenSession } : {})}
       {...(onDelegate ? { onDelegate } : {})}
       {...(onEdit ? { onEdit } : {})}
-      {...(onDefer ? { onDefer } : {})}
-      {...(onResumeDeferred ? { onResumeDeferred } : {})}
       {...(onHumanApprove ? { onHumanApprove } : {})}
       {...(onHumanRequestChanges ? { onHumanRequestChanges } : {})}
       {...(onResetImplementation ? { onResetImplementation } : {})}

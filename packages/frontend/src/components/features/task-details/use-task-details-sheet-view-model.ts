@@ -78,8 +78,6 @@ type UseTaskDetailsSheetViewModelOptions = {
     | ((role: AgentRole) => { externalSessionId?: string | null } | undefined)
     | undefined;
   onDelegate: TaskDetailsSheetProps["onDelegate"] | undefined;
-  onDefer: TaskDetailsSheetProps["onDefer"] | undefined;
-  onResumeDeferred: TaskDetailsSheetProps["onResumeDeferred"] | undefined;
   onHumanApprove: TaskDetailsSheetProps["onHumanApprove"] | undefined;
   onHumanRequestChanges: TaskDetailsSheetProps["onHumanRequestChanges"] | undefined;
   onResetImplementation: TaskDetailsSheetProps["onResetImplementation"] | undefined;
@@ -102,8 +100,6 @@ export function useTaskDetailsSheetViewModel({
   onOpenSession,
   resolveSessionOptionsByRole,
   onDelegate,
-  onDefer,
-  onResumeDeferred,
   onHumanApprove,
   onHumanRequestChanges,
   onResetImplementation,
@@ -190,8 +186,6 @@ export function useTaskDetailsSheetViewModel({
           onBuild,
           onOpenSession,
           onDelegate,
-          onDefer,
-          onResumeDeferred,
           onHumanApprove,
           onHumanRequestChanges,
           onResetImplementation,
@@ -203,7 +197,6 @@ export function useTaskDetailsSheetViewModel({
     },
     [
       onBuild,
-      onDefer,
       onDelegate,
       onOpenSession,
       resolveSessionOptionsByRole,
@@ -214,7 +207,6 @@ export function useTaskDetailsSheetViewModel({
       onQaStart,
       onResetImplementation,
       openResetDialog,
-      onResumeDeferred,
       taskId,
     ],
   );

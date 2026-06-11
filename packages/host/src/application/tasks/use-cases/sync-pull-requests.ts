@@ -1,6 +1,4 @@
 import { Effect } from "effect";
-import { isDeferrableOpenState } from "../../../domain/task";
-import { HostValidationError } from "../../../effect/host-errors";
 import { cleanupMergedBuilderState } from "../support/builder-worktree-cleanup";
 import {
   fetchLinkedPullRequest,
@@ -14,10 +12,10 @@ import {
   type TaskGithubDependencyInput,
 } from "../support/required-task-dependencies";
 import { validateTaskTransitionEffect } from "../support/task-validation-effects";
-import { enrichTask, taskListWithCurrent } from "../support/task-workflow-helpers";
+import { taskListWithCurrent } from "../support/task-workflow-helpers";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
-export const createTaskSyncDeferUseCases = ({
+export const createTaskPullRequestSyncUseCases = ({
   devServerService,
   gitPort,
   githubDependencies,
@@ -27,7 +25,7 @@ export const createTaskSyncDeferUseCases = ({
   workspaceSettingsService,
 }: CreateTaskServiceInput & TaskGithubDependencyInput): Pick<
   TaskService,
-  "repoPullRequestSync" | "repoPullRequestSyncDetailed" | "deferTask" | "resumeDeferredTask"
+  "repoPullRequestSync" | "repoPullRequestSyncDetailed"
 > => {
   const repoPullRequestSyncDetailed: TaskService["repoPullRequestSyncDetailed"] = (input) =>
     Effect.gen(function* () {
@@ -122,76 +120,5 @@ export const createTaskSyncDeferUseCases = ({
       });
     },
     repoPullRequestSyncDetailed,
-    deferTask(input) {
-      return Effect.gen(function* () {
-        const { repoPath, taskId } = input;
-        const currentTasks = yield* taskStore.listTasks({ repoPath });
-        const current = currentTasks.find((task) => task.id === taskId);
-        if (!current) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Task not found: ${taskId}`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        if (current.parentId !== undefined) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: "Subtasks cannot be deferred.",
-              details: { repoPath, taskId, parentId: current.parentId },
-            }),
-          );
-        }
-        if (!isDeferrableOpenState(current.status)) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: "Only non-closed open-state tasks can be deferred.",
-              details: { repoPath, taskId, status: current.status },
-            }),
-          );
-        }
-        yield* validateTaskTransitionEffect(current, currentTasks, current.status, "deferred");
-
-        const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "deferred" });
-        const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-        return enrichTask(updated, nextTasks);
-      });
-    },
-    resumeDeferredTask(input) {
-      return Effect.gen(function* () {
-        const { repoPath, taskId } = input;
-        const currentTasks = yield* taskStore.listTasks({ repoPath });
-        const current = currentTasks.find((task) => task.id === taskId);
-        if (!current) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Task not found: ${taskId}`,
-              details: { repoPath, taskId },
-            }),
-          );
-        }
-        if (current.status !== "deferred") {
-          return yield* Effect.fail(
-            new HostValidationError({
-              field: "taskId",
-              message: `Task is not deferred: ${taskId}`,
-              details: { repoPath, taskId, status: current.status },
-            }),
-          );
-        }
-        yield* validateTaskTransitionEffect(current, currentTasks, current.status, "open");
-
-        const updated = yield* taskStore.transitionTask({ repoPath, taskId, status: "open" });
-        const nextTasks = currentTasks.map((task) => (task.id === taskId ? updated : task));
-
-        return enrichTask(updated, nextTasks);
-      });
-    },
   };
 };

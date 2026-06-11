@@ -30,7 +30,6 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Task 1",
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",

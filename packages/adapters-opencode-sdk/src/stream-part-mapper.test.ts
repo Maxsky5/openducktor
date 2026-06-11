@@ -827,7 +827,7 @@ describe("stream-part-mapper", () => {
           error: {
             code: "ODT_TOOL_EXECUTION_ERROR",
             message:
-              "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
+              "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: closed)",
           },
         },
       },
@@ -845,14 +845,14 @@ describe("stream-part-mapper", () => {
       input: { taskId: "task-1" },
       preview: "task-1",
       error:
-        "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
+        "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: closed)",
       metadata: {
         structuredContent: {
           ok: false,
           error: {
             code: "ODT_TOOL_EXECUTION_ERROR",
             message:
-              "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
+              "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: closed)",
           },
         },
       },

@@ -7,5 +7,5 @@
     "outDir": "dist",
     "types": ["node", "bun-types", "bun-types/test-globals"]
   },
-  "include": ["src"]
+  "include": ["src", "src/**/*.json", "drizzle.task-store.config.ts"]
 }

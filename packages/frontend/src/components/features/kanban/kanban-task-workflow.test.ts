@@ -192,18 +192,6 @@ describe("resolveTaskCardActions", () => {
     expect(result.secondaryActions).not.toContain("build_start");
   });
 
-  test("uses resume as primary for deferred tasks", () => {
-    const task = createTaskCardFixture({
-      status: "deferred",
-      issueType: "epic",
-      availableActions: ["set_plan", "build_start", "resume_deferred", "defer_issue"],
-    });
-
-    const result = resolveTaskCardActions(task);
-
-    expect(result.primaryAction).toBe("resume_deferred");
-  });
-
   test("uses active session role as primary and hides session-creating actions", () => {
     const task = createTaskCardFixture({
       status: "in_progress",

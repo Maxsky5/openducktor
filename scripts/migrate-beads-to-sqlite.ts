@@ -19,15 +19,15 @@ import {
 const DOCUMENT_ENCODING_GZIP_BASE64_V1 = "gzip-base64-v1";
 const DOCUMENT_FORMAT_PLAIN_TEXT = "plain_text";
 const METADATA_NAMESPACE = "openducktor";
-const SUPPORTED_TASK_TYPES = new Set(["bug", "epic", "feature", "task"]);
 const SKIPPED_BEADS_INTERNAL_TYPES = new Set(["event", "gate"]);
 
 type CliArgs = {
   configDir: string;
+  dryRun: boolean;
   workspaceId: string;
 };
 
-type SharedServerState = {
+type BeadsMetadata = {
   host: string;
   port: number;
   user: string;
@@ -36,8 +36,7 @@ type SharedServerState = {
 type RawBdTask = {
   id: string;
   title: string;
-  description: string;
-  notes: string;
+  description: string | null;
   status: string;
   priority: number;
   issueType: string;
@@ -48,11 +47,15 @@ type RawBdTask = {
   createdAtMs: number;
 };
 
+type RawBdTaskDiscriminator = {
+  issueType: string;
+  record: Record<string, unknown>;
+};
+
 type MigratedTask = {
   id: string;
   title: string;
-  description: string;
-  notes: string;
+  description: string | null;
   status: string;
   issueType: string;
   priority: number;
@@ -87,17 +90,22 @@ type ParsedSnapshot = {
 
 const usage = (): never => {
   console.error(
-    "Usage: bun run scripts/migrate-beads-to-sqlite.ts --config-dir <config-root> --workspace-id <workspaceId>",
+    "Usage: bun run scripts/migrate-beads-to-sqlite.ts --config-dir <config-root> --workspace-id <workspaceId> [--dry-run]",
   );
   process.exit(1);
 };
 
 const parseArgs = (argv: string[]): CliArgs => {
   let configDir: string | null = null;
+  let dryRun = false;
   let workspaceId: string | null = null;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
+    if (arg === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
     if (arg === "--config-dir" && value) {
       configDir = value;
       index += 1;
@@ -120,6 +128,7 @@ const parseArgs = (argv: string[]): CliArgs => {
   }
   return {
     configDir: resolveUserPath(configDir),
+    dryRun,
     workspaceId,
   };
 };
@@ -142,16 +151,16 @@ const readJsonFile = (filePath: string): unknown => {
   }
 };
 
-const readSharedServerState = (filePath: string): SharedServerState => {
+const readBeadsMetadata = (filePath: string): BeadsMetadata => {
   const value = readJsonFile(filePath);
   if (!isRecord(value)) {
-    throw new Error(`Shared Dolt server state ${filePath} must be a JSON object.`);
+    throw new Error(`Beads metadata ${filePath} must be a JSON object.`);
   }
-  const host = readRequiredString(value, "host", "shared server state");
-  const user = readRequiredString(value, "user", "shared server state");
-  const port = readRequiredInteger(value, "port", "shared server state");
+  const host = readRequiredString(value, "dolt_server_host", "beads metadata");
+  const user = readRequiredString(value, "dolt_server_user", "beads metadata");
+  const port = readRequiredInteger(value, "dolt_server_port", "beads metadata");
   if (port <= 0) {
-    throw new Error(`shared server state.port must be positive.`);
+    throw new Error(`beads metadata.dolt_server_port must be positive.`);
   }
   return { host, port, user };
 };
@@ -197,6 +206,21 @@ const readRequiredInteger = (
   const value = record[field];
   if (typeof value !== "number" || !Number.isInteger(value)) {
     throw new Error(`${context}.${field} must be an integer.`);
+  }
+  return value;
+};
+
+const readOptionalBoolean = (
+  record: Record<string, unknown>,
+  field: string,
+  context: string,
+): boolean | null => {
+  const value = record[field];
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${context}.${field} must be a boolean when present.`);
   }
   return value;
 };
@@ -343,29 +367,32 @@ const documentsNamespace = (namespace: Record<string, unknown>): Record<string, 
   return isRecord(documents) ? documents : {};
 };
 
-const parseRawTask = (value: unknown): RawBdTask => {
+const parseTaskDiscriminator = (value: unknown): RawBdTaskDiscriminator => {
   if (!isRecord(value)) {
     throw new Error("bd list entry must be an object.");
   }
-  const id = readRequiredString(value, "id", "task");
-  const issueType = readRequiredString(value, "issue_type", `task ${id}`);
+  const issueType = readRequiredString(value, "issue_type", "bd list entry");
+  return { issueType, record: value };
+};
+
+const parseRawTask = ({ issueType, record }: RawBdTaskDiscriminator): RawBdTask => {
+  const id = readRequiredString(record, "id", "task");
   return {
     id,
-    title: readRequiredString(value, "title", `task ${id}`),
-    description: readOptionalString(value, "description", `task ${id}`) ?? "",
-    notes: readOptionalString(value, "notes", `task ${id}`) ?? "",
-    status: readRequiredString(value, "status", `task ${id}`),
-    priority: readOptionalNumber(value, "priority", `task ${id}`) ?? 0,
+    title: readRequiredString(record, "title", `task ${id}`),
+    description: readOptionalString(record, "description", `task ${id}`),
+    status: readRequiredString(record, "status", `task ${id}`),
+    priority: readRequiredInteger(record, "priority", `task ${id}`),
     issueType,
-    labels: readStringArray(value, "labels", `task ${id}`),
-    parentId: readOptionalString(value, "parent", `task ${id}`) ?? parentFromDependencies(value),
-    metadata: value.metadata,
+    labels: readStringArray(record, "labels", `task ${id}`),
+    parentId: readOptionalString(record, "parent", `task ${id}`) ?? parentFromDependencies(record),
+    metadata: record.metadata,
     updatedAtMs: parseTimestampMs(
-      readRequiredString(value, "updated_at", `task ${id}`),
+      readRequiredString(record, "updated_at", `task ${id}`),
       `task ${id}.updated_at`,
     ),
     createdAtMs: parseTimestampMs(
-      readRequiredString(value, "created_at", `task ${id}`),
+      readRequiredString(record, "created_at", `task ${id}`),
       `task ${id}.created_at`,
     ),
   };
@@ -399,9 +426,6 @@ const parentFromDependencies = (record: Record<string, unknown>): string | null 
 
 const parseTask = (raw: RawBdTask): MigratedTask => {
   const issueType = issueTypeSchema.parse(raw.issueType);
-  if (!SUPPORTED_TASK_TYPES.has(issueType)) {
-    throw new Error(`Unsupported task issue type for ${raw.id}: ${raw.issueType}.`);
-  }
   const namespace = metadataNamespace(raw.metadata);
   const delivery = isRecord(namespace.delivery) ? namespace.delivery : {};
   const targetBranch =
@@ -416,12 +440,12 @@ const parseTask = (raw: RawBdTask): MigratedTask => {
     id: raw.id,
     title: raw.title,
     description: raw.description,
-    notes: "",
     status: taskStatusSchema.parse(raw.status),
     issueType,
     priority: taskPrioritySchema.parse(raw.priority),
     parentId: raw.parentId,
-    qaRequired: typeof namespace.qaRequired === "boolean" ? namespace.qaRequired : true,
+    qaRequired:
+      readOptionalBoolean(namespace, "qaRequired", `task ${raw.id}.metadata.openducktor`) ?? true,
     labels: normalizeLabels(raw.labels),
     agentSessions:
       namespace.agentSessions === undefined
@@ -447,11 +471,12 @@ const parseSnapshot = (payload: unknown): ParsedSnapshot => {
   const documents: MigratedDocument[] = [];
   let skippedInternalRecords = 0;
   for (const entry of payload) {
-    const raw = parseRawTask(entry);
-    if (SKIPPED_BEADS_INTERNAL_TYPES.has(raw.issueType)) {
+    const discriminator = parseTaskDiscriminator(entry);
+    if (SKIPPED_BEADS_INTERNAL_TYPES.has(discriminator.issueType)) {
       skippedInternalRecords += 1;
       continue;
     }
+    const raw = parseRawTask(discriminator);
     const task = parseTask(raw);
     tasks.push(task);
     const documentsMetadata = documentsNamespace(metadataNamespace(raw.metadata));
@@ -489,8 +514,7 @@ const beadsAttachmentRoot = (configDir: string, workspaceId: string): string =>
 const beadsAttachmentPath = (configDir: string, workspaceId: string): string =>
   path.join(beadsAttachmentRoot(configDir, workspaceId), ".beads");
 
-const sharedServerStatePath = (configDir: string): string =>
-  path.join(configDir, "beads", "shared-server", "server.json");
+const beadsMetadataPath = (beadsDir: string): string => path.join(beadsDir, "metadata.json");
 
 const decode = (value: Uint8Array): string => new TextDecoder().decode(value);
 
@@ -498,12 +522,12 @@ const runBdJson = ({
   args,
   beadsDir,
   cwd,
-  sharedServer,
+  metadata,
 }: {
   args: string[];
   beadsDir: string;
   cwd: string;
-  sharedServer: SharedServerState;
+  metadata: BeadsMetadata;
 }): unknown => {
   let result: ReturnType<typeof Bun.spawnSync>;
   try {
@@ -513,9 +537,9 @@ const runBdJson = ({
         ...process.env,
         BEADS_DIR: beadsDir,
         BEADS_DOLT_SERVER_MODE: "1",
-        BEADS_DOLT_SERVER_HOST: sharedServer.host,
-        BEADS_DOLT_SERVER_PORT: String(sharedServer.port),
-        BEADS_DOLT_SERVER_USER: sharedServer.user,
+        BEADS_DOLT_SERVER_HOST: metadata.host,
+        BEADS_DOLT_SERVER_PORT: String(metadata.port),
+        BEADS_DOLT_SERVER_USER: metadata.user,
       },
       stderr: "pipe",
       stdout: "pipe",
@@ -574,17 +598,16 @@ const insertSnapshot = (databasePath: string, snapshot: ParsedSnapshot): void =>
     try {
       const insertTask = database.prepare(
         `insert into tasks (
-          id, title, description, notes, status, issue_type, priority, parent_id, qa_required,
+          id, title, description, status, issue_type, priority, parent_id, qa_required,
           labels_json, agent_sessions_json, target_branch_json, pull_request_json,
           direct_merge_json, created_at_ms, updated_at_ms
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const task of snapshot.tasks) {
         insertTask.run(
           task.id,
           task.title,
           task.description,
-          task.notes,
           task.status,
           task.issueType,
           task.priority,
@@ -627,19 +650,65 @@ const insertSnapshot = (databasePath: string, snapshot: ParsedSnapshot): void =>
   }
 };
 
+const countBy = <T>(items: readonly T[], key: (item: T) => string): Array<[string, number]> => {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const countKey = key(item);
+    counts.set(countKey, (counts.get(countKey) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).sort(([left], [right]) => left.localeCompare(right));
+};
+
+const formatCounts = (counts: Array<[string, number]>): string =>
+  counts.length === 0 ? "none" : counts.map(([key, count]) => `${key}: ${count}`).join(", ");
+
+const printSnapshotReport = ({
+  dryRun,
+  snapshot,
+  targetDatabasePath,
+}: {
+  dryRun: boolean;
+  snapshot: ParsedSnapshot;
+  targetDatabasePath: string;
+}): void => {
+  console.log(
+    dryRun
+      ? "SQLite task store migration dry run complete."
+      : "SQLite task store migration complete.",
+  );
+  console.log(`Target database: ${targetDatabasePath}`);
+  console.log(dryRun ? "SQLite writes: skipped (--dry-run)" : "SQLite writes: committed");
+  console.log(`${dryRun ? "Tasks to insert" : "Tasks inserted"}: ${snapshot.tasks.length}`);
+  console.log(
+    `${dryRun ? "Task documents to insert" : "Task documents inserted"}: ${
+      snapshot.documents.length
+    }`,
+  );
+  console.log(`Task statuses: ${formatCounts(countBy(snapshot.tasks, (task) => task.status))}`);
+  console.log(
+    `Task issue types: ${formatCounts(countBy(snapshot.tasks, (task) => task.issueType))}`,
+  );
+  console.log(
+    `Task document kinds: ${formatCounts(countBy(snapshot.documents, (document) => document.kind))}`,
+  );
+  console.log(`Skipped Beads-internal records: ${snapshot.skippedInternalRecords}`);
+};
+
 const main = (): void => {
-  const { configDir, workspaceId } = parseArgs(process.argv.slice(2));
+  const { configDir, dryRun, workspaceId } = parseArgs(process.argv.slice(2));
   const targetDatabasePath = taskStoreDatabasePath(configDir, workspaceId);
   const beadsDir = beadsAttachmentPath(configDir, workspaceId);
   const attachmentRoot = beadsAttachmentRoot(configDir, workspaceId);
-  const serverState = readSharedServerState(sharedServerStatePath(configDir));
-  assertTargetDatabaseExists(targetDatabasePath);
+  const metadata = readBeadsMetadata(beadsMetadataPath(beadsDir));
+  if (!dryRun) {
+    assertTargetDatabaseExists(targetDatabasePath);
+  }
   confirmBeadsAttachment(
     runBdJson({
       args: ["where"],
       beadsDir,
       cwd: attachmentRoot,
-      sharedServer: serverState,
+      metadata,
     }),
     beadsDir,
   );
@@ -648,15 +717,13 @@ const main = (): void => {
       args: ["list", "--all", "--limit", "0"],
       beadsDir,
       cwd: attachmentRoot,
-      sharedServer: serverState,
+      metadata,
     }),
   );
-  insertSnapshot(targetDatabasePath, snapshot);
-  console.log(`SQLite task store migration complete.`);
-  console.log(`Target database: ${targetDatabasePath}`);
-  console.log(`Tasks inserted: ${snapshot.tasks.length}`);
-  console.log(`Task documents inserted: ${snapshot.documents.length}`);
-  console.log(`Skipped Beads-internal records: ${snapshot.skippedInternalRecords}`);
+  if (!dryRun) {
+    insertSnapshot(targetDatabasePath, snapshot);
+  }
+  printSnapshotReport({ dryRun, snapshot, targetDatabasePath });
 };
 
 try {

@@ -22,8 +22,6 @@ describe("taskActionLabel", () => {
     expect(taskActionLabel("open_builder", task)).toBe("Open Builder");
     expect(taskActionLabel("open_spec", task)).toBe("Open Spec");
     expect(taskActionLabel("open_planner", task)).toBe("Open Planner");
-    expect(taskActionLabel("defer_issue", task)).toBe("Defer Task");
-    expect(taskActionLabel("resume_deferred", task)).toBe("Resume Task");
     expect(taskActionLabel("human_approve", task)).toBe("Approve Task");
     expect(taskActionLabel("reset_implementation", task)).toBe("Reset Implementation");
     expect(taskActionLabel("reset_task", task)).toBe("Reset Task");
@@ -82,14 +80,12 @@ describe("taskActionLabel", () => {
     expect(taskActionLabel("qa_start", task)).toBe("Request QA Review");
   });
 
-  test("keeps request changes and defer as non-destructive workflow actions", () => {
+  test("keeps request changes as a non-destructive workflow action", () => {
     expect(taskPrimaryActionVariant("human_request_changes")).toBe("outline");
-    expect(taskPrimaryActionVariant("defer_issue")).toBe("outline");
     expect(taskPrimaryActionVariant("reset_implementation")).toBe("destructive");
     expect(taskPrimaryActionVariant("reset_task")).toBe("destructive");
 
     expect(taskActionIsDestructive("human_request_changes")).toBe(false);
-    expect(taskActionIsDestructive("defer_issue")).toBe(false);
     expect(taskActionIsDestructive("reset_implementation")).toBe(true);
     expect(taskActionIsDestructive("reset_task")).toBe(true);
   });

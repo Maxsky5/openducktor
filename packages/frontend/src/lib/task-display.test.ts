@@ -6,7 +6,6 @@ const makeTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "TASK-1",
   title: "Task",
   description: "",
-  notes: "",
   status: "in_progress",
   priority: 2,
   issueType: "task",

@@ -491,7 +491,7 @@ describe("agents-page-selection", () => {
     }
   });
 
-  test("selects latest build session for blocked/deferred/closed and falls back to latest overall", () => {
+  test("selects latest build session for blocked/closed and falls back to latest overall", () => {
     const latestSpecSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
@@ -507,7 +507,7 @@ describe("agents-page-selection", () => {
       startedAt: "2026-02-22T12:00:00.000Z",
     });
 
-    const statuses: Array<"blocked" | "deferred" | "closed"> = ["blocked", "deferred", "closed"];
+    const statuses: Array<"blocked" | "closed"> = ["blocked", "closed"];
 
     for (const status of statuses) {
       const resolvedWithBuild = resolveAgentStudioActiveSession({

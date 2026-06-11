@@ -20,7 +20,6 @@ const makeTask = (id: string): TaskCard => ({
   id,
   title: id,
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",
@@ -29,7 +28,6 @@ const makeTask = (id: string): TaskCard => ({
   availableActions: [],
   parentId: undefined,
   subtaskIds: [],
-  assignee: undefined,
   updatedAt: "2026-01-01T00:00:00.000Z",
   createdAt: "2026-01-01T00:00:00.000Z",
   documentSummary: {
