@@ -132,8 +132,6 @@ describe("TaskDetailsSheet", () => {
       onBuild: undefined,
       onOpenSession: undefined,
       onDelegate: undefined,
-      onDefer: undefined,
-      onResumeDeferred: undefined,
       onHumanApprove: undefined,
       onHumanRequestChanges: undefined,
       onResetImplementation: undefined,

@@ -11,9 +11,9 @@ import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-h
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import {
   createAgentSessionFixture,
-  createBeadsCheckFixture,
   createDeferred,
   createTaskCardFixture,
+  createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
 import { useAgentStudioSessionStartFlow as useSessionStartFlow } from "./use-agent-studio-session-start-flow";
@@ -107,13 +107,13 @@ const createInternalModalHookHarness = (initialProps: HookArgs) => {
             runtimes: [],
             errors: [],
           }),
-          refreshBeadsCheckForRepo: async () => createBeadsCheckFixture(),
+          refreshTaskStoreCheckForRepo: async () => createTaskStoreCheckFixture(),
           refreshRepoRuntimeHealthForRepo: async () => ({}),
-          clearActiveBeadsCheck: () => {},
+          clearActiveTaskStoreCheck: () => {},
           clearActiveRepoRuntimeHealth: () => {},
           setIsLoadingChecks: () => {},
           hasRuntimeCheck: () => false,
-          hasCachedBeadsCheck: () => false,
+          hasCachedTaskStoreCheck: () => false,
           hasCachedRepoRuntimeHealth: () => false,
         },
       },

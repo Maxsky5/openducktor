@@ -1,4 +1,4 @@
-import type { TaskCard, TaskStatus } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 
 export type KanbanColumnId =
   | "open"
@@ -27,9 +27,6 @@ const columns: Array<{ id: KanbanColumnId; title: string }> = [
   { id: "closed", title: "Done" },
 ];
 
-const toColumn = (status: TaskStatus): KanbanColumnId | null =>
-  status === "deferred" ? null : status;
-
 export const mapToKanbanColumns = (tasks: TaskCard[]): KanbanColumn[] => {
   const grouped = new Map<KanbanColumnId, TaskCard[]>();
   for (const column of columns) {
@@ -37,10 +34,7 @@ export const mapToKanbanColumns = (tasks: TaskCard[]): KanbanColumn[] => {
   }
 
   for (const task of tasks) {
-    const column = toColumn(task.status);
-    if (!column) {
-      continue;
-    }
+    const column = task.status;
     const bucket = grouped.get(column);
     if (bucket) {
       bucket.push(task);

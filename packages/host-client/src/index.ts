@@ -49,8 +49,6 @@ const TASK_METHODS = [
   "taskResetImplementation",
   "taskReset",
   "taskTransition",
-  "taskDefer",
-  "taskResumeDeferred",
   "specGet",
   "setSpec",
   "saveSpecDocument",
@@ -72,7 +70,7 @@ const TASK_METHODS = [
 const AGENT_METHODS = [
   "systemCheck",
   "runtimeCheck",
-  "beadsCheck",
+  "taskStoreCheck",
   "runtimeDefinitionsList",
   "runtimeList",
   "taskWorktreeGet",

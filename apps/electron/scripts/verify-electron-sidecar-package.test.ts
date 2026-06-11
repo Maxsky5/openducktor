@@ -18,7 +18,7 @@ const makeReleaseDirectory = async (): Promise<string> => {
   return releaseDirectory;
 };
 
-const REQUIRED_SIDECAR_IDS = ["openducktor-mcp", "beads", "dolt"] as const;
+const REQUIRED_SIDECAR_IDS = ["openducktor-mcp"] as const;
 
 afterEach(async () => {
   await Promise.all(
@@ -83,7 +83,7 @@ const writeRequiredPackagedSidecars = async ({
   );
 
 describe("verifyPackagedElectronSidecars", () => {
-  test("resolves Electron Builder unpacked sidecar paths", async () => {
+  test("resolves Electron Builder unpacked MCP sidecar paths", async () => {
     const releaseDirectory = await makeReleaseDirectory();
 
     expect(
@@ -91,57 +91,23 @@ describe("verifyPackagedElectronSidecars", () => {
         arch: "x64",
         platform: "windows",
         releaseDirectory,
-        sidecarId: "beads",
-      }),
-    ).toBe(join(releaseDirectory, "win-unpacked", "resources", "bin", "bd.exe"));
-    expect(
-      resolvePackagedElectronSidecarPath({
-        arch: "arm64",
-        platform: "windows",
-        releaseDirectory,
-        sidecarId: "dolt",
-      }),
-    ).toBe(join(releaseDirectory, "win-arm64-unpacked", "resources", "bin", "dolt.exe"));
-    expect(
-      resolvePackagedElectronSidecarPath({
-        arch: "x64",
-        platform: "linux",
-        releaseDirectory,
         sidecarId: "openducktor-mcp",
       }),
-    ).toBe(join(releaseDirectory, "linux-unpacked", "resources", "bin", "openducktor-mcp"));
+    ).toBe(join(releaseDirectory, "win-unpacked", "resources", "bin", "openducktor-mcp.exe"));
     expect(
       resolvePackagedElectronSidecarPath({
         arch: "arm64",
         platform: "linux",
         releaseDirectory,
-        sidecarId: "beads",
-      }),
-    ).toBe(join(releaseDirectory, "linux-arm64-unpacked", "resources", "bin", "bd"));
-    expect(
-      resolvePackagedElectronSidecarPath({
-        arch: "x64",
-        platform: "macos",
-        releaseDirectory,
         sidecarId: "openducktor-mcp",
       }),
-    ).toBe(
-      join(
-        releaseDirectory,
-        "mac",
-        "OpenDucktor.app",
-        "Contents",
-        "Resources",
-        "bin",
-        "openducktor-mcp",
-      ),
-    );
+    ).toBe(join(releaseDirectory, "linux-arm64-unpacked", "resources", "bin", "openducktor-mcp"));
     expect(
       resolvePackagedElectronSidecarPath({
         arch: "arm64",
         platform: "macos",
         releaseDirectory,
-        sidecarId: "dolt",
+        sidecarId: "openducktor-mcp",
       }),
     ).toBe(
       join(
@@ -151,12 +117,12 @@ describe("verifyPackagedElectronSidecars", () => {
         "Contents",
         "Resources",
         "bin",
-        "dolt",
+        "openducktor-mcp",
       ),
     );
   });
 
-  test("accepts non-empty Windows sidecars without Unix executable-bit validation", async () => {
+  test("accepts non-empty Windows MCP sidecar without Unix executable-bit validation", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     const sidecarPaths = await writeRequiredPackagedSidecars({
       platform: "windows",
@@ -168,7 +134,7 @@ describe("verifyPackagedElectronSidecars", () => {
     ).resolves.toEqual(sidecarPaths);
   });
 
-  test("accepts architecture-specific Windows and Linux sidecar package paths", async () => {
+  test("accepts architecture-specific Windows and Linux MCP package paths", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     const windowsSidecarPaths = await writeRequiredPackagedSidecars({
       arch: "arm64",
@@ -189,35 +155,21 @@ describe("verifyPackagedElectronSidecars", () => {
     ).resolves.toEqual(linuxSidecarPaths);
   });
 
-  test("rejects a missing required Windows sidecar at the expected package path", async () => {
+  test("rejects a missing required Windows MCP sidecar at the expected package path", async () => {
     const releaseDirectory = await makeReleaseDirectory();
-    await writePackagedSidecar({
-      platform: "windows",
-      releaseDirectory,
-      sidecarId: "openducktor-mcp",
-    });
-    await writePackagedSidecar({
-      platform: "windows",
-      releaseDirectory,
-      sidecarId: "dolt",
-    });
 
     await expect(
       verifyPackagedElectronSidecars({ arch: "x64", platform: "windows", releaseDirectory }),
-    ).rejects.toThrow("bd.exe");
+    ).rejects.toThrow("openducktor-mcp.exe");
   });
 
-  test("rejects an empty required Windows sidecar", async () => {
+  test("rejects an empty required Windows MCP sidecar", async () => {
     const releaseDirectory = await makeReleaseDirectory();
-    await writeRequiredPackagedSidecars({
-      platform: "windows",
-      releaseDirectory,
-    });
     await writePackagedSidecar({
       contents: "",
       platform: "windows",
       releaseDirectory,
-      sidecarId: "dolt",
+      sidecarId: "openducktor-mcp",
     });
 
     await expect(
@@ -225,7 +177,7 @@ describe("verifyPackagedElectronSidecars", () => {
     ).rejects.toThrow("expected a non-empty file");
   });
 
-  test("accepts non-empty executable Linux sidecars", async () => {
+  test("accepts non-empty executable Linux MCP sidecar", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     const sidecarPaths = await writeRequiredPackagedSidecars({
       platform: "linux",
@@ -237,35 +189,12 @@ describe("verifyPackagedElectronSidecars", () => {
     ).resolves.toEqual(sidecarPaths);
   });
 
-  test("rejects an empty required Linux sidecar", async () => {
+  testIfUnixModeIsAvailable("rejects a non-executable required Linux MCP sidecar", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     await writeRequiredPackagedSidecars({
-      platform: "linux",
-      releaseDirectory,
-    });
-    await writePackagedSidecar({
-      contents: "",
-      platform: "linux",
-      releaseDirectory,
-      sidecarId: "beads",
-    });
-
-    await expect(
-      verifyPackagedElectronSidecars({ arch: "x64", platform: "linux", releaseDirectory }),
-    ).rejects.toThrow("expected a non-empty file");
-  });
-
-  testIfUnixModeIsAvailable("rejects a non-executable required Linux sidecar", async () => {
-    const releaseDirectory = await makeReleaseDirectory();
-    await writeRequiredPackagedSidecars({
-      platform: "linux",
-      releaseDirectory,
-    });
-    await writePackagedSidecar({
       executable: false,
       platform: "linux",
       releaseDirectory,
-      sidecarId: "dolt",
     });
 
     await expect(
@@ -273,7 +202,7 @@ describe("verifyPackagedElectronSidecars", () => {
     ).rejects.toThrow("expected an executable file");
   });
 
-  test("accepts non-empty executable macOS sidecars", async () => {
+  test("accepts non-empty executable macOS MCP sidecar", async () => {
     const releaseDirectory = await makeReleaseDirectory();
     const sidecarPaths = await writeRequiredPackagedSidecars({
       arch: "arm64",
@@ -284,43 +213,5 @@ describe("verifyPackagedElectronSidecars", () => {
     await expect(
       verifyPackagedElectronSidecars({ arch: "arm64", platform: "macos", releaseDirectory }),
     ).resolves.toEqual(sidecarPaths);
-  });
-
-  test("rejects a missing required macOS sidecar at the expected app bundle path", async () => {
-    const releaseDirectory = await makeReleaseDirectory();
-    await writePackagedSidecar({
-      arch: "arm64",
-      platform: "macos",
-      releaseDirectory,
-      sidecarId: "openducktor-mcp",
-    });
-    await writePackagedSidecar({
-      arch: "arm64",
-      platform: "macos",
-      releaseDirectory,
-      sidecarId: "dolt",
-    });
-
-    await expect(
-      verifyPackagedElectronSidecars({ arch: "arm64", platform: "macos", releaseDirectory }),
-    ).rejects.toThrow(join("mac-arm64", "OpenDucktor.app", "Contents", "Resources", "bin", "bd"));
-  });
-
-  testIfUnixModeIsAvailable("rejects a non-executable required macOS sidecar", async () => {
-    const releaseDirectory = await makeReleaseDirectory();
-    await writeRequiredPackagedSidecars({
-      platform: "macos",
-      releaseDirectory,
-    });
-    await writePackagedSidecar({
-      executable: false,
-      platform: "macos",
-      releaseDirectory,
-      sidecarId: "dolt",
-    });
-
-    await expect(
-      verifyPackagedElectronSidecars({ arch: "x64", platform: "macos", releaseDirectory }),
-    ).rejects.toThrow("expected an executable file");
   });
 });

@@ -6,7 +6,7 @@ describe("app-lifecycle-model", () => {
     expect(
       shouldLoadChecks({
         hasRuntimeCheck: true,
-        hasCachedBeadsCheck: true,
+        hasCachedTaskStoreCheck: true,
         hasCachedRepoRuntimeHealth: true,
       }),
     ).toBe(false);
@@ -14,7 +14,7 @@ describe("app-lifecycle-model", () => {
     expect(
       shouldLoadChecks({
         hasRuntimeCheck: false,
-        hasCachedBeadsCheck: true,
+        hasCachedTaskStoreCheck: true,
         hasCachedRepoRuntimeHealth: true,
       }),
     ).toBe(true);
@@ -22,7 +22,7 @@ describe("app-lifecycle-model", () => {
     expect(
       shouldLoadChecks({
         hasRuntimeCheck: true,
-        hasCachedBeadsCheck: false,
+        hasCachedTaskStoreCheck: false,
         hasCachedRepoRuntimeHealth: true,
       }),
     ).toBe(true);

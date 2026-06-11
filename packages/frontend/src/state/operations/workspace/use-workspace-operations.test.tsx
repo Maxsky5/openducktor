@@ -213,7 +213,7 @@ const normalizeHookArgs = ({
       setActiveRepo?.(workspace?.repoPath ?? null);
     }),
   clearTaskData: rest.clearTaskData ?? (() => {}),
-  clearActiveBeadsCheck: rest.clearActiveBeadsCheck ?? (() => {}),
+  clearActiveTaskStoreCheck: rest.clearActiveTaskStoreCheck ?? (() => {}),
   ...(rest.hostClient === undefined ? {} : { hostClient: rest.hostClient }),
 });
 
@@ -334,7 +334,7 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     };
 
     const StartupBranchLoader = ({
@@ -438,7 +438,7 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -469,7 +469,7 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
       hostClient,
     });
 
@@ -516,7 +516,7 @@ describe("use-workspace-operations", () => {
       latest = useWorkspaceOperations({
         ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
         clearTaskData: () => {},
-        clearActiveBeadsCheck: () => {},
+        clearActiveTaskStoreCheck: () => {},
         hostClient,
       });
       return createElement(SettingsSnapshotProbe);
@@ -560,7 +560,7 @@ describe("use-workspace-operations", () => {
   test("selectWorkspace clears state and triggers runtime ensure", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
-    const clearActiveBeadsCheck = mock(() => {});
+    const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
     const runtimeDeferred = createDeferred<{
       kind: "opencode";
@@ -629,7 +629,7 @@ describe("use-workspace-operations", () => {
       activeRepo: null,
       setActiveRepo,
       clearTaskData,
-      clearActiveBeadsCheck,
+      clearActiveTaskStoreCheck,
     });
 
     try {
@@ -652,7 +652,7 @@ describe("use-workspace-operations", () => {
 
       expect(setActiveRepo).toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).toHaveBeenCalled();
-      expect(clearActiveBeadsCheck).toHaveBeenCalled();
+      expect(clearActiveTaskStoreCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a", "opencode");
     } finally {
@@ -668,7 +668,7 @@ describe("use-workspace-operations", () => {
   test("selectWorkspace clears cached settings snapshot for next read", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
-    const clearActiveBeadsCheck = mock(() => {});
+    const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceGetSettingsSnapshot = mock(async () => settingsSnapshot(["/repo-old"]));
     const hostClient = createWorkspaceHostClient();
     hostClient.workspaceGetSettingsSnapshot = workspaceGetSettingsSnapshot;
@@ -725,7 +725,7 @@ describe("use-workspace-operations", () => {
       latest = useWorkspaceOperations({
         ...normalizeHookArgs({ activeRepo: null, setActiveRepo }),
         clearTaskData,
-        clearActiveBeadsCheck,
+        clearActiveTaskStoreCheck,
         hostClient,
       });
       return createElement(SettingsSnapshotProbe);
@@ -847,7 +847,7 @@ describe("use-workspace-operations", () => {
         activeWorkspace,
         setActiveWorkspace,
         clearTaskData: () => {},
-        clearActiveBeadsCheck: () => {},
+        clearActiveTaskStoreCheck: () => {},
         hostClient: workspaceHost,
       });
       const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
@@ -954,7 +954,7 @@ describe("use-workspace-operations", () => {
   test("preserves current repo branch state when workspace selection fails", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
-    const clearActiveBeadsCheck = mock(() => {});
+    const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => {
       throw new Error("workspace switch failed");
     });
@@ -990,7 +990,7 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-old",
       setActiveRepo,
       clearTaskData,
-      clearActiveBeadsCheck,
+      clearActiveTaskStoreCheck,
     });
 
     try {
@@ -1018,7 +1018,7 @@ describe("use-workspace-operations", () => {
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
       expect(setActiveRepo).not.toHaveBeenCalledWith("/repo-a");
       expect(clearTaskData).not.toHaveBeenCalled();
-      expect(clearActiveBeadsCheck).not.toHaveBeenCalled();
+      expect(clearActiveTaskStoreCheck).not.toHaveBeenCalled();
       expect(harness.getLatest().activeBranch).toEqual({
         name: "main",
         detached: false,
@@ -1133,7 +1133,7 @@ describe("use-workspace-operations", () => {
         activeWorkspace,
         setActiveWorkspace,
         clearTaskData: () => {},
-        clearActiveBeadsCheck: () => {},
+        clearActiveTaskStoreCheck: () => {},
         hostClient: workspaceHost,
       });
       const previousRepoRef = useRef(activeWorkspace?.repoPath ?? null);
@@ -1256,7 +1256,7 @@ describe("use-workspace-operations", () => {
     const baseArgs = {
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     };
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1343,7 +1343,7 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1411,7 +1411,7 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1455,7 +1455,7 @@ describe("use-workspace-operations", () => {
     const baseArgs = {
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     };
     const harness = createHookHarness({
       activeRepo: "/repo-a",
@@ -1518,7 +1518,7 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1587,7 +1587,7 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1627,7 +1627,7 @@ describe("use-workspace-operations", () => {
       activeRepo: "/repo-a",
       setActiveRepo,
       clearTaskData: () => {},
-      clearActiveBeadsCheck: () => {},
+      clearActiveTaskStoreCheck: () => {},
     });
 
     try {
@@ -1640,7 +1640,7 @@ describe("use-workspace-operations", () => {
         activeRepo: "/repo-b",
         setActiveRepo,
         clearTaskData: () => {},
-        clearActiveBeadsCheck: () => {},
+        clearActiveTaskStoreCheck: () => {},
       });
 
       expect(harness.getLatest().branchSyncDegraded).toBe(false);

@@ -1,8 +1,4 @@
 import { Effect } from "effect";
-import {
-  type BeadsTaskRepository,
-  createBeadsTaskRepository,
-} from "../../adapters/beads/beads-task-repository";
 import { createCodexWorkspaceRuntimeStarter } from "../../adapters/codex/codex-workspace-runtime-starter";
 import {
   createMcpHostBridgeServer,
@@ -12,6 +8,7 @@ import {
 import { createOpenCodeWorkspaceRuntimeStarter } from "../../adapters/opencode/opencode-workspace-runtime-starter";
 import { createRuntimeRegistry } from "../../adapters/runtimes/runtime-registry";
 import { createRuntimeTaskActivityGuard } from "../../adapters/runtimes/runtime-task-activity-guard";
+import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
 import { createLocalAttachmentService } from "../../application/attachments/local-attachment-service";
 import { createDevServerService } from "../../application/dev-servers/dev-server-service";
 import { createSystemDiagnosticsService } from "../../application/diagnostics/system-diagnostics-service";
@@ -63,7 +60,6 @@ import {
   createStopDevServersStep,
   createStopMcpHostBridgeStep,
   createStopRuntimesStep,
-  createStopSharedDoltServerStep,
   type HostLifecycleLogger,
   runShutdownSteps,
 } from "../host-lifecycle";
@@ -117,20 +113,15 @@ export const createNodeEffectHostCommandRouter = (
   const openInToolsService = createOpenInToolsService(openInTools);
   const runtimeDefinitionsService = createRuntimeDefinitionsService();
   const workspaceSettingsService = createWorkspaceSettingsService(settingsConfig);
-  let ownedTaskStore: BeadsTaskRepository | null = null;
   const taskStore: TaskStorePort =
     configuredTaskStore ??
-    (() => {
-      ownedTaskStore = createBeadsTaskRepository({
-        processEnv,
-        toolDiscovery,
-        resolveWorkspaceIdForRepoPath: (repoPath) =>
-          workspaceSettingsService
-            .getRepoConfigByRepoPath(repoPath)
-            .pipe(Effect.map((repoConfig) => repoConfig.workspaceId)),
-      });
-      return ownedTaskStore;
-    })();
+    createSqliteTaskRepository({
+      processEnv,
+      resolveWorkspaceIdForRepoPath: (repoPath) =>
+        workspaceSettingsService
+          .getRepoConfigByRepoPath(repoPath)
+          .pipe(Effect.map((repoConfig) => repoConfig.workspaceId)),
+    });
   const systemDiagnosticsService = createSystemDiagnosticsService({
     runtimeDefinitionsService,
     runtimeHealth,
@@ -303,7 +294,6 @@ export const createNodeEffectHostCommandRouter = (
             createStopDevServersStep(devServerService, lifecycleLogger),
             createStopRuntimesStep(effectiveRuntimeRegistry, lifecycleLogger),
             createStopMcpHostBridgeStep(resolvedMcpHostBridge, lifecycleLogger),
-            createStopSharedDoltServerStep(ownedTaskStore, lifecycleLogger),
           ],
           lifecycleLogger,
         );

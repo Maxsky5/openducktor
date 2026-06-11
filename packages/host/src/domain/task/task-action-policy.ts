@@ -8,7 +8,6 @@ import {
   canTransitionToClosed,
   canUseQaWorkflowFromStatus,
   isActiveOrReviewStatus,
-  isOpenState,
 } from "./status-transition-policy";
 
 const isQaRejectedRework = (task: TaskCard): boolean =>
@@ -51,14 +50,6 @@ export const deriveAvailableActions = (task: TaskCard, allTasks: TaskCard[]): Ta
 
   if (isQaRejectedRework(task)) {
     actions.push("open_qa");
-  }
-
-  if (task.parentId === undefined) {
-    if (task.status === "deferred") {
-      actions.push("resume_deferred");
-    } else if (isOpenState(task.status)) {
-      actions.push("defer_issue");
-    }
   }
 
   if (task.status === "ai_review" || task.status === "human_review") {

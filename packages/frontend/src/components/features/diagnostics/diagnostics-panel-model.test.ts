@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { buildDiagnosticsPanelModel } from "./diagnostics-panel-model";
 import {
-  makeBeadsCheck,
   makeRepoHealth,
   makeRuntimeDefinitions,
   makeRuntimeSummary,
+  makeTaskStoreCheck,
   makeWorkspace,
 } from "./diagnostics-panel-model-test-fixtures";
 
@@ -18,9 +18,9 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: null,
-      beadsCheck: null,
+      taskStoreCheck: null,
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -41,9 +41,9 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: null,
-      beadsCheck: null,
+      taskStoreCheck: null,
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: true,
     });
@@ -70,9 +70,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -99,9 +99,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "not_started",
@@ -152,9 +152,9 @@ describe("buildDiagnosticsPanelModel", () => {
         ],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({ runtime: { instance: makeRuntimeSummary() } }),
       },
@@ -202,9 +202,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: { instance: makeRuntimeSummary() },
@@ -241,27 +241,19 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck({
+      taskStoreCheck: makeTaskStoreCheck({
         repoStoreHealth: {
-          category: "missing_shared_database",
-          status: "restore_needed",
+          category: "database_unavailable",
+          status: "blocking",
           isReady: false,
-          detail: "Shared Dolt database repo_db is missing and restore is required",
-          attachment: {
-            path: "/Users/dev/.openducktor/beads/repo/.beads",
-            databaseName: "repo_db",
-          },
-          sharedServer: {
-            host: "127.0.0.1",
-            port: 36123,
-            ownershipState: "reused_existing_server",
-          },
+          detail: "SQLite task store database is unavailable",
+          databasePath: "/Users/dev/.openducktor/task-stores/repo/database.sqlite",
         },
-        beadsOk: false,
-        beadsError: "Shared Dolt database repo_db is missing and restore is required",
+        taskStoreOk: false,
+        taskStoreError: "SQLite task store database is unavailable",
       }),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: { instance: makeRuntimeSummary() },
@@ -271,33 +263,20 @@ describe("buildDiagnosticsPanelModel", () => {
       isLoadingChecks: false,
     });
 
-    const beadsSection = model.sections.find((section) => section.key === "beads-store");
+    const taskStoreSection = model.sections.find((section) => section.key === "task-store");
 
-    expect(beadsSection?.badge).toEqual({ label: "Restore needed", variant: "warning" });
-    expect(beadsSection?.rows).toEqual(
+    expect(taskStoreSection?.badge).toEqual({ label: "Blocked", variant: "danger" });
+    expect(taskStoreSection?.rows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "Status", value: "Restore needed" }),
-        expect.objectContaining({ label: "Health category", value: "Missing Dolt database" }),
-        expect.objectContaining({ label: "Beads executable source", value: "System PATH" }),
-        expect.objectContaining({ label: "Beads executable path", value: "/usr/local/bin/bd" }),
-        expect.objectContaining({ label: "Dolt executable source", value: "System PATH" }),
-        expect.objectContaining({ label: "Dolt executable path", value: "/usr/local/bin/dolt" }),
+        expect.objectContaining({ label: "Status", value: "Blocked" }),
+        expect.objectContaining({ label: "Health category", value: "Database unavailable" }),
         expect.objectContaining({
-          label: "Beads attachment path",
-          value: "/Users/dev/.openducktor/beads/repo/.beads",
-        }),
-        expect.objectContaining({ label: "Dolt database name", value: "repo_db" }),
-        expect.objectContaining({ label: "Dolt server host", value: "127.0.0.1" }),
-        expect.objectContaining({ label: "Dolt server port", value: "36123" }),
-        expect.objectContaining({
-          label: "Dolt server ownership",
-          value: "Reusing another OpenDucktor-managed Dolt server",
+          label: "SQLite database path",
+          value: "/Users/dev/.openducktor/task-stores/repo/database.sqlite",
         }),
       ]),
     );
-    expect(beadsSection?.errors).toEqual([
-      "Shared Dolt database repo_db is missing and restore is required",
-    ]);
+    expect(taskStoreSection?.errors).toEqual(["SQLite task store database is unavailable"]);
   });
 
   test("treats repositories using the default worktree path as healthy", () => {
@@ -321,9 +300,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: { instance: makeRuntimeSummary() },
@@ -369,16 +348,14 @@ describe("buildDiagnosticsPanelModel", () => {
         ],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck({
-        beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
+      taskStoreCheck: makeTaskStoreCheck({
+        taskStorePath: "/Users/dev/.openducktor/task-stores/fairnest/database.sqlite",
         repoStoreHealth: {
-          attachment: {
-            path: "/Users/dev/.openducktor/beads/fairnest/.beads",
-          },
+          databasePath: "/Users/dev/.openducktor/task-stores/fairnest/database.sqlite",
         },
       }),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: { instance: makeRuntimeSummary() },
@@ -429,22 +406,20 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },
-      beadsCheck: makeBeadsCheck({
-        beadsOk: false,
-        beadsPath: null,
-        beadsError: "beads init failed",
+      taskStoreCheck: makeTaskStoreCheck({
+        taskStoreOk: false,
+        taskStorePath: null,
+        taskStoreError: "task store failed",
         repoStoreHealth: {
-          category: "attachment_verification_failed",
+          category: "database_unavailable",
           status: "blocking",
           isReady: false,
-          detail: "beads init failed",
-          attachment: {
-            path: null,
-          },
+          detail: "task store failed",
+          databasePath: null,
         },
       }),
       runtimeCheckFailureKind: "error",
-      beadsCheckFailureKind: "error",
+      taskStoreCheckFailureKind: "error",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
@@ -471,16 +446,16 @@ describe("buildDiagnosticsPanelModel", () => {
 
     const runtimeSection = model.sections.find((section) => section.key === "runtime:opencode");
     const mcpSection = model.sections.find((section) => section.key === "mcp:opencode");
-    const beadsSection = model.sections.find((section) => section.key === "beads-store");
+    const taskStoreSection = model.sections.find((section) => section.key === "task-store");
 
     expect(model.summaryState.label).toBe("Critical issue");
     expect(model.criticalReasons).toEqual(
-      expect.arrayContaining(["Runtime CLI checks failing", "runtime failed", "beads init failed"]),
+      expect.arrayContaining(["Runtime CLI checks failing", "runtime failed", "task store failed"]),
     );
     expect(model.sections[1]?.errors).toEqual(["opencode not found in PATH"]);
     expect(runtimeSection?.errors).toEqual(["runtime failed"]);
     expect(mcpSection?.errors).toEqual([]);
-    expect(beadsSection?.errors).toEqual(["beads init failed"]);
+    expect(taskStoreSection?.errors).toEqual(["task store failed"]);
   });
 
   test("falls back to mcpError when server error is absent", () => {
@@ -501,9 +476,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
@@ -544,9 +519,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "checking",
@@ -620,9 +595,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "checking",
@@ -698,9 +673,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "checking",
@@ -723,7 +698,7 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.summaryState.label).toBe("Checking...");
   });
 
-  test("shows timeout-specific cli tools and beads states instead of leaving them checking", () => {
+  test("shows timeout-specific cli tools and task-store states instead of leaving them checking", () => {
     const model = buildDiagnosticsPanelModel({
       workspaceRepoPath: "/repo",
       activeWorkspace: makeWorkspace("/repo"),
@@ -741,22 +716,20 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["Timed out after 15000ms"],
       },
-      beadsCheck: makeBeadsCheck({
-        beadsOk: false,
-        beadsPath: null,
-        beadsError: "Timed out after 15000ms",
+      taskStoreCheck: makeTaskStoreCheck({
+        taskStoreOk: false,
+        taskStorePath: null,
+        taskStoreError: "Timed out after 15000ms",
         repoStoreHealth: {
-          category: "attachment_verification_failed",
+          category: "database_unavailable",
           status: "blocking",
           isReady: false,
           detail: "Timed out after 15000ms",
-          attachment: {
-            path: null,
-          },
+          databasePath: null,
         },
       }),
       runtimeCheckFailureKind: "timeout",
-      beadsCheckFailureKind: "timeout",
+      taskStoreCheckFailureKind: "timeout",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: { instance: makeRuntimeSummary() },
@@ -772,7 +745,7 @@ describe("buildDiagnosticsPanelModel", () => {
     expect(model.sections[1]?.badge).toEqual({ label: "Retrying", variant: "warning" });
     expect(model.sections[1]?.errors[0]).toContain("CLI tools are not yet available");
     expect(model.sections[4]?.badge).toEqual({ label: "Retrying", variant: "warning" });
-    expect(model.sections[4]?.errors[0]).toContain("Beads store is not yet available");
+    expect(model.sections[4]?.errors[0]).toContain("Task store is not yet available");
   });
 
   test("keeps hard failures ahead of retrying summary state", () => {
@@ -793,9 +766,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["Timed out after 15000ms"],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: "timeout",
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
@@ -849,9 +822,9 @@ describe("buildDiagnosticsPanelModel", () => {
         runtimes: [{ kind: "opencode", ok: true, version: "1.2.9" }],
         errors: ["gh auth missing"],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: { instance: makeRuntimeSummary() },

@@ -2021,15 +2021,7 @@ describe("createTaskService pull requests", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push({ type: "syncCandidates", input });
-            return [
-              task({
-                status: "human_review",
-                pullRequest: linkedPullRequest,
-                agentSessions: [
-                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-                ],
-              }),
-            ];
+            return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -2273,7 +2265,7 @@ describe("createTaskService pull requests", () => {
       listPullRequestSyncCandidates() {
         return Effect.tryPromise({
           try: async () => {
-            return [task({ status: "human_review", pullRequest: linkedPullRequest })];
+            return [{ id: "task-1", status: "human_review", pullRequest: linkedPullRequest }];
           },
           catch: (cause) =>
             new HostOperationError({

@@ -27,7 +27,6 @@ const taskWithSession = (taskId: string, externalSessionId: string): TaskCard =>
   id: taskId,
   title: taskId,
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",

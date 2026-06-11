@@ -11,7 +11,6 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
   title: "Task",
   description: "",
-  notes: "",
   status: "open",
   priority: 1,
   issueType: "feature",
@@ -130,7 +129,7 @@ describe("task domain policy", () => {
   });
 
   test("keeps QA unavailable outside QA workflow statuses", () => {
-    for (const status of ["ready_for_dev", "in_progress", "deferred"] as const) {
+    for (const status of ["ready_for_dev", "in_progress"] as const) {
       const workItem = task({
         status,
         aiReviewEnabled: true,

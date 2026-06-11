@@ -146,7 +146,6 @@ export const createTaskFixture = (): TaskCard => ({
   id: "task-1",
   title: "Refactor loader",
   description: "Split hydration into explicit stages",
-  notes: "",
   status: "ready_for_dev",
   priority: 2,
   issueType: "task",

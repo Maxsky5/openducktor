@@ -17,9 +17,9 @@ import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
-  createBeadsCheckFixture as createSharedBeadsCheckFixture,
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
+  createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -148,20 +148,23 @@ const TEST_CHECKS_OPERATIONS_CONTEXT = {
     runtimes: [],
     errors: [],
   }),
-  refreshBeadsCheckForRepo: async () =>
-    createSharedBeadsCheckFixture({}, { beadsPath: "/repo/.beads" }),
+  refreshTaskStoreCheckForRepo: async () =>
+    createSharedTaskStoreCheckFixture(
+      {},
+      { taskStorePath: "/repo/task-stores/workspace/database.sqlite" },
+    ),
   refreshRepoRuntimeHealthForRepo: async () => ({}),
-  clearActiveBeadsCheck: () => {},
+  clearActiveTaskStoreCheck: () => {},
   clearActiveRepoRuntimeHealth: () => {},
   setIsLoadingChecks: () => {},
   hasRuntimeCheck: () => false,
-  hasCachedBeadsCheck: () => false,
+  hasCachedTaskStoreCheck: () => false,
   hasCachedRepoRuntimeHealth: () => false,
 } satisfies ComponentProps<typeof ChecksOperationsContext.Provider>["value"];
 
 export const createDeferred = createSharedDeferred;
 
-export const createBeadsCheckFixture = createSharedBeadsCheckFixture;
+export const createTaskStoreCheckFixture = createSharedTaskStoreCheckFixture;
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(PAGE_TASK_CARD_DEFAULTS, overrides);

@@ -17,8 +17,8 @@ import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures
 import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  createBeadsCheckFixture,
   createTaskCardFixture,
+  createTaskStoreCheckFixture,
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 
@@ -45,8 +45,6 @@ const humanRequestChangesTaskMock = mock(async () => {});
 const deleteTaskMock = mock(async () => {});
 const resetTaskImplementationMock = mock(async () => {});
 const resetTaskMock = mock(async () => {});
-const deferTaskMock = mock(async () => {});
-const resumeDeferredTaskMock = mock(async () => {});
 const toastSuccessMock = mock(() => {});
 const toastErrorMock = mock(() => {});
 const workspaceGetRepoConfigMock = mock(async (): Promise<RepoConfig> => createRepoConfigFixture());
@@ -497,20 +495,16 @@ describe("KanbanPage session start modal flow", () => {
         resetTaskImplementation: resetTaskImplementationMock,
         resetTask: resetTaskMock,
         transitionTask: async () => {},
-        deferTask: deferTaskMock,
-        resumeDeferredTask: resumeDeferredTaskMock,
         humanApproveTask: humanApproveTaskMock,
         humanRequestChangesTask: humanRequestChangesTaskMock,
       }),
       useChecksState: () => ({
-        beadsCheck: createBeadsCheckFixture(
+        taskStoreCheck: createTaskStoreCheckFixture(
           {},
           {
-            beadsPath: "/tmp/beads.db",
+            taskStorePath: "/tmp/task-store/database.sqlite",
             repoStoreHealth: {
-              attachment: {
-                path: "/tmp/beads.db",
-              },
+              databasePath: "/tmp/task-store/database.sqlite",
             },
           },
         ),
@@ -588,8 +582,6 @@ describe("KanbanPage session start modal flow", () => {
     deleteTaskMock.mockClear();
     resetTaskImplementationMock.mockClear();
     resetTaskMock.mockClear();
-    deferTaskMock.mockClear();
-    resumeDeferredTaskMock.mockClear();
     toastSuccessMock.mockClear();
     toastErrorMock.mockClear();
     workspaceGetRepoConfigMock.mockClear();

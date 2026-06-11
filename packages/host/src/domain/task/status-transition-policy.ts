@@ -4,11 +4,6 @@ import { TaskPolicyError } from "./task-policy-error";
 const canSkipSpecAndPlanning = (task: TaskCard): boolean =>
   task.issueType === "task" || task.issueType === "bug";
 
-export const isOpenState = (status: TaskStatus): boolean =>
-  status !== "closed" && status !== "deferred";
-
-export const isDeferrableOpenState = isOpenState;
-
 export const isActiveOrReviewStatus = (status: TaskStatus): boolean =>
   status === "in_progress" ||
   status === "blocked" ||
@@ -60,8 +55,7 @@ export const canResetImplementationFromStatus = (status: TaskStatus): boolean =>
   status === "ai_review" ||
   status === "human_review";
 
-export const canResetTaskFromStatus = (status: TaskStatus): boolean =>
-  status !== "deferred" && status !== "closed";
+export const canResetTaskFromStatus = (status: TaskStatus): boolean => status !== "closed";
 
 export const allowsTransition = (task: TaskCard, from: TaskStatus, to: TaskStatus): boolean => {
   if (from === to) {
@@ -70,44 +64,38 @@ export const allowsTransition = (task: TaskCard, from: TaskStatus, to: TaskStatu
 
   if (from === "open") {
     if (canSkipSpecAndPlanning(task)) {
-      return (
-        to === "spec_ready" || to === "ready_for_dev" || to === "in_progress" || to === "deferred"
-      );
+      return to === "spec_ready" || to === "ready_for_dev" || to === "in_progress";
     }
 
-    return to === "spec_ready" || to === "deferred";
+    return to === "spec_ready";
   }
 
   if (from === "spec_ready") {
     if (canSkipSpecAndPlanning(task)) {
-      return to === "ready_for_dev" || to === "in_progress" || to === "deferred";
+      return to === "ready_for_dev" || to === "in_progress";
     }
 
-    return to === "ready_for_dev" || to === "deferred";
+    return to === "ready_for_dev";
   }
 
   if (from === "ready_for_dev") {
-    return to === "in_progress" || to === "deferred";
+    return to === "in_progress";
   }
 
   if (from === "in_progress") {
-    return to === "blocked" || to === "ai_review" || to === "human_review" || to === "deferred";
+    return to === "blocked" || to === "ai_review" || to === "human_review";
   }
 
   if (from === "blocked") {
-    return to === "in_progress" || to === "ai_review" || to === "human_review" || to === "deferred";
+    return to === "in_progress" || to === "ai_review" || to === "human_review";
   }
 
   if (from === "ai_review") {
-    return to === "in_progress" || to === "human_review" || to === "closed" || to === "deferred";
+    return to === "in_progress" || to === "human_review" || to === "closed";
   }
 
   if (from === "human_review") {
-    return to === "in_progress" || to === "closed" || to === "deferred";
-  }
-
-  if (from === "deferred") {
-    return to === "open";
+    return to === "in_progress" || to === "closed";
   }
 
   return false;
@@ -119,10 +107,7 @@ const canCloseEpic = (task: TaskCard, allTasks: TaskCard[]): boolean => {
   }
 
   return !allTasks.some(
-    (candidate) =>
-      candidate.parentId === task.id &&
-      candidate.status !== "closed" &&
-      candidate.status !== "deferred",
+    (candidate) => candidate.parentId === task.id && candidate.status !== "closed",
   );
 };
 
@@ -146,10 +131,7 @@ export const validateTransition = (
   }
 
   const blockingSubtask = allTasks.find(
-    (candidate) =>
-      candidate.parentId === task.id &&
-      candidate.status !== "closed" &&
-      candidate.status !== "deferred",
+    (candidate) => candidate.parentId === task.id && candidate.status !== "closed",
   );
   if (blockingSubtask) {
     throw TaskPolicyError.policy(

@@ -73,7 +73,7 @@ import { createTaskImplementationResetUseCase } from "./use-cases/reset-implemen
 import { createTaskFullResetUseCase } from "./use-cases/reset-task";
 import { createTaskReviewUseCases } from "./use-cases/review-task";
 import { createTaskBuildStartUseCase } from "./use-cases/start-build";
-import { createTaskSyncDeferUseCases } from "./use-cases/sync-deferred-tasks";
+import { createTaskPullRequestSyncUseCases } from "./use-cases/sync-pull-requests";
 import { createTaskBuildStateUseCases } from "./use-cases/update-build-state";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
@@ -154,8 +154,6 @@ export type TaskService = {
   repoPullRequestSyncDetailed(
     input: RepoPathInput,
   ): Effect.Effect<RepoPullRequestSyncResult, TaskServiceError>;
-  deferTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
-  resumeDeferredTask(input: TaskIdInput): Effect.Effect<TaskCard, TaskServiceError>;
 };
 export type RepoPullRequestSyncResult = {
   ran: boolean;
@@ -212,7 +210,7 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     ...createTaskBuildStartUseCase(useCaseInput),
     ...createTaskBuildStateUseCases(useCaseInput),
     ...createTaskReviewUseCases(useCaseInput),
-    ...createTaskSyncDeferUseCases(useCaseInput),
+    ...createTaskPullRequestSyncUseCases(useCaseInput),
   };
   return {
     agentSessionsList: (input) => mapTaskServiceErrors(service.agentSessionsList(input)),
@@ -224,7 +222,6 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
     buildStart: (input) => mapTaskServiceErrors(service.buildStart(input)),
     completeDirectMerge: (input) => mapTaskServiceErrors(service.completeDirectMerge(input)),
     createTask: (input) => mapTaskServiceErrors(service.createTask(input)),
-    deferTask: (input) => mapTaskServiceErrors(service.deferTask(input)),
     deleteTask: (input) => mapTaskServiceErrors(service.deleteTask(input)),
     detectPullRequest: (input) => mapTaskServiceErrors(service.detectPullRequest(input)),
     directMerge: (input) => mapTaskServiceErrors(service.directMerge(input)),
@@ -244,7 +241,6 @@ export const createTaskService = (input: CreateTaskServiceInput): TaskService =>
       mapTaskServiceErrors(service.repoPullRequestSyncDetailed(input)),
     resetImplementation: (input) => mapTaskServiceErrors(service.resetImplementation(input)),
     resetTask: (input) => mapTaskServiceErrors(service.resetTask(input)),
-    resumeDeferredTask: (input) => mapTaskServiceErrors(service.resumeDeferredTask(input)),
     savePlanDocument: (input) => mapTaskServiceErrors(service.savePlanDocument(input)),
     saveSpecDocument: (input) => mapTaskServiceErrors(service.saveSpecDocument(input)),
     setPlan: (input) => mapTaskServiceErrors(service.setPlan(input)),

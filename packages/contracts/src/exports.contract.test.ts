@@ -19,7 +19,6 @@ import type {
   AutopilotEventId,
   AutopilotRule,
   AutopilotSettings,
-  BeadsCheck,
   BuildSessionBootstrap,
   ChatSettings,
   CodexReasoningEffort,
@@ -137,6 +136,7 @@ import type {
   TaskPriority,
   TaskQaDocumentPresence,
   TaskStatus,
+  TaskStoreCheck,
   TaskUpdatePatch,
   TaskWorktreeSummary,
   ToolExecutableProvenance,
@@ -188,7 +188,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "parseAgentSessionTodoPayloadEntry",
   "parseAgentSessionTodoPayloadList",
   "parseCodexAppServerRequestResult",
-  "beadsCheckSchema",
+  "taskStoreCheckSchema",
   "buildBlockedResultSchema",
   "buildCompletedResultSchema",
   "chatSettingsSchema",
@@ -341,12 +341,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeHydratedEventTypeValues",
   "runtimeKindSchema",
   "repoRuntimeHealthCheckSchema",
-  "repoStoreAttachmentHealthSchema",
   "repoStoreHealthCategorySchema",
   "repoStoreHealthSchema",
   "repoStoreHealthStatusSchema",
-  "repoStoreSharedServerHealthSchema",
-  "repoStoreSharedServerOwnershipStateSchema",
   "repoRuntimeHealthMcpSchema",
   "repoRuntimeHealthObservationSchema",
   "repoRuntimeHealthRuntimeSchema",
@@ -469,7 +466,7 @@ type ExportedTypeContract = {
   AgentToolName: AgentToolName;
   AgentWorkflowState: AgentWorkflowState;
   AgentWorkflows: AgentWorkflows;
-  BeadsCheck: BeadsCheck;
+  TaskStoreCheck: TaskStoreCheck;
   ChatSettings: ChatSettings;
   CodexReasoningEffort: CodexReasoningEffort;
   CommitsAheadBehind: CommitsAheadBehind;

@@ -3,20 +3,20 @@
 ## Purpose
 This document defines the canonical task workflow model for OpenDucktor.
 It is the source of truth for:
-- persisted Beads statuses,
+- persisted task statuses,
 - UI status labels,
 - type-specific behavior,
 - metadata ownership for agent-authored documents.
 
 ## Core Principles
-- Beads `status` is the canonical lifecycle state.
+- The persisted task `status` is the canonical lifecycle state.
 - OpenDucktor does not use labels for lifecycle state.
 - Transitions are backend-enforced and mostly tool-driven.
 - User-authored fields and agent-authored documents are separated.
 
-## Persisted Statuses (Beads)
-OpenDucktor uses the following Beads statuses:
-- Built-in: `open`, `in_progress`, `blocked`, `deferred`, `closed`
+## Persisted Statuses
+OpenDucktor uses the following task statuses:
+- Built-in: `open`, `in_progress`, `blocked`, `closed`
 - Custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
 
 Notes:
@@ -33,7 +33,6 @@ Notes:
 - `ai_review` -> `AI Review`
 - `human_review` -> `Human Review`
 - `closed` -> `Done`
-- `deferred` -> hidden from main Kanban (for now)
 
 ## Task Capability Contract (Backend-Driven)
 - Backend computes allowed task actions and returns them on each `TaskCard` as `availableActions`.
@@ -73,84 +72,36 @@ When `qaRequired=false`, or when the latest QA verdict is already `approved`, bu
 - Only `epic` can have subtasks.
 - Max hierarchy depth is 1 level.
 - Subtasks cannot have subtasks.
-- Subtasks cannot be deferred through OpenDucktor actions.
 - Epic completion guard checks direct children only.
-- For completion guard, deferred children are ignored.
+- Epic completion guard blocks while any direct child is not `closed`.
 
-## Deferred Rules
-- Any non-closed parent issue can be deferred by user action.
-- Deferred issues are excluded from Kanban for now.
-- Resuming deferred issues returns them to `open`.
-- Subtasks are not allowed to be deferred by OpenDucktor.
+## Document Contract (Agent-Owned Documents)
+Agent-authored documents are stored as task documents only, never in user-authored task fields.
 
-## Metadata Contract (Agent-Owned Documents)
-Agent-authored documents are stored under issue `metadata` only, never in user-authored fields.
+SQLite stores document bodies as plain markdown with an explicit `format` value. The current document kinds are:
 
-Root namespace key is fixed to `openducktor`.
+- `spec`
+- `implementationPlan`
+- `qaReports`
 
-### Namespace Key Requirement
-- Value: `openducktor`
-- All metadata reads/writes must use that key
+Document rows include task id, kind, revision, markdown, format, optional QA verdict, source tool, updater, and update timestamp.
+Frontend and MCP callers receive plain markdown on successful reads.
 
-### JSON Shape
+Example document rows keep canonical workflow source tools explicit:
+
 ```json
-{
-  "openducktor": {
-    "qaRequired": true,
-    "documents": {
-      "spec": [
-        {
-          "markdown": "<base64-gzip-payload>",
-          "encoding": "gzip-base64-v1",
-          "updatedAt": "2026-02-17T12:34:56Z",
-          "updatedBy": "planner-agent",
-          "sourceTool": "odt_set_spec",
-          "revision": 1
-        }
-      ],
-      "implementationPlan": [
-        {
-          "markdown": "<base64-gzip-payload>",
-          "encoding": "gzip-base64-v1",
-          "updatedAt": "2026-02-17T12:40:10Z",
-          "updatedBy": "planner-agent",
-          "sourceTool": "odt_set_plan",
-          "revision": 1
-        }
-      ],
-      "qaReports": [
-        {
-          "markdown": "<base64-gzip-payload>",
-          "encoding": "gzip-base64-v1",
-          "verdict": "approved",
-          "updatedAt": "2026-02-17T13:02:00Z",
-          "updatedBy": "qa-agent",
-          "sourceTool": "odt_qa_approved",
-          "revision": 1
-        }
-      ]
-    }
-  }
-}
+[
+  { "kind": "spec", "sourceTool": "odt_set_spec" },
+  { "kind": "implementationPlan", "sourceTool": "odt_set_plan" },
+  { "kind": "qaReports", "sourceTool": "odt_qa_approved" }
+]
 ```
 
-Notes:
-- Legacy entries without `encoding` remain readable. In those entries, `markdown` is stored as literal markdown.
-- New or updated spec, plan, and QA documents are stored with `encoding: "gzip-base64-v1"` and a base64-encoded gzip payload in `markdown`.
-- Encode and decode translation is owned by the host. Frontend and MCP callers continue to receive plain markdown on successful reads.
-- When the latest stored document cannot be decoded, host-backed read APIs return an empty markdown string plus a document-level `error` field instead of silently treating the document as missing.
-- There is no automatic backfill migration for older markdown-only entries.
-
 ## Document History Policy
-- `qaReports`: list structure, but V1 retains only the latest entry in the list (list length = 1).
-- `spec`: list structure, but V1 retains only the latest entry in the list (list length = 1).
-- `implementationPlan`: list structure, but V1 retains only the latest entry in the list (list length = 1).
+- `qaReports`: history may be retained, but V1 UI surfaces the latest entry.
+- `spec`: history may be retained, but V1 UI surfaces the latest entry.
+- `implementationPlan`: history may be retained, but V1 UI surfaces the latest entry.
 
 ## Write Safety Rules
-- Metadata updates must be read-merge-write.
-- Unknown metadata keys must be preserved.
-- Avoid reserved Beads metadata prefixes (`bd:`, `_`) for custom keys.
+- Task-store updates must preserve unrelated durable task fields.
 - No workflow-critical data should depend on UI-only labels.
-
-## Compatibility Note
-Beads `bd ready` is optimized for `status=open` semantics. OpenDucktor uses custom statuses for intermediate workflow states, so Kanban and orchestration logic must not rely on `bd ready` as the workflow source of truth.

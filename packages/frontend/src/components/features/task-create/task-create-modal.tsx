@@ -91,7 +91,7 @@ export function TaskCreateModal({
             </DialogTitle>
             <DialogDescription>
               {controller.mode === "create"
-                ? "Create a structured Beads issue with the fields Planner and Builder rely on."
+                ? "Create a structured task with the fields Planner and Builder rely on."
                 : `Update ${task?.id ?? "task"} metadata and long-form markdown documents.`}
             </DialogDescription>
           </DialogHeader>

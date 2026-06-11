@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type BeadsCheck,
   OPENCODE_RUNTIME_DESCRIPTOR,
+  type TaskStoreCheck,
   type WorkspaceRecord,
 } from "@openducktor/contracts";
 import { createElement } from "react";
@@ -44,36 +44,16 @@ const makeRepoHealth = (overrides: RepoHealthOverrides = {}): RepoRuntimeHealthC
   },
 });
 
-const makeBeadsCheck = (overrides: Partial<BeadsCheck> = {}): BeadsCheck => ({
-  beadsOk: true,
-  beadsPath: "/Users/dev/.openducktor/beads/fairnest/.beads",
-  beadsError: null,
-  beadsExecutable: {
-    displayLabel: "System PATH",
-    error: null,
-    path: "/usr/local/bin/bd",
-    sourceCategory: "system_path",
-  },
-  doltExecutable: {
-    displayLabel: "System PATH",
-    error: null,
-    path: "/usr/local/bin/dolt",
-    sourceCategory: "system_path",
-  },
+const makeTaskStoreCheck = (overrides: Partial<TaskStoreCheck> = {}): TaskStoreCheck => ({
+  taskStoreOk: true,
+  taskStorePath: "/Users/dev/.openducktor/task-stores/fairnest/database.sqlite",
+  taskStoreError: null,
   repoStoreHealth: {
     category: "healthy",
     status: "ready",
     isReady: true,
-    detail: "Beads attachment and shared Dolt server are healthy.",
-    attachment: {
-      path: "/Users/dev/.openducktor/beads/fairnest/.beads",
-      databaseName: "fairnest_db",
-    },
-    sharedServer: {
-      host: "127.0.0.1",
-      port: 3307,
-      ownershipState: "owned_by_current_process",
-    },
+    detail: "SQLite task store is ready.",
+    databasePath: "/Users/dev/.openducktor/task-stores/fairnest/database.sqlite",
   },
   ...overrides,
 });
@@ -102,9 +82,9 @@ describe("DiagnosticsPanelSections", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       runtimeCheck: null,
-      beadsCheck: null,
+      taskStoreCheck: null,
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
       isLoadingChecks: false,
     });
@@ -135,9 +115,9 @@ describe("DiagnosticsPanelSections", () => {
         ],
         errors: [],
       },
-      beadsCheck: makeBeadsCheck(),
+      taskStoreCheck: makeTaskStoreCheck(),
       runtimeCheckFailureKind: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           runtime: {
@@ -183,15 +163,7 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Server name:");
     expect(html).toContain("Status:");
     expect(html).toContain("Tools detected:");
-    expect(html).toContain("Beads executable source:");
-    expect(html).toContain("Beads executable path:");
-    expect(html).toContain("Dolt executable source:");
-    expect(html).toContain("Dolt executable path:");
-    expect(html).toContain("Beads attachment path:");
-    expect(html).toContain("Dolt database name:");
-    expect(html).toContain("Dolt server host:");
-    expect(html).toContain("Dolt server port:");
-    expect(html).toContain("Dolt server ownership:");
+    expect(html).toContain("SQLite database path:");
   });
 
   test("renders error rows when section errors are present", () => {
@@ -217,28 +189,20 @@ describe("DiagnosticsPanelSections", () => {
         runtimes: [{ kind: "opencode", ok: false, version: null }],
         errors: ["opencode not found in PATH"],
       },
-      beadsCheck: makeBeadsCheck({
-        beadsOk: false,
-        beadsPath: null,
-        beadsError: "beads init failed",
+      taskStoreCheck: makeTaskStoreCheck({
+        taskStoreOk: false,
+        taskStorePath: null,
+        taskStoreError: "task store failed",
         repoStoreHealth: {
-          category: "attachment_verification_failed",
+          category: "database_unavailable",
           status: "degraded",
           isReady: false,
-          detail: "beads init failed",
-          attachment: {
-            path: null,
-            databaseName: "fairnest_db",
-          },
-          sharedServer: {
-            host: "127.0.0.1",
-            port: 3307,
-            ownershipState: "owned_by_current_process",
-          },
+          detail: "task store failed",
+          databasePath: null,
         },
       }),
       runtimeCheckFailureKind: "error",
-      beadsCheckFailureKind: "error",
+      taskStoreCheckFailureKind: "error",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
@@ -269,6 +233,6 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("opencode not found in PATH");
     expect(html).toContain("runtime failed");
     expect(html).not.toContain("server unavailable");
-    expect(html).toContain("beads init failed");
+    expect(html).toContain("task store failed");
   });
 });

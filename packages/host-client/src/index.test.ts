@@ -12,13 +12,11 @@ const makeTaskCardPayload = () => ({
   id: "task-1",
   title: "Task",
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",
   aiReviewEnabled: true,
   labels: [],
-  assignee: null,
   parentId: null,
   subtaskIds: [],
   documentSummary: {
@@ -61,27 +59,8 @@ const makeRepoStoreHealthPayload = (overrides: Record<string, unknown> = {}) => 
   category: "healthy",
   status: "ready",
   isReady: true,
-  detail: "Beads attachment and shared Dolt server are healthy.",
-  attachment: {
-    path: "/repo/.beads",
-    databaseName: "repo_db",
-  },
-  sharedServer: {
-    host: "127.0.0.1",
-    port: 3307,
-    ownershipState: "owned_by_current_process",
-  },
-  ...overrides,
-});
-
-const makeToolExecutablePayload = (
-  path: string | null,
-  overrides: Record<string, unknown> = {},
-) => ({
-  displayLabel: path === null ? "Unavailable" : "System PATH",
-  error: null,
-  path,
-  sourceCategory: path === null ? "unavailable" : "system_path",
+  detail: "SQLite task store is ready.",
+  databasePath: "/config/task-stores/workspace-1/database.sqlite",
   ...overrides,
 });
 
@@ -180,32 +159,31 @@ describe("HostClient", () => {
     expect(listing.entries[0]?.isGitRepo).toBe(true);
   });
 
-  test("parses structured repo store diagnostics from beadsCheck", async () => {
+  test("parses structured repo store diagnostics from taskStoreCheck", async () => {
     const { client } = createClient((command) => {
-      if (command === "beads_check") {
+      if (command === "task_store_check") {
         return {
-          beadsOk: false,
-          beadsPath: "/repo/.beads",
-          beadsError: "Shared Dolt database repo_db is missing and restore is required",
-          beadsExecutable: makeToolExecutablePayload("/usr/local/bin/bd"),
-          doltExecutable: makeToolExecutablePayload("/usr/local/bin/dolt"),
+          taskStoreOk: false,
+          taskStorePath: "/config/task-stores/workspace-1/database.sqlite",
+          taskStoreError: "SQLite task store database is unavailable",
           repoStoreHealth: makeRepoStoreHealthPayload({
-            category: "missing_shared_database",
-            status: "restore_needed",
+            category: "database_unavailable",
+            status: "blocking",
             isReady: false,
-            detail: "Shared Dolt database repo_db is missing and restore is required",
+            detail: "SQLite task store database is unavailable",
           }),
         };
       }
       throw new Error(`Unexpected command: ${command}`);
     });
 
-    const output = await client.beadsCheck("/repo");
+    const output = await client.taskStoreCheck("/repo");
 
-    expect(output.repoStoreHealth?.category).toBe("missing_shared_database");
-    expect(output.repoStoreHealth?.status).toBe("restore_needed");
-    expect(output.repoStoreHealth?.attachment.databaseName).toBe("repo_db");
-    expect(output.repoStoreHealth?.sharedServer.ownershipState).toBe("owned_by_current_process");
+    expect(output.repoStoreHealth?.category).toBe("database_unavailable");
+    expect(output.repoStoreHealth?.status).toBe("blocking");
+    expect(output.repoStoreHealth?.databasePath).toBe(
+      "/config/task-stores/workspace-1/database.sqlite",
+    );
   });
 
   test("tasksList preserves task target branch validation errors", async () => {
@@ -259,8 +237,6 @@ describe("HostClient", () => {
       "taskResetImplementation",
       "taskReset",
       "taskTransition",
-      "taskDefer",
-      "taskResumeDeferred",
       "specGet",
       "setSpec",
       "saveSpecDocument",
@@ -274,7 +250,7 @@ describe("HostClient", () => {
       "agentSessionUpsert",
       "systemCheck",
       "runtimeCheck",
-      "beadsCheck",
+      "taskStoreCheck",
       "runtimeDefinitionsList",
       "runtimeList",
       "taskWorktreeGet",

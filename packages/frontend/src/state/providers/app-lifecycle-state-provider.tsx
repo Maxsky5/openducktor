@@ -24,7 +24,7 @@ export function AppLifecycleStateProvider({
   );
   const { refreshWorkspaces, refreshBranches, clearBranchData } = useWorkspaceOperationsContext();
   const { availableRuntimeDefinitions } = useRuntimeAvailabilityContext();
-  const { refreshRuntimeCheck, refreshBeadsCheckForRepo, refreshRepoRuntimeHealthForRepo } =
+  const { refreshRuntimeCheck, refreshTaskStoreCheckForRepo, refreshRepoRuntimeHealthForRepo } =
     useChecksOperationsContext();
   const { refreshTaskData } = useTaskControlContext();
 
@@ -34,7 +34,7 @@ export function AppLifecycleStateProvider({
     refreshWorkspaces,
     refreshBranches,
     refreshRuntimeCheck,
-    refreshBeadsCheckForRepo,
+    refreshTaskStoreCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
     refreshTaskData,
     startRepoRuntime,

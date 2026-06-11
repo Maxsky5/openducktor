@@ -1,8 +1,8 @@
 import type {
-  BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
+  TaskStoreCheck,
 } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -15,22 +15,22 @@ import type {
 } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  beadsCheckQueryOptions,
   type ChecksQueryDependencies,
   checksQueryKeys,
   classifyDiagnosticsQueryError,
-  loadBeadsCheckFromQuery,
   loadRepoRuntimeHealthFromQuery,
   loadRuntimeCheckFromQuery,
+  loadTaskStoreCheckFromQuery,
   repoRuntimeHealthQueryOptions,
   runtimeCheckQueryOptions,
+  taskStoreCheckQueryOptions,
 } from "../../queries/checks";
 import {
-  buildBeadsCheckErrorState,
   buildDiagnosticsRetryPlan,
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
   buildRuntimeHealthErrorMap,
+  buildTaskStoreCheckErrorState,
   type DiagnosticsToastIssue,
 } from "./check-diagnostics";
 import {
@@ -47,29 +47,29 @@ type UseChecksArgs = {
     runtimeKind: RuntimeKind,
   ) => Promise<RepoRuntimeHealthCheck>;
   runtimeCheck?: ChecksQueryDependencies["runtimeCheck"];
-  beadsCheck?: ChecksQueryDependencies["beadsCheck"];
+  taskStoreCheck?: ChecksQueryDependencies["taskStoreCheck"];
   toastApi?: DiagnosticsToastApi;
 };
 
 type UseChecksResult = {
   runtimeCheck: RuntimeCheck | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  activeBeadsCheck: BeadsCheck | null;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  activeTaskStoreCheck: TaskStoreCheck | null;
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   activeRepoRuntimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   setIsLoadingChecks: (value: boolean) => void;
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
+  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   refreshRepoRuntimeHealthForRepo: (
     repoPath: string,
     force?: boolean,
   ) => Promise<RepoRuntimeHealthMap>;
   refreshChecks: () => Promise<void>;
   hasRuntimeCheck: () => boolean;
-  hasCachedBeadsCheck: (repoPath: string) => boolean;
+  hasCachedTaskStoreCheck: (repoPath: string) => boolean;
   hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
-  clearActiveBeadsCheck: () => void;
+  clearActiveTaskStoreCheck: () => void;
   clearActiveRepoRuntimeHealth: () => void;
 };
 
@@ -78,15 +78,15 @@ export function useChecks({
   runtimeDefinitions,
   checkRepoRuntimeHealth,
   runtimeCheck,
-  beadsCheck,
+  taskStoreCheck,
   toastApi,
 }: UseChecksArgs): UseChecksResult {
   const activeRepoPath = activeWorkspace?.repoPath ?? null;
   const queryClient = useQueryClient();
   const [isManualLoadingChecks, setIsManualLoadingChecks] = useState(false);
   const runtimeCheckQuery = useQuery(runtimeCheckQueryOptions(false, runtimeCheck));
-  const beadsCheckQuery = useQuery({
-    ...beadsCheckQueryOptions(activeRepoPath ?? "__disabled__", beadsCheck),
+  const taskStoreCheckQuery = useQuery({
+    ...taskStoreCheckQueryOptions(activeRepoPath ?? "__disabled__", taskStoreCheck),
     enabled: activeRepoPath !== null,
   });
   const runtimeHealthQuery = useQuery({
@@ -114,21 +114,21 @@ export function useChecks({
     [queryClient, runtimeCheck],
   );
 
-  const refreshBeadsCheckForRepo = useCallback(
-    async (repoPath: string, force = false): Promise<BeadsCheck> => {
+  const refreshTaskStoreCheckForRepo = useCallback(
+    async (repoPath: string, force = false): Promise<TaskStoreCheck> => {
       if (force) {
         await queryClient.invalidateQueries({
-          queryKey: checksQueryKeys.beads(repoPath),
+          queryKey: checksQueryKeys.taskStore(repoPath),
           exact: true,
           refetchType: "none",
         });
       }
 
       return force
-        ? queryClient.fetchQuery(beadsCheckQueryOptions(repoPath, beadsCheck))
-        : loadBeadsCheckFromQuery(queryClient, repoPath, beadsCheck);
+        ? queryClient.fetchQuery(taskStoreCheckQueryOptions(repoPath, taskStoreCheck))
+        : loadTaskStoreCheckFromQuery(queryClient, repoPath, taskStoreCheck);
     },
-    [beadsCheck, queryClient],
+    [taskStoreCheck, queryClient],
   );
 
   const refreshRepoRuntimeHealthForRepo = useCallback(
@@ -169,9 +169,9 @@ export function useChecks({
 
     setIsManualLoadingChecks(true);
     try {
-      const [runtimeResult, beadsResult, runtimeHealthResult] = await Promise.allSettled([
+      const [runtimeResult, taskStoreResult, runtimeHealthResult] = await Promise.allSettled([
         refreshRuntimeCheck(true),
-        refreshBeadsCheckForRepo(activeRepoPath, true),
+        refreshTaskStoreCheckForRepo(activeRepoPath, true),
         refreshRepoRuntimeHealthForRepo(activeRepoPath, true),
       ]);
 
@@ -179,8 +179,8 @@ export function useChecks({
         throw runtimeResult.reason;
       }
 
-      if (beadsResult.status === "rejected") {
-        throw beadsResult.reason;
+      if (taskStoreResult.status === "rejected") {
+        throw taskStoreResult.reason;
       }
 
       if (runtimeHealthResult.status === "rejected") {
@@ -188,9 +188,9 @@ export function useChecks({
       }
 
       const runtime = runtimeResult.value;
-      const beads = beadsResult.value;
+      const taskStore = taskStoreResult.value;
 
-      if (runtime && beads && runtime.gitOk && isRepoStoreReady(beads)) {
+      if (runtime && taskStore && runtime.gitOk && isRepoStoreReady(taskStore)) {
         return;
       }
     } finally {
@@ -198,19 +198,19 @@ export function useChecks({
     }
   }, [
     activeRepoPath,
-    refreshBeadsCheckForRepo,
+    refreshTaskStoreCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
     refreshRuntimeCheck,
   ]);
 
-  const hasCachedBeadsCheck = useCallback(
+  const hasCachedTaskStoreCheck = useCallback(
     (repoPath: string): boolean => {
       return (
-        queryClient.getQueryData(beadsCheckQueryOptions(repoPath, beadsCheck).queryKey) !==
+        queryClient.getQueryData(taskStoreCheckQueryOptions(repoPath, taskStoreCheck).queryKey) !==
         undefined
       );
     },
-    [beadsCheck, queryClient],
+    [taskStoreCheck, queryClient],
   );
 
   const hasCachedRepoRuntimeHealth = useCallback(
@@ -229,13 +229,13 @@ export function useChecks({
     );
   }, [queryClient, runtimeCheck]);
 
-  const clearActiveBeadsCheck = useCallback(() => {
+  const clearActiveTaskStoreCheck = useCallback(() => {
     setIsManualLoadingChecks(false);
     if (activeRepoPath === null) {
       return;
     }
     queryClient.removeQueries({
-      queryKey: checksQueryKeys.beads(activeRepoPath),
+      queryKey: checksQueryKeys.taskStore(activeRepoPath),
       exact: true,
     });
   }, [activeRepoPath, queryClient]);
@@ -296,26 +296,26 @@ export function useChecks({
 
     return null;
   }, [runtimeCheckError, runtimeCheckQuery.data, runtimeDefinitions]);
-  const beadsCheckQueryFailure = beadsCheckQuery.error
-    ? classifyDiagnosticsQueryError(beadsCheckQuery.error)
+  const taskStoreCheckQueryFailure = taskStoreCheckQuery.error
+    ? classifyDiagnosticsQueryError(taskStoreCheckQuery.error)
     : null;
-  const beadsCheckError = beadsCheckQueryFailure?.message ?? null;
-  const beadsCheckFailureKind = beadsCheckQueryFailure?.failureKind ?? null;
-  const rawBeadsCheck = useMemo((): BeadsCheck | null => {
+  const taskStoreCheckError = taskStoreCheckQueryFailure?.message ?? null;
+  const taskStoreCheckFailureKind = taskStoreCheckQueryFailure?.failureKind ?? null;
+  const rawTaskStoreCheck = useMemo((): TaskStoreCheck | null => {
     if (activeRepoPath === null) {
       return null;
     }
 
-    if (beadsCheckQuery.data) {
-      return beadsCheckQuery.data;
+    if (taskStoreCheckQuery.data) {
+      return taskStoreCheckQuery.data;
     }
 
-    if (beadsCheckError) {
-      return buildBeadsCheckErrorState(beadsCheckError);
+    if (taskStoreCheckError) {
+      return buildTaskStoreCheckErrorState(taskStoreCheckError);
     }
 
     return null;
-  }, [activeRepoPath, beadsCheckError, beadsCheckQuery.data]);
+  }, [activeRepoPath, taskStoreCheckError, taskStoreCheckQuery.data]);
   const diagnosticsToastIssues = useMemo(
     (): DiagnosticsToastIssue[] =>
       buildDiagnosticsToastIssues({
@@ -324,17 +324,17 @@ export function useChecks({
         runtimeCheck: runtimeCheckState,
         runtimeCheckError,
         runtimeCheckFailureKind,
-        beadsCheck: rawBeadsCheck,
-        beadsCheckError,
-        beadsCheckFailureKind,
+        taskStoreCheck: rawTaskStoreCheck,
+        taskStoreCheckError,
+        taskStoreCheckFailureKind,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
       }),
     [
       activeWorkspace,
-      rawBeadsCheck,
+      rawTaskStoreCheck,
       activeRepoRuntimeHealthByRuntime,
-      beadsCheckError,
-      beadsCheckFailureKind,
+      taskStoreCheckError,
+      taskStoreCheckFailureKind,
       runtimeCheckState,
       runtimeCheckError,
       runtimeCheckFailureKind,
@@ -349,16 +349,16 @@ export function useChecks({
         runtimeDefinitions,
         runtimeCheckFailureKind,
         runtimeCheckFetching: runtimeCheckQuery.isFetching,
-        beadsCheckFailureKind,
-        beadsCheckFetching: beadsCheckQuery.isFetching,
+        taskStoreCheckFailureKind,
+        taskStoreCheckFetching: taskStoreCheckQuery.isFetching,
         runtimeHealthByRuntime: activeRepoRuntimeHealthByRuntime,
         runtimeHealthFetching: runtimeHealthQuery.isFetching,
       }),
     [
       activeWorkspace,
       activeRepoRuntimeHealthByRuntime,
-      beadsCheckFailureKind,
-      beadsCheckQuery.isFetching,
+      taskStoreCheckFailureKind,
+      taskStoreCheckQuery.isFetching,
       runtimeCheckFailureKind,
       runtimeCheckQuery.isFetching,
       runtimeDefinitions,
@@ -371,7 +371,7 @@ export function useChecks({
     activeWorkspace,
     retryPlan: diagnosticsRetryPlan,
     refreshRuntimeCheck,
-    refreshBeadsCheckForRepo,
+    refreshTaskStoreCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
   });
 
@@ -379,25 +379,25 @@ export function useChecks({
     isManualLoadingChecks ||
     runtimeCheckQuery.isFetching ||
     (activeRepoPath !== null &&
-      (beadsCheckQuery.isFetching ||
+      (taskStoreCheckQuery.isFetching ||
         (runtimeDefinitions.length > 0 && runtimeHealthQuery.isFetching)));
 
   return {
     runtimeCheck: runtimeCheckState,
     runtimeCheckFailureKind,
-    activeBeadsCheck: rawBeadsCheck,
-    beadsCheckFailureKind,
+    activeTaskStoreCheck: rawTaskStoreCheck,
+    taskStoreCheckFailureKind,
     activeRepoRuntimeHealthByRuntime,
     isLoadingChecks,
     setIsLoadingChecks: setIsManualLoadingChecks,
     refreshRuntimeCheck,
-    refreshBeadsCheckForRepo,
+    refreshTaskStoreCheckForRepo,
     refreshRepoRuntimeHealthForRepo,
     refreshChecks,
     hasRuntimeCheck,
-    hasCachedBeadsCheck,
+    hasCachedTaskStoreCheck,
     hasCachedRepoRuntimeHealth,
-    clearActiveBeadsCheck,
+    clearActiveTaskStoreCheck,
     clearActiveRepoRuntimeHealth,
   };
 }

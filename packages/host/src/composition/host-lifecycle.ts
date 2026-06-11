@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { BeadsTaskRepository } from "../adapters/beads/beads-task-repository";
 import type { McpHostBridgeServer } from "../adapters/mcp/mcp-host-bridge-server";
 import type {
   DevServerServiceError,
@@ -123,29 +122,6 @@ export const createStopMcpHostBridgeStep = (
       logger.info(
         result.baseUrl ? `Stopped MCP host bridge at ${result.baseUrl}` : "Stopped MCP host bridge",
       );
-    });
-  },
-});
-
-export const createStopSharedDoltServerStep = (
-  taskStore: BeadsTaskRepository | null,
-  logger: HostLifecycleLogger,
-): HostShutdownStep => ({
-  label: "shared Dolt server",
-  run() {
-    return Effect.gen(function* () {
-      if (!taskStore) {
-        logger.info("No shared Dolt server owned by this OpenDucktor process");
-        return;
-      }
-
-      const result = yield* taskStore.close();
-      if (result.stoppedSharedDoltServers === 0) {
-        logger.info("No shared Dolt server owned by this OpenDucktor process");
-        return;
-      }
-
-      logger.info("Shared Dolt server stopped");
     });
   },
 });

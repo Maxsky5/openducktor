@@ -7,11 +7,11 @@ import {
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  buildBeadsCheckErrorState,
   buildDiagnosticsRetryPlan,
   buildDiagnosticsToastIssues,
   buildRuntimeCheckErrorState,
   buildRuntimeHealthErrorMap,
+  buildTaskStoreCheckErrorState,
 } from "./check-diagnostics";
 
 const makeRepoHealth = (
@@ -26,7 +26,7 @@ const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
 });
 
 describe("check-diagnostics helpers", () => {
-  test("projects runtime and beads query failures into concrete error states", () => {
+  test("projects runtime and task store query failures into concrete error states", () => {
     expect(
       buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "Timed out after 15000ms"),
     ).toEqual(
@@ -43,37 +43,17 @@ describe("check-diagnostics helpers", () => {
       }),
     );
 
-    expect(buildBeadsCheckErrorState("beads offline")).toEqual({
+    expect(buildTaskStoreCheckErrorState("task store offline")).toEqual({
       repoStoreHealth: {
         category: "check_call_failed",
         status: "degraded",
         isReady: false,
-        detail: "beads offline",
-        attachment: {
-          path: null,
-          databaseName: null,
-        },
-        sharedServer: {
-          host: null,
-          port: null,
-          ownershipState: "unavailable",
-        },
+        detail: "task store offline",
+        databasePath: null,
       },
-      beadsOk: false,
-      beadsPath: null,
-      beadsError: "beads offline",
-      beadsExecutable: {
-        displayLabel: "Unavailable",
-        error: "beads offline",
-        path: null,
-        sourceCategory: "unavailable",
-      },
-      doltExecutable: {
-        displayLabel: "Unavailable",
-        error: "beads offline",
-        path: null,
-        sourceCategory: "unavailable",
-      },
+      taskStoreOk: false,
+      taskStorePath: null,
+      taskStoreError: "task store offline",
     });
   });
 
@@ -84,9 +64,9 @@ describe("check-diagnostics helpers", () => {
       runtimeCheck: null,
       runtimeCheckError: "Timed out after 15000ms",
       runtimeCheckFailureKind: "timeout",
-      beadsCheck: null,
-      beadsCheckError: "beads offline",
-      beadsCheckFailureKind: "error",
+      taskStoreCheck: null,
+      taskStoreCheckError: "task store offline",
+      taskStoreCheckFailureKind: "error",
       runtimeHealthByRuntime: {
         opencode: makeRepoHealth({
           status: "error",
@@ -109,23 +89,23 @@ describe("check-diagnostics helpers", () => {
 
     expect(issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "diagnostics:beads-store", severity: "error" }),
+        expect.objectContaining({ id: "diagnostics:task-store", severity: "error" }),
         expect.objectContaining({ id: "diagnostics:runtime:opencode", severity: "error" }),
       ]),
     );
     expect(issues).toHaveLength(2);
   });
 
-  test("restores unhealthy cli and beads payload toasts even without query failures", () => {
+  test("restores unhealthy cli and task-store payload toasts even without query failures", () => {
     const issues = buildDiagnosticsToastIssues({
       activeWorkspace: createActiveWorkspace("/repo"),
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       runtimeCheck: buildRuntimeCheckErrorState([OPENCODE_RUNTIME_DESCRIPTOR], "git missing"),
       runtimeCheckError: null,
       runtimeCheckFailureKind: null,
-      beadsCheck: buildBeadsCheckErrorState("beads offline"),
-      beadsCheckError: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheck: buildTaskStoreCheckErrorState("task store offline"),
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
     });
 
@@ -137,9 +117,9 @@ describe("check-diagnostics helpers", () => {
           description: "git missing",
         }),
         expect.objectContaining({
-          id: "diagnostics:beads-store",
+          id: "diagnostics:task-store",
           severity: "error",
-          description: "beads offline",
+          description: "task store offline",
         }),
       ]),
     );
@@ -162,9 +142,9 @@ describe("check-diagnostics helpers", () => {
       },
       runtimeCheckError: null,
       runtimeCheckFailureKind: null,
-      beadsCheck: null,
-      beadsCheckError: null,
-      beadsCheckFailureKind: null,
+      taskStoreCheck: null,
+      taskStoreCheckError: null,
+      taskStoreCheckFailureKind: null,
       runtimeHealthByRuntime: {},
     });
 
@@ -186,8 +166,8 @@ describe("check-diagnostics helpers", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: "timeout",
         runtimeCheckFetching: false,
-        beadsCheckFailureKind: "error",
-        beadsCheckFetching: false,
+        taskStoreCheckFailureKind: "error",
+        taskStoreCheckFetching: false,
         runtimeHealthByRuntime: buildRuntimeHealthErrorMap(
           [OPENCODE_RUNTIME_DESCRIPTOR],
           "runtime health failed",
@@ -197,7 +177,7 @@ describe("check-diagnostics helpers", () => {
       }),
     ).toEqual({
       retryRuntimeCheck: true,
-      retryBeadsCheck: false,
+      retryTaskStoreCheck: false,
       retryRuntimeHealth: false,
     });
 
@@ -207,8 +187,8 @@ describe("check-diagnostics helpers", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: null,
         runtimeCheckFetching: false,
-        beadsCheckFailureKind: "timeout",
-        beadsCheckFetching: true,
+        taskStoreCheckFailureKind: "timeout",
+        taskStoreCheckFetching: true,
         runtimeHealthByRuntime: {
           opencode: makeRepoHealth({
             status: "checking",
@@ -227,7 +207,7 @@ describe("check-diagnostics helpers", () => {
       }),
     ).toEqual({
       retryRuntimeCheck: false,
-      retryBeadsCheck: false,
+      retryTaskStoreCheck: false,
       retryRuntimeHealth: true,
     });
 
@@ -237,8 +217,8 @@ describe("check-diagnostics helpers", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: null,
         runtimeCheckFetching: false,
-        beadsCheckFailureKind: null,
-        beadsCheckFetching: false,
+        taskStoreCheckFailureKind: null,
+        taskStoreCheckFetching: false,
         runtimeHealthByRuntime: {
           opencode: makeRepoHealth({
             status: "checking",
@@ -261,7 +241,7 @@ describe("check-diagnostics helpers", () => {
       }),
     ).toEqual({
       retryRuntimeCheck: false,
-      retryBeadsCheck: false,
+      retryTaskStoreCheck: false,
       retryRuntimeHealth: false,
     });
 
@@ -271,8 +251,8 @@ describe("check-diagnostics helpers", () => {
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         runtimeCheckFailureKind: null,
         runtimeCheckFetching: false,
-        beadsCheckFailureKind: null,
-        beadsCheckFetching: false,
+        taskStoreCheckFailureKind: null,
+        taskStoreCheckFetching: false,
         runtimeHealthByRuntime: {
           opencode: makeRepoHealth({
             status: "error",
@@ -291,7 +271,7 @@ describe("check-diagnostics helpers", () => {
       }),
     ).toEqual({
       retryRuntimeCheck: false,
-      retryBeadsCheck: false,
+      retryTaskStoreCheck: false,
       retryRuntimeHealth: false,
     });
   });

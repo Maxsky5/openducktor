@@ -12,8 +12,6 @@ type TaskWorkflowCallbacks = {
     | ((taskId: string, role: AgentRole, options?: { externalSessionId?: string | null }) => void)
     | undefined;
   onDelegate: ((taskId: string) => void) | undefined;
-  onDefer: ((taskId: string) => void) | undefined;
-  onResumeDeferred: ((taskId: string) => void) | undefined;
   onHumanApprove: ((taskId: string) => void) | undefined;
   onHumanRequestChanges: ((taskId: string) => void) | undefined;
   onResetImplementation:
@@ -156,12 +154,6 @@ export const runTaskWorkflowAction = (
       return;
     case "build_start":
       callbacks.onDelegate?.(taskId);
-      return;
-    case "defer_issue":
-      callbacks.onDefer?.(taskId);
-      return;
-    case "resume_deferred":
-      callbacks.onResumeDeferred?.(taskId);
       return;
     case "human_approve":
       callbacks.onHumanApprove?.(taskId);

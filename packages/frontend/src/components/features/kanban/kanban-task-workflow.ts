@@ -174,8 +174,6 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "open_qa",
     "human_approve",
     "human_request_changes",
-    "resume_deferred",
-    "defer_issue",
     "reset_implementation",
     "reset_task",
   ],
@@ -190,8 +188,6 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "open_qa",
     "human_approve",
     "human_request_changes",
-    "resume_deferred",
-    "defer_issue",
     "reset_implementation",
     "reset_task",
   ],
@@ -206,8 +202,6 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "open_qa",
     "human_approve",
     "human_request_changes",
-    "resume_deferred",
-    "defer_issue",
     "reset_implementation",
     "reset_task",
   ],
@@ -222,8 +216,6 @@ const ACTION_PRIORITY_BY_ISSUE_TYPE: Record<TaskCard["issueType"], TaskWorkflowA
     "open_qa",
     "human_approve",
     "human_request_changes",
-    "resume_deferred",
-    "defer_issue",
     "reset_implementation",
     "reset_task",
   ],
@@ -265,9 +257,6 @@ const resolvePriorityForTask = (
     }
     case "ready_for_dev": {
       return prioritize(basePriority, ["build_start"]);
-    }
-    case "deferred": {
-      return prioritize(basePriority, ["resume_deferred"]);
     }
     case "in_progress":
     case "blocked": {

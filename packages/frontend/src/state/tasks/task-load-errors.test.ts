@@ -2,71 +2,31 @@ import { describe, expect, test } from "bun:test";
 import { summarizeTaskLoadError } from "./task-load-errors";
 
 describe("summarizeTaskLoadError", () => {
-  test("returns category-specific restore guidance for missing shared databases", () => {
+  test("returns category-specific guidance for unavailable SQLite databases", () => {
     const message = summarizeTaskLoadError({
       error: new Error("repo store unavailable"),
       repoStoreHealth: {
-        category: "missing_shared_database",
-        status: "restore_needed",
-        isReady: false,
-        detail: "Shared Dolt database repo_db is missing and restore is required",
-        attachment: {
-          path: "/repo/.beads",
-          databaseName: "repo_db",
-        },
-        sharedServer: {
-          host: "127.0.0.1",
-          port: 3307,
-          ownershipState: "owned_by_current_process",
-        },
-      },
-    });
-
-    expect(message).toContain("restore the shared database");
-    expect(message).toContain("repo_db");
-  });
-
-  test("returns category-specific shared server guidance", () => {
-    const message = summarizeTaskLoadError({
-      error: new Error("repo store unavailable"),
-      repoStoreHealth: {
-        category: "shared_server_unavailable",
+        category: "database_unavailable",
         status: "blocking",
         isReady: false,
-        detail: "Shared Dolt server state is missing for /repo; reinitialize the repo store",
-        attachment: {
-          path: "/repo/.beads",
-          databaseName: "repo_db",
-        },
-        sharedServer: {
-          host: null,
-          port: null,
-          ownershipState: "unavailable",
-        },
+        detail: "SQLite task store database is unavailable",
+        databasePath: "/config/task-stores/repo/database.sqlite",
       },
     });
 
-    expect(message).toContain("shared Dolt server state");
     expect(message).toContain("Task store unavailable.");
+    expect(message).toContain("SQLite task store database is unavailable");
   });
 
   test("preserves unrelated thrown errors even when repo-store health is present", () => {
     const message = summarizeTaskLoadError({
       error: new Error("gh auth expired"),
       repoStoreHealth: {
-        category: "missing_shared_database",
-        status: "restore_needed",
+        category: "database_unavailable",
+        status: "blocking",
         isReady: false,
-        detail: "Shared Dolt database repo_db is missing and restore is required",
-        attachment: {
-          path: "/repo/.beads",
-          databaseName: "repo_db",
-        },
-        sharedServer: {
-          host: "127.0.0.1",
-          port: 3307,
-          ownershipState: "owned_by_current_process",
-        },
+        detail: "SQLite task store database is unavailable",
+        databasePath: "/config/task-stores/repo/database.sqlite",
       },
     });
 
@@ -80,9 +40,11 @@ describe("summarizeTaskLoadError", () => {
   });
 
   test("keeps task-store wording for store failures without structured context", () => {
-    const message = summarizeTaskLoadError({ error: new Error("beads_dir missing") });
+    const message = summarizeTaskLoadError({
+      error: new Error("database.sqlite is not readable"),
+    });
 
     expect(message).toContain("Task store unavailable.");
-    expect(message).toContain("OpenDucktor uses centralized Beads");
+    expect(message).toContain("OpenDucktor stores tasks in ~/.openducktor/task-stores");
   });
 });

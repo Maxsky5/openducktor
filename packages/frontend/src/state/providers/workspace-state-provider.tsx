@@ -17,7 +17,7 @@ import { useWorkspaceOperations } from "../operations/workspace/use-workspace-op
 export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactElement {
   const { activeWorkspace, setActiveWorkspace } = useActiveWorkspaceContext();
   const { clearTaskData } = useTaskControlContext();
-  const { clearActiveBeadsCheck } = useChecksOperationsContext();
+  const { clearActiveTaskStoreCheck } = useChecksOperationsContext();
 
   const {
     workspaces,
@@ -40,7 +40,7 @@ export function WorkspaceStateProvider({ children }: PropsWithChildren): ReactEl
     activeWorkspace,
     setActiveWorkspace,
     clearTaskData,
-    clearActiveBeadsCheck,
+    clearActiveTaskStoreCheck,
   });
 
   const lastResolvedActiveWorkspaceRef = useRef<WorkspaceRecord | null>(null);

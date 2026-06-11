@@ -2,8 +2,6 @@ import type { TaskCard } from "@openducktor/contracts";
 import {
   ArrowUpRightFromSquare,
   CircleCheckBig,
-  Pause,
-  Play,
   RotateCcw,
   ScrollText,
   ShieldCheck,
@@ -63,10 +61,8 @@ export const taskActionLabel = (
   if (action === "human_request_changes") {
     return "Request Changes";
   }
-  if (action === "defer_issue") {
-    return "Defer Task";
-  }
-  return "Resume Task";
+  const exhaustive: never = action;
+  return exhaustive;
 };
 
 export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
@@ -82,19 +78,12 @@ export const TASK_ACTION_ICON: Record<TaskWorkflowAction, ReactElement> = {
   qa_start: <ShieldCheck className="size-3.5" />,
   human_approve: <CircleCheckBig className="size-3.5" />,
   human_request_changes: <Undo2 className="size-3.5" />,
-  defer_issue: <Pause className="size-3.5" />,
-  resume_deferred: <Play className="size-3.5" />,
 };
 
 export const taskPrimaryActionVariant = (
   action: TaskWorkflowAction,
 ): "default" | "outline" | "destructive" => {
-  if (
-    action === "build_start" ||
-    action === "qa_start" ||
-    action === "human_approve" ||
-    action === "resume_deferred"
-  ) {
+  if (action === "build_start" || action === "qa_start" || action === "human_approve") {
     return "default";
   }
   if (action === "reset_implementation" || action === "reset_task") {

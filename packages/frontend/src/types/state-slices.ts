@@ -1,6 +1,5 @@
 import type {
   AgentSessionRecord,
-  BeadsCheck,
   GitBranch,
   GitCurrentBranch,
   GitProviderRepository,
@@ -17,6 +16,7 @@ import type {
   TaskCard,
   TaskCreateInput,
   TaskStatus,
+  TaskStoreCheck,
   TaskUpdatePatch,
   WorkspaceRecord,
 } from "@openducktor/contracts";
@@ -115,9 +115,9 @@ export type WorkspacePresenceContextValue = {
 
 export type ChecksStateContextValue = {
   runtimeCheck: RuntimeCheck | null;
-  beadsCheck: BeadsCheck | null;
+  taskStoreCheck: TaskStoreCheck | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
@@ -147,8 +147,6 @@ export type TasksStateContextValue = {
   resetTaskImplementation: (taskId: string) => Promise<void>;
   resetTask: (taskId: string) => Promise<void>;
   transitionTask: (taskId: string, status: TaskStatus, reason?: string) => Promise<void>;
-  deferTask: (taskId: string) => Promise<void>;
-  resumeDeferredTask: (taskId: string) => Promise<void>;
   humanApproveTask: (taskId: string) => Promise<void>;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
 };

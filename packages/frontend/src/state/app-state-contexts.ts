@@ -1,10 +1,10 @@
 import type {
   AgentRuntimes,
-  BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
   RuntimeKind,
   TaskCard,
+  TaskStoreCheck,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -80,16 +80,16 @@ export type RuntimeDefinitionsContextValue = {
 
 export type ChecksOperationsContextValue = {
   refreshRuntimeCheck: (force?: boolean) => Promise<RuntimeCheck>;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
+  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   refreshRepoRuntimeHealthForRepo: (
     repoPath: string,
     force?: boolean,
   ) => Promise<RepoRuntimeHealthMap>;
-  clearActiveBeadsCheck: () => void;
+  clearActiveTaskStoreCheck: () => void;
   clearActiveRepoRuntimeHealth: () => void;
   setIsLoadingChecks: (value: boolean) => void;
   hasRuntimeCheck: () => boolean;
-  hasCachedBeadsCheck: (repoPath: string) => boolean;
+  hasCachedTaskStoreCheck: (repoPath: string) => boolean;
   hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
 };
 

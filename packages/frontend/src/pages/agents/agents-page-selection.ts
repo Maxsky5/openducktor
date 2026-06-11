@@ -98,7 +98,6 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
     task.status === "ai_review" ||
     task.status === "human_review" ||
     task.status === "blocked" ||
-    task.status === "deferred" ||
     task.status === "closed"
   ) {
     return "build";
@@ -208,7 +207,6 @@ export const resolveAgentStudioSessionSelection = ({
     case "human_review":
       return withRoleFallback(latestSessionByRole("build"));
     case "blocked":
-    case "deferred":
     case "closed":
       return withRoleFallback(latestSessionByRole("build") ?? mostRecentSession);
     default:

@@ -74,7 +74,7 @@ Files:
 Used for checks that are somewhat volatile, but still should not refetch constantly.
 
 - runtime check: `5 min`
-- beads check: `60 sec`
+- task store check: `60 sec`
 - repo runtime health: `60 sec`
 
 File:

@@ -1,10 +1,10 @@
 import {
-  type BeadsCheck,
   DEFAULT_AGENT_RUNTIMES,
   type RepoStoreHealth,
   type RuntimeCheck,
   type RuntimeHealth,
   type SystemCheck,
+  type TaskStoreCheck,
   type ToolExecutableProvenance,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
@@ -31,7 +31,7 @@ type CachedRuntimeCheck = {
 };
 export type SystemDiagnosticsService = {
   runtimeCheck(forceRefresh?: boolean): Effect.Effect<RuntimeCheck, SystemDiagnosticsError>;
-  beadsCheck(repoPath: string): Effect.Effect<BeadsCheck, SystemDiagnosticsError>;
+  taskStoreCheck(repoPath: string): Effect.Effect<TaskStoreCheck, SystemDiagnosticsError>;
   systemCheck(repoPath: string): Effect.Effect<SystemCheck, SystemDiagnosticsError>;
 };
 export type SystemDiagnosticsError =
@@ -93,39 +93,13 @@ const probeGithubAuthStatus = (systemCommands: SystemCommandPort, ghCommand: str
       }),
     ),
   );
-const repoStoreHealthForMissingCommand = (detail: string): RepoStoreHealth => ({
-  category: "attachment_verification_failed",
-  status: "blocking",
-  isReady: false,
-  detail,
-  attachment: {
-    path: null,
-    databaseName: null,
-  },
-  sharedServer: {
-    host: null,
-    port: null,
-    ownershipState: "unavailable",
-  },
-});
-const buildBeadsCheck = (
-  repoStoreHealth: RepoStoreHealth,
-  tools: {
-    beadsExecutable: ToolExecutableProvenance;
-    doltExecutable: ToolExecutableProvenance;
-  },
-): BeadsCheck => {
-  const beadsError =
-    !repoStoreHealth.isReady && repoStoreHealth.status !== "initializing"
-      ? repoStoreHealth.detail
-      : null;
+const buildTaskStoreCheck = (repoStoreHealth: RepoStoreHealth): TaskStoreCheck => {
+  const taskStoreError = !repoStoreHealth.isReady ? repoStoreHealth.detail : null;
   return {
     repoStoreHealth,
-    beadsOk: repoStoreHealth.isReady,
-    beadsPath: repoStoreHealth.attachment.path,
-    beadsError,
-    beadsExecutable: tools.beadsExecutable,
-    doltExecutable: tools.doltExecutable,
+    taskStoreOk: repoStoreHealth.isReady,
+    taskStorePath: repoStoreHealth.databasePath,
+    taskStoreError,
   };
 };
 const enabledForRuntime = (config: LoadedGlobalConfig, kind: string): boolean =>
@@ -258,31 +232,21 @@ export const createSystemDiagnosticsService = ({
       };
       return check;
     });
-  const beadsCheck = (repoPath: string) =>
+  const taskStoreCheck = (repoPath: string) =>
     Effect.gen(function* () {
-      const bdTool = yield* resolveToolAvailability(toolDiscovery, "beads");
-      const doltTool = yield* resolveToolAvailability(toolDiscovery, "dolt");
-      const toolProvenance = {
-        beadsExecutable: bdTool,
-        doltExecutable: doltTool,
-      };
-      const toolError = bdTool.error ?? doltTool.error;
-      if (toolError !== null) {
-        return buildBeadsCheck(repoStoreHealthForMissingCommand(toolError), toolProvenance);
-      }
       const repoStoreHealth = yield* repoStoreDiagnostics.diagnoseRepoStore({
         repoPath,
         prepare: true,
       });
-      return buildBeadsCheck(repoStoreHealth, toolProvenance);
+      return buildTaskStoreCheck(repoStoreHealth);
     });
   const systemCheck = (repoPath: string) =>
     Effect.gen(function* () {
       const runtime = yield* runtimeCheck(false);
-      const beads = yield* beadsCheck(repoPath);
+      const taskStore = yield* taskStoreCheck(repoPath);
       const errors = [...runtime.errors];
-      if (beads.beadsError) {
-        errors.push(`beads: ${beads.beadsError}`);
+      if (taskStore.taskStoreError) {
+        errors.push(`task store: ${taskStore.taskStoreError}`);
       }
       return {
         gitOk: runtime.gitOk,
@@ -293,18 +257,16 @@ export const createSystemDiagnosticsService = ({
         ghAuthLogin: runtime.ghAuthLogin,
         ghAuthError: runtime.ghAuthError,
         runtimes: runtime.runtimes,
-        repoStoreHealth: beads.repoStoreHealth,
-        beadsOk: beads.beadsOk,
-        beadsPath: beads.beadsPath,
-        beadsError: beads.beadsError,
-        beadsExecutable: beads.beadsExecutable,
-        doltExecutable: beads.doltExecutable,
+        repoStoreHealth: taskStore.repoStoreHealth,
+        taskStoreOk: taskStore.taskStoreOk,
+        taskStorePath: taskStore.taskStorePath,
+        taskStoreError: taskStore.taskStoreError,
         errors,
       };
     });
   return {
     runtimeCheck,
-    beadsCheck,
+    taskStoreCheck,
     systemCheck,
   };
 };

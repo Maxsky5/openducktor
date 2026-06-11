@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createBeadsCheckFixture } from "@/test-utils/shared-test-fixtures";
+import { createTaskStoreCheckFixture } from "@/test-utils/shared-test-fixtures";
 import { isKanbanTaskCreationDisabled } from "./kanban-page-header-model";
 
 describe("isKanbanTaskCreationDisabled", () => {
@@ -7,7 +7,7 @@ describe("isKanbanTaskCreationDisabled", () => {
     expect(isKanbanTaskCreationDisabled(null, null)).toBe(true);
   });
 
-  test("disables task creation when beads is unavailable", () => {
+  test("disables task creation when the task store is unavailable", () => {
     expect(
       isKanbanTaskCreationDisabled(
         {
@@ -15,17 +15,17 @@ describe("isKanbanTaskCreationDisabled", () => {
           workspaceName: "Repo",
           repoPath: "/repo",
         },
-        createBeadsCheckFixture(
+        createTaskStoreCheckFixture(
           {},
           {
-            beadsOk: false,
-            beadsPath: null,
-            beadsError: "beads unavailable",
+            taskStoreOk: false,
+            taskStorePath: null,
+            taskStoreError: "task store unavailable",
             repoStoreHealth: {
-              category: "shared_server_unavailable",
+              category: "database_unavailable",
               status: "blocking",
               isReady: false,
-              detail: "beads unavailable",
+              detail: "task store unavailable",
             },
           },
         ),
@@ -33,7 +33,7 @@ describe("isKanbanTaskCreationDisabled", () => {
     ).toBe(true);
   });
 
-  test("enables task creation when beads is ready", () => {
+  test("enables task creation when the task store is ready", () => {
     expect(
       isKanbanTaskCreationDisabled(
         {
@@ -41,14 +41,12 @@ describe("isKanbanTaskCreationDisabled", () => {
           workspaceName: "Repo",
           repoPath: "/repo",
         },
-        createBeadsCheckFixture(
+        createTaskStoreCheckFixture(
           {},
           {
-            beadsPath: "/tmp/beads",
+            taskStorePath: "/tmp/task-store/database.sqlite",
             repoStoreHealth: {
-              attachment: {
-                path: "/tmp/beads",
-              },
+              databasePath: "/tmp/task-store/database.sqlite",
             },
           },
         ),

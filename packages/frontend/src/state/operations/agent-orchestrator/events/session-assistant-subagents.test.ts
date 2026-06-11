@@ -248,7 +248,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         toolType: "generic" as const,
         status: "error",
         error:
-          "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: deferred)",
+          "set_spec is only allowed from open/spec_ready/ready_for_dev/in_progress/blocked/ai_review/human_review (current: closed)",
       },
     });
 

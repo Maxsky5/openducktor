@@ -42,10 +42,8 @@ const writeExecutable = async (path: string): Promise<void> => {
 };
 
 const builtInOverrideCases = [
-  { command: "bd", toolId: "beads", variable: "OPENDUCKTOR_BD_PATH" },
   { command: "bun", toolId: "bun", variable: "OPENDUCKTOR_BUN_PATH" },
   { command: "codex", toolId: "codex", variable: "OPENDUCKTOR_CODEX_BINARY" },
-  { command: "dolt", toolId: "dolt", variable: "OPENDUCKTOR_DOLT_PATH" },
   { command: "git", toolId: "git", variable: "OPENDUCKTOR_GIT_PATH" },
   { command: "gh", toolId: "githubCli", variable: "OPENDUCKTOR_GH_PATH" },
   { command: "opencode", toolId: "opencode", variable: "OPENDUCKTOR_OPENCODE_BINARY" },
@@ -181,97 +179,22 @@ describe("discoverToolPath", () => {
     });
   });
 
-  test("resolves Beads and Dolt from packaged Electron resources before PATH", async () => {
-    await withTempDir(async (root) => {
-      const bundledDir = join(root, "OpenDucktor.app", "Contents", "Resources", "bin");
-      await mkdir(bundledDir, { recursive: true });
-      const beads = join(bundledDir, "bd");
-      const dolt = join(bundledDir, "dolt");
-      await writeExecutable(beads);
-      await writeExecutable(dolt);
-
-      const systemCommands = createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" });
-      await expect(
-        discoverBuiltInToolResult({
-          options: {
-            bundledToolBinDirs: { beads: bundledDir, dolt: bundledDir },
-            homeDir: root,
-            platform: "linux",
-          },
-          systemCommands,
-          toolId: "beads",
-        }),
-      ).resolves.toEqual({
-        displayLabel: "Bundled with OpenDucktor",
-        path: beads,
-        sourceCategory: "bundled_electron_resource",
-      });
-      await expect(
-        discoverBuiltInToolResult({
-          options: {
-            bundledToolBinDirs: { beads: bundledDir, dolt: bundledDir },
-            homeDir: root,
-            platform: "linux",
-          },
-          systemCommands,
-          toolId: "dolt",
-        }),
-      ).resolves.toEqual({
-        displayLabel: "Bundled with OpenDucktor",
-        path: dolt,
-        sourceCategory: "bundled_electron_resource",
-      });
-    });
-  });
-
-  test("fails Beads and Dolt missing packaged Electron sidecars before PATH", async () => {
-    await expect(
-      discoverBuiltInTool({
-        options: {
-          bundledToolBinDirs: { beads: "/opt/OpenDucktor/resources/bin" },
-          platform: "linux",
-        },
-        systemCommands: createSystemCommands({ available: ["bd"] }),
-        toolId: "beads",
-      }),
-    ).rejects.toThrow(
-      "Packaged Electron Beads sidecar is missing or invalid: expected bd in /opt/OpenDucktor/resources/bin. This is an OpenDucktor packaging defect.",
-    );
-
-    await expect(
-      discoverBuiltInTool({
-        options: {
-          bundledToolBinDirs: { dolt: "/opt/OpenDucktor/resources/bin" },
-          platform: "linux",
-        },
-        systemCommands: createSystemCommands({ available: ["dolt"] }),
-        toolId: "dolt",
-      }),
-    ).rejects.toThrow(
-      "Packaged Electron Dolt sidecar is missing or invalid: expected dolt in /opt/OpenDucktor/resources/bin. This is an OpenDucktor packaging defect.",
-    );
-  });
-
   test("reports environment override, provided path, and PATH provenance distinctly", async () => {
     await withTempDir(async (root) => {
-      const bundledDir = join(root, "bundled");
-      const provided = join(root, "provided-bd");
-      const override = join(root, "override-bd");
-      await mkdir(bundledDir, { recursive: true });
-      await writeExecutable(join(bundledDir, "bd"));
+      const provided = join(root, "provided-bun");
+      const override = join(root, "override-bun");
       await writeExecutable(provided);
       await writeExecutable(override);
 
       await expect(
         discoverBuiltInToolResult({
-          env: { OPENDUCKTOR_BD_PATH: override },
+          env: { OPENDUCKTOR_BUN_PATH: override },
           options: {
-            bundledToolBinDirs: { beads: bundledDir },
             platform: "linux",
-            providedToolPaths: { beads: provided },
+            providedToolPaths: { bun: provided },
           },
           systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
-          toolId: "beads",
+          toolId: "bun",
         }),
       ).resolves.toEqual({
         displayLabel: "Environment override",
@@ -282,12 +205,11 @@ describe("discoverToolPath", () => {
       await expect(
         discoverBuiltInToolResult({
           options: {
-            bundledToolBinDirs: { beads: bundledDir },
             platform: "linux",
-            providedToolPaths: { beads: provided },
+            providedToolPaths: { bun: provided },
           },
           systemCommands: createSystemCommandRunner({ env: { PATH: "" }, platform: "linux" }),
-          toolId: "beads",
+          toolId: "bun",
         }),
       ).resolves.toEqual({
         displayLabel: "Provided path",
@@ -298,31 +220,15 @@ describe("discoverToolPath", () => {
       await expect(
         discoverBuiltInToolResult({
           options: { platform: "linux" },
-          systemCommands: createSystemCommands({ available: ["bd"] }),
-          toolId: "beads",
+          systemCommands: createSystemCommands({ available: ["bun"] }),
+          toolId: "bun",
         }),
       ).resolves.toEqual({
         displayLabel: "System PATH",
-        path: "/path/bd",
+        path: "/path/bun",
         sourceCategory: "system_path",
       });
     });
-  });
-
-  test("rejects invalid Beads overrides before bundled resources and PATH", async () => {
-    await expect(
-      discoverBuiltInTool({
-        env: { OPENDUCKTOR_BD_PATH: "/missing/override-bd" },
-        options: {
-          bundledToolBinDirs: { beads: "/opt/OpenDucktor/resources/bin" },
-          platform: "linux",
-        },
-        systemCommands: createSystemCommands({ available: ["bd"] }),
-        toolId: "beads",
-      }),
-    ).rejects.toThrow(
-      "Configured Beads override OPENDUCKTOR_BD_PATH points to a missing or non-executable file: /missing/override-bd",
-    );
   });
 
   test("reports all checked descriptor sources when a tool is missing", async () => {

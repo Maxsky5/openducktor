@@ -53,7 +53,7 @@ Good candidates:
 - MCP bridge discovery and host calls
 - web runner startup, readiness, HTTP, and SSE orchestration
 - runtime process lifecycle
-- filesystem, git, Beads, Dolt, and external CLI adapters
+- filesystem, git, SQLite task store, and external CLI adapters
 - long-running loops, polling, retries, and shutdown logic
 
 Do not force Effect into code that is clearer as plain TypeScript:
@@ -322,7 +322,6 @@ Current host references:
 
 - `packages/host/src/adapters/mcp/mcp-host-bridge-server.ts`
 - `packages/host/src/adapters/runtimes/runtime-registry.ts`
-- `packages/host/src/adapters/beads/beads-cli-context-flight.ts`
 
 ## Scheduling and Time
 

@@ -73,8 +73,6 @@ export function useKanbanPageModels({
     deleteTask,
     resetTaskImplementation,
     resetTask,
-    deferTask,
-    resumeDeferredTask,
     humanApproveTask,
     humanRequestChangesTask,
     setTaskTargetBranch,
@@ -288,12 +286,6 @@ export function useKanbanPageModels({
       onBuild,
       onDelegate,
       onEdit: taskDialogs.onEditTask,
-      onDefer: (taskId) => {
-        void deferTask(taskId);
-      },
-      onResumeDeferred: (taskId) => {
-        void resumeDeferredTask(taskId);
-      },
       onHumanApprove,
       onHumanRequestChanges,
       onResetImplementation: openResetImplementation,

@@ -122,7 +122,6 @@ describe("createTaskService list and session reads", () => {
         "open_builder",
         "reset_implementation",
         "reset_task",
-        "defer_issue",
         "human_request_changes",
       ],
       agentWorkflows: {

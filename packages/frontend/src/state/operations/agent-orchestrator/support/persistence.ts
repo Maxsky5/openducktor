@@ -88,7 +88,7 @@ export const fromPersistedSessionRecord = (
       purpose: "primary",
       taskId: fallbackTaskId,
       role: session.role,
-      // Persisted Beads records are durable session metadata only.
+      // Persisted task-store records are durable session metadata only.
       // Live state must always be derived from the runtime on hydration/reconciliation.
       status: "stopped",
       startedAt: session.startedAt,

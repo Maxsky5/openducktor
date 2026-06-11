@@ -9,7 +9,6 @@ export const taskFixture: TaskCard = {
   id: "task-1",
   title: "Task",
   description: "",
-  notes: "",
   status: "open",
   priority: 2,
   issueType: "task",

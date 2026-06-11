@@ -33,15 +33,17 @@ bun run scripts/migrate-beads-to-sqlite.ts --config-dir <config-root> --workspac
 
 It must not require `--repo-path`; the migration is based on the managed OpenDucktor storage paths derived from `configDir` and `workspaceId`.
 
+The script supports an optional `--dry-run` flag. In dry-run mode it must read and validate the full Beads snapshot and print what would be written, but it must not open or write to the SQLite database.
+
 The script runs `bd` from `PATH`. It must not implement OpenDucktor tool discovery, bundled sidecar lookup, or an alternate `--bd-path` option.
 
-The script reads the legacy shared Dolt server route from:
+The script reads the legacy Dolt server route from the Beads attachment metadata:
 
 ```text
-<config-root>/beads/shared-server/server.json
+<config-root>/beads/<workspaceId>/.beads/metadata.json
 ```
 
-It uses that route to set `BEADS_DOLT_SERVER_MODE`, `BEADS_DOLT_SERVER_HOST`, `BEADS_DOLT_SERVER_PORT`, and `BEADS_DOLT_SERVER_USER` before invoking `bd`. If the server state file is missing or `bd where --json` cannot confirm the expected attachment, the script fails.
+It uses `dolt_server_host`, `dolt_server_port`, and `dolt_server_user` from that metadata to set `BEADS_DOLT_SERVER_MODE`, `BEADS_DOLT_SERVER_HOST`, `BEADS_DOLT_SERVER_PORT`, and `BEADS_DOLT_SERVER_USER` before invoking `bd`. If the metadata file is missing, does not contain the required Dolt server route, or `bd where --json` cannot confirm the expected attachment, the script fails.
 
 ## Migration Shape
 
@@ -61,7 +63,7 @@ Suggested task columns:
 tasks(
   id text primary key,
   title text not null,
-  description text not null,
+  description text null,
   status text not null,
   issue_type text not null,
   priority integer not null,
@@ -99,7 +101,7 @@ The exact schema can evolve during implementation, but it should preserve this s
 
 ## Migration Fidelity
 
-The migration must be lossless for the Beads task data OpenDucktor owns and models. Everything in the current OpenDucktor-used Beads task schema must be represented in SQLite, not only the subset currently displayed by OpenDucktor.
+The migration must be lossless for the Beads task data OpenDucktor owns and models. The SQLite task store represents the current OpenDucktor task-store model directly, not every incidental field present in Beads.
 
 Task Documents must preserve every document entry present in Beads metadata arrays, including historical `spec`, `implementationPlan`, and `qaReports` entries. The application may continue to read the latest entry for current workflow behavior, but the migration must not discard older entries.
 
@@ -114,10 +116,6 @@ Labels remain task-scoped for this migration. SQLite should store the labels att
 Task-scoped data should stay inline on the task row unless there is a concrete reason to split it out. For this migration, documents are the only dedicated child table because they can be large and can have history. Labels, agent sessions, Pull Request data, Direct Merge data, target branch data, and similar task-scoped metadata should be stored inline.
 
 Inline task-scoped structured data should use SQLite JSON text columns. Core task fields such as id, title, status, issue type, priority, description, parent id, QA-required flag, created timestamp, and updated timestamp remain scalar columns; repeated or nested task-scoped values such as labels, agent sessions, target branch, Pull Request, and Direct Merge are stored as JSON text columns on `tasks`.
-
-Beads `notes` is not migrated because OpenDucktor does not currently use it and the existing Beads data is empty. If notes become product-relevant later, they should be introduced deliberately in the SQLite Task Store rather than carried over by this migration.
-
-Beads owner/assignee data is not migrated. OpenDucktor does not yet have a real user model, and carrying firstname/lastname text into SQLite would preserve a weak representation that the product does not use.
 
 Subtask lists are derived from task parent references and are not stored as separate task data. SQLite stores each task's parent id; read models can derive child task ids from that relationship.
 
@@ -154,11 +152,15 @@ Migrated tasks must preserve their Beads task ids exactly, including prefixes an
 
 New tasks created after migration should keep the same task id format as the current Beads-backed store so existing task references, MCP workflows, transcripts, and user muscle memory remain stable.
 
+SQLite-created task ids use the workspace id as the canonical prefix source, not the repository filesystem path. The prefix must be capped at 10 characters before appending the Beads-style hash suffix.
+
 ## Validation And Write Semantics
 
 The migration script must parse the full Beads snapshot before writing SQLite data. It should reject broken or unexpected data instead of coercing it, but it must keep validation to the minimum required for a correct one-time migration.
 
 Minimum validation means checking the fields needed to insert into the clean SQLite task-store schema and preserve existing OpenDucktor contracts, such as required task fields, supported issue types and task statuses, decodable document payloads, and valid JSON metadata shapes that the migration reads.
+
+Legacy Beads task metadata may not contain an explicit `qaRequired` value. When it is absent, the migration uses the current OpenDucktor task default of `true`; when it is present, it must be a boolean.
 
 SQLite writes must be all-or-nothing. The script must persist the validated snapshot in a single transaction and must not leave a partially migrated database behind when validation or persistence fails.
 
@@ -174,6 +176,8 @@ After a successful migration, the script must print a concise report:
 - number of tasks inserted
 - number of task documents inserted
 - number of skipped Beads-internal records
+
+In dry-run mode, the report must make clear that SQLite writes were skipped and must report the number of tasks and task documents that would be inserted.
 
 The script should avoid verbose per-task output unless it fails.
 

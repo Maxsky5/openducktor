@@ -1,10 +1,10 @@
 import {
-  type BeadsCheck,
   externalTaskSyncEventSchema,
   type RepoStoreHealth,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
   type RuntimeKind,
+  type TaskStoreCheck,
 } from "@openducktor/contracts";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
@@ -18,7 +18,7 @@ import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/task
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
-const BEADS_PREPARATION_TOAST_DELAY_MS = 1_000;
+const TASK_STORE_PREPARATION_TOAST_DELAY_MS = 1_000;
 const MAX_TRACKED_EXTERNAL_TASK_EVENT_IDS = 256;
 
 const rememberProcessedExternalTaskEvent = (
@@ -48,7 +48,7 @@ type UseAppLifecycleArgs = {
   refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
-  refreshBeadsCheckForRepo: (repoPath: string, force?: boolean) => Promise<BeadsCheck>;
+  refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
   refreshRepoRuntimeHealthForRepo: (
     repoPath: string,
     force?: boolean,
@@ -60,7 +60,7 @@ type UseAppLifecycleArgs = {
   ) => Promise<void>;
   startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
   clearBranchData: () => void;
-  beadsPreparationToastDelayMs?: number;
+  taskStorePreparationToastDelayMs?: number;
 };
 
 export function useAppLifecycle({
@@ -69,12 +69,12 @@ export function useAppLifecycle({
   refreshWorkspaces,
   refreshBranches,
   refreshRuntimeCheck,
-  refreshBeadsCheckForRepo,
+  refreshTaskStoreCheckForRepo,
   refreshRepoRuntimeHealthForRepo,
   refreshTaskData,
   startRepoRuntime,
   clearBranchData,
-  beadsPreparationToastDelayMs = BEADS_PREPARATION_TOAST_DELAY_MS,
+  taskStorePreparationToastDelayMs = TASK_STORE_PREPARATION_TOAST_DELAY_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
@@ -282,57 +282,57 @@ export function useAppLifecycle({
     }
 
     const loadVersion = ++repoLoadVersionRef.current;
-    let beadsPreparationToastId: string | number | null = null;
-    let beadsPreparationToastShown = false;
-    let hadBeadsPreparationToast = false;
-    let beadsPreparationTimer: ReturnType<typeof setTimeout> | null = null;
+    let taskStorePreparationToastId: string | number | null = null;
+    let taskStorePreparationToastShown = false;
+    let hadTaskStorePreparationToast = false;
+    let taskStorePreparationTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const clearBeadsPreparationTimer = (): void => {
-      if (beadsPreparationTimer !== null) {
-        clearTimeout(beadsPreparationTimer);
-        beadsPreparationTimer = null;
+    const clearTaskStorePreparationTimer = (): void => {
+      if (taskStorePreparationTimer !== null) {
+        clearTimeout(taskStorePreparationTimer);
+        taskStorePreparationTimer = null;
       }
     };
 
-    const dismissBeadsPreparationToast = (): void => {
-      if (beadsPreparationToastId !== null) {
-        toast.dismiss(beadsPreparationToastId);
-        beadsPreparationToastId = null;
+    const dismissTaskStorePreparationToast = (): void => {
+      if (taskStorePreparationToastId !== null) {
+        toast.dismiss(taskStorePreparationToastId);
+        taskStorePreparationToastId = null;
       }
-      beadsPreparationToastShown = false;
+      taskStorePreparationToastShown = false;
     };
 
     let repoStoreHealth: RepoStoreHealth | null = null;
 
     const taskLoadPromise = (async () => {
-      beadsPreparationTimer = setTimeout(() => {
+      taskStorePreparationTimer = setTimeout(() => {
         if (
           repoLoadVersionRef.current !== loadVersion ||
           activeWorkspaceRef.current?.repoPath !== activeRepoPath
         ) {
           return;
         }
-        beadsPreparationToastShown = true;
-        hadBeadsPreparationToast = true;
-        beadsPreparationToastId = toast.loading("Preparing Beads database", {
-          description: "OpenDucktor is initializing the Beads task store for this repository.",
+        taskStorePreparationToastShown = true;
+        hadTaskStorePreparationToast = true;
+        taskStorePreparationToastId = toast.loading("Preparing task store", {
+          description: "OpenDucktor is opening the SQLite task store for this repository.",
         });
-      }, beadsPreparationToastDelayMs);
+      }, taskStorePreparationToastDelayMs);
 
       try {
-        const beadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, false);
-        repoStoreHealth = getBlockingRepoStoreHealth(beadsCheck);
-        if (beadsCheck.repoStoreHealth.isReady) {
-          clearBeadsPreparationTimer();
-          if (beadsPreparationToastShown) {
-            dismissBeadsPreparationToast();
+        const taskStoreCheck = await refreshTaskStoreCheckForRepo(activeRepoPath, false);
+        repoStoreHealth = getBlockingRepoStoreHealth(taskStoreCheck);
+        if (taskStoreCheck.repoStoreHealth.isReady) {
+          clearTaskStorePreparationTimer();
+          if (taskStorePreparationToastShown) {
+            dismissTaskStorePreparationToast();
           }
         }
 
         let taskLoadFailed = false;
         let taskLoadError: unknown;
         try {
-          // Initial repo load may use warm task data while Beads finishes preparing; manual
+          // Initial repo load may use warm task data while the task store finishes preparing; manual
           // refresh and mutation paths remain strict and force fresh task reads.
           await refreshTaskData(activeRepoPath, undefined, { forceFreshTaskList: false });
         } catch (error) {
@@ -340,10 +340,13 @@ export function useAppLifecycle({
           taskLoadError = error;
         }
 
-        if (!beadsCheck.repoStoreHealth.isReady) {
+        if (!taskStoreCheck.repoStoreHealth.isReady) {
           try {
-            const refreshedBeadsCheck = await refreshBeadsCheckForRepo(activeRepoPath, true);
-            repoStoreHealth = getBlockingRepoStoreHealth(refreshedBeadsCheck);
+            const refreshedTaskStoreCheck = await refreshTaskStoreCheckForRepo(
+              activeRepoPath,
+              true,
+            );
+            repoStoreHealth = getBlockingRepoStoreHealth(refreshedTaskStoreCheck);
           } catch {
             // Preserve the main repo-load outcome if the follow-up diagnostics refresh fails.
           }
@@ -355,18 +358,18 @@ export function useAppLifecycle({
 
         if (
           !repoStoreHealth &&
-          hadBeadsPreparationToast &&
+          hadTaskStorePreparationToast &&
           repoLoadVersionRef.current === loadVersion &&
           activeWorkspaceRef.current?.repoPath === activeRepoPath
         ) {
-          dismissBeadsPreparationToast();
-          toast.success("Beads database ready", {
+          dismissTaskStorePreparationToast();
+          toast.success("task store ready", {
             description: "The task store is ready for this repository.",
           });
         }
       } finally {
-        clearBeadsPreparationTimer();
-        dismissBeadsPreparationToast();
+        clearTaskStorePreparationTimer();
+        dismissTaskStorePreparationToast();
       }
     })();
     const runtimeCheckPromise = refreshRuntimeCheck(false);
@@ -405,17 +408,17 @@ export function useAppLifecycle({
       });
 
     return () => {
-      if (beadsPreparationTimer !== null) {
-        clearTimeout(beadsPreparationTimer);
-        beadsPreparationTimer = null;
+      if (taskStorePreparationTimer !== null) {
+        clearTimeout(taskStorePreparationTimer);
+        taskStorePreparationTimer = null;
       }
-      dismissBeadsPreparationToast();
+      dismissTaskStorePreparationToast();
     };
   }, [
     activeWorkspace,
-    beadsPreparationToastDelayMs,
+    taskStorePreparationToastDelayMs,
     clearBranchData,
-    refreshBeadsCheckForRepo,
+    refreshTaskStoreCheckForRepo,
     refreshBranches,
     refreshRuntimeCheck,
     refreshTaskData,

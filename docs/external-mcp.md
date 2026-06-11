@@ -4,16 +4,14 @@
 
 This document describes the public OpenDucktor MCP package that can be used outside the desktop app.
 
-Both desktop-managed and standalone MCP paths now route task operations through the OpenDucktor host. The TypeScript MCP package does not talk to Beads or Dolt directly.
+Both desktop-managed and standalone MCP paths route task operations through the OpenDucktor host. The TypeScript MCP package does not talk to the SQLite task store directly.
 
 - Desktop-managed launches receive `ODT_HOST_URL` from the desktop host automatically.
 - Standalone external use auto-discovers the current host bridge from the local discovery file.
 - `ODT_HOST_URL` and `--host-url` remain available as explicit overrides.
 - Startup fails if the host bridge is unhealthy or does not expose the required ODT tool surface.
 
-The MCP package is transport and validation only. The host remains the owner of Beads attachment readiness, shared Dolt lifecycle, workflow transitions, and metadata persistence.
-
-For the full Beads and shared Dolt lifecycle, including why the OpenDucktor host owns that lifecycle, see [beads-shared-dolt-lifecycle.md](beads-shared-dolt-lifecycle.md).
+The MCP package is transport and validation only. The host remains the owner of SQLite task-store readiness, workflow transitions, and document persistence.
 
 Package name:
 
@@ -172,7 +170,6 @@ This is a discovery-only summary. Call `odt_read_task` first, then call `odt_rea
 Public MCP task snapshots intentionally do not expose:
 
 - `parentId`
-- `assignee`
 - `availableActions`
 - `agentWorkflows`
 
@@ -264,7 +261,6 @@ Search semantics:
 Excluded statuses:
 
 - `closed`
-- `deferred`
 
 When the MCP started without `--workspace-id` or `ODT_WORKSPACE_ID`, `workspaceId` is required at call time.
 
@@ -320,9 +316,8 @@ Constraints:
 - Requested document keys are returned consistently even when no persisted body exists yet.
 - Missing spec and plan return `{ "markdown": "", "updatedAt": null }`.
 - Missing latest QA report returns `{ "markdown": "", "updatedAt": null, "verdict": "not_reviewed" }`.
-- Legacy markdown-only metadata remains readable.
-- New or updated workflow documents are stored as `encoding: "gzip-base64-v1"` plus a base64-gzip payload in `markdown`.
-- The OpenDucktor host owns that encode/decode translation. Successful MCP reads still return plain markdown.
+- Workflow documents are stored as plain markdown in the host-owned task store.
+- Successful MCP reads return plain markdown.
 - When the latest stored document cannot be decoded, the returned document includes an optional `error` field with an actionable host-supplied message.
 - There is no automatic migration of older markdown-only metadata.
 
@@ -352,7 +347,6 @@ Output:
 ## Architecture Notes
 
 - `packages/openducktor-mcp` owns MCP transport, request validation, response validation, and packaging.
-- The OpenDucktor host owns Beads attachment verification, shared Dolt lifecycle, task reads and writes, workflow transitions, recovery, and canonical metadata writes.
-- The OpenDucktor host also owns document compression and decompression for Beads metadata.
+- The OpenDucktor host owns SQLite task-store readiness, task reads and writes, workflow transitions, recovery, and canonical document writes.
 - The host bridge surface mirrors the MCP tool names so desktop-managed and standalone MCP clients use the same execution path.
-- Beads and Dolt stay modeled as storage infrastructure. They are not part of the MCP runtime contract beyond the host-owned bridge being healthy.
+- The task store stays modeled as host-owned storage infrastructure. It is not part of the MCP runtime contract beyond the host-owned bridge being healthy.

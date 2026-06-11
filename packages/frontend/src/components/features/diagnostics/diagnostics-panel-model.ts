@@ -1,8 +1,7 @@
 import type {
-  BeadsCheck,
   RuntimeCheck,
   RuntimeDescriptor,
-  ToolExecutableProvenance,
+  TaskStoreCheck,
   WorkspaceRecord,
 } from "@openducktor/contracts";
 import { runtimeLabelFor } from "@/lib/agent-runtime";
@@ -20,15 +19,14 @@ import {
   getRepoStoreCategoryLabel,
   getRepoStoreDetail,
   getRepoStoreHealth,
-  getRepoStoreOwnershipLabel,
   getRepoStoreStatusLabel,
   isRepoStoreReady,
 } from "@/lib/repo-store-health";
 import {
   buildTimeoutToastDescription,
-  hasBeadsCheckFailure,
   hasDiagnosticsRetryingState,
   hasRuntimeCheckFailure,
+  hasTaskStoreCheckFailure,
 } from "@/state/operations/workspace/check-diagnostics";
 import type {
   RepoRuntimeFailureKind,
@@ -72,9 +70,9 @@ type BuildDiagnosticsPanelModelInput = {
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
   runtimeCheck: RuntimeCheck | null;
-  beadsCheck: BeadsCheck | null;
+  taskStoreCheck: TaskStoreCheck | null;
   runtimeCheckFailureKind: RepoRuntimeFailureKind;
-  beadsCheckFailureKind: RepoRuntimeFailureKind;
+  taskStoreCheckFailureKind: RepoRuntimeFailureKind;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
 };
@@ -171,52 +169,32 @@ const buildFailureMessages = ({
 };
 
 const getRepoStoreFailureBadge = (
-  beadsCheck: BeadsCheck | null,
+  taskStoreCheck: TaskStoreCheck | null,
   failureKind: RepoRuntimeFailureKind,
 ): DiagnosticsSectionModel["badge"] => {
   if (failureKind === "timeout") {
     return { label: "Retrying", variant: "warning" };
   }
-  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+  const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
   if (repoStoreHealth === null) {
     return { label: "Checking", variant: "secondary" };
   }
 
   switch (repoStoreHealth.status) {
-    case "initializing":
-      return { label: "Preparing", variant: "secondary" };
     case "ready":
       return { label: "Ready", variant: "success" };
     case "degraded":
       return { label: "Degraded", variant: "warning" };
-    case "restore_needed":
-      return { label: "Restore needed", variant: "warning" };
     case "blocking":
       return { label: "Blocked", variant: "danger" };
   }
 };
 
-const buildExecutableRows = (
-  label: "Beads" | "Dolt",
-  executable: ToolExecutableProvenance,
-): DiagnosticKeyValueRowModel[] => [
-  {
-    label: `${label} executable source`,
-    value: executable.displayLabel,
-    valueClassName: "text-muted-foreground",
-  },
-  {
-    label: `${label} executable path`,
-    value: executable.path ?? "Unavailable",
-    breakAll: true,
-    mono: executable.path !== null,
-    valueClassName: "text-muted-foreground",
-  },
-];
-
-const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRowModel[] => {
-  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
-  if (!beadsCheck || !repoStoreHealth) {
+const buildRepoStoreRows = (
+  taskStoreCheck: TaskStoreCheck | null,
+): DiagnosticKeyValueRowModel[] => {
+  const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
+  if (!taskStoreCheck || !repoStoreHealth) {
     return [];
   }
 
@@ -229,38 +207,11 @@ const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRo
       label: "Health category",
       value: getRepoStoreCategoryLabel(repoStoreHealth),
     },
-    ...buildExecutableRows("Beads", beadsCheck.beadsExecutable),
-    ...buildExecutableRows("Dolt", beadsCheck.doltExecutable),
     {
-      label: "Beads attachment path",
-      value: repoStoreHealth.attachment.path ?? "Unavailable",
+      label: "SQLite database path",
+      value: repoStoreHealth.databasePath ?? "Unavailable",
       breakAll: true,
-      valueClassName: "text-muted-foreground",
-    },
-    {
-      label: "Dolt database name",
-      value: repoStoreHealth.attachment.databaseName ?? "Unavailable",
-      mono: true,
-      valueClassName: "text-muted-foreground",
-    },
-    {
-      label: "Dolt server host",
-      value: repoStoreHealth.sharedServer.host ?? "Unavailable",
-      mono: true,
-      valueClassName: "text-muted-foreground",
-    },
-    {
-      label: "Dolt server port",
-      value:
-        repoStoreHealth.sharedServer.port === null
-          ? "Unavailable"
-          : String(repoStoreHealth.sharedServer.port),
-      mono: true,
-      valueClassName: "text-muted-foreground",
-    },
-    {
-      label: "Dolt server ownership",
-      value: getRepoStoreOwnershipLabel(repoStoreHealth),
+      mono: repoStoreHealth.databasePath !== null,
       valueClassName: "text-muted-foreground",
     },
   ];
@@ -268,45 +219,30 @@ const buildRepoStoreRows = (beadsCheck: BeadsCheck | null): DiagnosticKeyValueRo
   return rows;
 };
 
-const appendUniqueError = (errors: string[], error: string | null): void => {
-  if (error !== null && !errors.includes(error)) {
-    errors.push(error);
-  }
-};
-
 const buildRepoStoreErrors = (
-  beadsCheck: BeadsCheck | null,
+  taskStoreCheck: TaskStoreCheck | null,
   failureKind: RepoRuntimeFailureKind,
 ): string[] => {
   if (failureKind === "timeout") {
-    const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+    const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
     const errors = buildFailureMessages({
-      label: "Beads store",
+      label: "Task store",
       detail: repoStoreHealth ? getRepoStoreDetail(repoStoreHealth) : null,
       failureKind,
     });
-    appendUniqueError(errors, beadsCheck?.beadsExecutable.error ?? null);
-    appendUniqueError(errors, beadsCheck?.doltExecutable.error ?? null);
     return errors;
   }
 
-  const repoStoreHealth = getRepoStoreHealth(beadsCheck);
-  if (
-    !beadsCheck ||
-    !repoStoreHealth ||
-    isRepoStoreReady(repoStoreHealth) ||
-    repoStoreHealth.status === "initializing"
-  ) {
+  const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
+  if (!taskStoreCheck || !repoStoreHealth || isRepoStoreReady(repoStoreHealth)) {
     return [];
   }
 
   const errors = buildFailureMessages({
-    label: "Beads store",
+    label: "Task store",
     detail: getRepoStoreDetail(repoStoreHealth),
     failureKind,
   });
-  appendUniqueError(errors, beadsCheck.beadsExecutable.error);
-  appendUniqueError(errors, beadsCheck.doltExecutable.error);
   return errors;
 };
 
@@ -479,9 +415,9 @@ export const buildDiagnosticsPanelModel = (
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
     runtimeCheck,
-    beadsCheck,
+    taskStoreCheck,
     runtimeCheckFailureKind,
-    beadsCheckFailureKind,
+    taskStoreCheckFailureKind,
     runtimeHealthByRuntime,
     isLoadingChecks,
   } = input;
@@ -511,7 +447,7 @@ export const buildDiagnosticsPanelModel = (
 
   const criticalReasons: string[] = [];
   if (workspaceRepoPath) {
-    const repoStoreHealth = getRepoStoreHealth(beadsCheck);
+    const repoStoreHealth = getRepoStoreHealth(taskStoreCheck);
     if (runtimeDefinitionsError) {
       criticalReasons.push(runtimeDefinitionsError);
     }
@@ -528,8 +464,8 @@ export const buildDiagnosticsPanelModel = (
     }
     if (
       repoStoreHealth &&
-      hasBeadsCheckFailure(beadsCheck) &&
-      beadsCheckFailureKind !== "timeout"
+      hasTaskStoreCheckFailure(taskStoreCheck) &&
+      taskStoreCheckFailureKind !== "timeout"
     ) {
       criticalReasons.push(getRepoStoreDetail(repoStoreHealth));
     }
@@ -545,14 +481,13 @@ export const buildDiagnosticsPanelModel = (
     (isLoadingRuntimeDefinitions ||
       isLoadingChecks ||
       runtimeCheck === null ||
-      beadsCheck === null ||
-      beadsCheck?.repoStoreHealth.status === "initializing" ||
+      taskStoreCheck === null ||
       isRuntimeHealthPending ||
       hasCheckingRuntimeHealth ||
       hasDiagnosticsRetryingState({
         runtimeDefinitions,
         runtimeCheckFailureKind,
-        beadsCheckFailureKind,
+        taskStoreCheckFailureKind,
         runtimeHealthByRuntime,
       }));
 
@@ -658,12 +593,12 @@ export const buildDiagnosticsPanelModel = (
     return [runtimeSection, mcpSection];
   });
 
-  const beadsStoreSection: DiagnosticsSectionModel = {
-    key: "beads-store",
-    title: "Beads Store",
-    badge: getRepoStoreFailureBadge(beadsCheck, beadsCheckFailureKind),
-    rows: workspaceRepoPath ? buildRepoStoreRows(beadsCheck) : [],
-    errors: buildRepoStoreErrors(beadsCheck, beadsCheckFailureKind),
+  const taskStoreSection: DiagnosticsSectionModel = {
+    key: "task-store",
+    title: "Task Store",
+    badge: getRepoStoreFailureBadge(taskStoreCheck, taskStoreCheckFailureKind),
+    rows: workspaceRepoPath ? buildRepoStoreRows(taskStoreCheck) : [],
+    errors: buildRepoStoreErrors(taskStoreCheck, taskStoreCheckFailureKind),
     ...(workspaceRepoPath ? {} : { emptyMessage: "Select a repository first." }),
   };
 
@@ -678,6 +613,6 @@ export const buildDiagnosticsPanelModel = (
       hasSetupIssues: setupReasons.length > 0,
     }),
     criticalReasons,
-    sections: [repositorySection, cliToolsSection, ...runtimeSections, beadsStoreSection],
+    sections: [repositorySection, cliToolsSection, ...runtimeSections, taskStoreSection],
   };
 };

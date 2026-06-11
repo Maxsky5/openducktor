@@ -15,7 +15,7 @@
 
 ## Project
 
-OpenDucktor is a **Bun monorepo** for a macOS-first **Electron** desktop app and local browser runner that orchestrate AI planning/building workflows with **Beads** as task source-of-truth.
+OpenDucktor is a **Bun monorepo** for a macOS-first **Electron** desktop app and local browser runner that orchestrate AI planning/building workflows with a workspace-scoped **SQLite task store** as task source-of-truth.
 
 Package manager: **Bun** (not npm/yarn). All workspace commands use `bun run`.
 
@@ -159,17 +159,17 @@ Prefer light shades for backgrounds (`bg-sky-50`) and dark for text (`text-sky-7
 - Keep blocking work off the UI thread.
 - Do not re-run expensive repo initialization when cached readiness is known.
 
-## Beads & Task Model
+## SQLite Task Store & Task Model
 
-- Beads is the sole source of truth for tasks in V1.
-- Lifecycle state is Beads `status` (not labels/phases).
-- Beads metadata must store durable task/workflow state only. Do not persist transient runtime or session interaction state there.
-- Never serialize pending permissions, pending questions, live runtime routes, in-progress transcripts, tool streaming state, or other recoverable live-only values into Beads metadata/models. Rehydrate those from the live runtime, event stream, or runtime-owned history instead.
+- The SQLite task store is the sole source of truth for tasks in V1.
+- Lifecycle state is task `status` (not labels/phases).
+- Task-store records must store durable task/workflow state only. Do not persist transient runtime or session interaction state there.
+- Never serialize pending permissions, pending questions, live runtime routes, in-progress transcripts, tool streaming state, or other recoverable live-only values into task-store records. Rehydrate those from the live runtime, event stream, or runtime-owned history instead.
 - Canonical statuses:
-  - built-in: `open`, `in_progress`, `blocked`, `deferred`, `closed`
+  - built-in: `open`, `in_progress`, `blocked`, `closed`
   - custom: `spec_ready`, `ready_for_dev`, `ai_review`, `human_review`
-- UI label mapping: `open` → Backlog, `closed` → Done, `deferred` → hidden from Kanban.
-- Agent-authored docs are metadata under `openducktor` namespace: `documents.spec`, `documents.implementationPlan`, `documents.qaReports` (latest-only).
+- UI label mapping: `open` → Backlog, `closed` → Done.
+- Agent-authored docs are task documents: `spec`, `implementationPlan`, `qaReports` (UI surfaces latest entries).
 - Task actions defined in `packages/contracts/src/task-schemas.ts` (`taskActionSchema`).
 - Detailed workflow docs: `docs/task-workflow-*.md`
 

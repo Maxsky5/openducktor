@@ -180,7 +180,6 @@ describe("createTaskService task mutations and reset", () => {
       id: "task-2",
       availableActions: ["view_details", "set_spec", "set_plan", "build_start", "reset_task"],
     });
-    expect(created.availableActions).not.toContain("defer_issue");
   });
   test("rejects subtasks under non-epic parents before creating", async () => {
     const taskStore: TaskStorePort = {

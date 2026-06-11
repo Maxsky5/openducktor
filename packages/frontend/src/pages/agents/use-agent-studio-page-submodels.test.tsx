@@ -15,7 +15,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     id: "task-1",
     title: "Task 1",
     description: "",
-    notes: "",
     status: "open",
     priority: 2,
     issueType: "task",
@@ -24,7 +23,6 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     labels: [],
     parentId: undefined,
     subtaskIds: [],
-    assignee: undefined,
     documentSummary: {
       spec: { has: false },
       plan: { has: false },

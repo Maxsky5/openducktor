@@ -20,7 +20,7 @@ type UseWorkspaceSelectionOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   setActiveWorkspace: (workspace: ActiveWorkspace | null) => void;
   clearTaskData: () => void;
-  clearActiveBeadsCheck: () => void;
+  clearActiveTaskStoreCheck: () => void;
   clearBranchData: (repoPath?: string | null) => void;
   hostClient: WorkspaceSelectionOperationsHostClient;
 };
@@ -95,7 +95,7 @@ export function useWorkspaceSelectionOperations({
   activeWorkspace,
   setActiveWorkspace,
   clearTaskData,
-  clearActiveBeadsCheck,
+  clearActiveTaskStoreCheck,
   clearBranchData,
   hostClient,
 }: UseWorkspaceSelectionOperationsArgs): UseWorkspaceSelectionOperationsResult {
@@ -116,12 +116,12 @@ export function useWorkspaceSelectionOperations({
       const nextRepo = nextWorkspace?.repoPath ?? null;
 
       clearTaskData();
-      clearActiveBeadsCheck();
+      clearActiveTaskStoreCheck();
       if (shouldResetBranchStateForRepoChange(previousRepo, nextRepo)) {
         clearBranchData(nextRepo);
       }
     },
-    [clearActiveBeadsCheck, clearBranchData, clearTaskData],
+    [clearActiveTaskStoreCheck, clearBranchData, clearTaskData],
   );
 
   const markWorkspaceActiveLocally = useCallback((workspaceId: string): void => {
