@@ -21,7 +21,7 @@ import {
   createFailedSelectedSessionViewLifecycle,
   createResolvingSelectedSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
-  shouldEnsureSelectedAgentSessionReadyForView,
+  shouldEnsureAgentSessionReadyForView,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -387,7 +387,7 @@ export function useAgentStudioSelectionController({
   useEffect(() => {
     if (
       selectedSessionLifecycle.externalSessionId === null ||
-      !shouldEnsureSelectedAgentSessionReadyForView(selectedSessionLifecycle)
+      !shouldEnsureAgentSessionReadyForView(selectedSessionLifecycle)
     ) {
       return;
     }

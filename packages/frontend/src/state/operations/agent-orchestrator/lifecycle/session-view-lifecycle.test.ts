@@ -6,7 +6,6 @@ import {
   isSelectedAgentSessionHistoryLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
   shouldEnsureAgentSessionReadyForView,
-  shouldEnsureSelectedAgentSessionReadyForView,
 } from "./session-view-lifecycle";
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -127,6 +126,23 @@ describe("deriveAgentSessionViewLifecycle", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         status: "running",
+        historyLoadState: "not_requested",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("loading_history");
+    expect(lifecycle.canRenderHistory).toBe(false);
+    expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(true);
+  });
+
+  test("keeps a cold running session in loading state while history is in flight", () => {
+    const lifecycle = deriveAgentSessionViewLifecycle({
+      session: createSession({
+        status: "running",
         historyLoadState: "loading",
         runtimeKind: "codex",
         workingDirectory: "/tmp/repo/worktree",
@@ -189,7 +205,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
     expect(isSelectedAgentSessionHistoryLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(true);
-    expect(shouldEnsureSelectedAgentSessionReadyForView(lifecycle)).toBe(false);
+    expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(false);
   });
 
   test("surfaces selected session load failures without a second local state machine", () => {
@@ -208,7 +224,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
     expect(isSelectedAgentSessionHistoryLoading(lifecycle)).toBe(false);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
-    expect(shouldEnsureSelectedAgentSessionReadyForView(lifecycle)).toBe(false);
+    expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(false);
   });
 
   test("delegates selected active session readiness to the session lifecycle", () => {
@@ -227,6 +243,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
     expect(isSelectedAgentSessionHistoryLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
-    expect(shouldEnsureSelectedAgentSessionReadyForView(lifecycle)).toBe(true);
+    expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(true);
   });
 });

@@ -8,14 +8,6 @@ import { getSessionMessageCount } from "../support/messages";
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
 
 export type AgentSessionViewLifecyclePhase =
-  | "idle"
-  | "blocked_on_repo"
-  | "needs_history"
-  | "loading_history"
-  | "history_failed"
-  | "ready";
-
-export type SelectedAgentSessionViewLifecyclePhase =
   | "inactive"
   | "resolving_session"
   | "resolving_runtime"
@@ -36,17 +28,14 @@ export type AgentSessionViewLifecycle = {
 
 export type SelectedAgentSessionViewLifecycle = {
   externalSessionId: string | null;
-  phase: SelectedAgentSessionViewLifecyclePhase;
+  phase: AgentSessionViewLifecyclePhase;
   canRenderHistory: boolean;
   historyRequest: AgentSessionHistoryRequest;
 };
 
 type SelectedAgentSessionLifecyclePhaseInput = Pick<SelectedAgentSessionViewLifecycle, "phase">;
 
-type SelectedAgentSessionLifecycleHistoryInput = Pick<
-  SelectedAgentSessionViewLifecycle,
-  "historyRequest"
->;
+type AgentSessionLifecycleHistoryInput = Pick<AgentSessionViewLifecycle, "historyRequest">;
 
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
   externalSessionId: null,
@@ -85,13 +74,13 @@ const createAgentSessionViewLifecycle = ({
   historyRequest?: AgentSessionHistoryRequest;
 }): AgentSessionViewLifecycle => ({
   phase,
-  canReadRuntimeData: repoReadinessState === "ready" && phase !== "idle",
+  canReadRuntimeData: repoReadinessState === "ready" && phase !== "inactive",
   canRenderHistory,
   historyRequest,
 });
 
 export const shouldEnsureAgentSessionReadyForView = (
-  lifecycle: AgentSessionViewLifecycle,
+  lifecycle: AgentSessionLifecycleHistoryInput,
 ): boolean => lifecycle.historyRequest === "load";
 
 export const isSelectedAgentSessionResolving = (
@@ -110,31 +99,6 @@ export const isSelectedAgentSessionHistoryLoading = (
   lifecycle.phase === "waiting_for_runtime" ||
   lifecycle.phase === "loading_history";
 
-export const shouldEnsureSelectedAgentSessionReadyForView = (
-  lifecycle: SelectedAgentSessionLifecycleHistoryInput,
-): boolean => lifecycle.historyRequest === "load";
-
-const toSelectedSessionLifecyclePhase = ({
-  lifecycle,
-}: {
-  lifecycle: AgentSessionViewLifecycle;
-}): SelectedAgentSessionViewLifecyclePhase => {
-  switch (lifecycle.phase) {
-    case "idle":
-      return "inactive";
-    case "blocked_on_repo":
-      return "waiting_for_runtime";
-    case "history_failed":
-      return "history_failed";
-    case "loading_history":
-      return "loading_history";
-    case "needs_history":
-      return lifecycle.canRenderHistory ? "needs_history" : "loading_history";
-    case "ready":
-      return "ready";
-  }
-};
-
 export const deriveAgentSessionViewLifecycle = ({
   session,
   repoReadinessState,
@@ -144,7 +108,7 @@ export const deriveAgentSessionViewLifecycle = ({
 }): AgentSessionViewLifecycle => {
   if (!session) {
     return createAgentSessionViewLifecycle({
-      phase: "idle",
+      phase: "inactive",
       repoReadinessState,
     });
   }
@@ -155,7 +119,7 @@ export const deriveAgentSessionViewLifecycle = ({
 
   if (repoReadinessState !== "ready" && sessionNeedsHistoryLoad && !hasTranscript) {
     return createAgentSessionViewLifecycle({
-      phase: "blocked_on_repo",
+      phase: "waiting_for_runtime",
       repoReadinessState,
     });
   }
@@ -178,7 +142,7 @@ export const deriveAgentSessionViewLifecycle = ({
 
   if (historyLoadState === "not_requested") {
     return createAgentSessionViewLifecycle({
-      phase: "needs_history",
+      phase: hasTranscript ? "needs_history" : "loading_history",
       repoReadinessState,
       canRenderHistory: hasTranscript,
       historyRequest: repoReadinessState === "ready" ? "load" : "none",
@@ -243,7 +207,7 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
 
   return {
     externalSessionId: selectedSessionRoute.externalSessionId,
-    phase: toSelectedSessionLifecyclePhase({ lifecycle }),
+    phase: lifecycle.phase,
     canRenderHistory: lifecycle.canRenderHistory,
     historyRequest: lifecycle.historyRequest,
   };
