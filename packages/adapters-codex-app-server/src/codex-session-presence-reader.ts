@@ -6,15 +6,13 @@ import type {
   ReadSessionPresenceInput,
 } from "@openducktor/core";
 import {
-  type CodexPendingInputStore,
-  pendingApprovalsForCodexSession,
-  pendingQuestionsForCodexSession,
   stalePresence,
   toPresenceSnapshotFromThread,
   toRefreshedPresenceSnapshot,
 } from "./codex-app-server-presence";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
+import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexSessionState } from "./types";
@@ -24,7 +22,7 @@ export type CodexSessionPresenceReaderDeps = {
   threadInventory: CodexThreadInventoryReader;
   sessions: Map<string, CodexSessionState>;
   historyPresenceOverlay: CodexHistoryPresenceOverlay;
-  pendingInputStore: () => CodexPendingInputStore;
+  pendingInput: CodexPendingInputState;
   hasActiveTurn: (externalSessionId: string) => boolean;
 };
 
@@ -51,13 +49,12 @@ const toLocalPresenceSnapshot = async (
     deps.runtimeClients.clientForRuntime(session.runtimeId),
     session.runtimeId,
   );
-  const pendingInputStore = deps.pendingInputStore();
   return toRefreshedPresenceSnapshot({
     session,
     inventory,
     ...(input ? { input } : {}),
-    pendingApprovals: pendingApprovalsForCodexSession(pendingInputStore, session.threadId),
-    pendingQuestions: pendingQuestionsForCodexSession(pendingInputStore, session.threadId),
+    pendingApprovals: deps.pendingInput.pendingApprovalsForSession(session.threadId),
+    pendingQuestions: deps.pendingInput.pendingQuestionsForSession(session.threadId),
     hasActiveTurn: deps.hasActiveTurn(session.threadId),
   });
 };
@@ -113,14 +110,8 @@ export const listCodexSessionPresence = async (
       toRefreshedPresenceSnapshot({
         session,
         inventory: await refreshRuntimeInventoryOnce(deps, inventoryByRuntimeId, session.runtimeId),
-        pendingApprovals: pendingApprovalsForCodexSession(
-          deps.pendingInputStore(),
-          session.threadId,
-        ),
-        pendingQuestions: pendingQuestionsForCodexSession(
-          deps.pendingInputStore(),
-          session.threadId,
-        ),
+        pendingApprovals: deps.pendingInput.pendingApprovalsForSession(session.threadId),
+        pendingQuestions: deps.pendingInput.pendingQuestionsForSession(session.threadId),
         hasActiveTurn: deps.hasActiveTurn(session.threadId),
       }),
     ),

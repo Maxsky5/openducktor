@@ -39,11 +39,6 @@ import type {
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
 import {
-  type CodexPendingInputStore,
-  pendingApprovalsForCodexSession,
-  pendingQuestionsForCodexSession,
-} from "./codex-app-server-presence";
-import {
   codexTurnKey,
   extractThreadIdFromParams,
   extractTurnId,
@@ -53,8 +48,6 @@ import {
 import {
   type CodexServerRequestHandlerContext,
   handleCodexServerRequest,
-  type PendingApprovalEntry,
-  type PendingQuestionEntry,
 } from "./codex-app-server-server-requests";
 import {
   type ActiveCodexTurn,
@@ -64,7 +57,6 @@ import {
 import {
   type CodexStreamingContext,
   type CompletedAgentMessage,
-  emitCodexSessionEvent,
   emitCodexUserMessage,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
@@ -77,6 +69,7 @@ import {
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { toFileDiffs } from "./codex-file-diffs";
 import { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
+import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import {
   CodexRuntimeEventBuffer,
@@ -84,6 +77,7 @@ import {
   type CodexRuntimeStreamEvent,
   threadIdFromRuntimeStreamEvent,
 } from "./codex-runtime-events";
+import { CodexSessionEventBus } from "./codex-session-event-bus";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
   applyRuntimeContextToSession,
@@ -128,13 +122,8 @@ export class CodexAppServerAdapter
 {
   private readonly sessions = new Map<string, CodexSessionState>();
   private readonly runtimeClients: CodexRuntimeClientResolver;
-  private readonly listenersBySessionId = new Map<string, Set<(event: AgentEvent) => void>>();
-  private readonly pendingApprovalsByRequestId = new Map<string, PendingApprovalEntry>();
-  private readonly pendingApprovalIdsBySessionId = new Map<string, Set<string>>();
-  private readonly pendingQuestionsByRequestId = new Map<string, PendingQuestionEntry>();
-  private readonly pendingQuestionIdsBySessionId = new Map<string, Set<string>>();
-  private readonly activeTurnsByApprovalRequestId = new Map<string, ActiveCodexTurn>();
-  private readonly activeTurnsByQuestionRequestId = new Map<string, ActiveCodexTurn>();
+  private readonly sessionEvents = new CodexSessionEventBus();
+  private readonly pendingInput = new CodexPendingInputState();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
   private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
   private readonly handledStreamRequestKeysByThreadId = new Map<string, Set<string>>();
@@ -143,7 +132,6 @@ export class CodexAppServerAdapter
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
   private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
-  private readonly eventBacklogBySessionId = new Map<string, AgentEvent[]>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly eventMapperPipeline = createCodexEventMapperPipeline();
   private readonly models = new CodexModels();
@@ -497,9 +485,14 @@ export class CodexAppServerAdapter
     if (session) {
       applyRuntimeContextToSession(session, input);
     }
-    const pending = this.pendingApprovalsByRequestId.get(input.requestId);
+    const pending = this.pendingInput.approval(input.requestId);
     if (!pending) {
       throw new Error(`Unknown Codex approval request '${input.requestId}'.`);
+    }
+    if (pending.threadId !== input.externalSessionId) {
+      throw new Error(
+        `Codex approval request '${input.requestId}' belongs to session '${pending.threadId}', not '${input.externalSessionId}'.`,
+      );
     }
     if (input.outcome === "approve_session" || input.outcome === "approve_turn") {
       throw new Error(`Codex approval outcome '${input.outcome}' is not supported.`);
@@ -515,12 +508,7 @@ export class CodexAppServerAdapter
       },
       undefined,
     );
-    const activeTurn = this.activeTurnsByApprovalRequestId.get(input.requestId);
-    this.pendingApprovalsByRequestId.delete(input.requestId);
-    this.activeTurnsByApprovalRequestId.delete(input.requestId);
-    for (const requestIds of this.pendingApprovalIdsBySessionId.values()) {
-      requestIds.delete(input.requestId);
-    }
+    const activeTurn = this.pendingInput.resolveApproval(input.requestId);
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.continueTurnAfterPendingInput(activeTurn);
     }
@@ -535,7 +523,7 @@ export class CodexAppServerAdapter
     if (session) {
       applyRuntimeContextToSession(session, input);
     }
-    const pending = this.pendingQuestionsByRequestId.get(input.requestId);
+    const pending = this.pendingInput.question(input.requestId);
     if (!pending) {
       throw new Error(`Unknown Codex question request '${input.requestId}'.`);
     }
@@ -579,12 +567,7 @@ export class CodexAppServerAdapter
         },
       }),
     });
-    const activeTurn = this.activeTurnsByQuestionRequestId.get(input.requestId);
-    this.pendingQuestionsByRequestId.delete(input.requestId);
-    this.activeTurnsByQuestionRequestId.delete(input.requestId);
-    for (const requestIds of this.pendingQuestionIdsBySessionId.values()) {
-      requestIds.delete(input.requestId);
-    }
+    const activeTurn = this.pendingInput.resolveQuestion(input.requestId);
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.continueTurnAfterPendingInput(activeTurn);
     }
@@ -592,14 +575,8 @@ export class CodexAppServerAdapter
 
   subscribeEvents(input: AgentSessionRef, listener: (event: AgentEvent) => void): EventUnsubscribe {
     const externalSessionId = input.externalSessionId;
-    const listeners = this.listenersBySessionId.get(externalSessionId) ?? new Set();
-    listeners.add(listener);
-    this.listenersBySessionId.set(externalSessionId, listeners);
-    this.replayEventBacklog(externalSessionId, listener);
-    for (const approval of pendingApprovalsForCodexSession(
-      this.pendingInputStore(),
-      externalSessionId,
-    )) {
+    const unsubscribe = this.sessionEvents.subscribe(externalSessionId, listener);
+    for (const approval of this.pendingInput.pendingApprovalsForSession(externalSessionId)) {
       listener({
         ...approval,
         type: "approval_required",
@@ -607,10 +584,7 @@ export class CodexAppServerAdapter
         timestamp: new Date().toISOString(),
       });
     }
-    for (const question of pendingQuestionsForCodexSession(
-      this.pendingInputStore(),
-      externalSessionId,
-    )) {
+    for (const question of this.pendingInput.pendingQuestionsForSession(externalSessionId)) {
       listener({
         ...question,
         type: "question_required",
@@ -619,13 +593,7 @@ export class CodexAppServerAdapter
       });
     }
     void this.drainBufferedStreamEvents(externalSessionId);
-    return () => {
-      const current = this.listenersBySessionId.get(externalSessionId);
-      current?.delete(listener);
-      if (current?.size === 0) {
-        this.listenersBySessionId.delete(externalSessionId);
-      }
-    };
+    return unsubscribe;
   }
 
   async stopSession(input: AgentSessionRef): Promise<void> {
@@ -644,32 +612,17 @@ export class CodexAppServerAdapter
   private localSessionStateStore(): InternalCodexLocalSessionStateStore {
     return {
       sessions: this.sessions,
-      listenersBySessionId: this.listenersBySessionId,
+      sessionEvents: this.sessionEvents,
       bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
       bufferedServerRequestsByThreadId: this.runtimeEventBuffer.serverRequestsByThreadId,
       handledStreamRequestKeysByThreadId: this.handledStreamRequestKeysByThreadId,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
-      eventBacklogBySessionId: this.eventBacklogBySessionId,
       latestTodosBySessionId: this.latestTodosBySessionId,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
-      pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
-      pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
-      activeTurnsByApprovalRequestId: this.activeTurnsByApprovalRequestId,
-      pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
-      pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
-      activeTurnsByQuestionRequestId: this.activeTurnsByQuestionRequestId,
+      pendingInput: this.pendingInput,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
       modelByTurnKey: this.modelByTurnKey,
-    };
-  }
-
-  private pendingInputStore(): CodexPendingInputStore {
-    return {
-      pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
-      pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
-      pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
-      pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
     };
   }
 
@@ -679,7 +632,7 @@ export class CodexAppServerAdapter
       threadInventory: this.threadInventory,
       sessions: this.sessions,
       historyPresenceOverlay: this.historyPresenceOverlay,
-      pendingInputStore: () => this.pendingInputStore(),
+      pendingInput: this.pendingInput,
       hasActiveTurn: (externalSessionId: string) => {
         const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
         return Boolean(activeTurn && !activeTurn.isTurnSettled());
@@ -793,32 +746,7 @@ export class CodexAppServerAdapter
     externalSessionId: string,
     activeTurn: ActiveCodexTurn,
   ): void {
-    for (const approval of pendingApprovalsForCodexSession(
-      this.pendingInputStore(),
-      externalSessionId,
-    )) {
-      this.activeTurnsByApprovalRequestId.set(approval.requestId, activeTurn);
-    }
-    for (const question of pendingQuestionsForCodexSession(
-      this.pendingInputStore(),
-      externalSessionId,
-    )) {
-      this.activeTurnsByQuestionRequestId.set(question.requestId, activeTurn);
-    }
-  }
-
-  private replayEventBacklog(
-    externalSessionId: string,
-    listener: (event: AgentEvent) => void,
-  ): void {
-    const backlog = this.eventBacklogBySessionId.get(externalSessionId);
-    if (!backlog) {
-      return;
-    }
-    this.eventBacklogBySessionId.delete(externalSessionId);
-    for (const event of backlog) {
-      listener(event);
-    }
+    this.pendingInput.bindActiveTurn(externalSessionId, activeTurn);
   }
 
   private async continueTurnAfterPendingInput(activeTurn: ActiveCodexTurn): Promise<void> {
@@ -884,7 +812,7 @@ export class CodexAppServerAdapter
   }
 
   private emitSessionEvent(externalSessionId: string, event: AgentEvent): void {
-    emitCodexSessionEvent(this.streamingContext(), externalSessionId, event);
+    this.sessionEvents.emit(externalSessionId, event);
   }
 
   private streamingContext(): CodexStreamingContext {
@@ -899,15 +827,15 @@ export class CodexAppServerAdapter
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
       tokenUsageByTurnKey: this.tokenUsageByTurnKey,
       modelByTurnKey: this.modelByTurnKey,
-      eventBacklogBySessionId: this.eventBacklogBySessionId,
       latestTodosBySessionId: this.latestTodosBySessionId,
       eventMapperPipeline: this.eventMapperPipeline,
+      emitSessionEvent: (externalSessionId, event) =>
+        this.emitSessionEvent(externalSessionId, event),
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
       bufferNotification: (notification) =>
         this.runtimeEventBuffer.bufferNotification(notification),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
-      listenersForSession: (externalSessionId) => this.listenersBySessionId.get(externalSessionId),
     };
   }
 
@@ -959,10 +887,7 @@ export class CodexAppServerAdapter
   private serverRequestContext(): CodexServerRequestHandlerContext {
     return {
       respondServerRequest: this.options.respondServerRequest,
-      pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
-      pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
-      pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
-      pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
+      pendingInput: this.pendingInput,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),

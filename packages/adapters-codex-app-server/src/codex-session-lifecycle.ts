@@ -143,27 +143,16 @@ type SessionScopedMap = {
   keys(): IterableIterator<string>;
 };
 
-type RequestIdsBySession = {
-  get(key: string): Set<string> | undefined;
-  delete(key: string): boolean;
-};
-
 export type InternalCodexLocalSessionStateStore = {
   sessions: { delete(key: string): boolean };
-  listenersBySessionId: { delete(key: string): boolean };
+  sessionEvents: { clear(externalSessionId: string): void };
   bufferedNotificationsByThreadId: { delete(key: string): boolean };
   bufferedServerRequestsByThreadId: { delete(key: string): boolean };
   handledStreamRequestKeysByThreadId: { delete(key: string): boolean };
   syntheticUserMessageTextsByThreadId: { delete(key: string): boolean };
-  eventBacklogBySessionId: { delete(key: string): boolean };
   latestTodosBySessionId: { delete(key: string): boolean };
   activeTurnsBySessionId: { delete(key: string): boolean };
-  pendingApprovalIdsBySessionId: RequestIdsBySession;
-  pendingApprovalsByRequestId: { delete(key: string): boolean };
-  activeTurnsByApprovalRequestId: { delete(key: string): boolean };
-  pendingQuestionIdsBySessionId: RequestIdsBySession;
-  pendingQuestionsByRequestId: { delete(key: string): boolean };
-  activeTurnsByQuestionRequestId: { delete(key: string): boolean };
+  pendingInput: { clearSession(externalSessionId: string): void };
   completedAgentMessagesByTurnKey: SessionScopedMap;
   tokenUsageByTurnKey: SessionScopedMap;
   modelByTurnKey: SessionScopedMap;
@@ -174,26 +163,14 @@ export const clearLocalSessionState = (
   externalSessionId: string,
 ): void => {
   store.sessions.delete(externalSessionId);
-  store.listenersBySessionId.delete(externalSessionId);
+  store.sessionEvents.clear(externalSessionId);
   store.bufferedNotificationsByThreadId.delete(externalSessionId);
   store.bufferedServerRequestsByThreadId.delete(externalSessionId);
   store.handledStreamRequestKeysByThreadId.delete(externalSessionId);
   store.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
-  store.eventBacklogBySessionId.delete(externalSessionId);
   store.latestTodosBySessionId.delete(externalSessionId);
   store.activeTurnsBySessionId.delete(externalSessionId);
-  const approvalRequestIds = store.pendingApprovalIdsBySessionId.get(externalSessionId) ?? [];
-  for (const requestId of approvalRequestIds) {
-    store.pendingApprovalsByRequestId.delete(requestId);
-    store.activeTurnsByApprovalRequestId.delete(requestId);
-  }
-  store.pendingApprovalIdsBySessionId.delete(externalSessionId);
-  const questionRequestIds = store.pendingQuestionIdsBySessionId.get(externalSessionId) ?? [];
-  for (const requestId of questionRequestIds) {
-    store.pendingQuestionsByRequestId.delete(requestId);
-    store.activeTurnsByQuestionRequestId.delete(requestId);
-  }
-  store.pendingQuestionIdsBySessionId.delete(externalSessionId);
+  store.pendingInput.clearSession(externalSessionId);
   const turnKeyPrefix = `${externalSessionId}:`;
   const turnScopedMaps = [
     store.completedAgentMessagesByTurnKey,

@@ -196,6 +196,55 @@ describe("CodexAppServerAdapter approvals", () => {
     transport?.turnStartDeferred.resolve({});
   });
 
+  test("rejects approval replies routed through another session", async () => {
+    const { adapter, drainServerRequests, respondServerRequest } = createHarness(
+      {},
+      { deferTurnStart: true },
+    );
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+
+    drainServerRequests.mockImplementationOnce(async () => [
+      {
+        id: 33,
+        method: "approval/request",
+        params: {
+          threadId: "thread/start-runtime-ensure",
+          turnId: "turn-approval-owner",
+          tool: "network",
+          url: "https://example.com",
+        },
+      },
+    ]);
+
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Need approval" }],
+      }),
+    );
+    await adapter.restoreSession(codexSessionRef("thread-saved"));
+
+    await expect(
+      adapter.replyApproval({
+        ...codexSessionRuntimeRef("thread-saved"),
+        requestId: "33",
+        outcome: "reject",
+      }),
+    ).rejects.toThrow(
+      "Codex approval request '33' belongs to session 'thread/start-runtime-ensure', not 'thread-saved'.",
+    );
+    expect(respondServerRequest).not.toHaveBeenCalled();
+  });
+
   test("preserves initial-turn approvals for late listeners and presence snapshots", async () => {
     const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
     drainServerRequests.mockImplementationOnce(async () => [

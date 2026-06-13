@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { handleCodexServerRequest } from "./codex-app-server-server-requests";
+import { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexSessionState } from "./types";
 
 describe("handleCodexServerRequest", () => {
@@ -26,10 +27,7 @@ describe("handleCodexServerRequest", () => {
       handleCodexServerRequest(
         {
           respondServerRequest,
-          pendingApprovalsByRequestId: new Map(),
-          pendingApprovalIdsBySessionId: new Map(),
-          pendingQuestionsByRequestId: new Map(),
-          pendingQuestionIdsBySessionId: new Map(),
+          pendingInput: new CodexPendingInputState(),
           activeTurnsBySessionId: new Map(),
           bindActiveTurnId: () => false,
           flushQueuedUserMessagesLater: () => {},
@@ -90,10 +88,7 @@ describe("handleCodexServerRequest", () => {
     await handleCodexServerRequest(
       {
         respondServerRequest,
-        pendingApprovalsByRequestId: new Map(),
-        pendingApprovalIdsBySessionId: new Map(),
-        pendingQuestionsByRequestId: new Map(),
-        pendingQuestionIdsBySessionId: new Map(),
+        pendingInput: new CodexPendingInputState(),
         activeTurnsBySessionId: new Map(),
         bindActiveTurnId: () => false,
         flushQueuedUserMessagesLater: () => {},

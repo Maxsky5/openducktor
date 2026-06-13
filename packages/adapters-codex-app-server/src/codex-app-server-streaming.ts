@@ -61,14 +61,13 @@ export type CodexStreamingContext = {
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
   tokenUsageByTurnKey: Map<string, CodexTokenUsageTotals>;
   modelByTurnKey: Map<string, AgentModelSelection>;
-  eventBacklogBySessionId: Map<string, AgentEvent[]>;
   latestTodosBySessionId: Map<string, AgentSessionTodoItem[]>;
   eventMapperPipeline: CodexEventMapperPipeline;
+  emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string): boolean;
   flushQueuedUserMessagesLater(activeTurn: ActiveCodexTurn): void;
   bufferNotification(notification: CodexNotificationRecord): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
-  listenersForSession(externalSessionId: string): Set<(event: AgentEvent) => void> | undefined;
 };
 
 const modelForTurn = (
@@ -78,37 +77,12 @@ const modelForTurn = (
 ): AgentModelSelection | undefined =>
   turnId ? context.modelByTurnKey.get(codexTurnKey(session.threadId, turnId)) : undefined;
 
-const bufferSessionEvent = (
+const emitCodexSessionEvent = (
   context: CodexStreamingContext,
   externalSessionId: string,
   event: AgentEvent,
 ): void => {
-  // Pending input is stateful and exposed through presence snapshots; buffering it here would
-  // duplicate events for late listeners after the request has already been resolved.
-  if (event.type === "approval_required" || event.type === "question_required") {
-    return;
-  }
-  const backlog = context.eventBacklogBySessionId.get(externalSessionId) ?? [];
-  backlog.push(event);
-  if (backlog.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-    backlog.splice(0, backlog.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-  }
-  context.eventBacklogBySessionId.set(externalSessionId, backlog);
-};
-
-export const emitCodexSessionEvent = (
-  context: CodexStreamingContext,
-  externalSessionId: string,
-  event: AgentEvent,
-): void => {
-  const listeners = context.listenersForSession(externalSessionId);
-  if (!listeners) {
-    bufferSessionEvent(context, externalSessionId, event);
-    return;
-  }
-  for (const listener of listeners) {
-    listener(event);
-  }
+  context.emitSessionEvent(externalSessionId, event);
 };
 
 const withTurnModel = (

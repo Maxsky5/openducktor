@@ -101,15 +101,16 @@ describe("codex session lifecycle", () => {
   });
 
   test("clears local session-scoped state without touching other sessions", () => {
+    const clearedSessionEvents: string[] = [];
+    const clearedPendingInput: string[] = [];
     const store = {
       sessions: new Map([
         ["thread-1", {}],
         ["thread-2", {}],
       ]),
-      listenersBySessionId: new Map([
-        ["thread-1", new Set()],
-        ["thread-2", new Set()],
-      ]),
+      sessionEvents: {
+        clear: (externalSessionId: string) => clearedSessionEvents.push(externalSessionId),
+      },
       bufferedNotificationsByThreadId: new Map([
         ["thread-1", []],
         ["thread-2", []],
@@ -126,10 +127,6 @@ describe("codex session lifecycle", () => {
         ["thread-1", []],
         ["thread-2", []],
       ]),
-      eventBacklogBySessionId: new Map([
-        ["thread-1", []],
-        ["thread-2", []],
-      ]),
       latestTodosBySessionId: new Map([
         ["thread-1", []],
         ["thread-2", []],
@@ -138,18 +135,9 @@ describe("codex session lifecycle", () => {
         ["thread-1", {}],
         ["thread-2", {}],
       ]),
-      pendingApprovalIdsBySessionId: new Map([["thread-1", new Set(["approval-1"])]]),
-      pendingApprovalsByRequestId: new Map([
-        ["approval-1", {}],
-        ["approval-other", {}],
-      ]),
-      activeTurnsByApprovalRequestId: new Map([["approval-1", {}]]),
-      pendingQuestionIdsBySessionId: new Map([["thread-1", new Set(["question-1"])]]),
-      pendingQuestionsByRequestId: new Map([
-        ["question-1", {}],
-        ["question-other", {}],
-      ]),
-      activeTurnsByQuestionRequestId: new Map([["question-1", {}]]),
+      pendingInput: {
+        clearSession: (externalSessionId: string) => clearedPendingInput.push(externalSessionId),
+      },
       completedAgentMessagesByTurnKey: new Map([
         ["thread-1:turn-1", {}],
         ["thread-2:turn-1", {}],
@@ -168,8 +156,7 @@ describe("codex session lifecycle", () => {
 
     expect(store.sessions.has("thread-1")).toBe(false);
     expect(store.sessions.has("thread-2")).toBe(true);
-    expect(store.listenersBySessionId.has("thread-1")).toBe(false);
-    expect(store.listenersBySessionId.has("thread-2")).toBe(true);
+    expect(clearedSessionEvents).toEqual(["thread-1"]);
     expect(store.bufferedNotificationsByThreadId.has("thread-1")).toBe(false);
     expect(store.bufferedNotificationsByThreadId.has("thread-2")).toBe(true);
     expect(store.bufferedServerRequestsByThreadId.has("thread-1")).toBe(false);
@@ -178,20 +165,11 @@ describe("codex session lifecycle", () => {
     expect(store.handledStreamRequestKeysByThreadId.has("thread-2")).toBe(true);
     expect(store.syntheticUserMessageTextsByThreadId.has("thread-1")).toBe(false);
     expect(store.syntheticUserMessageTextsByThreadId.has("thread-2")).toBe(true);
-    expect(store.eventBacklogBySessionId.has("thread-1")).toBe(false);
-    expect(store.eventBacklogBySessionId.has("thread-2")).toBe(true);
     expect(store.latestTodosBySessionId.has("thread-1")).toBe(false);
     expect(store.latestTodosBySessionId.has("thread-2")).toBe(true);
     expect(store.activeTurnsBySessionId.has("thread-1")).toBe(false);
     expect(store.activeTurnsBySessionId.has("thread-2")).toBe(true);
-    expect(store.pendingApprovalIdsBySessionId.has("thread-1")).toBe(false);
-    expect(store.pendingApprovalsByRequestId.has("approval-1")).toBe(false);
-    expect(store.pendingApprovalsByRequestId.has("approval-other")).toBe(true);
-    expect(store.activeTurnsByApprovalRequestId.has("approval-1")).toBe(false);
-    expect(store.pendingQuestionIdsBySessionId.has("thread-1")).toBe(false);
-    expect(store.pendingQuestionsByRequestId.has("question-1")).toBe(false);
-    expect(store.pendingQuestionsByRequestId.has("question-other")).toBe(true);
-    expect(store.activeTurnsByQuestionRequestId.has("question-1")).toBe(false);
+    expect(clearedPendingInput).toEqual(["thread-1"]);
     expect(store.completedAgentMessagesByTurnKey.has("thread-1:turn-1")).toBe(false);
     expect(store.completedAgentMessagesByTurnKey.has("thread-2:turn-1")).toBe(true);
     expect(store.tokenUsageByTurnKey.has("thread-1:turn-1")).toBe(false);
@@ -201,22 +179,18 @@ describe("codex session lifecycle", () => {
   });
 
   test("clears missing local sessions without throwing", () => {
+    const mockClearSessionEvents = () => undefined;
+    const mockClearPendingInput = () => undefined;
     const store = {
       sessions: new Map([["thread-2", {}]]),
-      listenersBySessionId: new Map([["thread-2", new Set()]]),
+      sessionEvents: { clear: mockClearSessionEvents },
       bufferedNotificationsByThreadId: new Map([["thread-2", []]]),
       bufferedServerRequestsByThreadId: new Map([["thread-2", []]]),
       handledStreamRequestKeysByThreadId: new Map([["thread-2", new Set()]]),
       syntheticUserMessageTextsByThreadId: new Map([["thread-2", []]]),
-      eventBacklogBySessionId: new Map([["thread-2", []]]),
       latestTodosBySessionId: new Map([["thread-2", []]]),
       activeTurnsBySessionId: new Map([["thread-2", {}]]),
-      pendingApprovalIdsBySessionId: new Map([["thread-2", new Set(["approval-2"])]]),
-      pendingApprovalsByRequestId: new Map([["approval-2", {}]]),
-      activeTurnsByApprovalRequestId: new Map([["approval-2", {}]]),
-      pendingQuestionIdsBySessionId: new Map([["thread-2", new Set(["question-2"])]]),
-      pendingQuestionsByRequestId: new Map([["question-2", {}]]),
-      activeTurnsByQuestionRequestId: new Map([["question-2", {}]]),
+      pendingInput: { clearSession: mockClearPendingInput },
       completedAgentMessagesByTurnKey: new Map([["thread-2:turn-1", {}]]),
       tokenUsageByTurnKey: new Map([["thread-2:turn-1", {}]]),
       modelByTurnKey: new Map([["thread-2:turn-1", {}]]),
@@ -225,8 +199,6 @@ describe("codex session lifecycle", () => {
     expect(() => clearLocalSessionState(store, "missing-thread")).not.toThrow();
 
     expect(store.sessions.has("thread-2")).toBe(true);
-    expect(store.pendingApprovalsByRequestId.has("approval-2")).toBe(true);
-    expect(store.pendingQuestionsByRequestId.has("question-2")).toBe(true);
     expect(store.completedAgentMessagesByTurnKey.has("thread-2:turn-1")).toBe(true);
   });
 });
