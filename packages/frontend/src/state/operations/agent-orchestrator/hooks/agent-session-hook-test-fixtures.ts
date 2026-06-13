@@ -66,6 +66,7 @@ export const createSession = (overrides: Partial<AgentSessionState> = {}): Agent
   selectedModel: null,
   isLoadingModelCatalog: false,
   ...overrides,
+  historyLoadState: overrides.historyLoadState ?? "not_requested",
 });
 
 export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>

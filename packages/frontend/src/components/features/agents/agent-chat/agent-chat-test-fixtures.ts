@@ -97,6 +97,7 @@ const baseSession: AgentSessionState = {
   status: "running",
   startedAt: "2026-02-20T10:00:30.000Z",
   workingDirectory: "/repo",
+  historyLoadState: "not_requested",
   messages: [baseMessage],
   draftAssistantText: "",
   draftAssistantMessageId: null,

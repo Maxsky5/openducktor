@@ -42,6 +42,7 @@ const createSessionFixture = (): AgentSessionState => ({
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
   workingDirectory: "/tmp/repo-a",
+  historyLoadState: "not_requested",
   messages: [],
   draftAssistantText: "",
   draftAssistantMessageId: null,

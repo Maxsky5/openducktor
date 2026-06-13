@@ -13,6 +13,7 @@ const sessionFixture: AgentSessionState = {
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
+  historyLoadState: "not_requested",
   messages: [],
   draftAssistantText: "Draft answer",
   draftAssistantMessageId: "assistant-msg-1",

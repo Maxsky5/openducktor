@@ -171,7 +171,7 @@ export type AgentSessionState = {
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
   workingDirectory: string;
-  historyLoadState?: AgentSessionHistoryLoadState;
+  historyLoadState: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
   draftAssistantText: string;
   draftAssistantMessageId: string | null;

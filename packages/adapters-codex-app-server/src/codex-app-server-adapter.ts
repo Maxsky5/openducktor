@@ -36,12 +36,8 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import {
-  AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
-  formatWorkflowAgentSessionTitle,
-} from "@openducktor/core";
+import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
-import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import {
   toPresenceSnapshot as buildPresenceSnapshot,
   resolveCodexPresenceSource,
@@ -87,17 +83,16 @@ import {
 import {
   type CodexTokenUsageTotals,
   codexTodosFromThreadRead,
-  codexTurnItemsFromThreadRead,
   extractCodexTokenUsageTotals,
-  toHistoryMessage,
 } from "./codex-app-server-transcript";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { toFileDiffs } from "./codex-file-diffs";
-import { projectCodexCanonicalEventsToHistory } from "./codex-history-projector";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
+import { loadCodexSessionHistory } from "./codex-session-history";
 import {
   clearLocalSessionState,
   type InternalCodexLocalSessionStateStore,
+  preserveRuntimeContextOnRestore,
   sessionStateFromThreadFork,
   sessionStateFromThreadRestore,
   sessionStateFromThreadResume,
@@ -146,40 +141,6 @@ const applyRuntimeContextToSession = (
 type HistoryOnlyIdleThreadLoad = {
   repoPath: string;
   workingDirectory: string;
-};
-
-const codexSystemPromptHistoryMessage = (
-  session: CodexSessionState,
-): AgentSessionHistoryMessage | null => {
-  const systemPrompt = session.systemPrompt.trim();
-  if (systemPrompt.length === 0) {
-    return null;
-  }
-
-  return {
-    messageId: `codex-system-prompt:${session.threadId}`,
-    role: "system",
-    timestamp: session.summary.startedAt,
-    text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
-    parts: [],
-  };
-};
-
-const preserveRuntimeContextOnRestore = (
-  restored: CodexSessionState,
-  current: CodexSessionState | undefined,
-): CodexSessionState => {
-  if (!current) {
-    return restored;
-  }
-
-  return {
-    ...restored,
-    ...(restored.model || !current.model ? {} : { model: current.model }),
-    role: restored.role ?? current.role,
-    taskId: restored.taskId || current.taskId,
-    systemPrompt: restored.systemPrompt || current.systemPrompt,
-  };
 };
 
 export class CodexAppServerAdapter
@@ -379,90 +340,27 @@ export class CodexAppServerAdapter
 
   async loadSessionHistory(
     input: LoadAgentSessionHistoryInput,
-  ): Promise<import("@openducktor/core").AgentSessionHistoryMessage[]> {
+  ): Promise<AgentSessionHistoryMessage[]> {
     const session = this.sessions.get(input.externalSessionId);
-    const { client, runtimeId } = session
+    const runtime = session
       ? {
           client: this.runtimeClients.clientForRuntime(session.runtimeId),
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session history");
-    const historyLoad = session
-      ? null
-      : await this.threadInventory.loadThreadForHistory(client, runtimeId, input);
-    const threadResponse = session
-      ? await this.threadInventory.readLoadedThread(client, runtimeId, input)
-      : historyLoad?.response;
-    if (!threadResponse) {
-      return [];
-    }
-    if (historyLoad) {
-      this.rememberHistoryOnlyIdleThreadLoad(input, historyLoad.preResumeThread);
-    }
-    const response = await this.threadInventory.readThreadWithTurns(
-      client,
-      input.externalSessionId,
-    );
-    const tokenUsageByTurnId = await this.drainThreadReadTokenUsage(
-      runtimeId,
-      input.externalSessionId,
-    );
-    const threadItems = codexTurnItemsFromThreadRead(response);
-    const projectedHistory = threadItems
-      .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
-        const turnModel =
-          model ??
-          (turnId
-            ? this.modelByTurnKey.get(codexTurnKey(input.externalSessionId, turnId))
-            : undefined);
-        let finalTokenUsage: CodexTokenUsageTotals | null = null;
-        if (isFinalAgentMessage && turnId) {
-          finalTokenUsage =
-            tokenUsageByTurnId.get(turnId) ??
-            this.tokenUsageByTurnKey.get(codexTurnKey(input.externalSessionId, turnId)) ??
-            null;
-        }
-        const canonicalEvents = this.eventMapperPipeline.runThreadItem(
-          {
-            item,
-            index,
-            ...(timestamp ? { timestamp } : {}),
-            ...(isFinalAgentMessage ? { isFinalAgentMessage } : {}),
-          },
-          {
-            source: "thread_read",
-            threadId: input.externalSessionId,
-            ...(timestamp ? { timestamp } : {}),
-          },
-        );
-        if (canonicalEvents.length > 0) {
-          const history = projectCodexCanonicalEventsToHistory(canonicalEvents, turnModel);
-          if (isFinalAgentMessage) {
-            return history.map((message) =>
-              applyFinalAssistantTurnMetadata(message, turnTiming, finalTokenUsage),
-            );
-          }
-          return history;
-        }
-        const message = toHistoryMessage(
-          item,
-          `codex-history-${index}`,
-          turnModel,
-          timestamp ?? undefined,
-          isFinalAgentMessage,
-          turnTiming,
-          finalTokenUsage,
-        );
-        if (!message) {
-          return [];
-        }
-        return [message];
-      })
-      .filter((message): message is AgentSessionHistoryMessage => Boolean(message));
-    const systemPromptHistoryMessage = session ? codexSystemPromptHistoryMessage(session) : null;
-    return systemPromptHistoryMessage
-      ? [systemPromptHistoryMessage, ...projectedHistory]
-      : projectedHistory;
+    return loadCodexSessionHistory({
+      input,
+      session,
+      runtime,
+      threadInventory: this.threadInventory,
+      eventMapperPipeline: this.eventMapperPipeline,
+      modelByTurnKey: this.modelByTurnKey,
+      tokenUsageByTurnKey: this.tokenUsageByTurnKey,
+      drainThreadReadTokenUsage: (runtimeId, threadId) =>
+        this.drainThreadReadTokenUsage(runtimeId, threadId),
+      rememberHistoryOnlyIdleThreadLoad: (historyInput, preResumeThread) =>
+        this.rememberHistoryOnlyIdleThreadLoad(historyInput, preResumeThread),
+    });
   }
 
   private async drainThreadReadTokenUsage(
@@ -525,12 +423,12 @@ export class CodexAppServerAdapter
           runtimeId: session.runtimeId,
         }
       : await this.runtimeClients.resolve(input, "load Codex session todos");
-    const responseWithoutTurns = await this.threadInventory.readLoadedThread(
+    const isThreadReadable = await this.threadInventory.ensureThreadReadable(
       client,
       runtimeId,
       input,
     );
-    if (!responseWithoutTurns) {
+    if (!isThreadReadable) {
       return [];
     }
     const response = await this.threadInventory.readThreadWithTurns(

@@ -121,6 +121,7 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   selectedModel: null,
   isLoadingModelCatalog: false,
   ...overrides,
+  historyLoadState: overrides.historyLoadState ?? "not_requested",
 });
 
 const makeTaskStoreCheck = (overrides: TaskStoreCheckFixtureOverrides = {}): TaskStoreCheck =>

@@ -19,6 +19,7 @@ const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSe
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeKind: "opencode",
   workingDirectory: "/tmp/repo/worktree",
+  historyLoadState: overrides.historyLoadState ?? "not_requested",
   messages: [],
   draftAssistantText: "",
   draftAssistantMessageId: null,

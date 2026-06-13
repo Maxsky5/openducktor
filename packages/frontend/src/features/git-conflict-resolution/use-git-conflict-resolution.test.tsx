@@ -18,6 +18,7 @@ const buildSession = (
     status: "idle",
     startedAt: "2026-03-18T10:00:00.000Z",
     workingDirectory,
+    historyLoadState: rest.historyLoadState ?? "not_requested",
     messages: [],
     draftAssistantText: "",
     draftAssistantMessageId: null,

@@ -107,6 +107,7 @@ function makeLiveTranscriptSession(): AgentSessionState {
     status: "running",
     startedAt: "2026-02-22T12:00:00.000Z",
     workingDirectory: "/repo-a",
+    historyLoadState: "not_requested",
     messages: [],
     draftAssistantText: "",
     draftAssistantMessageId: null,

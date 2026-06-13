@@ -95,16 +95,7 @@ describe("CodexThreadInventoryReader", () => {
       workingDirectory: "/repo",
     });
 
-    expect(historyLoad).toEqual({
-      preResumeThread: expect.objectContaining({ id: "thread-idle" }),
-      response: {
-        thread: expect.objectContaining({
-          id: "thread-idle",
-          cwd: "/repo",
-          turns: [expect.objectContaining({ id: "turn-1" })],
-        }),
-      },
-    });
+    expect(historyLoad).toEqual(expect.objectContaining({ id: "thread-idle" }));
     expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);
   });
 
@@ -128,20 +119,12 @@ describe("CodexThreadInventoryReader", () => {
       workingDirectory: "/repo",
     });
 
-    expect(historyLoad).toEqual({
-      preResumeThread: expect.objectContaining({
+    expect(historyLoad).toEqual(
+      expect.objectContaining({
         id: "thread-idle",
         status: expect.objectContaining({ agentSessionStatus: "idle" }),
       }),
-      response: {
-        thread: expect.objectContaining({
-          id: "thread-idle",
-          cwd: "/repo",
-          status: { type: "idle" },
-          turns: [expect.objectContaining({ id: "turn-1" })],
-        }),
-      },
-    });
+    );
   });
 
   test("returns null without resuming when the thread is missing from inventory", async () => {
@@ -253,7 +236,7 @@ describe("CodexThreadInventoryReader", () => {
 
     await expect(pendingRead).resolves.toMatchObject({ runtimeId: "runtime-1" });
     await expect(pendingHistoryLoad).resolves.toMatchObject({
-      preResumeThread: expect.objectContaining({ id: "thread-idle" }),
+      id: "thread-idle",
     });
     expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);
   });

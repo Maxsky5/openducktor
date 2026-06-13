@@ -107,6 +107,23 @@ export const sessionStateFromThreadRestore = (
   return session;
 };
 
+export const preserveRuntimeContextOnRestore = (
+  restored: CodexSessionState,
+  current: CodexSessionState | undefined,
+): CodexSessionState => {
+  if (!current) {
+    return restored;
+  }
+
+  return {
+    ...restored,
+    ...(restored.model || !current.model ? {} : { model: current.model }),
+    role: restored.role ?? current.role,
+    taskId: restored.taskId || current.taskId,
+    systemPrompt: restored.systemPrompt || current.systemPrompt,
+  };
+};
+
 type SessionScopedMap = {
   delete(key: string): boolean;
   keys(): IterableIterator<string>;

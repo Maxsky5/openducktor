@@ -40,6 +40,7 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
   selectedModel: null,
   isLoadingModelCatalog: false,
   ...overrides,
+  historyLoadState: overrides.historyLoadState ?? "not_requested",
 });
 
 export const getSession = (

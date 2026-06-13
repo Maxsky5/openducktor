@@ -6,7 +6,7 @@ export const DEFAULT_AGENT_SESSION_HISTORY_LOAD_STATE: AgentSessionHistoryLoadSt
 export const getAgentSessionHistoryLoadState = (
   session: Pick<AgentSessionState, "historyLoadState"> | null | undefined,
 ): AgentSessionHistoryLoadState => {
-  return session?.historyLoadState ?? DEFAULT_AGENT_SESSION_HISTORY_LOAD_STATE;
+  return session ? session.historyLoadState : DEFAULT_AGENT_SESSION_HISTORY_LOAD_STATE;
 };
 
 export const requiresLoadedAgentSessionHistory = (

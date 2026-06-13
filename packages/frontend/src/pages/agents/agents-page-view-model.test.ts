@@ -58,6 +58,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   selectedModel: null,
   isLoadingModelCatalog: false,
   ...overrides,
+  historyLoadState: overrides.historyLoadState ?? "not_requested",
 });
 
 const createDocumentState = (markdown = ""): TaskDocumentState => ({
