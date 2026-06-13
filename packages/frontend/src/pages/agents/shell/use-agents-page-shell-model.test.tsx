@@ -61,9 +61,7 @@ type SelectionState = {
   availableTabTasks: (typeof task)[];
   selectedSessionById: Record<string, SessionFixture>;
   taskId: string;
-  activeSession: SessionFixture | null;
   isActiveTaskReady: boolean;
-  isActiveTaskReadinessFailed: boolean;
   viewSessionLifecycle: ReturnType<typeof createSelectedSessionLifecycleFixture>;
   sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
@@ -200,9 +198,7 @@ let selectionState: SelectionState = {
   availableTabTasks: [task],
   selectedSessionById: { "session-1": initialSelectionSession },
   taskId: "task-1",
-  activeSession: initialSelectionSession,
   isActiveTaskReady: true,
-  isActiveTaskReadinessFailed: false,
   viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
   sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
@@ -476,9 +472,7 @@ beforeEach(async () => {
     availableTabTasks: [task],
     selectedSessionById: { "session-1": session },
     taskId: "task-1",
-    activeSession: session,
     isActiveTaskReady: true,
-    isActiveTaskReadinessFailed: false,
     viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
     sessionsForTask: [session],
     handleCreateTab: mock((_taskId: string) => {}),
@@ -612,7 +606,6 @@ describe("useAgentsPageShellModel", () => {
       viewSelectedTask: null,
       viewActiveSession: null,
       taskId: "",
-      activeSession: null,
       selectedSessionById: {},
       sessionsForTask: [],
       viewSessionsForTask: [],

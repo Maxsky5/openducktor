@@ -169,7 +169,6 @@ type BuildSelectedSessionContextFromOrchestrationInput = Omit<
 > & {
   viewSessionRuntimeDataError?: string | null;
   isActiveTaskReady: boolean;
-  isActiveTaskReadinessFailed: boolean;
   isSessionSelectionResolving: boolean;
   viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
@@ -177,7 +176,6 @@ type BuildSelectedSessionContextFromOrchestrationInput = Omit<
 export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
   viewSessionRuntimeDataError,
   isActiveTaskReady,
-  isActiveTaskReadinessFailed,
   isSessionSelectionResolving,
   viewSessionLifecycle,
   ...input
@@ -186,9 +184,7 @@ export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
     ...input,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
     lifecycle: viewSessionLifecycle,
-    isViewSwitching:
-      Boolean(input.taskId && !isActiveTaskReady && !isActiveTaskReadinessFailed) ||
-      isSessionSelectionResolving,
+    isViewSwitching: Boolean(input.taskId && !isActiveTaskReady) || isSessionSelectionResolving,
   });
 
 export const buildAgentStudioPageModelsArgs = ({
@@ -412,7 +408,6 @@ export function useAgentStudioOrchestrationController({
         viewSessionRuntimeDataError,
         hasActiveGitConflict,
         isActiveTaskReady,
-        isActiveTaskReadinessFailed: selection.isActiveTaskReadinessFailed,
         viewSessionLifecycle: selection.viewSessionLifecycle,
         isSessionSelectionResolving: selection.isSessionSelectionResolving,
         activeSessionContextUsage,
@@ -457,7 +452,6 @@ export function useAgentStudioOrchestrationController({
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
-      selection.isActiveTaskReadinessFailed,
       selection.isSessionSelectionResolving,
       selection.viewSessionLifecycle,
       specDoc,

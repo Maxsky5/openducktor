@@ -177,7 +177,6 @@ export type AgentOperationsContextValue = {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
-    persistedRecords?: AgentSessionRecord[];
   }) => Promise<EnsureSessionReadyForViewResult>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (

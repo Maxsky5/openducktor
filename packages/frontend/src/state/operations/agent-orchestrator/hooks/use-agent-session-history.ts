@@ -47,12 +47,10 @@ export const useAgentSessionHistory = ({
       taskId,
       externalSessionId,
       repoReadinessState,
-      persistedRecords,
     }: {
       taskId: string;
       externalSessionId: string;
       repoReadinessState: SessionRepoReadinessState;
-      persistedRecords?: AgentSessionRecord[];
     }): Promise<EnsureSessionReadyForViewResult> => {
       const session = sessionsRef.current[externalSessionId] ?? null;
       const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
@@ -66,7 +64,6 @@ export const useAgentSessionHistory = ({
           await loadAgentSessionHistory({
             taskId,
             externalSessionId,
-            ...(persistedRecords ? { persistedRecords } : {}),
           });
         } catch {
           return "failed";

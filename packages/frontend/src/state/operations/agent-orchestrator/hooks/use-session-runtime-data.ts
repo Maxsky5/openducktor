@@ -4,7 +4,6 @@ import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import {
-  type AgentSessionViewLifecyclePhase,
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
@@ -35,7 +34,6 @@ type UseSessionRuntimeDataArgs = {
 export type SessionRuntimeDataState = {
   session: AgentSessionState | null;
   runtimeDataError: string | null;
-  sessionViewLifecyclePhase: AgentSessionViewLifecyclePhase;
 };
 
 export const useSessionRuntimeData = ({
@@ -115,7 +113,6 @@ export const useSessionRuntimeData = ({
       return {
         session: null,
         runtimeDataError: null,
-        sessionViewLifecyclePhase: sessionViewLifecycle.phase,
       };
     }
 
@@ -141,7 +138,6 @@ export const useSessionRuntimeData = ({
       return {
         session,
         runtimeDataError,
-        sessionViewLifecyclePhase: sessionViewLifecycle.phase,
       };
     }
 
@@ -153,7 +149,6 @@ export const useSessionRuntimeData = ({
         isLoadingModelCatalog,
       },
       runtimeDataError,
-      sessionViewLifecyclePhase: sessionViewLifecycle.phase,
     };
   }, [
     catalogQuery.data,
@@ -164,6 +159,5 @@ export const useSessionRuntimeData = ({
     todosQuery.data,
     todosQuery.error,
     runtimeDataSupportError,
-    sessionViewLifecycle.phase,
   ]);
 };

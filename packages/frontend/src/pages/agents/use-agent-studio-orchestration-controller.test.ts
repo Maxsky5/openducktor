@@ -221,7 +221,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       viewSessionRuntimeDataError: "runtime data failed",
       hasActiveGitConflict: true,
       isActiveTaskReady: false,
-      isActiveTaskReadinessFailed: false,
       isSessionSelectionResolving: true,
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
         phase: "loading_history",

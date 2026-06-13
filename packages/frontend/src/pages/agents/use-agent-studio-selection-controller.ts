@@ -105,7 +105,6 @@ export type AgentStudioSelectionControllerResult = {
   viewRole: AgentRole;
   viewLaunchActionId: SessionLaunchActionId;
   isActiveTaskReady: boolean;
-  isActiveTaskReadinessFailed: boolean;
   viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
@@ -377,7 +376,6 @@ export function useAgentStudioSelectionController({
     });
   }, [ensureSessionReadyForView, selectedSessionLifecycle, viewSessionReadinessState, viewTaskId]);
   const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
-  const isActiveTaskReadinessFailed = false;
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
@@ -404,7 +402,6 @@ export function useAgentStudioSelectionController({
       viewRole,
       viewLaunchActionId,
       isActiveTaskReady,
-      isActiveTaskReadinessFailed,
       viewSessionLifecycle: selectedSessionLifecycle,
     }),
     [
