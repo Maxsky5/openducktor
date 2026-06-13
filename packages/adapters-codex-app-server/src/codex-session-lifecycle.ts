@@ -138,54 +138,6 @@ export const preserveRuntimeContextOnRestore = (
   };
 };
 
-type SessionScopedMap = {
-  delete(key: string): boolean;
-  keys(): IterableIterator<string>;
-};
-
-export type InternalCodexLocalSessionStateStore = {
-  sessions: { delete(key: string): boolean };
-  sessionEvents: { clear(externalSessionId: string): void };
-  bufferedNotificationsByThreadId: { delete(key: string): boolean };
-  bufferedServerRequestsByThreadId: { delete(key: string): boolean };
-  handledStreamRequestKeysByThreadId: { delete(key: string): boolean };
-  syntheticUserMessageTextsByThreadId: { delete(key: string): boolean };
-  latestTodosBySessionId: { delete(key: string): boolean };
-  activeTurnsBySessionId: { delete(key: string): boolean };
-  pendingInput: { clearSession(externalSessionId: string): void };
-  completedAgentMessagesByTurnKey: SessionScopedMap;
-  tokenUsageByTurnKey: SessionScopedMap;
-  modelByTurnKey: SessionScopedMap;
-};
-
-export const clearLocalSessionState = (
-  store: InternalCodexLocalSessionStateStore,
-  externalSessionId: string,
-): void => {
-  store.sessions.delete(externalSessionId);
-  store.sessionEvents.clear(externalSessionId);
-  store.bufferedNotificationsByThreadId.delete(externalSessionId);
-  store.bufferedServerRequestsByThreadId.delete(externalSessionId);
-  store.handledStreamRequestKeysByThreadId.delete(externalSessionId);
-  store.syntheticUserMessageTextsByThreadId.delete(externalSessionId);
-  store.latestTodosBySessionId.delete(externalSessionId);
-  store.activeTurnsBySessionId.delete(externalSessionId);
-  store.pendingInput.clearSession(externalSessionId);
-  const turnKeyPrefix = `${externalSessionId}:`;
-  const turnScopedMaps = [
-    store.completedAgentMessagesByTurnKey,
-    store.tokenUsageByTurnKey,
-    store.modelByTurnKey,
-  ];
-  for (const turnScopedMap of turnScopedMaps) {
-    for (const turnKey of turnScopedMap.keys()) {
-      if (turnKey.startsWith(turnKeyPrefix)) {
-        turnScopedMap.delete(turnKey);
-      }
-    }
-  }
-};
-
 const sessionStateFromThreadResumeResponse = (
   input: ResumeAgentSessionInput | AgentSessionRuntimeRef | AgentSessionRef,
   runtimeId: string,

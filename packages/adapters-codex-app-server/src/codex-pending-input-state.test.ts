@@ -61,6 +61,35 @@ describe("CodexPendingInputState", () => {
     ]);
   });
 
+  test("requires pending requests to belong to the replying session", () => {
+    const pendingInput = new CodexPendingInputState();
+    pendingInput.addApproval({
+      runtimeId: "runtime-1",
+      threadId: "thread-1",
+      request: approvalRequest("approval-1"),
+    });
+    pendingInput.addQuestion({
+      runtimeId: "runtime-1",
+      threadId: "thread-1",
+      request: questionRequest("question-1"),
+      questionIds: ["question-item-1"],
+      input: { requestId: "question-1" },
+    });
+
+    expect(pendingInput.requireApprovalForSession("approval-1", "thread-1")).toMatchObject({
+      threadId: "thread-1",
+    });
+    expect(pendingInput.requireQuestionForSession("question-1", "thread-1")).toMatchObject({
+      threadId: "thread-1",
+    });
+    expect(() => pendingInput.requireApprovalForSession("approval-1", "thread-2")).toThrow(
+      "belongs to session 'thread-1', not 'thread-2'",
+    );
+    expect(() => pendingInput.requireQuestionForSession("question-1", "thread-2")).toThrow(
+      "belongs to session 'thread-1', not 'thread-2'",
+    );
+  });
+
   test("clears all pending input for one session only", () => {
     const pendingInput = new CodexPendingInputState();
     pendingInput.addApproval({

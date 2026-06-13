@@ -43,6 +43,24 @@ export class CodexPendingInputState {
     return this.pendingQuestionsByRequestId.get(requestId);
   }
 
+  requireApprovalForSession(requestId: string, externalSessionId: string): PendingApprovalEntry {
+    const approval = this.approval(requestId);
+    if (!approval) {
+      throw new Error(`Unknown Codex approval request '${requestId}'.`);
+    }
+    this.requireRequestSession("approval", requestId, approval.threadId, externalSessionId);
+    return approval;
+  }
+
+  requireQuestionForSession(requestId: string, externalSessionId: string): PendingQuestionEntry {
+    const question = this.question(requestId);
+    if (!question) {
+      throw new Error(`Unknown Codex question request '${requestId}'.`);
+    }
+    this.requireRequestSession("question", requestId, question.threadId, externalSessionId);
+    return question;
+  }
+
   pendingApprovalsForSession(externalSessionId: string): AgentPendingApprovalRequest[] {
     const requestIds = this.pendingApprovalIdsBySessionId.get(externalSessionId);
     if (!requestIds) {
@@ -121,5 +139,19 @@ export class CodexPendingInputState {
         index.delete(threadId);
       }
     }
+  }
+
+  private requireRequestSession(
+    kind: "approval" | "question",
+    requestId: string,
+    ownerSessionId: string,
+    externalSessionId: string,
+  ): void {
+    if (ownerSessionId === externalSessionId) {
+      return;
+    }
+    throw new Error(
+      `Codex ${kind} request '${requestId}' belongs to session '${ownerSessionId}', not '${externalSessionId}'.`,
+    );
   }
 }

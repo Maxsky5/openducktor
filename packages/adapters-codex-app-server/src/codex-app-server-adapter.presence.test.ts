@@ -128,8 +128,11 @@ class HistoryOnlyIdleTransport extends RecordingTransport {
   }
 }
 
-const localSessions = (adapter: CodexAppServerAdapter): Map<string, unknown> =>
-  (adapter as unknown as { sessions: Map<string, unknown> }).sessions;
+const localSessions = (
+  adapter: CodexAppServerAdapter,
+): { has(externalSessionId: string): boolean } =>
+  (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
+    .localSessions;
 
 const restoreSessionState = async (
   adapter: CodexAppServerAdapter,
