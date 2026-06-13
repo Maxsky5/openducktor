@@ -114,10 +114,10 @@ export function useSessionTranscriptSurfaceModel({
     mode: "non_interactive",
     session: transcriptInteractions.session,
     sessionLifecycle: {
+      phase: isTranscriptLoading ? "loading_history" : "ready",
       canRenderHistory: !isTranscriptLoading,
+      historyRequest: "none",
       isViewSwitching: isResolvingTranscript,
-      isLoadingHistory: isTranscriptLoading,
-      isWaitingForRuntimeReadiness: false,
     },
     chatSettings,
     isSessionWorking,

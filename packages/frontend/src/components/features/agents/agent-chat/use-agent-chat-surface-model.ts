@@ -13,6 +13,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
+import {
+  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionWaitingForRuntimeReadiness,
+  type SelectedAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
@@ -159,10 +164,8 @@ type AgentChatComposerConfig = {
   onSelectVariant: (variant: string) => void;
 };
 
-export type AgentChatSurfaceSessionLifecycle = AgentChatThreadLifecycle & {
-  isLoadingHistory: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-};
+export type AgentChatSurfaceSessionLifecycle = AgentChatThreadLifecycle &
+  Pick<SelectedAgentSessionViewLifecycle, "phase" | "canRenderHistory" | "historyRequest">;
 
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;
@@ -212,7 +215,9 @@ export function useAgentChatSurfaceModel({
       lifecycle: sessionLifecycle,
     });
   const isSessionHistoryLoading =
-    sessionLifecycle.isLoadingHistory && !sessionLifecycle.canRenderHistory;
+    isSelectedAgentSessionHistoryLoading(sessionLifecycle) && !sessionLifecycle.canRenderHistory;
+  const isWaitingForRuntimeReadiness =
+    isSelectedAgentSessionWaitingForRuntimeReadiness(sessionLifecycle);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
@@ -264,7 +269,7 @@ export function useAgentChatSurfaceModel({
       isSessionViewLoading: isContextSwitching,
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness:
-        sessionLifecycle.isWaitingForRuntimeReadiness || runtimeReadiness.isRuntimeStarting,
+        isWaitingForRuntimeReadiness || runtimeReadiness.isRuntimeStarting,
       readinessState: runtimeReadiness.readinessState,
       isInteractionEnabled: isComposerInteractionEnabled,
       blockedReason: runtimeReadiness.blockedReason,
@@ -317,7 +322,7 @@ export function useAgentChatSurfaceModel({
       resolvedSessionAgentColors,
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
-      sessionLifecycle.isWaitingForRuntimeReadiness,
+      isWaitingForRuntimeReadiness,
       sessionRuntimeDataError,
       subagentPendingApprovalsByExternalSessionId,
       subagentPendingApprovalCountByExternalSessionId,

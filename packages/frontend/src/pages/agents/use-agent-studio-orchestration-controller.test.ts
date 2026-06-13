@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
+  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionWaitingForRuntimeReadiness,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
   createAgentSessionFixture,
   createSelectedSessionLifecycleFixture,
   createTaskCardFixture,
@@ -155,8 +159,10 @@ describe("buildAgentStudioPageModelsArgs", () => {
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
     expect(mapped.selectedSession.runtime.lifecycle.canRenderHistory).toBe(true);
-    expect(mapped.selectedSession.runtime.lifecycle.isHistoryLoadFailed).toBe(false);
-    expect(mapped.selectedSession.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(false);
+    expect(mapped.selectedSession.runtime.lifecycle.phase).toBe("ready");
+    expect(
+      isSelectedAgentSessionWaitingForRuntimeReadiness(mapped.selectedSession.runtime.lifecycle),
+    ).toBe(false);
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
@@ -223,10 +229,8 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       isActiveTaskReady: false,
       isSessionSelectionResolving: true,
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
-        phase: "loading_history",
+        phase: "resolving_runtime",
         canRenderHistory: false,
-        isLoadingHistory: true,
-        isWaitingForRuntimeReadiness: true,
       }),
       activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
       documents: baseDocuments,
@@ -246,8 +250,8 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
     expect(context.chat.isViewSwitching).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(context.runtime.lifecycle.isLoadingHistory).toBe(true);
-    expect(context.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(true);
+    expect(isSelectedAgentSessionHistoryLoading(context.runtime.lifecycle)).toBe(true);
+    expect(isSelectedAgentSessionWaitingForRuntimeReadiness(context.runtime.lifecycle)).toBe(true);
     expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
     expect(context.workflow.selectedInteractionRole).toBe("planner");
     expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
@@ -267,7 +271,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
         runtime: {
           ...baseArgs.selectedSession.runtime,
           lifecycle: createSelectedSessionLifecycleFixture({
-            isHistoryLoadFailed: true,
             phase: "history_failed",
           }),
         },
@@ -279,6 +282,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
     });
 
     expect(failed.selectedSession.chat.isViewSwitching).toBe(true);
-    expect(failed.selectedSession.runtime.lifecycle.isHistoryLoadFailed).toBe(true);
+    expect(failed.selectedSession.runtime.lifecycle.phase).toBe("history_failed");
   });
 });

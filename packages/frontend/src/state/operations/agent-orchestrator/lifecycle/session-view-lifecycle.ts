@@ -18,64 +18,103 @@ export type AgentSessionViewLifecyclePhase =
 export type SelectedAgentSessionViewLifecyclePhase =
   | "inactive"
   | "resolving_session"
+  | "resolving_runtime"
   | "waiting_for_runtime"
   | "needs_history"
   | "loading_history"
   | "history_failed"
   | "ready";
 
+export type AgentSessionHistoryRequest = "none" | "load";
+
 export type AgentSessionViewLifecycle = {
   phase: AgentSessionViewLifecyclePhase;
   canReadRuntimeData: boolean;
   canRenderHistory: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  isLoadingHistory: boolean;
-  isHistoryLoadFailed: boolean;
-  shouldEnsureReadyForView: boolean;
+  historyRequest: AgentSessionHistoryRequest;
 };
 
 export type SelectedAgentSessionViewLifecycle = {
   externalSessionId: string | null;
   phase: SelectedAgentSessionViewLifecyclePhase;
   canRenderHistory: boolean;
-  isResolvingSession: boolean;
-  isLoadingHistory: boolean;
-  isHistoryLoadFailed: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  shouldEnsureReadyForView: boolean;
+  historyRequest: AgentSessionHistoryRequest;
 };
+
+type SelectedAgentSessionLifecyclePhaseInput = Pick<SelectedAgentSessionViewLifecycle, "phase">;
+
+type SelectedAgentSessionLifecycleHistoryInput = Pick<
+  SelectedAgentSessionViewLifecycle,
+  "historyRequest"
+>;
 
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
   externalSessionId: null,
   phase: "inactive",
   canRenderHistory: false,
-  isResolvingSession: false,
-  isLoadingHistory: false,
-  isHistoryLoadFailed: false,
-  isWaitingForRuntimeReadiness: false,
-  shouldEnsureReadyForView: false,
+  historyRequest: "none",
 };
+
+const createAgentSessionViewLifecycle = ({
+  phase,
+  repoReadinessState,
+  canRenderHistory = false,
+  historyRequest = "none",
+}: {
+  phase: AgentSessionViewLifecyclePhase;
+  repoReadinessState: SessionRepoReadinessState;
+  canRenderHistory?: boolean;
+  historyRequest?: AgentSessionHistoryRequest;
+}): AgentSessionViewLifecycle => ({
+  phase,
+  canReadRuntimeData: repoReadinessState === "ready" && phase !== "idle",
+  canRenderHistory,
+  historyRequest,
+});
+
+export const shouldEnsureAgentSessionReadyForView = (
+  lifecycle: AgentSessionViewLifecycle,
+): boolean => lifecycle.historyRequest === "load";
+
+export const isSelectedAgentSessionResolving = (
+  lifecycle: SelectedAgentSessionLifecyclePhaseInput,
+): boolean => lifecycle.phase === "resolving_session" || lifecycle.phase === "resolving_runtime";
+
+export const isSelectedAgentSessionWaitingForRuntimeReadiness = (
+  lifecycle: SelectedAgentSessionLifecyclePhaseInput,
+): boolean => lifecycle.phase === "resolving_runtime" || lifecycle.phase === "waiting_for_runtime";
+
+export const isSelectedAgentSessionHistoryLoading = (
+  lifecycle: SelectedAgentSessionLifecyclePhaseInput,
+): boolean =>
+  lifecycle.phase === "resolving_session" ||
+  lifecycle.phase === "resolving_runtime" ||
+  lifecycle.phase === "waiting_for_runtime" ||
+  lifecycle.phase === "loading_history";
+
+export const shouldEnsureSelectedAgentSessionReadyForView = (
+  lifecycle: SelectedAgentSessionLifecycleHistoryInput,
+): boolean => lifecycle.historyRequest === "load";
 
 const toSelectedSessionLifecyclePhase = ({
   lifecycle,
-  isLoadingHistory,
 }: {
   lifecycle: AgentSessionViewLifecycle;
-  isLoadingHistory: boolean;
 }): SelectedAgentSessionViewLifecyclePhase => {
-  if (lifecycle.phase === "blocked_on_repo") {
-    return "waiting_for_runtime";
+  switch (lifecycle.phase) {
+    case "idle":
+      return "inactive";
+    case "blocked_on_repo":
+      return "waiting_for_runtime";
+    case "history_failed":
+      return "history_failed";
+    case "loading_history":
+      return "loading_history";
+    case "needs_history":
+      return lifecycle.canRenderHistory ? "needs_history" : "loading_history";
+    case "ready":
+      return "ready";
   }
-  if (lifecycle.isHistoryLoadFailed) {
-    return "history_failed";
-  }
-  if (isLoadingHistory) {
-    return "loading_history";
-  }
-  if (lifecycle.phase === "idle") {
-    return "inactive";
-  }
-  return lifecycle.phase;
 };
 
 export const deriveAgentSessionViewLifecycle = ({
@@ -86,15 +125,10 @@ export const deriveAgentSessionViewLifecycle = ({
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
   if (!session) {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "idle",
-      canReadRuntimeData: false,
-      canRenderHistory: false,
-      isWaitingForRuntimeReadiness: false,
-      isLoadingHistory: false,
-      isHistoryLoadFailed: false,
-      shouldEnsureReadyForView: false,
-    };
+      repoReadinessState,
+    });
   }
 
   const sessionNeedsHistoryLoad = requiresLoadedAgentSessionHistory(session);
@@ -102,87 +136,60 @@ export const deriveAgentSessionViewLifecycle = ({
   const hasTranscript = getSessionMessageCount(session) > 0;
 
   if (repoReadinessState !== "ready" && sessionNeedsHistoryLoad && !hasTranscript) {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "blocked_on_repo",
-      canReadRuntimeData: false,
-      canRenderHistory: false,
-      isWaitingForRuntimeReadiness: true,
-      isLoadingHistory: false,
-      isHistoryLoadFailed: false,
-      shouldEnsureReadyForView: false,
-    };
+      repoReadinessState,
+    });
   }
 
   if (!sessionNeedsHistoryLoad) {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "ready",
-      canReadRuntimeData: repoReadinessState === "ready",
+      repoReadinessState,
       canRenderHistory: true,
-      isWaitingForRuntimeReadiness: false,
-      isLoadingHistory: false,
-      isHistoryLoadFailed: false,
-      shouldEnsureReadyForView: false,
-    };
+    });
   }
 
   if (historyLoadState === "loading") {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "loading_history",
-      canReadRuntimeData: repoReadinessState === "ready",
+      repoReadinessState,
       canRenderHistory: hasTranscript,
-      isWaitingForRuntimeReadiness: false,
-      isLoadingHistory: true,
-      isHistoryLoadFailed: false,
-      shouldEnsureReadyForView: false,
-    };
+    });
   }
 
   if (historyLoadState === "not_requested") {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "needs_history",
-      canReadRuntimeData: repoReadinessState === "ready",
+      repoReadinessState,
       canRenderHistory: hasTranscript,
-      isWaitingForRuntimeReadiness: false,
-      isLoadingHistory: false,
-      isHistoryLoadFailed: false,
-      shouldEnsureReadyForView: repoReadinessState === "ready",
-    };
+      historyRequest: repoReadinessState === "ready" ? "load" : "none",
+    });
   }
 
   if (historyLoadState === "failed" && hasTranscript) {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "needs_history",
-      canReadRuntimeData: repoReadinessState === "ready",
+      repoReadinessState,
       canRenderHistory: true,
-      isWaitingForRuntimeReadiness: false,
-      isLoadingHistory: false,
-      isHistoryLoadFailed: false,
-      shouldEnsureReadyForView: repoReadinessState === "ready",
-    };
+      historyRequest: repoReadinessState === "ready" ? "load" : "none",
+    });
   }
 
   const shouldShowBlockingHistoryFailure = !hasTranscript && historyLoadState === "failed";
   if (shouldShowBlockingHistoryFailure) {
-    return {
+    return createAgentSessionViewLifecycle({
       phase: "history_failed",
-      canReadRuntimeData: repoReadinessState === "ready",
-      canRenderHistory: false,
-      isWaitingForRuntimeReadiness: false,
-      isLoadingHistory: false,
-      isHistoryLoadFailed: true,
-      shouldEnsureReadyForView: repoReadinessState === "ready",
-    };
+      repoReadinessState,
+      historyRequest: repoReadinessState === "ready" ? "load" : "none",
+    });
   }
 
-  return {
+  return createAgentSessionViewLifecycle({
     phase: "ready",
-    canReadRuntimeData: repoReadinessState === "ready",
+    repoReadinessState,
     canRenderHistory: hasTranscript || historyLoadState === "loaded",
-    isWaitingForRuntimeReadiness: false,
-    isLoadingHistory: false,
-    isHistoryLoadFailed: false,
-    shouldEnsureReadyForView: false,
-  };
+  });
 };
 
 export const deriveSelectedAgentSessionViewLifecycle = ({
@@ -202,42 +209,24 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
 
   if (!session) {
     const hasLoadFailed = sessionLoadError !== null && sessionLoadError !== undefined;
-    const isWaitingForRuntimeReadiness = !hasLoadFailed && repoReadinessState !== "ready";
     return {
       externalSessionId: selectedSessionRoute.externalSessionId,
       phase: hasLoadFailed
         ? "history_failed"
-        : isWaitingForRuntimeReadiness
-          ? "waiting_for_runtime"
+        : repoReadinessState !== "ready"
+          ? "resolving_runtime"
           : "resolving_session",
       canRenderHistory: false,
-      isResolvingSession: !hasLoadFailed,
-      isLoadingHistory: !hasLoadFailed,
-      isHistoryLoadFailed: hasLoadFailed,
-      isWaitingForRuntimeReadiness,
-      shouldEnsureReadyForView: false,
+      historyRequest: "none",
     };
   }
 
   const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
-  const isHistoryLoadFailed = lifecycle.isHistoryLoadFailed;
-  const isWaitingForRuntimeReadiness =
-    !isHistoryLoadFailed && lifecycle.isWaitingForRuntimeReadiness;
-  const isLoadingHistory =
-    !isHistoryLoadFailed &&
-    !lifecycle.canRenderHistory &&
-    (isWaitingForRuntimeReadiness ||
-      lifecycle.isLoadingHistory ||
-      lifecycle.shouldEnsureReadyForView);
 
   return {
     externalSessionId: selectedSessionRoute.externalSessionId,
-    phase: toSelectedSessionLifecyclePhase({ lifecycle, isLoadingHistory }),
+    phase: toSelectedSessionLifecyclePhase({ lifecycle }),
     canRenderHistory: lifecycle.canRenderHistory,
-    isResolvingSession: false,
-    isLoadingHistory,
-    isHistoryLoadFailed,
-    isWaitingForRuntimeReadiness,
-    shouldEnsureReadyForView: lifecycle.shouldEnsureReadyForView,
+    historyRequest: lifecycle.historyRequest,
   };
 };

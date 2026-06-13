@@ -472,7 +472,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "waiting_for_runtime",
-            isWaitingForRuntimeReadiness: true,
           }),
         },
         readiness: {
@@ -505,10 +504,8 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [selectedSummary],
           allSessionSummaries: [selectedSummary],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "waiting_for_runtime",
+            phase: "resolving_runtime",
             canRenderHistory: false,
-            isLoadingHistory: true,
-            isWaitingForRuntimeReadiness: true,
           }),
         },
         readiness: {
@@ -542,9 +539,8 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [],
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "waiting_for_runtime",
+            phase: "resolving_runtime",
             canRenderHistory: false,
-            isWaitingForRuntimeReadiness: true,
           }),
         },
         readiness: {
@@ -580,7 +576,6 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_session",
             canRenderHistory: false,
-            isLoadingHistory: true,
           }),
           isViewSwitching: true,
         },
@@ -620,7 +615,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
             canRenderHistory: true,
-            isLoadingHistory: true,
             phase: "loading_history",
           }),
         },
@@ -701,7 +695,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [pendingSession],
           lifecycle: createSelectedSessionLifecycleFixture({
             canRenderHistory: false,
-            isLoadingHistory: true,
             phase: "loading_history",
           }),
         },

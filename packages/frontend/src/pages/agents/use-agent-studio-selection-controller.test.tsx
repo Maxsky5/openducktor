@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionResolving,
+  isSelectedAgentSessionWaitingForRuntimeReadiness,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -210,7 +215,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().viewSessionLifecycle.isResolvingSession).toBe(true);
+      expect(isSelectedAgentSessionResolving(harness.getLatest().viewSessionLifecycle)).toBe(true);
       expect(harness.getLatest().viewActiveSession).toBeNull();
 
       const loadedSession = createSession("task-1", "session-reloaded", {
@@ -228,7 +233,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().viewSessionLifecycle.isResolvingSession).toBe(false);
+      expect(isSelectedAgentSessionResolving(harness.getLatest().viewSessionLifecycle)).toBe(false);
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-reloaded");
     } finally {
       await harness.unmount();
@@ -261,9 +266,12 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.viewSessionLifecycle.isResolvingSession).toBe(true);
-      expect(latest.viewSessionLifecycle.isLoadingHistory).toBe(true);
-      expect(latest.viewSessionLifecycle.isWaitingForRuntimeReadiness).toBe(true);
+      expect(isSelectedAgentSessionResolving(latest.viewSessionLifecycle)).toBe(true);
+      expect(isSelectedAgentSessionHistoryLoading(latest.viewSessionLifecycle)).toBe(true);
+      expect(isSelectedAgentSessionWaitingForRuntimeReadiness(latest.viewSessionLifecycle)).toBe(
+        true,
+      );
+      expect(latest.viewSessionLifecycle.phase).toBe("resolving_runtime");
       expect(latest.viewActiveSession).toBeNull();
     } finally {
       await harness.unmount();
@@ -291,10 +299,12 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.viewSessionLifecycle.isResolvingSession).toBe(false);
-      expect(latest.viewSessionLifecycle.isHistoryLoadFailed).toBe(true);
-      expect(latest.viewSessionLifecycle.isLoadingHistory).toBe(false);
-      expect(latest.viewSessionLifecycle.isWaitingForRuntimeReadiness).toBe(false);
+      expect(isSelectedAgentSessionResolving(latest.viewSessionLifecycle)).toBe(false);
+      expect(latest.viewSessionLifecycle.phase).toBe("history_failed");
+      expect(isSelectedAgentSessionHistoryLoading(latest.viewSessionLifecycle)).toBe(false);
+      expect(isSelectedAgentSessionWaitingForRuntimeReadiness(latest.viewSessionLifecycle)).toBe(
+        false,
+      );
       expect(latest.viewActiveSession).toBeNull();
     } finally {
       await harness.unmount();

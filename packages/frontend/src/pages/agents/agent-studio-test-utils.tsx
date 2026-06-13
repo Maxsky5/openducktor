@@ -60,11 +60,7 @@ export const createSelectedSessionLifecycleFixture = (
   externalSessionId: "session-1",
   phase: "ready",
   canRenderHistory: true,
-  isResolvingSession: false,
-  isLoadingHistory: false,
-  isHistoryLoadFailed: false,
-  isWaitingForRuntimeReadiness: false,
-  shouldEnsureReadyForView: false,
+  historyRequest: "none",
   ...overrides,
 });
 

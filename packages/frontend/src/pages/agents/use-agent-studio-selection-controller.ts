@@ -16,7 +16,10 @@ import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
   SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  deriveSelectedAgentSessionViewLifecycle,
+  shouldEnsureSelectedAgentSessionReadyForView,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -360,7 +363,7 @@ export function useAgentStudioSelectionController({
   useEffect(() => {
     if (
       selectedSessionLifecycle.externalSessionId === null ||
-      !selectedSessionLifecycle.shouldEnsureReadyForView
+      !shouldEnsureSelectedAgentSessionReadyForView(selectedSessionLifecycle)
     ) {
       return;
     }

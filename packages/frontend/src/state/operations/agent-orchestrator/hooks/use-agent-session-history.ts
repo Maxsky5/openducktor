@@ -3,8 +3,8 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
+  shouldEnsureAgentSessionReadyForView,
 } from "../lifecycle/session-view-lifecycle";
-import { requiresLoadedAgentSessionHistory } from "../support/history-load-state";
 
 type LoadSelectedSessionHistory = (input: { session: AgentSessionState }) => Promise<void>;
 
@@ -26,13 +26,11 @@ export const useAgentSessionHistory = ({
       const session = sessionsRef.current[externalSessionId] ?? null;
       const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
 
-      if (!session || !lifecycle.shouldEnsureReadyForView) {
+      if (!session || !shouldEnsureAgentSessionReadyForView(lifecycle)) {
         return;
       }
 
-      if (requiresLoadedAgentSessionHistory(session)) {
-        await loadSelectedSessionHistory({ session });
-      }
+      await loadSelectedSessionHistory({ session });
     },
     [loadSelectedSessionHistory, sessionsRef],
   );
