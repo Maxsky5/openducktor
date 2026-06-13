@@ -8,7 +8,10 @@ import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { SessionRepoReadinessState as AgentStudioReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type {
+  SessionRepoReadinessState as AgentStudioReadinessState,
+  AgentStudioSelectedSessionLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
@@ -82,12 +85,7 @@ export type SelectedSessionRuntimeContext = {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeReadiness: SelectedSessionRuntimeReadinessContext;
   sessionRuntimeDataError: string | null;
-  isTaskHydrating: boolean;
-  isSessionHistoryHydrated: boolean;
-  isSessionHistoryHydrating: boolean;
-  isSessionHistoryLoadFailed: boolean;
-  isSessionSelectionResolving: boolean;
-  isWaitingForRuntimeReadiness: boolean;
+  lifecycle: AgentStudioSelectedSessionLifecycle;
 };
 
 export type SelectedSessionPendingInputContext = {
@@ -128,12 +126,7 @@ export type AgentStudioSelectedSessionContextInput = {
   runtimeDefinitions: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   hasActiveGitConflict: boolean;
-  isTaskHydrating: boolean;
-  isSessionHistoryHydrated: boolean;
-  isSessionHistoryHydrating: boolean;
-  isSessionSelectionResolving: boolean;
-  isWaitingForRuntimeReadiness: boolean;
-  isSessionHistoryLoadFailed: boolean;
+  lifecycle: AgentStudioSelectedSessionLifecycle;
   activeSessionContextUsage: AgentStudioSessionContextUsage;
   documents: AgentStudioDocumentsContext;
   readiness: {
@@ -251,12 +244,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   runtimeDefinitions,
   sessionRuntimeDataError,
   hasActiveGitConflict,
-  isTaskHydrating,
-  isSessionHistoryHydrated,
-  isSessionHistoryHydrating,
-  isSessionSelectionResolving,
-  isWaitingForRuntimeReadiness,
-  isSessionHistoryLoadFailed,
+  lifecycle,
   activeSessionContextUsage,
   documents,
   readiness,
@@ -297,8 +285,6 @@ export const buildAgentStudioSelectedSessionContext = ({
     kickoffLabel: sessionActions.kickoffLabel,
     startLaunchKickoff: sessionActions.startLaunchKickoff,
   });
-  const isTranscriptWaitingForRuntimeReadiness =
-    isWaitingForRuntimeReadiness || (Boolean(taskId) && readiness.isRuntimeStarting);
   const hasPendingQuestions = (activeSession?.pendingQuestions ?? []).length > 0;
   const hasPendingApprovals = (activeSession?.pendingApprovals ?? []).length > 0;
 
@@ -348,12 +334,7 @@ export const buildAgentStudioSelectedSessionContext = ({
         refreshChecks: readiness.refreshChecks,
       },
       sessionRuntimeDataError,
-      isTaskHydrating,
-      isSessionHistoryHydrated,
-      isSessionHistoryHydrating,
-      isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness: isTranscriptWaitingForRuntimeReadiness,
-      isSessionHistoryLoadFailed,
+      lifecycle,
     },
     pendingInput: {
       pendingQuestions: {

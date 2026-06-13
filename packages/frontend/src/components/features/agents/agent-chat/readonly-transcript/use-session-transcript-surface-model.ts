@@ -126,7 +126,7 @@ export function useSessionTranscriptSurfaceModel({
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
     session: runtimeData.session,
-    isTaskHydrating: isResolvingTranscript,
+    isTaskViewResolving: isResolvingTranscript,
     isSessionSelectionResolving: false,
     chatSettings,
     isSessionWorking,

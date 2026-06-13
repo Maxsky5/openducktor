@@ -65,7 +65,7 @@ const createCompletedToolSession = (tool: string, id = tool, input?: Record<stri
 const createBaseArgs = (): HookArgs => ({
   viewRole: "build",
   activeSession: null,
-  isSessionHistoryHydrating: false,
+  isSessionHistoryLoading: false,
   refreshWorktree: refreshWorktreeMock,
 });
 
@@ -144,7 +144,7 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         role: "build",
         messages: [],
       }),
-      isSessionHistoryHydrating: true,
+      isSessionHistoryLoading: true,
     });
 
     try {
@@ -154,14 +154,14 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       await harness.update({
         ...createBaseArgs(),
         activeSession: createCompletedToolSession("apply_patch", "tool-1"),
-        isSessionHistoryHydrating: true,
+        isSessionHistoryLoading: true,
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
 
       await harness.update({
         ...createBaseArgs(),
         activeSession: createCompletedToolSession("apply_patch", "tool-1"),
-        isSessionHistoryHydrating: false,
+        isSessionHistoryLoading: false,
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
     } finally {

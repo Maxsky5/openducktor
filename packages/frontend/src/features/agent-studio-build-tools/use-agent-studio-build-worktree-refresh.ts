@@ -12,7 +12,7 @@ import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-po
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
   activeSession: AgentSessionState | null;
-  isSessionHistoryHydrating: boolean;
+  isSessionHistoryLoading: boolean;
   refreshWorktree: GitDiffRefresh;
 };
 
@@ -54,7 +54,7 @@ const replaceSetContents = (target: Set<string>, source: Set<string>): void => {
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
-  isSessionHistoryHydrating,
+  isSessionHistoryLoading,
   refreshWorktree,
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
   const processedToolMessageKeysRef = useRef<Set<string> | null>(null);
@@ -72,7 +72,7 @@ export function useAgentStudioBuildWorktreeRefresh({
       return;
     }
 
-    if (isSessionHistoryHydrating) {
+    if (isSessionHistoryLoading) {
       if (!wasSessionHistoryHydratingRef.current) {
         completedToolKeysBeforeHydrationRef.current =
           collectCompletedGitPanelRefreshToolKeys(activeSession);
@@ -132,11 +132,5 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (shouldRefresh) {
       void refreshWorktree("soft");
     }
-  }, [
-    activeSession,
-    isSessionHistoryHydrating,
-    processedToolMessageKeys,
-    refreshWorktree,
-    viewRole,
-  ]);
+  }, [activeSession, isSessionHistoryLoading, processedToolMessageKeys, refreshWorktree, viewRole]);
 }

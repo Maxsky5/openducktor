@@ -13,7 +13,11 @@ import type {
 } from "@/components/features/agents";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { SessionRepoReadinessState as AgentStudioReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  type SessionRepoReadinessState as AgentStudioReadinessState,
+  deriveAgentStudioSelectedSessionLifecycle,
+  type SelectedAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -162,23 +166,34 @@ type BuildAgentStudioPageModelsArgsInput = {
 
 type BuildSelectedSessionContextFromOrchestrationInput = Omit<
   AgentStudioSelectedSessionContextInput,
-  "isTaskHydrating" | "sessionRuntimeDataError"
+  "lifecycle" | "sessionRuntimeDataError"
 > & {
   viewSessionRuntimeDataError?: string | null;
   isActiveTaskReady: boolean;
   isActiveTaskReadinessFailed: boolean;
+  isSessionSelectionResolving: boolean;
+  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
 export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
   viewSessionRuntimeDataError,
   isActiveTaskReady,
   isActiveTaskReadinessFailed,
+  isSessionSelectionResolving,
+  viewSessionLifecycle,
   ...input
 }: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext =>
   buildAgentStudioSelectedSessionContext({
     ...input,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
-    isTaskHydrating: Boolean(input.taskId && !isActiveTaskReady && !isActiveTaskReadinessFailed),
+    lifecycle: deriveAgentStudioSelectedSessionLifecycle({
+      taskId: input.taskId,
+      isActiveTaskReady,
+      isActiveTaskReadinessFailed,
+      isSessionSelectionResolving,
+      isRuntimeStarting: input.readiness.isRuntimeStarting,
+      selectedSessionLifecycle: viewSessionLifecycle,
+    }),
   });
 
 export const buildAgentStudioPageModelsArgs = ({
@@ -403,11 +418,8 @@ export function useAgentStudioOrchestrationController({
         hasActiveGitConflict,
         isActiveTaskReady,
         isActiveTaskReadinessFailed: selection.isActiveTaskReadinessFailed,
-        isSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,
-        isSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+        viewSessionLifecycle: selection.viewSessionLifecycle,
         isSessionSelectionResolving: selection.isSessionSelectionResolving,
-        isWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
-        isSessionHistoryLoadFailed: selection.isViewSessionHistoryLoadFailed,
         activeSessionContextUsage,
         documents: {
           specDoc,
@@ -452,10 +464,7 @@ export function useAgentStudioOrchestrationController({
       selection.allSessionSummaries,
       selection.isActiveTaskReadinessFailed,
       selection.isSessionSelectionResolving,
-      selection.isViewSessionHistoryHydrated,
-      selection.isViewSessionHistoryLoadFailed,
-      selection.isViewSessionHistoryHydrating,
-      selection.isViewSessionWaitingForRuntimeReadiness,
+      selection.viewSessionLifecycle,
       specDoc,
       startLaunchKickoff,
       viewActiveSession,

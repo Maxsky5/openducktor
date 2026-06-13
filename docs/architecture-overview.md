@@ -24,7 +24,7 @@ Current scope:
 | Layer | Primary modules | Owns | Must not own |
 |---|---|---|---|
 | UI presentation | `packages/frontend/src/pages`, `packages/frontend/src/components` | Rendering, local interaction state, visual workflow affordances | Workflow authority, status transition rules |
-| Frontend state/orchestration | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | App-level state slices, async operation orchestration, session hydration | Persisted schema definitions, task-store mutation semantics |
+| Frontend state/orchestration | `packages/frontend/src/state/app-state-provider.tsx`, `packages/frontend/src/state/operations/*` | App-level state slices, async operation orchestration, session read model and history loading | Persisted schema definitions, task-store mutation semantics |
 | Shared contracts | `packages/contracts/src/*` | Runtime-validated schemas for tasks, sessions, workflows, host commands, and MCP payloads | Runtime orchestration, host process control |
 | Core services and ports | `packages/core/src/ports/agent-engine.ts`, `packages/core/src/services/*`, `packages/core/src/types/agent-orchestrator.ts` | `AgentEnginePort`, role/tool policy, tool normalization, prompt composition helpers | Shell invocation details, task-store adapter calls |
 | Host client and runtime adapters | `packages/host-client/src/*`, `packages/adapters-opencode-sdk/src/*`, `packages/adapters-codex-app-server/src/*` | Typed host-command client plus OpenCode/Codex `AgentEnginePort` adapters | Business workflow policy ownership, shell transport ownership |

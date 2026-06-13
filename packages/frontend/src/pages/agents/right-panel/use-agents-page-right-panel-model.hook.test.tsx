@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createHookHarness,
+  createSelectedSessionLifecycleFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
@@ -168,7 +169,7 @@ describe("useAgentsPageRightPanelModel", () => {
       viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
       panelKind: "documents",
       isPanelOpen: false,
-      isViewSessionHistoryHydrating: false,
+      viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
       documentsModel: { activeDocument: null },
       repoSettings: { defaultTargetBranch: null } as never,
       worktreeRecoverySignal: 0,
@@ -202,7 +203,7 @@ describe("useAgentsPageRightPanelModel", () => {
       viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
       panelKind: "documents",
       isPanelOpen: false,
-      isViewSessionHistoryHydrating: false,
+      viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
       documentsModel: { activeDocument: null },
       repoSettings: { defaultTargetBranch: null } as never,
       worktreeRecoverySignal: 1,

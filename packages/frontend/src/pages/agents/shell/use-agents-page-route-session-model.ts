@@ -163,7 +163,7 @@ export function useAgentsPageRouteSessionModel({
     onContextSwitchIntent: signalContextSwitchIntent,
   });
   const isSessionSelectionResolving =
-    isSelectionIntentResolving || selection.isSelectedSessionLoading;
+    isSelectionIntentResolving || selection.viewSessionLifecycle.isResolvingSession;
 
   const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
     workspaceRepoPath,

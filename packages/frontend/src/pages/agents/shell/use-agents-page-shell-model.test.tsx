@@ -64,7 +64,7 @@ type SelectionState = {
   isActiveTaskReady: boolean;
   isActiveTaskReadinessFailed: boolean;
   isViewSessionHistoryLoadFailed: boolean;
-  isViewSessionHistoryHydrating: boolean;
+  isViewSessionHistoryLoading: boolean;
   isSelectedSessionLoading: boolean;
   sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
@@ -205,7 +205,7 @@ let selectionState: SelectionState = {
   isActiveTaskReady: true,
   isActiveTaskReadinessFailed: false,
   isViewSessionHistoryLoadFailed: false,
-  isViewSessionHistoryHydrating: false,
+  isViewSessionHistoryLoading: false,
   isSelectedSessionLoading: false,
   sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
@@ -483,7 +483,7 @@ beforeEach(async () => {
     isActiveTaskReady: true,
     isActiveTaskReadinessFailed: false,
     isViewSessionHistoryLoadFailed: false,
-    isViewSessionHistoryHydrating: false,
+    isViewSessionHistoryLoading: false,
     isSelectedSessionLoading: false,
     sessionsForTask: [session],
     handleCreateTab: mock((_taskId: string) => {}),

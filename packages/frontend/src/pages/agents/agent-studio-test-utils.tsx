@@ -14,6 +14,7 @@ import {
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
+import type { AgentStudioSelectedSessionLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
@@ -52,6 +53,22 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
   startedAt: "2026-02-22T10:00:00.000Z",
   workingDirectory: "/repo",
 };
+
+export const createSelectedSessionLifecycleFixture = (
+  overrides: Partial<AgentStudioSelectedSessionLifecycle> = {},
+): AgentStudioSelectedSessionLifecycle => ({
+  externalSessionId: "session-1",
+  phase: "ready",
+  canRenderHistory: true,
+  isResolvingSession: false,
+  isLoadingHistory: false,
+  isHistoryLoadFailed: false,
+  isWaitingForRuntimeReadiness: false,
+  shouldEnsureReadyForView: false,
+  isTaskViewResolving: false,
+  isSessionSelectionResolving: false,
+  ...overrides,
+});
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,

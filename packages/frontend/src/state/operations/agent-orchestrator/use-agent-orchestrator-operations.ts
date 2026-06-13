@@ -36,7 +36,7 @@ type UseAgentOrchestratorOperationsArgs = {
   /**
    * Optional dependency seam for tests and specialized callers.
    * Pass a stable reference, such as a module-level object or a `useMemo` result;
-   * an inline object recreates downstream session hydration callbacks on every render.
+   * an inline object recreates downstream session loading callbacks on every render.
    */
   dependencies?: AgentOrchestratorDependencies;
 };

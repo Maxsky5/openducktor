@@ -12,6 +12,7 @@ import type {
   useAgentStudioOrchestrationController,
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
@@ -42,7 +43,7 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  isViewSessionHistoryHydrating: boolean;
+  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   worktreeRecoverySignal: number;
 };
@@ -131,13 +132,14 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewSelectedTask,
     panelKind,
     isPanelOpen,
-    isViewSessionHistoryHydrating,
+    viewSessionLifecycle,
     repoSettings,
     worktreeRecoverySignal,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
   const sessionRole = session.role;
+  const isSessionHistoryLoading = viewSessionLifecycle.isLoadingHistory;
   const gitPanelContextMode: AgentStudioGitPanelContextMode =
     sessionRole === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
@@ -148,7 +150,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewTaskId,
     viewSelectedTaskId: viewSelectedTask?.id ?? null,
   });
-  const isSessionContextStable = sessionRole !== "build" || !isViewSessionHistoryHydrating;
+  const isSessionContextStable = sessionRole !== "build" || !isSessionHistoryLoading;
   const hasSelectedTask = selectedTaskId != null;
   const taskTargetBranchState = useMemo(
     () =>
@@ -179,7 +181,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewSelectedTask,
     panelKind,
     isPanelOpen,
-    isViewSessionHistoryHydrating,
+    viewSessionLifecycle,
   });
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;

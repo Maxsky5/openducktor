@@ -2,7 +2,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentChatThreadContextArgs = {
   activeSession: AgentSessionState | null;
-  isTaskHydrating: boolean;
+  isTaskViewResolving: boolean;
   isSessionSelectionResolving: boolean;
 };
 
@@ -14,11 +14,11 @@ type AgentChatThreadContext = {
 
 export const useAgentChatThreadContext = ({
   activeSession,
-  isTaskHydrating,
+  isTaskViewResolving,
   isSessionSelectionResolving,
 }: UseAgentChatThreadContextArgs): AgentChatThreadContext => {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const shouldClearThread = isTaskHydrating || isSessionSelectionResolving;
+  const shouldClearThread = isTaskViewResolving || isSessionSelectionResolving;
 
   return {
     threadSession: shouldClearThread ? null : activeSession,

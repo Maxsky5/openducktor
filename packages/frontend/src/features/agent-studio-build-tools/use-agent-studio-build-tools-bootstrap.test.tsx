@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
@@ -32,7 +33,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   viewSelectedTask: null,
   panelKind: "build_tools",
   isPanelOpen: true,
-  isViewSessionHistoryHydrating: false,
+  viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
   ...overrides,
 });
 
@@ -46,7 +47,11 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
             workingDirectory: "/repo/worktree",
           }),
         ),
-        isViewSessionHistoryHydrating: true,
+        viewSessionLifecycle: createSelectedSessionLifecycleFixture({
+          phase: "loading_history",
+          canRenderHistory: false,
+          isLoadingHistory: true,
+        }),
       }),
     );
 

@@ -259,7 +259,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().isSelectedSessionLoading).toBe(true);
+      expect(harness.getLatest().viewSessionLifecycle.isResolvingSession).toBe(true);
       expect(harness.getLatest().viewActiveSession).toBeNull();
 
       const loadedSession = createSession("task-1", "session-reloaded", {
@@ -277,7 +277,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().isSelectedSessionLoading).toBe(false);
+      expect(harness.getLatest().viewSessionLifecycle.isResolvingSession).toBe(false);
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-reloaded");
     } finally {
       await harness.unmount();
@@ -310,9 +310,9 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.isSelectedSessionLoading).toBe(true);
-      expect(latest.isViewSessionHistoryHydrating).toBe(true);
-      expect(latest.isViewSessionWaitingForRuntimeReadiness).toBe(true);
+      expect(latest.viewSessionLifecycle.isResolvingSession).toBe(true);
+      expect(latest.viewSessionLifecycle.isLoadingHistory).toBe(true);
+      expect(latest.viewSessionLifecycle.isWaitingForRuntimeReadiness).toBe(true);
       expect(latest.viewActiveSession).toBeNull();
     } finally {
       await harness.unmount();
@@ -340,10 +340,10 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.isSelectedSessionLoading).toBe(false);
-      expect(latest.isViewSessionHistoryLoadFailed).toBe(true);
-      expect(latest.isViewSessionHistoryHydrating).toBe(false);
-      expect(latest.isViewSessionWaitingForRuntimeReadiness).toBe(false);
+      expect(latest.viewSessionLifecycle.isResolvingSession).toBe(false);
+      expect(latest.viewSessionLifecycle.isHistoryLoadFailed).toBe(true);
+      expect(latest.viewSessionLifecycle.isLoadingHistory).toBe(false);
+      expect(latest.viewSessionLifecycle.isWaitingForRuntimeReadiness).toBe(false);
       expect(latest.viewActiveSession).toBeNull();
     } finally {
       await harness.unmount();

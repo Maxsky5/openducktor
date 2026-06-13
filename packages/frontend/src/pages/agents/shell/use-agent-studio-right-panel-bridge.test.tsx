@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
@@ -37,7 +38,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       status: "running",
       workingDirectory: "/repo/worktrees/task-1",
     }),
-    isViewSessionHistoryHydrating: false,
+    viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
   },
   panel: createPanelState(),
   documentsModel: {

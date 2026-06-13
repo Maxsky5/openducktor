@@ -13,7 +13,10 @@ import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
-import type { SessionRepoReadinessState as AgentStudioReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type {
+  SessionRepoReadinessState as AgentStudioReadinessState,
+  SelectedAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
   AgentSessionRouteIdentity,
   AgentSessionState,
@@ -104,11 +107,7 @@ export type AgentStudioSelectionControllerResult = {
   viewLaunchActionId: SessionLaunchActionId;
   isActiveTaskReady: boolean;
   isActiveTaskReadinessFailed: boolean;
-  isViewSessionHistoryHydrated: boolean;
-  isViewSessionHistoryLoadFailed: boolean;
-  isViewSessionHistoryHydrating: boolean;
-  isViewSessionWaitingForRuntimeReadiness: boolean;
-  isSelectedSessionLoading: boolean;
+  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
@@ -473,34 +472,21 @@ export function useAgentStudioSelectionController({
   const activeSessionRuntimeData = isActiveSessionSameAsViewSession
     ? viewSessionRuntimeData
     : activeSessionRuntimeDataForDistinctSession;
-  const isSelectedSessionLoading =
-    Boolean(activeWorkspace) &&
-    !isRepoNavigationBoundaryPending &&
-    viewSessionReadinessState !== "blocked" &&
-    sessionReadModelError === null &&
-    viewSelectedSessionRoute !== null &&
-    viewSessionRuntimeData.session === null;
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"
       ? resolveBuildContinuationLaunchAction(viewSelectedTask)
       : firstLaunchAction(viewRole);
-  const {
-    isActiveTaskReady,
-    isActiveTaskReadinessFailed,
-    isActiveSessionHistoryLoaded,
-    isActiveSessionHistoryLoadFailed,
-    isActiveSessionHistoryLoading,
-    isWaitingForRuntimeReadiness,
-  } = useAgentChatSessionReadiness({
-    activeWorkspace,
-    activeTaskId: viewTaskId,
-    selectedSessionRoute: viewSelectedSessionRoute,
-    activeSession: viewSessionRuntimeData.session,
-    repoReadinessState: viewSessionReadinessState,
-    sessionLoadError: sessionReadModelError,
-    ensureSessionReadyForView,
-  });
+  const { isActiveTaskReady, isActiveTaskReadinessFailed, selectedSessionLifecycle } =
+    useAgentChatSessionReadiness({
+      activeWorkspace,
+      activeTaskId: viewTaskId,
+      selectedSessionRoute: viewSelectedSessionRoute,
+      activeSession: viewSessionRuntimeData.session,
+      repoReadinessState: viewSessionReadinessState,
+      sessionLoadError: sessionReadModelError,
+      ensureSessionReadyForView,
+    });
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
@@ -530,11 +516,7 @@ export function useAgentStudioSelectionController({
       viewLaunchActionId,
       isActiveTaskReady,
       isActiveTaskReadinessFailed,
-      isViewSessionHistoryHydrated: isActiveSessionHistoryLoaded,
-      isViewSessionHistoryLoadFailed: isActiveSessionHistoryLoadFailed,
-      isViewSessionHistoryHydrating: isActiveSessionHistoryLoading,
-      isViewSessionWaitingForRuntimeReadiness: isWaitingForRuntimeReadiness,
-      isSelectedSessionLoading,
+      viewSessionLifecycle: selectedSessionLifecycle,
     }),
     [
       activeSessionRuntimeData.runtimeDataError,
@@ -546,14 +528,10 @@ export function useAgentStudioSelectionController({
       handleCreateTab,
       handleReorderTab,
       handleSelectTab,
-      isActiveSessionHistoryLoaded,
-      isActiveSessionHistoryLoadFailed,
-      isActiveSessionHistoryLoading,
       isActiveTaskReady,
       isActiveTaskReadinessFailed,
       isLoadingTasks,
-      isWaitingForRuntimeReadiness,
-      isSelectedSessionLoading,
+      selectedSessionLifecycle,
       selectedSessionById,
       selectedTask,
       sessions,

@@ -180,7 +180,7 @@ type AgentChatComposerConfig = {
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;
   session: AgentSessionState | null;
-  isTaskHydrating: boolean;
+  isTaskViewResolving: boolean;
   isSessionSelectionResolving: boolean;
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
@@ -203,7 +203,7 @@ type UseAgentChatSurfaceModelArgs = {
 export function useAgentChatSurfaceModel({
   mode,
   session,
-  isTaskHydrating,
+  isTaskViewResolving,
   isSessionSelectionResolving,
   chatSettings,
   isSessionWorking,
@@ -227,7 +227,7 @@ export function useAgentChatSurfaceModel({
   >({});
   const { threadSession, activeExternalSessionId, isContextSwitching } = useAgentChatThreadContext({
     activeSession: session,
-    isTaskHydrating,
+    isTaskViewResolving,
     isSessionSelectionResolving,
   });
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);

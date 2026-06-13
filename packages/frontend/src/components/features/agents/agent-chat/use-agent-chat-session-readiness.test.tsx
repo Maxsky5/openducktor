@@ -58,8 +58,9 @@ describe("useAgentChatSessionReadiness", () => {
       await harness.mount();
 
       expect(ensureSessionReadyForView).not.toHaveBeenCalled();
-      expect(harness.getLatest().isActiveSessionHistoryLoaded).toBe(true);
-      expect(harness.getLatest().isActiveSessionHistoryLoading).toBe(false);
+      expect(harness.getLatest().selectedSessionLifecycle.canRenderHistory).toBe(true);
+      expect(harness.getLatest().selectedSessionLifecycle.isLoadingHistory).toBe(false);
+      expect(harness.getLatest().selectedSessionLifecycle.phase).toBe("ready");
     } finally {
       await harness.unmount();
     }
@@ -85,9 +86,10 @@ describe("useAgentChatSessionReadiness", () => {
       await harness.mount();
 
       expect(ensureSessionReadyForView).not.toHaveBeenCalled();
-      expect(harness.getLatest().isActiveSessionHistoryLoaded).toBe(false);
-      expect(harness.getLatest().isActiveSessionHistoryLoading).toBe(true);
-      expect(harness.getLatest().isWaitingForRuntimeReadiness).toBe(true);
+      expect(harness.getLatest().selectedSessionLifecycle.canRenderHistory).toBe(false);
+      expect(harness.getLatest().selectedSessionLifecycle.isLoadingHistory).toBe(true);
+      expect(harness.getLatest().selectedSessionLifecycle.isWaitingForRuntimeReadiness).toBe(true);
+      expect(harness.getLatest().selectedSessionLifecycle.phase).toBe("waiting_for_runtime");
     } finally {
       await harness.unmount();
     }
@@ -113,8 +115,8 @@ describe("useAgentChatSessionReadiness", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().isActiveSessionHistoryLoaded).toBe(false);
-      expect(harness.getLatest().isActiveSessionHistoryLoading).toBe(true);
+      expect(harness.getLatest().selectedSessionLifecycle.canRenderHistory).toBe(false);
+      expect(harness.getLatest().selectedSessionLifecycle.isLoadingHistory).toBe(true);
       await harness.waitFor(() => ensureSessionReadyForView.mock.calls.length === 1);
       if (resolveReady) {
         resolveReady();
@@ -123,7 +125,7 @@ describe("useAgentChatSessionReadiness", () => {
         ...hookArgs,
         activeSession: createSession(),
       });
-      await harness.waitFor((state) => !state.isActiveSessionHistoryLoading);
+      await harness.waitFor((state) => !state.selectedSessionLifecycle.isLoadingHistory);
     } finally {
       await harness.unmount();
     }

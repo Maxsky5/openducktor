@@ -36,14 +36,14 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
   isPanelOpen,
   viewRole,
   activeSession,
-  isSessionHistoryHydrating,
+  viewSessionLifecycle,
   refreshWorktreeRef,
 }: {
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
   viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
-  isSessionHistoryHydrating: boolean;
+  viewSessionLifecycle: UseAgentsPageRightPanelModelArgs["viewSessionLifecycle"];
   refreshWorktreeRef: WorktreeRefreshRef;
 }): null {
   const refreshWorktree = useForwardedWorktreeRefresh(refreshWorktreeRef);
@@ -51,7 +51,7 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
   useAgentStudioBuildWorktreeRefresh({
     viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
     activeSession,
-    isSessionHistoryHydrating,
+    isSessionHistoryLoading: viewSessionLifecycle.isLoadingHistory,
     refreshWorktree,
   });
 

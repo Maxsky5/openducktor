@@ -21,7 +21,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     externalSessionId: "external-a",
     role: "spec",
   }),
-  isTaskHydrating: false,
+  isTaskViewResolving: false,
   isSessionSelectionResolving: false,
   ...overrides,
 });
@@ -149,7 +149,7 @@ describe("useAgentChatThreadContext", () => {
     await harness.update(
       createHookArgs({
         activeSession: session,
-        isTaskHydrating: true,
+        isTaskViewResolving: true,
       }),
     );
     expect(harness.getLatest().threadSession).toBeNull();
@@ -161,7 +161,7 @@ describe("useAgentChatThreadContext", () => {
     await harness.update(
       createHookArgs({
         activeSession: session,
-        isTaskHydrating: false,
+        isTaskViewResolving: false,
       }),
     );
     expect(harness.getLatest().threadSession?.externalSessionId).toBe("external-a");

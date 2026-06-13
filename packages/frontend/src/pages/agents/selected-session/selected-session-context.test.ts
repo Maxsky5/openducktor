@@ -5,7 +5,11 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createAgentSessionFixture, createTaskCardFixture } from "../agent-studio-test-utils";
+import {
+  createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
+  createTaskCardFixture,
+} from "../agent-studio-test-utils";
 import {
   type AgentStudioSelectedSessionContextInput,
   buildAgentStudioSelectedSessionContext,
@@ -45,12 +49,7 @@ const createInput = (
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
-    isTaskHydrating: false,
-    isSessionHistoryHydrated: true,
-    isSessionHistoryHydrating: false,
-    isSessionSelectionResolving: false,
-    isWaitingForRuntimeReadiness: false,
-    isSessionHistoryLoadFailed: false,
+    lifecycle: createSelectedSessionLifecycleFixture(),
     activeSessionContextUsage: null,
     documents: {
       specDoc: createDoc("spec"),
@@ -221,7 +220,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
         sessionRuntimeDataError: "session todos unavailable",
-        isWaitingForRuntimeReadiness: true,
+        lifecycle: createSelectedSessionLifecycleFixture({
+          phase: "waiting_for_runtime",
+          isWaitingForRuntimeReadiness: true,
+        }),
         readiness: {
           agentStudioReadinessState: "blocked",
           agentStudioReady: false,
@@ -234,7 +236,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.runtime.sessionRuntimeDataError).toBe("session todos unavailable");
-    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(true);
+    expect(context.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(true);
     expect(context.runtime.runtimeReadiness).toMatchObject({
       readinessState: "blocked",
       isReady: false,
@@ -250,7 +252,10 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         activeSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        isWaitingForRuntimeReadiness: false,
+        lifecycle: createSelectedSessionLifecycleFixture({
+          phase: "waiting_for_runtime",
+          isWaitingForRuntimeReadiness: true,
+        }),
         readiness: {
           agentStudioReadinessState: "checking",
           agentStudioReady: false,
@@ -262,7 +267,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(true);
+    expect(context.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(true);
   });
 
   test("does not treat generic readiness checking as runtime startup", () => {
@@ -271,7 +276,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         activeSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        isWaitingForRuntimeReadiness: false,
+        lifecycle: createSelectedSessionLifecycleFixture(),
         readiness: {
           agentStudioReadinessState: "checking",
           agentStudioReady: false,
@@ -283,7 +288,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(false);
+    expect(context.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(false);
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {

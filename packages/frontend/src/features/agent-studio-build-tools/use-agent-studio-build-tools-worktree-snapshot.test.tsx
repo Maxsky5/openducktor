@@ -6,6 +6,7 @@ import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
   createDeferred,
+  createSelectedSessionLifecycleFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -112,7 +113,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   viewSelectedTask: createTaskCardFixture({ id: "task-24" }),
   panelKind: "build_tools",
   isPanelOpen: true,
-  isViewSessionHistoryHydrating: false,
+  viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
   repoSettings: null,
   worktreeRecoverySignal: 0,
   ...overrides,

@@ -6,7 +6,7 @@ import {
   type SubagentMessage,
 } from "./subagent-messages";
 
-const resolvePreferredHydratedCorrelationKey = (
+const resolvePreferredLoadedCorrelationKey = (
   existingMeta: SubagentMessage["meta"],
   incomingMeta: SubagentMessage["meta"],
 ): string => {
@@ -40,7 +40,7 @@ const resolvePreferredHydratedCorrelationKey = (
   return existingMeta.correlationKey;
 };
 
-const matchesHydratedSubagentMessage = (
+const matchesLoadedSubagentMessage = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
@@ -57,7 +57,7 @@ const matchesHydratedSubagentMessage = (
   return false;
 };
 
-const matchesHydratedSubagentActivity = (
+const matchesLoadedSubagentActivity = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
@@ -77,7 +77,7 @@ const matchesHydratedSubagentActivity = (
   );
 };
 
-const shouldIgnoreIncomingHydratedSubagent = (
+const shouldIgnoreIncomingLoadedSubagent = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
@@ -85,32 +85,32 @@ const shouldIgnoreIncomingHydratedSubagent = (
     existingMessage.meta.externalSessionId &&
       !incomingMessage.meta.externalSessionId &&
       existingMessage.meta.correlationKey !== incomingMessage.meta.correlationKey &&
-      matchesHydratedSubagentActivity(existingMessage, incomingMessage),
+      matchesLoadedSubagentActivity(existingMessage, incomingMessage),
   );
 };
 
-const canMergeHydratedSubagentMessage = (
+const canMergeLoadedSubagentMessage = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): boolean => {
-  if (matchesHydratedSubagentMessage(existingMessage, incomingMessage)) {
+  if (matchesLoadedSubagentMessage(existingMessage, incomingMessage)) {
     return true;
   }
 
   return Boolean(
     incomingMessage.meta.externalSessionId &&
       !existingMessage.meta.externalSessionId &&
-      matchesHydratedSubagentActivity(existingMessage, incomingMessage),
+      matchesLoadedSubagentActivity(existingMessage, incomingMessage),
   );
 };
 
-const mergeHydratedSubagentMessages = (
+const mergeLoadedSubagentMessages = (
   existingMessage: SubagentMessage,
   incomingMessage: SubagentMessage,
 ): SubagentMessage => {
   const existingMeta = existingMessage.meta;
   const incomingMeta = incomingMessage.meta;
-  const correlationKey = resolvePreferredHydratedCorrelationKey(existingMeta, incomingMeta);
+  const correlationKey = resolvePreferredLoadedCorrelationKey(existingMeta, incomingMeta);
   const nextMeta = mergeSubagentMeta(existingMeta, {
     ...incomingMeta,
     correlationKey,
@@ -124,7 +124,7 @@ const mergeHydratedSubagentMessages = (
   };
 };
 
-const findLastHydratedSubagentIndex = (
+const findLastLoadedSubagentIndex = (
   messages: AgentChatMessage[],
   incomingMessage: SubagentMessage,
   predicate: (existingMessage: SubagentMessage, incomingMessage: SubagentMessage) => boolean,
@@ -146,24 +146,24 @@ export const appendHistorySubagentMessage = (
   messages: AgentChatMessage[],
   incomingMessage: SubagentMessage,
 ): void => {
-  const ignoredIndex = findLastHydratedSubagentIndex(
+  const ignoredIndex = findLastLoadedSubagentIndex(
     messages,
     incomingMessage,
-    shouldIgnoreIncomingHydratedSubagent,
+    shouldIgnoreIncomingLoadedSubagent,
   );
   if (ignoredIndex >= 0) {
     return;
   }
 
-  const existingIndex = findLastHydratedSubagentIndex(
+  const existingIndex = findLastLoadedSubagentIndex(
     messages,
     incomingMessage,
-    canMergeHydratedSubagentMessage,
+    canMergeLoadedSubagentMessage,
   );
   if (existingIndex >= 0) {
     const existingMessage = messages[existingIndex];
     if (isSubagentMessage(existingMessage)) {
-      messages[existingIndex] = mergeHydratedSubagentMessages(existingMessage, incomingMessage);
+      messages[existingIndex] = mergeLoadedSubagentMessages(existingMessage, incomingMessage);
       return;
     }
   }

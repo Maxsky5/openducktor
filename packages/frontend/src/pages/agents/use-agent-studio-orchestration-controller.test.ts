@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import {
+  createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
+  createTaskCardFixture,
+} from "./agent-studio-test-utils";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
@@ -87,12 +91,7 @@ const baseArgs: BuildArgs = {
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
-    isTaskHydrating: false,
-    isSessionHistoryHydrated: true,
-    isSessionHistoryHydrating: false,
-    isSessionSelectionResolving: false,
-    isWaitingForRuntimeReadiness: false,
-    isSessionHistoryLoadFailed: false,
+    lifecycle: createSelectedSessionLifecycleFixture(),
     activeSessionContextUsage: null,
     documents: baseDocuments,
     readiness: baseReadiness,
@@ -154,9 +153,9 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
-    expect(mapped.selectedSession.runtime.isSessionHistoryHydrated).toBe(true);
-    expect(mapped.selectedSession.runtime.isSessionHistoryLoadFailed).toBe(false);
-    expect(mapped.selectedSession.runtime.isWaitingForRuntimeReadiness).toBe(false);
+    expect(mapped.selectedSession.runtime.lifecycle.canRenderHistory).toBe(true);
+    expect(mapped.selectedSession.runtime.lifecycle.isHistoryLoadFailed).toBe(false);
+    expect(mapped.selectedSession.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(false);
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
@@ -222,11 +221,13 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       hasActiveGitConflict: true,
       isActiveTaskReady: false,
       isActiveTaskReadinessFailed: false,
-      isSessionHistoryHydrated: false,
-      isSessionHistoryHydrating: true,
       isSessionSelectionResolving: true,
-      isWaitingForRuntimeReadiness: true,
-      isSessionHistoryLoadFailed: false,
+      viewSessionLifecycle: createSelectedSessionLifecycleFixture({
+        phase: "loading_history",
+        canRenderHistory: false,
+        isLoadingHistory: true,
+        isWaitingForRuntimeReadiness: true,
+      }),
       activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
       documents: baseDocuments,
       readiness: {
@@ -242,12 +243,12 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     });
 
-    expect(context.runtime.isTaskHydrating).toBe(true);
+    expect(context.runtime.lifecycle.isTaskViewResolving).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(context.runtime.isSessionSelectionResolving).toBe(true);
-    expect(context.runtime.isSessionHistoryHydrating).toBe(true);
-    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(true);
+    expect(context.runtime.lifecycle.isSessionSelectionResolving).toBe(true);
+    expect(context.runtime.lifecycle.isLoadingHistory).toBe(true);
+    expect(context.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(true);
     expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
     expect(context.workflow.selectedInteractionRole).toBe("planner");
     expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
@@ -266,13 +267,16 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
         ...baseArgs.selectedSession,
         runtime: {
           ...baseArgs.selectedSession.runtime,
-          isTaskHydrating: true,
-          isSessionHistoryLoadFailed: true,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            isTaskViewResolving: true,
+            isHistoryLoadFailed: true,
+            phase: "history_failed",
+          }),
         },
       },
     });
 
-    expect(failed.selectedSession.runtime.isTaskHydrating).toBe(true);
-    expect(failed.selectedSession.runtime.isSessionHistoryLoadFailed).toBe(true);
+    expect(failed.selectedSession.runtime.lifecycle.isTaskViewResolving).toBe(true);
+    expect(failed.selectedSession.runtime.lifecycle.isHistoryLoadFailed).toBe(true);
   });
 });

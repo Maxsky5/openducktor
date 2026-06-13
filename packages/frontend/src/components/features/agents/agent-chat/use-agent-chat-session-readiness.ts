@@ -2,6 +2,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useEffect, useMemo } from "react";
 import {
   deriveSelectedAgentSessionViewLifecycle,
+  type SelectedAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
@@ -30,10 +31,7 @@ type UseAgentChatSessionReadinessParams = {
 export type AgentChatSessionReadinessResult = {
   isActiveTaskReady: boolean;
   isActiveTaskReadinessFailed: boolean;
-  isActiveSessionHistoryLoaded: boolean;
-  isActiveSessionHistoryLoadFailed: boolean;
-  isActiveSessionHistoryLoading: boolean;
-  isWaitingForRuntimeReadiness: boolean;
+  selectedSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
 export function useAgentChatSessionReadiness({
@@ -102,22 +100,9 @@ export function useAgentChatSessionReadiness({
     selectedSessionViewLifecycle,
   ]);
 
-  const hasSelectedSession = selectedSessionViewLifecycle.externalSessionId !== null;
-
   return {
     isActiveTaskReady: Boolean(activeWorkspace && activeTaskId),
     isActiveTaskReadinessFailed: false,
-    isActiveSessionHistoryLoaded: hasSelectedSession
-      ? selectedSessionViewLifecycle.canRenderHistory
-      : false,
-    isActiveSessionHistoryLoadFailed: hasSelectedSession
-      ? selectedSessionViewLifecycle.isHistoryLoadFailed
-      : false,
-    isActiveSessionHistoryLoading: hasSelectedSession
-      ? selectedSessionViewLifecycle.isLoadingHistory
-      : false,
-    isWaitingForRuntimeReadiness: hasSelectedSession
-      ? selectedSessionViewLifecycle.isWaitingForRuntimeReadiness
-      : false,
+    selectedSessionLifecycle: selectedSessionViewLifecycle,
   };
 }

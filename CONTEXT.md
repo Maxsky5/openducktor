@@ -260,25 +260,25 @@ _Avoid_: Blocked, failed Task, QA Rejection
 The history of **Agent Sessions** attached to a specific **Task**, used to inspect or resume prior task-bound work. **Task Session History** is not the same thing as the **Transcript**.
 _Avoid_: Transcript, runtime history, browser history
 
-**Session Hydration**:
-The process of loading a persisted **Agent Session** back into Agent Studio with enough runtime, model, working-directory, and history information to display or continue it. **Session Hydration** may include **Transcript Hydration** and **Runtime Attachment** recovery.
-_Avoid_: fallback loading, session start, runtime start
+**Repo Session Read Model**:
+The startup projection that combines persisted **Task Session History** records with one runtime-owned **Session Presence Snapshot** per runtime kind and working directory. The **Repo Session Read Model** owns the session list shown after reload; it is not a second session store.
+_Avoid_: session hydration, reconciliation, presence store, reattach
 
-**Transcript Hydration**:
-The part of **Session Hydration** that loads or reconstructs the **Transcript** from runtime-owned session data. **Transcript Hydration** can be not requested, hydrating, hydrated, or failed; it should not invent missing runtime session data.
-_Avoid_: Transcript, live stream, reload
+**Session History Load**:
+The runtime-owned read that loads the visible **Transcript**, **Session Todos**, and other session-scoped runtime data for a selected **Agent Session**. **Session History Load** has ordinary loading, loaded, and failed states; it should not invent missing runtime session data.
+_Avoid_: transcript hydration, runtime recovery, fallback loading
 
-**Runtime Attachment**:
-The live connection between an **Agent Session** and the **Runtime Instance** that can answer session-scoped reads, such as **Transcript**, **Session Todos**, **Session Context Usage**, **Slash Commands**, **Skills**, or file search. **Runtime Attachment** is not persisted as a live route in **Task Metadata**.
-_Avoid_: Runtime Instance, Runtime, persisted endpoint
+**Runtime Session Reference**:
+The durable reference used to ask a **Runtime** about one **Agent Session**: runtime kind, repository path, working directory, and external session id, plus task or role context when a user sends or replies. A **Runtime Session Reference** is not a live route.
+_Avoid_: runtime attachment, runtime endpoint, runtime route
 
-**Runtime Recovery**:
-The process of restoring enough **Runtime Attachment** for an existing **Agent Session** to read runtime-owned session data again. **Runtime Recovery** is session/runtime state, not a **Task Workflow** action.
-_Avoid_: fallback runtime, repo default runtime, session start
+**Runtime Route Resolution**:
+The low-level registry step that resolves a **Runtime Session Reference** to the live **Runtime Route** only when an adapter call needs to reach the **Runtime Instance**. **Runtime Route Resolution** must fail fast when the matching runtime is unavailable.
+_Avoid_: runtime recovery, repo default fallback, persisted endpoint
 
-**Session Presence**:
-The runtime-backed availability signal for an **Agent Session**. **Session Presence** tells OpenDucktor whether session data can be read from the **Runtime**, must be recovered through **Runtime Recovery**, or is only available from persisted session records.
-_Avoid_: Session Status, Task Status, Runtime Instance
+**Session Presence Snapshot**:
+The runtime-backed startup snapshot for **Agent Sessions** known by a runtime kind and working directory. A **Session Presence Snapshot** can mark sessions as running, idle, stopped, errored, or waiting for input, but ongoing updates come from the runtime event stream.
+_Avoid_: Session Status source, polling, reconciliation store
 
 **Agent Chat**:
 The OpenDucktor surface that displays a **Transcript** and, when interaction is allowed, a **Chat Composer**. **Agent Chat** can appear inside or outside Agent Studio; it is not a separate **Agent Session**.
@@ -470,7 +470,7 @@ _Avoid_: Task Status, File Reference
 
 **Diff Refresh**:
 The **Git Panel** operation that reloads git state and diffs. Refresh modes may be hard, soft, or scheduled.
-_Avoid_: Session Hydration, Runtime Recovery, browser refresh
+_Avoid_: session history loading, runtime route resolution, browser refresh
 
 **Git Conflict**:
 A git operation conflict detected for rebase, pull rebase, or **Direct Merge**. A **Git Conflict** includes the operation, target branch, conflicted files, output, and working directory.
@@ -549,11 +549,11 @@ Use **Agent Session** in OpenDucktor product language. **Thread** is runtime/pro
 **Transcript vs Task Session History**:
 Use **Transcript** for the ordered messages and events of one **Agent Session**. Use **Task Session History** for the history of **Agent Sessions** attached to a specific **Task**.
 
-**Session Hydration vs Transcript Hydration**:
-Use **Session Hydration** for reloading an **Agent Session** into Agent Studio. Use **Transcript Hydration** only for loading or reconstructing the visible **Transcript** from runtime-owned session data.
+**Repo Session Read Model vs Session History Load**:
+Use **Repo Session Read Model** for the startup session list built from persisted records plus runtime presence snapshots. Use **Session History Load** for loading the selected session's runtime-owned transcript and session details.
 
-**Session Presence vs Session Status**:
-Use **Session Presence** for the runtime-backed availability signal. Use **Session Status** for OpenDucktor's interaction classification, such as **Running Session**, **Idle Session**, **Stopped Session**, or **Errored Session**.
+**Session Presence Snapshot vs Session Status**:
+Use **Session Presence Snapshot** for the startup runtime signal. Use **Session Status** for OpenDucktor's interaction classification, such as **Running Session**, **Idle Session**, **Stopped Session**, or **Errored Session**.
 
 **Runtime vs Model**:
 Use **Runtime** for an integrated agent system such as OpenCode or Codex. Use **Model** for the selected AI model within that runtime.
@@ -562,7 +562,10 @@ Use **Runtime** for an integrated agent system such as OpenCode or Codex. Use **
 Use **Runtime** for the agent system itself. Use **Runtime Descriptor** for OpenDucktor's declared contract for that runtime.
 
 **Runtime Instance vs Runtime Route**:
-Use **Runtime Instance** for the live runtime OpenDucktor started or attached to. Use **Runtime Route** for how OpenDucktor reaches that instance.
+Use **Runtime Instance** for the live runtime OpenDucktor started or connected to. Use **Runtime Route** for how low-level runtime code reaches that instance.
+
+**Runtime Session Reference vs Runtime Route**:
+Use **Runtime Session Reference** in application code when carrying session identity. Use **Runtime Route** only in low-level registry/adapter code that actually contacts the runtime.
 
 **Runtime Capabilities vs Model Capabilities**:
 Use **Runtime Capabilities** for what the integrated agent system supports across sessions, history, approvals, prompt input, and optional surfaces. Use model-specific language only for selected-model behavior such as **Attachment Support**.

@@ -24,9 +24,9 @@ export const EMPTY_SUBAGENT_PENDING_QUESTIONS_BY_EXTERNAL_SESSION_ID = Object.fr
 
 const mergePendingRequestsByRequestId = <T extends { requestId: string }>(
   currentEntries: T[] | undefined,
-  hydratedEntries: T[] | undefined,
+  loadedEntries: T[] | undefined,
 ): T[] | undefined => {
-  if (hydratedEntries !== undefined && hydratedEntries.length === 0) {
+  if (loadedEntries !== undefined && loadedEntries.length === 0) {
     return undefined;
   }
 
@@ -34,7 +34,7 @@ const mergePendingRequestsByRequestId = <T extends { requestId: string }>(
   for (const entry of currentEntries ?? []) {
     mergedByRequestId.set(entry.requestId, entry);
   }
-  for (const entry of hydratedEntries ?? []) {
+  for (const entry of loadedEntries ?? []) {
     if (!mergedByRequestId.has(entry.requestId)) {
       mergedByRequestId.set(entry.requestId, entry);
     }
@@ -46,19 +46,19 @@ const mergePendingRequestsByRequestId = <T extends { requestId: string }>(
 const mergeSubagentPendingOverlayByChildExternalSessionId = <T extends { requestId: string }>(
   current: Record<string, T[]> | undefined,
   scannedChildExternalSessionIds: string[],
-  hydratedByChildExternalSessionId: Record<string, T[]>,
+  loadedByChildExternalSessionId: Record<string, T[]>,
 ): Record<string, T[]> | undefined => {
   const next = { ...(current ?? {}) };
   const childExternalSessionIds = new Set([
     ...Object.keys(next),
-    ...Object.keys(hydratedByChildExternalSessionId),
+    ...Object.keys(loadedByChildExternalSessionId),
     ...scannedChildExternalSessionIds,
   ]);
 
   for (const childExternalSessionId of childExternalSessionIds) {
     const mergedEntries = mergePendingRequestsByRequestId(
       next[childExternalSessionId],
-      hydratedByChildExternalSessionId[childExternalSessionId],
+      loadedByChildExternalSessionId[childExternalSessionId],
     );
     if (mergedEntries) {
       next[childExternalSessionId] = mergedEntries;

@@ -60,41 +60,41 @@ const trimToolCallId = (callId: string | undefined): string =>
   typeof callId === "string" ? callId.trim() : "";
 
 const shouldPreserveCurrentToolMessage = (
-  hydratedStatus: ToolStatus,
+  loadedStatus: ToolStatus,
   currentStatus: ToolStatus,
 ): boolean => {
-  const hydratedTerminal = isTerminalToolStatus(hydratedStatus);
+  const loadedTerminal = isTerminalToolStatus(loadedStatus);
   const currentTerminal = isTerminalToolStatus(currentStatus);
 
-  if (hydratedTerminal !== currentTerminal) {
+  if (loadedTerminal !== currentTerminal) {
     return currentTerminal;
   }
-  if (!hydratedTerminal && !currentTerminal) {
-    return toolStatusRank(currentStatus) >= toolStatusRank(hydratedStatus);
+  if (!loadedTerminal && !currentTerminal) {
+    return toolStatusRank(currentStatus) >= toolStatusRank(loadedStatus);
   }
 
   return false;
 };
 
-const preserveCurrentToolWithHydratedIdentity = (
-  hydratedMessage: AgentChatMessage,
+const preserveCurrentToolWithLoadedIdentity = (
+  loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage,
 ): AgentChatMessage => {
-  if (hydratedMessage.meta?.kind !== "tool" || currentMessage.meta?.kind !== "tool") {
+  if (loadedMessage.meta?.kind !== "tool" || currentMessage.meta?.kind !== "tool") {
     return currentMessage;
   }
 
-  const scopedId = parseToolScopedPartId(hydratedMessage.id);
+  const scopedId = parseToolScopedPartId(loadedMessage.id);
   if (scopedId === null) {
     return currentMessage;
   }
 
-  const hydratedCallId = trimToolCallId(hydratedMessage.meta.callId);
+  const loadedCallId = trimToolCallId(loadedMessage.meta.callId);
   const currentCallId = trimToolCallId(currentMessage.meta.callId);
-  const canonicalCallId = hydratedCallId || currentCallId;
+  const canonicalCallId = loadedCallId || currentCallId;
   const canonicalId = toToolMessageId({
     messageId: scopedId.messageId,
-    partId: hydratedMessage.meta.partId,
+    partId: loadedMessage.meta.partId,
     ...(canonicalCallId ? { callId: canonicalCallId } : {}),
   });
 
@@ -109,143 +109,143 @@ const preserveCurrentToolWithHydratedIdentity = (
 };
 
 const chooseSubagentDescription = (
-  hydratedMeta: SubagentMessage["meta"],
+  loadedMeta: SubagentMessage["meta"],
   currentMeta: SubagentMessage["meta"],
   resolvedStatus: SubagentMessage["meta"]["status"],
 ): string | undefined => {
   const currentMatchesResolvedStatus = currentMeta.status === resolvedStatus;
-  const hydratedMatchesResolvedStatus = hydratedMeta.status === resolvedStatus;
+  const loadedMatchesResolvedStatus = loadedMeta.status === resolvedStatus;
 
-  if (currentMatchesResolvedStatus && !hydratedMatchesResolvedStatus) {
-    return currentMeta.description ?? hydratedMeta.description;
+  if (currentMatchesResolvedStatus && !loadedMatchesResolvedStatus) {
+    return currentMeta.description ?? loadedMeta.description;
   }
-  if (hydratedMatchesResolvedStatus && !currentMatchesResolvedStatus) {
-    return hydratedMeta.description ?? currentMeta.description;
+  if (loadedMatchesResolvedStatus && !currentMatchesResolvedStatus) {
+    return loadedMeta.description ?? currentMeta.description;
   }
 
-  return hydratedMeta.description ?? currentMeta.description;
+  return loadedMeta.description ?? currentMeta.description;
 };
 
 const mergeReasoningMessages = (
-  hydratedMessage: AgentChatMessage,
+  loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage,
 ): AgentChatMessage => {
-  if (hydratedMessage.meta?.kind !== "reasoning" || currentMessage.meta?.kind !== "reasoning") {
+  if (loadedMessage.meta?.kind !== "reasoning" || currentMessage.meta?.kind !== "reasoning") {
     return currentMessage;
   }
-  if (currentMessage.meta.completed && !hydratedMessage.meta.completed) {
+  if (currentMessage.meta.completed && !loadedMessage.meta.completed) {
     return currentMessage;
   }
-  if (!currentMessage.meta.completed && !hydratedMessage.meta.completed) {
+  if (!currentMessage.meta.completed && !loadedMessage.meta.completed) {
     return currentMessage;
   }
 
-  return hydratedMessage;
+  return loadedMessage;
 };
 
 const mergeToolMessages = (
-  hydratedMessage: AgentChatMessage,
+  loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage,
 ): AgentChatMessage => {
-  if (hydratedMessage.meta?.kind !== "tool" || currentMessage.meta?.kind !== "tool") {
+  if (loadedMessage.meta?.kind !== "tool" || currentMessage.meta?.kind !== "tool") {
     return currentMessage;
   }
 
-  if (shouldPreserveCurrentToolMessage(hydratedMessage.meta.status, currentMessage.meta.status)) {
-    return preserveCurrentToolWithHydratedIdentity(hydratedMessage, currentMessage);
+  if (shouldPreserveCurrentToolMessage(loadedMessage.meta.status, currentMessage.meta.status)) {
+    return preserveCurrentToolWithLoadedIdentity(loadedMessage, currentMessage);
   }
 
   const nextMeta = {
-    ...hydratedMessage.meta,
-    ...(hydratedMessage.meta.observedStartedAtMs === undefined &&
+    ...loadedMessage.meta,
+    ...(loadedMessage.meta.observedStartedAtMs === undefined &&
     currentMessage.meta.observedStartedAtMs !== undefined
       ? { observedStartedAtMs: currentMessage.meta.observedStartedAtMs }
       : {}),
-    ...(hydratedMessage.meta.observedEndedAtMs === undefined &&
+    ...(loadedMessage.meta.observedEndedAtMs === undefined &&
     currentMessage.meta.observedEndedAtMs !== undefined
       ? { observedEndedAtMs: currentMessage.meta.observedEndedAtMs }
       : {}),
-    ...(hydratedMessage.meta.inputReadyAtMs === undefined &&
+    ...(loadedMessage.meta.inputReadyAtMs === undefined &&
     currentMessage.meta.inputReadyAtMs !== undefined
       ? { inputReadyAtMs: currentMessage.meta.inputReadyAtMs }
       : {}),
   };
 
   return {
-    ...hydratedMessage,
+    ...loadedMessage,
     meta: nextMeta,
   };
 };
 
 const mergeSubagentMessages = (
-  hydratedMessage: SubagentMessage,
+  loadedMessage: SubagentMessage,
   currentMessage: SubagentMessage,
 ): AgentChatMessage => {
-  const hydratedMeta = hydratedMessage.meta;
+  const loadedMeta = loadedMessage.meta;
   const currentMeta = currentMessage.meta;
-  const nextMeta = mergeSubagentMeta(hydratedMeta, {
+  const nextMeta = mergeSubagentMeta(loadedMeta, {
     ...currentMeta,
-    partId: hydratedMeta.partId,
-    correlationKey: hydratedMeta.correlationKey,
+    partId: loadedMeta.partId,
+    correlationKey: loadedMeta.correlationKey,
   });
-  const description = chooseSubagentDescription(hydratedMeta, currentMeta, nextMeta.status);
+  const description = chooseSubagentDescription(loadedMeta, currentMeta, nextMeta.status);
   const resolvedMeta = {
     ...nextMeta,
     ...(typeof description === "string" ? { description } : {}),
   };
 
   return {
-    ...hydratedMessage,
+    ...loadedMessage,
     content: formatSubagentContent(resolvedMeta),
     meta: resolvedMeta,
   };
 };
 
-const matchesHydratedTool = (
-  hydratedMessage: AgentChatMessage,
+const matchesLoadedTool = (
+  loadedMessage: AgentChatMessage,
   candidate: AgentChatMessage,
 ): boolean => {
-  if (hydratedMessage.meta?.kind !== "tool" || candidate.meta?.kind !== "tool") {
+  if (loadedMessage.meta?.kind !== "tool" || candidate.meta?.kind !== "tool") {
     return false;
   }
-  if (candidate.id === hydratedMessage.id) {
+  if (candidate.id === loadedMessage.id) {
     return false;
   }
-  if (hydratedMessage.meta.tool !== candidate.meta.tool) {
+  if (loadedMessage.meta.tool !== candidate.meta.tool) {
     return false;
   }
 
-  const hydratedScopedId = parseToolScopedPartId(hydratedMessage.id);
+  const loadedScopedId = parseToolScopedPartId(loadedMessage.id);
   const candidateScopedId = parseToolScopedPartId(candidate.id);
   if (
-    hydratedScopedId === null ||
+    loadedScopedId === null ||
     candidateScopedId === null ||
-    hydratedScopedId.messageId !== candidateScopedId.messageId
+    loadedScopedId.messageId !== candidateScopedId.messageId
   ) {
     return false;
   }
 
-  const hydratedCallId = trimToolCallId(hydratedMessage.meta.callId);
+  const loadedCallId = trimToolCallId(loadedMessage.meta.callId);
   const candidateCallId = trimToolCallId(candidate.meta.callId);
-  if (hydratedCallId.length > 0 && candidateCallId.length > 0) {
-    return hydratedCallId === candidateCallId;
+  if (loadedCallId.length > 0 && candidateCallId.length > 0) {
+    return loadedCallId === candidateCallId;
   }
 
-  return hydratedMessage.meta.partId === candidate.meta.partId;
+  return loadedMessage.meta.partId === candidate.meta.partId;
 };
 
-const matchesHydratedSubagent = (
-  hydratedMessage: AgentChatMessage,
+const matchesLoadedSubagent = (
+  loadedMessage: AgentChatMessage,
   candidate: AgentChatMessage,
 ): boolean => {
-  if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
+  if (!isSubagentMessage(loadedMessage) || !isSubagentMessage(candidate)) {
     return false;
   }
-  if (candidate.id === hydratedMessage.id) {
+  if (candidate.id === loadedMessage.id) {
     return false;
   }
 
-  const loadedSessionId = hydratedMessage.meta.externalSessionId;
+  const loadedSessionId = loadedMessage.meta.externalSessionId;
   if (loadedSessionId) {
     return candidate.meta.externalSessionId === loadedSessionId;
   }
@@ -253,43 +253,43 @@ const matchesHydratedSubagent = (
   return false;
 };
 
-const canAbsorbHydratedPartSubagentIntoCurrentSessionRow = (
-  hydratedMessage: AgentChatMessage,
+const canAbsorbLoadedPartSubagentIntoCurrentSessionRow = (
+  loadedMessage: AgentChatMessage,
   candidate: AgentChatMessage,
 ): boolean => {
-  if (!isSubagentMessage(hydratedMessage) || !isSubagentMessage(candidate)) {
+  if (!isSubagentMessage(loadedMessage) || !isSubagentMessage(candidate)) {
     return false;
   }
-  if (hydratedMessage.meta.externalSessionId || !candidate.meta.externalSessionId) {
+  if (loadedMessage.meta.externalSessionId || !candidate.meta.externalSessionId) {
     return false;
   }
-  if (!hydratedMessage.meta.correlationKey.startsWith("part:")) {
+  if (!loadedMessage.meta.correlationKey.startsWith("part:")) {
     return false;
   }
   if (!candidate.meta.correlationKey.startsWith("session:")) {
     return false;
   }
 
-  const hydratedAgent = hydratedMessage.meta.agent?.trim();
+  const loadedAgent = loadedMessage.meta.agent?.trim();
   const candidateAgent = candidate.meta.agent?.trim();
-  const hydratedPrompt = hydratedMessage.meta.prompt?.trim();
+  const loadedPrompt = loadedMessage.meta.prompt?.trim();
   const candidatePrompt = candidate.meta.prompt?.trim();
 
-  if (!hydratedAgent || !candidateAgent || !hydratedPrompt || !candidatePrompt) {
+  if (!loadedAgent || !candidateAgent || !loadedPrompt || !candidatePrompt) {
     return false;
   }
 
-  return hydratedAgent === candidateAgent && hydratedPrompt === candidatePrompt;
+  return loadedAgent === candidateAgent && loadedPrompt === candidatePrompt;
 };
 
 const findMatchingCurrentNonSubagentMessages = ({
   currentOwner,
-  hydratedMessage,
+  loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
   currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
-  hydratedMessage: AgentChatMessage;
+  loadedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
@@ -304,7 +304,7 @@ const findMatchingCurrentNonSubagentMessages = ({
     if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
       continue;
     }
-    if (matchesHydratedTool(hydratedMessage, candidate)) {
+    if (matchesLoadedTool(loadedMessage, candidate)) {
       matches.push(candidate);
       seenIds.add(candidate.id);
     }
@@ -314,12 +314,12 @@ const findMatchingCurrentNonSubagentMessages = ({
 
 const findMatchingCurrentSubagentMessages = ({
   currentOwner,
-  hydratedMessage,
+  loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
   currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
-  hydratedMessage: AgentChatMessage;
+  loadedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
@@ -337,12 +337,12 @@ const findMatchingCurrentSubagentMessages = ({
     if (!candidate || seenIds.has(candidate.id) || absorbedCurrentMessageIds.has(candidate.id)) {
       continue;
     }
-    if (matchesHydratedSubagent(hydratedMessage, candidate)) {
+    if (matchesLoadedSubagent(loadedMessage, candidate)) {
       matches.push(candidate);
       seenIds.add(candidate.id);
       continue;
     }
-    if (canAbsorbHydratedPartSubagentIntoCurrentSessionRow(hydratedMessage, candidate)) {
+    if (canAbsorbLoadedPartSubagentIntoCurrentSessionRow(loadedMessage, candidate)) {
       fallbackCandidates.push(candidate);
     }
   }
@@ -359,19 +359,19 @@ const findMatchingCurrentSubagentMessages = ({
 
 const findMatchingCurrentMessages = ({
   currentOwner,
-  hydratedMessage,
+  loadedMessage,
   sameIdCurrentMessage,
   absorbedCurrentMessageIds,
 }: {
   currentOwner: Pick<AgentSessionState, "externalSessionId" | "messages">;
-  hydratedMessage: AgentChatMessage;
+  loadedMessage: AgentChatMessage;
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
-  if (isSubagentMessage(hydratedMessage)) {
+  if (isSubagentMessage(loadedMessage)) {
     return findMatchingCurrentSubagentMessages({
       currentOwner,
-      hydratedMessage,
+      loadedMessage,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
     });
@@ -379,65 +379,62 @@ const findMatchingCurrentMessages = ({
 
   return findMatchingCurrentNonSubagentMessages({
     currentOwner,
-    hydratedMessage,
+    loadedMessage,
     sameIdCurrentMessage,
     absorbedCurrentMessageIds,
   });
 };
 
 const mergeSameMessageId = (
-  hydratedMessage: AgentChatMessage,
+  loadedMessage: AgentChatMessage,
   currentMessage: AgentChatMessage | undefined,
 ): AgentChatMessage => {
   if (!currentMessage) {
-    return hydratedMessage;
+    return loadedMessage;
+  }
+
+  if (isSessionSystemPromptMessage(loadedMessage) && isSessionSystemPromptMessage(currentMessage)) {
+    return loadedMessage;
   }
 
   if (
-    isSessionSystemPromptMessage(hydratedMessage) &&
-    isSessionSystemPromptMessage(currentMessage)
-  ) {
-    return hydratedMessage;
-  }
-
-  if (
-    hydratedMessage.role === "user" &&
-    hydratedMessage.meta?.kind === "user" &&
+    loadedMessage.role === "user" &&
+    loadedMessage.meta?.kind === "user" &&
     currentMessage.role === "user" &&
     currentMessage.meta?.kind === "user"
   ) {
     return {
       ...currentMessage,
-      ...hydratedMessage,
+      ...loadedMessage,
       meta: {
         ...currentMessage.meta,
-        ...hydratedMessage.meta,
+        ...loadedMessage.meta,
       },
     };
   }
 
-  if (isFinalAssistantChatMessage(hydratedMessage) && currentMessage.role === "assistant") {
+  if (isFinalAssistantChatMessage(loadedMessage) && currentMessage.role === "assistant") {
     const mergedMeta =
-      currentMessage.meta && hydratedMessage.meta
-        ? { ...currentMessage.meta, ...hydratedMessage.meta }
-        : (hydratedMessage.meta ?? currentMessage.meta);
+      currentMessage.meta && loadedMessage.meta
+        ? { ...currentMessage.meta, ...loadedMessage.meta }
+        : (loadedMessage.meta ?? currentMessage.meta);
     return {
       ...currentMessage,
-      ...hydratedMessage,
+      ...loadedMessage,
       ...(mergedMeta ? { meta: mergedMeta } : {}),
     };
   }
 
-  if (isSubagentMessage(hydratedMessage) && isSubagentMessage(currentMessage)) {
-    return mergeSubagentMessages(hydratedMessage, currentMessage);
+  if (isSubagentMessage(loadedMessage) && isSubagentMessage(currentMessage)) {
+    return mergeSubagentMessages(loadedMessage, currentMessage);
   }
 
-  if (hydratedMessage.meta?.kind === "reasoning" && currentMessage.meta?.kind === "reasoning") {
-    return mergeReasoningMessages(hydratedMessage, currentMessage);
+  if (loadedMessage.meta?.kind === "reasoning" && currentMessage.meta?.kind === "reasoning") {
+    return mergeReasoningMessages(loadedMessage, currentMessage);
   }
 
-  if (hydratedMessage.meta?.kind === "tool" && currentMessage.meta?.kind === "tool") {
-    return mergeToolMessages(hydratedMessage, currentMessage);
+  if (loadedMessage.meta?.kind === "tool" && currentMessage.meta?.kind === "tool") {
+    return mergeToolMessages(loadedMessage, currentMessage);
   }
 
   return currentMessage;
@@ -445,24 +442,24 @@ const mergeSameMessageId = (
 
 export const mergeHistoryMessages = (
   externalSessionId: string,
-  hydratedMessages: AgentSessionState["messages"],
+  loadedMessages: AgentSessionState["messages"],
   currentMessages: AgentSessionState["messages"],
 ): AgentSessionState["messages"] => {
   const currentOwner = { externalSessionId, messages: currentMessages };
-  const hydratedOwner = { externalSessionId, messages: hydratedMessages };
-  const hydratedMessageIds = new Set<string>();
+  const loadedOwner = { externalSessionId, messages: loadedMessages };
+  const loadedMessageIds = new Set<string>();
   const absorbedCurrentMessageIds = new Set<string>();
   let mergedMessages = createSessionMessagesState(externalSessionId);
 
-  forEachSessionMessage(hydratedOwner, (message) => {
+  forEachSessionMessage(loadedOwner, (message) => {
     const sameIdCurrentMessage = findSessionMessageById(currentOwner, message.id);
     const matchingCurrentMessages = findMatchingCurrentMessages({
       currentOwner,
-      hydratedMessage: message,
+      loadedMessage: message,
       sameIdCurrentMessage,
       absorbedCurrentMessageIds,
     });
-    hydratedMessageIds.add(message.id);
+    loadedMessageIds.add(message.id);
     for (const matchingCurrentMessage of matchingCurrentMessages) {
       absorbedCurrentMessageIds.add(matchingCurrentMessage.id);
     }
@@ -478,7 +475,7 @@ export const mergeHistoryMessages = (
   });
 
   forEachSessionMessage(currentOwner, (message) => {
-    if (hydratedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
+    if (loadedMessageIds.has(message.id) || absorbedCurrentMessageIds.has(message.id)) {
       return;
     }
     mergedMessages = appendSessionMessage({ externalSessionId, messages: mergedMessages }, message);

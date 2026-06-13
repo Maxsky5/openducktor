@@ -8,11 +8,7 @@ import type {
 
 type AgentStudioRightPanelBridgeSelection = Pick<
   AgentStudioOrchestrationSelectionContext,
-  | "viewActiveSession"
-  | "viewRole"
-  | "viewTaskId"
-  | "viewSelectedTask"
-  | "isViewSessionHistoryHydrating"
+  "viewActiveSession" | "viewRole" | "viewTaskId" | "viewSelectedTask" | "viewSessionLifecycle"
 >;
 
 type AgentStudioRightPanelPanelState = Pick<
@@ -48,7 +44,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   viewSelectedTask: UseAgentsPageRightPanelModelArgs["viewSelectedTask"];
   panelKind: UseAgentsPageRightPanelModelArgs["panelKind"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
-  isViewSessionHistoryHydrating: UseAgentsPageRightPanelModelArgs["isViewSessionHistoryHydrating"];
+  viewSessionLifecycle: UseAgentsPageRightPanelModelArgs["viewSessionLifecycle"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   worktreeRecoverySignal: UseAgentsPageRightPanelModelArgs["worktreeRecoverySignal"];
@@ -66,7 +62,7 @@ export type AgentStudioBuildWorktreeRefreshModel = Pick<
   "panelKind" | "isPanelOpen" | "viewRole"
 > & {
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
-  isSessionHistoryHydrating: AgentStudioRightPanelRuntimeModel["isViewSessionHistoryHydrating"];
+  viewSessionLifecycle: AgentStudioRightPanelRuntimeModel["viewSessionLifecycle"];
 };
 
 export type AgentStudioRightPanelBridgeModel = {
@@ -130,7 +126,7 @@ function buildAgentStudioRightPanelBridgeModel({
       isPanelOpen,
       viewRole: selection.viewRole,
       activeSession: selection.viewActiveSession,
-      isSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+      viewSessionLifecycle: selection.viewSessionLifecycle,
     },
     rightPanel: {
       activeWorkspace,
@@ -142,7 +138,7 @@ function buildAgentStudioRightPanelBridgeModel({
       viewSelectedTask: selection.viewSelectedTask,
       panelKind,
       isPanelOpen,
-      isViewSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
+      viewSessionLifecycle: selection.viewSessionLifecycle,
       documentsModel,
       repoSettings,
       worktreeRecoverySignal,

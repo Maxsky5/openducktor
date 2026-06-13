@@ -8,6 +8,7 @@ import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
@@ -32,7 +33,7 @@ export type UseAgentsPageRightPanelModelArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
-  isViewSessionHistoryHydrating: boolean;
+  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   worktreeRecoverySignal: number;
@@ -167,7 +168,7 @@ export function useAgentsPageRightPanelModel({
   viewSelectedTask,
   panelKind,
   isPanelOpen,
-  isViewSessionHistoryHydrating,
+  viewSessionLifecycle,
   documentsModel,
   repoSettings,
   worktreeRecoverySignal,
@@ -190,7 +191,7 @@ export function useAgentsPageRightPanelModel({
     viewSelectedTask,
     panelKind,
     isPanelOpen,
-    isViewSessionHistoryHydrating,
+    viewSessionLifecycle,
     repoSettings,
     worktreeRecoverySignal,
   });

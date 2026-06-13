@@ -15,6 +15,15 @@ export type AgentSessionViewLifecyclePhase =
   | "history_failed"
   | "ready";
 
+export type SelectedAgentSessionViewLifecyclePhase =
+  | "inactive"
+  | "resolving_session"
+  | "waiting_for_runtime"
+  | "needs_history"
+  | "loading_history"
+  | "history_failed"
+  | "ready";
+
 export type AgentSessionViewLifecycle = {
   phase: AgentSessionViewLifecyclePhase;
   canReadRuntimeData: boolean;
@@ -27,7 +36,9 @@ export type AgentSessionViewLifecycle = {
 
 export type SelectedAgentSessionViewLifecycle = {
   externalSessionId: string | null;
+  phase: SelectedAgentSessionViewLifecyclePhase;
   canRenderHistory: boolean;
+  isResolvingSession: boolean;
   isLoadingHistory: boolean;
   isHistoryLoadFailed: boolean;
   isWaitingForRuntimeReadiness: boolean;
@@ -36,11 +47,66 @@ export type SelectedAgentSessionViewLifecycle = {
 
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
   externalSessionId: null,
+  phase: "inactive",
   canRenderHistory: false,
+  isResolvingSession: false,
   isLoadingHistory: false,
   isHistoryLoadFailed: false,
   isWaitingForRuntimeReadiness: false,
   shouldEnsureReadyForView: false,
+};
+
+export type AgentStudioSelectedSessionLifecycle = SelectedAgentSessionViewLifecycle & {
+  isTaskViewResolving: boolean;
+  isSessionSelectionResolving: boolean;
+};
+
+export const isSelectedSessionHistoryBlockingRender = (
+  lifecycle: Pick<SelectedAgentSessionViewLifecycle, "canRenderHistory" | "isLoadingHistory">,
+): boolean => lifecycle.isLoadingHistory && !lifecycle.canRenderHistory;
+
+export const deriveAgentStudioSelectedSessionLifecycle = ({
+  taskId,
+  isActiveTaskReady,
+  isActiveTaskReadinessFailed,
+  isSessionSelectionResolving,
+  isRuntimeStarting,
+  selectedSessionLifecycle,
+}: {
+  taskId: string;
+  isActiveTaskReady: boolean;
+  isActiveTaskReadinessFailed: boolean;
+  isSessionSelectionResolving: boolean;
+  isRuntimeStarting: boolean;
+  selectedSessionLifecycle: SelectedAgentSessionViewLifecycle;
+}): AgentStudioSelectedSessionLifecycle => ({
+  ...selectedSessionLifecycle,
+  isTaskViewResolving: Boolean(taskId && !isActiveTaskReady && !isActiveTaskReadinessFailed),
+  isSessionSelectionResolving,
+  isWaitingForRuntimeReadiness:
+    selectedSessionLifecycle.isWaitingForRuntimeReadiness || (Boolean(taskId) && isRuntimeStarting),
+});
+
+const toSelectedSessionLifecyclePhase = ({
+  lifecycle,
+  isLoadingHistory,
+}: {
+  lifecycle: AgentSessionViewLifecycle;
+  isLoadingHistory: boolean;
+}): SelectedAgentSessionViewLifecyclePhase => {
+  if (lifecycle.phase === "blocked_on_repo") {
+    return "waiting_for_runtime";
+  }
+  if (lifecycle.isHistoryLoadFailed) {
+    return "history_failed";
+  }
+  if (isLoadingHistory) {
+    return "loading_history";
+  }
+  if (lifecycle.phase === "idle") {
+    return "inactive";
+  }
+  return lifecycle.phase;
 };
 
 export const deriveAgentSessionViewLifecycle = ({
@@ -167,12 +233,19 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
 
   if (!session) {
     const hasLoadFailed = sessionLoadError !== null && sessionLoadError !== undefined;
+    const isWaitingForRuntimeReadiness = !hasLoadFailed && repoReadinessState !== "ready";
     return {
       externalSessionId: selectedSessionRoute.externalSessionId,
+      phase: hasLoadFailed
+        ? "history_failed"
+        : isWaitingForRuntimeReadiness
+          ? "waiting_for_runtime"
+          : "resolving_session",
       canRenderHistory: false,
+      isResolvingSession: !hasLoadFailed,
       isLoadingHistory: !hasLoadFailed,
       isHistoryLoadFailed: hasLoadFailed,
-      isWaitingForRuntimeReadiness: !hasLoadFailed && repoReadinessState !== "ready",
+      isWaitingForRuntimeReadiness,
       shouldEnsureReadyForView: false,
     };
   }
@@ -190,7 +263,9 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
 
   return {
     externalSessionId: selectedSessionRoute.externalSessionId,
+    phase: toSelectedSessionLifecyclePhase({ lifecycle, isLoadingHistory }),
     canRenderHistory: lifecycle.canRenderHistory,
+    isResolvingSession: false,
     isLoadingHistory,
     isHistoryLoadFailed,
     isWaitingForRuntimeReadiness,

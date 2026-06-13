@@ -14,6 +14,7 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -142,12 +143,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     selectedTask: createTask(),
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
-    isTaskHydrating: false,
-    isSessionHistoryHydrated: true,
-    isSessionHistoryHydrating: false,
-    isSessionSelectionResolving: false,
-    isWaitingForRuntimeReadiness: false,
-    isSessionHistoryLoadFailed: false,
+    lifecycle: createSelectedSessionLifecycleFixture(),
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
     allSessionSummaries,
@@ -253,12 +249,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
-      isTaskHydrating: selectedSessionCore.isTaskHydrating,
-      isSessionHistoryHydrated: selectedSessionCore.isSessionHistoryHydrated,
-      isSessionHistoryHydrating: selectedSessionCore.isSessionHistoryHydrating,
-      isSessionSelectionResolving: selectedSessionCore.isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness: selectedSessionCore.isWaitingForRuntimeReadiness,
-      isSessionHistoryLoadFailed: selectedSessionCore.isSessionHistoryLoadFailed,
+      lifecycle: selectedSessionCore.lifecycle,
       activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
         totalTokens: 12,
         contextWindow: 100,
@@ -477,8 +468,10 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
-          isSessionHistoryHydrating: false,
-          isWaitingForRuntimeReadiness: true,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            phase: "waiting_for_runtime",
+            isWaitingForRuntimeReadiness: true,
+          }),
         },
         readiness: {
           agentStudioReadinessState: "checking",
@@ -509,9 +502,12 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [selectedSummary],
           allSessionSummaries: [selectedSummary],
-          isSessionHistoryHydrated: false,
-          isSessionHistoryHydrating: true,
-          isWaitingForRuntimeReadiness: true,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            phase: "waiting_for_runtime",
+            canRenderHistory: false,
+            isLoadingHistory: true,
+            isWaitingForRuntimeReadiness: true,
+          }),
         },
         readiness: {
           agentStudioReadinessState: "checking",
@@ -543,7 +539,11 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [],
           allSessionSummaries: [],
-          isWaitingForRuntimeReadiness: false,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            phase: "waiting_for_runtime",
+            canRenderHistory: false,
+            isWaitingForRuntimeReadiness: true,
+          }),
         },
         readiness: {
           agentStudioReadinessState: "checking",
@@ -575,7 +575,9 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [],
           allSessionSummaries: [],
-          isSessionSelectionResolving: true,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            isSessionSelectionResolving: true,
+          }),
         },
         selectedSessionActions: {
           canKickoffNewSession: true,
@@ -611,8 +613,11 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
-          isSessionHistoryHydrated: true,
-          isSessionHistoryHydrating: true,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            canRenderHistory: true,
+            isLoadingHistory: true,
+            phase: "loading_history",
+          }),
         },
       }),
     );
@@ -689,8 +694,11 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           activeSession: pendingSession,
           sessionsForTask: [pendingSession],
-          isSessionHistoryHydrated: false,
-          isSessionHistoryHydrating: true,
+          lifecycle: createSelectedSessionLifecycleFixture({
+            canRenderHistory: false,
+            isLoadingHistory: true,
+            phase: "loading_history",
+          }),
         },
       }),
     );

@@ -19,7 +19,7 @@ import {
 } from "./start-session-rollback";
 import { resolvePromptContext } from "./start-session-runtime";
 
-// Match the requested-history hydration cap so newly forked child sessions load
+// Match the requested-history loading cap so newly forked child sessions load
 // enough history to render immediately without pulling an unbounded transcript.
 const FORK_START_HISTORY_LIMIT = 600;
 

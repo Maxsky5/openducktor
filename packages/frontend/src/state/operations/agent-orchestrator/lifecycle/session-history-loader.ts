@@ -79,7 +79,7 @@ export const loadSessionHistorySnapshot = async ({
       return { externalSessionId: record.externalSessionId, status: "stale" };
     }
 
-    const hydratedMessages = createSessionMessagesState(record.externalSessionId, [
+    const loadedMessages = createSessionMessagesState(record.externalSessionId, [
       ...historyToChatMessages(history, { role: record.role, selectedModel }),
     ]);
     const historyContextUsage = historyToSessionContextUsage(history);
@@ -92,11 +92,7 @@ export const loadSessionHistorySnapshot = async ({
         historyLoadState: "loaded",
         todos,
         contextUsage: current.contextUsage ?? historyContextUsage,
-        messages: mergeHistoryMessages(
-          current.externalSessionId,
-          hydratedMessages,
-          current.messages,
-        ),
+        messages: mergeHistoryMessages(current.externalSessionId, loadedMessages, current.messages),
       }),
       { persist: false },
     );

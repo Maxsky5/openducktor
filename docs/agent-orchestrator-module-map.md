@@ -150,7 +150,7 @@ Use these compact tests as the first-line safety net:
 | Per-session history failure isolation | `lifecycle/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `lifecycle/session-history-loader.test.ts` |
 | Selected-session runtime/history loading surface | `lifecycle/session-view-lifecycle.test.ts` and `components/features/agents/agent-chat/use-agent-chat-session-readiness.test.tsx` |
-| Selected-session preparation and runtime recovery | `lifecycle/ensure-ready.test.ts` |
+| Selected-session preparation and runtime loading failures | `lifecycle/ensure-ready.test.ts` |
 | Runtime presence projection onto session state | `lifecycle/session-presence.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
 | Event-driven permission/question lifecycle after startup | `events/session-permissions-questions.test.ts` |
