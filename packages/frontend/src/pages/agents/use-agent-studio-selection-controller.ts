@@ -335,14 +335,6 @@ export function useAgentStudioSelectionController({
       viewSelectedSessionRoute?.runtimeKind,
     ],
   );
-  const viewSessionRuntimeData = useSessionRuntimeData({
-    repoPath: activeWorkspace?.repoPath ?? null,
-    session: viewActiveSession,
-    runtimeDefinitions,
-    repoReadinessState: viewSessionReadinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
-  });
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"
@@ -378,6 +370,14 @@ export function useAgentStudioSelectionController({
     viewSessionReadinessState,
     viewActiveSession,
   ]);
+  const viewSessionRuntimeData = useSessionRuntimeData({
+    repoPath: activeWorkspace?.repoPath ?? null,
+    session: viewActiveSession,
+    runtimeDefinitions,
+    canReadRuntimeData: selectedSessionLifecycle.canReadRuntimeData,
+    readSessionModelCatalog,
+    readSessionTodos,
+  });
   useEffect(() => {
     if (
       selectedSessionLifecycle.externalSessionId === null ||

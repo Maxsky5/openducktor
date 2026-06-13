@@ -39,7 +39,7 @@ describe("useSessionRuntimeData", () => {
           workingDirectory: "/repo",
         }),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-        repoReadinessState: "ready",
+        canReadRuntimeData: true,
         readSessionModelCatalog,
         readSessionTodos,
       },

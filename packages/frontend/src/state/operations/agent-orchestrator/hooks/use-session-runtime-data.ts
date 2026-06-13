@@ -3,10 +3,6 @@ import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core"
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import {
-  deriveAgentSessionViewLifecycle,
-  type SessionRepoReadinessState,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { resolveSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
   agentSessionRuntimeQueryKeys,
@@ -19,7 +15,7 @@ type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
   session: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  repoReadinessState: SessionRepoReadinessState;
+  canReadRuntimeData: boolean;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -51,7 +47,7 @@ export const useSessionRuntimeData = ({
   repoPath,
   session,
   runtimeDefinitions,
-  repoReadinessState,
+  canReadRuntimeData,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
@@ -59,16 +55,8 @@ export const useSessionRuntimeData = ({
     () => resolveSessionRuntimeQueryState({ repoPath, session }),
     [repoPath, session],
   );
-  const sessionViewLifecycle = useMemo(
-    () =>
-      deriveAgentSessionViewLifecycle({
-        session,
-        repoReadinessState,
-      }),
-    [repoReadinessState, session],
-  );
   const canReadSessionRuntimeData =
-    sessionViewLifecycle.canReadRuntimeData &&
+    canReadRuntimeData &&
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";

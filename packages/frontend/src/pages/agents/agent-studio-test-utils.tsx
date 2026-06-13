@@ -58,6 +58,7 @@ export const createSelectedSessionLifecycleFixture = (
 ): SelectedAgentSessionViewLifecycle => ({
   externalSessionId: "session-1",
   phase: "ready",
+  canReadRuntimeData: true,
   canRenderHistory: true,
   historyRequest: "none",
   ...overrides,

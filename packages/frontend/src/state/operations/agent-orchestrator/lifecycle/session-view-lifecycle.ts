@@ -29,6 +29,7 @@ export type AgentSessionViewLifecycle = {
 export type SelectedAgentSessionViewLifecycle = {
   externalSessionId: string | null;
   phase: AgentSessionViewLifecyclePhase;
+  canReadRuntimeData: boolean;
   canRenderHistory: boolean;
   historyRequest: AgentSessionHistoryRequest;
 };
@@ -40,6 +41,7 @@ type AgentSessionLifecycleHistoryInput = Pick<AgentSessionViewLifecycle, "histor
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
   externalSessionId: null,
   phase: "inactive",
+  canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
 };
@@ -49,6 +51,7 @@ export const createResolvingSelectedSessionViewLifecycle = (
 ): SelectedAgentSessionViewLifecycle => ({
   externalSessionId,
   phase: "resolving_session",
+  canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
 });
@@ -58,6 +61,7 @@ export const createFailedSelectedSessionViewLifecycle = (
 ): SelectedAgentSessionViewLifecycle => ({
   externalSessionId,
   phase: "history_failed",
+  canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
 });
@@ -198,6 +202,7 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
         : repoReadinessState !== "ready"
           ? "resolving_runtime"
           : "resolving_session",
+      canReadRuntimeData: false,
       canRenderHistory: false,
       historyRequest: "none",
     };
@@ -208,6 +213,7 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
   return {
     externalSessionId: selectedSessionRoute.externalSessionId,
     phase: lifecycle.phase,
+    canReadRuntimeData: lifecycle.canReadRuntimeData,
     canRenderHistory: lifecycle.canRenderHistory,
     historyRequest: lifecycle.historyRequest,
   };
