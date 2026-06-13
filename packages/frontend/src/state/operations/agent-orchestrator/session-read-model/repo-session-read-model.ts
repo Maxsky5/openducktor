@@ -57,7 +57,7 @@ const shouldKeepLocalSession = (
   session: AgentSessionState,
   persistedSessionIds: Set<string>,
 ): boolean => {
-  return !persistedSessionIds.has(session.externalSessionId) && session.status !== "stopped";
+  return !persistedSessionIds.has(session.externalSessionId) && session.status === "starting";
 };
 
 const selectLocalSessions = (

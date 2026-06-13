@@ -147,6 +147,7 @@ export function useAgentOrchestratorOperations({
     agentEngine,
     listenToAgentSession,
     setSessionReadModelError,
+    queryClient,
   });
   const ensureRuntime = useMemo(
     () =>

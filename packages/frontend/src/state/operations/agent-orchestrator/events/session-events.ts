@@ -8,10 +8,6 @@ import type {
 import { createSessionEventHandlerContext } from "./session-event-types";
 import {
   handleAssistantMessage,
-  handlePermissionRequired,
-  handlePermissionResolved,
-  handleQuestionRequired,
-  handleQuestionResolved,
   handleSessionCompacted,
   handleSessionCompactionStarted,
   handleSessionError,
@@ -23,6 +19,12 @@ import {
   handleUserMessage,
 } from "./session-lifecycle";
 import { handleAssistantDelta, handleAssistantPart } from "./session-parts";
+import {
+  handlePermissionRequired,
+  handlePermissionResolved,
+  handleQuestionRequired,
+  handleQuestionResolved,
+} from "./session-pending-input";
 
 const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 500;
 

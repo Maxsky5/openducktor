@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { agentSessionQueryKeys, upsertAgentSessionRecordInQuery } from "./agent-sessions";
+import { host } from "../operations/host";
+import {
+  agentSessionQueryKeys,
+  loadAgentSessionListsFromQuery,
+  upsertAgentSessionRecordInQuery,
+} from "./agent-sessions";
 
 const sessionFixture: AgentSessionRecord = {
   externalSessionId: "external-1",
@@ -42,5 +47,38 @@ describe("agent session query cache helpers", () => {
     );
 
     expect(sessions).toEqual([updatedSession]);
+  });
+
+  test("loadAgentSessionListsFromQuery seeds per-task session caches from the bulk read", async () => {
+    const queryClient = new QueryClient();
+    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
+    host.agentSessionsListBulk = async () => ({
+      "task-1": [sessionFixture],
+      "task-2": [],
+    });
+
+    try {
+      const sessionsByTaskId = await loadAgentSessionListsFromQuery(queryClient, "/repo", [
+        "task-1",
+        "task-2",
+      ]);
+
+      expect(sessionsByTaskId).toEqual({
+        "task-1": [sessionFixture],
+        "task-2": [],
+      });
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-1"),
+        ),
+      ).toEqual([sessionFixture]);
+      expect(
+        queryClient.getQueryData<AgentSessionRecord[]>(
+          agentSessionQueryKeys.list("/repo", "task-2"),
+        ),
+      ).toEqual([]);
+    } finally {
+      host.agentSessionsListBulk = originalAgentSessionsListBulk;
+    }
   });
 });

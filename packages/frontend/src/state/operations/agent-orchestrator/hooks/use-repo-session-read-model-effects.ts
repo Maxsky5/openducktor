@@ -1,8 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
+import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
+import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { loadRepoAgentSessions } from "../lifecycle/load-sessions";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
@@ -24,6 +26,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   >;
   listenToAgentSession?: ListenToAgentSession;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
+  queryClient: QueryClient;
 };
 
 export const useRepoSessionReadModelEffects = ({
@@ -35,6 +38,7 @@ export const useRepoSessionReadModelEffects = ({
   agentEngine,
   listenToAgentSession,
   setSessionReadModelError,
+  queryClient,
 }: UseRepoSessionReadModelEffectsArgs) => {
   useEffect(() => {
     if (!workspaceRepoPath) {
@@ -53,9 +57,20 @@ export const useRepoSessionReadModelEffects = ({
       }
       setSessionReadModelError(null);
       try {
+        const taskIds = tasks.map((task) => task.id);
+        const recordsByTaskId =
+          taskIds.length > 0
+            ? await loadAgentSessionListsFromQuery(queryClient, workspaceRepoPath, taskIds)
+            : {};
+        if (!isCurrentRepo()) {
+          return;
+        }
         await loadRepoAgentSessions({
           repoPath: workspaceRepoPath,
-          tasks,
+          tasks: tasks.map((task) => ({
+            id: task.id,
+            agentSessions: recordsByTaskId[task.id] ?? [],
+          })),
           adapter: agentEngine,
           commitSessions,
           updateSession,
@@ -81,6 +96,7 @@ export const useRepoSessionReadModelEffects = ({
     };
   }, [
     agentEngine,
+    queryClient,
     listenToAgentSession,
     commitSessions,
     updateSession,

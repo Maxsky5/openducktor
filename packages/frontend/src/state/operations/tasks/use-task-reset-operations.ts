@@ -71,8 +71,7 @@ const invalidateTaskWorkflowQueries = async (
 ): Promise<void> => {
   await Promise.all([
     queryClient.invalidateQueries({
-      queryKey: agentSessionQueryKeys.list(repoPath, taskId),
-      exact: true,
+      queryKey: agentSessionQueryKeys.all,
       refetchType: "none",
     }),
     queryClient.invalidateQueries({

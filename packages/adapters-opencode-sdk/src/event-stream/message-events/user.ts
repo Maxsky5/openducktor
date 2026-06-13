@@ -54,7 +54,7 @@ const resolveUserMessageDisplay = (input: {
   return { ...finalVisibleUserMessage, matchedQueuedSend };
 };
 
-export const reconcileUserMessageQueuedStates = (runtime: EventStreamRuntime): void => {
+export const publishUserMessageReadStateChanges = (runtime: EventStreamRuntime): void => {
   const session = runtime.getSession(runtime.externalSessionId);
   if (!session) {
     return;

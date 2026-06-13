@@ -275,6 +275,79 @@ describe("repo session read model", () => {
     ]);
   });
 
+  test("drops local task sessions that are no longer present in persisted task records", async () => {
+    const tasks = [createTask([])];
+    const currentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: "orphan-session",
+        taskId: "task-1",
+        repoPath: "/repo",
+        runtimeKind: "opencode",
+        role: "build",
+        status: "running",
+        startedAt: "2026-06-11T08:00:00.000Z",
+        workingDirectory: "/repo/worktree",
+        historyLoadState: "loaded",
+      }),
+      messages: createSessionMessagesState("orphan-session", [
+        {
+          id: "stale-message",
+          role: "assistant",
+          content: "Stale output from before reset",
+          timestamp: "2026-06-11T08:00:01.000Z",
+        },
+      ]),
+    };
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [currentSession.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    expect(readModel.sessionsById[currentSession.externalSessionId]).toBeUndefined();
+    expect(readModel.liveSessions).toEqual([]);
+  });
+
+  test("keeps local starting sessions while their persisted record is not visible yet", async () => {
+    const tasks = [createTask([])];
+    const currentSession = createAgentSessionFixture({
+      externalSessionId: "starting-session",
+      taskId: "task-1",
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "starting",
+      startedAt: "2026-06-11T08:00:00.000Z",
+      workingDirectory: "/repo/worktree",
+      historyLoadState: "loaded",
+    });
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [currentSession.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    expect(readModel.sessionsById[currentSession.externalSessionId]).toBe(currentSession);
+  });
+
   test("surfaces idle pending input and idle status from runtime presence", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];

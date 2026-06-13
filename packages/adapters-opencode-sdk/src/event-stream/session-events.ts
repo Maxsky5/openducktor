@@ -2,7 +2,7 @@ import type { Event } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { toAgentApprovalRequestFromOpenCodePermission } from "../approval-translation";
 import { normalizeTodoList } from "../todo-normalizers";
-import { emitSubagentPartsForSession, reconcileUserMessageQueuedStates } from "./message-events";
+import { emitSubagentPartsForSession, publishUserMessageReadStateChanges } from "./message-events";
 import {
   parsePendingInputReplied,
   parsePermissionAsked,
@@ -233,7 +233,7 @@ const handleSessionStatusEvent = (event: Event, runtime: EventStreamRuntime): bo
       markSessionActive(runtime);
     } else {
       markSessionIdle(runtime);
-      reconcileUserMessageQueuedStates(runtime);
+      publishUserMessageReadStateChanges(runtime);
     }
     runtime.emit(runtime.externalSessionId, {
       type: "session_status",
@@ -373,7 +373,7 @@ const handleSessionIdleEvent = (event: Event, runtime: EventStreamRuntime): bool
   }
 
   emitSessionIdle(runtime);
-  reconcileUserMessageQueuedStates(runtime);
+  publishUserMessageReadStateChanges(runtime);
   return true;
 };
 

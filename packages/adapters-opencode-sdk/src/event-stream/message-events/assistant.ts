@@ -20,7 +20,7 @@ import {
   updateMessageMetadata,
 } from "./helpers";
 import { normalizeLiveSubagentCorrelation } from "./subagent";
-import { reconcileUserMessageQueuedStates } from "./user";
+import { publishUserMessageReadStateChanges } from "./user";
 
 type EmitAssistantPartOptions = {
   linkedSubagentExternalSessionId?: string;
@@ -185,7 +185,7 @@ export const updateAssistantMessageCompletionState = (
   }
 
   if (previousActiveAssistantMessageId !== session.activeAssistantMessageId) {
-    reconcileUserMessageQueuedStates(runtime);
+    publishUserMessageReadStateChanges(runtime);
   }
 };
 
@@ -234,7 +234,7 @@ export const maybeEmitCompletedAssistantMessage = (
   const visible = sanitizeAssistantMessage(text);
   if (visible.length === 0) {
     emitSessionIdle(runtime);
-    reconcileUserMessageQueuedStates(runtime);
+    publishUserMessageReadStateChanges(runtime);
     return true;
   }
 
@@ -254,6 +254,6 @@ export const maybeEmitCompletedAssistantMessage = (
   session.emittedAssistantMessageIds.add(input.messageId);
 
   emitSessionIdle(runtime);
-  reconcileUserMessageQueuedStates(runtime);
+  publishUserMessageReadStateChanges(runtime);
   return true;
 };
