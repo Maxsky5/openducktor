@@ -177,10 +177,6 @@ export type AgentSessionState = {
   contextUsage?: AgentSessionContextUsage | null;
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
-  /** Live-only parent-session badge projection keyed by child runtime session id. */
-  subagentPendingApprovalRequestIdsByExternalSessionId?: Record<string, string[]> | undefined;
-  /** Live-only parent-session badge projection keyed by child runtime session id. */
-  subagentPendingQuestionRequestIdsByExternalSessionId?: Record<string, string[]> | undefined;
   selectedModel: AgentModelSelection | null;
   promptOverrides?: RepoPromptOverrides;
   pendingUserMessageStartedAt?: number | undefined;

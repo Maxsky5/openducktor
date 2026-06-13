@@ -670,9 +670,10 @@ describe("useAgentStudioPageModels", () => {
           },
         },
       ],
-      subagentPendingApprovalRequestIdsByExternalSessionId: {
-        "external-child": ["perm-child"],
-      },
+    });
+    const childSession = createSession("session-child", "external-child", {
+      taskId: "other-task",
+      pendingApprovals: [createPendingApproval("perm-child")],
     });
     const harness = createHookHarness(
       createHookArgs({
@@ -680,7 +681,10 @@ describe("useAgentStudioPageModels", () => {
           role: "planner",
           activeSession: plannerSession,
           sessionsForTask: [toAgentSessionSummary(plannerSession)],
-          allSessionSummaries: [toAgentSessionSummary(plannerSession)],
+          allSessionSummaries: [
+            toAgentSessionSummary(plannerSession),
+            toAgentSessionSummary(childSession),
+          ],
         },
       }),
     );
@@ -1272,15 +1276,12 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("derives subagent pending approval counts from parent live event overlay", async () => {
-    const parentSession = createSession("session-parent", "external-parent", {
-      subagentPendingApprovalRequestIdsByExternalSessionId: {
-        "external-child-session": ["perm-1"],
-      },
-    });
+  test("derives subagent pending approval counts from child session summaries", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
     const childSummary = toAgentSessionSummary(
       createSession("internal-child-session", "external-child-session", {
         taskId: "other-task",
+        pendingApprovals: [createPendingApproval("perm-1")],
       }),
     );
     const harness = createHookHarness(
@@ -1386,16 +1387,12 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("derives subagent pending question counts from parent live event overlay", async () => {
-    const parentSession = createSession("session-parent", "external-parent", {
-      subagentPendingQuestionRequestIdsByExternalSessionId: {
-        "external-child-session": ["question-1"],
-        "external-empty-child-session": [],
-      },
-    });
+  test("derives subagent pending question counts from child session summaries", async () => {
+    const parentSession = createSession("session-parent", "external-parent");
     const childSummary = toAgentSessionSummary(
       createSession("internal-child-session", "external-child-session", {
         taskId: "other-task",
+        pendingQuestions: [createPendingQuestion("question-1")],
       }),
     );
     const harness = createHookHarness(

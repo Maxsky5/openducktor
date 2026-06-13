@@ -52,6 +52,9 @@ Owns:
 
 Invariant: permissions and questions are fetched at startup through presence/history reads;
 after that they come from runtime events. Do not add polling.
+Invariant: a pending permission or question belongs to exactly one `AgentSessionState`.
+Parent subagent rows may link to child session ids in message metadata, but they must
+not copy child pending input.
 
 ### Runtime Session References
 
@@ -94,6 +97,9 @@ Do not resolve live and persisted selections in separate branches.
 Invariant: selected-session lifecycle owns only the selected session's runtime
 and history state. Page route/task switching is orchestration state and must not
 be stored in the lifecycle model.
+
+Invariant: subagent waiting badges are derived from child session summaries.
+Selected-session state must not maintain parent-owned pending-input projections.
 
 ### Selected Session Runtime Data
 
@@ -235,6 +241,8 @@ Use these compact tests as the first-line safety net:
   page modules should carry runtime kind plus working directory, not live routes.
 - Do not store live runtime routes, pending permissions, pending questions, or
   transcript stream state in task records.
+- Do not add parent-session pending-input overlays for subagents. Child sessions
+  own pending requests; parent rows only link to child session ids.
 - Do not make operations context carry read-model state. Read-model state has its
   own context.
 - Do not split selected-session identity between a summary branch and a persisted

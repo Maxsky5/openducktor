@@ -178,9 +178,6 @@ export const keepStablePendingInputCounts = (
 
 const buildSubagentPendingApprovalCountByExternalSessionId = (
   sessions: AgentSessionSummary[],
-  subagentPendingApprovalRequestIdsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalRequestIdsByExternalSessionId"]
-    | undefined,
 ): Record<string, number> => {
   const next: Record<string, number> = {};
   for (const session of sessions) {
@@ -190,42 +187,17 @@ const buildSubagentPendingApprovalCountByExternalSessionId = (
     }
   }
 
-  if (subagentPendingApprovalRequestIdsByExternalSessionId) {
-    for (const [externalSessionId, requestIds] of Object.entries(
-      subagentPendingApprovalRequestIdsByExternalSessionId,
-    )) {
-      const pendingApprovalCount = requestIds.length;
-      if (pendingApprovalCount > 0) {
-        next[externalSessionId] = pendingApprovalCount;
-      }
-    }
-  }
-
   return Object.keys(next).length > 0 ? next : EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS;
 };
 
 const buildSubagentPendingQuestionCountByExternalSessionId = (
   sessions: AgentSessionSummary[],
-  subagentPendingQuestionRequestIdsByExternalSessionId:
-    | AgentSessionState["subagentPendingQuestionRequestIdsByExternalSessionId"]
-    | undefined,
 ): Record<string, number> => {
   const next: Record<string, number> = {};
   for (const session of sessions) {
     const pendingQuestionCount = session.pendingQuestions.length;
     if (pendingQuestionCount > 0) {
       next[session.externalSessionId] = pendingQuestionCount;
-    }
-  }
-
-  if (subagentPendingQuestionRequestIdsByExternalSessionId) {
-    for (const [externalSessionId, requestIds] of Object.entries(
-      subagentPendingQuestionRequestIdsByExternalSessionId,
-    )) {
-      const pendingQuestionCount = requestIds.length;
-      if (pendingQuestionCount > 0) {
-        next[externalSessionId] = pendingQuestionCount;
-      }
     }
   }
 
@@ -364,15 +336,9 @@ export const buildAgentStudioSelectedSessionContext = ({
         onReply: approvals.onReplyApproval,
       },
       subagentPendingApprovalCountByExternalSessionId:
-        buildSubagentPendingApprovalCountByExternalSessionId(
-          allSessionSummaries,
-          activeSession?.subagentPendingApprovalRequestIdsByExternalSessionId,
-        ),
+        buildSubagentPendingApprovalCountByExternalSessionId(allSessionSummaries),
       subagentPendingQuestionCountByExternalSessionId:
-        buildSubagentPendingQuestionCountByExternalSessionId(
-          allSessionSummaries,
-          activeSession?.subagentPendingQuestionRequestIdsByExternalSessionId,
-        ),
+        buildSubagentPendingQuestionCountByExternalSessionId(allSessionSummaries),
     },
   };
 };

@@ -9,12 +9,6 @@ import {
 } from "../support/messages";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import { formatSubagentContent } from "../support/subagent-messages";
-import {
-  addSubagentPendingApprovalRequestId,
-  addSubagentPendingQuestionRequestId,
-  clearSubagentPendingApprovalFromSessions,
-  clearSubagentPendingQuestionFromSessions,
-} from "../support/subagent-pending-input-projection";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { flushDraftBuffers } from "./session-helpers";
 
@@ -142,55 +136,37 @@ const isLinkedChildObservedByParent = (
   );
 };
 
-const recordParentSubagentPendingApproval = (
+const recordSessionPendingApproval = (
   context: SessionLifecycleEventContext,
+  externalSessionId: string,
   event: ApprovalRequiredEvent,
 ): void => {
-  if (!event.parentExternalSessionId) {
-    return;
-  }
-
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  if (!childExternalSessionId) {
-    return;
-  }
-
   context.store.updateSession(
-    event.parentExternalSessionId,
+    externalSessionId,
     (current) => ({
       ...current,
-      subagentPendingApprovalRequestIdsByExternalSessionId: addSubagentPendingApprovalRequestId(
-        current.subagentPendingApprovalRequestIdsByExternalSessionId,
-        childExternalSessionId,
-        event.requestId,
-      ),
+      pendingApprovals: [
+        ...current.pendingApprovals.filter((entry) => entry.requestId !== event.requestId),
+        toPendingApproval(event),
+      ],
     }),
     { persist: false },
   );
 };
 
-const recordParentSubagentPendingQuestion = (
+const recordSessionPendingQuestion = (
   context: SessionLifecycleEventContext,
+  externalSessionId: string,
   event: QuestionRequiredEvent,
 ): void => {
-  if (!event.parentExternalSessionId) {
-    return;
-  }
-
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  if (!childExternalSessionId) {
-    return;
-  }
-
   context.store.updateSession(
-    event.parentExternalSessionId,
+    externalSessionId,
     (current) => ({
       ...current,
-      subagentPendingQuestionRequestIdsByExternalSessionId: addSubagentPendingQuestionRequestId(
-        current.subagentPendingQuestionRequestIdsByExternalSessionId,
-        childExternalSessionId,
-        event.requestId,
-      ),
+      pendingQuestions: [
+        ...current.pendingQuestions.filter((entry) => entry.requestId !== event.requestId),
+        toPendingQuestion(event),
+      ],
     }),
     { persist: false },
   );
@@ -213,9 +189,9 @@ const shouldAutoRejectApproval = (
   return runtimeDefinition?.capabilities.approvals.readOnlyAutoRejectSafe === true;
 };
 
-const isLinkedChildApprovalOwnedByActiveListener = (
+const isLinkedChildOwnedByActiveListener = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: ApprovalRequiredEvent,
+  event: ApprovalRequiredEvent | QuestionRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   if (!childExternalSessionId || !context.store.isSessionListenerActive) {
@@ -234,7 +210,6 @@ const autoRejectMutatingApproval = (
   event: ApprovalRequiredEvent,
   role: AgentRole,
   replySessionId = context.store.externalSessionId,
-  overlaySessionId = replySessionId,
 ): void => {
   const pendingApproval = toPendingApproval(event);
   const promptOverrides =
@@ -302,12 +277,6 @@ const autoRejectMutatingApproval = (
         }),
         { persist: true },
       );
-      clearSubagentPendingApprovalFromSessions({
-        sessionsRef: context.store.sessionsRef,
-        updateSession: context.store.updateSession,
-        targetExternalSessionId: overlaySessionId,
-        requestId: event.requestId,
-      });
     })
     .catch((error) => {
       markManualResponseRequired(error);
@@ -323,51 +292,31 @@ export const handlePermissionRequired = (
 
   if (isLinkedChildObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
-    const isOwnedByActiveListener = isLinkedChildApprovalOwnedByActiveListener(context, event);
-    if (isOwnedByActiveListener && shouldAutoRejectApproval(context, role, event)) {
-      return;
-    }
-
-    recordParentSubagentPendingApproval(context, event);
+    const isOwnedByActiveListener = isLinkedChildOwnedByActiveListener(context, event);
     if (isOwnedByActiveListener) {
       return;
     }
 
     if (role && shouldAutoRejectApproval(context, role, event)) {
-      const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-      if (childExternalSessionId) {
-        autoRejectMutatingApproval(
-          context,
-          event,
-          role,
-          context.store.externalSessionId,
-          childExternalSessionId,
-        );
-      }
+      autoRejectMutatingApproval(context, event, role);
+      return;
+    }
+
+    const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
+    if (childExternalSessionId) {
+      recordSessionPendingApproval(context, childExternalSessionId, event);
     }
     return;
   }
 
   if (role && shouldAutoRejectApproval(context, role, event)) {
     patchParentSubagentSessionLink(context, event);
-    recordParentSubagentPendingApproval(context, event);
     autoRejectMutatingApproval(context, event, role);
     return;
   }
 
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => ({
-      ...current,
-      pendingApprovals: [
-        ...current.pendingApprovals.filter((entry) => entry.requestId !== event.requestId),
-        toPendingApproval(event),
-      ],
-    }),
-    { persist: false },
-  );
+  recordSessionPendingApproval(context, context.store.externalSessionId, event);
   patchParentSubagentSessionLink(context, event);
-  recordParentSubagentPendingApproval(context, event);
 };
 
 export const handlePermissionResolved = (
@@ -390,12 +339,6 @@ export const handlePermissionResolved = (
     }),
     { persist: false },
   );
-  clearSubagentPendingApprovalFromSessions({
-    sessionsRef: context.store.sessionsRef,
-    updateSession: context.store.updateSession,
-    targetExternalSessionId: targetSessionId,
-    requestId: event.requestId,
-  });
 };
 
 export const handleQuestionRequired = (
@@ -406,23 +349,18 @@ export const handleQuestionRequired = (
 
   if (isLinkedChildObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
-    recordParentSubagentPendingQuestion(context, event);
+    if (isLinkedChildOwnedByActiveListener(context, event)) {
+      return;
+    }
+    const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
+    if (childExternalSessionId) {
+      recordSessionPendingQuestion(context, childExternalSessionId, event);
+    }
     return;
   }
 
-  context.store.updateSession(
-    context.store.externalSessionId,
-    (current) => ({
-      ...current,
-      pendingQuestions: [
-        ...current.pendingQuestions.filter((entry) => entry.requestId !== event.requestId),
-        toPendingQuestion(event),
-      ],
-    }),
-    { persist: false },
-  );
+  recordSessionPendingQuestion(context, context.store.externalSessionId, event);
   patchParentSubagentSessionLink(context, event);
-  recordParentSubagentPendingQuestion(context, event);
 };
 
 export const handleQuestionResolved = (
@@ -445,10 +383,4 @@ export const handleQuestionResolved = (
     }),
     { persist: false },
   );
-  clearSubagentPendingQuestionFromSessions({
-    sessionsRef: context.store.sessionsRef,
-    updateSession: context.store.updateSession,
-    targetExternalSessionId: targetSessionId,
-    requestId: event.requestId,
-  });
 };

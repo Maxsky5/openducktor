@@ -36,10 +36,6 @@ import {
   toRuntimeSessionContextRef,
   toRuntimeSessionRef,
 } from "../support/session-runtime-ref";
-import {
-  clearSubagentPendingApprovalFromSessions,
-  clearSubagentPendingQuestionFromSessions,
-} from "../support/subagent-pending-input-projection";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import { createStartAgentSession } from "./start-session";
 
@@ -542,12 +538,6 @@ export const createAgentSessionActions = ({
       }),
       { persist: false },
     );
-    clearSubagentPendingApprovalFromSessions({
-      sessionsRef,
-      updateSession,
-      targetExternalSessionId: externalSessionId,
-      requestId,
-    });
   };
 
   const answerAgentQuestion = async (
@@ -588,12 +578,6 @@ export const createAgentSessionActions = ({
       },
       { persist: false },
     );
-    clearSubagentPendingQuestionFromSessions({
-      sessionsRef,
-      updateSession,
-      targetExternalSessionId: externalSessionId,
-      requestId,
-    });
   };
 
   return {
