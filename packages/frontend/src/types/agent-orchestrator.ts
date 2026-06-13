@@ -161,11 +161,8 @@ export type AgentSessionContextUsage = {
 
 export type AgentSessionHistoryLoadState = "not_requested" | "loading" | "loaded" | "failed";
 
-export type AgentSessionPurpose = "primary" | "transcript";
-
 export type AgentSessionState = {
   externalSessionId: string;
-  purpose?: AgentSessionPurpose;
   title?: string;
   taskId: string;
   repoPath: string;
@@ -204,10 +201,6 @@ export type AgentSessionRouteIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
-
-export type TranscriptAgentSessionState = AgentSessionState & {
-  purpose: "transcript";
-};
 
 export type AgentSessionHistoryLoadPolicy = "none" | "requested_only" | "live_if_empty";
 

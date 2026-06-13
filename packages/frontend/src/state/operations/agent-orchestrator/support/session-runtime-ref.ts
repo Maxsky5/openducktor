@@ -15,6 +15,5 @@ export const toRuntimeSessionContextRef = (session: AgentSessionState): AgentSes
   ...toRuntimeSessionRef(session),
   taskId: session.taskId,
   role: session.role,
-  purpose: session.purpose ?? "primary",
   ...(session.selectedModel ? { model: session.selectedModel } : {}),
 });

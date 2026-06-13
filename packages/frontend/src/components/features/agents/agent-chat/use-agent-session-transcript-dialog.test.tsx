@@ -4,7 +4,6 @@ import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
@@ -13,8 +12,6 @@ import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runti
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
-const removeAgentSession = mock(async () => {});
-let agentSessionState: Pick<AgentSessionState, "purpose" | "role"> | null = null;
 let latestDialogProps: {
   externalSessionId: string | null;
   source: RuntimeSessionTranscriptSource | null;
@@ -70,8 +67,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
   beforeEach(() => {
     latestDialogProps = null;
-    removeAgentSession.mockClear();
-    agentSessionState = null;
 
     mock.module("@/state/app-state-provider", () => ({
       useActiveWorkspace: () => ({
@@ -79,10 +74,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
         workspaceName: "Workspace A",
         repoPath: "/repo-a",
       }),
-      useAgentOperations: () => ({
-        removeAgentSession,
-      }),
-      useAgentSession: () => agentSessionState,
     }));
 
     mock.module("./agent-session-transcript-dialog", () => ({
@@ -151,12 +142,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
   });
 
-  test("removes transcript-only sessions when the dialog closes", async () => {
-    agentSessionState = {
-      purpose: "transcript",
-      role: "build",
-    };
-
+  test("clears runtime transcript requests when the dialog closes", async () => {
     const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
     );
@@ -198,57 +184,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    await waitFor(() => expect(removeAgentSession).toHaveBeenCalledWith("session-child-1"));
-  });
-
-  test("keeps regular sessions when the dialog closes", async () => {
-    agentSessionState = {
-      purpose: "primary",
-      role: "build",
-    };
-
-    const { AgentSessionTranscriptDialogHost } = await import(
-      "./use-agent-session-transcript-dialog"
-    );
-    const { useAgentSessionTranscriptDialog } = await import(
-      "./agent-session-transcript-dialog-context"
-    );
-
-    function DialogControls(): ReactElement {
-      const { openSessionTranscript, closeSessionTranscript } = useAgentSessionTranscriptDialog();
-      return (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              openSessionTranscript({
-                externalSessionId: "session-build-1",
-                source: transcriptSource,
-              });
-            }}
-          >
-            Open
-          </button>
-          <button type="button" onClick={() => closeSessionTranscript()}>
-            Close
-          </button>
-        </>
-      );
-    }
-
-    const wrapper = ({ children }: PropsWithChildren): ReactElement => (
-      <QueryProvider useIsolatedClient>
-        <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
-      </QueryProvider>
-    );
-
-    render(<DialogControls />, { wrapper });
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBe("session-build-1"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
-    await waitFor(() => expect(removeAgentSession).not.toHaveBeenCalled());
+    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBeNull());
   });
 
   test("opens a linked subagent transcript from the visible subagent card", async () => {

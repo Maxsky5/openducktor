@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
-import { isTranscriptAgentSession } from "../support/session-purpose";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 
 type UseAgentSessionMutationsArgs = {
   workspaceRepoPath: string | null;
@@ -35,11 +35,11 @@ export const useAgentSessionMutations = ({
       if (!current) {
         return;
       }
-      const shouldPersist = options?.persist === true && !isTranscriptAgentSession(current);
       const nextSession = updater(current);
       if (nextSession === current) {
         return;
       }
+      const shouldPersist = options?.persist === true;
 
       let hasChanges = false;
       for (const key of Object.keys(nextSession) as Array<keyof AgentSessionState>) {
@@ -51,6 +51,10 @@ export const useAgentSessionMutations = ({
 
       if (!hasChanges) {
         return;
+      }
+
+      if (shouldPersist && !isWorkflowAgentSession(nextSession)) {
+        throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
       }
 
       const nextSessions = {

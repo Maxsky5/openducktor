@@ -1,5 +1,5 @@
 import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
-import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/session-purpose";
+import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/workflow-session";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<

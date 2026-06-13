@@ -31,7 +31,6 @@ import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
-import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
   type ListenToAgentSession,
   toRuntimeSessionContextRef,
@@ -41,6 +40,7 @@ import {
   clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
 } from "../support/subagent-approval-overlay";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import { createStartAgentSession } from "./start-session";
 
 type SessionActionsDependencies = {

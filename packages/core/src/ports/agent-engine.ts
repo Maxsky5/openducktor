@@ -40,7 +40,6 @@ export type AgentSessionRuntimeRef = AgentSessionRef & {
   role: AgentRole | null;
   model?: AgentModelSelection;
   systemPrompt?: string;
-  purpose?: "primary" | "transcript";
 };
 
 export type StartAgentSessionInput = AgentSessionContext;

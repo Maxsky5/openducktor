@@ -6,9 +6,9 @@ import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { RuntimeInfo } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { isWorkflowAgentSession } from "../support/session-purpose";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
 import { type ListenToAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { isWorkflowAgentSession } from "../support/workflow-session";
 import {
   type AgentSessionPresenceSnapshot,
   applyAgentSessionPresenceSnapshotToSession,

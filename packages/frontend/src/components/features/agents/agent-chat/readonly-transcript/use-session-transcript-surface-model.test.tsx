@@ -101,10 +101,9 @@ function makeLiveTranscriptSession(): AgentSessionState {
   return {
     runtimeKind: "opencode",
     externalSessionId: "session-subagent-1",
-    purpose: "transcript",
-    taskId: "",
+    taskId: "task-a",
     repoPath: "/repo-a",
-    role: null as unknown as AgentSessionState["role"],
+    role: "build",
     status: "running",
     startedAt: "2026-02-22T12:00:00.000Z",
     workingDirectory: "/repo-a",

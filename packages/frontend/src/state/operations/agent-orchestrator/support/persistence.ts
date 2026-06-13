@@ -24,7 +24,6 @@ import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { isFinalAssistantHistoryMessage } from "./history-finality";
 import { appendHistorySubagentMessage } from "./history-subagent-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
-import { isWorkflowAgentSession } from "./session-purpose";
 import {
   readPersistedRuntimeKind,
   requirePersistedSelectedModelRuntimeKind,
@@ -33,6 +32,7 @@ import {
 } from "./session-runtime-metadata";
 import { isSubagentMessage } from "./subagent-messages";
 import { normalizeToolInput, normalizeToolText } from "./tool-messages";
+import { isWorkflowAgentSession } from "./workflow-session";
 
 type HistoryPart = AgentSessionHistoryMessage["parts"][number];
 type LegacySubtaskHistoryPart = {
@@ -85,7 +85,6 @@ export const fromPersistedSessionRecord = (
     {
       externalSessionId: session.externalSessionId,
       title: formatWorkflowAgentSessionTitle(session.role, fallbackTaskId),
-      purpose: "primary",
       taskId: fallbackTaskId,
       role: session.role,
       // Persisted task-store records are durable session metadata only.

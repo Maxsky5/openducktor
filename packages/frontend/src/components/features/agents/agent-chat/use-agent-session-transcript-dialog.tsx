@@ -1,10 +1,5 @@
 import { type PropsWithChildren, type ReactElement, useCallback, useMemo, useState } from "react";
-import {
-  useActiveWorkspace,
-  useAgentOperations,
-  useAgentSession,
-} from "@/state/app-state-provider";
-import { isTranscriptAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
+import { useActiveWorkspace } from "@/state/app-state-provider";
 import { AgentSessionTranscriptDialog } from "./agent-session-transcript-dialog";
 import {
   AgentSessionTranscriptDialogContext,
@@ -16,10 +11,8 @@ const DEFAULT_DESCRIPTION = "Read-only conversation.";
 
 function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
   const activeWorkspace = useActiveWorkspace();
-  const { removeAgentSession } = useAgentOperations();
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
   const externalSessionId = request?.externalSessionId ?? null;
-  const activeTranscriptSession = useAgentSession(externalSessionId);
   const open = request !== null;
 
   const openSessionTranscript = useCallback((nextRequest: OpenAgentSessionTranscriptRequest) => {
@@ -28,10 +21,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
 
   const closeSessionTranscript = useCallback(() => {
     setRequest(null);
-    if (externalSessionId && isTranscriptAgentSession(activeTranscriptSession)) {
-      void removeAgentSession(externalSessionId);
-    }
-  }, [activeTranscriptSession, removeAgentSession, externalSessionId]);
+  }, []);
 
   const contextValue = useMemo(
     () => ({

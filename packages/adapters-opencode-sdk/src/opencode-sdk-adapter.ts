@@ -431,12 +431,9 @@ export class OpencodeSdkAdapter
     );
     const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
     const sessionInput = toRestoredSessionInput(input);
-    let startedMessage = "Restored session";
-    if ("purpose" in input && input.purpose === "transcript") {
-      startedMessage = "Restored transcript session";
-    } else if (sessionInput.role) {
-      startedMessage = `Restored ${sessionInput.role} session`;
-    }
+    const startedMessage = sessionInput.role
+      ? `Restored ${sessionInput.role} session`
+      : "Restored session";
 
     const summary = registerSession({
       sessions: this.sessions,

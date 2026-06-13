@@ -4,9 +4,7 @@ import { useCallback } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { listenToAgentSessionEvents } from "../events/session-events";
-import { isTranscriptAgentSession } from "../support/session-purpose";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
-import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 import type { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
@@ -91,13 +89,9 @@ export const useAgentSessionListeners = ({
 
   const removeAgentSession = useCallback(
     async (externalSessionId: string): Promise<void> => {
-      const session = sessionsRef.current[externalSessionId];
-      if (session && isTranscriptAgentSession(session)) {
-        await agentEngine.releaseSession(toRuntimeSessionRef(session));
-      }
       removeSessionIds([externalSessionId]);
     },
-    [agentEngine, removeSessionIds, sessionsRef],
+    [removeSessionIds],
   );
 
   const removeAgentSessions = useCallback(
@@ -108,19 +102,12 @@ export const useAgentSessionListeners = ({
           session.taskId === taskId &&
           (matchingRoles === null || (session.role !== null && matchingRoles.has(session.role))),
       );
-      await Promise.all(
-        matchingSessions.map(async (session) => {
-          if (isTranscriptAgentSession(session)) {
-            await agentEngine.releaseSession(toRuntimeSessionRef(session));
-          }
-        }),
-      );
       const externalSessionIds = Array.from(
         new Set(matchingSessions.map((session) => session.externalSessionId)),
       );
       removeSessionIds(externalSessionIds);
     },
-    [agentEngine, removeSessionIds, sessionsRef],
+    [removeSessionIds, sessionsRef],
   );
 
   const listenToAgentSession = useCallback<ListenToAgentSession>(

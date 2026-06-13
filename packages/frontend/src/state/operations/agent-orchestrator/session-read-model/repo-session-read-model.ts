@@ -61,9 +61,6 @@ const shouldKeepLocalSession = (
   session: AgentSessionState,
   persistedSessionIds: Set<string>,
 ): boolean => {
-  if (session.purpose === "transcript") {
-    return true;
-  }
   return !persistedSessionIds.has(session.externalSessionId) && session.status !== "stopped";
 };
 

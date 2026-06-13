@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
   BUILD_SELECTION,
   buildBootstrapFixture,
   createAgentSessionPresenceSnapshotFixture,
   createHookHarness,
-  createSessionMessagesState,
   createUnavailableBuildTaskFixture,
   createWorktreeRuntimeFixture,
   host,
@@ -559,14 +559,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     }
   });
 
-  test("removeAgentSession releases transcript-purpose runtime sessions before local cleanup", async () => {
-    const originalReleaseSession = OpencodeSdkAdapter.prototype.releaseSession;
-    const releaseCalls: unknown[] = [];
-
-    OpencodeSdkAdapter.prototype.releaseSession = async (input) => {
-      releaseCalls.push(input);
-    };
-
+  test("removeAgentSession removes local session state", async () => {
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
       tasks: [taskFixture],
@@ -577,146 +570,24 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.mount();
       await harness.run(async () => {
         harness.getLatest().commitSessions({
-          "external-transcript": {
-            externalSessionId: "external-transcript",
+          "external-1": createAgentSessionFixture({
+            externalSessionId: "external-1",
             taskId: "task-1",
             repoPath: "/tmp/repo",
             runtimeKind: "opencode",
-            role: null,
-            status: "idle",
-            startedAt: "2026-02-22T08:00:00.000Z",
+            role: "build",
             workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "loaded",
-            purpose: "transcript",
-            messages: createSessionMessagesState("external-transcript", []),
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            contextUsage: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            todos: [],
-            modelCatalog: null,
-            selectedModel: null,
-            isLoadingModelCatalog: false,
-            promptOverrides: {},
-          },
+          }),
         });
       });
 
       await harness.run(async () => {
-        await harness.getLatest().removeAgentSession("external-transcript");
+        await harness.getLatest().removeAgentSession("external-1");
       });
 
-      expect(releaseCalls).toEqual([
-        {
-          externalSessionId: "external-transcript",
-          repoPath: "/tmp/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      ]);
-      expect(harness.getLatest().sessionStore.getSessionSnapshot("external-transcript")).toBeNull();
+      expect(harness.getLatest().sessionStore.getSessionSnapshot("external-1")).toBeNull();
     } finally {
       await harness.unmount();
-      OpencodeSdkAdapter.prototype.releaseSession = originalReleaseSession;
-    }
-  });
-
-  test("removeAgentSessions releases transcript-purpose runtime sessions before task cleanup", async () => {
-    const originalReleaseSession = OpencodeSdkAdapter.prototype.releaseSession;
-    const releaseCalls: unknown[] = [];
-
-    OpencodeSdkAdapter.prototype.releaseSession = async (input) => {
-      releaseCalls.push(input);
-    };
-
-    const harness = createHookHarness({
-      activeRepo: "/tmp/repo",
-      tasks: [taskFixture],
-      refreshTaskData: async () => {},
-    });
-
-    try {
-      await harness.mount();
-      await harness.run(async () => {
-        harness.getLatest().commitSessions({
-          "external-transcript-a": {
-            externalSessionId: "external-transcript-a",
-            taskId: "task-1",
-            repoPath: "/tmp/repo",
-            runtimeKind: "opencode",
-            role: null,
-            status: "idle",
-            startedAt: "2026-02-22T08:00:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "loaded",
-            purpose: "transcript",
-            messages: createSessionMessagesState("external-transcript-a", []),
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            contextUsage: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            todos: [],
-            modelCatalog: null,
-            selectedModel: null,
-            isLoadingModelCatalog: false,
-            promptOverrides: {},
-          },
-          "external-transcript-b": {
-            externalSessionId: "external-transcript-b",
-            taskId: "task-1",
-            repoPath: "/tmp/repo",
-            runtimeKind: "opencode",
-            role: null,
-            status: "idle",
-            startedAt: "2026-02-22T08:00:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "loaded",
-            purpose: "transcript",
-            messages: createSessionMessagesState("external-transcript-b", []),
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            contextUsage: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            todos: [],
-            modelCatalog: null,
-            selectedModel: null,
-            isLoadingModelCatalog: false,
-            promptOverrides: {},
-          },
-        });
-      });
-
-      await harness.run(async () => {
-        await harness.getLatest().removeAgentSessions({ taskId: "task-1" });
-      });
-
-      expect(releaseCalls).toEqual([
-        {
-          externalSessionId: "external-transcript-a",
-          repoPath: "/tmp/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-        {
-          externalSessionId: "external-transcript-b",
-          repoPath: "/tmp/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      ]);
-      expect(harness.getLatest().sessions).toEqual([]);
-    } finally {
-      await harness.unmount();
-      OpencodeSdkAdapter.prototype.releaseSession = originalReleaseSession;
     }
   });
 

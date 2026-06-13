@@ -853,7 +853,6 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
         "external-child-session": buildSession({
           externalSessionId: "external-child-session",
-          purpose: "transcript",
           pendingApprovals: [],
         }),
       },
@@ -1089,7 +1088,6 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
         "external-child-session": buildSession({
           externalSessionId: "external-child-session",
-          purpose: "transcript",
           pendingQuestions: [],
         }),
       },

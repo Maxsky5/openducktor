@@ -91,14 +91,13 @@ describe("createAgentSessionsStore activity snapshots", () => {
     });
   });
 
-  test("omits transcript-only sessions from activity snapshots", () => {
+  test("omits role-less sessions from activity snapshots", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({
       externalSessionId: "session-1",
       taskId: "task-1",
       status: "running",
-      purpose: "transcript",
-      role: "build",
+      role: null,
     });
 
     store.setSessionsById({ [session.externalSessionId]: session });

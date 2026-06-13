@@ -17,7 +17,7 @@ import {
   useSessionStartModalRunner,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
+import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
