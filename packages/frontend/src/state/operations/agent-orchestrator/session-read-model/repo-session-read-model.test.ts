@@ -10,7 +10,7 @@ import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import {
   buildRepoSessionReadModel,
-  readRepoSessionPresence,
+  readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
 
@@ -72,7 +72,7 @@ describe("repo session read model", () => {
     const record = createRecord({ runtimeKind });
     const tasks = [createTask([record])];
     const pendingQuestion = { requestId: `${runtimeKind}-question`, questions: [] };
-    const presence = await readRepoSessionPresence({
+    const presence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -88,7 +88,7 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence,
+      runtimePresence: presence,
     });
 
     const session = readModel.sessionsById[record.externalSessionId];
@@ -108,7 +108,7 @@ describe("repo session read model", () => {
   test("a later read can restore an active session after an earlier scan missed it", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const firstPresence = await readRepoSessionPresence({
+    const firstPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [],
@@ -116,11 +116,11 @@ describe("repo session read model", () => {
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence: firstPresence,
+      runtimePresence: firstPresence,
     });
     expect(firstRead.sessionsById[record.externalSessionId]?.status).toBe("stopped");
 
-    const secondPresence = await readRepoSessionPresence({
+    const secondPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -135,7 +135,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: firstRead.sessionsById,
-      presence: secondPresence,
+      runtimePresence: secondPresence,
     });
 
     expect(secondRead.sessionsById[record.externalSessionId]?.status).toBe("running");
@@ -152,7 +152,7 @@ describe("repo session read model", () => {
   test("surfaces idle status when runtime presence is idle without pending input", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const busyPresence = await readRepoSessionPresence({
+    const busyPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -166,9 +166,9 @@ describe("repo session read model", () => {
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence: busyPresence,
+      runtimePresence: busyPresence,
     });
-    const idlePresence = await readRepoSessionPresence({
+    const idlePresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -184,7 +184,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: busyRead.sessionsById,
-      presence: idlePresence,
+      runtimePresence: idlePresence,
     });
 
     expect(idleRead.sessionsById[record.externalSessionId]?.status).toBe("idle");
@@ -193,7 +193,7 @@ describe("repo session read model", () => {
   test("demotes an active session when a runtime scan misses it", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const busyPresence = await readRepoSessionPresence({
+    const busyPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -207,9 +207,9 @@ describe("repo session read model", () => {
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence: busyPresence,
+      runtimePresence: busyPresence,
     });
-    const presence = await readRepoSessionPresence({
+    const presence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [],
@@ -219,7 +219,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: busyRead.sessionsById,
-      presence,
+      runtimePresence: presence,
     });
 
     expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
@@ -249,7 +249,7 @@ describe("repo session read model", () => {
         },
       ]),
     };
-    const presence = await readRepoSessionPresence({
+    const presence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [],
@@ -261,7 +261,7 @@ describe("repo session read model", () => {
       currentSessionsById: {
         [record.externalSessionId]: currentSession,
       },
-      presence,
+      runtimePresence: presence,
     });
 
     const session = readModel.sessionsById[record.externalSessionId];
@@ -278,7 +278,7 @@ describe("repo session read model", () => {
   test("surfaces idle pending input and idle status from runtime presence", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const busyPresence = await readRepoSessionPresence({
+    const busyPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -292,10 +292,10 @@ describe("repo session read model", () => {
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence: busyPresence,
+      runtimePresence: busyPresence,
     });
     const pendingQuestion = { requestId: "question-1", questions: [] };
-    const idlePresence = await readRepoSessionPresence({
+    const idlePresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -312,7 +312,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: busyRead.sessionsById,
-      presence: idlePresence,
+      runtimePresence: idlePresence,
     });
 
     const session = idleRead.sessionsById[record.externalSessionId];
@@ -325,7 +325,7 @@ describe("repo session read model", () => {
     const tasks = [createTask([record])];
     const firstQuestion = { requestId: "question-1", questions: [] };
     const secondQuestion = { requestId: "question-2", questions: [] };
-    const firstPresence = await readRepoSessionPresence({
+    const firstPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -339,13 +339,13 @@ describe("repo session read model", () => {
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence: firstPresence,
+      runtimePresence: firstPresence,
     });
     const currentSession = firstRead.sessionsById[record.externalSessionId];
     if (!currentSession) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    const secondPresence = await readRepoSessionPresence({
+    const secondPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -361,7 +361,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: firstRead.sessionsById,
-      presence: secondPresence,
+      runtimePresence: secondPresence,
     });
 
     expect(secondRead.sessionsById[record.externalSessionId]).toBe(currentSession);
@@ -394,7 +394,7 @@ describe("repo session read model", () => {
         },
       ],
     };
-    const firstPresence = await readRepoSessionPresence({
+    const firstPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -408,13 +408,13 @@ describe("repo session read model", () => {
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      presence: firstPresence,
+      runtimePresence: firstPresence,
     });
     const currentSession = firstRead.sessionsById[record.externalSessionId];
     if (!currentSession) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    const secondPresence = await readRepoSessionPresence({
+    const secondPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -430,7 +430,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: firstRead.sessionsById,
-      presence: secondPresence,
+      runtimePresence: secondPresence,
     });
 
     expect(secondRead.sessionsById[record.externalSessionId]).not.toBe(currentSession);
@@ -443,7 +443,7 @@ describe("repo session read model", () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     await expect(
-      readRepoSessionPresence({
+      readRepoRuntimeSessionPresence({
         repoPath: "/repo",
         tasks,
         listSessionPresence: async () => {

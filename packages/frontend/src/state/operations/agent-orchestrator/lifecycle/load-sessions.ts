@@ -6,9 +6,9 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  buildStoredSessionPresenceRead,
-  type RepoSessionPresenceRead,
-  readRepoSessionPresence,
+  createEmptyRepoRuntimeSessionPresenceRead,
+  type RepoRuntimeSessionPresenceRead,
+  readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
@@ -37,13 +37,13 @@ type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence" | "resto
 const commitRepoSessionLoadPlan = ({
   repoPath,
   tasks,
-  currentPresence,
+  runtimePresence,
   options,
   commitSessions,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
-  currentPresence: RepoSessionPresenceRead;
+  runtimePresence: RepoRuntimeSessionPresenceRead;
   options?: AgentSessionLoadOptions;
   commitSessions: CommitSessions;
 }): RepoSessionLoadPlan => {
@@ -53,7 +53,7 @@ const commitRepoSessionLoadPlan = ({
       repoPath,
       tasks,
       currentSessionsById,
-      presence: currentPresence,
+      runtimePresence,
       ...(options ? { options } : {}),
     });
     committedPlan = nextPlan;
@@ -126,7 +126,7 @@ export const loadRepoAgentSessions = async ({
   commitRepoSessionLoadPlan({
     repoPath,
     tasks,
-    currentPresence: buildStoredSessionPresenceRead({ repoPath, tasks }),
+    runtimePresence: createEmptyRepoRuntimeSessionPresenceRead(),
     options: { ...(options ?? {}), historyPolicy: "none" },
     commitSessions,
   });
@@ -135,7 +135,7 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const presence = await readRepoSessionPresence({
+  const runtimePresence = await readRepoRuntimeSessionPresence({
     repoPath,
     tasks,
     listSessionPresence: (input) => adapter.listSessionPresence(input),
@@ -147,7 +147,7 @@ export const loadRepoAgentSessions = async ({
   const committedPlan = commitRepoSessionLoadPlan({
     repoPath,
     tasks,
-    currentPresence: presence,
+    runtimePresence,
     ...(options ? { options } : {}),
     commitSessions,
   });

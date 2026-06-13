@@ -141,6 +141,30 @@ describe("createLoadAgentSessions", () => {
     expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
   });
 
+  test("commits persisted sessions before runtime presence resolves", async () => {
+    const presenceReady = createDeferred<void>();
+    const harness = createLoaderHarness({
+      listSessionPresence: async () => {
+        await presenceReady.promise;
+        return [];
+      },
+      loadSessionHistory: async () => {
+        throw new Error("History must wait for the runtime presence plan.");
+      },
+    });
+
+    const loading = harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+
+    const session = harness.getSession(record.externalSessionId);
+    expect(session?.status).toBe("stopped");
+    expect(session?.runtimeKind).toBe("opencode");
+    expect(session?.workingDirectory).toBe(record.workingDirectory);
+    expect(session?.historyLoadState).toBe("not_requested");
+
+    presenceReady.resolve(undefined);
+    await loading;
+  });
+
   test("loads the runtime history baseline for a running session after reload", async () => {
     let historyLoads = 0;
     const harness = createLoaderHarness({

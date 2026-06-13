@@ -7,7 +7,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import {
   buildRepoSessionReadModel,
-  type RepoSessionPresenceRead,
+  type RepoRuntimeSessionPresenceRead,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
 import { getAgentSessionHistoryLoadState } from "../support/history-load-state";
@@ -95,20 +95,20 @@ export const buildRepoSessionLoadPlan = ({
   repoPath,
   tasks,
   currentSessionsById,
-  presence,
+  runtimePresence,
   options,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionsById: SessionsById;
-  presence: RepoSessionPresenceRead;
+  runtimePresence: RepoRuntimeSessionPresenceRead;
   options?: AgentSessionLoadOptions;
 }): RepoSessionLoadPlan => {
   const readModel = buildRepoSessionReadModel({
     repoPath,
     tasks,
     currentSessionsById,
-    presence,
+    runtimePresence,
   });
   const historyRecords = selectSessionHistoryRecords({
     records: tasks.flatMap((task) => task.agentSessions ?? []),

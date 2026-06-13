@@ -135,11 +135,12 @@ Must not own:
 1. The app loads tasks from the task store.
 2. `use-repo-session-read-model-effects.ts` passes all task session records to
    `loadRepoAgentSessions`.
-3. `readRepoSessionPresence` scans each runtime kind and working directory once.
-4. `buildRepoSessionReadModel` merges persisted records with runtime presence.
-5. Live sessions are subscribed by route ref.
-6. Initial history is loaded for requested sessions and live empty transcripts.
-7. Subsequent status, transcript, permissions, and questions come from runtime events.
+3. Persisted session records materialize immediately as the local session list.
+4. `readRepoRuntimeSessionPresence` scans each runtime kind and working directory once.
+5. `buildRepoSessionReadModel` overlays runtime presence when it exists; missing runtime evidence is `persisted_only`.
+6. Live sessions are subscribed by route ref.
+7. Initial history is loaded for requested sessions and live empty transcripts.
+8. Subsequent status, transcript, permissions, and questions come from runtime events.
 
 ## Regression Anchors
 
