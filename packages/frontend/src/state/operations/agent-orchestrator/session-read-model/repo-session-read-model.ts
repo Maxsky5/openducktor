@@ -209,6 +209,27 @@ const toPersistedSessionRef = ({
   externalSessionId: record.externalSessionId,
 });
 
+export const buildStoredSessionPresenceRead = ({
+  repoPath,
+  tasks,
+}: {
+  repoPath: string;
+  tasks: TaskSessionRecords[];
+}): RepoSessionPresenceRead => {
+  const presenceBySessionKey = new Map<string, AgentSessionPresenceSnapshot>();
+  for (const { record } of collectTaskSessionRecords(tasks)) {
+    const ref = toPersistedSessionRef({ repoPath, record });
+    presenceBySessionKey.set(
+      toPresenceKey(ref.runtimeKind, ref.workingDirectory, ref.externalSessionId),
+      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+        ref,
+        snapshot: null,
+      }),
+    );
+  }
+  return { presenceBySessionKey };
+};
+
 export const readRepoSessionPresence = async ({
   repoPath,
   tasks,
@@ -251,17 +272,12 @@ export const readRepoSessionPresence = async ({
     }),
   );
 
-  for (const { record } of taskSessionRecords) {
-    const ref = toPersistedSessionRef({ repoPath, record });
-    const sessionKey = toPresenceKey(ref.runtimeKind, ref.workingDirectory, ref.externalSessionId);
+  for (const [sessionKey, snapshot] of buildStoredSessionPresenceRead({
+    repoPath,
+    tasks,
+  }).presenceBySessionKey) {
     if (!presenceBySessionKey.has(sessionKey)) {
-      presenceBySessionKey.set(
-        sessionKey,
-        toAgentSessionPresenceSnapshotFromLiveSnapshot({
-          ref,
-          snapshot: null,
-        }),
-      );
+      presenceBySessionKey.set(sessionKey, snapshot);
     }
   }
 

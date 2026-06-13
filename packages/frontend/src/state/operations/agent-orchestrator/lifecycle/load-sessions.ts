@@ -6,6 +6,8 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
+  buildStoredSessionPresenceRead,
+  type RepoSessionPresenceRead,
   readRepoSessionPresence,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
@@ -31,6 +33,37 @@ type CommitSessions = (updater: SessionStateUpdater) => void;
 
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence" | "restoreSession"> &
   SessionHistoryLoaderAdapter;
+
+const commitRepoSessionLoadPlan = ({
+  repoPath,
+  tasks,
+  currentPresence,
+  options,
+  commitSessions,
+}: {
+  repoPath: string;
+  tasks: TaskSessionRecords[];
+  currentPresence: RepoSessionPresenceRead;
+  options?: AgentSessionLoadOptions;
+  commitSessions: CommitSessions;
+}): RepoSessionLoadPlan => {
+  let committedPlan: RepoSessionLoadPlan | undefined;
+  commitSessions((currentSessionsById) => {
+    const nextPlan = buildRepoSessionLoadPlan({
+      repoPath,
+      tasks,
+      currentSessionsById,
+      presence: currentPresence,
+      ...(options ? { options } : {}),
+    });
+    committedPlan = nextPlan;
+    return nextPlan.sessionsById;
+  });
+  if (committedPlan === undefined) {
+    throw new Error("Failed to commit repo session read model.");
+  }
+  return committedPlan;
+};
 
 type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -90,6 +123,18 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
+  commitRepoSessionLoadPlan({
+    repoPath,
+    tasks,
+    currentPresence: buildStoredSessionPresenceRead({ repoPath, tasks }),
+    options: { ...(options ?? {}), historyPolicy: "none" },
+    commitSessions,
+  });
+
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
   const presence = await readRepoSessionPresence({
     repoPath,
     tasks,
@@ -99,21 +144,13 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  let committedPlan: RepoSessionLoadPlan | undefined;
-  commitSessions((currentSessionsById) => {
-    const nextPlan = buildRepoSessionLoadPlan({
-      repoPath,
-      tasks,
-      currentSessionsById,
-      presence,
-      ...(options ? { options } : {}),
-    });
-    committedPlan = nextPlan;
-    return nextPlan.sessionsById;
+  const committedPlan = commitRepoSessionLoadPlan({
+    repoPath,
+    tasks,
+    currentPresence: presence,
+    ...(options ? { options } : {}),
+    commitSessions,
   });
-  if (committedPlan === undefined) {
-    return;
-  }
 
   if (isStaleRepoOperation()) {
     return;
