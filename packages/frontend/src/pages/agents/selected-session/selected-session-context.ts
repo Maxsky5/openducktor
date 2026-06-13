@@ -10,7 +10,7 @@ import type { AgentChatModel } from "@/components/features/agents/agent-chat/age
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
-  AgentStudioSelectedSessionLifecycle,
+  SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -77,6 +77,7 @@ export type SelectedSessionChatContext = {
   emptyState: NonNullable<AgentChatModel["thread"]["emptyState"]> | null;
   contextUsage: AgentChatModel["composer"]["contextUsage"];
   activeComposerSession: SelectedSessionComposerActiveSession;
+  isViewSwitching: boolean;
   composerReadOnly: boolean;
   composerReadOnlyReason: string | null;
 };
@@ -85,7 +86,7 @@ export type SelectedSessionRuntimeContext = {
   runtimeDefinitions: RuntimeDescriptor[];
   runtimeReadiness: SelectedSessionRuntimeReadinessContext;
   sessionRuntimeDataError: string | null;
-  lifecycle: AgentStudioSelectedSessionLifecycle;
+  lifecycle: SelectedAgentSessionViewLifecycle;
 };
 
 export type SelectedSessionPendingInputContext = {
@@ -126,7 +127,8 @@ export type AgentStudioSelectedSessionContextInput = {
   runtimeDefinitions: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   hasActiveGitConflict: boolean;
-  lifecycle: AgentStudioSelectedSessionLifecycle;
+  lifecycle: SelectedAgentSessionViewLifecycle;
+  isViewSwitching: boolean;
   activeSessionContextUsage: AgentStudioSessionContextUsage;
   documents: AgentStudioDocumentsContext;
   readiness: {
@@ -245,6 +247,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionRuntimeDataError,
   hasActiveGitConflict,
   lifecycle,
+  isViewSwitching,
   activeSessionContextUsage,
   documents,
   readiness,
@@ -320,6 +323,7 @@ export const buildAgentStudioSelectedSessionContext = ({
             pendingQuestions: activeSession.pendingQuestions,
           }
         : null,
+      isViewSwitching,
       composerReadOnly,
       composerReadOnlyReason: composerReadOnly ? workflow.selectedRoleReadOnlyReason : null,
     },

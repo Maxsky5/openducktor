@@ -92,6 +92,7 @@ const baseArgs: BuildArgs = {
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
+    isViewSwitching: false,
     activeSessionContextUsage: null,
     documents: baseDocuments,
     readiness: baseReadiness,
@@ -243,10 +244,9 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     });
 
-    expect(context.runtime.lifecycle.isTaskViewResolving).toBe(true);
+    expect(context.chat.isViewSwitching).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(context.runtime.lifecycle.isSessionSelectionResolving).toBe(true);
     expect(context.runtime.lifecycle.isLoadingHistory).toBe(true);
     expect(context.runtime.lifecycle.isWaitingForRuntimeReadiness).toBe(true);
     expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
@@ -268,15 +268,18 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
         runtime: {
           ...baseArgs.selectedSession.runtime,
           lifecycle: createSelectedSessionLifecycleFixture({
-            isTaskViewResolving: true,
             isHistoryLoadFailed: true,
             phase: "history_failed",
           }),
         },
+        chat: {
+          ...baseArgs.selectedSession.chat,
+          isViewSwitching: true,
+        },
       },
     });
 
-    expect(failed.selectedSession.runtime.lifecycle.isTaskViewResolving).toBe(true);
+    expect(failed.selectedSession.chat.isViewSwitching).toBe(true);
     expect(failed.selectedSession.runtime.lifecycle.isHistoryLoadFailed).toBe(true);
   });
 });

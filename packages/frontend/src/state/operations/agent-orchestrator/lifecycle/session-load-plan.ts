@@ -30,38 +30,6 @@ const findRecord = (
 ): AgentSessionRecord | null =>
   records.find((record) => record.externalSessionId === externalSessionId) ?? null;
 
-const collectPersistedSessionIds = (tasks: TaskSessionRecords[]): Set<string> => {
-  const persistedSessionIds = new Set<string>();
-  for (const task of tasks) {
-    for (const record of task.agentSessions ?? []) {
-      persistedSessionIds.add(record.externalSessionId);
-    }
-  }
-  return persistedSessionIds;
-};
-
-const shouldKeepLocalSessionOverlay = (
-  session: AgentSessionState,
-  persistedSessionIds: Set<string>,
-): boolean => {
-  if (session.purpose === "transcript") {
-    return true;
-  }
-  return !persistedSessionIds.has(session.externalSessionId) && session.status !== "stopped";
-};
-
-const selectLocalSessionOverlay = (
-  currentSessionsById: SessionsById,
-  tasks: TaskSessionRecords[],
-): SessionsById => {
-  const persistedSessionIds = collectPersistedSessionIds(tasks);
-  return Object.fromEntries(
-    Object.entries(currentSessionsById).filter(([, session]) =>
-      shouldKeepLocalSessionOverlay(session, persistedSessionIds),
-    ),
-  );
-};
-
 const shouldLoadLiveSessionHistory = (session: AgentSessionState | undefined): boolean => {
   if (!session) {
     return false;
@@ -140,7 +108,6 @@ export const buildRepoSessionLoadPlan = ({
     repoPath,
     tasks,
     currentSessionsById,
-    localSessionOverlay: selectLocalSessionOverlay(currentSessionsById, tasks),
     presence,
   });
   const historyRecords = selectSessionHistoryRecords({

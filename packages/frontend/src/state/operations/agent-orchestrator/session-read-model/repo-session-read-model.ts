@@ -38,8 +38,6 @@ export type RepoSessionReadModel = {
   liveSessions: AgentSessionRef[];
 };
 
-type LocalSessionOverlay = Record<string, AgentSessionState>;
-
 const toPresenceKey = (
   runtimeKind: RuntimeKind,
   workingDirectory: string,
@@ -54,6 +52,31 @@ const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionReco
     }
   }
   return records;
+};
+
+const collectPersistedSessionIds = (records: TaskSessionRecord[]): Set<string> =>
+  new Set(records.map(({ record }) => record.externalSessionId));
+
+const shouldKeepLocalSession = (
+  session: AgentSessionState,
+  persistedSessionIds: Set<string>,
+): boolean => {
+  if (session.purpose === "transcript") {
+    return true;
+  }
+  return !persistedSessionIds.has(session.externalSessionId) && session.status !== "stopped";
+};
+
+const selectLocalSessions = (
+  currentSessionsById: Record<string, AgentSessionState>,
+  taskSessionRecords: TaskSessionRecord[],
+): Record<string, AgentSessionState> => {
+  const persistedSessionIds = collectPersistedSessionIds(taskSessionRecords);
+  return Object.fromEntries(
+    Object.entries(currentSessionsById).filter(([, session]) =>
+      shouldKeepLocalSession(session, persistedSessionIds),
+    ),
+  );
 };
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
@@ -252,28 +275,25 @@ export const buildRepoSessionReadModel = ({
   repoPath,
   tasks,
   currentSessionsById = {},
-  localSessionOverlay,
   presence,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionsById?: Record<string, AgentSessionState>;
-  localSessionOverlay: LocalSessionOverlay;
   presence: RepoSessionPresenceRead;
 }): RepoSessionReadModel => {
-  const sessionsById = { ...localSessionOverlay };
+  const taskSessionRecords = collectTaskSessionRecords(tasks);
+  const sessionsById = { ...selectLocalSessions(currentSessionsById, taskSessionRecords) };
   const liveSessions: AgentSessionRef[] = [];
 
-  for (const { taskId, record } of collectTaskSessionRecords(tasks)) {
+  for (const { taskId, record } of taskSessionRecords) {
     const runtimeKind = readPersistedRuntimeKind(record);
     const sessionKey = toPresenceKey(
       runtimeKind,
       record.workingDirectory,
       record.externalSessionId,
     );
-    const current =
-      currentSessionsById[record.externalSessionId] ??
-      localSessionOverlay[record.externalSessionId];
+    const current = currentSessionsById[record.externalSessionId];
     const snapshot = presence.presenceBySessionKey.get(sessionKey);
     if (!snapshot) {
       throw new Error(`Missing runtime presence for session '${record.externalSessionId}'.`);

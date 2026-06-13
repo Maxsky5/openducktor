@@ -13,10 +13,9 @@ import type {
 } from "@/components/features/agents";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import {
-  type SessionRepoReadinessState as AgentStudioReadinessState,
-  deriveAgentStudioSelectedSessionLifecycle,
-  type SelectedAgentSessionViewLifecycle,
+import type {
+  SessionRepoReadinessState as AgentStudioReadinessState,
+  SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -166,7 +165,7 @@ type BuildAgentStudioPageModelsArgsInput = {
 
 type BuildSelectedSessionContextFromOrchestrationInput = Omit<
   AgentStudioSelectedSessionContextInput,
-  "lifecycle" | "sessionRuntimeDataError"
+  "isViewSwitching" | "lifecycle" | "sessionRuntimeDataError"
 > & {
   viewSessionRuntimeDataError?: string | null;
   isActiveTaskReady: boolean;
@@ -186,14 +185,10 @@ export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
   buildAgentStudioSelectedSessionContext({
     ...input,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
-    lifecycle: deriveAgentStudioSelectedSessionLifecycle({
-      taskId: input.taskId,
-      isActiveTaskReady,
-      isActiveTaskReadinessFailed,
+    lifecycle: viewSessionLifecycle,
+    isViewSwitching:
+      Boolean(input.taskId && !isActiveTaskReady && !isActiveTaskReadinessFailed) ||
       isSessionSelectionResolving,
-      isRuntimeStarting: input.readiness.isRuntimeStarting,
-      selectedSessionLifecycle: viewSessionLifecycle,
-    }),
   });
 
 export const buildAgentStudioPageModelsArgs = ({

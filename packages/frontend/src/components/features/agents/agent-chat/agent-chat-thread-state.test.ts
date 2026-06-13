@@ -18,7 +18,7 @@ describe("getAgentChatThreadState", () => {
     expect(state.isTranscriptLoading).toBe(false);
   });
 
-  test("treats history hydration as conversation-loading state", () => {
+  test("treats history load as conversation-loading state", () => {
     const state = getAgentChatThreadState({
       isSessionViewLoading: false,
       isSessionHistoryLoading: true,

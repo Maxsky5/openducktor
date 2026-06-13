@@ -14,7 +14,7 @@ import {
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentStudioSelectedSessionLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
@@ -55,8 +55,8 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
 };
 
 export const createSelectedSessionLifecycleFixture = (
-  overrides: Partial<AgentStudioSelectedSessionLifecycle> = {},
-): AgentStudioSelectedSessionLifecycle => ({
+  overrides: Partial<SelectedAgentSessionViewLifecycle> = {},
+): SelectedAgentSessionViewLifecycle => ({
   externalSessionId: "session-1",
   phase: "ready",
   canRenderHistory: true,
@@ -65,8 +65,6 @@ export const createSelectedSessionLifecycleFixture = (
   isHistoryLoadFailed: false,
   isWaitingForRuntimeReadiness: false,
   shouldEnsureReadyForView: false,
-  isTaskViewResolving: false,
-  isSessionSelectionResolving: false,
   ...overrides,
 });
 

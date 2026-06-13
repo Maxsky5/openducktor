@@ -128,8 +128,7 @@ export function useSessionTranscriptSurfaceModel({
     session: runtimeData.session,
     sessionLifecycle: {
       canRenderHistory: !isTranscriptLoading,
-      isTaskViewResolving: isResolvingTranscript,
-      isSessionSelectionResolving: false,
+      isViewSwitching: isResolvingTranscript,
       isLoadingHistory: isTranscriptLoading,
       isWaitingForRuntimeReadiness: false,
     },

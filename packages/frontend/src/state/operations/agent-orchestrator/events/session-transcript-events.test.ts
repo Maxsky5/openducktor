@@ -12,7 +12,7 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
-  test("preserves explicit history hydration state when live transcript changes", () => {
+  test("preserves explicit history load state when live transcript changes", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {

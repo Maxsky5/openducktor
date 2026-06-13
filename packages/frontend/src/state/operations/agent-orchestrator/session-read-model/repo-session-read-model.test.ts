@@ -88,7 +88,6 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence,
     });
 
@@ -117,7 +116,6 @@ describe("repo session read model", () => {
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence: firstPresence,
     });
     expect(firstRead.sessionsById[record.externalSessionId]?.status).toBe("stopped");
@@ -136,7 +134,7 @@ describe("repo session read model", () => {
     const secondRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: firstRead.sessionsById,
+      currentSessionsById: firstRead.sessionsById,
       presence: secondPresence,
     });
 
@@ -168,7 +166,6 @@ describe("repo session read model", () => {
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence: busyPresence,
     });
     const idlePresence = await readRepoSessionPresence({
@@ -186,7 +183,7 @@ describe("repo session read model", () => {
     const idleRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: busyRead.sessionsById,
+      currentSessionsById: busyRead.sessionsById,
       presence: idlePresence,
     });
 
@@ -210,7 +207,6 @@ describe("repo session read model", () => {
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence: busyPresence,
     });
     const presence = await readRepoSessionPresence({
@@ -222,7 +218,7 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: busyRead.sessionsById,
+      currentSessionsById: busyRead.sessionsById,
       presence,
     });
 
@@ -265,7 +261,6 @@ describe("repo session read model", () => {
       currentSessionsById: {
         [record.externalSessionId]: currentSession,
       },
-      localSessionOverlay: {},
       presence,
     });
 
@@ -297,7 +292,6 @@ describe("repo session read model", () => {
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence: busyPresence,
     });
     const pendingQuestion = { requestId: "question-1", questions: [] };
@@ -317,7 +311,7 @@ describe("repo session read model", () => {
     const idleRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: busyRead.sessionsById,
+      currentSessionsById: busyRead.sessionsById,
       presence: idlePresence,
     });
 
@@ -345,7 +339,6 @@ describe("repo session read model", () => {
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence: firstPresence,
     });
     const currentSession = firstRead.sessionsById[record.externalSessionId];
@@ -368,7 +361,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: firstRead.sessionsById,
-      localSessionOverlay: {},
       presence: secondPresence,
     });
 
@@ -416,7 +408,6 @@ describe("repo session read model", () => {
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      localSessionOverlay: {},
       presence: firstPresence,
     });
     const currentSession = firstRead.sessionsById[record.externalSessionId];
@@ -439,7 +430,6 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionsById: firstRead.sessionsById,
-      localSessionOverlay: {},
       presence: secondPresence,
     });
 

@@ -56,33 +56,6 @@ const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = 
   shouldEnsureReadyForView: false,
 };
 
-export type AgentStudioSelectedSessionLifecycle = SelectedAgentSessionViewLifecycle & {
-  isTaskViewResolving: boolean;
-  isSessionSelectionResolving: boolean;
-};
-
-export const deriveAgentStudioSelectedSessionLifecycle = ({
-  taskId,
-  isActiveTaskReady,
-  isActiveTaskReadinessFailed,
-  isSessionSelectionResolving,
-  isRuntimeStarting,
-  selectedSessionLifecycle,
-}: {
-  taskId: string;
-  isActiveTaskReady: boolean;
-  isActiveTaskReadinessFailed: boolean;
-  isSessionSelectionResolving: boolean;
-  isRuntimeStarting: boolean;
-  selectedSessionLifecycle: SelectedAgentSessionViewLifecycle;
-}): AgentStudioSelectedSessionLifecycle => ({
-  ...selectedSessionLifecycle,
-  isTaskViewResolving: Boolean(taskId && !isActiveTaskReady && !isActiveTaskReadinessFailed),
-  isSessionSelectionResolving,
-  isWaitingForRuntimeReadiness:
-    selectedSessionLifecycle.isWaitingForRuntimeReadiness || (Boolean(taskId) && isRuntimeStarting),
-});
-
 const toSelectedSessionLifecyclePhase = ({
   lifecycle,
   isLoadingHistory,

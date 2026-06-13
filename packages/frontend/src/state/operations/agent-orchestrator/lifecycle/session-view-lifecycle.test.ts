@@ -32,7 +32,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 });
 
 describe("deriveAgentSessionViewLifecycle", () => {
-  test("requests background history hydration when a partial transcript exists", () => {
+  test("requests background history load when a partial transcript exists", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         historyLoadState: "not_requested",
@@ -53,7 +53,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
-  test("requests background hydration after a prior history failure when transcript exists", () => {
+  test("requests background history load after a prior history failure when transcript exists", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         historyLoadState: "failed",
@@ -75,7 +75,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
-  test("renders running sessions immediately without view readiness hydration", () => {
+  test("renders running sessions immediately without view readiness loading", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         status: "running",
@@ -86,7 +86,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
           {
             id: "message-1",
             role: "assistant",
-            content: "already hydrated",
+            content: "already loaded",
             timestamp: "2026-02-22T08:00:03.000Z",
           },
         ],
@@ -110,7 +110,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
           {
             id: "message-1",
             role: "assistant",
-            content: "already hydrated",
+            content: "already loaded",
             timestamp: "2026-02-22T08:00:03.000Z",
           },
         ],

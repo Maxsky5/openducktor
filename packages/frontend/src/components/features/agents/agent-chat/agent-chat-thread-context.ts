@@ -2,8 +2,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentChatThreadLifecycle = {
   canRenderHistory: boolean;
-  isTaskViewResolving: boolean;
-  isSessionSelectionResolving: boolean;
+  isViewSwitching: boolean;
 };
 
 type ResolveAgentChatThreadContextArgs = {
@@ -22,9 +21,7 @@ export const resolveAgentChatThreadContext = ({
   lifecycle,
 }: ResolveAgentChatThreadContextArgs): AgentChatThreadContext => {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const isResolvingSelection =
-    lifecycle.isTaskViewResolving || lifecycle.isSessionSelectionResolving;
-  const shouldClearThread = isResolvingSelection && !lifecycle.canRenderHistory;
+  const shouldClearThread = lifecycle.isViewSwitching && !lifecycle.canRenderHistory;
 
   return {
     threadSession: shouldClearThread ? null : activeSession,

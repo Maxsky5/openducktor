@@ -50,6 +50,7 @@ const createInput = (
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
+    isViewSwitching: false,
     activeSessionContextUsage: null,
     documents: {
       specDoc: createDoc("spec"),

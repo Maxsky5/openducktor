@@ -144,6 +144,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
+    isViewSwitching: false,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
     allSessionSummaries,
@@ -250,6 +251,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
       lifecycle: selectedSessionCore.lifecycle,
+      isViewSwitching: selectedSessionCore.isViewSwitching,
       activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
         totalTokens: 12,
         contextWindow: 100,
@@ -579,8 +581,8 @@ describe("useAgentStudioPageModels", () => {
             phase: "resolving_session",
             canRenderHistory: false,
             isLoadingHistory: true,
-            isSessionSelectionResolving: true,
           }),
+          isViewSwitching: true,
         },
         selectedSessionActions: {
           canKickoffNewSession: true,
@@ -600,8 +602,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("does not mark session history loading during background hydration when transcript can render", async () => {
-    const cachedSession = createSession("session-hydrating", "external-hydrating", {
+  test("does not mark session history loading during background history load when transcript can render", async () => {
+    const cachedSession = createSession("session-history-loading", "external-history-loading", {
       messages: [
         {
           id: "assistant-cached",
@@ -688,7 +690,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("marks session history loading while hydration blocks transcript rendering", async () => {
+  test("marks session history loading while history load blocks transcript rendering", async () => {
     const pendingSession = createSession("session-pending", "external-pending", {
       messages: [],
     });

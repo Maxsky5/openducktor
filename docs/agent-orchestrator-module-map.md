@@ -74,7 +74,8 @@ Files:
 
 - `pages/agents/agents-page-selection.ts`
 - `pages/agents/use-agent-studio-selection-controller.ts`
-- `components/features/agents/agent-chat/use-agent-chat-session-readiness.ts`
+- `pages/agents/selected-session/selected-session-context.ts`
+- `components/features/agents/agent-chat/agent-chat-thread-context.ts`
 - `lifecycle/session-view-lifecycle.ts`
 - `lifecycle/ensure-ready.ts`
 
@@ -88,6 +89,10 @@ Owns:
 
 Invariant: live summaries and persisted records must be combined before selection.
 Do not resolve live and persisted selections in separate branches.
+
+Invariant: selected-session lifecycle owns only the selected session's runtime
+and history state. Page route/task switching is orchestration state and must not
+be stored in the lifecycle model.
 
 ### Session Actions
 
@@ -149,7 +154,7 @@ Use these compact tests as the first-line safety net:
 | User messages preserved while repo/session reads are in flight | `lifecycle/load-sessions.test.ts` |
 | Per-session history failure isolation | `lifecycle/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `lifecycle/session-history-loader.test.ts` |
-| Selected-session runtime/history loading surface | `lifecycle/session-view-lifecycle.test.ts` and `components/features/agents/agent-chat/use-agent-chat-session-readiness.test.tsx` |
+| Selected-session runtime/history loading surface | `lifecycle/session-view-lifecycle.test.ts`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-context.test.ts` |
 | Selected-session preparation and runtime loading failures | `lifecycle/ensure-ready.test.ts` |
 | Runtime presence projection onto session state | `lifecycle/session-presence.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
