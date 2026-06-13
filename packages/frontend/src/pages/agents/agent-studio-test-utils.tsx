@@ -86,7 +86,6 @@ const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescripto
     },
     history: {
       ...descriptor.capabilities.history,
-      hydratedEventTypes: [...descriptor.capabilities.history.hydratedEventTypes],
       limitations: [...descriptor.capabilities.history.limitations],
     },
     approvals: {

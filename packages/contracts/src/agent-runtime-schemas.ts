@@ -61,17 +61,6 @@ export const runtimeHistoryReplayValues = [
 export const runtimeHistoryReplaySchema = z.enum(runtimeHistoryReplayValues);
 export type RuntimeHistoryReplay = z.infer<typeof runtimeHistoryReplaySchema>;
 
-export const runtimeHydratedEventTypeValues = [
-  "message",
-  "tool_call",
-  "tool_result",
-  "approval_request",
-  "question_request",
-  "status_change",
-] as const;
-export const runtimeHydratedEventTypeSchema = z.enum(runtimeHydratedEventTypeValues);
-export type RuntimeHydratedEventType = z.infer<typeof runtimeHydratedEventTypeSchema>;
-
 export const runtimeApprovalRequestTypeValues = [
   "command_execution",
   "file_change",
@@ -143,11 +132,6 @@ const runtimeForkTargetsSchema = createUniqueArraySchema(
   "Runtime fork targets must be unique.",
 );
 
-const runtimeHydratedEventTypesSchema = createUniqueArraySchema(
-  runtimeHydratedEventTypeSchema,
-  "Runtime hydrated event types must be unique.",
-);
-
 const runtimeApprovalRequestTypesSchema = createUniqueArraySchema(
   runtimeApprovalRequestTypeSchema,
   "Runtime approval request types must be unique.",
@@ -208,7 +192,6 @@ export const runtimeHistoryCapabilitiesSchema = z
     stableItemIds: z.boolean(),
     stableItemOrder: z.boolean(),
     exposesCompletionState: z.boolean(),
-    hydratedEventTypes: runtimeHydratedEventTypesSchema,
     limitations: runtimeHistoryLimitationsSchema,
   })
   .strict();
@@ -371,12 +354,6 @@ export const runtimeCapabilitiesSchema = z
         addIssue(
           ["history", "replay"],
           'Runtime descriptors without loadable history must use "none" history replay.',
-        );
-      }
-      if (capabilities.history.hydratedEventTypes.length > 0) {
-        addIssue(
-          ["history", "hydratedEventTypes"],
-          "Runtime descriptors without loadable history must not declare hydrated event types.",
         );
       }
     }

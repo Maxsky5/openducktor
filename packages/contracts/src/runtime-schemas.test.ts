@@ -1266,14 +1266,6 @@ describe("runtime schemas", () => {
           stableItemIds: true,
           stableItemOrder: true,
           exposesCompletionState: true,
-          hydratedEventTypes: [
-            "message",
-            "tool_call",
-            "tool_result",
-            "approval_request",
-            "question_request",
-            "status_change",
-          ],
           limitations: [],
         },
         approvals: {

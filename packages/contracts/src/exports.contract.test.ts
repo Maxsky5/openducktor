@@ -97,7 +97,6 @@ import type {
   RuntimeHistoryCapabilities,
   RuntimeHistoryFidelity,
   RuntimeHistoryReplay,
-  RuntimeHydratedEventType,
   RuntimeInstanceSummary,
   RuntimeInstanceSummaryRole,
   RuntimeKind,
@@ -337,8 +336,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "runtimeHistoryReplaySchema",
   "runtimeHistoryReplayValues",
   "runtimeHealthSchema",
-  "runtimeHydratedEventTypeSchema",
-  "runtimeHydratedEventTypeValues",
   "runtimeKindSchema",
   "repoRuntimeHealthCheckSchema",
   "repoStoreHealthCategorySchema",
@@ -532,7 +529,6 @@ type ExportedTypeContract = {
   RuntimeHistoryCapabilities: RuntimeHistoryCapabilities;
   RuntimeHistoryFidelity: RuntimeHistoryFidelity;
   RuntimeHistoryReplay: RuntimeHistoryReplay;
-  RuntimeHydratedEventType: RuntimeHydratedEventType;
   RuntimeOmittedPermissionBehavior: RuntimeOmittedPermissionBehavior;
   RuntimeOptionalSurfaceCapabilities: RuntimeOptionalSurfaceCapabilities;
   RuntimePendingInputVisibility: RuntimePendingInputVisibility;
