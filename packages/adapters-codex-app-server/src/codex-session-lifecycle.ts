@@ -53,6 +53,20 @@ const buildSessionState = (
   ...(liveStatus ? { liveStatus } : {}),
 });
 
+export const applyRuntimeContextToSession = (
+  session: CodexSessionState,
+  input: AgentSessionRuntimeRef,
+): void => {
+  session.role = input.role;
+  session.taskId = input.taskId;
+  if (input.systemPrompt !== undefined) {
+    session.systemPrompt = input.systemPrompt;
+  }
+  if (input.model !== undefined) {
+    session.model = input.model;
+  }
+};
+
 export const sessionStateFromThreadStart = (
   input: StartAgentSessionInput,
   runtimeId: string,

@@ -3,8 +3,13 @@ import type {
   AgentPendingQuestionRequest,
   AgentSessionPresenceSnapshot,
   AgentSessionRef,
+  ReadSessionPresenceInput,
 } from "@openducktor/core";
-import type { CodexThreadSnapshot } from "./codex-app-server-threads";
+import type {
+  PendingApprovalEntry,
+  PendingQuestionEntry,
+} from "./codex-app-server-server-requests";
+import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
 
 export type CodexPresenceSource =
@@ -18,6 +23,13 @@ export type ResolveCodexPresenceSourceInput = {
   threadIsLoaded: boolean;
   hasPendingInput: boolean;
   hasActiveTurn: boolean;
+};
+
+export type CodexPendingInputStore = {
+  pendingApprovalIdsBySessionId: Map<string, Set<string>>;
+  pendingApprovalsByRequestId: Map<string, PendingApprovalEntry>;
+  pendingQuestionIdsBySessionId: Map<string, Set<string>>;
+  pendingQuestionsByRequestId: Map<string, PendingQuestionEntry>;
 };
 
 export const resolveCodexPresenceSource = ({
@@ -102,6 +114,74 @@ export const toPresenceSnapshotFromThread = (
   pendingApprovals: [],
   pendingQuestions: [],
 });
+
+export const pendingApprovalsForCodexSession = (
+  store: CodexPendingInputStore,
+  externalSessionId: string,
+): AgentPendingApprovalRequest[] => {
+  const requestIds = store.pendingApprovalIdsBySessionId.get(externalSessionId);
+  if (!requestIds) {
+    return [];
+  }
+  return [...requestIds]
+    .map((requestId) => store.pendingApprovalsByRequestId.get(requestId)?.request)
+    .filter((request): request is AgentPendingApprovalRequest => Boolean(request));
+};
+
+export const pendingQuestionsForCodexSession = (
+  store: CodexPendingInputStore,
+  externalSessionId: string,
+): AgentPendingQuestionRequest[] => {
+  const requestIds = store.pendingQuestionIdsBySessionId.get(externalSessionId);
+  if (!requestIds) {
+    return [];
+  }
+  return [...requestIds]
+    .map((requestId) => store.pendingQuestionsByRequestId.get(requestId)?.request)
+    .filter((request): request is AgentPendingQuestionRequest => Boolean(request));
+};
+
+export const codexSessionRef = (session: CodexSessionState): ReadSessionPresenceInput => ({
+  externalSessionId: session.threadId,
+  repoPath: session.repoPath,
+  runtimeKind: "codex",
+  workingDirectory: session.workingDirectory,
+});
+
+export const toRefreshedPresenceSnapshot = ({
+  session,
+  inventory,
+  input,
+  pendingApprovals,
+  pendingQuestions,
+  hasActiveTurn,
+}: {
+  session: CodexSessionState;
+  inventory: CodexThreadInventory;
+  input?: ReadSessionPresenceInput;
+  pendingApprovals: AgentPendingApprovalRequest[];
+  pendingQuestions: AgentPendingQuestionRequest[];
+  hasActiveTurn: boolean;
+}): AgentSessionPresenceSnapshot => {
+  const thread = inventory.threadsById.get(session.threadId) ?? null;
+  const hasPendingInput = pendingApprovals.length > 0 || pendingQuestions.length > 0;
+  const ref = input ?? codexSessionRef(session);
+  const presenceSource = resolveCodexPresenceSource({
+    session,
+    thread,
+    threadIsLoaded: inventory.loadedIds.has(session.threadId),
+    hasPendingInput,
+    hasActiveTurn,
+  });
+
+  if (presenceSource.type === "local") {
+    return toPresenceSnapshot(session, pendingApprovals, pendingQuestions);
+  }
+  if (presenceSource.type === "stale") {
+    return stalePresence(ref);
+  }
+  return toPresenceSnapshotFromThread(presenceSource.thread, ref);
+};
 
 export const stalePresence = (input: AgentSessionRef): AgentSessionPresenceSnapshot => ({
   presence: "stale",

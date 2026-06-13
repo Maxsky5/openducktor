@@ -39,10 +39,9 @@ import type {
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
 import {
-  toPresenceSnapshot as buildPresenceSnapshot,
-  resolveCodexPresenceSource,
-  stalePresence,
-  toPresenceSnapshotFromThread,
+  type CodexPendingInputStore,
+  pendingApprovalsForCodexSession,
+  pendingQuestionsForCodexSession,
 } from "./codex-app-server-presence";
 import {
   codexTurnKey,
@@ -60,11 +59,6 @@ import {
 import {
   type ActiveCodexTurn,
   CODEX_USER_INPUT_REQUEST_METHOD,
-  type CodexLiveEventPump,
-  isPlainObject,
-  MAX_CODEX_BUFFERED_THREAD_COUNT,
-  MAX_CODEX_EVENT_BACKLOG_PER_SESSION,
-  trimOldestMapKeys,
   unsupported,
 } from "./codex-app-server-shared";
 import {
@@ -74,12 +68,7 @@ import {
   emitCodexUserMessage,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
-import {
-  type CodexThreadInventory,
-  type CodexThreadSnapshot,
-  type CodexThreadStatusSnapshot,
-  codexThreadStatusSnapshot,
-} from "./codex-app-server-threads";
+import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
   codexTodosFromThreadRead,
@@ -87,9 +76,17 @@ import {
 } from "./codex-app-server-transcript";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { toFileDiffs } from "./codex-file-diffs";
+import { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
+import {
+  CodexRuntimeEventBuffer,
+  CodexRuntimeEventSubscriptions,
+  type CodexRuntimeStreamEvent,
+  threadIdFromRuntimeStreamEvent,
+} from "./codex-runtime-events";
 import { loadCodexSessionHistory } from "./codex-session-history";
 import {
+  applyRuntimeContextToSession,
   clearLocalSessionState,
   type InternalCodexLocalSessionStateStore,
   preserveRuntimeContextOnRestore,
@@ -98,6 +95,11 @@ import {
   sessionStateFromThreadResume,
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
+import {
+  listCodexSessionPresence,
+  listLiveCodexAgentSessions,
+  readCodexSessionPresence,
+} from "./codex-session-presence-reader";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
@@ -115,33 +117,11 @@ import {
 import { toCodexSkillCatalog } from "./skill-catalog";
 import type {
   CodexAppServerAdapterOptions,
-  CodexNotificationRecord,
   CodexServerRequestRecord,
   CodexSessionState,
 } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
-
-const IDLE_CODEX_THREAD_STATUS = codexThreadStatusSnapshot("idle");
-
-const applyRuntimeContextToSession = (
-  session: CodexSessionState,
-  input: AgentSessionRuntimeRef,
-): void => {
-  session.role = input.role;
-  session.taskId = input.taskId;
-  if (input.systemPrompt !== undefined) {
-    session.systemPrompt = input.systemPrompt;
-  }
-  if (input.model !== undefined) {
-    session.model = input.model;
-  }
-};
-
-type HistoryOnlyIdleThreadLoad = {
-  repoPath: string;
-  workingDirectory: string;
-};
 
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
@@ -156,23 +136,23 @@ export class CodexAppServerAdapter
   private readonly activeTurnsByApprovalRequestId = new Map<string, ActiveCodexTurn>();
   private readonly activeTurnsByQuestionRequestId = new Map<string, ActiveCodexTurn>();
   private readonly activeTurnsBySessionId = new Map<string, ActiveCodexTurn>();
-  private readonly bufferedNotificationsByThreadId = new Map<string, CodexNotificationRecord[]>();
-  private readonly bufferedServerRequestsByThreadId = new Map<string, CodexServerRequestRecord[]>();
+  private readonly runtimeEventBuffer = new CodexRuntimeEventBuffer();
   private readonly handledStreamRequestKeysByThreadId = new Map<string, Set<string>>();
   private readonly syntheticUserMessageTextsByThreadId = new Map<string, string[]>();
   private readonly completedAgentMessagesByTurnKey = new Map<string, CompletedAgentMessage>();
   private readonly tokenUsageByTurnKey = new Map<string, CodexTokenUsageTotals>();
   private readonly modelByTurnKey = new Map<string, AgentModelSelection>();
-  private readonly runtimeEventSubscriptionsByRuntimeId = new Map<string, CodexLiveEventPump>();
+  private readonly runtimeEventSubscriptions: CodexRuntimeEventSubscriptions;
   private readonly eventBacklogBySessionId = new Map<string, AgentEvent[]>();
   private readonly latestTodosBySessionId = new Map<string, AgentSessionTodoItem[]>();
   private readonly eventMapperPipeline = createCodexEventMapperPipeline();
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
-  private readonly historyOnlyIdleThreadLoadsById = new Map<string, HistoryOnlyIdleThreadLoad>();
+  private readonly historyPresenceOverlay = new CodexHistoryPresenceOverlay();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
+    this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(options.subscribeEvents);
   }
 
   getRuntimeDefinition(): RuntimeDescriptor {
@@ -215,7 +195,7 @@ export class CodexAppServerAdapter
     const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
-    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
+    this.historyPresenceOverlay.clear(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
     await client.threadSetName({
@@ -244,7 +224,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const { summary } = session;
-    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
+    this.historyPresenceOverlay.clear(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
 
@@ -270,7 +250,7 @@ export class CodexAppServerAdapter
     const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
-    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
+    this.historyPresenceOverlay.clear(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, session);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
     await client.threadSetName({
@@ -359,7 +339,7 @@ export class CodexAppServerAdapter
       drainThreadReadTokenUsage: (runtimeId, threadId) =>
         this.drainThreadReadTokenUsage(runtimeId, threadId),
       rememberHistoryOnlyIdleThreadLoad: (historyInput, preResumeThread) =>
-        this.rememberHistoryOnlyIdleThreadLoad(historyInput, preResumeThread),
+        this.historyPresenceOverlay.rememberIdleHistoryLoad(historyInput, preResumeThread),
     });
   }
 
@@ -368,8 +348,7 @@ export class CodexAppServerAdapter
     threadId: string,
   ): Promise<Map<string, CodexTokenUsageTotals>> {
     const tokenUsageByTurnId = new Map<string, CodexTokenUsageTotals>();
-    const bufferedNotifications = this.bufferedNotificationsByThreadId.get(threadId) ?? [];
-    this.bufferedNotificationsByThreadId.delete(threadId);
+    const bufferedNotifications = this.runtimeEventBuffer.takeNotifications(threadId);
     const drainedNotifications = this.options.drainNotifications
       ? (await this.options.drainNotifications(runtimeId)).map(parseNotificationRecord)
       : [];
@@ -389,26 +368,11 @@ export class CodexAppServerAdapter
         continue;
       }
       if (!this.options.subscribeEvents) {
-        this.bufferNotification(notification);
+        this.runtimeEventBuffer.bufferNotification(notification);
       }
     }
 
     return tokenUsageByTurnId;
-  }
-
-  private bufferNotification(notification: CodexNotificationRecord): void {
-    const notificationThreadId = extractThreadIdFromParams(notification.params);
-    if (!notificationThreadId) {
-      return;
-    }
-
-    const buffered = this.bufferedNotificationsByThreadId.get(notificationThreadId) ?? [];
-    buffered.push(notification);
-    if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-      buffered.splice(0, buffered.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-    }
-    this.bufferedNotificationsByThreadId.set(notificationThreadId, buffered);
-    trimOldestMapKeys(this.bufferedNotificationsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
   }
 
   async loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]> {
@@ -489,7 +453,7 @@ export class CodexAppServerAdapter
       session,
       this.sessions.get(summary.externalSessionId),
     );
-    this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
+    this.historyPresenceOverlay.clear(summary.externalSessionId);
     this.sessions.set(summary.externalSessionId, restoredSession);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
     return summary;
@@ -509,88 +473,19 @@ export class CodexAppServerAdapter
   async listLiveAgentSessions(
     input: ListLiveAgentSessionsInput,
   ): Promise<LiveAgentSessionSummary[]> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(input, "list live sessions", {
-      requireLive: true,
-    });
-    const inventory = await this.threadInventory.refresh(client, runtimeId);
-    this.clearUnloadedHistoryOnlyIdleLoads(inventory);
-    if (inventory.loadedIds.size === 0) {
-      return [];
-    }
-    const directories = new Set(input.directories ?? []);
-    return [...inventory.threadsById.values()]
-      .filter((thread) => inventory.loadedIds.has(thread.id))
-      .filter((thread) => directories.size === 0 || directories.has(thread.cwd))
-      .map((thread) => this.threadSnapshotForRemotePresence(thread, input.repoPath))
-      .map((thread) => ({
-        externalSessionId: thread.id,
-        title: thread.title,
-        workingDirectory: thread.cwd,
-        startedAt: thread.startedAt,
-        status: thread.status.status,
-      }));
+    return listLiveCodexAgentSessions(this.presenceReaderDeps(), input);
   }
 
   async listSessionPresence(
     input: ListSessionPresenceInput,
   ): Promise<AgentSessionPresenceSnapshot[]> {
-    const directories = new Set(input.directories ?? []);
-    const localSessions = [...this.sessions.values()]
-      .filter((session) => session.repoPath === input.repoPath)
-      .filter((session) => directories.size === 0 || directories.has(session.workingDirectory));
-    const inventoryByRuntimeId = new Map<string, Promise<CodexThreadInventory>>();
-    const refreshRuntimeInventory = (runtimeId: string): Promise<CodexThreadInventory> => {
-      const existing = inventoryByRuntimeId.get(runtimeId);
-      if (existing) {
-        return existing;
-      }
-      const inventory = this.threadInventory.refresh(
-        this.runtimeClients.clientForRuntime(runtimeId),
-        runtimeId,
-      );
-      inventoryByRuntimeId.set(runtimeId, inventory);
-      return inventory;
-    };
-    const localSnapshots = await Promise.all(
-      localSessions.map(async (session) =>
-        this.toRefreshedPresenceSnapshot(session, await refreshRuntimeInventory(session.runtimeId)),
-      ),
-    );
-    const localThreadIds = new Set(localSessions.map((session) => session.threadId));
-    const { client, runtimeId } = await this.runtimeClients.resolve(
-      input,
-      "list session presence",
-      {
-        requireLive: true,
-      },
-    );
-    const inventory = await this.threadInventory.refresh(client, runtimeId);
-    this.clearUnloadedHistoryOnlyIdleLoads(inventory);
-    const remoteSnapshots = [...inventory.threadsById.values()]
-      .filter((thread) => inventory.loadedIds.has(thread.id))
-      .filter((thread) => !localThreadIds.has(thread.id))
-      .filter((thread) => directories.size === 0 || directories.has(thread.cwd))
-      .map((thread) =>
-        toPresenceSnapshotFromThread(
-          this.threadSnapshotForRemotePresence(thread, input.repoPath),
-          input,
-        ),
-      );
-    return [...localSnapshots, ...remoteSnapshots];
+    return listCodexSessionPresence(this.presenceReaderDeps(), input);
   }
 
   async readSessionPresence(
     input: ReadSessionPresenceInput,
   ): Promise<AgentSessionPresenceSnapshot> {
-    const session = this.sessions.get(input.externalSessionId);
-    if (!session) {
-      return this.readRemoteSessionPresence(input);
-    }
-    const inventory = await this.threadInventory.refresh(
-      this.runtimeClients.clientForRuntime(session.runtimeId),
-      session.runtimeId,
-    );
-    return this.toRefreshedPresenceSnapshot(session, inventory, input);
+    return readCodexSessionPresence(this.presenceReaderDeps(), input);
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
@@ -701,7 +596,10 @@ export class CodexAppServerAdapter
     listeners.add(listener);
     this.listenersBySessionId.set(externalSessionId, listeners);
     this.replayEventBacklog(externalSessionId, listener);
-    for (const approval of this.pendingApprovalsForSession(externalSessionId)) {
+    for (const approval of pendingApprovalsForCodexSession(
+      this.pendingInputStore(),
+      externalSessionId,
+    )) {
       listener({
         ...approval,
         type: "approval_required",
@@ -709,7 +607,10 @@ export class CodexAppServerAdapter
         timestamp: new Date().toISOString(),
       });
     }
-    for (const question of this.pendingQuestionsForSession(externalSessionId)) {
+    for (const question of pendingQuestionsForCodexSession(
+      this.pendingInputStore(),
+      externalSessionId,
+    )) {
       listener({
         ...question,
         type: "question_required",
@@ -744,8 +645,8 @@ export class CodexAppServerAdapter
     return {
       sessions: this.sessions,
       listenersBySessionId: this.listenersBySessionId,
-      bufferedNotificationsByThreadId: this.bufferedNotificationsByThreadId,
-      bufferedServerRequestsByThreadId: this.bufferedServerRequestsByThreadId,
+      bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
+      bufferedServerRequestsByThreadId: this.runtimeEventBuffer.serverRequestsByThreadId,
       handledStreamRequestKeysByThreadId: this.handledStreamRequestKeysByThreadId,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
       eventBacklogBySessionId: this.eventBacklogBySessionId,
@@ -763,27 +664,36 @@ export class CodexAppServerAdapter
     };
   }
 
-  private ensureRuntimeEventSubscription(runtimeId: string): void {
-    if (!this.options.subscribeEvents) {
-      return;
-    }
-    const existing = this.runtimeEventSubscriptionsByRuntimeId.get(runtimeId);
-    if (existing) {
-      return;
-    }
-    const pump: CodexLiveEventPump = {
-      unsubscribe: null,
+  private pendingInputStore(): CodexPendingInputStore {
+    return {
+      pendingApprovalIdsBySessionId: this.pendingApprovalIdsBySessionId,
+      pendingApprovalsByRequestId: this.pendingApprovalsByRequestId,
+      pendingQuestionIdsBySessionId: this.pendingQuestionIdsBySessionId,
+      pendingQuestionsByRequestId: this.pendingQuestionsByRequestId,
     };
-    this.runtimeEventSubscriptionsByRuntimeId.set(runtimeId, pump);
-    const unsubscribe = this.options.subscribeEvents(runtimeId, (event) => {
-      if (event.runtimeId !== runtimeId) {
-        return;
-      }
+  }
+
+  private presenceReaderDeps() {
+    return {
+      runtimeClients: this.runtimeClients,
+      threadInventory: this.threadInventory,
+      sessions: this.sessions,
+      historyPresenceOverlay: this.historyPresenceOverlay,
+      pendingInputStore: () => this.pendingInputStore(),
+      hasActiveTurn: (externalSessionId: string) => {
+        const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
+        return Boolean(activeTurn && !activeTurn.isTurnSettled());
+      },
+    };
+  }
+
+  private ensureRuntimeEventSubscription(runtimeId: string): void {
+    this.runtimeEventSubscriptions.ensure(runtimeId, (event) => {
       void (async () => {
         try {
           await this.handleRuntimeStreamEvent(event);
         } catch (error) {
-          const threadId = this.threadIdFromStreamEvent(event);
+          const threadId = threadIdFromRuntimeStreamEvent(event);
           if (!threadId) {
             return;
           }
@@ -796,34 +706,14 @@ export class CodexAppServerAdapter
         }
       })();
     });
-    if (typeof (unsubscribe as Promise<() => void>).then === "function") {
-      void (unsubscribe as Promise<() => void>).then((resolved) => {
-        if (this.runtimeEventSubscriptionsByRuntimeId.get(runtimeId) !== pump) {
-          resolved();
-          return;
-        }
-        pump.unsubscribe = resolved;
-      });
-    } else {
-      pump.unsubscribe = unsubscribe as () => void;
-    }
   }
 
   private stopRuntimeEventSubscription(runtimeId: string): void {
-    const pump = this.runtimeEventSubscriptionsByRuntimeId.get(runtimeId);
-    if (!pump) {
-      return;
-    }
-    pump.unsubscribe?.();
-    this.runtimeEventSubscriptionsByRuntimeId.delete(runtimeId);
+    this.runtimeEventSubscriptions.stop(runtimeId);
   }
 
-  private async handleRuntimeStreamEvent(event: {
-    runtimeId: string;
-    kind: "notification" | "server_request";
-    message: unknown;
-  }): Promise<void> {
-    const threadId = this.threadIdFromStreamEvent(event);
+  private async handleRuntimeStreamEvent(event: CodexRuntimeStreamEvent): Promise<void> {
+    const threadId = threadIdFromRuntimeStreamEvent(event);
     if (!threadId) {
       if (event.kind === "server_request") {
         this.emitUnroutableRuntimeServerRequest(event.runtimeId);
@@ -838,59 +728,16 @@ export class CodexAppServerAdapter
     await this.processRuntimeStreamEventForSession(session, event);
   }
 
-  private threadIdFromStreamEvent(event: {
-    kind: "notification" | "server_request";
-    message: unknown;
-  }): string | null {
-    if (!isPlainObject(event.message)) {
-      return null;
-    }
-    return extractThreadIdFromParams(event.message.params);
-  }
-
   private bufferRuntimeStreamEvent(
     threadId: string,
     event: { kind: "notification" | "server_request"; message: unknown },
   ): void {
-    if (event.kind === "notification") {
-      const notification = parseNotificationRecord(event.message);
-      this.clearHistoryOnlyIdleThreadLoadForNotification(threadId, notification);
-      const buffered = this.bufferedNotificationsByThreadId.get(threadId) ?? [];
-      buffered.push(notification);
-      if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-        buffered.splice(0, buffered.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-      }
-      this.bufferedNotificationsByThreadId.set(threadId, buffered);
-      trimOldestMapKeys(this.bufferedNotificationsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
+    const buffered = this.runtimeEventBuffer.bufferRuntimeStreamEvent(threadId, event);
+    if (buffered.kind === "notification") {
+      this.historyPresenceOverlay.clearForNotification(threadId, buffered.notification);
       return;
     }
-    this.clearHistoryOnlyIdleThreadLoad(threadId);
-    const buffered = this.bufferedServerRequestsByThreadId.get(threadId) ?? [];
-    buffered.push(parseServerRequestRecord(event.message));
-    if (buffered.length > MAX_CODEX_EVENT_BACKLOG_PER_SESSION) {
-      buffered.splice(0, buffered.length - MAX_CODEX_EVENT_BACKLOG_PER_SESSION);
-    }
-    this.bufferedServerRequestsByThreadId.set(threadId, buffered);
-    trimOldestMapKeys(this.bufferedServerRequestsByThreadId, MAX_CODEX_BUFFERED_THREAD_COUNT);
-  }
-
-  private clearHistoryOnlyIdleThreadLoadForNotification(
-    threadId: string,
-    notification: CodexNotificationRecord,
-  ): void {
-    if (!this.historyOnlyIdleThreadLoadsById.has(threadId)) {
-      return;
-    }
-    if (notification.method === "turn/started") {
-      this.clearHistoryOnlyIdleThreadLoad(threadId);
-      return;
-    }
-    if (notification.method !== "thread/status/changed" || !isPlainObject(notification.params)) {
-      return;
-    }
-    if (codexThreadStatusSnapshot(notification.params.status).classification !== "idle") {
-      this.clearHistoryOnlyIdleThreadLoad(threadId);
-    }
+    this.historyPresenceOverlay.clear(threadId);
   }
 
   private emitUnroutableRuntimeServerRequest(runtimeId: string): void {
@@ -913,8 +760,7 @@ export class CodexAppServerAdapter
       return;
     }
     await this.handlePendingNotifications(session, []);
-    const bufferedRequests = this.bufferedServerRequestsByThreadId.get(session.threadId) ?? [];
-    this.bufferedServerRequestsByThreadId.delete(session.threadId);
+    const bufferedRequests = this.runtimeEventBuffer.takeServerRequests(session.threadId);
     await this.processServerRequestsForSession(session, bufferedRequests);
   }
 
@@ -947,10 +793,16 @@ export class CodexAppServerAdapter
     externalSessionId: string,
     activeTurn: ActiveCodexTurn,
   ): void {
-    for (const approval of this.pendingApprovalsForSession(externalSessionId)) {
+    for (const approval of pendingApprovalsForCodexSession(
+      this.pendingInputStore(),
+      externalSessionId,
+    )) {
       this.activeTurnsByApprovalRequestId.set(approval.requestId, activeTurn);
     }
-    for (const question of this.pendingQuestionsForSession(externalSessionId)) {
+    for (const question of pendingQuestionsForCodexSession(
+      this.pendingInputStore(),
+      externalSessionId,
+    )) {
       this.activeTurnsByQuestionRequestId.set(question.requestId, activeTurn);
     }
   }
@@ -1041,7 +893,7 @@ export class CodexAppServerAdapter
       ...(this.options.drainNotifications
         ? { drainNotifications: this.options.drainNotifications }
         : {}),
-      bufferedNotificationsByThreadId: this.bufferedNotificationsByThreadId,
+      bufferedNotificationsByThreadId: this.runtimeEventBuffer.notificationsByThreadId,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       syntheticUserMessageTextsByThreadId: this.syntheticUserMessageTextsByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,
@@ -1052,7 +904,8 @@ export class CodexAppServerAdapter
       eventMapperPipeline: this.eventMapperPipeline,
       bindActiveTurnId: (activeTurn, turnId) => this.bindActiveTurnId(activeTurn, turnId),
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
-      bufferNotification: (notification) => this.bufferNotification(notification),
+      bufferNotification: (notification) =>
+        this.runtimeEventBuffer.bufferNotification(notification),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
       listenersForSession: (externalSessionId) => this.listenersBySessionId.get(externalSessionId),
     };
@@ -1079,123 +932,6 @@ export class CodexAppServerAdapter
     };
   }
 
-  private rememberHistoryOnlyIdleThreadLoad(
-    input: LoadAgentSessionHistoryInput,
-    thread: CodexThreadSnapshot,
-  ): void {
-    if (thread.status.agentSessionStatus !== "idle") {
-      this.clearHistoryOnlyIdleThreadLoad(thread.id);
-      return;
-    }
-    this.historyOnlyIdleThreadLoadsById.set(thread.id, {
-      repoPath: input.repoPath,
-      workingDirectory: input.workingDirectory,
-    });
-  }
-
-  private clearHistoryOnlyIdleThreadLoad(threadId: string): void {
-    this.historyOnlyIdleThreadLoadsById.delete(threadId);
-  }
-
-  private clearUnloadedHistoryOnlyIdleLoads(inventory: CodexThreadInventory): void {
-    for (const threadId of this.historyOnlyIdleThreadLoadsById.keys()) {
-      if (!inventory.loadedIds.has(threadId)) {
-        this.clearHistoryOnlyIdleThreadLoad(threadId);
-      }
-    }
-  }
-
-  private threadSnapshotForRemotePresence(
-    thread: CodexThreadSnapshot,
-    repoPath: string,
-  ): CodexThreadSnapshot {
-    const historyOnlyLoad = this.historyOnlyIdleThreadLoadsById.get(thread.id);
-    if (
-      !historyOnlyLoad ||
-      historyOnlyLoad.repoPath !== repoPath ||
-      historyOnlyLoad.workingDirectory !== thread.cwd
-    ) {
-      return thread;
-    }
-    if (thread.status.classification !== "running") {
-      if (thread.status.classification !== "idle") {
-        this.clearHistoryOnlyIdleThreadLoad(thread.id);
-      }
-      return thread;
-    }
-    return {
-      ...thread,
-      status: {
-        classification: IDLE_CODEX_THREAD_STATUS.classification,
-        status: { ...IDLE_CODEX_THREAD_STATUS.status },
-        agentSessionStatus: IDLE_CODEX_THREAD_STATUS.agentSessionStatus,
-      },
-    };
-  }
-
-  private pendingApprovalsForSession(
-    externalSessionId: string,
-  ): import("@openducktor/core").AgentPendingApprovalRequest[] {
-    const requestIds = this.pendingApprovalIdsBySessionId.get(externalSessionId);
-    if (!requestIds) {
-      return [];
-    }
-    return [...requestIds]
-      .map((requestId) => this.pendingApprovalsByRequestId.get(requestId)?.request)
-      .filter((request): request is import("@openducktor/core").AgentPendingApprovalRequest =>
-        Boolean(request),
-      );
-  }
-
-  private pendingQuestionsForSession(
-    externalSessionId: string,
-  ): import("@openducktor/core").AgentPendingQuestionRequest[] {
-    const requestIds = this.pendingQuestionIdsBySessionId.get(externalSessionId);
-    if (!requestIds) {
-      return [];
-    }
-    return [...requestIds]
-      .map((requestId) => this.pendingQuestionsByRequestId.get(requestId)?.request)
-      .filter((request): request is import("@openducktor/core").AgentPendingQuestionRequest =>
-        Boolean(request),
-      );
-  }
-
-  private toPresenceSnapshot(session: CodexSessionState): AgentSessionPresenceSnapshot {
-    return buildPresenceSnapshot(
-      session,
-      this.pendingApprovalsForSession(session.threadId),
-      this.pendingQuestionsForSession(session.threadId),
-    );
-  }
-
-  private toRefreshedPresenceSnapshot(
-    session: CodexSessionState,
-    inventory: CodexThreadInventory,
-    input?: ReadSessionPresenceInput,
-  ): AgentSessionPresenceSnapshot {
-    const thread = inventory.threadsById.get(session.threadId) ?? null;
-    const activeTurn = this.activeTurnsBySessionId.get(session.threadId);
-    const hasPendingInput =
-      this.pendingApprovalsForSession(session.threadId).length > 0 ||
-      this.pendingQuestionsForSession(session.threadId).length > 0;
-    const presenceSource = resolveCodexPresenceSource({
-      session,
-      thread,
-      threadIsLoaded: inventory.loadedIds.has(session.threadId),
-      hasPendingInput,
-      hasActiveTurn: Boolean(activeTurn && !activeTurn.isTurnSettled()),
-    });
-
-    if (presenceSource.type === "local") {
-      return this.toPresenceSnapshot(session);
-    }
-    if (presenceSource.type === "stale") {
-      return stalePresence(input ?? this.sessionRef(session));
-    }
-    return toPresenceSnapshotFromThread(presenceSource.thread, input ?? this.sessionRef(session));
-  }
-
   private setSessionLiveStatus(
     session: CodexSessionState,
     liveStatus: CodexThreadStatusSnapshot,
@@ -1205,40 +941,6 @@ export class CodexAppServerAdapter
       ...session.summary,
       status: liveStatus.agentSessionStatus,
     };
-  }
-
-  private sessionRef(session: CodexSessionState): ReadSessionPresenceInput {
-    return {
-      externalSessionId: session.threadId,
-      repoPath: session.repoPath,
-      runtimeKind: "codex",
-      workingDirectory: session.workingDirectory,
-    };
-  }
-
-  private async readRemoteSessionPresence(
-    input: ReadSessionPresenceInput,
-  ): Promise<AgentSessionPresenceSnapshot> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(
-      input,
-      "read session presence",
-      {
-        requireLive: true,
-      },
-    );
-    const inventory = await this.threadInventory.refresh(client, runtimeId);
-    this.clearUnloadedHistoryOnlyIdleLoads(inventory);
-    if (!inventory.loadedIds.has(input.externalSessionId)) {
-      return stalePresence(input);
-    }
-    const snapshot = inventory.threadsById.get(input.externalSessionId) ?? null;
-    if (!snapshot || snapshot.cwd !== input.workingDirectory) {
-      return stalePresence(input);
-    }
-    return toPresenceSnapshotFromThread(
-      this.threadSnapshotForRemotePresence(snapshot, input.repoPath),
-      input,
-    );
   }
 
   private async handleServerRequest(
