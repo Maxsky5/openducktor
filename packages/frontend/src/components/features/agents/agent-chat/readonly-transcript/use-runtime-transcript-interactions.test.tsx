@@ -4,6 +4,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
 import {
   mergeRuntimePendingApprovals,
   mergeRuntimePendingQuestions,
@@ -70,6 +71,21 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 });
 
 describe("runtime transcript pending request helpers", () => {
+  test("requires an external session id for transcript interaction identity", () => {
+    expect(
+      getRuntimeTranscriptIdentityKey({
+        externalSessionId: null,
+        source: createSource(),
+      }),
+    ).toBeNull();
+    expect(
+      getRuntimeTranscriptIdentityKey({
+        externalSessionId: "session-1",
+        source: createSource(),
+      }),
+    ).toBe("session-1\u0000opencode\u0000/repo-a");
+  });
+
   test("merges source and session requests by request id and hides replied requests", () => {
     const sourceShared = createApprovalRequest("shared", { title: "source shared" });
     const sessionShared = createApprovalRequest("shared", { title: "session shared" });

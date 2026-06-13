@@ -2,15 +2,13 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
-  createRuntimeTranscriptSession,
-  type RuntimeTranscriptSession,
-} from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
-import {
   agentSessionRuntimeQueryKeys,
   SESSION_HISTORY_STALE_TIME_MS,
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentChatThreadSession } from "../agent-chat.types";
+import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
@@ -31,7 +29,7 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
 };
 
 type RuntimeTranscriptSessionHistory = {
-  session: AgentSessionState | RuntimeTranscriptSession | null;
+  session: AgentChatThreadSession | null;
   isHistoryLoading: boolean;
   historyError: string | null;
 };
@@ -88,7 +86,7 @@ export function useRuntimeTranscriptSessionHistory({
       return null;
     }
 
-    return createRuntimeTranscriptSession({
+    return createReadonlyTranscriptSession({
       externalSessionId,
       runtimeKind: source.runtimeKind,
       workingDirectory: source.workingDirectory,

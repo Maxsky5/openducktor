@@ -34,7 +34,7 @@ export function useSessionTranscriptSurfaceModel({
     useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
-  const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
+  const externalSessionId = requestedExternalSessionId ?? null;
   const liveSession = useAgentSession(isOpen ? externalSessionId : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     activeWorkspace,

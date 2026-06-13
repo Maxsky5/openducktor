@@ -329,11 +329,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("uses the transcript source session id before the requested session id", async () => {
-    const transcriptSource = {
-      ...makeTranscriptSource(),
-      externalSessionId: "session-source",
-    };
+  test("uses the requested dialog session id as the transcript target", async () => {
+    const transcriptSource = makeTranscriptSource();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -356,12 +353,12 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
-      expect(useAgentSessionMock).toHaveBeenCalledWith("session-source");
+      expect(useAgentSessionMock).toHaveBeenCalledWith("session-requested");
       expect(readSessionHistory).toHaveBeenCalledWith(
         "/repo-a",
         "opencode",
         "/repo-a",
-        "session-source",
+        "session-requested",
       );
     } finally {
       await harness.unmount();
