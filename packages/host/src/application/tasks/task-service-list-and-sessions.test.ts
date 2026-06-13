@@ -779,7 +779,7 @@ describe("createTaskService list and session reads", () => {
       ),
     ).resolves.toEqual({ markdown: "" });
   });
-  test("lists agent sessions in bulk from task cards", async () => {
+  test("lists agent sessions in bulk from task metadata", async () => {
     const calls: unknown[] = [];
     const session = {
       externalSessionId: "session-1",
@@ -794,10 +794,7 @@ describe("createTaskService list and session reads", () => {
         return Effect.tryPromise({
           try: async () => {
             calls.push(input);
-            return [
-              task({ id: "task-1", agentSessions: [session] }),
-              task({ id: "task-2", agentSessions: [] }),
-            ];
+            return [task({ id: "task-1" }), task({ id: "task-2" })];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -807,10 +804,15 @@ describe("createTaskService list and session reads", () => {
             }),
         });
       },
-      getTaskMetadata() {
+      getTaskMetadata(input) {
         return Effect.tryPromise({
           try: async () => {
-            throw new Error("should not read metadata");
+            calls.push(input);
+            return {
+              spec: { markdown: "" },
+              plan: { markdown: "" },
+              agentSessions: input.taskId === "task-1" ? [session] : [],
+            };
           },
           catch: (cause) =>
             new HostOperationError({
@@ -936,7 +938,11 @@ describe("createTaskService list and session reads", () => {
       "task-1": [session],
       "task-2": [],
     });
-    expect(calls).toEqual([{ repoPath: "/repo" }]);
+    expect(calls).toEqual([
+      { repoPath: "/repo" },
+      { repoPath: "/repo", taskId: "task-1" },
+      { repoPath: "/repo", taskId: "task-2" },
+    ]);
   });
   test("does not list tasks for empty bulk agent-session requests", async () => {
     const taskStore: TaskStorePort = {

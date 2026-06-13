@@ -9,6 +9,7 @@ import {
   collectRelatedTaskBranches,
   collectTaskDeleteTargets,
   managedWorktreeBaseForRepoConfig,
+  type TaskSessionRecords,
   taskHasImplementationSessions,
 } from "../support/reset-cleanup";
 import {
@@ -64,7 +65,18 @@ export const createTaskDeleteUseCase = ({
 
       const targetTasks = collectTaskDeleteTargets(currentTasks, taskId, deleteSubtasks);
       const targetTaskIds = targetTasks.map((task) => task.id);
-      if (targetTasks.some(taskHasImplementationSessions)) {
+      const targetTaskSessions: TaskSessionRecords[] = [];
+      for (const targetTask of targetTasks) {
+        const metadata = yield* taskStore.getTaskMetadata({
+          repoPath,
+          taskId: targetTask.id,
+        });
+        targetTaskSessions.push({
+          taskId: targetTask.id,
+          sessions: metadata.agentSessions,
+        });
+      }
+      if (targetTaskSessions.some((entry) => taskHasImplementationSessions(entry.sessions))) {
         if (!taskActivityGuard) {
           return yield* Effect.fail(
             new HostDependencyError({
@@ -78,8 +90,7 @@ export const createTaskDeleteUseCase = ({
         }
         yield* taskActivityGuard.ensureNoActiveTaskDeleteRuns({
           repoPath,
-          taskIds: targetTaskIds,
-          tasks: targetTasks,
+          taskSessions: targetTaskSessions,
         });
       }
 
@@ -95,7 +106,7 @@ export const createTaskDeleteUseCase = ({
         dependencies,
         effectiveRepoPath,
         branchPrefix,
-        targetTasks,
+        targetTaskSessions,
       );
       const branchNames = yield* collectRelatedTaskBranches(
         dependencies.gitPort,

@@ -1,4 +1,5 @@
 import {
+  type AgentSessionRecord,
   DEFAULT_BRANCH_PREFIX,
   type RepoConfig,
   type TaskCard,
@@ -13,8 +14,12 @@ export const implementationSessionRoleNames = ["build", "qa"] as const;
 export const taskResetSessionRoleNames = ["spec", "planner", "build", "qa"] as const;
 export const implementationSessionRoles = new Set<string>(implementationSessionRoleNames);
 export const taskResetSessionRoles = new Set<string>(taskResetSessionRoleNames);
-export const taskHasImplementationSessions = (task: TaskCard): boolean =>
-  (task.agentSessions ?? []).some((session) => implementationSessionRoles.has(session.role.trim()));
+export type TaskSessionRecords = {
+  taskId: string;
+  sessions: AgentSessionRecord[];
+};
+export const taskHasImplementationSessions = (sessions: AgentSessionRecord[]): boolean =>
+  sessions.some((session) => implementationSessionRoles.has(session.role.trim()));
 export const managedWorktreeBaseForRepoConfig = (
   settingsConfig: SettingsConfigPort,
   repoConfig: RepoConfig,
@@ -73,14 +78,14 @@ export const collectDeleteWorktreePaths = (
   },
   repoPath: string,
   branchPrefix: string,
-  targetTasks: TaskCard[],
+  targetTaskSessions: TaskSessionRecords[],
 ) =>
   Effect.gen(function* () {
     const normalizedRepo = normalizePathForComparison(repoPath);
     const seen = new Set<string>();
     const paths: string[] = [];
-    for (const task of targetTasks) {
-      for (const session of task.agentSessions ?? []) {
+    for (const { taskId, sessions } of targetTaskSessions) {
+      for (const session of sessions) {
         if (!implementationSessionRoles.has(session.role.trim())) {
           continue;
         }
@@ -95,7 +100,7 @@ export const collectDeleteWorktreePaths = (
         if (yield* dependencies.settingsConfig.pathExists(workingDirectory)) {
           const currentBranch = yield* dependencies.gitPort.getCurrentBranch(workingDirectory);
           const branchName = currentBranch.name?.trim();
-          if (!branchName || !relatedTaskBranch(branchName, branchPrefix, task.id)) {
+          if (!branchName || !relatedTaskBranch(branchName, branchPrefix, taskId)) {
             continue;
           }
         }
@@ -114,7 +119,8 @@ export const collectResetWorktreePaths = (
   },
   repoPath: string,
   branchPrefix: string,
-  task: TaskCard,
+  taskId: string,
+  sessions: AgentSessionRecord[],
   sessionRoles: Set<string>,
   operationLabel: "reset implementation" | "reset task",
 ) =>
@@ -122,7 +128,7 @@ export const collectResetWorktreePaths = (
     const normalizedRepo = normalizePathForComparison(repoPath);
     const seen = new Set<string>();
     const paths: string[] = [];
-    for (const session of task.agentSessions ?? []) {
+    for (const session of sessions) {
       if (!sessionRoles.has(session.role.trim())) {
         continue;
       }
@@ -141,12 +147,12 @@ export const collectResetWorktreePaths = (
           return yield* Effect.fail(
             new HostValidationError({
               field: "taskId",
-              message: `Cannot ${operationLabel} task ${task.id} because worktree ${workingDirectory} is detached or has no active branch.`,
-              details: { repoPath, taskId: task.id, workingDirectory },
+              message: `Cannot ${operationLabel} task ${taskId} because worktree ${workingDirectory} is detached or has no active branch.`,
+              details: { repoPath, taskId, workingDirectory },
             }),
           );
         }
-        if (!relatedTaskBranch(branchName, branchPrefix, task.id)) {
+        if (!relatedTaskBranch(branchName, branchPrefix, taskId)) {
           continue;
         }
       }
@@ -205,8 +211,10 @@ export const appendResetCleanupProgress = <E>(
     cause: error,
   });
 };
-export const taskHasSessionsForRoles = (task: TaskCard, roles: Set<string>): boolean =>
-  (task.agentSessions ?? []).some((session) => roles.has(session.role.trim()));
+export const taskHasSessionsForRoles = (
+  sessions: AgentSessionRecord[],
+  roles: Set<string>,
+): boolean => sessions.some((session) => roles.has(session.role.trim()));
 export const resetImplementationRollbackStatus = (task: TaskCard): TaskStatus => {
   if (task.documentSummary.plan.has) {
     return "ready_for_dev";

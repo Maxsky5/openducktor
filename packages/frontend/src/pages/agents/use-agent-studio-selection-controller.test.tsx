@@ -59,7 +59,6 @@ const createTaskWithPersistedReloadedSession = (
     id: "task-1",
     title: "task-1",
     ...overrides,
-    agentSessions: [persistedReloadedSessionRecord],
   });
 
 const createSession = (

@@ -126,17 +126,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
-      tasks: [
-        {
-          ...taskFixture,
-          agentSessions: [
-            {
-              ...persistedSessionFixture,
-              role: "spec",
-            },
-          ],
-        },
-      ],
+      tasks: [taskFixture],
       refreshTaskData: async () => {},
     });
 
@@ -463,18 +453,7 @@ describe("use-agent-orchestrator-operations session state", () => {
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo",
-      tasks: [
-        {
-          ...taskFixture,
-          agentSessions: [
-            {
-              ...persistedSessionFixture,
-              role: "build",
-              workingDirectory: "/tmp/repo/worktree",
-            },
-          ],
-        },
-      ],
+      tasks: [taskFixture],
       refreshTaskData: async () => {},
     });
 

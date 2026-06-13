@@ -1,6 +1,6 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { HostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 export type CreateRuntimeTaskActivityGuardInput = {
@@ -54,35 +54,25 @@ export const createRuntimeTaskActivityGuard = ({
         taskId: string;
         evidence: ActiveWorkEvidence;
       }> = [];
-      for (const taskId of input.taskIds) {
-        const task = input.tasks.find((candidate) => candidate.id === taskId);
-        if (!task) {
-          return yield* Effect.fail(
-            new HostValidationError({
-              message: `Task ${taskId} was not provided for activity guard checks.`,
-              field: "taskIds",
-              details: { taskId },
-            }),
-          );
-        }
+      for (const task of input.taskSessions) {
         const evidence = yield* collectActiveWorkEvidence(
           runtimeRegistry,
           input.repoPath,
-          task.agentSessions ?? [],
+          task.sessions,
           ["build", "qa"],
         ).pipe(
           Effect.mapError(
             (error) =>
               new HostOperationError({
                 operation: "runtimeTaskActivityGuard.ensureNoActiveTaskDeleteRuns",
-                message: `Failed checking active task work before deleting ${taskId}`,
+                message: `Failed checking active task work before deleting ${task.taskId}`,
                 cause: error,
-                details: { taskId },
+                details: { taskId: task.taskId },
               }),
           ),
         );
         if (evidence.activeSessionRoles.length > 0) {
-          activeTasks.push({ taskId, evidence });
+          activeTasks.push({ taskId: task.taskId, evidence });
         }
       }
       if (activeTasks.length === 0) {

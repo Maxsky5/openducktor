@@ -63,7 +63,6 @@ const BASE_TASK_CARD_FIXTURE: TaskCard = {
   labels: [],
   parentId: undefined,
   subtaskIds: [],
-  agentSessions: [],
   pullRequest: undefined,
   documentSummary: {
     spec: { has: false },

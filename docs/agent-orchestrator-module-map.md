@@ -130,6 +130,29 @@ Must not own:
 - runtime route resolution
 - workflow session status
 
+### Task Session Records
+
+Files:
+
+- `state/queries/agent-sessions.ts`
+- `state/operations/agent-orchestrator/session-read-model/task-session-records.ts`
+
+Owns:
+
+- reading durable task session records from the host
+- seeding per-task session-record query caches after bulk reads
+- presenting task session history to Agent Studio, Kanban, task details, and autopilot
+
+Must not own:
+
+- live runtime status
+- transcript messages
+- runtime route resolution
+
+Invariant: UI decisions must not read session history from `TaskCard.agentSessions`.
+Use task session record queries instead, so task cards remain task summaries and
+session history has one frontend read boundary.
+
 ## Startup Flow
 
 1. The app loads tasks from the task store.

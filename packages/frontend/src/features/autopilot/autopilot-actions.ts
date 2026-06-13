@@ -31,6 +31,7 @@ type ExecuteAutopilotActionArgs = {
   task: TaskCard;
   actionId: AutopilotActionId;
   queryClient: QueryClient;
+  loadTaskSessionRecords: (repoPath: string, taskId: string) => Promise<AgentSessionRecord[]>;
   loadRepoRuntimeCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -68,10 +69,10 @@ type AutopilotStartResolution = ResolvedAutopilotStart | SkippedAutopilotStart;
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 const findLatestSessionRecordByRole = (
-  task: TaskCard,
+  sessions: AgentSessionRecord[],
   role: AgentRole,
 ): AgentSessionRecord | null => {
-  const matchingSessions = (task.agentSessions ?? [])
+  const matchingSessions = sessions
     .filter((session) => session.role === role)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
@@ -157,11 +158,16 @@ const resolveAutopilotStart = async ({
   activeWorkspace,
   action,
   task,
+  loadTaskSessionRecords,
   resolveTaskWorktree,
-}: Pick<ExecuteAutopilotActionArgs, "activeWorkspace" | "task" | "resolveTaskWorktree"> & {
+}: Pick<
+  ExecuteAutopilotActionArgs,
+  "activeWorkspace" | "task" | "loadTaskSessionRecords" | "resolveTaskWorktree"
+> & {
   action: AutopilotActionDefinition;
 }): Promise<AutopilotStartResolution> => {
-  const latestRoleSession = findLatestSessionRecordByRole(task, action.role);
+  const taskSessions = await loadTaskSessionRecords(activeWorkspace.repoPath, task.id);
+  const latestRoleSession = findLatestSessionRecordByRole(taskSessions, action.role);
 
   if (action.startPolicy.kind === "latestRoleSession") {
     if (!latestRoleSession) {
@@ -217,6 +223,7 @@ export const executeAutopilotAction = async ({
   task,
   actionId,
   queryClient,
+  loadTaskSessionRecords,
   loadRepoRuntimeCatalog,
   resolveTaskWorktree,
   startSessionWorkflow,
@@ -232,6 +239,7 @@ export const executeAutopilotAction = async ({
       activeWorkspace,
       action,
       task,
+      loadTaskSessionRecords,
       resolveTaskWorktree,
     });
     if (startResolution.kind === "skipped") {

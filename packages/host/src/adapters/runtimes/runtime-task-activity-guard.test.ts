@@ -172,38 +172,15 @@ describe("createRuntimeTaskActivityGuard", () => {
       Effect.runPromise(
         guard.ensureNoActiveTaskDeleteRuns({
           repoPath: "/repo",
-          taskIds: ["task-1"],
-          tasks: [
+          taskSessions: [
             {
-              id: "task-1",
-              title: "Task 1",
-              description: "",
-              status: "ai_review",
-              priority: 2,
-              issueType: "task",
-              aiReviewEnabled: true,
-              availableActions: [],
-              labels: [],
-              subtaskIds: [],
-              documentSummary: {
-                spec: { has: false },
-                plan: { has: false },
-                qaReport: { has: false, verdict: "not_reviewed" },
-              },
-              agentWorkflows: {
-                spec: { required: false, canSkip: true, available: false, completed: false },
-                planner: { required: false, canSkip: true, available: false, completed: false },
-                builder: { required: true, canSkip: false, available: false, completed: false },
-                qa: { required: true, canSkip: false, available: false, completed: false },
-              },
-              agentSessions: [
+              taskId: "task-1",
+              sessions: [
                 session({
                   externalSessionId: "external-qa-session",
                   role: "qa",
                 }),
               ],
-              updatedAt: "2026-05-10T10:00:00.000Z",
-              createdAt: "2026-05-10T09:00:00.000Z",
             },
           ],
         }),

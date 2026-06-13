@@ -476,12 +476,7 @@ describe("createTaskService approval context", () => {
       getTask() {
         return Effect.tryPromise({
           try: async () => {
-            return task({
-              status: "human_review",
-              agentSessions: [
-                createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-              ],
-            });
+            return task({ status: "human_review" });
           },
           catch: (cause) =>
             new HostOperationError({
@@ -498,7 +493,9 @@ describe("createTaskService approval context", () => {
               spec: { markdown: "# Spec" },
               plan: { markdown: "# Plan" },
               directMerge,
-              agentSessions: [],
+              agentSessions: [
+                createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
+              ],
             };
           },
           catch: (cause) =>
@@ -512,14 +509,7 @@ describe("createTaskService approval context", () => {
       listTasks() {
         return Effect.tryPromise({
           try: async () => {
-            return [
-              task({
-                status: "human_review",
-                agentSessions: [
-                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-                ],
-              }),
-            ];
+            return [task({ status: "human_review" })];
           },
           catch: (cause) =>
             new HostOperationError({

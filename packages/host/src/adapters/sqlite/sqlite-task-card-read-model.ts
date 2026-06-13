@@ -8,12 +8,7 @@ import {
 import { gte, ne, or } from "drizzle-orm";
 import { Effect } from "effect";
 import type { TaskStoreListTasksInput } from "../../ports/task-repository-ports";
-import {
-  agentSessionsFromRow,
-  decodeWithSchema,
-  labelsFromRow,
-  optionalJsonFromRow,
-} from "./sqlite-json-codecs";
+import { decodeWithSchema, labelsFromRow, optionalJsonFromRow } from "./sqlite-json-codecs";
 import { documentSummariesByTaskId, documentSummary } from "./sqlite-task-document-queries";
 import { requireTaskRow, taskRows } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
@@ -46,13 +41,11 @@ const rowToTaskCard = (
     const pullRequest = yield* optionalJsonFromRow(row, "pullRequestJson", (value) =>
       decodeWithSchema(pullRequestSchema, value, "pull_request_json", { taskId: row.id }),
     );
-    const agentSessions = yield* agentSessionsFromRow(row);
     const labels = yield* labelsFromRow(row);
     const summary = documentSummaryOverride ?? (yield* documentSummary(session, row.id));
     return yield* decodeWithSchema(
       taskCardSchema,
       {
-        agentSessions,
         aiReviewEnabled: row.qaRequired === 1,
         availableActions: [],
         createdAt: row.createdAt.toISOString(),

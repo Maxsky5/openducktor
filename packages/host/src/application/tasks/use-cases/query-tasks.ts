@@ -47,14 +47,11 @@ export const createTaskQueryUseCases = ({
         return {};
       }
 
-      const currentTasks = yield* taskStore.listTasks({ repoPath });
-      const sessionsByAvailableTask = new Map(
-        currentTasks.map((task) => [task.id, task.agentSessions ?? []]),
+      const availableTaskIds = new Set(
+        (yield* taskStore.listTasks({ repoPath })).map((task) => task.id),
       );
-      const sessionsByTask: Record<string, AgentSessionRecord[]> = {};
       for (const taskId of taskIds) {
-        const sessions = sessionsByAvailableTask.get(taskId);
-        if (sessions === undefined) {
+        if (!availableTaskIds.has(taskId)) {
           return yield* Effect.fail(
             new HostValidationError({
               field: "taskIds",
@@ -63,7 +60,12 @@ export const createTaskQueryUseCases = ({
             }),
           );
         }
-        sessionsByTask[taskId] = sessions;
+      }
+
+      const sessionsByTask: Record<string, AgentSessionRecord[]> = {};
+      for (const taskId of taskIds) {
+        const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
+        sessionsByTask[taskId] = metadata.agentSessions;
       }
 
       return sessionsByTask;

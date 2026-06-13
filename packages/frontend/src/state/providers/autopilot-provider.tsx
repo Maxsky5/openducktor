@@ -18,6 +18,7 @@ import {
   useTaskDataContext,
 } from "../app-state-contexts";
 import { loadTaskWorktree } from "../operations/agent-orchestrator/runtime/runtime";
+import { loadAgentSessionListFromQuery } from "../queries/agent-sessions";
 import { settingsSnapshotQueryOptions } from "../queries/workspace";
 
 export function AutopilotProvider({ children }: PropsWithChildren): ReactElement {
@@ -78,6 +79,10 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
                 task: observedEvent.task,
                 actionId,
                 queryClient,
+                loadTaskSessionRecords: (repoPath, taskId) =>
+                  loadAgentSessionListFromQuery(queryClient, repoPath, taskId, {
+                    forceFresh: true,
+                  }),
                 loadRepoRuntimeCatalog,
                 resolveTaskWorktree: loadTaskWorktree,
                 startSessionWorkflow,

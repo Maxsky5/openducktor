@@ -52,19 +52,9 @@ export const findLatestCleanupTarget = (
         externalSessionId: "task-worktree",
       });
     }
-    const tasks = yield* taskStore.listTasks({ repoPath });
-    const task = tasks.find((entry) => entry.id === taskId);
-    if (!task) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `Task not found: ${taskId}`,
-          details: { repoPath, taskId },
-        }),
-      );
-    }
+    const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
     candidates.push(
-      ...(task.agentSessions ?? [])
+      ...metadata.agentSessions
         .filter((session) => session.role.trim() === "build")
         .map((session) => ({
           workingDirectory: session.workingDirectory,

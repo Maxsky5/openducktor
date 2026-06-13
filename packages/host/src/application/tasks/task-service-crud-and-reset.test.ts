@@ -62,6 +62,13 @@ const createCleanupWorktreeFiles = (calls: unknown[]): WorktreeFilePort =>
       });
     },
   }) satisfies WorktreeFilePort as unknown as WorktreeFilePort;
+const metadataWithSessions = (
+  agentSessions: ReturnType<typeof createAgentSessionRecord>[] = [],
+) => ({
+  spec: { markdown: "" },
+  plan: { markdown: "" },
+  agentSessions,
+});
 describe("createTaskService task mutations and reset", () => {
   test("creates a task after validating parent relationships and enriches the result", async () => {
     const calls: unknown[] = [];
@@ -120,6 +127,9 @@ describe("createTaskService task mutations and reset", () => {
               cause: cause,
             }),
         });
+      },
+      getTaskMetadata() {
+        return Effect.succeed(metadataWithSessions());
       },
       transitionTask() {
         return Effect.tryPromise({
@@ -234,6 +244,9 @@ describe("createTaskService task mutations and reset", () => {
               cause: cause,
             }),
         });
+      },
+      getTaskMetadata() {
+        return Effect.succeed(metadataWithSessions());
       },
       transitionTask() {
         return Effect.tryPromise({
@@ -351,6 +364,12 @@ describe("createTaskService task mutations and reset", () => {
             }),
         });
       },
+      getTaskMetadata(input) {
+        return Effect.sync(() => {
+          calls.push({ type: "metadata", input });
+          return metadataWithSessions();
+        });
+      },
       transitionTask() {
         return Effect.tryPromise({
           try: async () => {
@@ -382,6 +401,7 @@ describe("createTaskService task mutations and reset", () => {
     ).resolves.toEqual({ ok: true });
     expect(calls).toEqual([
       { type: "list", input: { repoPath: "/repo" } },
+      { type: "metadata", input: { repoPath: "/repo", taskId: "task-1" } },
       { type: "listBranches", workingDir: "/repo" },
       { type: "stopDevServers", input: { repoPath: "/repo", taskId: "task-1" } },
       {
@@ -495,6 +515,9 @@ describe("createTaskService task mutations and reset", () => {
   });
   test("deletes subtasks with inactive session guard and cleans related worktrees and branches", async () => {
     const calls: unknown[] = [];
+    const session = createAgentSessionRecord({
+      workingDirectory: "/worktrees/repo/task-1",
+    });
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.tryPromise({
@@ -502,15 +525,7 @@ describe("createTaskService task mutations and reset", () => {
             calls.push({ type: "list", input });
             return [
               task({ id: "epic-1", issueType: "epic", subtaskIds: ["task-1"] }),
-              task({
-                id: "task-1",
-                parentId: "epic-1",
-                agentSessions: [
-                  createAgentSessionRecord({
-                    workingDirectory: "/worktrees/repo/task-1",
-                  }),
-                ],
-              }),
+              task({ id: "task-1", parentId: "epic-1" }),
             ];
           },
           catch: (cause) =>
@@ -520,6 +535,9 @@ describe("createTaskService task mutations and reset", () => {
               cause: cause,
             }),
         });
+      },
+      getTaskMetadata(input) {
+        return Effect.succeed(metadataWithSessions(input.taskId === "task-1" ? [session] : []));
       },
       deleteTask(input) {
         return Effect.tryPromise({
@@ -651,11 +669,10 @@ describe("createTaskService task mutations and reset", () => {
         type: "activityGuard",
         input: {
           repoPath: "/repo",
-          taskIds: ["epic-1", "task-1"],
-          tasks: expect.arrayContaining([
-            expect.objectContaining({ id: "epic-1" }),
-            expect.objectContaining({ id: "task-1" }),
-          ]),
+          taskSessions: [
+            { taskId: "epic-1", sessions: [] },
+            { taskId: "task-1", sessions: [session] },
+          ],
         },
       },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },
@@ -678,6 +695,7 @@ describe("createTaskService task mutations and reset", () => {
   });
   test("deletes closed tasks with stranded managed worktree directories", async () => {
     const calls: unknown[] = [];
+    const session = createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" });
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.tryPromise({
@@ -687,9 +705,6 @@ describe("createTaskService task mutations and reset", () => {
               task({
                 id: "task-1",
                 status: "closed",
-                agentSessions: [
-                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-                ],
               }),
             ];
           },
@@ -700,6 +715,9 @@ describe("createTaskService task mutations and reset", () => {
               cause: cause,
             }),
         });
+      },
+      getTaskMetadata() {
+        return Effect.succeed(metadataWithSessions([session]));
       },
       deleteTask(input) {
         return Effect.tryPromise({
@@ -829,8 +847,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "activityGuard",
         input: {
           repoPath: "/repo",
-          taskIds: ["task-1"],
-          tasks: [expect.objectContaining({ id: "task-1" })],
+          taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
       { type: "listBranches", workingDir: "/repo" },
@@ -851,20 +868,16 @@ describe("createTaskService task mutations and reset", () => {
   });
   test("deletes tasks when a stale outside-root worktree path is already missing", async () => {
     const calls: unknown[] = [];
+    const session = createAgentSessionRecord({ workingDirectory: "/legacy/repo/task-1" });
     const taskStore: TaskStorePort = {
       listTasks(input) {
         return Effect.sync(() => {
           calls.push({ type: "list", input });
-          return [
-            task({
-              id: "task-1",
-              status: "closed",
-              agentSessions: [
-                createAgentSessionRecord({ workingDirectory: "/legacy/repo/task-1" }),
-              ],
-            }),
-          ];
+          return [task({ id: "task-1", status: "closed" })];
         });
+      },
+      getTaskMetadata() {
+        return Effect.succeed(metadataWithSessions([session]));
       },
       deleteTask(input) {
         return Effect.sync(() => {
@@ -916,8 +929,7 @@ describe("createTaskService task mutations and reset", () => {
         type: "activityGuard",
         input: {
           repoPath: "/repo",
-          taskIds: ["task-1"],
-          tasks: [expect.objectContaining({ id: "task-1" })],
+          taskSessions: [{ taskId: "task-1", sessions: [session] }],
         },
       },
       { type: "listBranches", workingDir: "/repo" },
@@ -936,17 +948,12 @@ describe("createTaskService task mutations and reset", () => {
     ]);
   });
   test("fails fast when task deletion needs live activity checks but no guard is configured", async () => {
+    const session = createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" });
     const taskStore: TaskStorePort = {
       listTasks() {
         return Effect.tryPromise({
           try: async () => {
-            return [
-              task({
-                agentSessions: [
-                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-                ],
-              }),
-            ];
+            return [task()];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -955,6 +962,9 @@ describe("createTaskService task mutations and reset", () => {
               cause: cause,
             }),
         });
+      },
+      getTaskMetadata() {
+        return Effect.succeed(metadataWithSessions([session]));
       },
       deleteTask() {
         return Effect.tryPromise({
@@ -1042,6 +1052,11 @@ describe("createTaskService task mutations and reset", () => {
   });
   test("resets implementation after activity guard and cleans builder state", async () => {
     const calls: unknown[] = [];
+    const currentSessions = [
+      createAgentSessionRecord({
+        workingDirectory: "/worktrees/repo/task-1",
+      }),
+    ];
     const currentTask = task({
       status: "ai_review",
       documentSummary: {
@@ -1053,11 +1068,6 @@ describe("createTaskService task mutations and reset", () => {
           verdict: "approved",
         },
       },
-      agentSessions: [
-        createAgentSessionRecord({
-          workingDirectory: "/worktrees/repo/task-1",
-        }),
-      ],
     });
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -1197,17 +1207,7 @@ describe("createTaskService task mutations and reset", () => {
         });
       },
       getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected metadata");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        return Effect.succeed(metadataWithSessions(currentSessions));
       },
       setSpecDocument() {
         return Effect.tryPromise({
@@ -1312,7 +1312,7 @@ describe("createTaskService task mutations and reset", () => {
         input: {
           repoPath: "/repo",
           taskId: "task-1",
-          sessions: currentTask.agentSessions,
+          sessions: currentSessions,
           operationLabel: "reset implementation",
           sessionRoles: ["build", "qa"],
         },
@@ -1349,14 +1349,14 @@ describe("createTaskService task mutations and reset", () => {
   });
   test("resets a task by clearing workflow artifacts and rolling status back to open", async () => {
     const calls: unknown[] = [];
+    const currentSessions = [
+      createAgentSessionRecord({
+        role: "planner",
+        workingDirectory: "/worktrees/repo/task-1",
+      }),
+    ];
     const currentTask = task({
       status: "human_review",
-      agentSessions: [
-        createAgentSessionRecord({
-          role: "planner",
-          workingDirectory: "/worktrees/repo/task-1",
-        }),
-      ],
     });
     const taskStore: TaskStorePort = {
       listTasks(input) {
@@ -1496,17 +1496,7 @@ describe("createTaskService task mutations and reset", () => {
         });
       },
       getTaskMetadata() {
-        return Effect.tryPromise({
-          try: async () => {
-            throw new Error("unexpected metadata");
-          },
-          catch: (cause) =>
-            new HostOperationError({
-              operation: "test.effect",
-              message: cause instanceof Error ? cause.message : String(cause),
-              cause: cause,
-            }),
-        });
+        return Effect.succeed(metadataWithSessions(currentSessions));
       },
       setSpecDocument() {
         return Effect.tryPromise({
@@ -1608,7 +1598,7 @@ describe("createTaskService task mutations and reset", () => {
         input: {
           repoPath: "/repo",
           taskId: "task-1",
-          sessions: currentTask.agentSessions,
+          sessions: currentSessions,
           operationLabel: "reset task",
           sessionRoles: ["spec", "planner", "build", "qa"],
         },
@@ -1647,18 +1637,12 @@ describe("createTaskService task mutations and reset", () => {
     ]);
   });
   test("fails fast when implementation reset needs live activity checks but no guard is configured", async () => {
+    const session = createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" });
     const taskStore: TaskStorePort = {
       listTasks() {
         return Effect.tryPromise({
           try: async () => {
-            return [
-              task({
-                status: "blocked",
-                agentSessions: [
-                  createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" }),
-                ],
-              }),
-            ];
+            return [task({ status: "blocked" })];
           },
           catch: (cause) =>
             new HostOperationError({
@@ -1667,6 +1651,9 @@ describe("createTaskService task mutations and reset", () => {
               cause: cause,
             }),
         });
+      },
+      getTaskMetadata() {
+        return Effect.succeed(metadataWithSessions([session]));
       },
       clearAgentSessionsByRoles() {
         return Effect.tryPromise({

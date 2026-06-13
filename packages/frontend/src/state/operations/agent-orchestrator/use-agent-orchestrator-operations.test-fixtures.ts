@@ -60,17 +60,10 @@ export const persistedSessionFixture: AgentSessionRecord = {
 
 export const taskFixtureWithPersistedBuildSession: TaskCard = {
   ...taskFixture,
-  agentSessions: [persistedSessionFixture],
 };
 
 export const taskFixture2WithPersistedBuildSession: TaskCard = {
   ...taskFixture2,
-  agentSessions: [
-    {
-      ...persistedSessionFixture,
-      externalSessionId: "external-2",
-    },
-  ],
 };
 
 export const buildBootstrapFixture = {

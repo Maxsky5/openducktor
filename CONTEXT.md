@@ -260,6 +260,10 @@ _Avoid_: Blocked, failed Task, QA Rejection
 The history of **Agent Sessions** attached to a specific **Task**, used to inspect or resume prior task-bound work. **Task Session History** is not the same thing as the **Transcript**.
 _Avoid_: Transcript, runtime history, browser history
 
+**Task Session Records Query**:
+The frontend read boundary for **Task Session History**. Agent Studio, Kanban, task details, and autopilot should use this query instead of reading session history from task-card summaries.
+_Avoid_: TaskCard session source, duplicated session history state
+
 **Repo Session Read Model**:
 The startup projection that combines persisted **Task Session History** records with one runtime-owned **Session Presence Snapshot** per runtime kind and working directory. The **Repo Session Read Model** owns the session list shown after reload; it is not a second session store.
 _Avoid_: session hydration, reconciliation, presence store, reattach
