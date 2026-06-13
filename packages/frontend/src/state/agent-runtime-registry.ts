@@ -177,203 +177,94 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
     getAdapter,
     getRuntimeDefinition,
     startRepoRuntime: hostRepoRuntimeResolver.ensureRepoRuntime,
-    createAgentEngine: () => new RuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds),
+    createAgentEngine: () => createRuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds),
   };
 };
 
-class RuntimeRegistryAgentEngine implements AgentEnginePort {
-  constructor(
-    private readonly getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
-    private readonly registeredRuntimeKinds: RuntimeKind[],
-  ) {
-    this.startSession = this.startSession.bind(this);
-    this.resumeSession = this.resumeSession.bind(this);
-    this.releaseSession = this.releaseSession.bind(this);
-    this.forkSession = this.forkSession.bind(this);
-    this.listRuntimeDefinitions = this.listRuntimeDefinitions.bind(this);
-    this.listAvailableModels = this.listAvailableModels.bind(this);
-    this.listAvailableSlashCommands = this.listAvailableSlashCommands.bind(this);
-    this.listAvailableSkills = this.listAvailableSkills.bind(this);
-    this.searchFiles = this.searchFiles.bind(this);
-    this.listLiveAgentSessions = this.listLiveAgentSessions.bind(this);
-    this.listSessionPresence = this.listSessionPresence.bind(this);
-    this.readSessionPresence = this.readSessionPresence.bind(this);
-    this.loadSessionHistory = this.loadSessionHistory.bind(this);
-    this.loadSessionTodos = this.loadSessionTodos.bind(this);
-    this.updateSessionModel = this.updateSessionModel.bind(this);
-    this.sendUserMessage = this.sendUserMessage.bind(this);
-    this.replyApproval = this.replyApproval.bind(this);
-    this.replyQuestion = this.replyQuestion.bind(this);
-    this.subscribeEvents = this.subscribeEvents.bind(this);
-    this.stopSession = this.stopSession.bind(this);
-    this.loadSessionDiff = this.loadSessionDiff.bind(this);
-    this.loadFileStatus = this.loadFileStatus.bind(this);
+const requireInputRuntimeKind = (
+  runtimeKind: RuntimeKind | undefined,
+  operation: string,
+): RuntimeKind => {
+  if (runtimeKind) {
+    return runtimeKind;
   }
+  throw new Error(`Runtime kind is required for ${operation} requests.`);
+};
 
-  async startSession(input: Parameters<AgentEnginePort["startSession"]>[0]) {
-    const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
-    const summary = await this.getAdapter(runtimeKind).startSession(input);
-    return {
-      ...summary,
-      runtimeKind,
-    };
+const resolveRuntimeKind = (
+  runtimeKind: RuntimeKind | undefined,
+  model: AgentModelSelection | undefined,
+): RuntimeKind => {
+  if (runtimeKind) {
+    return runtimeKind;
   }
-
-  async resumeSession(input: Parameters<AgentEnginePort["resumeSession"]>[0]) {
-    const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
-    const summary = await this.getAdapter(runtimeKind).resumeSession(input);
-    return {
-      ...summary,
-      runtimeKind,
-    };
+  if (model?.runtimeKind) {
+    return model.runtimeKind;
   }
+  throw new Error("Runtime kind is required to select an agent runtime adapter.");
+};
 
-  async releaseSession(input: Parameters<AgentEnginePort["releaseSession"]>[0]): Promise<void> {
-    await this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session release"),
-    ).releaseSession(input);
-  }
-
-  async forkSession(input: Parameters<AgentEnginePort["forkSession"]>[0]) {
-    const runtimeKind = this.resolveRuntimeKind(input.runtimeKind, input.model);
-    const summary = await this.getAdapter(runtimeKind).forkSession(input);
-    return {
-      ...summary,
-      runtimeKind,
-    };
-  }
-
-  listRuntimeDefinitions(): AgentRuntimeDefinition[] {
-    return this.registeredRuntimeKinds.map((runtimeKind) =>
-      this.getAdapter(runtimeKind).getRuntimeDefinition(),
-    );
-  }
-
-  listAvailableModels(input: Parameters<AgentEnginePort["listAvailableModels"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "model catalog"),
-    ).listAvailableModels(input);
-  }
-
-  listAvailableSlashCommands(input: Parameters<AgentEnginePort["listAvailableSlashCommands"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "slash command catalog"),
-    ).listAvailableSlashCommands(input);
-  }
-
-  listAvailableSkills(input: Parameters<AgentEnginePort["listAvailableSkills"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "skill catalog"),
-    ).listAvailableSkills(input);
-  }
-
-  searchFiles(input: Parameters<AgentEnginePort["searchFiles"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "file search"),
-    ).searchFiles(input);
-  }
-
-  listLiveAgentSessions(input: Parameters<AgentEnginePort["listLiveAgentSessions"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live agent session discovery"),
-    ).listLiveAgentSessions(input);
-  }
-
-  listSessionPresence(input: Parameters<AgentEnginePort["listSessionPresence"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live session snapshot discovery"),
-    ).listSessionPresence(input);
-  }
-
-  readSessionPresence(input: Parameters<AgentEnginePort["readSessionPresence"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "live session snapshot read"),
-    ).readSessionPresence(input);
-  }
-
-  loadSessionHistory(input: Parameters<AgentEnginePort["loadSessionHistory"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session history"),
-    ).loadSessionHistory(input);
-  }
-
-  loadSessionTodos(input: Parameters<AgentEnginePort["loadSessionTodos"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session todos"),
-    ).loadSessionTodos(input);
-  }
-
-  updateSessionModel(input: Parameters<AgentEnginePort["updateSessionModel"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session model update"),
-    ).updateSessionModel(input);
-  }
-
-  sendUserMessage(input: Parameters<AgentEnginePort["sendUserMessage"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "user message send"),
-    ).sendUserMessage(input);
-  }
-
-  replyApproval(input: Parameters<AgentEnginePort["replyApproval"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "approval reply"),
-    ).replyApproval(input);
-  }
-
-  replyQuestion(input: Parameters<AgentEnginePort["replyQuestion"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "question reply"),
-    ).replyQuestion(input);
-  }
-
-  subscribeEvents(
-    input: Parameters<AgentEnginePort["subscribeEvents"]>[0],
-    listener: Parameters<AgentEnginePort["subscribeEvents"]>[1],
-  ) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session event subscription"),
-    ).subscribeEvents(input, listener);
-  }
-
-  async stopSession(input: Parameters<AgentEnginePort["stopSession"]>[0]): Promise<void> {
-    await this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session stop"),
-    ).stopSession(input);
-  }
-
-  loadSessionDiff(input: Parameters<AgentEnginePort["loadSessionDiff"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session diff"),
-    ).loadSessionDiff(input);
-  }
-
-  loadFileStatus(input: Parameters<AgentEnginePort["loadFileStatus"]>[0]) {
-    return this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "file status"),
-    ).loadFileStatus(input);
-  }
-
-  private requireInputRuntimeKind(
+const createRuntimeRegistryAgentEngine = (
+  getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
+  registeredRuntimeKinds: RuntimeKind[],
+): AgentEnginePort => {
+  const adapterFor = (
     runtimeKind: RuntimeKind | undefined,
     operation: string,
-  ): RuntimeKind {
-    if (runtimeKind) {
-      return runtimeKind;
-    }
-    throw new Error(`Runtime kind is required for ${operation} requests.`);
-  }
-
-  private resolveRuntimeKind(
+  ): RegisteredRuntimeAdapter => getAdapter(requireInputRuntimeKind(runtimeKind, operation));
+  const adapterForStart = (
     runtimeKind: RuntimeKind | undefined,
     model: AgentModelSelection | undefined,
-  ): RuntimeKind {
-    if (runtimeKind) {
-      return runtimeKind;
-    }
-    if (model?.runtimeKind) {
-      return model.runtimeKind;
-    }
-    throw new Error("Runtime kind is required to select an agent runtime adapter.");
-  }
-}
+  ) => {
+    const resolvedRuntimeKind = resolveRuntimeKind(runtimeKind, model);
+    return { adapter: getAdapter(resolvedRuntimeKind), runtimeKind: resolvedRuntimeKind };
+  };
+
+  return {
+    async startSession(input) {
+      const { adapter, runtimeKind } = adapterForStart(input.runtimeKind, input.model);
+      return { ...(await adapter.startSession(input)), runtimeKind };
+    },
+    async resumeSession(input) {
+      const { adapter, runtimeKind } = adapterForStart(input.runtimeKind, input.model);
+      return { ...(await adapter.resumeSession(input)), runtimeKind };
+    },
+    releaseSession: (input) =>
+      adapterFor(input.runtimeKind, "session release").releaseSession(input),
+    async forkSession(input) {
+      const { adapter, runtimeKind } = adapterForStart(input.runtimeKind, input.model);
+      return { ...(await adapter.forkSession(input)), runtimeKind };
+    },
+    listRuntimeDefinitions: () =>
+      registeredRuntimeKinds.map((runtimeKind) => getAdapter(runtimeKind).getRuntimeDefinition()),
+    listAvailableModels: (input) =>
+      adapterFor(input.runtimeKind, "model catalog").listAvailableModels(input),
+    listAvailableSlashCommands: (input) =>
+      adapterFor(input.runtimeKind, "slash command catalog").listAvailableSlashCommands(input),
+    listAvailableSkills: (input) =>
+      adapterFor(input.runtimeKind, "skill catalog").listAvailableSkills(input),
+    searchFiles: (input) => adapterFor(input.runtimeKind, "file search").searchFiles(input),
+    listLiveAgentSessions: (input) =>
+      adapterFor(input.runtimeKind, "live agent session discovery").listLiveAgentSessions(input),
+    listSessionPresence: (input) =>
+      adapterFor(input.runtimeKind, "live session snapshot discovery").listSessionPresence(input),
+    readSessionPresence: (input) =>
+      adapterFor(input.runtimeKind, "live session snapshot read").readSessionPresence(input),
+    loadSessionHistory: (input) =>
+      adapterFor(input.runtimeKind, "session history").loadSessionHistory(input),
+    loadSessionTodos: (input) =>
+      adapterFor(input.runtimeKind, "session todos").loadSessionTodos(input),
+    updateSessionModel: (input) =>
+      adapterFor(input.runtimeKind, "session model update").updateSessionModel(input),
+    sendUserMessage: (input) =>
+      adapterFor(input.runtimeKind, "user message send").sendUserMessage(input),
+    replyApproval: (input) => adapterFor(input.runtimeKind, "approval reply").replyApproval(input),
+    replyQuestion: (input) => adapterFor(input.runtimeKind, "question reply").replyQuestion(input),
+    subscribeEvents: (input, listener) =>
+      adapterFor(input.runtimeKind, "session event subscription").subscribeEvents(input, listener),
+    stopSession: (input) => adapterFor(input.runtimeKind, "session stop").stopSession(input),
+    loadSessionDiff: (input) =>
+      adapterFor(input.runtimeKind, "session diff").loadSessionDiff(input),
+    loadFileStatus: (input) => adapterFor(input.runtimeKind, "file status").loadFileStatus(input),
+  };
+};
