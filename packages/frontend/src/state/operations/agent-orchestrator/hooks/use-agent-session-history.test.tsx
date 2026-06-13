@@ -8,7 +8,6 @@ import { useAgentSessionHistory } from "./use-agent-session-history";
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "planner-session-1",
   taskId: "task-1",
-  repoPath: "/repo-a",
   role: "planner",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",

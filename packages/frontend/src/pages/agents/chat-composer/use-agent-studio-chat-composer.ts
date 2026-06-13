@@ -157,7 +157,6 @@ export function useAgentStudioChatComposer({
   const activeSessionStatus = activeSessionChatComposerContext.status;
   const activeSessionSelectedModel = activeSessionChatComposerContext.selectedModel;
   const activeSessionRuntimeKind = activeSessionChatComposerContext.runtimeKind;
-  const activeSessionRepoPath = activeSessionChatComposerContext.repoPath;
   const activeSessionWorkingDirectory = activeSessionChatComposerContext.workingDirectory;
   const activeSessionLiveContextUsage = activeSessionChatComposerContext.liveContextUsage ?? null;
   const activeSessionMessages = activeSessionChatComposerContext.messages;
@@ -207,21 +206,16 @@ export function useAgentStudioChatComposer({
   ]);
   const activeSessionRuntimeQueryState = useMemo(
     () =>
-      resolveSessionRuntimeQueryState(
-        hasActiveSession
+      resolveSessionRuntimeQueryState({
+        repoPath: workspaceRepoPath,
+        session: hasActiveSession
           ? {
-              repoPath: activeSessionRepoPath,
               runtimeKind: activeSessionRuntimeKind,
               workingDirectory: activeSessionWorkingDirectory,
             }
           : null,
-      ),
-    [
-      activeSessionRepoPath,
-      activeSessionRuntimeKind,
-      activeSessionWorkingDirectory,
-      hasActiveSession,
-    ],
+      }),
+    [activeSessionRuntimeKind, activeSessionWorkingDirectory, hasActiveSession, workspaceRepoPath],
   );
   const activeSessionRuntimeQueryInput = activeSessionRuntimeQueryState.runtimeQueryInput;
   const activeSessionRuntimeQueryError = activeSessionRuntimeQueryState.runtimeQueryError;

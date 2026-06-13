@@ -15,7 +15,6 @@ const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
     externalSessionId: sessionTarget.externalSessionId,
     taskId: "task-1",
-    repoPath: "/repo",
     runtimeKind: "opencode",
     role: "build",
     status: "running",

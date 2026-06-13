@@ -49,7 +49,6 @@ const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 };
 
 const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
-  repoPath: "/repo",
   startedAt: "2026-02-22T10:00:00.000Z",
   workingDirectory: "/repo",
 };

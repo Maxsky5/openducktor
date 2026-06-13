@@ -32,6 +32,7 @@ describe("useSessionRuntimeData", () => {
     const harness = createHookHarness(
       useSessionRuntimeData,
       {
+        repoPath: "/repo",
         session: createAgentSessionFixture({
           externalSessionId: "external-1",
           runtimeKind: "opencode",

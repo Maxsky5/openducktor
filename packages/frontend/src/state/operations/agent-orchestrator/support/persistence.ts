@@ -6,7 +6,6 @@ import type {
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
-import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type {
   AgentChatMessage,
   AgentSessionContextUsage,
@@ -77,44 +76,40 @@ export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessi
 export const fromPersistedSessionRecord = (
   session: AgentSessionRecord,
   fallbackTaskId: string,
-  repoPath: string,
 ): AgentSessionState => {
   const runtimeKind = readPersistedRuntimeKind(session);
 
-  return createRepoScopedAgentSessionState(
-    {
-      externalSessionId: session.externalSessionId,
-      title: formatWorkflowAgentSessionTitle(session.role, fallbackTaskId),
-      taskId: fallbackTaskId,
-      role: session.role,
-      // Persisted task-store records are durable session metadata only.
-      // Live state must always be derived from the runtime, not from persisted records.
-      status: "stopped",
-      startedAt: session.startedAt,
-      runtimeKind,
-      workingDirectory: session.workingDirectory,
-      historyLoadState: "not_requested",
-      messages: [],
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-      draftReasoningText: "",
-      draftReasoningMessageId: null,
-      contextUsage: null,
-      pendingApprovals: [],
-      pendingQuestions: [],
-      selectedModel: session.selectedModel
-        ? normalizePersistedSelection({
-            ...session.selectedModel,
-            runtimeKind: requirePersistedSelectedModelRuntimeKind(
-              session.externalSessionId,
-              runtimeKind,
-              session.selectedModel,
-            ),
-          })
-        : null,
-    },
-    repoPath,
-  );
+  return {
+    externalSessionId: session.externalSessionId,
+    title: formatWorkflowAgentSessionTitle(session.role, fallbackTaskId),
+    taskId: fallbackTaskId,
+    role: session.role,
+    // Persisted task-store records are durable session metadata only.
+    // Live state must always be derived from the runtime, not from persisted records.
+    status: "stopped",
+    startedAt: session.startedAt,
+    runtimeKind,
+    workingDirectory: session.workingDirectory,
+    historyLoadState: "not_requested",
+    messages: [],
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: session.selectedModel
+      ? normalizePersistedSelection({
+          ...session.selectedModel,
+          runtimeKind: requirePersistedSelectedModelRuntimeKind(
+            session.externalSessionId,
+            runtimeKind,
+            session.selectedModel,
+          ),
+        })
+      : null,
+  };
 };
 
 const userMessageMeta = (

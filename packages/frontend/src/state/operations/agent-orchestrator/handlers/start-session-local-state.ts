@@ -1,5 +1,4 @@
 import type { AgentModelSelection } from "@openducktor/core";
-import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
@@ -26,40 +25,36 @@ export const buildInitialSession = ({
   systemPrompt: string;
   promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
   initialMessages?: AgentSessionState["messages"];
-}): AgentSessionState =>
-  createRepoScopedAgentSessionState(
-    {
+}): AgentSessionState => ({
+  externalSessionId: startedCtx.summary.externalSessionId,
+  ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
+  taskId: startedCtx.taskId,
+  runtimeKind: requireConfiguredRuntimeKind(
+    runtime.runtimeKind,
+    `Runtime kind is required to initialize ${startedCtx.role} sessions.`,
+  ),
+  role: startedCtx.role,
+  status: "starting",
+  startedAt: startedCtx.summary.startedAt,
+  workingDirectory: runtime.workingDirectory,
+  historyLoadState: "loaded",
+  messages:
+    initialMessages ??
+    buildSessionHeaderMessages({
       externalSessionId: startedCtx.summary.externalSessionId,
-      ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
-      taskId: startedCtx.taskId,
-      runtimeKind: requireConfiguredRuntimeKind(
-        runtime.runtimeKind,
-        `Runtime kind is required to initialize ${startedCtx.role} sessions.`,
-      ),
-      role: startedCtx.role,
-      status: "starting",
+      systemPrompt,
       startedAt: startedCtx.summary.startedAt,
-      workingDirectory: runtime.workingDirectory,
-      historyLoadState: "loaded",
-      messages:
-        initialMessages ??
-        buildSessionHeaderMessages({
-          externalSessionId: startedCtx.summary.externalSessionId,
-          systemPrompt,
-          startedAt: startedCtx.summary.startedAt,
-        }),
-      draftAssistantText: "",
-      draftAssistantMessageId: null,
-      draftReasoningText: "",
-      draftReasoningMessageId: null,
-      contextUsage: null,
-      pendingApprovals: [],
-      pendingQuestions: [],
-      selectedModel,
-      promptOverrides,
-    },
-    startedCtx.repoPath,
-  );
+    }),
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  contextUsage: null,
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel,
+  promptOverrides,
+});
 
 export const persistInitialSession = async ({
   initialSession,

@@ -342,6 +342,7 @@ export function useAgentStudioSelectionController({
     ],
   );
   const viewSessionRuntimeData = useSessionRuntimeData({
+    repoPath: activeWorkspace?.repoPath ?? null,
     session: viewActiveSession,
     runtimeDefinitions,
     repoReadinessState: viewSessionReadinessState,

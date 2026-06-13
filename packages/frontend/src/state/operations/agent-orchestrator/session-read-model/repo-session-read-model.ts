@@ -73,17 +73,15 @@ const selectLocalSessions = (
 };
 
 const toPersistedSessionView = ({
-  repoPath,
   taskId,
   record,
   current,
 }: {
-  repoPath: string;
   taskId: string;
   record: AgentSessionRecord;
   current: AgentSessionState | undefined;
 }): AgentSessionState => {
-  const persisted = fromPersistedSessionRecord(record, taskId, repoPath);
+  const persisted = fromPersistedSessionRecord(record, taskId);
   const runtimeKind = readPersistedRuntimeKind(record);
   if (!current) {
     return persisted;
@@ -91,7 +89,6 @@ const toPersistedSessionView = ({
   return {
     ...current,
     taskId,
-    repoPath,
     runtimeKind,
     role: record.role,
     startedAt: record.startedAt,
@@ -184,7 +181,6 @@ export const buildRepoSessionReadModel = ({
         reason: "No live runtime session found for persisted session.",
       });
     const baseSession = toPersistedSessionView({
-      repoPath,
       taskId,
       record,
       current,
@@ -193,7 +189,7 @@ export const buildRepoSessionReadModel = ({
     sessionsById[record.externalSessionId] = session;
 
     if (shouldListenToAgentSessionPresenceSnapshot(snapshot)) {
-      liveSessions.push(toRuntimeSessionRef(session));
+      liveSessions.push(toRuntimeSessionRef(repoPath, session));
     }
   }
 

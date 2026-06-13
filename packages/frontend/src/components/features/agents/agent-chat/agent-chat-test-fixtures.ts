@@ -5,7 +5,6 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
@@ -71,7 +70,6 @@ const baseMessage: AgentChatMessage = {
 const baseSession: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
   taskId: "task-1",
-  repoPath: "/repo",
   runtimeKind: "opencode",
   role: "spec",
   status: "running",
@@ -107,20 +105,11 @@ type AgentChatThreadSessionOverrides = Partial<AgentSessionState> & {
 export const buildSession = (
   overrides: AgentChatThreadSessionOverrides = {},
 ): AgentChatThreadSession => {
-  const repoPath = overrides.repoPath ?? baseSession.repoPath ?? "/repo";
-  const { repoPath: _baseRepoPath, ...baseRepoSession } = baseSession;
-  const { repoPath: _overrideRepoPath, todos = [], ...overrideSession } = overrides;
-
-  const session = createRepoScopedAgentSessionState(
-    {
-      ...baseRepoSession,
-      ...overrideSession,
-    },
-    repoPath,
-  );
+  const { todos = [], ...overrideSession } = overrides;
 
   return {
-    ...session,
+    ...baseSession,
+    ...overrideSession,
     todos,
   };
 };

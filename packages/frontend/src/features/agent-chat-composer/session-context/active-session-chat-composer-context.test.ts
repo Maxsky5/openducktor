@@ -7,7 +7,6 @@ import {
 
 const makeSummary = (): ActiveSessionChatComposerSummary => ({
   externalSessionId: "external-1",
-  repoPath: "/repo",
   status: "idle",
   workingDirectory: "/repo",
   runtimeKind: "opencode",
@@ -21,7 +20,6 @@ const makeSummary = (): ActiveSessionChatComposerSummary => ({
 
 const makeHydratedSession = (): ActiveSessionChatComposerSession => ({
   externalSessionId: "external-1",
-  repoPath: "/repo",
   status: "idle",
   selectedModel: {
     runtimeKind: "opencode",

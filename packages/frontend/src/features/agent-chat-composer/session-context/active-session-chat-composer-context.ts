@@ -5,7 +5,6 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 export type ActiveSessionChatComposerSession = Pick<
   AgentSessionState,
   | "externalSessionId"
-  | "repoPath"
   | "status"
   | "selectedModel"
   | "runtimeKind"
@@ -16,12 +15,11 @@ export type ActiveSessionChatComposerSession = Pick<
 
 export type ActiveSessionChatComposerSummary = Pick<
   AgentSessionSummary,
-  "externalSessionId" | "repoPath" | "status" | "selectedModel" | "runtimeKind" | "workingDirectory"
+  "externalSessionId" | "status" | "selectedModel" | "runtimeKind" | "workingDirectory"
 >;
 
 export type ActiveSessionChatComposerContext = {
   externalSessionId: string | null;
-  repoPath: string;
   status: AgentSessionState["status"] | null;
   selectedModel: AgentModelSelection | null;
   runtimeKind: AgentSessionState["runtimeKind"] | null;
@@ -41,7 +39,6 @@ export const resolveActiveSessionChatComposerContext = (
 
   return {
     externalSessionId,
-    repoPath: activeSession?.repoPath?.trim() ?? activeSessionSummary?.repoPath?.trim() ?? "",
     status: activeSession?.status ?? activeSessionSummary?.status ?? null,
     selectedModel,
     runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,

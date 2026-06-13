@@ -53,12 +53,6 @@ describe("shared test fixtures", () => {
     expect(getSessionMessageCount(second)).toBe(0);
   });
 
-  test("createAgentSessionFixture keeps repo identity explicit", () => {
-    const session = createAgentSessionFixture({}, { repoPath: "/repo-b" });
-
-    expect(session.repoPath).toBe("/repo-b");
-  });
-
   test("createAgentSessionFixture uses the canonical external id by default", () => {
     expect(createAgentSessionFixture().externalSessionId).toBe(TEST_EXTERNAL_SESSION_IDS.default);
   });

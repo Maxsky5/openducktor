@@ -15,7 +15,6 @@ const buildSession = (
 ): AgentActivitySessionSummary => ({
   externalSessionId: overrides.externalSessionId ?? "session-1",
   taskId: overrides.taskId ?? "task-1",
-  repoPath: "/repo",
   role: overrides.role ?? ("spec" as const),
   status: overrides.status ?? "idle",
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",

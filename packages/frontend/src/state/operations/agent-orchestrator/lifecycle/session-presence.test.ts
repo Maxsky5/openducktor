@@ -13,7 +13,6 @@ import {
 const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "external-1",
   taskId: "task-1",
-  repoPath: "/tmp/repo",
   role: "build",
   status: "running",
   startedAt: "2026-03-01T09:00:00.000Z",

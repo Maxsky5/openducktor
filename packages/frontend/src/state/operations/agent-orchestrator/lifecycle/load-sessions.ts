@@ -234,11 +234,11 @@ export const createLoadSelectedSessionHistory = ({
   session: AgentSessionState;
 }) => Promise<void>) => {
   return async ({ session }): Promise<void> => {
-    if (currentWorkspaceRepoPathRef.current !== session.repoPath) {
+    const repoPath = currentWorkspaceRepoPathRef.current;
+    if (!repoPath) {
       return;
     }
 
-    const repoPath = session.repoPath;
     const repoEpochAtStart = repoEpochRef.current;
     const isStaleRepoOperation = (): boolean =>
       isRepoOperationStale({

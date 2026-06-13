@@ -3,7 +3,7 @@ import { resolveSessionRuntimeQueryState } from "./session-runtime-query-state";
 
 describe("resolveSessionRuntimeQueryState", () => {
   test("returns no query state when there is no active session", () => {
-    expect(resolveSessionRuntimeQueryState(null)).toEqual({
+    expect(resolveSessionRuntimeQueryState({ repoPath: "/repo", session: null })).toEqual({
       runtimeQueryInput: null,
       runtimeQueryError: null,
     });
@@ -13,8 +13,10 @@ describe("resolveSessionRuntimeQueryState", () => {
     expect(
       resolveSessionRuntimeQueryState({
         repoPath: " /repo ",
-        runtimeKind: "codex",
-        workingDirectory: " /repo/worktree ",
+        session: {
+          runtimeKind: "codex",
+          workingDirectory: " /repo/worktree ",
+        },
       }),
     ).toEqual({
       runtimeQueryInput: {
@@ -30,8 +32,10 @@ describe("resolveSessionRuntimeQueryState", () => {
     expect(
       resolveSessionRuntimeQueryState({
         repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "   ",
+        session: {
+          runtimeKind: "codex",
+          workingDirectory: "   ",
+        },
       }),
     ).toEqual({
       runtimeQueryInput: null,

@@ -41,7 +41,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   taskId: "task-1",
-  repoPath: overrides.repoPath ?? "/repo",
   role: "spec",
   status: "running",
   startedAt: "2026-02-22T12:00:00.000Z",

@@ -240,8 +240,10 @@ export const handleToolPart = (
         workflowToolAliasesByCanonical,
       });
       if (todoUpdateFromTool) {
-        context.runtimeData.runtimeDataWriter.updateTodos(current, (todos) =>
-          mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
+        context.runtimeData.runtimeDataWriter.updateTodos(
+          context.runtimeData.repoPath,
+          current,
+          (todos) => mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
         );
       }
 

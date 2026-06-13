@@ -262,8 +262,10 @@ export const handleSessionTodosUpdated = (
   context.store.updateSession(
     context.store.externalSessionId,
     (current) => {
-      context.runtimeData.runtimeDataWriter.updateTodos(current, (todos) =>
-        mergeTodoListPreservingOrder(todos, event.todos),
+      context.runtimeData.runtimeDataWriter.updateTodos(
+        context.runtimeData.repoPath,
+        current,
+        (todos) => mergeTodoListPreservingOrder(todos, event.todos),
       );
       return {
         ...current,

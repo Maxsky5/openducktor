@@ -97,8 +97,8 @@ describe("repo session read model", () => {
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
     expect(readModel.liveSessions).toEqual([
       {
-        externalSessionId: record.externalSessionId,
         repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
         runtimeKind,
         workingDirectory: record.workingDirectory,
       },
@@ -141,8 +141,8 @@ describe("repo session read model", () => {
     expect(secondRead.sessionsById[record.externalSessionId]?.status).toBe("running");
     expect(secondRead.liveSessions).toEqual([
       {
-        externalSessionId: record.externalSessionId,
         repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
         runtimeKind: "opencode",
         workingDirectory: record.workingDirectory,
       },
@@ -232,7 +232,6 @@ describe("repo session read model", () => {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
         taskId: "task-1",
-        repoPath: "/repo",
         runtimeKind: "opencode",
         role: "build",
         status: "running",
@@ -281,7 +280,6 @@ describe("repo session read model", () => {
       ...createAgentSessionFixture({
         externalSessionId: "orphan-session",
         taskId: "task-1",
-        repoPath: "/repo",
         runtimeKind: "opencode",
         role: "build",
         status: "running",
@@ -322,7 +320,6 @@ describe("repo session read model", () => {
     const currentSession = createAgentSessionFixture({
       externalSessionId: "starting-session",
       taskId: "task-1",
-      repoPath: "/repo",
       runtimeKind: "opencode",
       role: "build",
       status: "starting",

@@ -38,7 +38,6 @@ export const createSession = (overrides: Partial<AgentSessionState> = {}): Agent
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   taskId: "task-1",
-  repoPath: "/tmp/repo",
   role: "build",
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",

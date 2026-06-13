@@ -16,6 +16,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseSessionRuntimeDataArgs = {
+  repoPath: string | null;
   session: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
   repoReadinessState: SessionRepoReadinessState;
@@ -47,6 +48,7 @@ const emptyRuntimeData: SessionRuntimeDataState["runtimeData"] = Object.freeze({
 });
 
 export const useSessionRuntimeData = ({
+  repoPath,
   session,
   runtimeDefinitions,
   repoReadinessState,
@@ -54,8 +56,8 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
   const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
-    () => resolveSessionRuntimeQueryState(session),
-    [session],
+    () => resolveSessionRuntimeQueryState({ repoPath, session }),
+    [repoPath, session],
   );
   const sessionViewLifecycle = useMemo(
     () =>

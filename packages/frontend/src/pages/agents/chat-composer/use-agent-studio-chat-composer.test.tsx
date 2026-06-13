@@ -389,7 +389,6 @@ describe("useAgentStudioChatComposer", () => {
         activeSession: null,
         activeSessionSummary: {
           externalSessionId: "external-1",
-          repoPath: "/repo",
           taskId: "task-1",
           role: "spec",
           status: "idle",

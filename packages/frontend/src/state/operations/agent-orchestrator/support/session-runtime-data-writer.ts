@@ -6,13 +6,17 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type SessionRuntimeDataSessionRef = Pick<
   AgentSessionState,
-  "externalSessionId" | "repoPath" | "runtimeKind" | "workingDirectory"
+  "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
 
 type SessionTodosUpdater = (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[];
 
 export type SessionRuntimeDataWriter = {
-  updateTodos: (session: SessionRuntimeDataSessionRef, updater: SessionTodosUpdater) => void;
+  updateTodos: (
+    repoPath: string,
+    session: SessionRuntimeDataSessionRef,
+    updater: SessionTodosUpdater,
+  ) => void;
 };
 
 const todosQueryKey = ({
@@ -31,8 +35,8 @@ const todosQueryKey = ({
 export const createSessionRuntimeDataWriter = (
   queryClient: QueryClient,
 ): SessionRuntimeDataWriter => ({
-  updateTodos(session, updater): void {
-    const queryKey = todosQueryKey(session);
+  updateTodos(repoPath, session, updater): void {
+    const queryKey = todosQueryKey({ ...session, repoPath });
     const current = queryClient.getQueryData<AgentSessionTodoItem[]>(queryKey) ?? [];
     queryClient.setQueryData(queryKey, updater(current));
   },

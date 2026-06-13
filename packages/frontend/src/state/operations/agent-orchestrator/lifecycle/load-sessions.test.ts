@@ -109,8 +109,8 @@ describe("createLoadAgentSessions", () => {
     expect(harness.getSession("external-1")?.runtimeKind).toBe("opencode");
     expect(harness.listenedSessions).toEqual([
       {
-        externalSessionId: "external-1",
         repoPath: "/repo",
+        externalSessionId: "external-1",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
       },
@@ -169,7 +169,6 @@ describe("createLoadAgentSessions", () => {
         [record.externalSessionId]: createAgentSessionFixture({
           externalSessionId: record.externalSessionId,
           taskId: "task-1",
-          repoPath: "/repo",
           runtimeKind: "opencode",
           role: "build",
           status: "stopped",
@@ -283,7 +282,6 @@ describe("createLoadAgentSessions", () => {
         ...createAgentSessionFixture({
           externalSessionId: record.externalSessionId,
           taskId: "task-1",
-          repoPath: "/repo",
           runtimeKind: "opencode",
           role: "build",
           status: "running",
@@ -337,7 +335,6 @@ describe("createLoadAgentSessions", () => {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
         taskId: "task-1",
-        repoPath: "/repo",
         runtimeKind: "opencode",
         role: "build",
         status: "running",
@@ -405,7 +402,6 @@ describe("createLoadAgentSessions", () => {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
         taskId: "task-1",
-        repoPath: "/repo",
         runtimeKind: "opencode",
         role: "build",
         status: "running",

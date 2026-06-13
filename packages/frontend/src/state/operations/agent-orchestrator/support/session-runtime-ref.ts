@@ -4,15 +4,21 @@ import { requireSessionRuntimeKindForPersistence } from "./session-runtime-metad
 
 export type ListenToAgentSession = (session: AgentSessionRef) => void;
 
-export const toRuntimeSessionRef = (session: AgentSessionState): AgentSessionRef => ({
+export const toRuntimeSessionRef = (
+  repoPath: string,
+  session: AgentSessionState,
+): AgentSessionRef => ({
   externalSessionId: session.externalSessionId,
-  repoPath: session.repoPath,
+  repoPath,
   runtimeKind: requireSessionRuntimeKindForPersistence(session),
   workingDirectory: session.workingDirectory,
 });
 
-export const toRuntimeSessionContextRef = (session: AgentSessionState): AgentSessionRuntimeRef => ({
-  ...toRuntimeSessionRef(session),
+export const toRuntimeSessionContextRef = (
+  repoPath: string,
+  session: AgentSessionState,
+): AgentSessionRuntimeRef => ({
+  ...toRuntimeSessionRef(repoPath, session),
   taskId: session.taskId,
   role: session.role,
   ...(session.selectedModel ? { model: session.selectedModel } : {}),

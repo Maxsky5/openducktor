@@ -6,7 +6,6 @@ export type AgentSessionSummary = Pick<
   AgentSessionState,
   | "externalSessionId"
   | "title"
-  | "repoPath"
   | "taskId"
   | "role"
   | "status"
@@ -36,7 +35,6 @@ export type AgentActivitySessionSummary = Pick<
   WorkflowAgentSessionState,
   "externalSessionId" | "taskId" | "role" | "status" | "startedAt"
 > & {
-  repoPath: string;
   hasPendingApprovals: boolean;
   hasPendingQuestions: boolean;
 };
@@ -59,7 +57,6 @@ const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState):
 export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionSummary => ({
   externalSessionId: session.externalSessionId,
   ...(session.title ? { title: session.title } : {}),
-  repoPath: session.repoPath,
   taskId: session.taskId,
   role: session.role,
   status: session.status,
@@ -81,7 +78,6 @@ export const toAgentActivitySessionSummary = (
   return {
     externalSessionId: session.externalSessionId,
     taskId: session.taskId,
-    repoPath: session.repoPath,
     role: session.role,
     status: session.status,
     startedAt: session.startedAt,
@@ -116,7 +112,6 @@ const areActivitySummariesEquivalent = (
   return (
     left?.externalSessionId === right.externalSessionId &&
     left.taskId === right.taskId &&
-    left.repoPath === right.repoPath &&
     left.role === right.role &&
     left.status === right.status &&
     left.startedAt === right.startedAt &&

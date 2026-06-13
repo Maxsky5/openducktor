@@ -64,7 +64,10 @@ export type SessionStoreContext = Pick<
   "externalSessionId" | "sessionsRef" | "updateSession" | "isSessionListenerActive"
 >;
 
-export type SessionRuntimeDataContext = Pick<ListenToAgentSessionParams, "runtimeDataWriter">;
+export type SessionRuntimeDataContext = Pick<
+  ListenToAgentSessionParams,
+  "repoPath" | "runtimeDataWriter"
+>;
 
 export type SessionDraftContext = Pick<
   ListenToAgentSessionParams,
@@ -171,6 +174,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     runtimeData: {
+      repoPath: context.repoPath,
       runtimeDataWriter: context.runtimeDataWriter,
     },
   },
@@ -217,6 +221,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     runtimeData: {
+      repoPath: context.repoPath,
       runtimeDataWriter: context.runtimeDataWriter,
     },
   },

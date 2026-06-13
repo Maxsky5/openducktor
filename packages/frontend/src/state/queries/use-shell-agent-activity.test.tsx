@@ -124,26 +124,18 @@ afterEach(async () => {
 });
 
 describe("useShellAgentActivity", () => {
-  test("shows only active sessions for the current repo", async () => {
+  test("shows active sessions from the current workspace session store", async () => {
     const harness = createHarness({ activeWorkspace: createActiveWorkspace("/repo") }, [
       createActivitySession({
         externalSessionId: "session-1",
         taskId: "task-1",
-        repoPath: "/repo",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
       createActivitySession({
         externalSessionId: "session-2",
         taskId: "task-2",
-        repoPath: "/repo",
         status: "stopped",
         startedAt: "2026-03-17T09:00:00.000Z",
-      }),
-      createActivitySession({
-        externalSessionId: "session-3",
-        taskId: "task-3",
-        repoPath: "/other-repo",
-        startedAt: "2026-03-17T08:00:00.000Z",
       }),
     ]);
 
@@ -172,7 +164,6 @@ describe("useShellAgentActivity", () => {
       createActivitySession({
         externalSessionId: "session-1",
         taskId: "task-1",
-        repoPath: "/repo",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
     ]);
@@ -214,7 +205,6 @@ describe("useShellAgentActivity", () => {
       createActivitySession({
         externalSessionId: "session-a",
         taskId: "task-a",
-        repoPath: "/repo-a",
         startedAt: "2026-03-17T10:00:00.000Z",
       }),
     ]);
@@ -225,6 +215,10 @@ describe("useShellAgentActivity", () => {
       expect(harness.getLatest().activeSessions[0]?.taskTitle).toBe("task-a");
 
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
+      await harness.run(() => {
+        harness.sessionStore.setActivitySessions([]);
+        currentActivitySessions = [];
+      });
       expect(harness.getLatest()).toEqual({
         activeSessionCount: 0,
         waitingForInputCount: 0,
@@ -237,7 +231,6 @@ describe("useShellAgentActivity", () => {
           createActivitySession({
             externalSessionId: "session-b",
             taskId: "task-b",
-            repoPath: "/repo-b",
             startedAt: "2026-03-17T11:00:00.000Z",
           }),
         ];

@@ -2,7 +2,6 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type SessionRuntimeAccessState = {
-  repoPath?: string | null;
   runtimeKind?: AgentSessionState["runtimeKind"] | null;
   workingDirectory: string;
 };
@@ -18,9 +17,13 @@ export type SessionRuntimeQueryState = {
   runtimeQueryError: string | null;
 };
 
-export const resolveSessionRuntimeQueryState = (
-  session: SessionRuntimeAccessState | null | undefined,
-): SessionRuntimeQueryState => {
+export const resolveSessionRuntimeQueryState = ({
+  repoPath,
+  session,
+}: {
+  repoPath: string | null | undefined;
+  session: SessionRuntimeAccessState | null | undefined;
+}): SessionRuntimeQueryState => {
   if (!session) {
     return {
       runtimeQueryInput: null,
@@ -29,13 +32,13 @@ export const resolveSessionRuntimeQueryState = (
   }
 
   const runtimeKind = session?.runtimeKind ?? null;
-  const repoPath = session?.repoPath?.trim() ?? "";
+  const workspaceRepoPath = repoPath?.trim() ?? "";
   const workingDirectory = session?.workingDirectory?.trim() ?? "";
 
-  if (!repoPath) {
+  if (!workspaceRepoPath) {
     return {
       runtimeQueryInput: null,
-      runtimeQueryError: "Active session runtime context is missing repo path.",
+      runtimeQueryError: "Active session runtime context is missing workspace repo path.",
     };
   }
 
@@ -55,7 +58,7 @@ export const resolveSessionRuntimeQueryState = (
 
   return {
     runtimeQueryInput: {
-      repoPath,
+      repoPath: workspaceRepoPath,
       runtimeKind,
       workingDirectory,
     },

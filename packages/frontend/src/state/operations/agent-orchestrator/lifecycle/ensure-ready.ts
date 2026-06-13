@@ -142,7 +142,7 @@ export const createEnsureSessionReady = ({
       );
       if (shouldListen) {
         listenToAgentSession(
-          toRuntimeSessionRef(sessionsRef.current[externalSessionId] ?? session),
+          toRuntimeSessionRef(repoPath, sessionsRef.current[externalSessionId] ?? session),
         );
       }
       if (!allowPendingInput && sessionPresenceHasPendingInput(snapshot)) {

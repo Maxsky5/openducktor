@@ -163,7 +163,6 @@ export type AgentSessionState = {
   externalSessionId: string;
   title?: string;
   taskId: string;
-  repoPath: string;
   runtimeKind: RuntimeKind;
   role: AgentRole | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";

@@ -33,7 +33,7 @@ const filterSessionsForRepo = (
     return [];
   }
 
-  return sessions.filter((session) => session.repoPath === activeWorkspace.repoPath);
+  return sessions;
 };
 
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {

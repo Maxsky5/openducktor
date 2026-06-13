@@ -87,7 +87,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const readSessionHistory = mock(async () => [createHistoryMessage()]);
     const liveSession = createAgentSessionFixture({
       externalSessionId: "session-1",
-      repoPath: "/repo-a",
       status: "running",
     });
     const harness = createHookHarness(

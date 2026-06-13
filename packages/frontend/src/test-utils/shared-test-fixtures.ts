@@ -8,7 +8,6 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
-import { createRepoScopedAgentSessionState } from "@/state/repo-scoped-agent-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
@@ -88,7 +87,6 @@ export const TEST_EXTERNAL_SESSION_IDS = {
 const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
   taskId: "task-1",
-  repoPath: "/repo",
   runtimeKind: "opencode",
   role: "spec",
   status: "idle",
@@ -270,17 +268,13 @@ export const createAgentSessionFixture = (
   defaults: LegacyAgentSessionOverrides = {},
   overrides: LegacyAgentSessionOverrides = {},
 ): AgentSessionState => {
-  const repoPath =
-    overrides.repoPath ?? defaults.repoPath ?? BASE_AGENT_SESSION_FIXTURE.repoPath ?? "/repo";
-  const { repoPath: _baseRepoPath, ...baseSession } = BASE_AGENT_SESSION_FIXTURE;
-  const { repoPath: _defaultRepoPath, runId: _defaultRunId, ...defaultSession } = defaults;
-  const { repoPath: _overrideRepoPath, runId: _overrideRunId, ...overrideSession } = overrides;
-  const sessionWithoutRepo: Omit<AgentSessionState, "repoPath"> = {
-    ...baseSession,
+  const { runId: _defaultRunId, ...defaultSession } = defaults;
+  const { runId: _overrideRunId, ...overrideSession } = overrides;
+  const merged: AgentSessionState = {
+    ...BASE_AGENT_SESSION_FIXTURE,
     ...defaultSession,
     ...overrideSession,
   };
-  const merged = createRepoScopedAgentSessionState(sessionWithoutRepo, repoPath);
 
   return structuredClone(merged);
 };

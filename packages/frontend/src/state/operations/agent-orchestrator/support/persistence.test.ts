@@ -26,11 +26,9 @@ const recordFixture: AgentSessionRecord = {
   },
 };
 
-const repoPathFixture = "/tmp/repo";
-
 describe("agent-orchestrator/support/persistence", () => {
   test("loads persisted sessions as stopped until runtime state is read", () => {
-    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
+    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.title).toBe("BUILD task-1");
     expect(hydrated.runtimeKind).toBe("opencode");
@@ -41,7 +39,7 @@ describe("agent-orchestrator/support/persistence", () => {
   });
 
   test("does not persist pending input requests in session snapshots", () => {
-    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
+    const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
     const withPendingInput: AgentSessionState = {
       ...hydrated,
       pendingApprovals: [
@@ -83,7 +81,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("persists compact session fields", () => {
     const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
+      ...fromPersistedSessionRecord(recordFixture, "task-1"),
       status: "error",
     };
     const persisted = toPersistedSessionRecord(session);
@@ -104,7 +102,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     };
 
-    const hydrated = fromPersistedSessionRecord(customRuntimeRecord, "task-1", repoPathFixture);
+    const hydrated = fromPersistedSessionRecord(customRuntimeRecord, "task-1");
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.selectedModel?.runtimeKind).toBe("opencode");
 
@@ -118,11 +116,7 @@ describe("agent-orchestrator/support/persistence", () => {
     delete invalidRecord.runtimeKind;
 
     expect(() =>
-      fromPersistedSessionRecord(
-        invalidRecord as unknown as AgentSessionRecord,
-        "task-1",
-        repoPathFixture,
-      ),
+      fromPersistedSessionRecord(invalidRecord as unknown as AgentSessionRecord, "task-1"),
     ).toThrow("Persisted session 'external-1' is missing runtime kind metadata.");
   });
 
@@ -135,7 +129,7 @@ describe("agent-orchestrator/support/persistence", () => {
       } as unknown as NonNullable<AgentSessionRecord["selectedModel"]>,
     };
 
-    expect(() => fromPersistedSessionRecord(invalidRecord, "task-1", repoPathFixture)).toThrow(
+    expect(() => fromPersistedSessionRecord(invalidRecord, "task-1")).toThrow(
       "Persisted session 'external-1' selected model is missing runtime kind metadata.",
     );
   });
@@ -152,14 +146,13 @@ describe("agent-orchestrator/support/persistence", () => {
           },
         } as unknown as AgentSessionRecord,
         "task-1",
-        repoPathFixture,
       ),
     ).toThrow("Unsupported runtime kind metadata: claude-code.");
   });
 
   test("rejects persisting sessions without a top-level runtime kind", () => {
     const session = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
+      ...fromPersistedSessionRecord(recordFixture, "task-1"),
     } as Record<string, unknown>;
     delete session.runtimeKind;
 
@@ -170,7 +163,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("rejects persisting selected models without a runtime kind", () => {
     const session: AgentSessionState = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
+      ...fromPersistedSessionRecord(recordFixture, "task-1"),
       selectedModel: {
         providerId: "openai",
         modelId: "gpt-5",
@@ -184,7 +177,7 @@ describe("agent-orchestrator/support/persistence", () => {
 
   test("rejects persisting selected models whose runtime kind disagrees with the session", () => {
     const session = {
-      ...fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture),
+      ...fromPersistedSessionRecord(recordFixture, "task-1"),
       selectedModel: {
         runtimeKind: "claude-code",
         providerId: "openai",

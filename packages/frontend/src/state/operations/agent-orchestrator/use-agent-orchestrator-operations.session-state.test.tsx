@@ -552,7 +552,6 @@ describe("use-agent-orchestrator-operations session state", () => {
           "external-1": createAgentSessionFixture({
             externalSessionId: "external-1",
             taskId: "task-1",
-            repoPath: "/tmp/repo",
             runtimeKind: "opencode",
             role: "build",
             workingDirectory: "/tmp/repo/worktree",

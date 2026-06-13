@@ -24,7 +24,8 @@ export const createRecordingRuntimeDataWriter = () => {
   return {
     writer: {
       updateTodos: (
-        _session: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[0],
+        _repoPath: string,
+        _session: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[1],
         updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
       ) => {
         todos = updater(todos);
@@ -38,7 +39,6 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
   runtimeKind: "opencode",
   externalSessionId: "external-1",
   taskId: "task-1",
-  repoPath: overrides.repoPath ?? "/tmp/repo",
   role: "spec",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",

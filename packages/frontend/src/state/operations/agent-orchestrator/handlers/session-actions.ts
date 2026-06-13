@@ -123,6 +123,13 @@ const settleStartingSession = (
   );
 };
 
+const requireWorkspaceRepoPath = (workspaceRepoPath: string | null): string => {
+  if (!workspaceRepoPath) {
+    throw new Error("Active workspace repo path is unavailable.");
+  }
+  return workspaceRepoPath;
+};
+
 const ensureSessionReadyForSend = async ({
   externalSessionId,
   ensureSessionReady,
@@ -291,8 +298,9 @@ export const createAgentSessionActions = ({
     }
 
     try {
+      const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
       await adapter.sendUserMessage({
-        ...toRuntimeSessionContextRef(readySession),
+        ...toRuntimeSessionContextRef(repoPath, readySession),
         externalSessionId,
         parts: normalizedParts,
         ...(selectedModel ? { model: selectedModel } : {}),
@@ -420,7 +428,7 @@ export const createAgentSessionActions = ({
     }
 
     try {
-      await adapter.releaseSession(toRuntimeSessionRef(session));
+      await adapter.releaseSession(toRuntimeSessionRef(stopRepoPath, session));
     } catch (error) {
       console.warn(
         `Failed to release local session '${externalSessionId}' after authoritative stop: ${errorMessage(error)}`,
@@ -484,8 +492,9 @@ export const createAgentSessionActions = ({
   ): void => {
     const session = sessionsRef.current[externalSessionId];
     if (session) {
+      const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
       adapter.updateSessionModel({
-        ...toRuntimeSessionRef(session),
+        ...toRuntimeSessionRef(repoPath, session),
         externalSessionId,
         model: selection,
       });
@@ -517,8 +526,9 @@ export const createAgentSessionActions = ({
       sessionsRef,
       externalSessionId,
     );
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await adapter.replyApproval({
-      ...toRuntimeSessionContextRef(session),
+      ...toRuntimeSessionContextRef(repoPath, session),
       requestId,
       outcome,
       ...(message ? { message } : {}),
@@ -555,8 +565,9 @@ export const createAgentSessionActions = ({
       sessionsRef,
       externalSessionId,
     );
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await adapter.replyQuestion({
-      ...toRuntimeSessionContextRef(session),
+      ...toRuntimeSessionContextRef(repoPath, session),
       requestId,
       answers,
     });

@@ -66,7 +66,6 @@ const createThreadSession = (
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   session: createThreadSession({
     externalSessionId: "session-1",
-    repoPath: "/repo-a",
     pendingApprovals: [],
     pendingQuestions: [],
   }),
@@ -118,7 +117,6 @@ describe("runtime transcript pending request helpers", () => {
     });
     const session = createThreadSession({
       externalSessionId: "session-1",
-      repoPath: "/repo-a",
       pendingApprovals: [sessionApproval],
       pendingQuestions: [sessionQuestion],
     });
@@ -154,7 +152,6 @@ describe("useRuntimeTranscriptInteractions", () => {
         }),
         session: createThreadSession({
           externalSessionId: "session-1",
-          repoPath: "/repo-a",
           pendingApprovals: [sessionApproval],
           pendingQuestions: [sessionQuestion],
         }),
@@ -223,7 +220,6 @@ describe("useRuntimeTranscriptInteractions", () => {
         source: createSource({ pendingApprovals: [pendingApproval] }),
         session: createThreadSession({
           externalSessionId: "session-other",
-          repoPath: "/repo-a",
           pendingApprovals: [],
           pendingQuestions: [],
         }),
@@ -301,7 +297,6 @@ describe("useRuntimeTranscriptInteractions", () => {
         externalSessionId: "session-2",
         session: createThreadSession({
           externalSessionId: "session-2",
-          repoPath: "/repo-a",
           pendingApprovals: [],
           pendingQuestions: [],
         }),
