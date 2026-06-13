@@ -1,7 +1,6 @@
 import type {
   AgentSessionRecord,
   RuntimeApprovalReplyOutcome,
-  RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
 import type {
@@ -10,7 +9,6 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentSessionHistoryMessage,
-  AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -20,8 +18,8 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
-  AgentSessionHistoryPreludeMode,
   AgentSessionLoadOptions,
+  EnsureSessionReadyForViewResult,
 } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
@@ -49,27 +47,17 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  bootstrapTaskSessions: (taskId: string, persistedRecords?: AgentSessionRecord[]) => Promise<void>;
-  hydrateRequestedTaskSessionHistory: (input: {
+  loadRequestedTaskSessionHistory: (input: {
     taskId: string;
     externalSessionId: string;
-    historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
     persistedRecords?: AgentSessionRecord[];
   }) => Promise<void>;
   ensureSessionReadyForView: (input: {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
-    historyPreludeMode?: AgentSessionHistoryPreludeMode;
     persistedRecords?: AgentSessionRecord[];
-  }) => Promise<boolean>;
-  reconcileLiveTaskSessions: (input: {
-    taskId: string;
-    persistedRecords?: AgentSessionRecord[];
-    preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-    preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
-  }) => Promise<void>;
+  }) => Promise<EnsureSessionReadyForViewResult>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -87,7 +75,6 @@ type CreatePublicOperationsArgs = {
     workingDirectory: string,
     externalSessionId: string,
   ) => Promise<AgentSessionHistoryMessage[]>;
-  attachRuntimeTranscriptSession: AgentOperationsContextValue["attachRuntimeTranscriptSession"];
   readSessionSlashCommands: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -108,8 +95,6 @@ type CreatePublicOperationsArgs = {
   sessionActions: SessionActions;
 };
 
-type OrchestratorPublicOperations = AgentOperationsContextValue;
-
 const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Promise<T> => {
   try {
     return await operation();
@@ -122,40 +107,28 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 };
 
 export const createOrchestratorPublicOperations = ({
-  bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory,
+  loadRequestedTaskSessionHistory,
   ensureSessionReadyForView,
-  reconcileLiveTaskSessions,
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
   readSessionHistory,
-  attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
   readSessionSkills,
   removeAgentSession,
   removeAgentSessions,
   sessionActions,
-}: CreatePublicOperationsArgs): OrchestratorPublicOperations => ({
-  bootstrapTaskSessions: (taskId, persistedRecords) =>
-    withErrorToast("Failed to load agent sessions", () =>
-      bootstrapTaskSessions(taskId, persistedRecords),
-    ),
-  hydrateRequestedTaskSessionHistory: (input) =>
-    withErrorToast("Failed to hydrate session history", () =>
-      hydrateRequestedTaskSessionHistory(input),
-    ),
+}: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
+  loadRequestedTaskSessionHistory: (input) =>
+    withErrorToast("Failed to load session history", () => loadRequestedTaskSessionHistory(input)),
   ensureSessionReadyForView: (input) =>
     withErrorToast("Failed to prepare session", () => ensureSessionReadyForView(input)),
-  reconcileLiveTaskSessions: (input) =>
-    withErrorToast("Failed to reconcile live sessions", () => reconcileLiveTaskSessions(input)),
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,
   readSessionTodos,
   readSessionHistory,
-  attachRuntimeTranscriptSession,
   readSessionSlashCommands,
   readSessionFileSearch,
   ...(readSessionSkills ? { readSessionSkills } : {}),

@@ -194,7 +194,7 @@ export const buildTaskSessionsByTaskId = (
     Array.from(sessionsByTaskId.entries()).map(([taskId, taskSessions]) => [
       taskId,
       taskSessions.map((session) => ({
-        ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
+        runtimeKind: session.runtimeKind,
         externalSessionId: session.externalSessionId,
         role: session.role,
         status: session.status,

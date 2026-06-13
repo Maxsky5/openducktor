@@ -12,10 +12,8 @@ import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
-import { useLiveTranscriptAttachment } from "./use-live-transcript-attachment";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
-import { useRuntimeTranscriptSessionHydration } from "./use-runtime-transcript-session-hydration";
-import { useRuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
+import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
@@ -40,7 +38,6 @@ export function useSessionTranscriptSurfaceModel({
     readSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
-    attachRuntimeTranscriptSession,
     replyAgentApproval,
     answerAgentQuestion,
   } = useAgentOperations();
@@ -68,42 +65,22 @@ export function useSessionTranscriptSurfaceModel({
     refreshChecks,
   });
 
-  const sourceResolution = useRuntimeTranscriptSourceResolution({
-    isOpen,
-    workspaceRepoPath,
-    source,
-  });
-  const sessionHydration = useRuntimeTranscriptSessionHydration({
+  const sessionHistory = useRuntimeTranscriptSessionHistory({
     isOpen,
     activeWorkspace,
     externalSessionId,
     source,
-    sourceResolution,
     liveSession,
     readSessionHistory,
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
-    session: sessionHydration.session,
+    session: sessionHistory.session,
     source,
     externalSessionId,
-    sourceResolution,
     isRuntimeReady: runtimeReadiness.isReady,
     replyAgentApproval,
     answerAgentQuestion,
   });
-  const liveAttachment = useLiveTranscriptAttachment({
-    isOpen,
-    activeWorkspace,
-    externalSessionId,
-    source,
-    sourceResolution,
-    visiblePendingApprovals: transcriptInteractions.visiblePendingApprovals,
-    visiblePendingQuestions: transcriptInteractions.visiblePendingQuestions,
-    attachRuntimeTranscriptSession,
-  });
-  const canUseLiveTranscriptSession =
-    source?.isLive !== true ||
-    (!liveAttachment.isAttachingLiveTranscript && !liveAttachment.liveTranscriptAttachError);
 
   const runtimeData = useAgentChatSessionRuntimeData({
     session: transcriptInteractions.session,
@@ -114,13 +91,11 @@ export function useSessionTranscriptSurfaceModel({
   });
   const isSessionWorking =
     runtimeData.session?.status === "running" || runtimeData.session?.status === "starting";
-  const hasTranscriptSession = runtimeData.session !== null;
-  const isLiveAttachBlocking = liveAttachment.isAttachingLiveTranscript && !hasTranscriptSession;
-  const isTranscriptLoading = sessionHydration.isHistoryLoading || isLiveAttachBlocking;
+  const isTranscriptLoading = sessionHistory.isHistoryLoading;
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
     runtimeData.session === null &&
-    (sourceResolution.isPending || isTranscriptLoading);
+    isTranscriptLoading;
   const chatSettingsLoadError =
     chatSettingsError && activeWorkspace
       ? `Failed to load chat settings: ${errorMessageFromUnknown(
@@ -128,11 +103,7 @@ export function useSessionTranscriptSurfaceModel({
           "Settings read failed.",
         )}`
       : null;
-  const loadError =
-    sourceResolution.error ??
-    chatSettingsLoadError ??
-    liveAttachment.liveTranscriptAttachError ??
-    sessionHydration.historyError;
+  const loadError = chatSettingsLoadError ?? sessionHistory.historyError;
   const emptyState = useMemo(() => {
     if (loadError) {
       return {
@@ -167,11 +138,11 @@ export function useSessionTranscriptSurfaceModel({
     emptyState,
     pendingQuestions: {
       ...transcriptInteractions.pendingQuestions,
-      canSubmit: transcriptInteractions.pendingQuestions.canSubmit && canUseLiveTranscriptSession,
+      canSubmit: transcriptInteractions.pendingQuestions.canSubmit,
     },
     approvals: {
       ...transcriptInteractions.approvals,
-      canReply: transcriptInteractions.approvals.canReply && canUseLiveTranscriptSession,
+      canReply: transcriptInteractions.approvals.canReply,
     },
   });
 

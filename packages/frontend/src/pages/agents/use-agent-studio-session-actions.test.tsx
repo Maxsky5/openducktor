@@ -236,7 +236,8 @@ const createBaseArgs = (): HookArgs => {
     sessionsForTask: [],
     selectedTask: createTask(),
     agentStudioReady: true,
-    isActiveTaskHydrated: true,
+    isActiveTaskReady: true,
+    isSessionSelectionResolving: false,
     selectionForNewSession: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -498,7 +499,7 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
-      initialStatusRelease: "after_listener_attach",
+      initialStatusRelease: "after_listener_start",
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
       { kind: "text", text: "  hello world  " },
@@ -1533,6 +1534,24 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("does not expose kickoff while selected session state is resolving", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      role: "build",
+      launchActionId: "build_after_human_request_changes",
+      selectedTask: createTask({ status: "human_review" }),
+      activeSession: null,
+      sessionsForTask: [],
+      isSessionSelectionResolving: true,
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest().canKickoffNewSession).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("selection actions ignore invalid session ids without mutating query state", async () => {
     const updateQuery = mock(() => {});
     const scheduleSelectionIntent = mock(() => {});
@@ -1543,7 +1562,7 @@ describe("useAgentStudioSessionActions", () => {
       activeSessionRole: "spec" as const,
       activeSessionExists: false,
       agentStudioReady: true,
-      isActiveTaskHydrated: true,
+      isActiveTaskReady: true,
       isSessionWorking: false,
       sessionsForTask: [createSession({ externalSessionId: "session-1" })],
       selectedTask: createTask(),
@@ -1574,7 +1593,7 @@ describe("useAgentStudioSessionActions", () => {
       activeSessionRole: "spec" as const,
       activeSessionExists: true,
       agentStudioReady: true,
-      isActiveTaskHydrated: true,
+      isActiveTaskReady: true,
       isSessionWorking: false,
       sessionsForTask: [session],
       selectedTask: createTask(),

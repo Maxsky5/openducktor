@@ -181,8 +181,6 @@ const createBaseArgs = (): HookArgs => ({
   ],
   navigate: mock(() => {}),
   loadRepoSettings: async () => createDefaultRepoSettings(),
-  bootstrapTaskSessions: async () => {},
-  hydrateRequestedTaskSessionHistory: async () => {},
   loadAgentSessions: async () => {},
   humanRequestChangesTask: async () => {},
   setTaskTargetBranch: async () => {},
@@ -707,13 +705,11 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("human review feedback opens the shared start modal with reuse selected by default when builder sessions exist", async () => {
-    const bootstrapTaskSessions = mock(async () => {});
     const humanRequestChangesTask = mock(async () => {});
     const startAgentSession = mock(async () => "session-new");
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
-      bootstrapTaskSessions,
       humanRequestChangesTask,
       startAgentSession,
       sendAgentMessage,
@@ -762,7 +758,6 @@ describe("useKanbanSessionStartFlow", () => {
       ...createBaseArgs(),
       tasks: task ? [task] : [],
       sessions: [],
-      bootstrapTaskSessions: mock(async () => {}),
     });
 
     await harness.mount();
@@ -794,11 +789,9 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("ai review feedback opens the shared start modal with reuse selected by default", async () => {
-    const bootstrapTaskSessions = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
       tasks: [createTaskCardFixture({ id: "TASK-1", status: "ai_review" })],
-      bootstrapTaskSessions,
     });
 
     await harness.mount();
@@ -832,7 +825,6 @@ describe("useKanbanSessionStartFlow", () => {
   test("canceling the shared request-changes start modal restores the feedback draft", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
-      bootstrapTaskSessions: mock(async () => {}),
     });
 
     await harness.mount();

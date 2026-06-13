@@ -45,7 +45,6 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   role: "build",
   status: "running",
   startedAt: "2026-03-17T10:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",

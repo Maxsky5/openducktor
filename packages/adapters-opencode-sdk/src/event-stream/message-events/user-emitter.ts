@@ -1,4 +1,8 @@
-import type { AgentUserMessageDisplayPart, AgentUserMessageState } from "@openducktor/core";
+import type {
+  AgentSessionHistoryMessage,
+  AgentUserMessageDisplayPart,
+  AgentUserMessageState,
+} from "@openducktor/core";
 import {
   ensureVisibleUserTextDisplayParts,
   normalizeUserMessageDisplayParts,
@@ -136,5 +140,59 @@ export const emitKnownUserMessage = (
     parts: content.displayParts,
     state: input.state,
     ...(input.model ? { model: input.model } : {}),
+  });
+};
+
+type UserHistoryMessage = Extract<AgentSessionHistoryMessage, { role: "user" }>;
+
+const seedHistoryUserMessageMetadata = (
+  runtime: EventStreamRuntime,
+  message: UserHistoryMessage,
+): ReturnType<EventStreamRuntime["getSession"]> => {
+  const session = runtime.getSession(runtime.externalSessionId);
+  runtime.messageRoleById.set(message.messageId, "user");
+  persistUserMessageMetadata({
+    session,
+    messageId: message.messageId,
+    timestamp: message.timestamp,
+    ...(message.model ? { model: message.model } : {}),
+    visible: message.text,
+    displayParts: message.displayParts,
+  });
+
+  return session;
+};
+
+export const seedHistoryUserMessage = (
+  runtime: EventStreamRuntime,
+  message: UserHistoryMessage,
+): boolean => {
+  const session = seedHistoryUserMessageMetadata(runtime, message);
+  session?.emittedUserMessageSignatures.set(
+    message.messageId,
+    buildUserMessageSignature({
+      timestamp: message.timestamp,
+      message: message.text,
+      parts: message.displayParts,
+      state: message.state,
+      ...(message.model ? { model: message.model } : {}),
+    }),
+  );
+  session?.emittedUserMessageStates.set(message.messageId, message.state);
+  return true;
+};
+
+export const emitHistoryUserMessage = (
+  runtime: EventStreamRuntime,
+  message: UserHistoryMessage,
+): boolean => {
+  seedHistoryUserMessageMetadata(runtime, message);
+  return emitUserMessage(runtime, {
+    messageId: message.messageId,
+    timestamp: message.timestamp,
+    message: message.text,
+    parts: message.displayParts,
+    state: message.state,
+    ...(message.model ? { model: message.model } : {}),
   });
 };

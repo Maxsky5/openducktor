@@ -18,7 +18,7 @@ export type SessionRuntimeQueryState = {
   runtimeQueryError: string | null;
 };
 
-export const resolveAttachedSessionRuntimeQueryState = (
+export const resolveSessionRuntimeQueryState = (
   session: SessionRuntimeAccessState | null | undefined,
 ): SessionRuntimeQueryState => {
   if (!session) {

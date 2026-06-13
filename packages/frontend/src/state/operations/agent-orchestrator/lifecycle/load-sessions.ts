@@ -1,316 +1,246 @@
-import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { MutableRefObject } from "react";
 import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
-import type {
-  AgentSessionHistoryHydrationPolicy,
-  AgentSessionLoadOptions,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { TaskDocuments } from "../runtime/runtime";
-import { getSessionMessageCount } from "../support/messages";
 import {
-  createHydrationPromptAssemblerStage,
-  createRuntimeResolutionPlannerStage,
-  hydrateSessionRecordsStage,
-  preparePersistedSessionMergeStage,
-  reconcileLiveSessionsStage,
-  type SessionLifecycleAdapter,
-  type SessionLoadIntent,
-  type UpdateSession,
-} from "./load-sessions-stages";
+  readRepoSessionPresence,
+  type TaskSessionRecords,
+} from "../session-read-model/repo-session-read-model";
+import type { ListenToAgentSession } from "../support/session-runtime-ref";
+import {
+  loadRequestedSessionHistorySnapshot,
+  loadSessionHistorySnapshots,
+  type SessionHistoryLoaderAdapter,
+} from "./session-history-loader";
+import { buildRepoSessionLoadPlan, type RepoSessionLoadPlan } from "./session-load-plan";
+
+type UpdateSession = (
+  externalSessionId: string,
+  updater: (current: AgentSessionState) => AgentSessionState,
+  options?: { persist?: boolean },
+) => void;
+
+type SessionsById = Record<string, AgentSessionState>;
+
+type SessionStateUpdater = SessionsById | ((current: SessionsById) => SessionsById);
+
+type CommitSessions = (updater: SessionStateUpdater) => void;
+
+type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence" | "restoreSession"> &
+  SessionHistoryLoaderAdapter;
 
 type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  adapter: SessionLifecycleAdapter;
+  adapter: SessionLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
-  activeWorkspaceRef?: MutableRefObject<ActiveWorkspace | null>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
-  setSessionsById: Dispatch<SetStateAction<Record<string, AgentSessionState>>>;
-  taskRef: MutableRefObject<TaskCard[]>;
+  setSessionsById: CommitSessions;
   updateSession: UpdateSession;
-  attachSessionListener?: (repoPath: string, externalSessionId: string) => void;
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  loadTaskDocuments?: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
+  listenToAgentSession?: ListenToAgentSession;
   queryClient: QueryClient;
 };
 
-const REQUESTED_SESSION_LIVE_RECONCILE_STATUSES = new Set<AgentSessionState["status"]>([
-  // A locally stopped session can still have a late runtime acknowledgement in flight.
-  // Reconcile once on requested-history loads so the runtime remains the source of liveness truth.
-  "stopped",
-  "starting",
-  "running",
-]);
+const taskFromSessionRecords = (
+  taskId: string,
+  agentSessions: AgentSessionRecord[],
+): TaskSessionRecords => ({
+  id: taskId,
+  agentSessions,
+});
 
-const shouldReconcileRequestedSessionLiveness = (session: AgentSessionState | null): boolean => {
-  if (session === null) {
-    return true;
-  }
-  if (REQUESTED_SESSION_LIVE_RECONCILE_STATUSES.has(session.status)) {
-    return true;
-  }
-  return session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0;
+const isRepoOperationStale = ({
+  repoPath,
+  repoEpochAtStart,
+  repoEpochRef,
+  currentWorkspaceRepoPathRef,
+}: {
+  repoPath: string;
+  repoEpochAtStart: number;
+  repoEpochRef: MutableRefObject<number>;
+  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
+}): boolean => {
+  return (
+    repoEpochRef.current !== repoEpochAtStart || currentWorkspaceRepoPathRef.current !== repoPath
+  );
 };
 
-const resolveHistoryPolicy = ({
-  explicitPolicy,
-  shouldHydrateRequestedSession,
-  shouldReconcileLiveSessions,
+export const loadRepoAgentSessions = async ({
+  repoPath,
+  tasks,
+  adapter,
+  commitSessions,
+  updateSession,
+  listenToAgentSession,
+  isStaleRepoOperation,
+  options,
 }: {
-  explicitPolicy: AgentSessionLoadOptions["historyPolicy"] | undefined;
-  shouldHydrateRequestedSession: boolean;
-  shouldReconcileLiveSessions: boolean;
-}): AgentSessionHistoryHydrationPolicy => {
-  if (explicitPolicy) {
-    return explicitPolicy;
+  repoPath: string;
+  tasks: TaskSessionRecords[];
+  adapter: SessionLoaderAdapter;
+  commitSessions: CommitSessions;
+  updateSession: UpdateSession;
+  listenToAgentSession?: ListenToAgentSession;
+  isStaleRepoOperation: () => boolean;
+  options?: AgentSessionLoadOptions;
+}): Promise<void> => {
+  if (isStaleRepoOperation()) {
+    return;
   }
-  if (shouldHydrateRequestedSession) {
-    return "requested_only";
+
+  const presence = await readRepoSessionPresence({
+    repoPath,
+    tasks,
+    listSessionPresence: (input) => adapter.listSessionPresence(input),
+  });
+  if (isStaleRepoOperation()) {
+    return;
   }
-  if (shouldReconcileLiveSessions) {
-    return "live_if_empty";
+
+  let committedPlan: RepoSessionLoadPlan | undefined;
+  commitSessions((currentSessionsById) => {
+    const nextPlan = buildRepoSessionLoadPlan({
+      repoPath,
+      tasks,
+      currentSessionsById,
+      presence,
+      ...(options ? { options } : {}),
+    });
+    committedPlan = nextPlan;
+    return nextPlan.sessionsById;
+  });
+  if (committedPlan === undefined) {
+    return;
   }
-  return "none";
+
+  if (isStaleRepoOperation()) {
+    return;
+  }
+  await Promise.all(
+    committedPlan.liveSessions.map(async (session) => {
+      await adapter.restoreSession(session);
+      if (!isStaleRepoOperation()) {
+        listenToAgentSession?.(session);
+      }
+    }),
+  );
+
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
+  if (committedPlan.historyRecords.length === 0) {
+    return;
+  }
+
+  await loadSessionHistorySnapshots({
+    repoPath,
+    adapter,
+    updateSession,
+    records: committedPlan.historyRecords,
+    isStaleRepoOperation,
+  });
 };
 
 export const createLoadAgentSessions = ({
   activeWorkspace,
   adapter,
   repoEpochRef,
-  activeWorkspaceRef,
   currentWorkspaceRepoPathRef,
-  sessionsRef,
   setSessionsById,
-  taskRef,
   updateSession,
-  attachSessionListener,
-  loadRepoPromptOverrides,
-  loadTaskDocuments: _loadTaskDocuments,
+  listenToAgentSession,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
 ) => Promise<void>) => {
-  const inFlightRequestedHistoryLoads = new Map<string, Promise<void>>();
-  const inFlightRuntimeAttachmentRecoveryLoads = new Map<string, Promise<void>>();
-  const normalizeHistoryPreludeMode = (
-    historyPreludeMode: AgentSessionLoadOptions["historyPreludeMode"],
-  ): string => historyPreludeMode ?? "task_context";
-
-  const buildRequestedHistoryKey = (
-    repoPath: string,
-    taskId: string,
-    externalSessionId: string,
-    historyPreludeMode: AgentSessionLoadOptions["historyPreludeMode"],
-  ): string =>
-    `${repoPath}::${taskId}::${externalSessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
-
-  const buildRuntimeAttachmentRecoveryKey = (
-    repoPath: string,
-    taskId: string,
-    externalSessionId: string,
-    recoveryDedupKey?: string | null,
-    historyPreludeMode?: AgentSessionLoadOptions["historyPreludeMode"],
-  ): string =>
-    recoveryDedupKey?.trim().length
-      ? `${repoPath}::${taskId}::${externalSessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}::${recoveryDedupKey.trim()}`
-      : `${repoPath}::${taskId}::${externalSessionId}::${normalizeHistoryPreludeMode(historyPreludeMode)}`;
-
-  const buildLoadIntent = (
-    repoPath: string,
-    taskId: string,
-    options?: AgentSessionLoadOptions,
-  ): SessionLoadIntent => {
-    const mode = options?.mode ?? "bootstrap";
-    const requestedSessionId = options?.targetExternalSessionId?.trim() || null;
-    const shouldHydrateRequestedSession =
-      mode === "requested_history" && requestedSessionId !== null;
-    const shouldRecoverRuntimeAttachment =
-      mode === "recover_runtime_attachment" && requestedSessionId !== null;
-    const requestedSession = requestedSessionId
-      ? (sessionsRef.current[requestedSessionId] ?? null)
-      : null;
-    const shouldReconcileRequestedLiveSession =
-      shouldHydrateRequestedSession && shouldReconcileRequestedSessionLiveness(requestedSession);
-    const shouldReconcileLiveSessions =
-      mode === "reconcile_live" ||
-      shouldRecoverRuntimeAttachment ||
-      shouldReconcileRequestedLiveSession;
-    const historyPolicy = resolveHistoryPolicy({
-      explicitPolicy: options?.historyPolicy,
-      shouldHydrateRequestedSession,
-      shouldReconcileLiveSessions,
-    });
-    return {
-      repoPath,
-      workspaceId: activeWorkspace?.workspaceId ?? "",
-      taskId,
-      mode,
-      requestedSessionId,
-      requestedHistoryKey: shouldHydrateRequestedSession
-        ? buildRequestedHistoryKey(
-            repoPath,
-            taskId,
-            requestedSessionId,
-            options?.historyPreludeMode,
-          )
-        : null,
-      shouldHydrateRequestedSession,
-      shouldReconcileLiveSessions,
-      historyPolicy,
-    };
-  };
-
   return async (taskId: string, options?: AgentSessionLoadOptions): Promise<void> => {
-    if (!activeWorkspace?.repoPath || !activeWorkspace.workspaceId || taskId.trim().length === 0) {
+    if (!activeWorkspace?.repoPath || taskId.trim().length === 0) {
       return;
     }
 
     const repoPath = activeWorkspace.repoPath;
     const repoEpochAtStart = repoEpochRef.current;
-    const isStaleRepoOperation = (): boolean => {
-      const currentRepoPath =
-        currentWorkspaceRepoPathRef.current ?? activeWorkspaceRef?.current?.repoPath ?? null;
-      return repoEpochRef.current !== repoEpochAtStart || currentRepoPath !== repoPath;
-    };
+    const isStaleRepoOperation = (): boolean =>
+      isRepoOperationStale({
+        repoPath,
+        repoEpochAtStart,
+        repoEpochRef,
+        currentWorkspaceRepoPathRef,
+      });
+
     if (isStaleRepoOperation()) {
       return;
     }
 
-    const intent = buildLoadIntent(repoPath, taskId, options);
-    const requestedHistoryKey = intent.requestedHistoryKey;
-    const runtimeAttachmentRecoveryKeyWithSignal =
-      intent.mode === "recover_runtime_attachment" && intent.requestedSessionId !== null
-        ? buildRuntimeAttachmentRecoveryKey(
-            repoPath,
-            taskId,
-            intent.requestedSessionId,
-            options?.recoveryDedupKey,
-            options?.historyPreludeMode,
-          )
-        : null;
-    if (requestedHistoryKey) {
-      const existingLoad = inFlightRequestedHistoryLoads.get(requestedHistoryKey);
-      if (existingLoad) {
-        return existingLoad;
-      }
-    }
-    if (runtimeAttachmentRecoveryKeyWithSignal) {
-      const existingLoad = inFlightRuntimeAttachmentRecoveryLoads.get(
-        runtimeAttachmentRecoveryKeyWithSignal,
-      );
-      if (existingLoad) {
-        return existingLoad;
-      }
-    }
-
-    const executeLoad = async (): Promise<void> => {
-      const { recordsToHydrate, historyHydrationSessionIds, getRepoPromptOverrides } =
-        await preparePersistedSessionMergeStage({
-          intent,
-          ...(options ? { options } : {}),
-          sessionsRef,
-          setSessionsById,
-          isStaleRepoOperation,
-          loadPersistedRecords: async () => {
-            if (options?.persistedRecords) {
-              return options.persistedRecords;
-            }
-            return loadAgentSessionListFromQuery(queryClient, repoPath, taskId);
-          },
-          loadRepoPromptOverrides,
-        });
-      const shouldSkipHydration =
-        isStaleRepoOperation() ||
-        (!intent.shouldHydrateRequestedSession && !intent.shouldReconcileLiveSessions) ||
-        recordsToHydrate.length === 0;
-      if (shouldSkipHydration) {
-        return;
-      }
-
-      const runtimePlanner = createRuntimeResolutionPlannerStage({
-        intent,
-        ...(options ? { options } : {}),
-        adapter,
-      });
-      const promptAssembler = createHydrationPromptAssemblerStage({
-        taskId,
-        taskRef,
-        ...(options?.historyPreludeMode ? { historyPreludeMode: options.historyPreludeMode } : {}),
-      });
-
-      const { reattachedSessionIds } = await reconcileLiveSessionsStage({
-        intent,
-        ...(options ? { options } : {}),
-        adapter,
-        sessionsRef,
-        updateSession,
-        ...(attachSessionListener ? { attachSessionListener } : {}),
-        isStaleRepoOperation,
-        recordsToHydrate,
-        runtimePlanner,
-        promptAssembler,
-        getRepoPromptOverrides,
-      });
-      if (!isStaleRepoOperation()) {
-        const effectiveHistoryHydrationSessionIds = new Set(historyHydrationSessionIds);
-        if (intent.historyPolicy === "live_if_empty") {
-          for (const externalSessionId of reattachedSessionIds) {
-            const currentSession = sessionsRef.current[externalSessionId];
-            if (!currentSession) {
-              continue;
-            }
-            const hasHydratedHistory = currentSession.historyHydrationState === "hydrated";
-            if (hasHydratedHistory && getSessionMessageCount(currentSession) > 0) {
-              continue;
-            }
-            effectiveHistoryHydrationSessionIds.add(externalSessionId);
-          }
-        }
-
-        const shouldHydrateSubagentPendingInput = intent.shouldReconcileLiveSessions;
-        await hydrateSessionRecordsStage({
-          repoPath: intent.repoPath,
-          adapter,
-          setSessionsById,
-          updateSession,
-          isStaleRepoOperation,
-          recordsToHydrate,
-          historyHydrationSessionIds: effectiveHistoryHydrationSessionIds,
-          failOnRuntimeResolutionError: true,
-          runtimePlanner,
-          promptAssembler,
-          getRepoPromptOverrides,
-          subagentPendingInputMode: shouldHydrateSubagentPendingInput ? "hydrate" : "skip",
-        });
-      }
-    };
-
-    if (!requestedHistoryKey && !runtimeAttachmentRecoveryKeyWithSignal) {
-      await executeLoad();
+    const records =
+      options?.persistedRecords ??
+      (await loadAgentSessionListFromQuery(queryClient, repoPath, taskId));
+    if (isStaleRepoOperation()) {
       return;
     }
 
-    const inFlightLoad = executeLoad().finally(() => {
-      if (requestedHistoryKey) {
-        inFlightRequestedHistoryLoads.delete(requestedHistoryKey);
-      }
-      if (runtimeAttachmentRecoveryKeyWithSignal) {
-        inFlightRuntimeAttachmentRecoveryLoads.delete(runtimeAttachmentRecoveryKeyWithSignal);
-      }
+    const task = taskFromSessionRecords(taskId, records);
+    await loadRepoAgentSessions({
+      repoPath,
+      tasks: [task],
+      adapter,
+      commitSessions: setSessionsById,
+      updateSession,
+      ...(listenToAgentSession ? { listenToAgentSession } : {}),
+      isStaleRepoOperation,
+      ...(options ? { options } : {}),
     });
-    if (requestedHistoryKey) {
-      inFlightRequestedHistoryLoads.set(requestedHistoryKey, inFlightLoad);
+  };
+};
+
+export const createLoadAgentSessionHistory = ({
+  activeWorkspace,
+  adapter,
+  repoEpochRef,
+  currentWorkspaceRepoPathRef,
+  updateSession,
+  queryClient,
+}: Omit<CreateLoadAgentSessionsArgs, "setSessionsById" | "listenToAgentSession">): ((input: {
+  taskId: string;
+  externalSessionId: string;
+  persistedRecords?: AgentSessionRecord[];
+}) => Promise<void>) => {
+  return async ({ taskId, externalSessionId, persistedRecords }): Promise<void> => {
+    if (!activeWorkspace?.repoPath || taskId.trim().length === 0) {
+      return;
     }
-    if (runtimeAttachmentRecoveryKeyWithSignal) {
-      inFlightRuntimeAttachmentRecoveryLoads.set(
-        runtimeAttachmentRecoveryKeyWithSignal,
-        inFlightLoad,
-      );
+
+    const repoPath = activeWorkspace.repoPath;
+    const repoEpochAtStart = repoEpochRef.current;
+    const isStaleRepoOperation = (): boolean =>
+      isRepoOperationStale({
+        repoPath,
+        repoEpochAtStart,
+        repoEpochRef,
+        currentWorkspaceRepoPathRef,
+      });
+
+    if (isStaleRepoOperation()) {
+      return;
     }
-    await inFlightLoad;
+
+    const records =
+      persistedRecords ?? (await loadAgentSessionListFromQuery(queryClient, repoPath, taskId));
+    if (isStaleRepoOperation()) {
+      return;
+    }
+
+    await loadRequestedSessionHistorySnapshot({
+      repoPath,
+      adapter,
+      updateSession,
+      records,
+      externalSessionId,
+      isStaleRepoOperation,
+    });
   };
 };

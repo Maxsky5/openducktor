@@ -183,7 +183,7 @@ const createBaseArgs = (): HookArgs => ({
   sessionsForTask: [],
   selectedTask: createTask(),
   agentStudioReady: true,
-  isActiveTaskHydrated: true,
+  isActiveTaskReady: true,
   isSessionWorking: false,
   selectionForNewSession: {
     ...MODEL_SELECTION,
@@ -422,7 +422,7 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      initialStatusRelease: "after_listener_attach",
+      initialStatusRelease: "after_listener_start",
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -758,7 +758,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      isActiveTaskHydrated: false,
+      isActiveTaskReady: false,
       startAgentSession,
       selectedTask: createTask({ status: "human_review" }),
       sessionsForTask: [
@@ -833,7 +833,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "build",
       launchActionId: "build_after_human_request_changes",
-      isActiveTaskHydrated: false,
+      isActiveTaskReady: false,
       startAgentSession,
       sendAgentMessage,
       selectedTask: createTask({ status: "human_review" }),

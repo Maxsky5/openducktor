@@ -40,6 +40,7 @@ export function useAgentStudioReadiness({
   return {
     agentStudioReadinessState: readiness.readinessState,
     agentStudioReady: readiness.isReady,
+    isRuntimeStarting: readiness.isRuntimeStarting,
     agentStudioBlockedReason: readiness.blockedReason,
     isLoadingChecks: readiness.isLoadingChecks,
     refreshChecks: readiness.refreshChecks,

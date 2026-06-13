@@ -3,7 +3,7 @@ import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { requiresHydratedAgentSessionHistory } from "../support/history-hydration";
+import { requiresLoadedAgentSessionHistory } from "../support/history-load-state";
 import type {
   StartSessionContext,
   StartSessionCreationInput,
@@ -27,7 +27,7 @@ const loadPersistedSessionsForRole = async ({
   return persistedSessions.filter((entry) => entry.role === ctx.role);
 };
 
-const ensureSessionHydrated = async ({
+const loadSessionForReuse = async ({
   ctx,
   deps,
   externalSessionId,
@@ -42,21 +42,20 @@ const ensureSessionHydrated = async ({
 }): Promise<AgentSessionState> => {
   if (forceReload || !deps.session.sessionsRef.current[externalSessionId]) {
     await deps.session.loadAgentSessions(ctx.taskId, {
-      mode: "requested_history",
       targetExternalSessionId: externalSessionId,
       historyPolicy: "requested_only",
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const hydratedSession = deps.session.sessionsRef.current[externalSessionId];
-  if (!hydratedSession) {
+  const loadedSession = deps.session.sessionsRef.current[externalSessionId];
+  if (!loadedSession) {
     throw new Error(
-      `Failed to hydrate session "${externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
+      `Failed to load session "${externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
     );
   }
 
-  return hydratedSession;
+  return loadedSession;
 };
 
 const createWorkingDirectoryMatchers = ({
@@ -143,8 +142,8 @@ export const resolveLoadedSourceSession = async ({
       entry.externalSessionId === sourceExternalSessionId,
   );
   if (existingSourceSession) {
-    if (requiresHydratedAgentSessionHistory(existingSourceSession)) {
-      return ensureSessionHydrated({
+    if (requiresLoadedAgentSessionHistory(existingSourceSession)) {
+      return loadSessionForReuse({
         ctx,
         deps,
         externalSessionId: existingSourceSession.externalSessionId,
@@ -166,7 +165,7 @@ export const resolveLoadedSourceSession = async ({
     );
   }
 
-  return ensureSessionHydrated({
+  return loadSessionForReuse({
     ctx,
     deps,
     externalSessionId: persistedSourceSession.externalSessionId,
@@ -229,7 +228,7 @@ export const executeReuseStart = async ({
     );
   }
 
-  await ensureSessionHydrated({
+  await loadSessionForReuse({
     ctx,
     deps,
     externalSessionId: persistedSession.externalSessionId,

@@ -1566,7 +1566,7 @@ describe("runtime schemas", () => {
     expect(parsed.selectedModel).toBeNull();
   });
 
-  test("agent session record ignores old local session id when external id is present", () => {
+  test("agent session record strips legacy non-durable fields", () => {
     const parsed = agentSessionRecordSchema.parse({
       sessionId: "obp-session-2",
       externalSessionId: "obp-session-2",
@@ -1574,6 +1574,7 @@ describe("runtime schemas", () => {
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
+      systemPrompt: "Plan the work.",
       selectedModel: null,
     });
 
@@ -1594,6 +1595,19 @@ describe("runtime schemas", () => {
       startedAt: "2026-02-18T17:11:00.000Z",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
+      selectedModel: null,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("agent session record rejects blank working directory", () => {
+    const result = agentSessionRecordSchema.safeParse({
+      externalSessionId: "obp-session-2",
+      role: "planner",
+      startedAt: "2026-02-18T17:11:00.000Z",
+      runtimeKind: "opencode",
+      workingDirectory: " ",
       selectedModel: null,
     });
 

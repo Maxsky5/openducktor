@@ -1,11 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
   getSession,
   getSessionMessages,
   handleAssistantPart,
+  listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEventAdapter,
   type SessionPartEventContext,
@@ -46,7 +46,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -144,7 +144,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -433,7 +433,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -554,7 +554,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
   });
 
-  test("forwards turn timing callbacks to part handlers through attachAgentSessionListener", () => {
+  test("forwards turn timing callbacks to part handlers through listenToAgentSessionEvents", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
@@ -586,7 +586,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -662,7 +662,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -765,7 +765,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -853,7 +853,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -982,7 +982,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -1087,7 +1087,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -1194,7 +1194,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -1324,7 +1324,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

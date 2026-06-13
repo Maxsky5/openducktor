@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Event } from "@opencode-ai/sdk/v2";
-import { makeMockClient, OpencodeSdkAdapter } from "./test-support";
+import { makeMockClient, OpencodeSdkAdapter, sessionRef } from "./test-support";
 
 describe("OpencodeSdkAdapter index", () => {
   test("shares one global event stream across sessions on the same endpoint", async () => {
@@ -71,22 +71,19 @@ describe("OpencodeSdkAdapter index", () => {
       },
     ]);
 
-    await adapter.stopSession("session-2");
+    await adapter.stopSession(sessionRef("session-2"));
     expect(abortSignals[0]?.aborted).toBe(false);
 
-    await adapter.stopSession("session-opencode-1");
+    await adapter.stopSession(sessionRef("session-opencode-1"));
     expect(abortSignals[0]?.aborted).toBe(true);
   });
 
-  test("startSession emits session_started and returns summary", async () => {
+  test("startSession returns summary and registers the session", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
       now: () => "2026-02-17T12:00:00Z",
     });
-
-    const events: unknown[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
 
     const summary = await adapter.startSession({
       repoPath: "/repo",
@@ -193,7 +190,8 @@ describe("OpencodeSdkAdapter index", () => {
       pattern: "*",
       action: "allow",
     });
-    expect(events).toHaveLength(1);
-    expect((events[0] as { type: string }).type).toBe("session_started");
+    expect(
+      (adapter as unknown as { sessions: Map<string, unknown> }).sessions.has("session-opencode-1"),
+    ).toBe(true);
   });
 });

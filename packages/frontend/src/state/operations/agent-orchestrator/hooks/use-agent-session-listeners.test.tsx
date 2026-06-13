@@ -11,6 +11,54 @@ import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("useAgentSessionListeners", () => {
+  test("subscribes with the runtime session route after reload", async () => {
+    const subscribeEvents = mock(() => () => undefined);
+    const Harness = () => {
+      const state = useOrchestratorSessionState({
+        activeWorkspace: {
+          workspaceId: "workspace",
+          workspaceName: "Workspace",
+          repoPath: "/tmp/repo",
+        },
+        tasks: [createTaskFixture()],
+      });
+      const listeners = useAgentSessionListeners({
+        agentEngine: createNoopEngine({
+          subscribeEvents,
+          listRuntimeDefinitions: () => [],
+        }),
+        refBridges: state.refBridges,
+        sessionsRef: state.refBridges.sessionsRef,
+        commitSessions: state.commitSessions,
+        updateSession: () => undefined,
+        recordTurnActivityTimestamp: () => undefined,
+        recordTurnUserMessageTimestamp: () => undefined,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => undefined,
+        refreshTaskData: async () => undefined,
+      });
+      return { listeners };
+    };
+
+    const harness = createHookHarness(Harness, undefined);
+    await harness.mount();
+
+    const sessionRef = {
+      externalSessionId: "external-1",
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/worktree",
+    } as const;
+
+    await harness.run(async ({ listeners }) => {
+      listeners.listenToAgentSession(sessionRef);
+    });
+
+    expect(subscribeEvents).toHaveBeenCalledWith(sessionRef, expect.any(Function));
+
+    await harness.unmount();
+  });
+
   test("removal clears subscriptions, draft refs, timing refs, and session state", async () => {
     const unsubscribe = mock(() => undefined);
     const Harness = () => {

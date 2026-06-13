@@ -38,6 +38,7 @@ describe("CodexAppServerAdapter history hydration", () => {
       externalSessionId: "thread/start-runtime-ensure",
     });
 
+    expect(history.some((message) => message.role === "system")).toBe(false);
     expect(history).toEqual([
       expect.objectContaining({
         messageId: "user-history-1",

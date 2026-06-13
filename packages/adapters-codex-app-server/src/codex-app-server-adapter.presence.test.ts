@@ -1,10 +1,13 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
+  codexSessionRef,
+  codexSessionRuntimeRef,
   createHarness,
+  flushCodexAdapterWork,
   RecordingTransport,
   waitForEvent,
 } from "./codex-app-server-adapter.test-harness";
-import type { CodexJsonRpcRequest } from "./index";
+import type { CodexAppServerAdapter, CodexJsonRpcRequest } from "./index";
 
 class ThreadIdOnlyResumeTransport extends RecordingTransport {
   async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -36,6 +39,26 @@ class MutableThreadListTransport extends RecordingTransport {
         ],
         nextCursor: null,
         backwardsCursor: null,
+      } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
+class RestoreIdleThreadListActiveTransport extends MutableThreadListTransport {
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/resume") {
+      this.calls.push(request);
+      return {
+        thread: {
+          id: (request.params as { threadId: string }).threadId,
+          cwd: "/repo",
+          createdAt: 1_778_112_000,
+          preview: "Saved session",
+          status: { type: "idle" },
+          turns: [],
+        },
+        startedAt: "2026-05-07T00:00:00.000Z",
       } as Response;
     }
     return super.request<Response>(request);
@@ -105,6 +128,18 @@ class HistoryOnlyIdleTransport extends RecordingTransport {
   }
 }
 
+const localSessions = (adapter: CodexAppServerAdapter): Map<string, unknown> =>
+  (adapter as unknown as { sessions: Map<string, unknown> }).sessions;
+
+const restoreSessionState = async (
+  adapter: CodexAppServerAdapter,
+  externalSessionId: string,
+): Promise<void> => {
+  await adapter.restoreSession(codexSessionRef(externalSessionId));
+  adapter.subscribeEvents(codexSessionRuntimeRef(externalSessionId), () => {});
+  await flushCodexAdapterWork();
+};
+
 describe("CodexAppServerAdapter presence", () => {
   test("refreshes Codex thread inventory during presence checks", async () => {
     const { adapter, transports } = createHarness();
@@ -161,16 +196,7 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await adapter.attachSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-saved",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await restoreSessionState(adapter, "thread-saved");
 
     transport.threadSavedStatus = { type: "idle" };
 
@@ -202,14 +228,13 @@ describe("CodexAppServerAdapter presence", () => {
     ).resolves.toMatchObject({
       presence: "runtime",
       classification: "running",
-      runtimeId: "runtime-live",
       ref: expect.objectContaining({
         externalSessionId: "thread-saved",
         workingDirectory: "/repo",
       }),
     });
 
-    expect(adapter.hasSession("thread-saved")).toBe(false);
+    expect(localSessions(adapter).has("thread-saved")).toBe(false);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
       "thread/loaded/list",
     );
@@ -268,7 +293,7 @@ describe("CodexAppServerAdapter presence", () => {
         status: { type: "idle" },
       }),
     );
-    expect(adapter.hasSession("thread-idle")).toBe(false);
+    expect(localSessions(adapter).has("thread-idle")).toBe(false);
   });
 
   test("keeps real pending input visible after a history-only Codex resume", async () => {
@@ -399,23 +424,12 @@ describe("CodexAppServerAdapter presence", () => {
     });
   });
 
-  test("attaches a missing live Codex session without starting a turn", async () => {
+  test("restores a missing live Codex session without starting a turn", async () => {
     const { adapter, transports } = createHarness();
 
-    await expect(
-      adapter.attachSession({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
-        systemPrompt: "Use the repo rules.",
-        externalSessionId: "thread-saved",
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
-    ).resolves.toMatchObject({ externalSessionId: "thread-saved" });
+    await restoreSessionState(adapter, "thread-saved");
 
-    expect(adapter.hasSession("thread-saved")).toBe(true);
+    expect(localSessions(adapter).has("thread-saved")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
       "thread/resume",
     );
@@ -424,24 +438,32 @@ describe("CodexAppServerAdapter presence", () => {
     );
   });
 
-  test("attaches an idle Codex thread without marking it running", async () => {
-    const { adapter } = createHarness();
+  test("trusts active inventory over an idle restore response during reload", async () => {
+    const transport = new RestoreIdleThreadListActiveTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+
+    await restoreSessionState(adapter, "thread-saved");
 
     await expect(
-      adapter.attachSession({
+      adapter.readSessionPresence({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
-        systemPrompt: "Use the repo rules.",
-        externalSessionId: "thread-idle",
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        externalSessionId: "thread-saved",
       }),
     ).resolves.toMatchObject({
-      externalSessionId: "thread-idle",
-      status: "idle",
+      classification: "running",
+      agentSessionStatus: "running",
+      status: { type: "busy" },
     });
+  });
+
+  test("restores an idle Codex thread without marking it running", async () => {
+    const { adapter } = createHarness();
+
+    await restoreSessionState(adapter, "thread-idle");
 
     await expect(
       adapter.readSessionPresence({
@@ -503,21 +525,10 @@ describe("CodexAppServerAdapter presence", () => {
       }),
     ).rejects.toThrow(expectedMessage);
 
-    await expect(
-      adapter.attachSession({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
-        systemPrompt: "Use the repo rules.",
-        externalSessionId: "thread-idle",
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
-    ).rejects.toThrow(expectedMessage);
+    expect(localSessions(adapter).has("thread-idle")).toBe(false);
   });
 
-  test("streams messages and completion after refresh attach", async () => {
+  test("streams messages and completion after refresh restore", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
     > = [];
@@ -535,16 +546,7 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await adapter.attachSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-saved",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await restoreSessionState(adapter, "thread-saved");
 
     const notifications = [
       {
@@ -574,7 +576,9 @@ describe("CodexAppServerAdapter presence", () => {
     ];
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
+      events.push(event),
+    );
     for (const message of notifications) {
       streamListeners[0]?.({ runtimeId: "runtime-live", kind: "notification", message });
     }
@@ -625,19 +629,12 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await adapter.attachSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-saved",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await restoreSessionState(adapter, "thread-saved");
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
+      events.push(event),
+    );
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",
@@ -668,7 +665,7 @@ describe("CodexAppServerAdapter presence", () => {
     unsubscribe();
   });
 
-  test("streams messages and completion after refresh resume reattach", async () => {
+  test("streams messages and completion after refresh resume stream", async () => {
     const streamListeners: Array<
       (event: { runtimeId: string; kind: "notification"; message: unknown }) => void
     > = [];
@@ -698,7 +695,9 @@ describe("CodexAppServerAdapter presence", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
+      events.push(event),
+    );
     streamListeners[0]?.({
       runtimeId: "runtime-live",
       kind: "notification",

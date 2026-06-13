@@ -25,7 +25,7 @@ type UseAgentStudioSelectionActionsArgs = {
   activeSessionRole: AgentRole;
   activeSessionExists: boolean;
   agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
+  isActiveTaskReady: boolean;
   isSessionWorking: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
@@ -84,7 +84,7 @@ export function useAgentStudioSelectionActions({
   activeSessionRole,
   activeSessionExists,
   agentStudioReady,
-  isActiveTaskHydrated,
+  isActiveTaskReady,
   isSessionWorking,
   sessionsForTask,
   selectedTask,
@@ -182,7 +182,7 @@ export function useAgentStudioSelectionActions({
 
   const handlePrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): void => {
-      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
+      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskReady) {
         return;
       }
       if (activeSessionExists && isSessionWorking) {
@@ -208,7 +208,7 @@ export function useAgentStudioSelectionActions({
       activeSessionExists,
       activeSessionRole,
       agentStudioReady,
-      isActiveTaskHydrated,
+      isActiveTaskReady,
       isSessionWorking,
       onContextSwitchIntent,
       scheduleSelectionIntent,

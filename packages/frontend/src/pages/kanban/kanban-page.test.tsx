@@ -30,8 +30,7 @@ const originalConsoleError = console.error;
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
-const bootstrapTaskSessionsMock = mock(async (_taskId: string) => {});
-const hydrateRequestedTaskSessionHistoryMock = mock(
+const loadRequestedTaskSessionHistoryMock = mock(
   async (_input: { taskId: string; externalSessionId: string }) => {},
 );
 const loadAgentSessionsMock = mock(
@@ -467,8 +466,7 @@ describe("KanbanPage session start modal flow", () => {
       useAgentSessionSummaries: () => currentSessionsFixture,
       useAgentActivitySessions: () => [],
       useAgentOperations: () => ({
-        bootstrapTaskSessions: bootstrapTaskSessionsMock,
-        hydrateRequestedTaskSessionHistory: hydrateRequestedTaskSessionHistoryMock,
+        loadRequestedTaskSessionHistory: loadRequestedTaskSessionHistoryMock,
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
         startAgentSession: startAgentSessionMock,
@@ -573,8 +571,7 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    bootstrapTaskSessionsMock.mockClear();
-    hydrateRequestedTaskSessionHistoryMock.mockClear();
+    loadRequestedTaskSessionHistoryMock.mockClear();
     loadAgentSessionsMock.mockClear();
     removeAgentSessionsMock.mockClear();
     humanApproveTaskMock.mockClear();
@@ -998,7 +995,6 @@ describe("KanbanPage session start modal flow", () => {
       );
     });
 
-    expect(bootstrapTaskSessionsMock).not.toHaveBeenCalled();
     expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
     expect(latestHumanReviewFeedbackModalModel?.open).toBe(true);
     expect(latestHumanReviewFeedbackModalModel?.message).toBe("");
@@ -1034,7 +1030,6 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitForSessionStartModalReady();
 
-    expect(bootstrapTaskSessionsMock).not.toHaveBeenCalled();
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(humanRequestChangesTaskMock).not.toHaveBeenCalled();
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
@@ -1056,10 +1051,6 @@ describe("KanbanPage session start modal flow", () => {
     const [specSession] = currentSessionsFixture;
     expect(specSession).toBeDefined();
     currentSessionsFixture = specSession ? [specSession] : [];
-    const sessionsBeforeBootstrap = currentSessionsFixture;
-    bootstrapTaskSessionsMock.mockImplementationOnce(async () => {
-      currentSessionsFixture = sessionsBeforeBootstrap;
-    });
     const renderer = await renderPage();
 
     await act(async () => {

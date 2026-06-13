@@ -103,6 +103,7 @@ export const invokeStopAgentSession = (
 type AgentChatRuntimeReadiness = {
   readinessState: "ready" | "checking" | "blocked";
   isReady: boolean;
+  isRuntimeStarting: boolean;
   blockedReason: string | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;

@@ -1,4 +1,9 @@
-import type { RepoRuntimeHealthCheck, RepoRuntimeHealthObservation } from "@/types/diagnostics";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type {
+  RepoRuntimeHealthCheck,
+  RepoRuntimeHealthMap,
+  RepoRuntimeHealthObservation,
+} from "@/types/diagnostics";
 
 type RuntimeHealthBadge = {
   label: string;
@@ -38,6 +43,18 @@ export const formatRepoRuntimeObservation = (
 
 export const isRepoRuntimeReady = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
   return runtimeHealth?.status === "ready";
+};
+
+export const isRepoRuntimeStarting = (runtimeHealth: RepoRuntimeHealthCheck | null): boolean => {
+  if (!runtimeHealth) {
+    return false;
+  }
+
+  return (
+    runtimeHealth.runtime.status === "checking" &&
+    (runtimeHealth.runtime.stage === "startup_requested" ||
+      runtimeHealth.runtime.stage === "waiting_for_runtime")
+  );
 };
 
 export const isRepoRuntimeHealthTransient = (
@@ -192,4 +209,163 @@ export const describeRepoRuntimeStatus = (
     case "unsupported":
       return `${runtimeLabel} runtime is ready.`;
   }
+};
+
+export type RepoRuntimeReadinessState = "ready" | "checking" | "blocked";
+
+export type RepoRuntimeReadinessSnapshot = {
+  readinessState: RepoRuntimeReadinessState;
+  isReady: boolean;
+  isRuntimeStarting: boolean;
+  blockedReason: string | null;
+  isLoadingChecks: boolean;
+};
+
+type DeriveRepoRuntimeReadinessArgs = {
+  hasActiveWorkspace: boolean;
+  runtimeDefinitions: RuntimeDescriptor[];
+  isLoadingRuntimeDefinitions: boolean;
+  runtimeDefinitionsError: string | null;
+  runtimeHealthByRuntime: RepoRuntimeHealthMap;
+  isLoadingChecks: boolean;
+  runtimeKind?: RuntimeKind | null;
+};
+
+const getBlockedRuntimeReason = (
+  runtimeLabel: string,
+  runtimeHealth: RepoRuntimeHealthCheck | null,
+): string | null => {
+  if (!runtimeHealth) {
+    return null;
+  }
+  return describeRepoRuntimeStatus(runtimeLabel, runtimeHealth);
+};
+
+const findRuntimeDefinition = (
+  runtimeDefinitions: RuntimeDescriptor[],
+  runtimeKind: RuntimeKind | null,
+): RuntimeDescriptor | null => {
+  if (!runtimeKind) {
+    return null;
+  }
+  return runtimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
+};
+
+export const deriveRepoRuntimeReadiness = ({
+  hasActiveWorkspace,
+  runtimeDefinitions,
+  isLoadingRuntimeDefinitions,
+  runtimeDefinitionsError,
+  runtimeHealthByRuntime,
+  isLoadingChecks,
+  runtimeKind = null,
+}: DeriveRepoRuntimeReadinessArgs): RepoRuntimeReadinessSnapshot => {
+  const targetRuntimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
+  const scopedRuntimeDefinitions = targetRuntimeDefinition
+    ? [targetRuntimeDefinition]
+    : runtimeKind
+      ? []
+      : runtimeDefinitions;
+  const isRuntimeHealthPending =
+    hasActiveWorkspace &&
+    scopedRuntimeDefinitions.length > 0 &&
+    scopedRuntimeDefinitions.some(
+      (definition) => runtimeHealthByRuntime[definition.kind] === undefined,
+    );
+  const healthyRuntimeDefinition =
+    scopedRuntimeDefinitions.find((definition) =>
+      isRepoRuntimeReady(runtimeHealthByRuntime[definition.kind] ?? null),
+    ) ?? null;
+  const checkingRuntimeDefinition =
+    scopedRuntimeDefinitions.find(
+      (definition) => runtimeHealthByRuntime[definition.kind]?.status === "checking",
+    ) ?? null;
+  const blockedRuntimeDefinition =
+    scopedRuntimeDefinitions.find((definition) => {
+      const runtimeHealth = runtimeHealthByRuntime[definition.kind];
+      return Boolean(
+        runtimeHealth && runtimeHealth.status !== "ready" && runtimeHealth.status !== "checking",
+      );
+    }) ?? null;
+  const blockedRuntimeHealth = blockedRuntimeDefinition
+    ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
+    : null;
+  const isReady = Boolean(hasActiveWorkspace && healthyRuntimeDefinition);
+  const isRuntimeStarting =
+    hasActiveWorkspace &&
+    scopedRuntimeDefinitions.some((definition) =>
+      isRepoRuntimeStarting(runtimeHealthByRuntime[definition.kind] ?? null),
+    );
+  const readinessState: RepoRuntimeReadinessState = (() => {
+    if (isReady) {
+      return "ready";
+    }
+    if (hasActiveWorkspace && checkingRuntimeDefinition) {
+      return "checking";
+    }
+    if (
+      hasActiveWorkspace &&
+      (isLoadingRuntimeDefinitions || isLoadingChecks || isRuntimeHealthPending)
+    ) {
+      return "checking";
+    }
+
+    return "blocked";
+  })();
+  const blockedReason = (() => {
+    if (isReady) {
+      return null;
+    }
+    if (!hasActiveWorkspace) {
+      return "Select a repository to use agent chat.";
+    }
+    if (runtimeDefinitionsError) {
+      return runtimeDefinitionsError;
+    }
+    if (isLoadingRuntimeDefinitions) {
+      return "Loading runtime definitions...";
+    }
+    if (runtimeKind && !targetRuntimeDefinition) {
+      return `Runtime '${runtimeKind}' is not available for agent chat.`;
+    }
+    if (isLoadingChecks || isRuntimeHealthPending) {
+      if (checkingRuntimeDefinition) {
+        return (
+          getBlockedRuntimeReason(
+            checkingRuntimeDefinition.label,
+            runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
+          ) ?? "Checking runtime health..."
+        );
+      }
+      return blockedRuntimeDefinition
+        ? (getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth) ??
+            "Checking runtime health...")
+        : "Checking runtime health...";
+    }
+    if (checkingRuntimeDefinition) {
+      return (
+        getBlockedRuntimeReason(
+          checkingRuntimeDefinition.label,
+          runtimeHealthByRuntime[checkingRuntimeDefinition.kind] ?? null,
+        ) ?? "Checking runtime health..."
+      );
+    }
+
+    return (
+      (blockedRuntimeDefinition
+        ? getBlockedRuntimeReason(blockedRuntimeDefinition.label, blockedRuntimeHealth)
+        : null) ??
+      (runtimeDefinitions.length === 0
+        ? "No agent runtimes are available."
+        : "No configured runtime is ready for agent chat.")
+    );
+  })();
+
+  return {
+    readinessState,
+    isReady,
+    isRuntimeStarting,
+    blockedReason,
+    isLoadingChecks,
+  };
 };

@@ -52,11 +52,9 @@ const createLiveAgentSessionSnapshotFixture = (
 
 export const createAgentSessionPresenceSnapshotFixture = ({
   ref: refOverrides = {},
-  runtimeId = "runtime-1",
   snapshot: snapshotOverrides = {},
 }: {
   ref?: Partial<AgentSessionRef>;
-  runtimeId?: string;
   snapshot?: Partial<LiveAgentSessionSnapshot>;
 } = {}): AgentSessionPresenceSnapshot => {
   const ref: AgentSessionRef = {
@@ -69,7 +67,6 @@ export const createAgentSessionPresenceSnapshotFixture = ({
 
   return toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref,
-    runtimeId,
     snapshot: createLiveAgentSessionSnapshotFixture({
       ...snapshotOverrides,
       externalSessionId: ref.externalSessionId,

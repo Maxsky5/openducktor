@@ -105,7 +105,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-build",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(buildStartCalls).toBe(1);
@@ -132,7 +131,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(raceResult).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-build",
       workingDirectory: "/tmp/repo/worktree",
     });
     await expect(runtimePromise).resolves.toEqual(raceResult);
@@ -210,7 +208,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-shared",
       workingDirectory: "/tmp/repo/conflict-worktree",
     });
     expect(buildStartCalls).toBe(0);
@@ -260,7 +257,6 @@ describe("agent-orchestrator-runtime", () => {
 
     expect(runtime).toEqual({
       runtimeKind: "opencode",
-      runtimeId: "runtime-shared",
       workingDirectory: "/tmp/repo/worktree",
     });
     expect(continuationCalls).toBe(1);

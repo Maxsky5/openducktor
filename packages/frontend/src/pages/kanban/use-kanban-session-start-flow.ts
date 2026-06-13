@@ -46,8 +46,6 @@ type UseKanbanSessionStartFlowArgs = {
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
   loadRepoSettings: () => Promise<RepoSettingsInput>;
-  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
-  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
   loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
@@ -150,8 +148,6 @@ export function useKanbanSessionStartFlow({
   sessions,
   navigate,
   loadRepoSettings: _loadRepoSettings,
-  bootstrapTaskSessions: _bootstrapTaskSessions,
-  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
   loadAgentSessions: _loadAgentSessions,
   humanRequestChangesTask,
   setTaskTargetBranch,

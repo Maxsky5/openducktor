@@ -49,7 +49,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("reattaches listener before send when adapter session exists", async () => {
+  test("restarts listener before send when adapter session exists", async () => {
     let subscribeCalls = 0;
     let sendCalls = 0;
 
@@ -59,8 +59,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-
-    const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
@@ -76,8 +74,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
-
-    OpencodeSdkAdapter.prototype.hasSession = () => true;
     OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => {
       subscribeCalls += 1;
       return () => {};
@@ -129,8 +125,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
-
-      OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
@@ -139,15 +133,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("does not attach a duplicate session listener when the same live session is explicitly reconciled twice", async () => {
+  test("does not add a duplicate session listener when the same live session is explicitly reconciled twice", async () => {
     let subscribeCalls = 0;
-    const hasAttachedSession = true;
-
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
-    const originalRuntimeList = host.runtimeList;
-    const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
-    const originalResumeSession = OpencodeSdkAdapter.prototype.resumeSession;
+    const originalRestoreSession = OpencodeSdkAdapter.prototype.restoreSession;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
@@ -155,28 +145,10 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.agentSessionUpsert = async () => {};
-    host.runtimeList = async () => [
-      {
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath: "/tmp/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/tmp/repo/worktree",
-        runtimeRoute: {
-          type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4444",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
-
-    OpencodeSdkAdapter.prototype.hasSession = () => hasAttachedSession;
-    OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
+    OpencodeSdkAdapter.prototype.restoreSession = async (input) => {
       return {
         externalSessionId: input.externalSessionId,
-        role: input.role,
+        role: "planner",
         startedAt: "2026-02-22T08:00:00.000Z",
         status: "running",
         runtimeKind: "opencode",
@@ -216,12 +188,12 @@ describe("use-agent-orchestrator-operations start and send", () => {
     try {
       await harness.mount();
       await harness.run(async () => {
-        await harness.getLatest().reconcileLiveTaskSessions({
-          taskId: "task-1",
+        await harness.getLatest().loadAgentSessions("task-1", {
+          historyPolicy: "none",
           persistedRecords: [persistedSessionFixture],
         });
-        await harness.getLatest().reconcileLiveTaskSessions({
-          taskId: "task-1",
+        await harness.getLatest().loadAgentSessions("task-1", {
+          historyPolicy: "none",
           persistedRecords: [persistedSessionFixture],
         });
       });
@@ -231,9 +203,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
       host.agentSessionUpsert = originalAgentSessionUpsert;
-      host.runtimeList = originalRuntimeList;
-      OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
-      OpencodeSdkAdapter.prototype.resumeSession = originalResumeSession;
+      OpencodeSdkAdapter.prototype.restoreSession = originalRestoreSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
@@ -252,8 +222,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-
-    const originalHasSession = OpencodeSdkAdapter.prototype.hasSession;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalSendUserMessage = OpencodeSdkAdapter.prototype.sendUserMessage;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
@@ -270,7 +238,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
-    OpencodeSdkAdapter.prototype.hasSession = () => true;
     OpencodeSdkAdapter.prototype.subscribeEvents = () => () => {};
     OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
       sendCalls += 1;
@@ -316,7 +283,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
-      OpencodeSdkAdapter.prototype.hasSession = originalHasSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.sendUserMessage = originalSendUserMessage;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;

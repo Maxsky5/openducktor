@@ -13,6 +13,16 @@
 - AVOID "normalization" unless it's absolutely necessary
 - NEVER harden code without a good reason
 
+## Critical Notice — Runtime Source Evidence
+
+- When behavior depends on external runtime internals, inspect the runtime source or official contract before designing or changing adapters.
+- Never infer runtime behavior from memory, adapter shape, or assumptions when source evidence is available.
+
+## Critical Notice — Human Validation for Database Schema
+
+- NEVER change database schemas, migration files, persisted record schemas, or durable SQLite/task-store record shapes without explicit human validation.
+- If a fix appears to require persisting new data or changing durable storage shape, stop and ask for approval first.
+
 ## Project
 
 OpenDucktor is a **Bun monorepo** for a macOS-first **Electron** desktop app and local browser runner that orchestrate AI planning/building workflows with a workspace-scoped **SQLite task store** as task source-of-truth.

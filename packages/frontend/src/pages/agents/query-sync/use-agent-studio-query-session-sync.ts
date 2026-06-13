@@ -16,7 +16,6 @@ type UseAgentStudioQuerySessionSyncArgs = {
   taskId: string;
   activeSession: AgentSessionState | null;
   roleFromQuery: AgentRole;
-  isActiveTaskHydrated: boolean;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
 };
 
@@ -35,7 +34,6 @@ const resolveAgentStudioQuerySessionUpdate = ({
   taskId,
   activeSession,
   roleFromQuery,
-  isActiveTaskHydrated,
 }: ResolveAgentStudioQuerySessionUpdateArgs): AgentStudioQueryUpdate | null => {
   if (isRepoNavigationBoundaryPending) {
     return null;
@@ -61,8 +59,9 @@ const resolveAgentStudioQuerySessionUpdate = ({
     updates[AGENT_STUDIO_QUERY_KEYS.task] = selectedSessionById.taskId;
   }
 
+  const selectedTaskExists = taskId.length > 0 && tasks.some((entry) => entry.id === taskId);
   const shouldClearSessionParam =
-    Boolean(sessionParam) && taskId.length > 0 && isActiveTaskHydrated && !selectedSessionById;
+    Boolean(sessionParam) && !isLoadingTasks && selectedTaskExists && !selectedSessionById;
 
   if (sessionParam) {
     if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
@@ -97,7 +96,6 @@ export function useAgentStudioQuerySessionSync({
   taskId,
   activeSession,
   roleFromQuery,
-  isActiveTaskHydrated,
   scheduleQueryUpdate,
 }: UseAgentStudioQuerySessionSyncArgs): void {
   const queryUpdate = useMemo(
@@ -112,11 +110,9 @@ export function useAgentStudioQuerySessionSync({
         taskId,
         activeSession,
         roleFromQuery,
-        isActiveTaskHydrated,
       }),
     [
       activeSession,
-      isActiveTaskHydrated,
       isLoadingTasks,
       isRepoNavigationBoundaryPending,
       roleFromQuery,

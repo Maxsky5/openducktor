@@ -8,8 +8,8 @@ import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { SessionRepoReadinessState as AgentStudioReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentStudioReadinessState } from "../agent-studio-task-hydration-state";
 import {
   type AgentStudioDocumentsContext,
   type AgentStudioSessionContextUsage,
@@ -25,6 +25,7 @@ const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS: Record<string, number> = Object.fr
 type SelectedSessionRuntimeReadinessContext = {
   readinessState: AgentStudioReadinessState;
   isReady: boolean;
+  isRuntimeStarting: boolean;
   blockedReason: string | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
@@ -84,7 +85,7 @@ export type SelectedSessionRuntimeContext = {
   isTaskHydrating: boolean;
   isSessionHistoryHydrated: boolean;
   isSessionHistoryHydrating: boolean;
-  isSessionHistoryHydrationFailed: boolean;
+  isSessionHistoryLoadFailed: boolean;
   isSessionSelectionResolving: boolean;
   isWaitingForRuntimeReadiness: boolean;
 };
@@ -132,12 +133,13 @@ export type AgentStudioSelectedSessionContextInput = {
   isSessionHistoryHydrating: boolean;
   isSessionSelectionResolving: boolean;
   isWaitingForRuntimeReadiness: boolean;
-  isSessionHistoryHydrationFailed: boolean;
+  isSessionHistoryLoadFailed: boolean;
   activeSessionContextUsage: AgentStudioSessionContextUsage;
   documents: AgentStudioDocumentsContext;
   readiness: {
     agentStudioReadinessState: AgentStudioReadinessState;
     agentStudioReady: boolean;
+    isRuntimeStarting: boolean;
     agentStudioBlockedReason: string | null;
     isLoadingChecks: boolean;
     refreshChecks: () => Promise<void>;
@@ -254,7 +256,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   isSessionHistoryHydrating,
   isSessionSelectionResolving,
   isWaitingForRuntimeReadiness,
-  isSessionHistoryHydrationFailed,
+  isSessionHistoryLoadFailed,
   activeSessionContextUsage,
   documents,
   readiness,
@@ -295,6 +297,8 @@ export const buildAgentStudioSelectedSessionContext = ({
     kickoffLabel: sessionActions.kickoffLabel,
     startLaunchKickoff: sessionActions.startLaunchKickoff,
   });
+  const isTranscriptWaitingForRuntimeReadiness =
+    isWaitingForRuntimeReadiness || (Boolean(taskId) && readiness.isRuntimeStarting);
   const hasPendingQuestions = (activeSession?.pendingQuestions ?? []).length > 0;
   const hasPendingApprovals = (activeSession?.pendingApprovals ?? []).length > 0;
 
@@ -338,6 +342,7 @@ export const buildAgentStudioSelectedSessionContext = ({
       runtimeReadiness: {
         readinessState: readiness.agentStudioReadinessState,
         isReady: readiness.agentStudioReady,
+        isRuntimeStarting: readiness.isRuntimeStarting,
         blockedReason: readiness.agentStudioBlockedReason,
         isLoadingChecks: readiness.isLoadingChecks,
         refreshChecks: readiness.refreshChecks,
@@ -347,8 +352,8 @@ export const buildAgentStudioSelectedSessionContext = ({
       isSessionHistoryHydrated,
       isSessionHistoryHydrating,
       isSessionSelectionResolving,
-      isWaitingForRuntimeReadiness,
-      isSessionHistoryHydrationFailed,
+      isWaitingForRuntimeReadiness: isTranscriptWaitingForRuntimeReadiness,
+      isSessionHistoryLoadFailed,
     },
     pendingInput: {
       pendingQuestions: {

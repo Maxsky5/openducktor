@@ -33,7 +33,7 @@ import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start"
 import { DEFAULT_RUNTIME_KIND, findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
+import { resolveSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
@@ -160,6 +160,8 @@ export function useAgentStudioChatComposer({
   const activeSessionLiveContextUsage = activeSessionChatComposerContext.liveContextUsage ?? null;
   const activeSessionMessages = activeSessionChatComposerContext.messages;
   const hasActiveSession = activeSessionChatComposerContext.hasActiveSession;
+  const activeSessionOwnsModelCatalogLoad =
+    activeSession !== null && activeSessionIsLoadingModelCatalog;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     const selection = toRoleDefaultModelSelection(
       repoSettings?.agentDefaults[role],
@@ -205,7 +207,7 @@ export function useAgentStudioChatComposer({
   ]);
   const activeSessionRuntimeQueryState = useMemo(
     () =>
-      resolveAttachedSessionRuntimeQueryState(
+      resolveSessionRuntimeQueryState(
         hasActiveSession
           ? {
               repoPath: activeSessionRepoPath,
@@ -277,12 +279,15 @@ export function useAgentStudioChatComposer({
     enabled:
       hasActiveSession &&
       activeSessionModelCatalog === null &&
+      !activeSessionOwnsModelCatalogLoad &&
       activeSessionRuntimeQueryInput !== null,
   });
   const composerCatalog = composerCatalogQuery.data ?? null;
   const activeSessionCatalog = activeSessionCatalogQuery.data ?? null;
   const isLoadingComposerCatalog =
-    composerCatalogQuery.isLoading || activeSessionCatalogQuery.isLoading;
+    activeSessionOwnsModelCatalogLoad ||
+    composerCatalogQuery.isLoading ||
+    activeSessionCatalogQuery.isLoading;
   const {
     supportsSlashCommands,
     slashCommandCatalog,

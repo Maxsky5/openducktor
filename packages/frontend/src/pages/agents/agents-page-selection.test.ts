@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { type AgentSessionRecord, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
@@ -12,6 +12,7 @@ import {
   resolveAgentStudioBuilderSessionsForTask,
   resolveAgentStudioDefaultRoleForTask,
   resolveAgentStudioSessionSelection,
+  resolveAgentStudioSessionSelectionFromCandidates,
   resolveAgentStudioTaskId,
   toContextStorageKey,
   toRightPanelStorageKey,
@@ -269,6 +270,39 @@ describe("agents-page-selection", () => {
     });
 
     expect(resolved).toEqual({ activeSession: null, role: "build" });
+  });
+
+  test("uses the same selection policy for persisted session records", () => {
+    const persistedSessions: AgentSessionRecord[] = [
+      {
+        externalSessionId: "spec-older",
+        role: "spec",
+        startedAt: "2026-02-22T09:00:00.000Z",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        selectedModel: null,
+      },
+      {
+        externalSessionId: "planner-newer",
+        role: "planner",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo",
+        selectedModel: null,
+      },
+    ];
+
+    const selection = resolveAgentStudioSessionSelectionFromCandidates({
+      sessionsForTask: persistedSessions,
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "spec",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
+      fallbackRole: "spec",
+    });
+
+    expect(selection.activeSession?.externalSessionId).toBe("planner-newer");
+    expect(selection.role).toBe("planner");
   });
 
   test("prioritizes active running session over status defaults", () => {

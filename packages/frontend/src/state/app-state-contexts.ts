@@ -24,6 +24,7 @@ import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
+  AgentSessionReadModelStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
   SpecStateContextValue,
@@ -45,6 +46,8 @@ export const DelegationStateContext = createContext<DelegationStateContextValue 
 export const SpecStateContext = createContext<SpecStateContextValue | null>(null);
 export const AgentSessionsContext = createContext<AgentSessionsStore | null>(null);
 export const AgentOperationsContext = createContext<AgentOperationsContextValue | null>(null);
+export const AgentSessionReadModelStateContext =
+  createContext<AgentSessionReadModelStateContextValue | null>(null);
 
 export type ActiveWorkspaceContextValue = {
   activeWorkspace: ActiveWorkspace | null;
@@ -191,6 +194,9 @@ export const useAgentSessionsContext = (): AgentSessionsStore =>
 
 export const useAgentOperationsContext = (): AgentOperationsContextValue =>
   useRequiredContext(AgentOperationsContext, "useAgentOperations");
+
+export const useAgentSessionReadModelStateContext = (): AgentSessionReadModelStateContextValue =>
+  useRequiredContext(AgentSessionReadModelStateContext, "useAgentSessionReadModelState");
 
 export const useWorkspaceBranchStateContext = (): WorkspaceBranchStateContextValue =>
   useRequiredContext(WorkspaceBranchStateContext, "useWorkspaceBranchState");

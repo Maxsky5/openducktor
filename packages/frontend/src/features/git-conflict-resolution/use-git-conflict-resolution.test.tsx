@@ -17,7 +17,6 @@ const buildSession = (
     role: "build",
     status: "idle",
     startedAt: "2026-03-18T10:00:00.000Z",
-    runtimeId: null,
     workingDirectory,
     messages: [],
     draftAssistantText: "",

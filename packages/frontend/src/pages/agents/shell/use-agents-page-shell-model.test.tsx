@@ -17,7 +17,6 @@ import type { AgentStudioRightPanelBridgeModel } from "./use-agent-studio-right-
 
 enableReactActEnvironment();
 
-const actualAppStateProviderModule = await import("../../../state/app-state-provider");
 const actualReactRouterDomModule = await import("react-router-dom");
 const actualAppStateContextsModule = appStateContexts;
 
@@ -62,10 +61,11 @@ type SelectionState = {
   selectedSessionById: Record<string, SessionFixture>;
   taskId: string;
   activeSession: SessionFixture | null;
-  isActiveTaskHydrated: boolean;
-  isActiveTaskHydrationFailed: boolean;
-  isViewSessionHistoryHydrationFailed: boolean;
+  isActiveTaskReady: boolean;
+  isActiveTaskReadinessFailed: boolean;
+  isViewSessionHistoryLoadFailed: boolean;
   isViewSessionHistoryHydrating: boolean;
+  isSelectedSessionLoading: boolean;
   sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
@@ -75,6 +75,7 @@ type SelectionState = {
 type ReadinessState = {
   agentStudioReadinessState: "ready" | "checking" | "blocked";
   agentStudioReady: boolean;
+  isRuntimeStarting: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
@@ -156,9 +157,9 @@ let tasksState: TasksStateContextValue = {
   pendingMergedPullRequest: null,
 };
 let agentSessions = [createSession()];
+let agentSessionReadModelState = { sessionReadModelError: null as string | null };
 let agentOperations = {
-  bootstrapTaskSessions: mock(async () => undefined),
-  hydrateRequestedTaskSessionHistory: mock(async () => undefined),
+  loadRequestedTaskSessionHistory: mock(async () => undefined),
   readSessionFileSearch: mock(async () => []),
   readSessionModelCatalog: mock(async () => ({
     providers: [],
@@ -201,10 +202,11 @@ let selectionState: SelectionState = {
   selectedSessionById: { "session-1": initialSelectionSession },
   taskId: "task-1",
   activeSession: initialSelectionSession,
-  isActiveTaskHydrated: true,
-  isActiveTaskHydrationFailed: false,
-  isViewSessionHistoryHydrationFailed: false,
+  isActiveTaskReady: true,
+  isActiveTaskReadinessFailed: false,
+  isViewSessionHistoryLoadFailed: false,
   isViewSessionHistoryHydrating: false,
+  isSelectedSessionLoading: false,
   sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
@@ -213,6 +215,7 @@ let selectionState: SelectionState = {
 let readinessState: ReadinessState = {
   agentStudioReadinessState: "ready",
   agentStudioReady: true,
+  isRuntimeStarting: false,
   agentStudioBlockedReason: null,
   isLoadingChecks: false,
   refreshChecks: async () => undefined,
@@ -279,7 +282,7 @@ let useAgentsPageShellModel: () => AgentsPageShellModelState;
 
 const mockedModuleResets = [
   ["react-router-dom", async () => actualReactRouterDomModule],
-  ["@/state/app-state-provider", async () => actualAppStateProviderModule],
+  ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
   ["@/state/app-state-contexts", async () => actualAppStateContextsModule],
   ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
   [
@@ -308,6 +311,7 @@ const registerModuleMocks = (): void => {
     useChecksState: () => checksState,
     useTasksState: () => tasksState,
     useAgentOperations: () => agentOperations,
+    useAgentSessionReadModelState: () => agentSessionReadModelState,
     useAgentSessions: () => agentSessions,
     useAgentSessionSummaries: () =>
       agentSessions.map((entry) => ({
@@ -326,7 +330,11 @@ const registerModuleMocks = (): void => {
       externalSessionId
         ? (agentSessions.find((entry) => entry.externalSessionId === externalSessionId) ?? null)
         : null,
-    useAgentState: () => ({ sessions: agentSessions, ...agentOperations }),
+    useAgentState: () => ({
+      sessions: agentSessions,
+      ...agentSessionReadModelState,
+      ...agentOperations,
+    }),
     useSpecState: () => {
       throw new Error("useSpecState is not used in this test");
     },
@@ -428,9 +436,9 @@ beforeEach(async () => {
   };
   const session = createSession();
   agentSessions = [session];
+  agentSessionReadModelState = { sessionReadModelError: null };
   agentOperations = {
-    bootstrapTaskSessions: mock(async () => undefined),
-    hydrateRequestedTaskSessionHistory: mock(async () => undefined),
+    loadRequestedTaskSessionHistory: mock(async () => undefined),
     readSessionFileSearch: mock(async () => []),
     readSessionModelCatalog: mock(async () => ({
       providers: [],
@@ -472,10 +480,11 @@ beforeEach(async () => {
     selectedSessionById: { "session-1": session },
     taskId: "task-1",
     activeSession: session,
-    isActiveTaskHydrated: true,
-    isActiveTaskHydrationFailed: false,
-    isViewSessionHistoryHydrationFailed: false,
+    isActiveTaskReady: true,
+    isActiveTaskReadinessFailed: false,
+    isViewSessionHistoryLoadFailed: false,
     isViewSessionHistoryHydrating: false,
+    isSelectedSessionLoading: false,
     sessionsForTask: [session],
     handleCreateTab: mock((_taskId: string) => {}),
     handleCloseTab: mock((_taskId: string) => {}),
@@ -484,6 +493,7 @@ beforeEach(async () => {
   readinessState = {
     agentStudioReadinessState: "ready",
     agentStudioReady: true,
+    isRuntimeStarting: false,
     agentStudioBlockedReason: null,
     isLoadingChecks: false,
     refreshChecks: async () => undefined,

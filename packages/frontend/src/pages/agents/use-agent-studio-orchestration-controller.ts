@@ -13,9 +13,9 @@ import type {
 } from "@/components/features/agents";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import type { SessionRepoReadinessState as AgentStudioReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
-import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
@@ -40,6 +40,7 @@ export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionContr
 export type AgentStudioOrchestrationReadinessContext = {
   agentStudioReadinessState: AgentStudioReadinessState;
   agentStudioReady: boolean;
+  isRuntimeStarting: boolean;
   agentStudioBlockedReason: string | null;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
@@ -66,8 +67,7 @@ type AgentStudioOrchestrationActionsContext = {
   readSessionFileSearch: AgentStateContextValue["readSessionFileSearch"];
   readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
   readSessionSkills: AgentStateContextValue["readSessionSkills"];
-  bootstrapTaskSessions: AgentStateContextValue["bootstrapTaskSessions"];
-  hydrateRequestedTaskSessionHistory: AgentStateContextValue["hydrateRequestedTaskSessionHistory"];
+  loadRequestedTaskSessionHistory: AgentStateContextValue["loadRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentStateContextValue["replyAgentApproval"];
@@ -165,20 +165,20 @@ type BuildSelectedSessionContextFromOrchestrationInput = Omit<
   "isTaskHydrating" | "sessionRuntimeDataError"
 > & {
   viewSessionRuntimeDataError?: string | null;
-  isActiveTaskHydrated: boolean;
-  isActiveTaskHydrationFailed: boolean;
+  isActiveTaskReady: boolean;
+  isActiveTaskReadinessFailed: boolean;
 };
 
 export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
   viewSessionRuntimeDataError,
-  isActiveTaskHydrated,
-  isActiveTaskHydrationFailed,
+  isActiveTaskReady,
+  isActiveTaskReadinessFailed,
   ...input
 }: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext =>
   buildAgentStudioSelectedSessionContext({
     ...input,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
-    isTaskHydrating: Boolean(input.taskId && !isActiveTaskHydrated && !isActiveTaskHydrationFailed),
+    isTaskHydrating: Boolean(input.taskId && !isActiveTaskReady && !isActiveTaskReadinessFailed),
   });
 
 export const buildAgentStudioPageModelsArgs = ({
@@ -254,7 +254,7 @@ export function useAgentStudioOrchestrationController({
     taskTabs,
     availableTabTasks,
     isLoadingTasks,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
     handleSelectTab,
     handleCreateTab,
     handleCloseTab,
@@ -364,7 +364,8 @@ export function useAgentStudioOrchestrationController({
     sessionsForTask: viewSessionsForTask,
     selectedTask: viewSelectedTask,
     agentStudioReady,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
+    isSessionSelectionResolving: selection.isSessionSelectionResolving,
     selectionForNewSession,
     reusablePrompts,
     repoSettings,
@@ -400,13 +401,13 @@ export function useAgentStudioOrchestrationController({
         runtimeDefinitions,
         viewSessionRuntimeDataError,
         hasActiveGitConflict,
-        isActiveTaskHydrated,
-        isActiveTaskHydrationFailed: selection.isActiveTaskHydrationFailed,
+        isActiveTaskReady,
+        isActiveTaskReadinessFailed: selection.isActiveTaskReadinessFailed,
         isSessionHistoryHydrated: selection.isViewSessionHistoryHydrated,
         isSessionHistoryHydrating: selection.isViewSessionHistoryHydrating,
         isSessionSelectionResolving: selection.isSessionSelectionResolving,
         isWaitingForRuntimeReadiness: selection.isViewSessionWaitingForRuntimeReadiness,
-        isSessionHistoryHydrationFailed: selection.isViewSessionHistoryHydrationFailed,
+        isSessionHistoryLoadFailed: selection.isViewSessionHistoryLoadFailed,
         activeSessionContextUsage,
         documents: {
           specDoc,
@@ -435,7 +436,7 @@ export function useAgentStudioOrchestrationController({
       approvalReplyErrorByRequestId,
       canKickoffNewSession,
       hasActiveGitConflict,
-      isActiveTaskHydrated,
+      isActiveTaskReady,
       isSessionWorking,
       isStarting,
       isSubmittingApprovalByRequestId,
@@ -449,10 +450,10 @@ export function useAgentStudioOrchestrationController({
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
-      selection.isActiveTaskHydrationFailed,
+      selection.isActiveTaskReadinessFailed,
       selection.isSessionSelectionResolving,
       selection.isViewSessionHistoryHydrated,
-      selection.isViewSessionHistoryHydrationFailed,
+      selection.isViewSessionHistoryLoadFailed,
       selection.isViewSessionHistoryHydrating,
       selection.isViewSessionWaitingForRuntimeReadiness,
       specDoc,

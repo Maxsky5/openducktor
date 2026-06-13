@@ -12,7 +12,6 @@ import {
   mergeRuntimePendingApprovals,
   mergeRuntimePendingQuestions,
 } from "./runtime-transcript-pending-requests";
-import type { RuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
 
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
@@ -100,7 +99,6 @@ type UseRuntimeTranscriptInteractionsArgs = {
   session: AgentSessionState | null;
   source: RuntimeSessionTranscriptSource | null;
   externalSessionId: string | null;
-  sourceResolution: RuntimeTranscriptSourceResolution;
   isRuntimeReady: boolean;
   replyAgentApproval: (
     externalSessionId: string,
@@ -135,7 +133,6 @@ export function useRuntimeTranscriptInteractions({
   session,
   source,
   externalSessionId,
-  sourceResolution,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
@@ -186,11 +183,7 @@ export function useRuntimeTranscriptInteractions({
   const activeSessionId = sessionWithPendingRequests?.externalSessionId ?? null;
   const sessionMatchesTranscript =
     activeSessionId !== null && activeSessionId === externalSessionId;
-  const canReplyToRuntimeRequest =
-    isRuntimeReady &&
-    !sourceResolution.isPending &&
-    !sourceResolution.error &&
-    sessionMatchesTranscript;
+  const canReplyToRuntimeRequest = isRuntimeReady && sessionMatchesTranscript;
   const pendingApprovalRequests: readonly AgentApprovalRequest[] =
     sessionWithPendingRequests?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
   const replyTranscriptApproval = useCallback(
@@ -223,7 +216,7 @@ export function useRuntimeTranscriptInteractions({
     sessionWithPendingRequests?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const replyTranscriptQuestion = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeSessionId) {
+      if (!activeSessionId || !sessionMatchesTranscript) {
         throw new Error("Runtime transcript question target is unavailable.");
       }
       dispatchInteractionState({
@@ -246,7 +239,7 @@ export function useRuntimeTranscriptInteractions({
         });
       }
     },
-    [activeSessionId, answerAgentQuestion, transcriptIdentityKey],
+    [activeSessionId, answerAgentQuestion, sessionMatchesTranscript, transcriptIdentityKey],
   );
 
   return {

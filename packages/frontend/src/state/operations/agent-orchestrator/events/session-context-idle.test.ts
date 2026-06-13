@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
   getSession,
   getSessionMessages,
+  listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEventAdapter,
   sessionMessageAt,
@@ -67,7 +67,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -158,7 +158,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -275,7 +275,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -378,7 +378,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -507,7 +507,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -632,7 +632,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -724,7 +724,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -802,7 +802,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -867,7 +867,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -929,7 +929,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -1028,7 +1028,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

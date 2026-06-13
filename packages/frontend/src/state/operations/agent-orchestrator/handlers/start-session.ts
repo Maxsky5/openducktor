@@ -1,12 +1,13 @@
+import type { AgentSessionRef } from "@openducktor/core";
 import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
+import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
 import { requireSelectedModelRuntimeKindForStart } from "../support/session-runtime-metadata";
 import type {
   RuntimeDependencies,
   SessionDependencies,
   StartAgentSessionInput,
-  StartedSessionContext,
   StartOrReuseResult,
   StartSessionContext,
   StartSessionCreationInput,
@@ -114,18 +115,30 @@ const resolveFreshStartTarget = async ({
   });
 };
 
-const attachSessionListenerAndGuard = async ({
-  startedCtx,
+const listenToAgentSessionAndGuard = async ({
+  startResult,
   session,
   runtime,
   initialStatusRelease,
 }: {
-  startedCtx: StartedSessionContext;
+  startResult: Extract<StartOrReuseResult, { kind: "started" }>;
   session: SessionDependencies;
   runtime: RuntimeDependencies;
   initialStatusRelease: InitialSessionStatusReleasePolicy;
 }): Promise<void> => {
-  session.attachSessionListener(startedCtx.repoPath, startedCtx.summary.externalSessionId);
+  const { ctx: startedCtx, runtimeInfo } = startResult;
+  const runtimeKind = requireConfiguredRuntimeKind(
+    runtimeInfo.runtimeKind,
+    `Runtime kind is required to listen to ${startedCtx.role} session '${startedCtx.summary.externalSessionId}'.`,
+  );
+  const listenerTarget: AgentSessionRef = {
+    externalSessionId: startedCtx.summary.externalSessionId,
+    repoPath: startedCtx.repoPath,
+    runtimeKind,
+    workingDirectory: runtimeInfo.workingDirectory,
+  };
+
+  await session.listenToAgentSession(listenerTarget);
 
   if (!startedCtx.isStaleRepoOperation()) {
     if (initialStatusRelease === "after_first_send_attempt") {
@@ -149,7 +162,7 @@ const attachSessionListenerAndGuard = async ({
   }
 
   await stopSessionOnStaleAndThrow({
-    reason: "start-session-stop-on-stale-after-listener-attach",
+    reason: "start-session-stop-on-stale-after-listener-start",
     runtime,
     startedCtx,
   });
@@ -159,11 +172,11 @@ const getInitialStatusRelease = (
   input: StartAgentSessionInput,
 ): InitialSessionStatusReleasePolicy => {
   if (input.startMode === "reuse") {
-    return "after_listener_attach";
+    return "after_listener_start";
   }
 
   if (!input.initialStatusRelease) {
-    return "after_listener_attach";
+    return "after_listener_start";
   }
 
   return input.initialStatusRelease;
@@ -187,7 +200,6 @@ export const createStartAgentSession = ({
       repoPath,
       repoEpochRef: repo.repoEpochRef,
       currentWorkspaceRepoPathRef: repo.currentWorkspaceRepoPathRef,
-      ...(repo.activeWorkspaceRef ? { activeWorkspaceRef: repo.activeWorkspaceRef } : {}),
     });
     throwIfRepoStale(isStaleRepoOperation, STALE_START_ERROR);
 
@@ -259,8 +271,12 @@ export const createStartAgentSession = ({
         return startResult.externalSessionId;
       }
 
-      await attachSessionListenerAndGuard({
-        startedCtx: startResult.ctx,
+      if (creationInput.startMode === "reuse") {
+        throw new Error("Started session is missing selected model metadata.");
+      }
+
+      await listenToAgentSessionAndGuard({
+        startResult,
         session,
         runtime,
         initialStatusRelease,

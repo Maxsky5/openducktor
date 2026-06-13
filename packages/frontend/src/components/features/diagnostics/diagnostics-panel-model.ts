@@ -254,29 +254,12 @@ const buildRuntimeRows = (runtimeHealth: RuntimeHealthState): DiagnosticKeyValue
   const rows: DiagnosticKeyValueRowModel[] = [];
   const instance = runtimeHealth.runtime.instance;
   if (instance) {
-    rows.push(
-      {
-        label: "Runtime ID",
-        value: instance.runtimeId,
-        mono: true,
-        valueClassName: "text-muted-foreground",
-      },
-      {
-        label: "Route",
-        value:
-          instance.runtimeRoute.type === "local_http"
-            ? instance.runtimeRoute.endpoint
-            : instance.runtimeRoute.identity,
-        mono: true,
-        valueClassName: "text-muted-foreground",
-      },
-      {
-        label: "Working directory",
-        value: instance.workingDirectory,
-        breakAll: true,
-        valueClassName: "text-muted-foreground",
-      },
-    );
+    rows.push({
+      label: "Working directory",
+      value: instance.workingDirectory,
+      breakAll: true,
+      valueClassName: "text-muted-foreground",
+    });
   }
 
   if (runtimeHealth.runtime.status !== "ready") {

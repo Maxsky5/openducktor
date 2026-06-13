@@ -64,7 +64,7 @@ describe("useAgentChatThreadContext", () => {
     const sessionB = createSession({
       externalSessionId: "external-b",
       role: "planner",
-      historyHydrationState: "not_requested",
+      historyLoadState: "not_requested",
     });
     const harness = createHookHarness(
       useAgentChatThreadContext,

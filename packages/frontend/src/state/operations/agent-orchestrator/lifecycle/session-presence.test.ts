@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
   type AgentSessionPresenceSnapshot,
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
@@ -8,18 +7,8 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   applyAgentSessionPresenceSnapshotToSession,
-  createSessionPresenceReader,
-  isAttachableAgentSessionPresenceSnapshot,
+  shouldListenToAgentSessionPresenceSnapshot,
 } from "./session-presence";
-
-const recordFixture: AgentSessionRecord = {
-  externalSessionId: "external-1",
-  role: "build",
-  startedAt: "2026-03-01T09:00:00.000Z",
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-  selectedModel: null,
-};
 
 const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "external-1",
@@ -29,7 +18,6 @@ const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSe
   status: "running",
   startedAt: "2026-03-01T09:00:00.000Z",
   runtimeKind: "opencode",
-  runtimeId: "runtime-1",
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -59,35 +47,9 @@ const sessionRefFixture = {
 };
 
 describe("session-presence", () => {
-  test("classifies missing runtime as persisted-only without reading live snapshots", async () => {
-    let snapshotReads = 0;
-    const readPresence = createSessionPresenceReader({
-      repoPath: "/tmp/repo",
-      resolveHydrationRuntime: async () => ({
-        ok: false,
-        runtimeKind: "opencode",
-        reason: "No live repo runtime found.",
-      }),
-      readPresence: async () => {
-        snapshotReads += 1;
-        return toPersistedOnlyAgentSessionPresenceSnapshot({
-          ref: sessionRefFixture,
-          reason: "No live repo runtime found.",
-        });
-      },
-    });
-
-    const snapshot = await readPresence(recordFixture);
-
-    expect(snapshot.presence).toBe("persisted_only");
-    expect(snapshot.classification).toBe("persisted_only");
-    expect(snapshotReads).toBe(0);
-  });
-
-  test("classifies missing live session as stale and clears pending input when applied", () => {
+  test("classifies missing live session as stale and demotes live-only state", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: null,
     });
 
@@ -99,10 +61,9 @@ describe("session-presence", () => {
     expect(applied.pendingQuestions).toEqual([]);
   });
 
-  test("keeps pending outbound sends running when stale presence arrives", () => {
+  test("settles pending outbound sends when stale presence arrives", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: null,
     });
 
@@ -111,14 +72,13 @@ describe("session-presence", () => {
       snapshot,
     );
 
-    expect(applied.status).toBe("running");
-    expect(applied.runtimeRecoveryState).toBe("recovering_runtime");
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
   });
 
-  test("settles pending outbound sends when runtime idle presence arrives", () => {
+  test("settles pending outbound sends and surfaces runtime idle status", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "external-1",
         title: " Builder Session ",
@@ -143,10 +103,33 @@ describe("session-presence", () => {
     expect(applied.draftReasoningMessageId).toBeNull();
   });
 
+  test("keeps a starting session starting when runtime is idle before the send starts", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      snapshot: {
+        externalSessionId: "external-1",
+        title: " Builder Session ",
+        startedAt: "2026-03-01T09:00:00.000Z",
+        status: { type: "idle" },
+        pendingApprovals: [],
+        pendingQuestions: [],
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({ status: "starting" }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("starting");
+    expect(applied.pendingApprovals).toEqual([]);
+    expect(applied.pendingQuestions).toEqual([]);
+  });
+
   test("keeps pending outbound sends running when runtime presence is busy", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "external-1",
         title: " Builder Session ",
@@ -173,13 +156,12 @@ describe("session-presence", () => {
     expect(applied.draftAssistantMessageId).toBe("assistant-draft");
   });
 
-  test("settles pending outbound sends when runtime reports pending input", () => {
+  test("settles pending outbound sends and surfaces idle status when runtime reports pending input", () => {
     const liveApproval = {
       requestId: "live-approval",
     } as AgentSessionState["pendingApprovals"][number];
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "external-1",
         title: " Builder Session ",
@@ -208,7 +190,7 @@ describe("session-presence", () => {
     expect(applied.pendingApprovals).toEqual([liveApproval]);
   });
 
-  test("marks persisted-only pending outbound sends as recovering runtime", () => {
+  test("settles persisted-only pending outbound sends", () => {
     const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
       ref: sessionRefFixture,
       reason: "No live repo runtime found.",
@@ -219,9 +201,28 @@ describe("session-presence", () => {
       snapshot,
     );
 
-    expect(applied.status).toBe("running");
-    expect(applied.runtimeRecoveryState).toBe("recovering_runtime");
-    expect(applied.runtimeId).toBeNull();
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.pendingApprovals).toEqual([]);
+    expect(applied.pendingQuestions).toEqual([]);
+  });
+
+  test("preserves terminal status without runtime presence", () => {
+    const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      ref: sessionRefFixture,
+      snapshot: null,
+    });
+
+    expect(
+      applyAgentSessionPresenceSnapshotToSession(
+        createSessionState({ status: "stopped" }),
+        snapshot,
+      ).status,
+    ).toBe("stopped");
+    expect(
+      applyAgentSessionPresenceSnapshotToSession(createSessionState({ status: "error" }), snapshot)
+        .status,
+    ).toBe("error");
   });
 
   test("uses live pending input instead of persisted recovery hints", () => {
@@ -230,7 +231,6 @@ describe("session-presence", () => {
     } as AgentSessionState["pendingApprovals"][number];
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "external-1",
         title: " Builder Session ",
@@ -252,7 +252,6 @@ describe("session-presence", () => {
   test("maps retry snapshot to running session status without pending input", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "external-1",
         title: " Builder Session ",
@@ -283,7 +282,6 @@ describe("session-presence", () => {
   test("keeps pending outbound sends when runtime presence is retrying", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "external-1",
         title: " Builder Session ",
@@ -319,11 +317,10 @@ describe("session-presence", () => {
     expect(applied.draftReasoningMessageId).toBe("reasoning-draft");
   });
 
-  test("treats pending input and non-idle runtime status as attachable", () => {
+  test("treats pending input and non-idle runtime status for listening", () => {
     const createPresence = (overrides: Partial<AgentSessionPresenceSnapshot> = {}) =>
       toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: sessionRefFixture,
-        runtimeId: "runtime-1",
         snapshot: {
           externalSessionId: "external-1",
           title: " Builder Session ",
@@ -344,8 +341,8 @@ describe("session-presence", () => {
       ] as never,
     });
 
-    expect(isAttachableAgentSessionPresenceSnapshot(idlePresence)).toBe(false);
-    expect(isAttachableAgentSessionPresenceSnapshot(busyPresence)).toBe(true);
-    expect(isAttachableAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
+    expect(shouldListenToAgentSessionPresenceSnapshot(idlePresence)).toBe(false);
+    expect(shouldListenToAgentSessionPresenceSnapshot(busyPresence)).toBe(true);
+    expect(shouldListenToAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
   });
 });

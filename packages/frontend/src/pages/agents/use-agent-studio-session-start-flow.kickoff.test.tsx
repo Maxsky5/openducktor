@@ -108,7 +108,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   sessionsForTask: [],
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
-  isActiveTaskHydrated: true,
+  isActiveTaskReady: true,
   isSessionWorking: false,
   selectionForNewSession: {
     runtimeKind: "opencode",

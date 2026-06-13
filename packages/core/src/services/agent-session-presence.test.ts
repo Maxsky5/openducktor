@@ -70,7 +70,6 @@ describe("agent-session-presence", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
       },
-      runtimeId: "runtime-1",
       snapshot: {
         externalSessionId: "session-1",
         title: "Build session",
@@ -91,7 +90,6 @@ describe("agent-session-presence", () => {
         workingDirectory: "/repo/worktree",
         externalSessionId: "session-1",
       },
-      runtimeId: "runtime-1",
       title: "Build session",
       startedAt: "2026-02-22T12:00:00.000Z",
       status: { type: "busy" },
@@ -99,29 +97,6 @@ describe("agent-session-presence", () => {
       pendingApprovals: [],
       pendingQuestions: [],
     });
-  });
-
-  test("fails fast when a runtime snapshot has no runtime id", () => {
-    expect(() =>
-      toAgentSessionPresenceSnapshotFromLiveSnapshot({
-        ref: {
-          repoPath: "/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
-          externalSessionId: "session-1",
-        },
-        runtimeId: null,
-        snapshot: {
-          externalSessionId: "session-1",
-          title: "Build session",
-          workingDirectory: "/repo/worktree",
-          startedAt: "2026-02-22T12:00:00.000Z",
-          status: { type: "busy" },
-          pendingApprovals: [],
-          pendingQuestions: [],
-        },
-      }),
-    ).toThrow("Runtime session presence requires a live runtime id.");
   });
 
   test("builds stale snapshot when a runtime snapshot is absent", () => {
@@ -135,14 +110,12 @@ describe("agent-session-presence", () => {
     expect(
       toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref,
-        runtimeId: "runtime-1",
         snapshot: null,
       }),
     ).toEqual({
       presence: "stale",
       classification: "stale",
       ref,
-      runtimeId: "runtime-1",
       pendingApprovals: [],
       pendingQuestions: [],
     });
@@ -165,7 +138,6 @@ describe("agent-session-presence", () => {
       presence: "persisted_only",
       classification: "persisted_only",
       ref,
-      runtimeId: null,
       reason: "runtime missing",
       pendingApprovals: [],
       pendingQuestions: [],

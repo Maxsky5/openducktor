@@ -17,19 +17,6 @@ import { host } from "./operations/shared/host";
 import { agentSessionRuntimeQueryKeys } from "./queries/agent-session-runtime";
 import { runtimeCatalogQueryKeys } from "./queries/runtime-catalog";
 
-const createDeferred = <T>() => {
-  let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return {
-    promise,
-    resolve: (value: T) => {
-      resolve?.(value);
-    },
-  };
-};
-
 const waitForSessionIdleEvent = async (
   events: Array<{ type?: string }>,
   deadline = Date.now() + 1_000,
@@ -40,6 +27,21 @@ const waitForSessionIdleEvent = async (
 
   await new Promise((resolve) => setTimeout(resolve, 10));
   await waitForSessionIdleEvent(events, deadline);
+};
+
+const waitForCodexEventListener = async (
+  bridge: { listener?: (payload: unknown) => void },
+  deadline = Date.now() + 1_000,
+): Promise<(payload: unknown) => void> => {
+  if (bridge.listener) {
+    return bridge.listener;
+  }
+  if (Date.now() >= deadline) {
+    throw new Error("Codex app-server event listener was not registered.");
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  return waitForCodexEventListener(bridge, deadline);
 };
 
 describe("agent-runtime-registry", () => {
@@ -251,23 +253,24 @@ describe("agent-runtime-registry", () => {
 
     try {
       const adapter = createAgentRuntimeRegistry().getAdapter("codex");
-      await adapter.attachSession({
+      const events: Array<{ type?: string }> = [];
+      await adapter.restoreSession({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
-        taskId: "task-1",
-        role: "build",
-        systemPrompt: "Use the repo rules.",
         externalSessionId: "thread-live",
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
       });
+      const unsubscribe = adapter.subscribeEvents(
+        {
+          repoPath: "/repo",
+          runtimeKind: "codex",
+          workingDirectory: "/repo",
+          externalSessionId: "thread-live",
+        },
+        (event) => events.push(event),
+      );
 
-      const events: Array<{ type?: string }> = [];
-      const unsubscribe = adapter.subscribeEvents("thread-live", (event) => events.push(event));
-      const emitCodexEvent = codexEventBridge.listener;
-      if (!emitCodexEvent) {
-        throw new Error("Codex app-server event listener was not registered.");
-      }
+      const emitCodexEvent = await waitForCodexEventListener(codexEventBridge);
       const runtimeSkillKey = runtimeCatalogQueryKeys.repoSkills("/repo", "codex", "/repo");
       const sessionSkillKey = agentSessionRuntimeQueryKeys.skills("/repo", "codex", "/repo");
       appQueryClient.setQueryData(runtimeSkillKey, { skills: [] });
@@ -418,53 +421,30 @@ describe("agent-runtime-registry", () => {
     }
   });
 
-  test("allows event subscription while attachSession is still registering the adapter session", async () => {
-    const originalAttachSession = OpencodeSdkAdapter.prototype.attachSession;
+  test("routes event subscriptions through the explicit durable session ref", () => {
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
-    const attachDeferred = createDeferred<void>();
-    let attachStarted = false;
-    const subscribedExternalSessionIds: string[] = [];
+    const subscribedSessionRefs: unknown[] = [];
 
-    OpencodeSdkAdapter.prototype.attachSession = async (input) => {
-      attachStarted = true;
-      await attachDeferred.promise;
-      return {
-        runtimeKind: input.runtimeKind,
-        externalSessionId: input.externalSessionId,
-        startedAt: "2026-02-22T09:00:00.000Z",
-        role: input.role,
-        status: "running",
-      };
-    };
-    OpencodeSdkAdapter.prototype.subscribeEvents = (externalSessionId) => {
-      subscribedExternalSessionIds.push(externalSessionId);
+    OpencodeSdkAdapter.prototype.subscribeEvents = (sessionRef) => {
+      subscribedSessionRefs.push(sessionRef);
       return () => {};
     };
 
     const engine = createAgentRuntimeRegistry().createAgentEngine();
 
     try {
-      const attachPromise = engine.attachSession({
+      const sessionRef = {
         externalSessionId: "external-pending",
         repoPath: "/repo",
         workingDirectory: "/repo/worktree",
-        taskId: "",
         runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        role: "build",
-        systemPrompt: "",
-      });
+      } as const;
 
-      expect(attachStarted).toBe(true);
-      expect(engine.hasSession("external-pending")).toBe(true);
-      const unsubscribe = engine.subscribeEvents("external-pending", () => {});
-      expect(subscribedExternalSessionIds).toEqual(["external-pending"]);
+      const unsubscribe = engine.subscribeEvents(sessionRef, () => {});
+      expect(subscribedSessionRefs).toEqual([sessionRef]);
 
-      attachDeferred.resolve();
-      await attachPromise;
       unsubscribe();
     } finally {
-      OpencodeSdkAdapter.prototype.attachSession = originalAttachSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
     }
   });

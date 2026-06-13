@@ -25,8 +25,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
-const ensureSessionReadyForView = async (): Promise<boolean> => false;
-const attachRuntimeTranscriptSession = async (): Promise<void> => {};
+const ensureSessionReadyForView = async () => "not_needed" as const;
 
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
@@ -35,10 +34,8 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {
         throw new Error("load failed");
       },
@@ -53,7 +50,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -75,10 +71,8 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -91,7 +85,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -122,10 +115,8 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -138,7 +129,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -166,10 +156,8 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -182,7 +170,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -208,12 +195,10 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView: async () => {
         throw new Error("prepare failed");
       },
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -226,7 +211,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -251,10 +235,8 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit single-session removal without toast wrapping", async () => {
     const removeAgentSession = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -267,7 +249,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession,
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -281,10 +262,8 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit session removals without toast wrapping", async () => {
     const removeAgentSessions = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
+      loadRequestedTaskSessionHistory: async () => {},
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -297,7 +276,6 @@ describe("agent-orchestrator-public-operations", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession,
       removeAgentSession: async () => {},
       removeAgentSessions,
       sessionActions: createSessionActions(),

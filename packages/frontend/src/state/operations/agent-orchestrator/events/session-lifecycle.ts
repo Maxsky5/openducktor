@@ -20,6 +20,7 @@ import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
+import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
 import {
   clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
@@ -286,12 +287,12 @@ const shouldAutoRejectApproval = (
   return runtimeDefinition?.capabilities.approvals.readOnlyAutoRejectSafe === true;
 };
 
-const isLinkedChildApprovalOwnedByAttachedListener = (
+const isLinkedChildApprovalOwnedByActiveListener = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: ApprovalRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  if (!childExternalSessionId || !context.store.isSessionListenerAttached) {
+  if (!childExternalSessionId || !context.store.isSessionListenerActive) {
     return false;
   }
 
@@ -299,7 +300,7 @@ const isLinkedChildApprovalOwnedByAttachedListener = (
     context.store.sessionsRef.current,
     childExternalSessionId,
   );
-  return localChildSessionId ? context.store.isSessionListenerAttached(localChildSessionId) : false;
+  return localChildSessionId ? context.store.isSessionListenerActive(localChildSessionId) : false;
 };
 
 const autoRejectMutatingApproval = (
@@ -345,9 +346,15 @@ const autoRejectMutatingApproval = (
     return;
   }
 
+  const replySession = context.store.sessionsRef.current[replySessionId];
+  if (!replySession) {
+    markManualResponseRequired(new Error(`Session '${replySessionId}' is not loaded.`));
+    return;
+  }
+
   void context.approvals.adapter
     .replyApproval({
-      externalSessionId: replySessionId,
+      ...toRuntimeSessionContextRef(replySession),
       requestId: event.requestId,
       outcome: "reject",
       message: rejectionMessage,
@@ -583,13 +590,13 @@ export const handlePermissionRequired = (
 
   if (isLinkedChildObservedByParent(context, event)) {
     patchParentSubagentSessionLink(context, event);
-    const isOwnedByAttachedListener = isLinkedChildApprovalOwnedByAttachedListener(context, event);
-    if (isOwnedByAttachedListener && shouldAutoRejectApproval(context, role, event)) {
+    const isOwnedByActiveListener = isLinkedChildApprovalOwnedByActiveListener(context, event);
+    if (isOwnedByActiveListener && shouldAutoRejectApproval(context, role, event)) {
       return;
     }
 
     recordParentSubagentPendingApproval(context, event);
-    if (isOwnedByAttachedListener) {
+    if (isOwnedByActiveListener) {
       return;
     }
 

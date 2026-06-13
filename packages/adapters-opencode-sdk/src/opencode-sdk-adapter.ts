@@ -7,10 +7,11 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionPresenceSnapshot,
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentWorkspaceInspectionPort,
-  AttachAgentSessionInput,
   EventUnsubscribe,
   ForkAgentSessionInput,
   ListAgentModelsInput,
@@ -54,6 +55,11 @@ import {
   type SessionEventListeners,
   subscribeSessionEvents,
 } from "./event-emitter";
+import { createEventStreamRuntime } from "./event-stream";
+import {
+  emitHistoryUserMessage,
+  seedHistoryUserMessage,
+} from "./event-stream/message-events/user-emitter";
 import { setSessionActive, setSessionIdle } from "./event-stream/shared";
 import {
   listOpencodeLiveAgentSessionSnapshots,
@@ -72,13 +78,12 @@ import {
   toOpencodeRuntimeClientInput,
 } from "./runtime-connection";
 import {
-  attachSessionToRuntimeEvents,
   clearWorkflowToolCacheForDirectory,
-  detachSessionRuntime,
-  hasSession,
   registerSession,
+  releaseSessionRuntime,
   requireSession,
   stopSessionRuntime,
+  subscribeSessionToRuntimeEvents,
 } from "./session-registry";
 import { toIsoFromEpoch, toSessionInput } from "./session-runtime-utils";
 import type {
@@ -88,6 +93,7 @@ import type {
   OpencodeSdkAdapterOptions,
   RepoRuntimeResolverPort,
   RuntimeEventTransportRecord,
+  SessionInput,
   SessionRecord,
 } from "./types";
 import { WORKFLOW_TOOL_CACHE_TTL_MS } from "./types";
@@ -106,11 +112,32 @@ const requireWorkflowRole = (session: SessionRecord): AgentRole => {
   );
 };
 
-const requireSessionPresenceRuntimeId = (runtimeId: string | null | undefined): string => {
-  if (runtimeId) {
-    return runtimeId;
+const toRestoredSessionInput = (input: AgentSessionRef | AgentSessionRuntimeRef): SessionInput =>
+  toSessionInput({
+    ...input,
+    taskId: "taskId" in input ? input.taskId : "",
+    role: "role" in input ? input.role : null,
+    ...("model" in input && input.model ? { model: input.model } : {}),
+    ...("systemPrompt" in input && input.systemPrompt ? { systemPrompt: input.systemPrompt } : {}),
+  });
+
+const applyRuntimeContextToSession = (
+  session: SessionRecord,
+  input: AgentSessionRuntimeRef,
+): void => {
+  session.input = { ...session.input };
+  session.input.taskId = input.taskId;
+  session.input.role = input.role;
+  if (input.model !== undefined) {
+    if (input.model) {
+      session.input.model = input.model;
+    } else {
+      delete session.input.model;
+    }
   }
-  throw new Error("Runtime session presence requires a live runtime id.");
+  if (input.systemPrompt !== undefined) {
+    session.input.systemPrompt = input.systemPrompt;
+  }
 };
 
 const copySubagentCorrelationState = (source: SessionRecord, target: SessionRecord): void => {
@@ -222,7 +249,7 @@ export class OpencodeSdkAdapter
     return [this.getRuntimeDefinition()];
   }
 
-  private toLocallyAttachedPresenceSnapshot(session: SessionRecord): LiveAgentSessionSnapshot {
+  private toLocalPresenceSnapshot(session: SessionRecord): LiveAgentSessionSnapshot {
     return {
       externalSessionId: session.externalSessionId,
       title: session.input.role
@@ -256,7 +283,7 @@ export class OpencodeSdkAdapter
     };
   }
 
-  private listLocallyAttachedPresenceSnapshots(input: {
+  private listLocalPresenceSnapshots(input: {
     runtimeEndpoint: string;
     repoPath: string;
     runtimeKind: string;
@@ -292,7 +319,7 @@ export class OpencodeSdkAdapter
       }
 
       snapshots.push({
-        ...this.toLocallyAttachedPresenceSnapshot(session),
+        ...this.toLocalPresenceSnapshot(session),
         workingDirectory,
       });
     }
@@ -367,15 +394,25 @@ export class OpencodeSdkAdapter
     });
   }
 
-  async attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary> {
+  async restoreSession(input: AgentSessionRef): Promise<AgentSessionSummary> {
+    return this.restoreSessionState(input);
+  }
+
+  private async restoreSessionState(
+    input: AgentSessionRef | AgentSessionRuntimeRef,
+  ): Promise<AgentSessionSummary> {
     const existing = this.sessions.get(input.externalSessionId);
     if (existing) {
       return existing.summary;
     }
 
-    const runtimeClientInput = await this.resolveRuntimeClientInput(input, "attach session", {
-      requireLive: true,
-    });
+    const runtimeClientInput = await this.resolveRuntimeClientInput(
+      input,
+      "restore session state",
+      {
+        requireLive: true,
+      },
+    );
     const client = this.createClient(runtimeClientInput);
     const detail = await client.session.get({
       directory: input.workingDirectory,
@@ -387,7 +424,13 @@ export class OpencodeSdkAdapter
       this.now,
     );
     const runtimeEndpoint = runtimeClientInput.runtimeEndpoint;
-    const sessionInput = toSessionInput(input);
+    const sessionInput = toRestoredSessionInput(input);
+    let startedMessage = "Restored session";
+    if ("purpose" in input && input.purpose === "transcript") {
+      startedMessage = "Restored transcript session";
+    } else if (sessionInput.role) {
+      startedMessage = `Restored ${sessionInput.role} session`;
+    }
 
     const summary = registerSession({
       sessions: this.sessions,
@@ -398,10 +441,7 @@ export class OpencodeSdkAdapter
       sessionInput,
       client,
       startedAt,
-      startedMessage:
-        input.purpose === "transcript"
-          ? "Attached transcript session"
-          : `Attached ${input.role} session`,
+      startedMessage,
       emitStartedEvent: false,
       subscribeToEvents: false,
       now: this.now,
@@ -411,7 +451,7 @@ export class OpencodeSdkAdapter
 
     try {
       const session = requireSession(this.sessions, input.externalSessionId);
-      attachSessionToRuntimeEvents({
+      subscribeSessionToRuntimeEvents({
         sessions: this.sessions,
         runtimeEventTransports: this.runtimeEventTransports,
         createClient: this.createClient,
@@ -422,16 +462,17 @@ export class OpencodeSdkAdapter
         emit: this.emit.bind(this),
         ...(this.logEvent ? { logEvent: this.logEvent } : {}),
       });
-      await loadAndSeedSessionHistory(this.createClient, this.now, {
+      const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
         runtimeEndpoint,
         workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         session,
       });
+      this.seedRuntimeUserMessagesFromHistory(session, history);
     } catch (error) {
       const session = this.sessions.get(input.externalSessionId);
       if (session) {
-        await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
+        await releaseSessionRuntime(session, this.sessions, this.runtimeEventTransports);
       }
       throw error;
     }
@@ -439,15 +480,15 @@ export class OpencodeSdkAdapter
     return summary;
   }
 
-  async detachSession(externalSessionId: string): Promise<void> {
-    const session = this.sessions.get(externalSessionId);
+  async releaseSession(input: AgentSessionRef): Promise<void> {
+    const session = this.sessions.get(input.externalSessionId);
     if (!session) {
-      clearSessionListeners(this.listeners, externalSessionId);
+      clearSessionListeners(this.listeners, input.externalSessionId);
       return;
     }
 
-    await detachSessionRuntime(session, this.sessions, this.runtimeEventTransports);
-    clearSessionListeners(this.listeners, externalSessionId);
+    await releaseSessionRuntime(session, this.sessions, this.runtimeEventTransports);
+    clearSessionListeners(this.listeners, input.externalSessionId);
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
@@ -506,7 +547,6 @@ export class OpencodeSdkAdapter
       "list session presence",
       { requireLive: true },
     );
-    const runtimeId = requireSessionPresenceRuntimeId(runtimeClientInput.runtimeId);
     const snapshots = await listOpencodeLiveAgentSessionSnapshots({
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
@@ -516,14 +556,14 @@ export class OpencodeSdkAdapter
     const existingExternalSessionIds = new Set(
       snapshots.map((snapshot) => snapshot.externalSessionId),
     );
-    const locallyAttachedSnapshots = this.listLocallyAttachedPresenceSnapshots({
+    const localSnapshots = this.listLocalPresenceSnapshots({
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
       ...(input.directories ? { directories: input.directories } : {}),
       existingExternalSessionIds,
     });
-    return [...snapshots, ...locallyAttachedSnapshots].map((snapshot) =>
+    return [...snapshots, ...localSnapshots].map((snapshot) =>
       toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: {
           repoPath: input.repoPath,
@@ -531,7 +571,6 @@ export class OpencodeSdkAdapter
           workingDirectory: snapshot.workingDirectory,
           externalSessionId: snapshot.externalSessionId,
         },
-        runtimeId,
         snapshot: this.applyLocalActivityToPresenceSnapshot(
           runtimeClientInput.runtimeEndpoint,
           snapshot,
@@ -548,7 +587,6 @@ export class OpencodeSdkAdapter
       "read session presence",
       { requireLive: true },
     );
-    const runtimeId = requireSessionPresenceRuntimeId(runtimeClientInput.runtimeId);
     const snapshots = await listOpencodeLiveAgentSessionSnapshots({
       createClient: this.createClient,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
@@ -573,11 +611,10 @@ export class OpencodeSdkAdapter
         : null;
     const snapshot =
       scannedSnapshot ??
-      (matchingLocalSession ? this.toLocallyAttachedPresenceSnapshot(matchingLocalSession) : null);
+      (matchingLocalSession ? this.toLocalPresenceSnapshot(matchingLocalSession) : null);
     if (!snapshot) {
       return toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: input,
-        runtimeId,
         snapshot: null,
       });
     }
@@ -589,16 +626,11 @@ export class OpencodeSdkAdapter
         ...input,
         workingDirectory: canonicalWorkingDirectory,
       },
-      runtimeId,
       snapshot: this.applyLocalActivityToPresenceSnapshot(
         runtimeClientInput.runtimeEndpoint,
         snapshot,
       ),
     });
-  }
-
-  hasSession(externalSessionId: string): boolean {
-    return hasSession(this.sessions, externalSessionId);
   }
 
   async loadSessionHistory(
@@ -640,9 +672,11 @@ export class OpencodeSdkAdapter
       ...historyInput,
       session: primarySession,
     });
+    this.seedRuntimeUserMessagesFromHistory(primarySession, history);
 
     for (const session of otherSessions) {
       copySubagentCorrelationState(primarySession, session);
+      this.seedRuntimeUserMessagesFromHistory(session, history);
     }
 
     return history;
@@ -722,7 +756,11 @@ export class OpencodeSdkAdapter
   }
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
+    if (!this.sessions.has(input.externalSessionId)) {
+      await this.restoreSessionState(input);
+    }
     const session = requireSession(this.sessions, input.externalSessionId);
+    applyRuntimeContextToSession(session, input);
     setSessionActive(session);
     this.emit(input.externalSessionId, {
       type: "session_status",
@@ -732,11 +770,13 @@ export class OpencodeSdkAdapter
     });
     try {
       const tools = await this.resolveSessionToolSelection(session);
+      const knownUserMessageIds = new Set(session.emittedUserMessageSignatures.keys());
       await sendUserMessage({
         session,
         request: input,
         tools,
       });
+      await this.publishNewRuntimeUserMessagesFromHistory(session, knownUserMessageIds);
     } catch (error) {
       setSessionIdle(session);
       this.emit(input.externalSessionId, {
@@ -762,35 +802,40 @@ export class OpencodeSdkAdapter
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
+    if (!this.sessions.has(input.externalSessionId)) {
+      await this.restoreSessionState(input);
+    }
     const session = requireSession(this.sessions, input.externalSessionId);
+    applyRuntimeContextToSession(session, input);
     await replyApproval(session, input);
     this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
+    if (!this.sessions.has(input.externalSessionId)) {
+      await this.restoreSessionState(input);
+    }
     const session = requireSession(this.sessions, input.externalSessionId);
+    applyRuntimeContextToSession(session, input);
     await replyQuestion(session, input);
     this.clearPendingSubagentInputEvent(input.externalSessionId, input.requestId);
   }
 
-  subscribeEvents(
-    externalSessionId: string,
-    listener: (event: AgentEvent) => void,
-  ): EventUnsubscribe {
-    return subscribeSessionEvents(this.listeners, externalSessionId, listener);
+  subscribeEvents(input: AgentSessionRef, listener: (event: AgentEvent) => void): EventUnsubscribe {
+    return subscribeSessionEvents(this.listeners, input.externalSessionId, listener);
   }
 
-  async stopSession(externalSessionId: string): Promise<void> {
-    const session = requireSession(this.sessions, externalSessionId);
+  async stopSession(input: AgentSessionRef): Promise<void> {
+    const session = requireSession(this.sessions, input.externalSessionId);
     await stopSessionRuntime(session, this.sessions, this.runtimeEventTransports);
 
-    this.emit(externalSessionId, {
+    this.emit(input.externalSessionId, {
       type: "session_finished",
-      externalSessionId,
+      externalSessionId: input.externalSessionId,
       timestamp: this.now(),
       message: "Session stopped",
     });
-    clearSessionListeners(this.listeners, externalSessionId);
+    clearSessionListeners(this.listeners, input.externalSessionId);
   }
 
   async loadSessionDiff(
@@ -815,6 +860,66 @@ export class OpencodeSdkAdapter
 
   private emit(externalSessionId: string, event: AgentEvent): void {
     emitSessionEvent(this.listeners, externalSessionId, event);
+  }
+
+  private createRuntimeEventView(session: SessionRecord) {
+    return createEventStreamRuntime({
+      context: {
+        externalSessionId: session.externalSessionId,
+        input: session.input,
+      },
+      now: this.now,
+      emit: this.emit.bind(this),
+      getSession: (sessionId) => this.sessions.get(sessionId),
+    });
+  }
+
+  private seedRuntimeUserMessagesFromHistory(
+    session: SessionRecord,
+    history: AgentSessionHistoryMessage[],
+  ): void {
+    const runtime = this.createRuntimeEventView(session);
+    if (!runtime) {
+      return;
+    }
+
+    for (const message of history) {
+      if (message.role === "user") {
+        seedHistoryUserMessage(runtime, message);
+      }
+    }
+  }
+
+  private async publishNewRuntimeUserMessagesFromHistory(
+    session: SessionRecord,
+    knownUserMessageIds: ReadonlySet<string>,
+  ): Promise<void> {
+    const runtime = this.createRuntimeEventView(session);
+    if (!runtime) {
+      return;
+    }
+
+    try {
+      const history = await loadAndSeedSessionHistory(this.createClient, this.now, {
+        runtimeEndpoint: session.eventTransportKey,
+        workingDirectory: session.input.workingDirectory,
+        externalSessionId: session.externalSessionId,
+        session,
+      });
+
+      for (const message of history) {
+        if (message.role === "user" && !knownUserMessageIds.has(message.messageId)) {
+          emitHistoryUserMessage(runtime, message);
+        }
+      }
+    } catch (error) {
+      this.emit(session.externalSessionId, {
+        type: "session_error",
+        externalSessionId: session.externalSessionId,
+        timestamp: this.now(),
+        message: `Failed to publish new runtime user messages: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
   }
 
   private clearPendingSubagentInputEvent(externalSessionId: string, requestId: string): void {

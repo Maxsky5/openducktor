@@ -8,7 +8,7 @@ import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { resolveAttachedSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
+import { resolveSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
   SESSION_MODEL_CATALOG_STALE_TIME_MS,
   SESSION_TODOS_STALE_TIME_MS,
@@ -47,7 +47,7 @@ export const useSessionRuntimeData = ({
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
   const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
-    () => resolveAttachedSessionRuntimeQueryState(session),
+    () => resolveSessionRuntimeQueryState(session),
     [session],
   );
   const sessionViewLifecycle = useMemo(

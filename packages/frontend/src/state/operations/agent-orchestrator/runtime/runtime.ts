@@ -16,9 +16,8 @@ import { ensureRuntimeAndInvalidateReadinessQueries } from "../../shared/runtime
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 export type RuntimeInfo = {
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   kind?: string;
-  runtimeId: string | null;
   workingDirectory: string;
 };
 
@@ -174,28 +173,21 @@ export const createEnsureRuntime = ({
       }
       runtimeKind = await loadRepoDefaultRuntimeKind(workspaceId, role, repoConfigLoader);
     }
-    const toRuntimeInfo = (input: {
-      runtimeId: string | null;
-      workingDirectory: string;
-    }): RuntimeInfo => ({
+    const toRuntimeInfo = (workingDirectory: string): RuntimeInfo => ({
       runtimeKind,
-      runtimeId: input.runtimeId,
-      workingDirectory: input.workingDirectory,
+      workingDirectory,
     });
 
     if (role === "build") {
       if (targetWorkingDirectory) {
-        const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+        await ensureRuntimeAndInvalidateReadinessQueries({
           repoPath,
           runtimeKind,
           queryClient,
           ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
             hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
         });
-        return toRuntimeInfo({
-          runtimeId: runtime.runtimeId,
-          workingDirectory: targetWorkingDirectory,
-        });
+        return toRuntimeInfo(targetWorkingDirectory);
       }
 
       const bootstrap: BuildSessionBootstrap = await hostClient.buildStart(
@@ -210,10 +202,7 @@ export const createEnsureRuntime = ({
           tags: { repoPath, taskId, role },
         },
       );
-      return toRuntimeInfo({
-        runtimeId: bootstrap.runtimeId,
-        workingDirectory: bootstrap.workingDirectory,
-      });
+      return toRuntimeInfo(bootstrap.workingDirectory);
     }
 
     if (role === "qa") {
@@ -225,17 +214,14 @@ export const createEnsureRuntime = ({
       if (!workingDirectory) {
         throw new Error(MISSING_BUILD_TARGET_ERROR);
       }
-      const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
+      await ensureRuntimeAndInvalidateReadinessQueries({
         repoPath,
         runtimeKind,
         queryClient,
         ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
           hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
       });
-      return toRuntimeInfo({
-        runtimeId: runtime.runtimeId,
-        workingDirectory,
-      });
+      return toRuntimeInfo(workingDirectory);
     }
 
     const runtime = await ensureRuntimeAndInvalidateReadinessQueries({
@@ -246,9 +232,6 @@ export const createEnsureRuntime = ({
         hostClient.runtimeEnsure(nextRepoPath, nextRuntimeKind),
     });
     const workingDirectory = targetWorkingDirectory || runtime.workingDirectory;
-    return toRuntimeInfo({
-      runtimeId: runtime.runtimeId,
-      workingDirectory,
-    });
+    return toRuntimeInfo(workingDirectory);
   };
 };

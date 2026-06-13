@@ -8,11 +8,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-  type WorkflowAgentSessionSummary,
-} from "@/state/agent-sessions-store";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export {
@@ -106,7 +102,26 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
   return null;
 };
 
-export const resolveAgentStudioSessionSelection = ({
+export type AgentStudioSessionSelectionCandidate = {
+  externalSessionId: string;
+  role: AgentRole | null;
+  startedAt: string;
+  status?: AgentSessionSummary["status"];
+};
+
+type AgentStudioSessionSelectionInput<TSession extends AgentStudioSessionSelectionCandidate> = {
+  sessionsForTask: TSession[];
+  sessionParam: string | null;
+  hasExplicitRoleParam: boolean;
+  roleFromQuery: AgentRole;
+  selectedTask: TaskCard | null;
+  fallbackRole: AgentRole;
+  keepExplicitRoleSessionless?: boolean;
+};
+
+export const resolveAgentStudioSessionSelectionFromCandidates = <
+  TSession extends AgentStudioSessionSelectionCandidate,
+>({
   sessionsForTask,
   sessionParam,
   hasExplicitRoleParam,
@@ -114,18 +129,16 @@ export const resolveAgentStudioSessionSelection = ({
   selectedTask,
   fallbackRole,
   keepExplicitRoleSessionless = false,
-}: {
-  sessionsForTask: AgentSessionSummary[];
-  sessionParam: string | null;
-  hasExplicitRoleParam: boolean;
-  roleFromQuery: AgentRole;
-  selectedTask: TaskCard | null;
-  fallbackRole: AgentRole;
-  keepExplicitRoleSessionless?: boolean;
-}): { activeSession: AgentSessionSummary | null; role: AgentRole } => {
+}: AgentStudioSessionSelectionInput<TSession>): {
+  activeSession: TSession | null;
+  role: AgentRole;
+} => {
   const runningSession =
-    sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
-      if (session.status !== "running" && session.status !== "starting") {
+    sessionsForTask.reduce<TSession | null>((latest, session) => {
+      if (
+        session.role === null ||
+        (session.status !== "running" && session.status !== "starting")
+      ) {
         return latest;
       }
       if (!latest || compareAgentSessionRecency(session, latest) < 0) {
@@ -134,9 +147,9 @@ export const resolveAgentStudioSessionSelection = ({
       return latest;
     }, null) ?? null;
 
-  const latestSessionByRole = (role: AgentRole): WorkflowAgentSessionSummary | null => {
-    return sessionsForTask.reduce<WorkflowAgentSessionSummary | null>((latest, session) => {
-      if (!isWorkflowAgentSessionSummary(session) || session.role !== role) {
+  const latestSessionByRole = (role: AgentRole): TSession | null => {
+    return sessionsForTask.reduce<TSession | null>((latest, session) => {
+      if (session.role !== role) {
         return latest;
       }
       if (!latest || compareAgentSessionRecency(session, latest) < 0) {
@@ -146,7 +159,7 @@ export const resolveAgentStudioSessionSelection = ({
     }, null);
   };
 
-  const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
+  const toSelection = (role: AgentRole, session: TSession | null) => {
     return {
       activeSession: session,
       role,
@@ -156,7 +169,7 @@ export const resolveAgentStudioSessionSelection = ({
   if (sessionParam) {
     const explicitSession =
       sessionsForTask.find((entry) => entry.externalSessionId === sessionParam) ?? null;
-    if (isWorkflowAgentSessionSummary(explicitSession)) {
+    if (explicitSession?.role) {
       return toSelection(explicitSession.role, explicitSession);
     }
     return toSelection(fallbackRole, null);
@@ -169,7 +182,7 @@ export const resolveAgentStudioSessionSelection = ({
     return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 
-  if (isWorkflowAgentSessionSummary(runningSession)) {
+  if (runningSession?.role) {
     return toSelection(runningSession.role, runningSession);
   }
 
@@ -178,20 +191,17 @@ export const resolveAgentStudioSessionSelection = ({
   }
 
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
-  const mostRecentSession = sessionsForTask.reduce<WorkflowAgentSessionSummary | null>(
-    (latest, session) => {
-      if (!isWorkflowAgentSessionSummary(session)) {
-        return latest;
-      }
-      if (!latest || compareAgentSessionRecency(session, latest) < 0) {
-        return session;
-      }
+  const mostRecentSession = sessionsForTask.reduce<TSession | null>((latest, session) => {
+    if (session.role === null) {
       return latest;
-    },
-    null,
-  );
+    }
+    if (!latest || compareAgentSessionRecency(session, latest) < 0) {
+      return session;
+    }
+    return latest;
+  }, null);
 
-  const withRoleFallback = (session: WorkflowAgentSessionSummary | null) =>
+  const withRoleFallback = (session: TSession | null) =>
     toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
 
   switch (selectedTask.status) {
@@ -213,6 +223,11 @@ export const resolveAgentStudioSessionSelection = ({
       return toSelection(defaultRole ?? fallbackRole, null);
   }
 };
+
+export const resolveAgentStudioSessionSelection = (
+  input: AgentStudioSessionSelectionInput<AgentSessionSummary>,
+): { activeSession: AgentSessionSummary | null; role: AgentRole } =>
+  resolveAgentStudioSessionSelectionFromCandidates(input);
 
 export const resolveAgentStudioBuilderSessionsForTask = ({
   taskId,

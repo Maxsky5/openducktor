@@ -13,15 +13,6 @@ const resolveAgentSessionPurpose = (
   return purpose ?? DEFAULT_AGENT_SESSION_PURPOSE;
 };
 
-export const resolveAgentSessionPurposeForLoad = (_input: {
-  requestedSessionId?: string | null;
-  externalSessionId: string;
-  shouldHydrateRequestedSession: boolean;
-  mode?: "bootstrap" | "requested_history" | "reconcile_live" | "recover_runtime_attachment";
-}): AgentSessionPurpose => {
-  return DEFAULT_AGENT_SESSION_PURPOSE;
-};
-
 export const isTranscriptAgentSession = (
   session: Pick<AgentSessionState, "purpose"> | null | undefined,
 ): session is TranscriptAgentSessionState => {

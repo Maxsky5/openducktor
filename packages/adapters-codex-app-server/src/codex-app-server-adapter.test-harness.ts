@@ -1,5 +1,10 @@
 import { mock } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import type {
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
+  SendAgentUserMessageInput,
+} from "@openducktor/core";
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -18,6 +23,41 @@ export const makeRuntimeSummary = (runtimeId: string): RuntimeInstanceSummary =>
   startedAt: "2026-05-07T00:00:00.000Z",
   descriptor: CODEX_RUNTIME_DESCRIPTOR,
 });
+
+export const codexSessionRef = (
+  externalSessionId = "thread/start-runtime-ensure",
+): AgentSessionRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/repo",
+});
+
+export const codexSessionRuntimeRef = (
+  externalSessionId = "thread/start-runtime-ensure",
+  overrides: Partial<AgentSessionRuntimeRef> = {},
+): AgentSessionRuntimeRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "codex",
+  workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "build",
+  systemPrompt: "Use the repo rules.",
+  model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+  ...overrides,
+});
+
+export const codexUserMessageInput = (
+  input: Pick<SendAgentUserMessageInput, "parts"> &
+    Partial<Omit<SendAgentUserMessageInput, "parts">>,
+): SendAgentUserMessageInput => {
+  const { model: _defaultModel, ...base } = codexSessionRuntimeRef(input.externalSessionId);
+  return {
+    ...base,
+    ...input,
+  };
+};
 
 export const createDeferred = <T>() => {
   let resolve: ((value: T | PromiseLike<T>) => void) | null = null;
@@ -395,12 +435,6 @@ export const createHarness = (
     kind: runtimeKind,
     runtimeId: "runtime-live",
   }));
-  const requireRuntimeById = mock(async ({ repoPath, runtimeKind }, runtimeId: string) => ({
-    ...makeRuntimeSummary(runtimeId),
-    repoPath,
-    kind: runtimeKind,
-    runtimeId,
-  }));
   const drainServerRequests = mock(async (_runtimeId: string) => [] as unknown[]);
   const drainNotifications = mock(async (_runtimeId: string) => [] as unknown[]);
   const respondServerRequest = mock(async () => {});
@@ -409,7 +443,6 @@ export const createHarness = (
     repoRuntimeResolver: {
       ensureRepoRuntime,
       requireRepoRuntime,
-      requireRuntimeById,
     },
     transportFactory,
     drainServerRequests,
@@ -424,7 +457,6 @@ export const createHarness = (
     transportFactory,
     ensureRepoRuntime,
     requireRepoRuntime,
-    requireRuntimeById,
     drainServerRequests,
     drainNotifications,
     respondServerRequest,
@@ -444,4 +476,9 @@ export const waitForEvent = async (
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("Timed out waiting for Codex event.");
+};
+
+export const flushCodexAdapterWork = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
 };

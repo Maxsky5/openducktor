@@ -1,15 +1,14 @@
 import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole } from "@openducktor/core";
-import { errorMessage } from "@/lib/errors";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { RuntimeInfo } from "../runtime/runtime";
-import { runOrchestratorTask } from "../support/async-side-effects";
-import { shouldReattachListenerForAttachedSession, throwIfRepoStale } from "../support/core";
+import { throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
+import { type ListenToAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import {
   type AgentSessionPresenceSnapshot,
   applyAgentSessionPresenceSnapshotToSession,
@@ -20,7 +19,6 @@ type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
-  activeWorkspaceRef?: { current: ActiveWorkspace | null };
   currentWorkspaceRepoPathRef: { current: string | null };
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
@@ -30,7 +28,7 @@ type EnsureSessionReadyDependencies = {
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
-  attachSessionListener: (repoPath: string, externalSessionId: string) => void;
+  listenToAgentSession: ListenToAgentSession;
   ensureRuntime: (
     repoPath: string,
     taskId: string,
@@ -48,7 +46,6 @@ type ConfirmedAgentSessionPresenceSnapshot = Extract<
   AgentSessionPresenceSnapshot,
   { presence: "runtime" }
 >;
-type AttachedSessionCleanupAction = "detach" | "stop";
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
 const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
@@ -57,13 +54,12 @@ export const createEnsureSessionReady = ({
   activeWorkspace,
   adapter,
   repoEpochRef,
-  activeWorkspaceRef,
   currentWorkspaceRepoPathRef,
   sessionsRef,
   taskRef,
   unsubscribersRef,
   updateSession,
-  attachSessionListener,
+  listenToAgentSession,
   ensureRuntime,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
@@ -71,12 +67,9 @@ export const createEnsureSessionReady = ({
     externalSessionId: string,
     options?: {
       allowPendingInput?: boolean;
-      preserveStartingStatusForIdlePresence?: boolean;
     },
   ): Promise<void> => {
     const allowPendingInput = options?.allowPendingInput === true;
-    const preserveStartingStatusForIdlePresence =
-      options?.preserveStartingStatusForIdlePresence === true;
     const repoPath = requireActiveRepo(activeWorkspace?.repoPath ?? null);
     const workspaceId = activeWorkspace?.workspaceId;
     if (!workspaceId) {
@@ -84,47 +77,14 @@ export const createEnsureSessionReady = ({
     }
     const repoEpochAtStart = repoEpochRef.current;
     const isStaleRepoOperation = (): boolean => {
-      const currentRepoPath =
-        currentWorkspaceRepoPathRef.current ?? activeWorkspaceRef?.current?.repoPath ?? null;
-      return repoEpochRef.current !== repoEpochAtStart || currentRepoPath !== repoPath;
+      return (
+        repoEpochRef.current !== repoEpochAtStart ||
+        currentWorkspaceRepoPathRef.current !== repoPath
+      );
     };
     const assertNotStale = (): void => {
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
-    const cleanupAttachedSessionOrThrow = async ({
-      action,
-      operation,
-      cleanupErrorMessage,
-      externalSessionId: targetExternalSessionId,
-      taskId,
-      role,
-    }: {
-      action: AttachedSessionCleanupAction;
-      operation: string;
-      cleanupErrorMessage: string;
-      externalSessionId: string;
-      taskId: string;
-      role: AgentSessionState["role"];
-    }): Promise<void> => {
-      try {
-        await runOrchestratorTask(
-          operation,
-          async () => {
-            if (action === "detach") {
-              await adapter.detachSession(targetExternalSessionId);
-              return;
-            }
-            await adapter.stopSession(targetExternalSessionId);
-          },
-          {
-            tags: { repoPath, externalSessionId: targetExternalSessionId, taskId, role },
-          },
-        );
-      } catch (error) {
-        throw new Error(`${cleanupErrorMessage}: ${errorMessage(error)}`, { cause: error });
-      }
-    };
-
     const removeSessionUnsubscriber = (targetExternalSessionId: string): void => {
       const existingUnsubscriber = unsubscribersRef.current.get(targetExternalSessionId);
       if (!existingUnsubscriber) {
@@ -156,19 +116,21 @@ export const createEnsureSessionReady = ({
         externalSessionId,
       });
     };
-    const applyConfirmedSessionPresenceSnapshot = (
+    const applyConfirmedSessionPresenceSnapshot = async (
       snapshot: ConfirmedAgentSessionPresenceSnapshot,
       {
-        shouldAttachListener,
+        session,
+        shouldListen,
         promptOverrides,
         persistFalse = false,
       }: {
-        shouldAttachListener: boolean;
+        session: WorkflowAgentSessionState;
+        shouldListen: boolean;
         promptOverrides?: RepoPromptOverrides;
         persistFalse?: boolean;
       },
-    ): void => {
-      const applyOptions = { preserveStartingStatusForIdlePresence };
+    ): Promise<void> => {
+      const applyOptions: Parameters<typeof applyAgentSessionPresenceSnapshotToSession>[2] = {};
       if (promptOverrides) {
         Object.assign(applyOptions, { promptOverrides });
       }
@@ -178,8 +140,10 @@ export const createEnsureSessionReady = ({
         (current) => applyAgentSessionPresenceSnapshotToSession(current, snapshot, applyOptions),
         persistFalse ? { persist: false } : undefined,
       );
-      if (shouldAttachListener) {
-        attachSessionListener(repoPath, snapshot.ref.externalSessionId);
+      if (shouldListen) {
+        listenToAgentSession(
+          toRuntimeSessionRef(sessionsRef.current[externalSessionId] ?? session),
+        );
       }
       if (!allowPendingInput && sessionPresenceHasPendingInput(snapshot)) {
         throw new Error(PENDING_INPUT_NOT_READY_ERROR);
@@ -199,22 +163,18 @@ export const createEnsureSessionReady = ({
         return;
       }
 
-      await cleanupAttachedSessionOrThrow({
-        action: "stop",
-        operation: "ensure-ready-stop-session-after-stale-resume",
-        cleanupErrorMessage: `${STALE_PREPARE_ERROR} Failed to stop stale resumed session '${externalSessionId}'`,
+      await adapter.stopSession({
+        repoPath,
         externalSessionId,
-        taskId: session.taskId,
-        role: session.role,
+        runtimeKind: requireSessionRuntimeKindForPersistence(session),
+        workingDirectory: session.workingDirectory,
       });
       throw new Error(STALE_PREPARE_ERROR);
     };
     const resumeSessionAndReadPresence = async ({
-      promptContext,
       requestedRuntimeKind,
       runtime,
     }: {
-      promptContext: Awaited<ReturnType<typeof loadSessionPromptContext>>;
       requestedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
       runtime: Awaited<ReturnType<typeof ensureRuntime>>;
     }): Promise<Awaited<ReturnType<typeof readSessionPresenceSnapshot>>> => {
@@ -225,7 +185,6 @@ export const createEnsureSessionReady = ({
         workingDirectory: runtime.workingDirectory,
         taskId: session.taskId,
         role: session.role,
-        systemPrompt: promptContext.systemPrompt,
         ...(session.selectedModel ? { model: session.selectedModel } : {}),
       });
       await cleanupStaleResumedSessionIfNeeded();
@@ -237,57 +196,27 @@ export const createEnsureSessionReady = ({
       });
     };
 
-    if (adapter.hasSession(externalSessionId)) {
-      if (session.status !== "error") {
-        const attachedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
-        const attachedWorkingDirectory = session.workingDirectory;
-        const shouldAttachListener = shouldReattachListenerForAttachedSession(
-          session.status,
-          unsubscribersRef.current.has(externalSessionId),
-        );
-
-        const sessionPresence = await readSessionPresenceSnapshot({
-          runtimeKind: attachedRuntimeKind,
-          workingDirectory: attachedWorkingDirectory,
-          externalSessionId: session.externalSessionId,
-        });
-        assertNotStale();
-        if (sessionPresence.presence === "runtime") {
-          applyConfirmedSessionPresenceSnapshot(sessionPresence, {
-            shouldAttachListener,
-            persistFalse: true,
-          });
-          return;
-        }
-        await cleanupAttachedSessionOrThrow({
-          action: "detach",
-          operation: "ensure-ready-detach-missing-attached-session",
-          cleanupErrorMessage: `Failed to detach stale attached session '${externalSessionId}' before preparing it`,
-          externalSessionId,
-          taskId: session.taskId,
-          role: session.role,
-        });
-        removeSessionUnsubscriber(externalSessionId);
-        updateSession(
-          externalSessionId,
-          (current) =>
-            applyAgentSessionPresenceSnapshotToSession(current, sessionPresence, {
-              missingSessionRuntimeId: null,
-            }),
-          { persist: false },
-        );
-        assertNotStale();
-        throw new Error(`Runtime did not report attached session '${externalSessionId}'.`);
-      }
-      await cleanupAttachedSessionOrThrow({
-        action: "stop",
-        operation: "ensure-ready-stop-attached-error-session",
-        cleanupErrorMessage: `Failed to stop attached error session '${externalSessionId}' before preparing it`,
-        externalSessionId,
-        taskId: session.taskId,
-        role: session.role,
+    if (session.status !== "error") {
+      const storedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
+      const sessionPresence = await readSessionPresenceSnapshot({
+        runtimeKind: storedRuntimeKind,
+        workingDirectory: session.workingDirectory,
+        externalSessionId: session.externalSessionId,
       });
-      removeSessionUnsubscriber(externalSessionId);
+      assertNotStale();
+      if (sessionPresence.presence === "runtime") {
+        await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
+          session,
+          shouldListen: !unsubscribersRef.current.has(externalSessionId),
+          persistFalse: true,
+        });
+        return;
+      }
+      updateSession(
+        externalSessionId,
+        (current) => applyAgentSessionPresenceSnapshotToSession(current, sessionPresence),
+        { persist: false },
+      );
       assertNotStale();
     }
 
@@ -311,20 +240,17 @@ export const createEnsureSessionReady = ({
     });
     assertNotStale();
     const sessionPresence = await resumeSessionAndReadPresence({
-      promptContext,
       requestedRuntimeKind,
       runtime,
     });
     assertNotStale();
 
     if (sessionPresence.presence !== "runtime") {
-      await cleanupAttachedSessionOrThrow({
-        action: "stop",
-        operation: "ensure-ready-stop-missing-live-session-after-resume",
-        cleanupErrorMessage: `Failed to stop resumed session '${externalSessionId}' after live snapshot was stale`,
+      await adapter.stopSession({
+        repoPath,
         externalSessionId,
-        taskId: session.taskId,
-        role: session.role,
+        runtimeKind: requestedRuntimeKind,
+        workingDirectory: runtime.workingDirectory,
       });
       throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
@@ -332,8 +258,9 @@ export const createEnsureSessionReady = ({
     assertNotStale();
 
     removeSessionUnsubscriber(externalSessionId);
-    applyConfirmedSessionPresenceSnapshot(sessionPresence, {
-      shouldAttachListener: true,
+    await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
+      session,
+      shouldListen: true,
       promptOverrides: promptContext.promptOverrides,
     });
 

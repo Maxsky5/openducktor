@@ -10,6 +10,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
+  AgentSessionReadModelStateContextValue,
   AgentStateContextValue,
   ChecksStateContextValue,
   DelegationStateContextValue,
@@ -30,6 +31,7 @@ import {
   TasksStateContext,
   useActiveWorkspaceContext,
   useAgentOperationsContext,
+  useAgentSessionReadModelStateContext,
   useAgentSessionsContext,
   useRequiredContext,
   useWorkspaceBranchStateContext,
@@ -125,6 +127,9 @@ export const useSpecState = (): SpecStateContextValue =>
 
 export const useAgentOperations = (): AgentOperationsContextValue => useAgentOperationsContext();
 
+export const useAgentSessionReadModelState = (): AgentSessionReadModelStateContextValue =>
+  useAgentSessionReadModelStateContext();
+
 export const useAgentSessions = (): AgentStateContextValue["sessions"] => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
@@ -164,6 +169,7 @@ export const useAgentSession = (externalSessionId: string | null): AgentSessionS
 export const useAgentState = (): AgentStateContextValue => {
   const sessionStore = useRequiredContext(AgentSessionsContext, "useAgentState");
   const operations = useRequiredContext(AgentOperationsContext, "useAgentState");
+  const readModelState = useAgentSessionReadModelStateContext();
   const sessions = useSyncExternalStore(
     sessionStore.subscribe,
     sessionStore.getSessionsSnapshot,
@@ -173,8 +179,9 @@ export const useAgentState = (): AgentStateContextValue => {
   return useMemo(
     () => ({
       sessions,
+      ...readModelState,
       ...operations,
     }),
-    [operations, sessions],
+    [operations, readModelState, sessions],
   );
 };

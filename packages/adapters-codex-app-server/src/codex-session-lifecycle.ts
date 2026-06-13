@@ -1,13 +1,15 @@
 import type {
   AgentModelSelection,
   AgentRole,
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
   AgentSessionSummary,
-  AttachAgentSessionInput,
   ForkAgentSessionInput,
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
 import {
+  codexThreadStatusSnapshot,
   extractThreadId,
   requireThreadSnapshotFromReadResponse,
   toSessionSummary,
@@ -23,12 +25,13 @@ type SessionInput =
   | StartAgentSessionInput
   | ResumeAgentSessionInput
   | ForkAgentSessionInput
-  | AttachAgentSessionInput;
+  | AgentSessionRuntimeRef
+  | AgentSessionRef;
 
 type SessionStateInput = SessionInput & {
-  role: AgentRole | null;
-  systemPrompt: string;
-  taskId: string;
+  role?: AgentRole | null;
+  systemPrompt?: string;
+  taskId?: string;
 };
 
 const buildSessionState = (
@@ -40,13 +43,13 @@ const buildSessionState = (
 ): CodexSessionState => ({
   summary,
   ...(model ? { model } : {}),
-  systemPrompt: input.systemPrompt,
-  role: input.role,
+  systemPrompt: input.systemPrompt ?? "",
+  role: input.role ?? null,
   runtimeId,
   repoPath: input.repoPath,
   threadId: summary.externalSessionId,
   workingDirectory: input.workingDirectory,
-  taskId: input.taskId,
+  taskId: input.taskId ?? "",
   ...(liveStatus ? { liveStatus } : {}),
 });
 
@@ -65,7 +68,7 @@ export const sessionStateFromThreadStart = (
     role: input.role,
     status: "running",
   });
-  return buildSessionState(input, summary, runtimeId, model);
+  return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
 };
 
 export const sessionStateFromThreadResume = (
@@ -90,15 +93,19 @@ export const sessionStateFromThreadFork = (
     role: input.role,
     status: "running",
   });
-  return buildSessionState(input, summary, runtimeId, model);
+  return buildSessionState(input, summary, runtimeId, model, codexThreadStatusSnapshot("active"));
 };
 
-export const sessionStateFromThreadAttach = (
-  input: AttachAgentSessionInput,
+export const sessionStateFromThreadRestore = (
+  input: AgentSessionRef | AgentSessionRuntimeRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
-): CodexSessionState => sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
+): CodexSessionState => {
+  const session = sessionStateFromThreadResumeResponse(input, runtimeId, model, response);
+  delete session.liveStatus;
+  return session;
+};
 
 type SessionScopedMap = {
   delete(key: string): boolean;
@@ -172,7 +179,7 @@ export const clearLocalSessionState = (
 };
 
 const sessionStateFromThreadResumeResponse = (
-  input: ResumeAgentSessionInput | AttachAgentSessionInput,
+  input: ResumeAgentSessionInput | AgentSessionRuntimeRef | AgentSessionRef,
   runtimeId: string,
   model: AgentModelSelection | undefined,
   response: CodexThreadResumeResult,
@@ -187,7 +194,7 @@ const sessionStateFromThreadResumeResponse = (
     externalSessionId,
     startedAt: startedAt ?? threadSnapshot.startedAt,
     title: threadSnapshot.title,
-    role: input.role,
+    role: "role" in input ? input.role : null,
     status: threadSnapshot.status.agentSessionStatus,
   });
   return buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);

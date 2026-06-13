@@ -23,7 +23,7 @@ let latestDialogProps: {
 } | null = null;
 
 const transcriptSource: RuntimeSessionTranscriptSource = {
-  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
+  runtimeKind: "opencode",
   workingDirectory: "/repo-a",
 };
 
@@ -305,7 +305,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
         })}
         sessionAgentColors={{}}
         sessionRuntimeKind="opencode"
-        sessionRuntimeRef={{ kind: "opencode", runtimeId: "runtime-1" }}
         sessionWorkingDirectory="/repo-a"
         subagentPendingApprovals={[pendingApproval]}
         subagentPendingApprovalCount={1}
@@ -323,9 +322,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
       expect(latestDialogProps).toMatchObject({
         externalSessionId: "session-child-1",
         source: {
-          runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
+          runtimeKind: "opencode",
           workingDirectory: "/repo-a",
-          isLive: true,
           pendingApprovals: [pendingApproval],
           pendingQuestions: [pendingQuestion],
         },
@@ -335,7 +333,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
     });
   });
 
-  test("opens a linked subagent transcript from a Planner thread with its runtime ref", async () => {
+  test("opens a linked subagent transcript from a Planner thread with its runtime kind", async () => {
     const { AgentSessionTranscriptDialogHost } = await import(
       "./use-agent-session-transcript-dialog"
     );
@@ -357,7 +355,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
           session: buildSession({
             role: "planner",
             runtimeKind: "opencode",
-            runtimeId: "runtime-planner-1",
             workingDirectory: "/repo-a",
             messages: [
               buildMessage("system", "Subagent (explorer): read file", {
@@ -387,9 +384,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
       expect(latestDialogProps).toMatchObject({
         externalSessionId: "session-child-planner-1",
         source: {
-          runtimeRef: { kind: "opencode", runtimeId: "runtime-planner-1" },
+          runtimeKind: "opencode",
           workingDirectory: "/repo-a",
-          isLive: true,
         },
         title: "Subagent activity",
         description: "View what this subagent did.",

@@ -101,7 +101,7 @@ const agentSessionRecordShape = {
   role: agentSessionRoleSchema,
   startedAt: z.string(),
   runtimeKind: runtimeKindSchema,
-  workingDirectory: z.string(),
+  workingDirectory: nonEmptyStringSchema,
   selectedModel: z.preprocess(
     (value) => (value === undefined ? null : value),
     agentSessionModelSelectionSchema.nullable(),

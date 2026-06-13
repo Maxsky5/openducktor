@@ -1,25 +1,24 @@
-import type { AgentSessionRecord, RuntimeKind, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import type { AgentSessionHistoryPreludeMode, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
+  AgentSessionReadModelStateContextValue,
   AgentStateContextValue,
 } from "@/types/state-slices";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import { useAgentSessionHydration } from "./hooks/use-agent-session-hydration";
+import { useAgentSessionHistory } from "./hooks/use-agent-session-history";
 import { useAgentSessionListeners } from "./hooks/use-agent-session-listeners";
 import { useAgentSessionMutations } from "./hooks/use-agent-session-mutations";
 import { useAgentSessionReaders } from "./hooks/use-agent-session-readers";
 import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
-import { useRepoSessionHydrationEffects } from "./hooks/use-repo-session-hydration-effects";
-import { useRuntimeTranscriptAttachment } from "./hooks/use-runtime-transcript-attachment";
-import { createLoadAgentSessions } from "./lifecycle/load-sessions";
-import { prepareRepoSessionPresencePreloads } from "./lifecycle/repo-session-presence-preloads";
+import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
+import { createLoadAgentSessionHistory, createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -34,7 +33,6 @@ type UseAgentOrchestratorOperationsArgs = {
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
   agentEngine: AgentEnginePort;
-  isSessionRuntimeReady: (runtimeKind: RuntimeKind) => boolean;
   /**
    * Optional dependency seam for tests and specialized callers.
    * Pass a stable reference, such as a module-level object or a `useMemo` result;
@@ -49,16 +47,9 @@ type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
       | Record<string, AgentSessionState>
       | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
   ) => void;
-  retrySessionRuntimeAttachment: (input: {
-    taskId: string;
-    externalSessionId: string;
-    recoveryDedupKey?: string | null;
-    historyPreludeMode?: AgentSessionHistoryPreludeMode;
-    allowLiveSessionResume?: boolean;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<boolean>;
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
+  readModelState: AgentSessionReadModelStateContextValue;
 };
 
 export function useAgentOrchestratorOperations({
@@ -66,10 +57,10 @@ export function useAgentOrchestratorOperations({
   tasks,
   refreshTaskData,
   agentEngine,
-  isSessionRuntimeReady,
   dependencies,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const [sessionReadModelError, setSessionReadModelError] = useState<string | null>(null);
   const resolvedDependencies = useMemo(
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
     [dependencies],
@@ -79,7 +70,7 @@ export function useAgentOrchestratorOperations({
     activeWorkspace,
     tasks,
   });
-  const { sessionsRef, unsubscribersRef } = refBridges;
+  const { sessionsRef } = refBridges;
   const sessionCacheEffects = useMemo(
     () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
     [workspaceRepoPath, queryClient, hostPort],
@@ -94,7 +85,7 @@ export function useAgentOrchestratorOperations({
     commitSessions,
     persistSessionRecord,
   });
-  const { attachSessionListener, removeAgentSession, removeAgentSessions, removeSessionIds } =
+  const { listenToAgentSession, removeAgentSession, removeAgentSessions } =
     useAgentSessionListeners({
       agentEngine,
       refBridges,
@@ -104,15 +95,6 @@ export function useAgentOrchestratorOperations({
       ...turnTiming,
       refreshTaskData,
     });
-  const attachRuntimeTranscriptSession = useRuntimeTranscriptAttachment({
-    agentEngine,
-    sessionsRef,
-    unsubscribersRef,
-    commitSessions,
-    updateSession,
-    attachSessionListener,
-    removeSessionIds,
-  });
   const queryBackedPromptOverrides = useCallback(
     (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
     [queryClient],
@@ -123,50 +105,47 @@ export function useAgentOrchestratorOperations({
         activeWorkspace,
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
-        activeWorkspaceRef: refBridges.activeWorkspaceRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-        sessionsRef: refBridges.sessionsRef,
         setSessionsById: commitSessions,
-        taskRef: refBridges.taskRef,
         updateSession,
-        attachSessionListener,
-        loadRepoPromptOverrides: queryBackedPromptOverrides,
-        loadTaskDocuments,
+        listenToAgentSession,
         queryClient,
       }),
     [
       activeWorkspace,
       agentEngine,
-      attachSessionListener,
+      listenToAgentSession,
       commitSessions,
-      queryBackedPromptOverrides,
       queryClient,
       refBridges,
       updateSession,
     ],
   );
-  const { sessionHydration, retrySessionRuntimeAttachment, ensureSessionReadyForView } =
-    useAgentSessionHydration({
-      loadAgentSessions,
-      sessionsRef,
-      updateSession,
-    });
-  const prepareSessionPresencePreloads = useCallback(
-    ({ repoPath, records }: { repoPath: string; records: AgentSessionRecord[] }) =>
-      prepareRepoSessionPresencePreloads({
-        repoPath,
-        records,
-        listSessionPresence: (input) => agentEngine.listSessionPresence(input),
+  const loadAgentSessionHistory = useMemo(
+    () =>
+      createLoadAgentSessionHistory({
+        activeWorkspace,
+        adapter: agentEngine,
+        repoEpochRef: refBridges.repoEpochRef,
+        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
+        updateSession,
+        queryClient,
       }),
-    [agentEngine],
+    [activeWorkspace, agentEngine, queryClient, refBridges, updateSession],
   );
-  useRepoSessionHydrationEffects({
+  const { loadRequestedTaskSessionHistory, ensureSessionReadyForView } = useAgentSessionHistory({
+    loadAgentSessionHistory,
+    sessionsRef,
+  });
+  useRepoSessionReadModelEffects({
     workspaceRepoPath,
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-    sessionHydration,
-    prepareRepoSessionPresencePreloads: prepareSessionPresencePreloads,
-    isSessionRuntimeReady,
+    commitSessions,
+    updateSession,
+    agentEngine,
+    listenToAgentSession,
+    setSessionReadModelError,
   });
   const ensureRuntime = useMemo(
     () =>
@@ -189,7 +168,6 @@ export function useAgentOrchestratorOperations({
         sessionsRef: refBridges.sessionsRef,
         taskRef: refBridges.taskRef,
         repoEpochRef: refBridges.repoEpochRef,
-        activeWorkspaceRef: refBridges.activeWorkspaceRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
         unsubscribersRef: refBridges.unsubscribersRef,
@@ -197,7 +175,7 @@ export function useAgentOrchestratorOperations({
         turnUserAnchorAtBySessionRef: refBridges.turnUserAnchorAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
-        attachSessionListener,
+        listenToAgentSession,
         resolveTaskWorktree: hostPort.taskWorktreeGet,
         ensureRuntime,
         loadTaskDocuments,
@@ -212,7 +190,7 @@ export function useAgentOrchestratorOperations({
     [
       activeWorkspace,
       agentEngine,
-      attachSessionListener,
+      listenToAgentSession,
       commitSessions,
       ensureRuntime,
       hostPort,
@@ -229,14 +207,12 @@ export function useAgentOrchestratorOperations({
   const readers = useAgentSessionReaders(agentEngine);
 
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
+    const readModelState = { sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
-      bootstrapTaskSessions: sessionHydration.bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory: sessionHydration.hydrateRequestedTaskSession,
+      loadRequestedTaskSessionHistory: loadRequestedTaskSessionHistory,
       ensureSessionReadyForView,
-      reconcileLiveTaskSessions: sessionHydration.reconcileLiveTaskSessions,
       loadAgentSessions,
       ...readers,
-      attachRuntimeTranscriptSession,
       removeAgentSession,
       removeAgentSessions,
       sessionActions,
@@ -246,20 +222,20 @@ export function useAgentOrchestratorOperations({
       get sessions() {
         return sessionStore.getSessionsSnapshot();
       },
+      ...readModelState,
       ...operations,
       commitSessions,
-      retrySessionRuntimeAttachment,
       sessionStore,
       operations,
+      readModelState,
     };
   }, [
+    sessionReadModelError,
     sessionStore,
-    sessionHydration,
+    loadRequestedTaskSessionHistory,
     commitSessions,
     loadAgentSessions,
     readers,
-    attachRuntimeTranscriptSession,
-    retrySessionRuntimeAttachment,
     ensureSessionReadyForView,
     removeAgentSessions,
     removeAgentSession,

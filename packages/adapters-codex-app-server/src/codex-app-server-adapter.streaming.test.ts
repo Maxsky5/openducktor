@@ -1,5 +1,22 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createHarness } from "./codex-app-server-adapter.test-harness";
+import {
+  codexSessionRef,
+  codexSessionRuntimeRef,
+  codexUserMessageInput,
+  createHarness,
+  flushCodexAdapterWork,
+} from "./codex-app-server-adapter.test-harness";
+import type { CodexAppServerAdapter } from "./index";
+
+const restoreSessionState = async (
+  adapter: CodexAppServerAdapter,
+  externalSessionId: string,
+): Promise<() => void> => {
+  await adapter.restoreSession(codexSessionRef(externalSessionId));
+  const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef(externalSessionId), () => {});
+  await flushCodexAdapterWork();
+  return unsubscribe;
+};
 
 describe("CodexAppServerAdapter streaming", () => {
   test("emits transcript events from Codex notifications", async () => {
@@ -17,7 +34,9 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+      events.push(event),
+    );
     drainNotifications.mockImplementationOnce(async () => {
       transports.get("runtime-ensure")?.turnStartDeferred.resolve({ turn: { id: "turn-1" } });
       return [
@@ -168,11 +187,13 @@ describe("CodexAppServerAdapter streaming", () => {
       ];
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Hello Codex" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Hello Codex" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -337,7 +358,9 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+      events.push(event),
+    );
     drainNotifications.mockImplementationOnce(async () => {
       transports.get("runtime-ensure")?.turnStartDeferred.resolve({ turn: { id: "turn-tools" } });
       return [
@@ -429,11 +452,13 @@ describe("CodexAppServerAdapter streaming", () => {
       ];
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Use tools" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Use tools" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     const toolParts = events
       .filter(
@@ -488,7 +513,9 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+      events.push(event),
+    );
     drainNotifications.mockImplementationOnce(async () => {
       setTimeout(() => {
         transports.get("runtime-ensure")?.turnStartDeferred.resolve({
@@ -526,11 +553,13 @@ describe("CodexAppServerAdapter streaming", () => {
       ];
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Use shallow reasoning" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Use shallow reasoning" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     const assistantMessage = events.find(
       (event) =>
@@ -561,7 +590,9 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+      events.push(event),
+    );
     drainNotifications.mockImplementationOnce(async () => {
       adapter.updateSessionModel({
         externalSessionId: "thread/start-runtime-ensure",
@@ -587,11 +618,13 @@ describe("CodexAppServerAdapter streaming", () => {
       ];
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Use the original turn model" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Use the original turn model" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     const userMessage = events.find(
       (event) =>
@@ -633,16 +666,20 @@ describe("CodexAppServerAdapter streaming", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+      events.push(event),
+    );
     transports.get("runtime-ensure")?.turnStartDeferred.resolve({
       turn: { id: "turn-1", status: "completed" },
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Hello Codex" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Hello Codex" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     expect(events).not.toContainEqual(
       expect.objectContaining({ messageId: "agent-foreign", message: "Wrong session" }),
@@ -667,11 +704,13 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     await expect(
-      adapter.sendUserMessage({
-        externalSessionId: "thread/start-runtime-ensure",
-        parts: [{ kind: "text", text: "Hello Codex" }],
-        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-      }),
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: "thread/start-runtime-ensure",
+          parts: [{ kind: "text", text: "Hello Codex" }],
+          model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+        }),
+      ),
     ).resolves.toBeUndefined();
 
     await expect(
@@ -716,16 +755,20 @@ describe("CodexAppServerAdapter streaming", () => {
       turn: { id: "turn-active", status: "running" },
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Start now" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Also inspect failing tests" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Start now" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Also inspect failing tests" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     expect(transports.get("runtime-ensure")?.calls).toContainEqual({
       method: "turn/steer",
@@ -758,15 +801,18 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      (event) => events.push(event),
     );
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Hello streamed Codex" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Hello streamed Codex" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     streamListeners[0]?.({
       runtimeId: "runtime-ensure",
@@ -818,21 +864,24 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      (event) => events.push(event),
     );
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [
-        { kind: "text", text: "Inspect" },
-        {
-          kind: "file_reference",
-          file: { id: "file-1", path: "/repo/src/app.ts", name: "app.ts", kind: "code" },
-        },
-      ],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [
+          { kind: "text", text: "Inspect" },
+          {
+            kind: "file_reference",
+            file: { id: "file-1", path: "/repo/src/app.ts", name: "app.ts", kind: "code" },
+          },
+        ],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     streamListeners[0]?.({
       runtimeId: "runtime-ensure",
@@ -896,25 +945,28 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      (event) => events.push(event),
     );
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [
-        { kind: "text", text: "Tell me the purpose of " },
-        {
-          kind: "skill_mention",
-          skill: {
-            id: "/skills/address-pr-comments/SKILL.md",
-            name: "address-pr-comments",
-            path: "/skills/address-pr-comments/SKILL.md",
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [
+          { kind: "text", text: "Tell me the purpose of " },
+          {
+            kind: "skill_mention",
+            skill: {
+              id: "/skills/address-pr-comments/SKILL.md",
+              name: "address-pr-comments",
+              path: "/skills/address-pr-comments/SKILL.md",
+            },
           },
-        },
-      ],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+        ],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     streamListeners[0]?.({
       runtimeId: "runtime-ensure",
@@ -978,27 +1030,30 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", (event) =>
-      events.push(event),
+    const unsubscribe = adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      (event) => events.push(event),
     );
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [
-        { kind: "text", text: "Inspect this screenshot" },
-        {
-          kind: "attachment",
-          attachment: {
-            id: "attachment-1",
-            kind: "image",
-            name: "Screenshot 2026-05-20 at 21.01.45.png",
-            path: "/tmp/openducktor-local-attachments/staged-screenshot.png",
-            mime: "image/png",
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [
+          { kind: "text", text: "Inspect this screenshot" },
+          {
+            kind: "attachment",
+            attachment: {
+              id: "attachment-1",
+              kind: "image",
+              name: "Screenshot 2026-05-20 at 21.01.45.png",
+              path: "/tmp/openducktor-local-attachments/staged-screenshot.png",
+              mime: "image/png",
+            },
           },
-        },
-      ],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+        ],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1028,16 +1083,8 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    await adapter.attachSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-saved",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    const unsubscribeRestoredListener = await restoreSessionState(adapter, "thread-saved");
+    unsubscribeRestoredListener();
 
     streamListeners[0]?.({
       runtimeId: "runtime-live",
@@ -1085,7 +1132,9 @@ describe("CodexAppServerAdapter streaming", () => {
     await Promise.resolve();
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
+      events.push(event),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1122,17 +1171,10 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter } = createHarness({ subscribeEvents });
     const events: unknown[] = [];
 
-    await adapter.attachSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-saved",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    const unsubscribe = adapter.subscribeEvents("thread-saved", (event) => events.push(event));
+    await restoreSessionState(adapter, "thread-saved");
+    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
+      events.push(event),
+    );
 
     streamListeners[0]?.({
       runtimeId: "runtime-live",
@@ -1198,7 +1240,9 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents("thread/start-runtime-ensure", (event) => events.push(event));
+    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+      events.push(event),
+    );
     drainNotifications.mockImplementationOnce(async () => {
       transports.get("runtime-ensure")?.turnStartDeferred.resolve({ turn: { id: "turn-todos" } });
       return [
@@ -1231,11 +1275,13 @@ describe("CodexAppServerAdapter streaming", () => {
       ];
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Update todos" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        parts: [{ kind: "text", text: "Update todos" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({

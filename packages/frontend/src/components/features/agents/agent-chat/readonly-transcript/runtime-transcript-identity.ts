@@ -11,11 +11,11 @@ export function getRuntimeTranscriptIdentityKey({
   externalSessionId,
   source,
 }: RuntimeTranscriptIdentityInput): string | null {
-  if (!externalSessionId && !source?.runtimeRef.runtimeId) {
+  if (!externalSessionId && !source?.runtimeKind) {
     return null;
   }
 
-  return [externalSessionId ?? "", source?.runtimeRef.runtimeId ?? ""].join(
+  return [externalSessionId ?? "", source?.runtimeKind ?? "", source?.workingDirectory ?? ""].join(
     TRANSCRIPT_IDENTITY_SEPARATOR,
   );
 }

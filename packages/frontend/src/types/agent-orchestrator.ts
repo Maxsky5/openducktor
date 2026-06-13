@@ -3,7 +3,6 @@ import type {
   FileContent,
   FileDiff,
   RepoPromptOverrides,
-  RuntimeInstanceSummary,
   RuntimeKind,
 } from "@openducktor/contracts";
 import type {
@@ -11,7 +10,6 @@ import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
-  AgentSessionPresenceSnapshot,
   AgentSessionTodoItem,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
@@ -22,13 +20,11 @@ import type {
 /**
  * Defines when a newly-created local session may leave its initial `starting` state.
  *
- * - `after_listener_attach`: mark the session idle as soon as the runtime listener is attached.
+ * - `after_listener_start`: mark the session idle as soon as the runtime listener starts.
  * - `after_first_send_attempt`: keep the session visibly starting until the kickoff/send path
  *   either marks it running or settles it back to idle/error.
  */
-export type InitialSessionStatusReleasePolicy =
-  | "after_listener_attach"
-  | "after_first_send_attempt";
+export type InitialSessionStatusReleasePolicy = "after_listener_start" | "after_first_send_attempt";
 
 export type AgentChatMessageMeta =
   | {
@@ -163,19 +159,7 @@ export type AgentSessionContextUsage = {
   profileId?: string;
 };
 
-export type AgentSessionHistoryHydrationState =
-  | "not_requested"
-  | "hydrating"
-  | "hydrated"
-  | "failed";
-
-export type AgentSessionHistoryPreludeMode = "task_context" | "none";
-
-export type AgentSessionRuntimeRecoveryState =
-  | "idle"
-  | "waiting_for_runtime"
-  | "recovering_runtime"
-  | "failed";
+export type AgentSessionHistoryLoadState = "not_requested" | "loading" | "loaded" | "failed";
 
 export type AgentSessionPurpose = "primary" | "transcript";
 
@@ -185,14 +169,12 @@ export type AgentSessionState = {
   title?: string;
   taskId: string;
   repoPath: string;
-  runtimeKind?: RuntimeKind;
+  runtimeKind: RuntimeKind;
   role: AgentRole | null;
   status: "starting" | "running" | "idle" | "error" | "stopped";
   startedAt: string;
-  runtimeId: string | null;
   workingDirectory: string;
-  historyHydrationState?: AgentSessionHistoryHydrationState;
-  runtimeRecoveryState?: AgentSessionRuntimeRecoveryState;
+  historyLoadState?: AgentSessionHistoryLoadState;
   messages: AgentSessionMessages;
   draftAssistantText: string;
   draftAssistantMessageId: string | null;
@@ -218,25 +200,21 @@ export type WorkflowAgentSessionState = AgentSessionState & {
   role: AgentRole;
 };
 
+export type AgentSessionRouteIdentity = Pick<
+  AgentSessionState,
+  "externalSessionId" | "runtimeKind" | "workingDirectory"
+>;
+
 export type TranscriptAgentSessionState = AgentSessionState & {
   purpose: "transcript";
 };
 
-export type AgentSessionLoadMode =
-  | "bootstrap"
-  | "requested_history"
-  | "reconcile_live"
-  | "recover_runtime_attachment";
-export type AgentSessionHistoryHydrationPolicy = "none" | "requested_only" | "live_if_empty";
+export type AgentSessionHistoryLoadPolicy = "none" | "requested_only" | "live_if_empty";
+
+export type EnsureSessionReadyForViewResult = "ready" | "not_needed" | "failed";
 
 export type AgentSessionLoadOptions = {
-  mode?: AgentSessionLoadMode;
   targetExternalSessionId?: string | null;
-  recoveryDedupKey?: string | null;
-  historyPolicy?: AgentSessionHistoryHydrationPolicy;
-  historyPreludeMode?: AgentSessionHistoryPreludeMode;
-  allowLiveSessionResume?: boolean;
+  historyPolicy?: AgentSessionHistoryLoadPolicy;
   persistedRecords?: AgentSessionRecord[];
-  preloadedRuntimeLists?: Map<RuntimeKind, RuntimeInstanceSummary[]>;
-  preloadedSessionPresenceByKey?: Map<string, AgentSessionPresenceSnapshot[]>;
 };

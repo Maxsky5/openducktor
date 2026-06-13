@@ -37,7 +37,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   taskId: "task-1",
   activeSession: null,
   roleFromQuery: "spec",
-  isActiveTaskHydrated: true,
   scheduleQueryUpdate: () => {},
   ...overrides,
 });
@@ -109,6 +108,29 @@ describe("useAgentStudioQuerySessionSync", () => {
     try {
       await harness.mount();
       expect(scheduleQueryUpdate).toHaveBeenCalledTimes(0);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears stale session selection for an existing reset task before workflow readiness", async () => {
+    const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
+    const harness = createHookHarness(
+      createBaseArgs({
+        tasks: [createTask("task-1")],
+        taskIdParam: "task-1",
+        sessionParam: "removed-session",
+        selectedSessionById: null,
+        taskId: "task-1",
+        scheduleQueryUpdate,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
+      expect(scheduleQueryUpdate.mock.calls[0]).toEqual([{ session: undefined }]);
     } finally {
       await harness.unmount();
     }

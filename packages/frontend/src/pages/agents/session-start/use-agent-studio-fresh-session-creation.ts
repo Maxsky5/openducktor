@@ -31,7 +31,7 @@ type UseAgentStudioFreshSessionCreationArgs = {
   activeSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
+  isActiveTaskReady: boolean;
   isSessionWorking: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
@@ -54,7 +54,7 @@ export function useAgentStudioFreshSessionCreation({
   activeSession,
   selectedTask,
   agentStudioReady,
-  isActiveTaskHydrated,
+  isActiveTaskReady,
   isSessionWorking,
   startAgentSession,
   settleStartedAgentSession,
@@ -198,7 +198,7 @@ export function useAgentStudioFreshSessionCreation({
   const handleCreateSession = useCallback(
     (option: SessionCreateOption): void => {
       const { role: nextRole, launchActionId: nextLaunchActionId } = option;
-      if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
+      if (!taskId || !agentStudioReady || !isActiveTaskReady) {
         return;
       }
       if (activeSession && isSessionWorking) {
@@ -234,7 +234,7 @@ export function useAgentStudioFreshSessionCreation({
     [
       activeSession,
       agentStudioReady,
-      isActiveTaskHydrated,
+      isActiveTaskReady,
       isSessionWorking,
       runFreshSessionCreation,
       selectedTask,

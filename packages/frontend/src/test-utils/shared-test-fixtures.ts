@@ -90,13 +90,12 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   externalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
   taskId: "task-1",
   repoPath: "/repo",
+  runtimeKind: "opencode",
   role: "spec",
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/tmp/repo/worktree",
-  historyHydrationState: "hydrated",
-  runtimeRecoveryState: "idle",
+  historyLoadState: "loaded",
   messages: [],
   draftAssistantText: "",
   draftAssistantMessageId: null,
@@ -280,14 +279,12 @@ export const createAgentSessionFixture = (
   const { repoPath: _baseRepoPath, ...baseSession } = BASE_AGENT_SESSION_FIXTURE;
   const { repoPath: _defaultRepoPath, runId: _defaultRunId, ...defaultSession } = defaults;
   const { repoPath: _overrideRepoPath, runId: _overrideRunId, ...overrideSession } = overrides;
-  const merged = createRepoScopedAgentSessionState(
-    {
-      ...baseSession,
-      ...defaultSession,
-      ...overrideSession,
-    },
-    repoPath,
-  );
+  const sessionWithoutRepo: Omit<AgentSessionState, "repoPath"> = {
+    ...baseSession,
+    ...defaultSession,
+    ...overrideSession,
+  };
+  const merged = createRepoScopedAgentSessionState(sessionWithoutRepo, repoPath);
 
   return structuredClone(merged);
 };

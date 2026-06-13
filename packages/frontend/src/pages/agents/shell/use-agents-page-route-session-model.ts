@@ -4,7 +4,11 @@ import { useCallback, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type {
+  AgentSessionState,
+  EnsureSessionReadyForViewResult,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
@@ -28,17 +32,12 @@ type UseAgentsPageRouteSessionModelArgs = {
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-  }) => Promise<void>;
+  sessionReadModelError: string | null;
   ensureSessionReadyForView: (input: {
     taskId: string;
     externalSessionId: string;
-    repoReadinessState: Parameters<
-      typeof useAgentStudioSelectionController
-    >[0]["agentStudioReadinessState"];
-  }) => Promise<boolean>;
+    repoReadinessState: SessionRepoReadinessState;
+  }) => Promise<EnsureSessionReadyForViewResult>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -82,7 +81,7 @@ export function useAgentsPageRouteSessionModel({
   tasks,
   isForegroundLoadingTasks,
   sessions,
-  hydrateRequestedTaskSessionHistory,
+  sessionReadModelError,
   ensureSessionReadyForView,
   readSessionModelCatalog,
   readSessionTodos,
@@ -118,13 +117,16 @@ export function useAgentsPageRouteSessionModel({
     setContextSwitchVersion((current) => current + 1);
   }, []);
 
-  const { selectionIntentForController, isSessionSelectionResolving, scheduleSelectionIntent } =
-    useAgentStudioSelectionIntentState({
-      isRepoNavigationBoundaryPending,
-      taskIdParam,
-      sessionParam,
-      roleFromQuery,
-    });
+  const {
+    selectionIntentForController,
+    isSessionSelectionResolving: isSelectionIntentResolving,
+    scheduleSelectionIntent,
+  } = useAgentStudioSelectionIntentState({
+    isRepoNavigationBoundaryPending,
+    taskIdParam,
+    sessionParam,
+    roleFromQuery,
+  });
 
   const readiness = useAgentStudioReadiness({
     activeWorkspace,
@@ -142,21 +144,26 @@ export function useAgentsPageRouteSessionModel({
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
     sessions,
+    sessionReadModelError,
     taskIdParam,
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
     selectionIntent: selectionIntentForController,
     updateQuery: scheduleQueryUpdate,
-    agentStudioReadinessState: readiness.agentStudioReadinessState,
-    hydrateRequestedTaskSessionHistory,
     ensureSessionReadyForView,
     runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeHealthByRuntime,
+    isLoadingChecks,
     readSessionModelCatalog,
     readSessionTodos,
     clearComposerInput: signalContextSwitchIntent,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
+  const isSessionSelectionResolving =
+    isSelectionIntentResolving || selection.isSelectedSessionLoading;
 
   const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
     workspaceRepoPath,
@@ -182,7 +189,6 @@ export function useAgentsPageRouteSessionModel({
     taskId: selection.taskId,
     activeSession: selection.activeSession,
     roleFromQuery,
-    isActiveTaskHydrated: selection.isActiveTaskHydrated,
     scheduleQueryUpdate,
   });
 

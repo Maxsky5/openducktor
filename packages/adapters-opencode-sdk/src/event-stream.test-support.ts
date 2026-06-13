@@ -1,6 +1,6 @@
 import type { Event, OpencodeClient, Session } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
-import { attachSessionToRuntimeEvents } from "./session-registry";
+import { subscribeSessionToRuntimeEvents } from "./session-registry";
 import type {
   OpencodeEventLogger,
   RuntimeEventTransportRecord,
@@ -101,7 +101,7 @@ export const runEventStreamWithSession = async (
 
   const sessions = new Map([[sessionRecord.externalSessionId, sessionRecord]]);
   const runtimeEventTransports = new Map<string, RuntimeEventTransportRecord>();
-  attachSessionToRuntimeEvents({
+  subscribeSessionToRuntimeEvents({
     sessions,
     runtimeEventTransports,
     createClient: () => client,
@@ -109,7 +109,7 @@ export const runEventStreamWithSession = async (
     externalSessionId: sessionRecord.externalSessionId,
     sessionInput: sessionRecord.input,
     now: () => "2026-02-22T12:00:00.000Z",
-    emit: (_externalSessionId, event) => {
+    emit: (_externalSessionId: string, event: AgentEvent) => {
       emitted.push(event);
     },
     ...(options.logEvent ? { logEvent: options.logEvent } : {}),

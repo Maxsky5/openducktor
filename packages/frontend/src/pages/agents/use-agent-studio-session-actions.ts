@@ -56,7 +56,8 @@ type UseAgentStudioSessionActionsArgs = {
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
+  isActiveTaskReady: boolean;
+  isSessionSelectionResolving: boolean;
   selectionForNewSession: AgentModelSelection | null;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
@@ -110,7 +111,8 @@ export function useAgentStudioSessionActions({
   sessionsForTask,
   selectedTask,
   agentStudioReady,
-  isActiveTaskHydrated,
+  isActiveTaskReady,
+  isSessionSelectionResolving,
   selectionForNewSession,
   reusablePrompts,
   repoSettings,
@@ -163,7 +165,7 @@ export function useAgentStudioSessionActions({
     sessionsForTask,
     selectedTask,
     agentStudioReady,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
     isSessionWorking: startFlowSessionWorking,
     selectionForNewSession,
     repoSettings,
@@ -236,7 +238,7 @@ export function useAgentStudioSessionActions({
     activeSessionRole: sessionState.activeSessionRole,
     activeSessionExists: sessionState.hasActiveSession,
     agentStudioReady,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
     isSessionWorking,
     sessionsForTask,
     selectedTask,
@@ -250,7 +252,8 @@ export function useAgentStudioSessionActions({
   const canKickoffNewSession =
     agentStudioReady &&
     Boolean(taskId) &&
-    isActiveTaskHydrated &&
+    isActiveTaskReady &&
+    !isSessionSelectionResolving &&
     !sessionState.hasActiveSession &&
     selectedRoleAvailable &&
     Boolean(selectedLaunchAction.kickoffTemplateId);

@@ -1,7 +1,7 @@
 import { toast } from "sonner";
 import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
-  AttachAgentSessionListenerParams,
+  ListenToAgentSessionParams,
   SessionEvent,
   SessionEventHandlerContext,
 } from "./session-event-types";
@@ -104,9 +104,7 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
   }
 };
 
-export const attachAgentSessionListener = (
-  context: AttachAgentSessionListenerParams,
-): (() => void) => {
+export const listenToAgentSessionEvents = (context: ListenToAgentSessionParams): (() => void) => {
   const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
     current: {} as Record<string, string>,
   };
@@ -220,7 +218,7 @@ export const attachAgentSessionListener = (
     }, delayMs);
   };
 
-  const unsubscribe = context.adapter.subscribeEvents(context.externalSessionId, (event) => {
+  const unsubscribe = context.adapter.subscribeEvents(context.sessionRef, (event) => {
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
       handleSessionEvent(handlerContext, event);
@@ -230,7 +228,6 @@ export const attachAgentSessionListener = (
     queuedEvents.push(event);
     scheduleQueuedFlush();
   });
-
   return () => {
     flushQueuedEvents();
     unsubscribe();

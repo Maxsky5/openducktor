@@ -53,7 +53,6 @@ export const createSession = (overrides: Partial<AgentSessionState> = {}): Agent
   role: "build",
   status: "idle",
   startedAt: "2026-03-01T09:00:00.000Z",
-  runtimeId: "runtime-1",
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -71,8 +70,6 @@ export const createSession = (overrides: Partial<AgentSessionState> = {}): Agent
 
 export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>
   ({
-    hasSession: () => false,
-    detachSession: async () => undefined,
     listRuntimeDefinitions: () => [],
     ...overrides,
   }) as AgentEnginePort;

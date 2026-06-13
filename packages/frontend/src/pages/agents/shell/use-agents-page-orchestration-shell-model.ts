@@ -24,8 +24,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   openTaskDetails: () => void;
   agentOperations: Pick<
     ReturnType<typeof useAgentOperations>,
-    | "bootstrapTaskSessions"
-    | "hydrateRequestedTaskSessionHistory"
+    | "loadRequestedTaskSessionHistory"
     | "readSessionFileSearch"
     | "readSessionSlashCommands"
     | "readSessionSkills"
@@ -124,8 +123,7 @@ export function useAgentsPageOrchestrationShellModel({
       readSessionFileSearch: agentOperations.readSessionFileSearch,
       readSessionSlashCommands: agentOperations.readSessionSlashCommands,
       readSessionSkills: agentOperations.readSessionSkills,
-      bootstrapTaskSessions: agentOperations.bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory: agentOperations.hydrateRequestedTaskSessionHistory,
+      loadRequestedTaskSessionHistory: agentOperations.loadRequestedTaskSessionHistory,
       humanRequestChangesTask,
       setTaskTargetBranch,
       replyAgentApproval: agentOperations.replyAgentApproval,

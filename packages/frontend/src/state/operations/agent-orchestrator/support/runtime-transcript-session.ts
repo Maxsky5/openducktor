@@ -1,4 +1,4 @@
-import type { RuntimeRef } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "./messages";
@@ -7,10 +7,9 @@ import { historyToChatMessages } from "./persistence";
 export type RuntimeTranscriptSessionInput = {
   repoPath: string;
   externalSessionId: string;
-  runtimeRef: RuntimeRef;
+  runtimeKind: RuntimeKind;
   workingDirectory: string;
   history: AgentSessionHistoryMessage[];
-  isLive?: boolean;
   pendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   pendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
 };
@@ -38,28 +37,26 @@ const runtimeTranscriptHistoryVersion = (history: AgentSessionHistoryMessage[]):
 export const createRuntimeTranscriptSession = ({
   repoPath,
   externalSessionId,
-  runtimeRef,
+  runtimeKind,
   workingDirectory,
   history,
-  isLive = false,
   pendingApprovals = [],
   pendingQuestions = [],
 }: RuntimeTranscriptSessionInput): AgentSessionState => {
   const startedAt = history[0]?.timestamp ?? new Date(0).toISOString();
+  const status = pendingApprovals.length > 0 || pendingQuestions.length > 0 ? "running" : "idle";
 
   return {
     externalSessionId,
     purpose: "transcript",
     taskId: "",
     repoPath,
-    runtimeKind: runtimeRef.kind,
+    runtimeKind,
     role: null,
-    status: isLive ? "running" : "idle",
+    status,
     startedAt,
-    runtimeId: runtimeRef.runtimeId,
     workingDirectory,
-    historyHydrationState: "hydrated",
-    runtimeRecoveryState: "idle",
+    historyLoadState: "loaded",
     messages: createSessionMessagesState(
       externalSessionId,
       historyToChatMessages(history, {

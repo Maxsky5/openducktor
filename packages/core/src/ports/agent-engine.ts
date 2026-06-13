@@ -35,42 +35,29 @@ export type AgentSessionRef = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
 };
 
-export type StartAgentSessionInput = AgentSessionContext;
-
-export type ResumeAgentSessionInput = AgentSessionContext & {
-  externalSessionId: ExternalSessionId;
+export type AgentSessionRuntimeRef = AgentSessionRef & {
+  taskId: string;
+  role: AgentRole | null;
+  model?: AgentModelSelection;
+  systemPrompt?: string;
+  purpose?: "primary" | "transcript";
 };
 
-export type AttachAgentSessionInput =
-  | (AgentSessionContext & {
-      externalSessionId: ExternalSessionId;
-      purpose?: "primary";
-    })
-  | {
-      purpose: "transcript";
-      externalSessionId: ExternalSessionId;
-      repoPath: string;
-      runtimeKind: RuntimeKind;
-      runtimeId?: string;
-      workingDirectory: string;
-      taskId: "";
-      role: null;
-      systemPrompt: "";
-    };
+export type StartAgentSessionInput = AgentSessionContext;
+
+export type ResumeAgentSessionInput = AgentSessionRuntimeRef;
 
 export type ForkAgentSessionInput = AgentSessionContext & {
   parentExternalSessionId: ExternalSessionId;
   runtimeHistoryAnchor?: RuntimeHistoryAnchor;
 };
 
-export type SendAgentUserMessageInput = {
-  externalSessionId: ExternalSessionId;
+export type SendAgentUserMessageInput = AgentSessionRuntimeRef & {
   parts: AgentUserMessagePart[];
   model?: AgentModelSelection;
 };
 
-export type UpdateAgentSessionModelInput = {
-  externalSessionId: ExternalSessionId;
+export type UpdateAgentSessionModelInput = AgentSessionRef & {
   model: AgentModelSelection | null;
 };
 
@@ -137,6 +124,11 @@ export type AgentSessionHistoryMessage =
       role: "system";
       timestamp: string;
       text: string;
+      /**
+       * Runtime adapters use system messages only for system/developer context
+       * that is exposed by the runtime-owned history source. Adapters must not
+       * synthesize missing prompt text from OpenDucktor persistence.
+       */
       notice?: {
         tone: "info";
         reason: "session_compacted";
@@ -186,7 +178,6 @@ export type AgentSessionPresenceSnapshot =
       presence: "runtime";
       classification: AgentSessionActivity;
       ref: AgentSessionRef;
-      runtimeId: string;
       title: string;
       startedAt: string;
       status: LiveAgentSessionStatus;
@@ -198,7 +189,6 @@ export type AgentSessionPresenceSnapshot =
       presence: "stale";
       classification: "stale";
       ref: AgentSessionRef;
-      runtimeId: string | null;
       pendingApprovals: [];
       pendingQuestions: [];
     }
@@ -206,21 +196,18 @@ export type AgentSessionPresenceSnapshot =
       presence: "persisted_only";
       classification: "persisted_only";
       ref: AgentSessionRef;
-      runtimeId: null;
       reason: string;
       pendingApprovals: [];
       pendingQuestions: [];
     };
 
-export type ReplyApprovalInput = {
-  externalSessionId: ExternalSessionId;
+export type ReplyApprovalInput = AgentSessionRuntimeRef & {
   requestId: RuntimePendingInputRequestId;
   outcome: RuntimeApprovalReplyOutcome;
   message?: string;
 };
 
-export type ReplyQuestionInput = {
-  externalSessionId: ExternalSessionId;
+export type ReplyQuestionInput = AgentSessionRuntimeRef & {
   requestId: RuntimePendingInputRequestId;
   answers: string[][];
 };
@@ -250,28 +237,20 @@ export interface AgentCatalogPort {
 export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
-  attachSession(input: AttachAgentSessionInput): Promise<AgentSessionSummary>;
-  /**
-   * Releases the adapter's local attachment to a runtime session without terminating the runtime
-   * session itself. Use stopSession when the remote/live session should be stopped.
-   */
-  detachSession(externalSessionId: ExternalSessionId): Promise<void>;
+  restoreSession(input: AgentSessionRef): Promise<AgentSessionSummary>;
+  releaseSession(input: AgentSessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
   listSessionPresence(input: ListSessionPresenceInput): Promise<AgentSessionPresenceSnapshot[]>;
   readSessionPresence(input: ReadSessionPresenceInput): Promise<AgentSessionPresenceSnapshot>;
-  hasSession(externalSessionId: ExternalSessionId): boolean;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyApproval(input: ReplyApprovalInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
-  subscribeEvents(
-    externalSessionId: ExternalSessionId,
-    listener: (event: AgentEvent) => void,
-  ): EventUnsubscribe;
-  stopSession(externalSessionId: ExternalSessionId): Promise<void>;
+  subscribeEvents(input: AgentSessionRef, listener: (event: AgentEvent) => void): EventUnsubscribe;
+  stopSession(input: AgentSessionRef): Promise<void>;
 }
 
 export interface AgentWorkspaceInspectionPort {

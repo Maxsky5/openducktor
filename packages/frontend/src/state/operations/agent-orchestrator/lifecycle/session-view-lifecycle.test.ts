@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { deriveAgentSessionViewLifecycle } from "./session-view-lifecycle";
+import {
+  deriveAgentSessionViewLifecycle,
+  deriveSelectedAgentSessionViewLifecycle,
+} from "./session-view-lifecycle";
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   externalSessionId: "external-1",
@@ -10,10 +13,8 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   runtimeKind: "opencode",
-  runtimeId: "runtime-1",
   workingDirectory: "/tmp/repo/worktree",
-  historyHydrationState: "not_requested",
-  runtimeRecoveryState: "idle",
+  historyLoadState: "not_requested",
   messages: [],
   draftAssistantText: "",
   draftAssistantMessageId: null,
@@ -34,7 +35,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   test("requests background history hydration when a partial transcript exists", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
-        historyHydrationState: "not_requested",
+        historyLoadState: "not_requested",
         messages: [
           {
             id: "tail-1",
@@ -55,7 +56,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   test("requests background hydration after a prior history failure when transcript exists", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
-        historyHydrationState: "failed",
+        historyLoadState: "failed",
         messages: [
           {
             id: "message-1",
@@ -70,16 +71,15 @@ describe("deriveAgentSessionViewLifecycle", () => {
 
     expect(lifecycle.phase).toBe("needs_history");
     expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.isHistoryHydrationFailed).toBe(false);
+    expect(lifecycle.isHistoryLoadFailed).toBe(false);
     expect(lifecycle.shouldEnsureReadyForView).toBe(true);
   });
 
-  test("requests a view readiness refresh for hydrated attached sessions that still appear running", () => {
+  test("renders running sessions immediately without view readiness hydration", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         status: "running",
-        historyHydrationState: "hydrated",
-        runtimeId: "runtime-1",
+        historyLoadState: "loaded",
         runtimeKind: "codex",
         workingDirectory: "/tmp/repo/worktree",
         messages: [
@@ -96,16 +96,15 @@ describe("deriveAgentSessionViewLifecycle", () => {
 
     expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.shouldEnsureReadyForView).toBe(true);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(false);
   });
 
-  test("requests a view readiness refresh for running planner sessions missing runtime identity", () => {
+  test("renders running planner sessions immediately when durable runtime context is available", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         role: "planner",
         status: "running",
-        historyHydrationState: "hydrated",
-        runtimeId: null,
+        historyLoadState: "loaded",
         runtimeKind: "opencode",
         messages: [
           {
@@ -121,16 +120,33 @@ describe("deriveAgentSessionViewLifecycle", () => {
 
     expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.canReadRuntimeData).toBe(false);
-    expect(lifecycle.shouldEnsureReadyForView).toBe(true);
+    expect(lifecycle.canReadRuntimeData).toBe(true);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(false);
+  });
+
+  test("loads a cold running session transcript before rendering it", () => {
+    const lifecycle = deriveAgentSessionViewLifecycle({
+      session: createSession({
+        status: "running",
+        historyLoadState: "loading",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("loading_history");
+    expect(lifecycle.canRenderHistory).toBe(false);
+    expect(lifecycle.isLoadingHistory).toBe(true);
+    expect(lifecycle.shouldEnsureReadyForView).toBe(false);
   });
 
   test("does not request view readiness while a local outbound send is pending", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         status: "running",
-        historyHydrationState: "hydrated",
-        runtimeId: "runtime-1",
+        historyLoadState: "loaded",
         runtimeKind: "codex",
         workingDirectory: "/tmp/repo/worktree",
         pendingUserMessageStartedAt: 123,
@@ -149,5 +165,67 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.canRenderHistory).toBe(true);
     expect(lifecycle.shouldEnsureReadyForView).toBe(false);
+  });
+});
+
+describe("deriveSelectedAgentSessionViewLifecycle", () => {
+  const selectedSessionRoute = {
+    externalSessionId: "external-1",
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/tmp/repo/worktree",
+  };
+
+  test("keeps a missing selected session loading while runtime readiness is checking", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute,
+      session: null,
+      repoReadinessState: "checking",
+      sessionLoadError: null,
+    });
+
+    expect(lifecycle).toMatchObject({
+      externalSessionId: "external-1",
+      canRenderHistory: false,
+      isLoadingHistory: true,
+      isHistoryLoadFailed: false,
+      isWaitingForRuntimeReadiness: true,
+      shouldEnsureReadyForView: false,
+    });
+  });
+
+  test("surfaces selected session load failures without a second local state machine", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute,
+      session: null,
+      repoReadinessState: "ready",
+      sessionLoadError: "Session history failed",
+    });
+
+    expect(lifecycle).toMatchObject({
+      externalSessionId: "external-1",
+      canRenderHistory: false,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: true,
+      isWaitingForRuntimeReadiness: false,
+      shouldEnsureReadyForView: false,
+    });
+  });
+
+  test("delegates selected active session readiness to the session lifecycle", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute,
+      session: createSession({ historyLoadState: "not_requested", messages: [] }),
+      repoReadinessState: "ready",
+      sessionLoadError: null,
+    });
+
+    expect(lifecycle).toMatchObject({
+      externalSessionId: "external-1",
+      canRenderHistory: false,
+      isLoadingHistory: true,
+      isHistoryLoadFailed: false,
+      isWaitingForRuntimeReadiness: false,
+      shouldEnsureReadyForView: true,
+    });
   });
 });

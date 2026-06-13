@@ -61,7 +61,6 @@ export type CodexAppServerStreamEvent = {
 export type CodexRepoRuntimeResolverPort = {
   ensureRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
   requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
-  requireRuntimeById?(ref: RepoRuntimeRef, runtimeId: string): Promise<RuntimeInstanceSummary>;
 };
 
 export type CodexModelCatalogRecord = {

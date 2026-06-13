@@ -71,7 +71,7 @@ const resolveInitialStatusRelease = (
   postStartAction: SessionStartPostAction,
 ): InitialSessionStatusReleasePolicy => {
   if (postStartAction === "none") {
-    return "after_listener_attach";
+    return "after_listener_start";
   }
 
   return "after_first_send_attempt";

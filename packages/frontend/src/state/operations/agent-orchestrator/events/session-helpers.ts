@@ -153,10 +153,18 @@ export const settleDraftToIdle = (
       model ?? undefined,
     );
     shouldClear = shouldClearTurnFromCurrentState(current);
+    const messages = settleDanglingTodoToolMessages(finalized, timestamp);
+    const status = current.status === "error" ? "error" : "idle";
+    const didChange =
+      finalized !== current || messages !== finalized.messages || current.status !== status;
+    if (!didChange) {
+      return current;
+    }
+
     return {
       ...finalized,
-      messages: settleDanglingTodoToolMessages(finalized, timestamp),
-      ...(current.status === "error" ? { status: "error" } : { status: "idle" }),
+      messages,
+      status,
     };
   });
   return shouldClear;

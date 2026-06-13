@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
   getLastSessionMessage,
   getSessionMessages,
+  listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEventAdapter,
 } from "./session-events-test-harness";
@@ -65,7 +65,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -169,7 +169,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -286,7 +286,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -360,7 +360,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -466,7 +466,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -552,7 +552,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -686,7 +686,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -771,7 +771,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

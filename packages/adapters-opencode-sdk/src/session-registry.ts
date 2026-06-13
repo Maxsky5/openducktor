@@ -24,13 +24,6 @@ import type {
   SessionRecord,
 } from "./types";
 
-export const hasSession = (
-  sessions: Map<string, SessionRecord>,
-  externalSessionId: string,
-): boolean => {
-  return sessions.has(externalSessionId);
-};
-
 export const requireSession = (
   sessions: Map<string, SessionRecord>,
   externalSessionId: string,
@@ -277,7 +270,7 @@ const ensureRuntimeEventTransport = (input: {
   return streamRecord;
 };
 
-export const attachSessionToRuntimeEvents = (input: {
+export const subscribeSessionToRuntimeEvents = (input: {
   sessions: Map<string, SessionRecord>;
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>;
   createClient: ClientFactory;
@@ -366,7 +359,7 @@ export const registerSession = (input: {
 
   if (input.subscribeToEvents !== false) {
     try {
-      attachSessionToRuntimeEvents({
+      subscribeSessionToRuntimeEvents({
         sessions: input.sessions,
         runtimeEventTransports: input.runtimeEventTransports,
         createClient: input.createClient,
@@ -407,7 +400,7 @@ export const clearWorkflowToolCacheForDirectory = (
   }
 };
 
-const releaseSessionRuntimeAttachment = async (
+const releaseSessionRuntimeSubscription = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
@@ -425,12 +418,12 @@ const releaseSessionRuntimeAttachment = async (
   await eventTransport.streamDone.catch(() => undefined);
 };
 
-export const detachSessionRuntime = async (
+export const releaseSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
-  await releaseSessionRuntimeAttachment(session, sessions, runtimeEventTransports);
+  await releaseSessionRuntimeSubscription(session, sessions, runtimeEventTransports);
 };
 
 export const stopSessionRuntime = async (
@@ -447,5 +440,5 @@ export const stopSessionRuntime = async (
     void abortError;
   }
 
-  await releaseSessionRuntimeAttachment(session, sessions, runtimeEventTransports);
+  await releaseSessionRuntimeSubscription(session, sessions, runtimeEventTransports);
 };

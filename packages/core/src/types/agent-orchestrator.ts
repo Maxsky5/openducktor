@@ -290,7 +290,6 @@ export type AgentToolCall =
     };
 
 export type AgentSessionContext = RepoRuntimeRef & {
-  runtimeId?: string;
   workingDirectory: string;
   taskId: string;
   role: AgentRole;

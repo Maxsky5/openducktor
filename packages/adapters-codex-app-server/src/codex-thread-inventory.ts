@@ -13,7 +13,7 @@ import {
 } from "./codex-app-server-threads";
 import type { CodexAppServerClient } from "./types";
 
-export type CodexHistoryThreadAttachment = {
+export type CodexHistoryThreadLoad = {
   response: unknown;
   preResumeThread: CodexThreadSnapshot;
 };
@@ -100,11 +100,11 @@ export class CodexThreadInventoryReader {
     });
   }
 
-  async attachThreadForHistory(
+  async loadThreadForHistory(
     client: CodexAppServerClient,
     runtimeId: string,
     input: { externalSessionId: string; workingDirectory: string },
-  ): Promise<CodexHistoryThreadAttachment | null> {
+  ): Promise<CodexHistoryThreadLoad | null> {
     const inventory = await this.read(client, runtimeId);
     const thread = inventory.threadsById.get(input.externalSessionId) ?? null;
     if (!thread || thread.cwd !== input.workingDirectory) {

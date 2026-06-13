@@ -568,9 +568,26 @@ export const loadSessionHistory = async (
   const pendingAssistantIndex =
     pendingAssistantReverseIndex >= 0 ? entries.length - 1 - pendingAssistantReverseIndex : -1;
 
-  return entries.map((item, index) => {
+  const history: AgentSessionHistoryMessage[] = [];
+  let lastRenderedSystemPrompt: string | null = null;
+
+  for (const [index, item] of entries.entries()) {
+    if (item.entry.info.role === "user") {
+      const systemPrompt = item.entry.info.system?.trim() ?? "";
+      if (systemPrompt.length > 0 && systemPrompt !== lastRenderedSystemPrompt) {
+        history.push({
+          messageId: `system-prompt:${item.entry.info.id}`,
+          role: "system",
+          timestamp: item.timestamp,
+          text: `System prompt:\n\n${systemPrompt}`,
+          parts: [],
+        });
+        lastRenderedSystemPrompt = systemPrompt;
+      }
+    }
+
     if (item.entry.info.role === "assistant") {
-      return {
+      history.push({
         messageId: item.entry.info.id,
         role: "assistant",
         timestamp: item.timestamp,
@@ -578,10 +595,11 @@ export const loadSessionHistory = async (
         ...(typeof item.totalTokens === "number" ? { totalTokens: item.totalTokens } : {}),
         ...(item.model ? { model: item.model } : {}),
         parts: item.parts,
-      };
+      });
+      continue;
     }
 
-    return {
+    history.push({
       messageId: item.entry.info.id,
       role: "user",
       timestamp: item.timestamp,
@@ -590,8 +608,10 @@ export const loadSessionHistory = async (
       state: pendingAssistantIndex >= 0 && index > pendingAssistantIndex ? "queued" : "read",
       ...(item.model ? { model: item.model } : {}),
       parts: item.parts,
-    };
-  });
+    });
+  }
+
+  return history;
 };
 
 export const loadAndSeedSessionHistory = async (

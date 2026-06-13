@@ -1,22 +1,36 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2/client";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeInstanceSummary } from "@openducktor/contracts";
-import type { AgentEvent, RuntimeKind } from "@openducktor/core";
+import type {
+  AgentEvent,
+  AgentSessionRef,
+  AgentSessionRuntimeRef,
+  RuntimeKind,
+} from "@openducktor/core";
 import { OpencodeSdkAdapter as BaseOpencodeSdkAdapter } from "./opencode-sdk-adapter";
 import type { OpencodeSdkAdapterOptions, SessionRecord } from "./types";
 
 type TestAdapterInternals = {
-  sessions: Map<
-    string,
-    {
-      pendingSubagentInputEventsByExternalSessionId: Map<
-        string,
-        Array<{ requestId: string; type: "approval_required" | "question_required" }>
-      >;
-    }
-  >;
+  sessions: Map<string, SessionRecord>;
   clearPendingSubagentInputEvent: (externalSessionId: string, requestId: string) => void;
 };
+
+const sessionRef = (externalSessionId = "external-session-1"): AgentSessionRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+});
+
+const sessionRuntimeRef = (externalSessionId = "external-session-1"): AgentSessionRuntimeRef => ({
+  externalSessionId,
+  repoPath: "/repo",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+  taskId: "task-1",
+  role: "spec",
+  systemPrompt: "system",
+});
 
 const createDeferred = <T>(): {
   promise: Promise<T>;
@@ -490,11 +504,6 @@ describe("opencode-sdk-adapter", () => {
       now: () => "2026-02-22T12:00:00.000Z",
     });
 
-    const events: AgentEvent[] = [];
-    adapter.subscribeEvents("external-session-1", (event) => {
-      events.push(event);
-    });
-
     const summary = await adapter.startSession({
       repoPath: "/repo",
       workingDirectory: "/repo",
@@ -504,14 +513,20 @@ describe("opencode-sdk-adapter", () => {
       systemPrompt: "system",
     });
 
+    const adapterInternals = adapter as unknown as TestAdapterInternals;
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
+      events.push(event);
+    });
+
     expect(summary.externalSessionId).toBe("external-session-1");
-    expect(adapter.hasSession("external-session-1")).toBe(true);
+    expect(adapterInternals.sessions.has("external-session-1")).toBe(true);
     expect(mock.createCalls).toHaveLength(1);
 
-    await adapter.stopSession("external-session-1");
+    await adapter.stopSession(sessionRef("external-session-1"));
 
     expect(mock.abortCalls).toHaveLength(1);
-    expect(adapter.hasSession("external-session-1")).toBe(false);
+    expect(adapterInternals.sessions.has("external-session-1")).toBe(false);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
 
@@ -577,7 +592,9 @@ describe("opencode-sdk-adapter", () => {
         systemPrompt: "system",
       }),
     ).rejects.toThrow("client.global.event()");
-    expect(adapter.hasSession("external-session-1")).toBe(false);
+    expect((adapter as unknown as TestAdapterInternals).sessions.has("external-session-1")).toBe(
+      false,
+    );
   });
 
   test("checks same-directory MCP health before returning cached workflow tool selection", async () => {
@@ -635,7 +652,7 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("Expected test session to be registered.");
     }
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("external-session-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
       events.push(event);
     });
 
@@ -878,7 +895,6 @@ describe("opencode-sdk-adapter", () => {
           externalSessionId: "external-session-1",
           workingDirectory: "/repo",
         },
-        runtimeId: "runtime-opencode-1",
         title: "BUILD task-1",
         startedAt: "2026-02-22T12:00:00.000Z",
         agentSessionStatus: "idle",
@@ -900,7 +916,6 @@ describe("opencode-sdk-adapter", () => {
           externalSessionId: "external-session-2",
           workingDirectory: "/other",
         },
-        runtimeId: "runtime-opencode-1",
         title: "OTHER task",
         startedAt: "2026-02-22T12:00:00.000Z",
         agentSessionStatus: "idle",
@@ -925,7 +940,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("readSessionPresence keeps a newly attached local session active through idle runtime status", async () => {
+  test("readSessionPresence keeps a newly started local session active through idle runtime status", async () => {
     const mock = makeMockClient();
     const idleStatusClient = {
       ...mock.client,
@@ -1148,7 +1163,7 @@ describe("opencode-sdk-adapter", () => {
     });
   });
 
-  test("listSessionPresence includes attached local sessions before runtime list catches up", async () => {
+  test("listSessionPresence includes local runtime sessions before runtime list catches up", async () => {
     const mock = makeMockClient();
     const emptyListClient = {
       ...mock.client,
@@ -1551,7 +1566,6 @@ describe("opencode-sdk-adapter", () => {
         workingDirectory: "/repo",
         externalSessionId: "external-session-1",
       },
-      runtimeId: "runtime-opencode-1",
       pendingApprovals: [expectedReadApproval],
       pendingQuestions: [
         {

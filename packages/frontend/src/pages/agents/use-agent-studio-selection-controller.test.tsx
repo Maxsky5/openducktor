@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
+import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
@@ -14,11 +15,11 @@ enableReactActEnvironment();
 
 type UseAgentStudioSelectionControllerHook =
   typeof import("./use-agent-studio-selection-controller")["useAgentStudioSelectionController"];
-type BuildSessionsByTaskIdWithCacheFn =
-  typeof import("./use-agent-studio-selection-controller")["buildSessionsByTaskIdWithCache"];
+type GroupSessionsByTaskIdFn =
+  typeof import("./use-agent-studio-selection-controller")["groupSessionsByTaskId"];
 
 let useAgentStudioSelectionController: UseAgentStudioSelectionControllerHook;
-let buildSessionsByTaskIdWithCache: BuildSessionsByTaskIdWithCacheFn;
+let groupSessionsByTaskId: GroupSessionsByTaskIdFn;
 
 const sessionByIdRef: { current: Record<string, AgentSessionState> } = {
   current: {},
@@ -34,6 +35,31 @@ const emptyCatalog = {
 };
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
+
+const activeWorkspace = {
+  repoPath: "/repo",
+  workspaceId: "workspace-1",
+  workspaceName: "Workspace",
+};
+
+const persistedReloadedSessionRecord = {
+  runtimeKind: "opencode" as const,
+  externalSessionId: "session-reloaded",
+  role: "build" as const,
+  startedAt: "2026-02-22T10:00:00.000Z",
+  workingDirectory: "/repo/worktree",
+  selectedModel: null,
+};
+
+const createTaskWithPersistedReloadedSession = (
+  overrides: Partial<NonNullable<Parameters<typeof createTaskCardFixture>[0]>> = {},
+) =>
+  createTaskCardFixture({
+    id: "task-1",
+    title: "task-1",
+    ...overrides,
+    agentSessions: [persistedReloadedSessionRecord],
+  });
 
 const createSession = (
   taskId: string,
@@ -75,19 +101,24 @@ const createHookHarness = (initialProps: HookArgs) => {
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: null,
   isRepoNavigationBoundaryPending: false,
-  agentStudioReadinessState: "ready",
   tasks: [createTask("task-1"), createTask("task-2")],
   isLoadingTasks: false,
   sessions: [],
+  sessionReadModelError: null,
   taskIdParam: "task-1",
   sessionParam: null,
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
   selectionIntent: null,
   updateQuery: () => {},
-  hydrateRequestedTaskSessionHistory: async () => {},
-  ensureSessionReadyForView: async () => false,
+  ensureSessionReadyForView: async () => "not_needed",
   runtimeDefinitions: createDefaultRuntimeDefinitions(),
+  isLoadingRuntimeDefinitions: false,
+  runtimeDefinitionsError: null,
+  runtimeHealthByRuntime: {
+    opencode: createRepoRuntimeHealthFixture(),
+  },
+  isLoadingChecks: false,
   readSessionModelCatalog: async () => emptyCatalog,
   readSessionTodos: async () => [],
   clearComposerInput: () => {},
@@ -104,6 +135,9 @@ describe("useAgentStudioSelectionController", () => {
       },
       useAgentOperations: () => {
         throw new Error("useAgentOperations is not used in this test");
+      },
+      useAgentSessionReadModelState: () => {
+        throw new Error("useAgentSessionReadModelState is not used in this test");
       },
       useAgentSessions: () => {
         throw new Error("useAgentSessions is not used in this test");
@@ -130,7 +164,7 @@ describe("useAgentStudioSelectionController", () => {
         externalSessionId ? (sessionByIdRef.current[externalSessionId] ?? null) : null,
     }));
 
-    ({ buildSessionsByTaskIdWithCache, useAgentStudioSelectionController } = await import(
+    ({ groupSessionsByTaskId, useAgentStudioSelectionController } = await import(
       "./use-agent-studio-selection-controller"
     ));
   });
@@ -141,7 +175,7 @@ describe("useAgentStudioSelectionController", () => {
     ]);
   });
 
-  test("reuses cached task ordering metadata for unchanged task signatures", () => {
+  test("groups sessions by task with newest sessions first", () => {
     const firstTaskOneOld = createSession("task-1", "session-old", {
       startedAt: "2026-02-22T10:00:00.000Z",
     });
@@ -152,41 +186,20 @@ describe("useAgentStudioSelectionController", () => {
       startedAt: "2026-02-22T09:00:00.000Z",
     });
 
-    const first = buildSessionsByTaskIdWithCache(
+    const grouped = groupSessionsByTaskId(
       [firstTaskOneOld, firstTaskOneNew, firstTaskTwo].map(toAgentSessionSummary),
-      new Map(),
     );
 
-    expect(
-      first.sessionsByTaskId.get("task-1")?.map((session) => session.externalSessionId),
-    ).toEqual(["session-new", "session-old"]);
-
-    const secondTaskOneOld = createSession("task-1", "session-old", {
-      startedAt: "2026-02-22T10:00:00.000Z",
-      status: "running",
-    });
-    const secondTaskOneNew = createSession("task-1", "session-new", {
-      startedAt: "2026-02-22T11:00:00.000Z",
-      status: "stopped",
-    });
-    const secondTaskTwoNew = createSession("task-2", "session-2-new", {
-      startedAt: "2026-02-22T12:00:00.000Z",
-    });
-
-    const second = buildSessionsByTaskIdWithCache(
-      [secondTaskOneOld, secondTaskOneNew, secondTaskTwoNew].map(toAgentSessionSummary),
-      first.nextCache,
-    );
-
-    expect(
-      second.sessionsByTaskId.get("task-1")?.map((session) => session.externalSessionId),
-    ).toEqual(["session-new", "session-old"]);
-    expect(
-      second.sessionsByTaskId.get("task-2")?.map((session) => session.externalSessionId),
-    ).toEqual(["session-2-new"]);
+    expect(grouped.get("task-1")?.map((session) => session.externalSessionId)).toEqual([
+      "session-new",
+      "session-old",
+    ]);
+    expect(grouped.get("task-2")?.map((session) => session.externalSessionId)).toEqual([
+      "session-2-old",
+    ]);
   });
 
-  test("keeps cache signature stable when task sessions arrive in a different order", () => {
+  test("keeps grouped session order stable when input order changes", () => {
     const sessionOld = createSession("task-1", "session-old", {
       startedAt: "2026-02-22T10:00:00.000Z",
     });
@@ -194,21 +207,17 @@ describe("useAgentStudioSelectionController", () => {
       startedAt: "2026-02-22T11:00:00.000Z",
     });
 
-    const first = buildSessionsByTaskIdWithCache(
-      [sessionOld, sessionNew].map(toAgentSessionSummary),
-      new Map(),
-    );
-    const second = buildSessionsByTaskIdWithCache(
-      [sessionNew, sessionOld].map(toAgentSessionSummary),
-      first.nextCache,
-    );
+    const first = groupSessionsByTaskId([sessionOld, sessionNew].map(toAgentSessionSummary));
+    const second = groupSessionsByTaskId([sessionNew, sessionOld].map(toAgentSessionSummary));
 
-    expect(second.nextCache.get("task-1")?.inputSignature).toBe(
-      first.nextCache.get("task-1")?.inputSignature,
-    );
-    expect(
-      second.sessionsByTaskId.get("task-1")?.map((session) => session.externalSessionId),
-    ).toEqual(["session-new", "session-old"]);
+    expect(first.get("task-1")?.map((session) => session.externalSessionId)).toEqual([
+      "session-new",
+      "session-old",
+    ]);
+    expect(second.get("task-1")?.map((session) => session.externalSessionId)).toEqual([
+      "session-new",
+      "session-old",
+    ]);
   });
 
   test("resolves task context from selected session when task param is missing", async () => {
@@ -235,13 +244,120 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("prepares the selected view session without opting into live resume", async () => {
-    const ensureSessionReadyForView = mock(async () => true);
-    const session = createSession("task-1", "session-live", {
-      historyHydrationState: "not_requested",
+  test("marks selected task session read model loading until persisted records are summarized", async () => {
+    const taskWithPersistedSession = createTaskWithPersistedReloadedSession();
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspace,
+        tasks: [taskWithPersistedSession, createTask("task-2")],
+        sessions: [],
+        taskIdParam: "task-1",
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().isSelectedSessionLoading).toBe(true);
+      expect(harness.getLatest().viewActiveSession).toBeNull();
+
+      const loadedSession = createSession("task-1", "session-reloaded", {
+        role: "build",
+        startedAt: "2026-02-22T10:00:00.000Z",
+        status: "running",
+      });
+      await harness.update(
+        createBaseArgs({
+          activeWorkspace,
+          tasks: [taskWithPersistedSession, createTask("task-2")],
+          sessions: [loadedSession],
+          taskIdParam: "task-1",
+          hasExplicitRoleParam: false,
+        }),
+      );
+
+      expect(harness.getLatest().isSelectedSessionLoading).toBe(false);
+      expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-reloaded");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a persisted selected session loading while runtime readiness is checking", async () => {
+    const taskWithPersistedSession = createTaskWithPersistedReloadedSession({
+      status: "in_progress",
     });
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspace,
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture({
+            status: "checking",
+            runtime: { status: "checking", stage: "waiting_for_runtime" },
+          }),
+        },
+        tasks: [taskWithPersistedSession],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionParam: "session-reloaded",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.isSelectedSessionLoading).toBe(true);
+      expect(latest.isViewSessionHistoryHydrating).toBe(true);
+      expect(latest.isViewSessionWaitingForRuntimeReadiness).toBe(true);
+      expect(latest.viewActiveSession).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("marks persisted selected session failed when startup read model fails", async () => {
+    const taskWithPersistedSession = createTaskWithPersistedReloadedSession({
+      status: "in_progress",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspace,
+        tasks: [taskWithPersistedSession],
+        sessions: [],
+        sessionReadModelError: "Failed to load agent session read model",
+        taskIdParam: "task-1",
+        sessionParam: "session-reloaded",
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.isSelectedSessionLoading).toBe(false);
+      expect(latest.isViewSessionHistoryLoadFailed).toBe(true);
+      expect(latest.isViewSessionHistoryHydrating).toBe(false);
+      expect(latest.isViewSessionWaitingForRuntimeReadiness).toBe(false);
+      expect(latest.viewActiveSession).toBeNull();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("prepares the selected view session without opting into live resume", async () => {
+    const ensureSessionReadyForView = mock(async () => "ready" as const);
+    const session = createSession("task-1", "session-live", {
+      historyLoadState: "not_requested",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspace,
         sessions: [session],
         taskIdParam: "task-1",
         sessionParam: "session-live",
@@ -343,6 +459,7 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspace,
         sessions: [buildSession],
         taskIdParam: "task-1",
         sessionParam: "session-build",
@@ -381,13 +498,13 @@ describe("useAgentStudioSelectionController", () => {
     const buildSession = createSession("task-1", "session-build", {
       role: "build",
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/repo",
-      status: "idle",
+      status: "running",
       todos: [],
     });
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspace,
         sessions: [buildSession],
         taskIdParam: "task-1",
         sessionParam: "session-build",
@@ -429,7 +546,6 @@ describe("useAgentStudioSelectionController", () => {
     const activeSession = createSession("task-1", "session-build", {
       role: "build",
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/repo/task-1",
       status: "running",
       todos: [],
@@ -437,13 +553,13 @@ describe("useAgentStudioSelectionController", () => {
     const viewSession = createSession("task-2", "session-qa", {
       role: "qa",
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/repo/task-2",
       status: "running",
       todos: [],
     });
     const harness = createHookHarness(
       createBaseArgs({
+        activeWorkspace,
         sessions: [activeSession, viewSession],
         taskIdParam: "task-1",
         sessionParam: "session-build",
@@ -480,7 +596,6 @@ describe("useAgentStudioSelectionController", () => {
   test("suppresses stale query task and session selection while repo boundary reset is pending", async () => {
     const readSessionModelCatalog = mock(async () => emptyCatalog);
     const readSessionTodos = mock(async () => []);
-    const hydrateRequestedTaskSessionHistory = mock(async () => {});
     const staleSession = createSession("task-1", "session-1", {
       runtimeKind: "opencode",
       workingDirectory: "/repo-a",
@@ -497,7 +612,6 @@ describe("useAgentStudioSelectionController", () => {
         roleFromQuery: "build",
         readSessionModelCatalog,
         readSessionTodos,
-        hydrateRequestedTaskSessionHistory,
       }),
     );
 
@@ -513,7 +627,6 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.viewActiveSession).toBeNull();
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);
       expect(readSessionTodos).toHaveBeenCalledTimes(0);
-      expect(hydrateRequestedTaskSessionHistory).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

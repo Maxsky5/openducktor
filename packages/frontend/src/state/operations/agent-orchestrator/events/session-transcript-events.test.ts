@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
+  getSession,
   getSessionMessages,
+  listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEvent,
   type SessionEventAdapter,
@@ -11,6 +12,68 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
+  test("preserves explicit history hydration state when live transcript changes", () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: (_externalSessionId, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ historyLoadState: "loaded" }),
+      },
+    };
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    listenToAgentSessionEvents({
+      adapter,
+      repoPath: "/tmp/repo",
+      externalSessionId: "session-1",
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      turnStartedAtBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "Final answer",
+    });
+
+    expect(getSession(sessionsRef).historyLoadState).toBe("loaded");
+  });
+
   test("records inputReadyAtMs when tool input first becomes meaningful", () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
@@ -45,7 +108,7 @@ describe("agent-orchestrator session transcript events", () => {
     };
 
     try {
-      attachAgentSessionListener({
+      listenToAgentSessionEvents({
         adapter,
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
@@ -174,7 +237,7 @@ describe("agent-orchestrator session transcript events", () => {
         },
       };
 
-      attachAgentSessionListener({
+      listenToAgentSessionEvents({
         adapter,
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
@@ -267,7 +330,7 @@ describe("agent-orchestrator session transcript events", () => {
           };
         };
 
-        attachAgentSessionListener({
+        listenToAgentSessionEvents({
           adapter,
           repoPath: "/tmp/repo",
           externalSessionId: "session-1",
@@ -370,7 +433,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -513,7 +576,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -629,7 +692,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -722,7 +785,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    const unsubscribe = attachAgentSessionListener({
+    const unsubscribe = listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -816,7 +879,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -902,7 +965,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -1025,7 +1088,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

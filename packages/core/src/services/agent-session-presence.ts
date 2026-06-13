@@ -52,29 +52,22 @@ export const toAgentSessionPresenceSnapshotFromLiveSnapshot = (
   input:
     | {
         ref: AgentSessionRef;
-        runtimeId: string | null;
         snapshot: LiveAgentSessionSnapshot;
       }
     | {
         ref: AgentSessionRef;
-        runtimeId: string | null;
         snapshot: null;
       },
 ): AgentSessionPresenceSnapshot => {
-  const { ref, runtimeId, snapshot } = input;
+  const { ref, snapshot } = input;
   if (!snapshot) {
     return {
       presence: "stale",
       classification: "stale",
       ref,
-      runtimeId,
       pendingApprovals: [],
       pendingQuestions: [],
     };
-  }
-
-  if (!runtimeId) {
-    throw new Error("Runtime session presence requires a live runtime id.");
   }
 
   const classification = classifyLiveAgentSessionSnapshot(snapshot);
@@ -82,7 +75,6 @@ export const toAgentSessionPresenceSnapshotFromLiveSnapshot = (
     presence: "runtime",
     classification,
     ref,
-    runtimeId,
     title: snapshot.title,
     startedAt: snapshot.startedAt,
     status: snapshot.status,
@@ -102,7 +94,6 @@ export const toPersistedOnlyAgentSessionPresenceSnapshot = ({
   presence: "persisted_only",
   classification: "persisted_only",
   ref,
-  runtimeId: null,
   reason,
   pendingApprovals: [],
   pendingQuestions: [],

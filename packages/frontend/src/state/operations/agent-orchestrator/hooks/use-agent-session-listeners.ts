@@ -3,8 +3,10 @@ import type { AgentEnginePort, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { attachAgentSessionListener } from "../events/session-events";
+import { listenToAgentSessionEvents } from "../events/session-events";
 import { isTranscriptAgentSession } from "../support/session-purpose";
+import type { ListenToAgentSession } from "../support/session-runtime-ref";
+import { toRuntimeSessionRef } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 import type { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
@@ -90,12 +92,8 @@ export const useAgentSessionListeners = ({
   const removeAgentSession = useCallback(
     async (externalSessionId: string): Promise<void> => {
       const session = sessionsRef.current[externalSessionId];
-      if (
-        session &&
-        isTranscriptAgentSession(session) &&
-        agentEngine.hasSession(externalSessionId)
-      ) {
-        await agentEngine.detachSession(externalSessionId);
+      if (session && isTranscriptAgentSession(session)) {
+        await agentEngine.releaseSession(toRuntimeSessionRef(session));
       }
       removeSessionIds([externalSessionId]);
     },
@@ -112,11 +110,8 @@ export const useAgentSessionListeners = ({
       );
       await Promise.all(
         matchingSessions.map(async (session) => {
-          if (
-            isTranscriptAgentSession(session) &&
-            agentEngine.hasSession(session.externalSessionId)
-          ) {
-            await agentEngine.detachSession(session.externalSessionId);
+          if (isTranscriptAgentSession(session)) {
+            await agentEngine.releaseSession(toRuntimeSessionRef(session));
           }
         }),
       );
@@ -128,15 +123,18 @@ export const useAgentSessionListeners = ({
     [agentEngine, removeSessionIds, sessionsRef],
   );
 
-  const attachSessionListener = useCallback(
-    (repoPath: string, externalSessionId: string): void => {
+  const listenToAgentSession = useCallback<ListenToAgentSession>(
+    (target): void => {
+      const externalSessionId = target.externalSessionId;
       if (unsubscribersRef.current.has(externalSessionId)) {
         return;
       }
-      const unsubscribe = attachAgentSessionListener({
+
+      const unsubscribe = listenToAgentSessionEvents({
         adapter: agentEngine,
-        repoPath,
+        repoPath: target.repoPath,
         externalSessionId,
+        sessionRef: target,
         sessionsRef: refBridges.sessionsRef,
         draftRawBySessionRef: refBridges.draftRawBySessionRef,
         draftSourceBySessionRef: refBridges.draftSourceBySessionRef,
@@ -145,7 +143,7 @@ export const useAgentSessionListeners = ({
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
-        isSessionListenerAttached: (candidateSessionId) =>
+        isSessionListenerActive: (candidateSessionId) =>
           candidateSessionId === externalSessionId ||
           unsubscribersRef.current.has(candidateSessionId),
         recordTurnActivityTimestamp,
@@ -172,5 +170,5 @@ export const useAgentSessionListeners = ({
     ],
   );
 
-  return { attachSessionListener, removeAgentSession, removeAgentSessions, removeSessionIds };
+  return { listenToAgentSession, removeAgentSession, removeAgentSessions, removeSessionIds };
 };

@@ -33,16 +33,14 @@ export const buildInitialSession = ({
       ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
       taskId: startedCtx.taskId,
       runtimeKind: requireConfiguredRuntimeKind(
-        runtime.runtimeKind ?? selectedModel?.runtimeKind,
+        runtime.runtimeKind,
         `Runtime kind is required to initialize ${startedCtx.role} sessions.`,
       ),
       role: startedCtx.role,
       status: "starting",
       startedAt: startedCtx.summary.startedAt,
-      runtimeId: runtime.runtimeId,
       workingDirectory: runtime.workingDirectory,
-      historyHydrationState: "hydrated",
-      runtimeRecoveryState: "idle",
+      historyLoadState: "loaded",
       messages:
         initialMessages ??
         buildSessionHeaderMessages({

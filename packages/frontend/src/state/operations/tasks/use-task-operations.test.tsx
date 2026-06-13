@@ -20,7 +20,7 @@ import { documentQueryKeys } from "../../queries/documents";
 import { repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import { workspaceQueryKeys } from "../../queries/workspace";
 import {
-  attachAgentSessionListener,
+  listenToAgentSessionEvents,
   type SessionEventAdapter,
 } from "../agent-orchestrator/events/session-events";
 import { host } from "../shared/host";
@@ -107,7 +107,6 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   role: "build",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/repo",
   messages: [],
   draftAssistantText: "",
@@ -1881,10 +1880,16 @@ describe("use-task-operations", () => {
         1000,
       );
 
-      const unsubscribe = attachAgentSessionListener({
+      const unsubscribe = listenToAgentSessionEvents({
         adapter,
         repoPath: "/repo",
         externalSessionId: "session-1",
+        sessionRef: {
+          externalSessionId: "session-1",
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
         sessionsRef,
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },

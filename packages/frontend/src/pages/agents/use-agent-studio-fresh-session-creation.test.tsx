@@ -52,7 +52,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: null,
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
-  isActiveTaskHydrated: true,
+  isActiveTaskReady: true,
   isSessionWorking: false,
   startAgentSession: async () => "session-new",
   settleStartedAgentSession: () => {},

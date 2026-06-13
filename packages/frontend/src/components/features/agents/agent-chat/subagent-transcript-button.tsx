@@ -1,4 +1,4 @@
-import type { RuntimeRef } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
 import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
 
 type SubagentTranscriptButtonProps = {
-  sessionRuntimeRef?: RuntimeRef | null;
+  sessionRuntimeKind?: RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
   pendingApprovals?: AgentApprovalRequest[] | undefined;
   pendingQuestions?: AgentQuestionRequest[] | undefined;
@@ -22,15 +22,10 @@ type SubagentTranscriptButtonProps = {
 };
 
 type TranscriptSourceInput = {
-  sessionRuntimeRef: RuntimeRef | null | undefined;
+  sessionRuntimeKind: RuntimeKind | null | undefined;
   sessionWorkingDirectory: string | null | undefined;
-  isLive: boolean;
   pendingApprovals: AgentApprovalRequest[] | undefined;
   pendingQuestions: AgentQuestionRequest[] | undefined;
-};
-
-const isLiveSubagentStatus = (status: SubagentMeta["status"]): boolean => {
-  return status === "pending" || status === "running";
 };
 
 const buildTranscriptRequest = (
@@ -46,29 +41,27 @@ const buildTranscriptRequest = (
 };
 
 const buildTranscriptSource = ({
-  sessionRuntimeRef,
+  sessionRuntimeKind,
   sessionWorkingDirectory,
-  isLive,
   pendingApprovals,
   pendingQuestions,
 }: TranscriptSourceInput): RuntimeSessionTranscriptSource | null => {
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
 
-  if (!sessionRuntimeRef || !workingDirectory) {
+  if (!sessionRuntimeKind || !workingDirectory) {
     return null;
   }
 
   return {
-    runtimeRef: sessionRuntimeRef,
+    runtimeKind: sessionRuntimeKind,
     workingDirectory,
-    ...(isLive ? { isLive: true } : {}),
     ...(pendingApprovals ? { pendingApprovals } : {}),
     ...(pendingQuestions ? { pendingQuestions } : {}),
   };
 };
 
 export function SubagentTranscriptButton({
-  sessionRuntimeRef,
+  sessionRuntimeKind,
   sessionWorkingDirectory,
   pendingApprovals,
   pendingQuestions,
@@ -80,9 +73,8 @@ export function SubagentTranscriptButton({
   const externalSessionId = meta.externalSessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
   const transcriptSource = buildTranscriptSource({
-    sessionRuntimeRef,
+    sessionRuntimeKind,
     sessionWorkingDirectory,
-    isLive: isLiveSubagentStatus(meta.status),
     pendingApprovals,
     pendingQuestions,
   });

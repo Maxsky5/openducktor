@@ -5,6 +5,7 @@ import {
   flushAsync,
   makeMockClient,
   OpencodeSdkAdapter,
+  sessionRuntimeRef,
   startDefaultSession,
 } from "./test-support";
 
@@ -63,7 +64,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -129,7 +130,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -187,7 +188,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -269,7 +270,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -335,7 +336,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -401,7 +402,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -443,7 +444,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -509,7 +510,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -574,7 +575,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -641,7 +642,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -716,7 +717,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -790,7 +791,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -847,7 +848,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -905,7 +906,7 @@ describe("OpencodeSdkAdapter event stream", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 

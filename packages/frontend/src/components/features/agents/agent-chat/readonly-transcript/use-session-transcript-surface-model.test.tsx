@@ -32,7 +32,6 @@ const readSessionHistory = mock(
 );
 const readSessionModelCatalog = mock(async () => ({ profiles: [], models: [] }));
 const readSessionTodos = mock(async () => []);
-const attachRuntimeTranscriptSession = mock(async () => {});
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
@@ -52,7 +51,7 @@ let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host
 
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
   return {
-    runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
+    runtimeKind: "opencode",
     workingDirectory: "/repo-a",
   };
 }
@@ -101,13 +100,6 @@ function makeTranscriptSourceWithPendingApproval(): RuntimeSessionTranscriptSour
   };
 }
 
-function makeLiveTranscriptSource(): RuntimeSessionTranscriptSource {
-  return {
-    ...makeTranscriptSource(),
-    isLive: true,
-  };
-}
-
 function makeLiveTranscriptSession(): AgentSessionState {
   return {
     runtimeKind: "opencode",
@@ -118,7 +110,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
     role: null as unknown as AgentSessionState["role"],
     status: "running",
     startedAt: "2026-02-22T12:00:00.000Z",
-    runtimeId: "runtime-1",
     workingDirectory: "/repo-a",
     messages: [],
     draftAssistantText: "",
@@ -193,8 +184,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
     );
     readSessionModelCatalog.mockClear();
     readSessionTodos.mockClear();
-    attachRuntimeTranscriptSession.mockClear();
-    attachRuntimeTranscriptSession.mockImplementation(async () => {});
     replyAgentApproval.mockClear();
     answerAgentQuestion.mockClear();
     useAgentSessionMock.mockClear();
@@ -226,7 +215,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       }),
       useAgentOperations: () => ({
         readSessionHistory,
-        attachRuntimeTranscriptSession,
         readSessionModelCatalog,
         readSessionTodos,
         replyAgentApproval,
@@ -256,6 +244,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       useRepoRuntimeReadiness: () => ({
         readinessState: "ready" as const,
         isReady: true,
+        isRuntimeStarting: false,
         blockedReason: null,
         isLoadingChecks: false,
         refreshChecks: async () => {},
@@ -507,8 +496,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("hydrates existing history while attaching live runtime transcripts", async () => {
-    const liveTranscriptSource = makeLiveTranscriptSource();
+  test("loads existing history with parent-observed pending inputs", async () => {
+    const transcriptSource = makeTranscriptSource();
     const pendingApproval = makePendingApproval();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
@@ -524,7 +513,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         isOpen: true,
         externalSessionId: "session-subagent-1",
         source: {
-          ...liveTranscriptSource,
+          ...transcriptSource,
           pendingApprovals: [pendingApproval],
           pendingQuestions: [makePendingQuestion()],
         },
@@ -534,16 +523,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
-
-      expect(attachRuntimeTranscriptSession).toHaveBeenCalledWith({
-        repoPath: "/repo-a",
-        externalSessionId: "session-subagent-1",
-        runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
-        pendingApprovals: [pendingApproval],
-        pendingQuestions: [makePendingQuestion()],
-        workingDirectory: "/repo-a",
-      });
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
       expect(readSessionHistory).toHaveBeenCalledWith(
         "/repo-a",
         "opencode",
@@ -559,58 +539,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("does not keep live transcript loading after an attach failure", async () => {
-    const liveTranscriptSource = makeLiveTranscriptSource();
-    attachRuntimeTranscriptSession.mockImplementationOnce(async () => {
-      throw new Error("attach unavailable");
-    });
-    const { useSessionTranscriptSurfaceModel } = await import(
-      "./use-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useSessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: liveTranscriptSource,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor(() => {
-        return Boolean(
-          harness.getLatest().model.thread.emptyState?.title.includes("attach unavailable"),
-        );
-      });
-
-      expect(attachRuntimeTranscriptSession).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(false);
-      expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title: "Failed to load conversation: attach unavailable",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("does not keep the live transcript loading after the session is visible", async () => {
-    const liveTranscriptSource = makeLiveTranscriptSource();
+  test("prefers an already-live transcript session when it exists locally", async () => {
     const pendingApproval = makePendingApproval();
     const liveSession = makeLiveTranscriptSession();
-    const resolveAttachCallbacks: Array<() => void> = [];
-    attachRuntimeTranscriptSession.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveAttachCallbacks.push(resolve);
-        }),
-    );
     useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
       requestedSessionId === "session-subagent-1" ? liveSession : null,
     );
@@ -628,7 +559,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         isOpen: true,
         externalSessionId: "session-subagent-1",
         source: {
-          ...liveTranscriptSource,
+          ...makeTranscriptSource(),
           pendingApprovals: [pendingApproval],
         },
       },
@@ -637,21 +568,14 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => attachRuntimeTranscriptSession.mock.calls.length === 1);
 
       const model = harness.getLatest().model;
       expect(model.thread.session).toEqual(liveSession);
       expect(model.thread.isSessionViewLoading).toBe(false);
       expect(model.thread.isSessionHistoryLoading).toBe(false);
-      expect(model.thread.canReplyToApprovals).toBe(false);
-
-      await harness.run(async () => {
-        resolveAttachCallbacks[0]?.();
-      });
-      await harness.waitFor((state) => state.model.thread.canReplyToApprovals === true);
-      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(true);
+      expect(model.thread.canReplyToApprovals).toBe(true);
+      expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
-      resolveAttachCallbacks[0]?.();
       await harness.unmount();
     }
   });
@@ -864,118 +788,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
         title: "Failed to load conversation: Failed to load chat settings: settings unavailable",
       });
       expect(harness.getLatest().model.chatSettings).toEqual(createChatSettingsFixture());
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("surfaces an unavailable state when the source runtime is not attached", async () => {
-    const transcriptSource = makeTranscriptSource();
-    runtimeList = [];
-    const { useSessionTranscriptSurfaceModel } = await import(
-      "./use-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useSessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.model.thread.emptyState !== null);
-
-      expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(false);
-      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(false);
-      await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
-      expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title:
-          "Failed to load conversation: No opencode runtime instance is attached for runtime-1.",
-      });
-      expect(replyAgentApproval).not.toHaveBeenCalled();
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("surfaces runtime list failures without converting them to missing runtimes", async () => {
-    const transcriptSource = makeTranscriptSource();
-    runtimeListError = new Error("runtime registry unavailable");
-    const { useSessionTranscriptSurfaceModel } = await import(
-      "./use-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useSessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.model.thread.emptyState !== null);
-
-      expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(false);
-      expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title: "Failed to load conversation: runtime registry unavailable",
-      });
-    } finally {
-      await harness.unmount();
-    }
-  });
-
-  test("surfaces an ambiguous runtime attachment as unresolved and blocks approval replies", async () => {
-    const transcriptSource = makeTranscriptSource();
-    runtimeList = [makeRuntime(), makeRuntime()];
-    const { useSessionTranscriptSurfaceModel } = await import(
-      "./use-session-transcript-surface-model"
-    );
-    const harness = createSharedHookHarness(
-      useSessionTranscriptSurfaceModel,
-      {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
-        isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
-      },
-      { wrapper },
-    );
-
-    try {
-      await harness.mount();
-      await harness.waitFor((state) => state.model.thread.emptyState !== null);
-
-      expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(false);
-      await harness.getLatest().model.thread.onReplyApproval("permission-1", "approve_once");
-      expect(harness.getLatest().model.thread.emptyState).toEqual({
-        title:
-          "Failed to load conversation: Multiple opencode runtime instances are attached for runtime-1.",
-      });
-      expect(replyAgentApproval).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }

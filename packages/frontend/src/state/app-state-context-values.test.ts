@@ -114,10 +114,9 @@ describe("app-state-context-values", () => {
     };
     const agentValue: AgentStateContextValue = {
       sessions: [],
-      bootstrapTaskSessions: async () => {},
-      hydrateRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView: async () => false,
-      reconcileLiveTaskSessions: async () => {},
+      sessionReadModelError: null,
+      loadRequestedTaskSessionHistory: async () => {},
+      ensureSessionReadyForView: async () => "not_needed",
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -130,7 +129,6 @@ describe("app-state-context-values", () => {
       readSessionFileSearch: async () => [],
       readSessionTodos: async () => [],
       readSessionHistory: async () => [],
-      attachRuntimeTranscriptSession: async () => {},
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       startAgentSession: async () => "session",

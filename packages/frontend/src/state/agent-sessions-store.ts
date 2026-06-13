@@ -16,7 +16,7 @@ export type AgentSessionSummary = Pick<
   | "pendingQuestions"
 > & {
   selectedModel: AgentSessionState["selectedModel"];
-  runtimeKind?: AgentSessionState["runtimeKind"];
+  runtimeKind: AgentSessionState["runtimeKind"];
 };
 
 export type WorkflowAgentSessionSummary = AgentSessionSummary &

@@ -33,6 +33,11 @@ import {
 } from "../support/session-notice-messages";
 import { isWorkflowAgentSession } from "../support/session-purpose";
 import {
+  type ListenToAgentSession,
+  toRuntimeSessionContextRef,
+  toRuntimeSessionRef,
+} from "../support/session-runtime-ref";
+import {
   clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
 } from "../support/subagent-approval-overlay";
@@ -49,7 +54,6 @@ type SessionActionsDependencies = {
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
-  activeWorkspaceRef?: { current: ActiveWorkspace | null };
   currentWorkspaceRepoPathRef: { current: string | null };
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   unsubscribersRef: { current: Map<string, () => void> };
@@ -61,7 +65,7 @@ type SessionActionsDependencies = {
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
-  attachSessionListener: (repoPath: string, externalSessionId: string) => void;
+  listenToAgentSession: ListenToAgentSession;
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
@@ -126,17 +130,12 @@ const ensureSessionReadyForSend = async ({
   updateSession,
 }: {
   externalSessionId: string;
-  ensureSessionReady: (
-    externalSessionId: string,
-    options?: { preserveStartingStatusForIdlePresence?: boolean },
-  ) => Promise<void>;
+  ensureSessionReady: (externalSessionId: string) => Promise<void>;
   sessionsRef: { current: Record<string, AgentSessionState> };
   updateSession: SessionActionsDependencies["updateSession"];
 }): Promise<void> => {
   try {
-    await ensureSessionReady(externalSessionId, {
-      preserveStartingStatusForIdlePresence: true,
-    });
+    await ensureSessionReady(externalSessionId);
   } catch (error) {
     settleStartingSession(externalSessionId, "error", sessionsRef, updateSession);
     throw error;
@@ -196,14 +195,13 @@ export const createAgentSessionActions = ({
   sessionsRef,
   taskRef,
   repoEpochRef,
-  activeWorkspaceRef,
   currentWorkspaceRepoPathRef,
   inFlightStartsByWorkspaceTaskRef,
   unsubscribersRef,
   turnUserAnchorAtBySessionRef = { current: {} },
   turnModelBySessionRef,
   updateSession,
-  attachSessionListener,
+  listenToAgentSession,
   resolveTaskWorktree,
   ensureRuntime,
   loadTaskDocuments,
@@ -225,10 +223,9 @@ export const createAgentSessionActions = ({
     taskRef,
     unsubscribersRef,
     updateSession,
-    attachSessionListener,
+    listenToAgentSession,
     ensureRuntime,
     loadRepoPromptOverrides,
-    ...(activeWorkspaceRef ? { activeWorkspaceRef } : {}),
   });
 
   const sendAgentMessage = async (
@@ -275,7 +272,9 @@ export const createAgentSessionActions = ({
       if (turnModelBySessionRef) {
         turnModelBySessionRef.current[externalSessionId] = selectedModel ?? null;
       }
+    }
 
+    if (!isBusyQueuedSend) {
       updateSession(
         externalSessionId,
         (current) => ({
@@ -293,6 +292,7 @@ export const createAgentSessionActions = ({
 
     try {
       await adapter.sendUserMessage({
+        ...toRuntimeSessionContextRef(readySession),
         externalSessionId,
         parts: normalizedParts,
         ...(selectedModel ? { model: selectedModel } : {}),
@@ -348,7 +348,6 @@ export const createAgentSessionActions = ({
       activeWorkspace,
       repoEpochRef,
       currentWorkspaceRepoPathRef,
-      ...(activeWorkspaceRef ? { activeWorkspaceRef } : {}),
     },
     session: {
       setSessionsById,
@@ -356,7 +355,7 @@ export const createAgentSessionActions = ({
       inFlightStartsByWorkspaceTaskRef,
       loadAgentSessions,
       persistSessionRecord,
-      attachSessionListener,
+      listenToAgentSession,
     },
     runtime: {
       adapter,
@@ -390,16 +389,10 @@ export const createAgentSessionActions = ({
       { persist: false },
     );
 
-    const hasLocalRuntimeSession = adapter.hasSession(externalSessionId);
-
     try {
-      stopRepoPath = workspaceRepoPath ?? currentWorkspaceRepoPathRef.current;
+      stopRepoPath = workspaceRepoPath;
       if (!stopRepoPath) {
         throw new Error("Active workspace repo path is unavailable.");
-      }
-
-      if (!session.runtimeKind) {
-        throw new Error("Session runtime kind is unavailable.");
       }
 
       await stopAuthoritativeSession({
@@ -426,16 +419,12 @@ export const createAgentSessionActions = ({
       );
     }
 
-    if (hasLocalRuntimeSession) {
-      try {
-        await adapter.stopSession(externalSessionId);
-      } catch (error) {
-        console.warn(
-          "[agent-orchestrator] local session stop failed after host stop",
-          externalSessionId,
-          errorMessage(error),
-        );
-      }
+    try {
+      await adapter.releaseSession(toRuntimeSessionRef(session));
+    } catch (error) {
+      console.warn(
+        `Failed to release local session '${externalSessionId}' after authoritative stop: ${errorMessage(error)}`,
+      );
     }
 
     const unsubscribe = unsubscribersRef.current.get(externalSessionId);
@@ -481,7 +470,7 @@ export const createAgentSessionActions = ({
         invalidateSessionStopQueries({
           repoPath: stopRepoPath,
           taskId: session.taskId,
-          ...(session.runtimeKind ? { runtimeKind: session.runtimeKind } : {}),
+          runtimeKind: session.runtimeKind,
         }),
         refreshTaskData(stopRepoPath),
         loadAgentSessions(session.taskId),
@@ -493,8 +482,10 @@ export const createAgentSessionActions = ({
     externalSessionId: string,
     selection: AgentModelSelection | null,
   ): void => {
-    if (adapter.hasSession(externalSessionId)) {
+    const session = sessionsRef.current[externalSessionId];
+    if (session) {
       adapter.updateSessionModel({
+        ...toRuntimeSessionRef(session),
         externalSessionId,
         model: selection,
       });
@@ -516,8 +507,9 @@ export const createAgentSessionActions = ({
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    if (!adapter.hasSession(externalSessionId)) {
-      await ensureSessionReady(externalSessionId, { allowPendingInput: true });
+    const session = sessionsRef.current[externalSessionId];
+    if (!session) {
+      throw new Error(`Session '${externalSessionId}' is not loaded.`);
     }
     markTurnUserAnchorIfMissing(
       turnUserAnchorAtBySessionRef,
@@ -526,7 +518,7 @@ export const createAgentSessionActions = ({
       externalSessionId,
     );
     await adapter.replyApproval({
-      externalSessionId,
+      ...toRuntimeSessionContextRef(session),
       requestId,
       outcome,
       ...(message ? { message } : {}),
@@ -553,8 +545,9 @@ export const createAgentSessionActions = ({
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
-    if (!adapter.hasSession(externalSessionId)) {
-      await ensureSessionReady(externalSessionId, { allowPendingInput: true });
+    const session = sessionsRef.current[externalSessionId];
+    if (!session) {
+      throw new Error(`Session '${externalSessionId}' is not loaded.`);
     }
     markTurnUserAnchorIfMissing(
       turnUserAnchorAtBySessionRef,
@@ -562,7 +555,11 @@ export const createAgentSessionActions = ({
       sessionsRef,
       externalSessionId,
     );
-    await adapter.replyQuestion({ externalSessionId, requestId, answers });
+    await adapter.replyQuestion({
+      ...toRuntimeSessionContextRef(session),
+      requestId,
+      answers,
+    });
     updateSession(
       externalSessionId,
       (current) => {

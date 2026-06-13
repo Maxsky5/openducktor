@@ -29,6 +29,8 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalRuntimeEnsure = host.runtimeEnsure;
   const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
   const originalReadAgentSessionPresenceSnapshot = OpencodeSdkAdapter.prototype.readSessionPresence;
+  const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+  const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
   await clearAppQueryClient();
   host.taskWorktreeGet = async () => ({
@@ -95,6 +97,8 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
       },
     });
   };
+  OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
+  OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
   return () => {
     host.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
@@ -104,5 +108,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.runtimeEnsure = originalRuntimeEnsure;
     opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
     opencodeSdkAdapterPrototype.readSessionPresence = originalReadAgentSessionPresenceSnapshot;
+    OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+    OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
   };
 };

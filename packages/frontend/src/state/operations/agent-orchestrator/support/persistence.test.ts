@@ -3,6 +3,7 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
   findSessionMessageForTest,
   sessionMessageAt,
+  sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -28,14 +29,14 @@ const recordFixture: AgentSessionRecord = {
 const repoPathFixture = "/tmp/repo";
 
 describe("agent-orchestrator/support/persistence", () => {
-  test("hydrates persisted sessions as stopped until runtime reconciliation", () => {
+  test("loads persisted sessions as stopped until runtime state is read", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1", repoPathFixture);
     expect(hydrated.status).toBe("stopped");
     expect(hydrated.title).toBe("BUILD task-1");
     expect(hydrated.runtimeKind).toBe("opencode");
-    expect(hydrated.runtimeId).toBeNull();
     expect(hydrated.pendingApprovals).toEqual([]);
     expect(hydrated.pendingQuestions).toEqual([]);
+    expect(sessionMessagesToArray(hydrated)).toEqual([]);
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
     expect(hydrated.isLoadingModelCatalog).toBe(false);
   });

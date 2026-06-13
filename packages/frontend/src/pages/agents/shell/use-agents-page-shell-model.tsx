@@ -5,6 +5,7 @@ import {
 } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
+  useAgentSessionReadModelState,
   useAgentSessionSummaries,
   useChecksState,
   useTasksState,
@@ -70,9 +71,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unlinkingPullRequestTaskId,
     setTaskTargetBranch,
   } = useTasksState();
+  const { sessionReadModelError } = useAgentSessionReadModelState();
   const {
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
+    loadRequestedTaskSessionHistory,
     ensureSessionReadyForView,
     readSessionFileSearch,
     readSessionModelCatalog,
@@ -108,7 +109,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     tasks,
     isForegroundLoadingTasks,
     sessions,
-    hydrateRequestedTaskSessionHistory,
+    sessionReadModelError,
     ensureSessionReadyForView,
     readSessionModelCatalog,
     readSessionTodos,
@@ -150,8 +151,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     gitConflictQuickActionContextRef,
     openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
     agentOperations: {
-      bootstrapTaskSessions,
-      hydrateRequestedTaskSessionHistory,
+      loadRequestedTaskSessionHistory,
       readSessionFileSearch,
       readSessionSlashCommands,
       ...(readSessionSkills ? { readSessionSkills } : {}),

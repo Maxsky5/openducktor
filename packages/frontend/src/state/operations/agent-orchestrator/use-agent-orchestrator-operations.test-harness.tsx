@@ -91,7 +91,6 @@ export const createHookHarness = (args: {
     ...args,
     activeWorkspace: args.activeWorkspace ?? createDefaultActiveWorkspace(args.activeRepo),
     agentEngine: args.agentEngine ?? new OpencodeSdkAdapter(),
-    isSessionRuntimeReady: () => true,
   };
 
   const Harness = () => {

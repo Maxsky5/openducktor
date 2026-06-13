@@ -16,7 +16,6 @@ type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => 
 type OrchestratorMutableState = {
   sessionsById: AgentSessionsById;
   tasks: TaskCard[];
-  activeWorkspace: ActiveWorkspace | null;
   currentWorkspaceRepoPath: string | null;
   repoEpoch: number;
   inFlightStartsByWorkspaceTask: Map<string, Promise<string>>;
@@ -32,7 +31,6 @@ type OrchestratorMutableState = {
 type OrchestratorRefBridges = {
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   taskRef: MutableRefObject<TaskCard[]>;
-  activeWorkspaceRef: MutableRefObject<ActiveWorkspace | null>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   inFlightStartsByWorkspaceTaskRef: MutableRefObject<Map<string, Promise<string>>>;
@@ -198,7 +196,6 @@ export const useOrchestratorSessionState = ({
   const mutableStateRef = useRef<OrchestratorMutableState>({
     sessionsById: {},
     tasks,
-    activeWorkspace,
     currentWorkspaceRepoPath: workspaceRepoPath,
     repoEpoch: 0,
     inFlightStartsByWorkspaceTask: new Map<string, Promise<string>>(),
@@ -214,7 +211,6 @@ export const useOrchestratorSessionState = ({
     () => ({
       sessionsRef: createMutableBridge(mutableStateRef, "sessionsById"),
       taskRef: createMutableBridge(mutableStateRef, "tasks"),
-      activeWorkspaceRef: createMutableBridge(mutableStateRef, "activeWorkspace"),
       currentWorkspaceRepoPathRef: createMutableBridge(mutableStateRef, "currentWorkspaceRepoPath"),
       repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
       inFlightStartsByWorkspaceTaskRef: createMutableBridge(
@@ -262,9 +258,8 @@ export const useOrchestratorSessionState = ({
   );
 
   useEffect(() => {
-    mutableStateRef.current.activeWorkspace = activeWorkspace;
     mutableStateRef.current.tasks = tasks;
-  }, [activeWorkspace, tasks]);
+  }, [tasks]);
 
   useEffect(() => {
     if (mutableStateRef.current.currentWorkspaceRepoPath === workspaceRepoPath) {

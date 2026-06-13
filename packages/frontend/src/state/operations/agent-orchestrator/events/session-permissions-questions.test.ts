@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   type AgentSessionState,
-  attachAgentSessionListener,
   buildSession,
   getSessionMessages,
+  listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEvent,
   type SessionEventAdapter,
@@ -11,7 +11,7 @@ import {
 
 type SessionsRef = { current: Record<string, AgentSessionState> };
 
-const attachTestSessionListener = (input: {
+const startTestSessionListener = (input: {
   externalSessionId: string;
   sessionsRef: SessionsRef;
 }): ((event: SessionEvent) => void) => {
@@ -37,7 +37,7 @@ const attachTestSessionListener = (input: {
     };
   };
 
-  attachAgentSessionListener({
+  listenToAgentSessionEvents({
     adapter,
     repoPath: "/tmp/repo",
     externalSessionId: input.externalSessionId,
@@ -95,7 +95,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -197,7 +197,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-child-session",
@@ -313,7 +313,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const handleEvent = attachTestSessionListener({
+    const handleEvent = startTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -361,7 +361,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const handleEvent = attachTestSessionListener({
+    const handleEvent = startTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -430,7 +430,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -585,7 +585,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -658,7 +658,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const handleEvent = attachTestSessionListener({
+    const handleEvent = startTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -748,7 +748,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -828,7 +828,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       },
       replyApproval: async () => {},
     };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-attached-permission";
+    const subagentCorrelationKey = "part:assistant-parent:subtask-active-permission";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-parent-session": buildSession({
@@ -842,7 +842,7 @@ describe("agent-orchestrator session permissions and questions", () => {
               timestamp: "2026-02-22T08:00:01.000Z",
               meta: {
                 kind: "subagent",
-                partId: "subtask-attached-permission",
+                partId: "subtask-active-permission",
                 correlationKey: subagentCorrelationKey,
                 status: "running",
                 agent: "build",
@@ -872,7 +872,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -881,7 +881,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
+      isSessionListenerActive: (externalSessionId) =>
         externalSessionId === "external-child-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -897,7 +897,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     handleEvent({
       type: "approval_required",
       externalSessionId: "external-parent-session",
-      requestId: "perm-child-attached",
+      requestId: "perm-child-active",
       requestType: "permission_grant" as const,
       title: `Approve permission: ${"read"}`,
       summary: `Approval request for ${"read"}.`,
@@ -923,7 +923,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       ],
     ).toEqual([
       {
-        requestId: "perm-child-attached",
+        requestId: "perm-child-active",
         requestType: "permission_grant" as const,
         title: `Approve permission: ${"read"}`,
         summary: `Approval request for ${"read"}.`,
@@ -993,7 +993,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1064,7 +1064,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       },
       replyApproval: async () => {},
     };
-    const subagentCorrelationKey = "part:assistant-parent:subtask-attached-question";
+    const subagentCorrelationKey = "part:assistant-parent:subtask-active-question";
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "external-parent-session": buildSession({
@@ -1078,7 +1078,7 @@ describe("agent-orchestrator session permissions and questions", () => {
               timestamp: "2026-02-22T08:00:01.000Z",
               meta: {
                 kind: "subagent",
-                partId: "subtask-attached-question",
+                partId: "subtask-active-question",
                 correlationKey: subagentCorrelationKey,
                 status: "running",
                 agent: "build",
@@ -1108,7 +1108,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1117,7 +1117,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
+      isSessionListenerActive: (externalSessionId) =>
         externalSessionId === "external-child-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1133,7 +1133,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     handleEvent({
       type: "question_required",
       externalSessionId: "external-parent-session",
-      requestId: "question-child-attached",
+      requestId: "question-child-active",
       questions: [
         {
           header: "Scope",
@@ -1155,7 +1155,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       ],
     ).toEqual([
       {
-        requestId: "question-child-attached",
+        requestId: "question-child-active",
         questions: [
           {
             header: "Scope",
@@ -1205,7 +1205,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1309,7 +1309,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1351,12 +1351,14 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
     await Promise.resolve();
 
-    expect(replyApproval).toHaveBeenCalledWith({
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
-      outcome: "reject",
-      message: expect.any(String),
-    });
+    expect(replyApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-write",
+        outcome: "reject",
+        message: expect.any(String),
+      }),
+    );
     expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
       sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
@@ -1422,7 +1424,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1431,7 +1433,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
+      isSessionListenerActive: (externalSessionId) =>
         externalSessionId === "external-parent-session",
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1466,18 +1468,20 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
     await Promise.resolve();
 
-    expect(replyApproval).toHaveBeenCalledWith({
-      externalSessionId: "external-parent-session",
-      requestId: "perm-child-write",
-      outcome: "reject",
-      message: expect.any(String),
-    });
+    expect(replyApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalSessionId: "external-parent-session",
+        requestId: "perm-child-write",
+        outcome: "reject",
+        message: expect.any(String),
+      }),
+    );
     expect(
       sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
     ).toBeUndefined();
   });
 
-  test("lets attached child sessions own linked auto-reject replies", async () => {
+  test("lets active child sessions own linked auto-reject replies", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
@@ -1530,7 +1534,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1539,7 +1543,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
+      isSessionListenerActive: (externalSessionId) =>
         externalSessionId === "external-parent-session" ||
         externalSessionId === "external-child-session",
       resolveTurnDurationMs: () => undefined,
@@ -1547,7 +1551,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-child-session",
@@ -1556,7 +1560,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerAttached: (externalSessionId) =>
+      isSessionListenerActive: (externalSessionId) =>
         externalSessionId === "external-parent-session" ||
         externalSessionId === "external-child-session",
       resolveTurnDurationMs: () => undefined,
@@ -1597,12 +1601,14 @@ describe("agent-orchestrator session permissions and questions", () => {
     await Promise.resolve();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
-    expect(replyApproval).toHaveBeenCalledWith({
-      externalSessionId: "external-child-session",
-      requestId: "perm-child-write",
-      outcome: "reject",
-      message: expect.any(String),
-    });
+    expect(replyApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalSessionId: "external-child-session",
+        requestId: "perm-child-write",
+        outcome: "reject",
+        message: expect.any(String),
+      }),
+    );
     expect(
       sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
     ).toBeUndefined();
@@ -1663,7 +1669,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    attachAgentSessionListener({
+    listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",

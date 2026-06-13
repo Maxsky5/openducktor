@@ -96,6 +96,7 @@ describe("useAgentStudioReadiness", () => {
 
       const readiness = latest as ReturnType<typeof useAgentStudioReadiness>;
       expect(readiness.agentStudioReadinessState).toBe("checking");
+      expect(readiness.isRuntimeStarting).toBe(true);
       expect(readiness.agentStudioBlockedReason).toContain("runtime is starting");
     } finally {
       await harness.unmount();
@@ -155,6 +156,7 @@ describe("useAgentStudioReadiness", () => {
       }
 
       const readiness = latest as ReturnType<typeof useAgentStudioReadiness>;
+      expect(readiness.isRuntimeStarting).toBe(false);
       expect(readiness.agentStudioBlockedReason).toContain("Checking OpenDucktor MCP");
     } finally {
       await harness.unmount();
@@ -215,6 +217,7 @@ describe("useAgentStudioReadiness", () => {
 
       const readiness = latest as ReturnType<typeof useAgentStudioReadiness>;
       expect(readiness.agentStudioReadinessState).toBe("checking");
+      expect(readiness.isRuntimeStarting).toBe(false);
       expect(readiness.agentStudioBlockedReason).toContain("Checking OpenDucktor MCP");
       expect(readiness.agentStudioBlockedReason).not.toContain("mock runtime failed");
     } finally {

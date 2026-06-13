@@ -8,6 +8,21 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { createSessionStartTags } from "./start-session-support";
 
+const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
+  const runtimeKind = startedCtx.summary.runtimeKind;
+  if (!runtimeKind) {
+    throw new Error(
+      `Runtime kind is required to stop started session '${startedCtx.summary.externalSessionId}'.`,
+    );
+  }
+  return {
+    repoPath: startedCtx.repoPath,
+    externalSessionId: startedCtx.summary.externalSessionId,
+    runtimeKind,
+    workingDirectory: startedCtx.workingDirectory,
+  };
+};
+
 export const stopSessionOnStaleAndThrow = async ({
   reason,
   runtime,
@@ -21,7 +36,7 @@ export const stopSessionOnStaleAndThrow = async ({
   try {
     await runOrchestratorTask(
       reason,
-      async () => runtime.adapter.stopSession(tags.externalSessionId),
+      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
       {
         tags,
       },
@@ -59,7 +74,7 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   try {
     await runOrchestratorTask(
       "start-session-stop-after-persist-failure",
-      async () => runtime.adapter.stopSession(externalSessionId),
+      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
       { tags: createSessionStartTags(startedCtx) },
     );
   } catch (stopError) {
@@ -89,9 +104,13 @@ export const rollbackStartedSessionBeforeRegistration = async ({
   const externalSessionId = startedCtx.summary.externalSessionId;
 
   try {
-    await runOrchestratorTask(reason, async () => runtime.adapter.stopSession(externalSessionId), {
-      tags: createSessionStartTags(startedCtx),
-    });
+    await runOrchestratorTask(
+      reason,
+      async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
+      {
+        tags: createSessionStartTags(startedCtx),
+      },
+    );
   } catch (stopError) {
     throw new Error(
       `Failed to initialize started session "${externalSessionId}": ${errorMessage(error)}. Failed to stop the started session during rollback: ${errorMessage(stopError)}`,

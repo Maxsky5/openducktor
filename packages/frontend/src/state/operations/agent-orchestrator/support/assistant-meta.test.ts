@@ -12,7 +12,6 @@ const sessionFixture: AgentSessionState = {
   role: "build",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "Draft answer",

@@ -35,7 +35,6 @@ describe("useAgentChatSessionRuntimeData", () => {
         session: createAgentSessionFixture({
           externalSessionId: "external-1",
           runtimeKind: "opencode",
-          runtimeId: "runtime-1",
           workingDirectory: "/repo",
           modelCatalog: null,
           isLoadingModelCatalog: true,

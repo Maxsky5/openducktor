@@ -256,6 +256,7 @@ export function useAgentStudioPageModels({
     () => ({
       readinessState: selectedRuntimeReadiness.readinessState,
       isReady: selectedRuntimeReadiness.isReady,
+      isRuntimeStarting: selectedRuntimeReadiness.isRuntimeStarting,
       blockedReason: selectedRuntimeReadiness.blockedReason,
       isLoadingChecks: selectedRuntimeReadiness.isLoadingChecks,
       refreshChecks: selectedRuntimeReadiness.refreshChecks,
@@ -264,6 +265,7 @@ export function useAgentStudioPageModels({
       selectedRuntimeReadiness.blockedReason,
       selectedRuntimeReadiness.isLoadingChecks,
       selectedRuntimeReadiness.isReady,
+      selectedRuntimeReadiness.isRuntimeStarting,
       selectedRuntimeReadiness.readinessState,
       selectedRuntimeReadiness.refreshChecks,
     ],

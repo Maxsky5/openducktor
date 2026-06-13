@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { invokeStopAgentSession } from "./use-agent-chat-surface-model";
 
 describe("invokeStopAgentSession", () => {
-  test("invokes stop and attaches a local rejection handler", () => {
+  test("invokes stop and registers a local rejection handler", () => {
     const stopCalls: string[] = [];
     const catchState: { rejectionHandler?: (error: Error) => unknown } = {};
     const stopPromise = {
@@ -21,7 +21,7 @@ describe("invokeStopAgentSession", () => {
     expect(stopCalls).toEqual(["session-1"]);
     expect(catchState.rejectionHandler).toBeFunction();
     if (!catchState.rejectionHandler) {
-      throw new Error("Expected stop rejection handler to be attached");
+      throw new Error("Expected stop rejection handler to be registered");
     }
     expect(catchState.rejectionHandler(new Error("stop failed"))).toBeUndefined();
   });

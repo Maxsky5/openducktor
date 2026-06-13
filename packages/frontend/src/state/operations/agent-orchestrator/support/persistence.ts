@@ -22,7 +22,7 @@ import {
 } from "./assistant-turn-duration";
 import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { isFinalAssistantHistoryMessage } from "./history-finality";
-import { appendHydratedSubagentMessage } from "./hydrated-subagent-messages";
+import { appendHistorySubagentMessage } from "./history-subagent-messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import { isWorkflowAgentSession } from "./session-purpose";
 import {
@@ -42,7 +42,7 @@ type LegacySubtaskHistoryPart = {
   prompt: string;
   description: string;
 };
-type HydrationHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
+type SessionHistoryPart = HistoryPart | LegacySubtaskHistoryPart;
 
 export const toPersistedSessionRecord = (session: AgentSessionState): AgentSessionRecord => {
   if (!isWorkflowAgentSession(session)) {
@@ -89,14 +89,12 @@ export const fromPersistedSessionRecord = (
       taskId: fallbackTaskId,
       role: session.role,
       // Persisted task-store records are durable session metadata only.
-      // Live state must always be derived from the runtime on hydration/reconciliation.
+      // Live state must always be derived from the runtime, not from persisted records.
       status: "stopped",
       startedAt: session.startedAt,
       runtimeKind,
-      runtimeId: null,
       workingDirectory: session.workingDirectory,
-      historyHydrationState: "not_requested",
-      runtimeRecoveryState: "idle",
+      historyLoadState: "not_requested",
       messages: [],
       draftAssistantText: "",
       draftAssistantMessageId: null,
@@ -142,7 +140,7 @@ const userMessageMeta = (
 
 const historyPartToChatMessage = (
   message: AgentSessionHistoryMessage,
-  part: HydrationHistoryPart,
+  part: SessionHistoryPart,
 ): AgentChatMessage | null => {
   switch (part.kind) {
     case "reasoning": {
@@ -259,11 +257,11 @@ export const historyToChatMessages = (
   for (const message of history) {
     const userDisplayParts = message.role === "user" ? (message.displayParts ?? []) : [];
 
-    for (const part of message.parts as HydrationHistoryPart[]) {
+    for (const part of message.parts as SessionHistoryPart[]) {
       const partMessage = historyPartToChatMessage(message, part);
       if (partMessage) {
         if (isSubagentMessage(partMessage)) {
-          appendHydratedSubagentMessage(next, partMessage);
+          appendHistorySubagentMessage(next, partMessage);
           continue;
         }
         next.push(partMessage);

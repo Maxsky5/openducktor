@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { AttachAgentSessionInput, ResumeAgentSessionInput } from "@openducktor/core";
+import type { AgentSessionRuntimeRef, ResumeAgentSessionInput } from "@openducktor/core";
 import {
   clearLocalSessionState,
-  sessionStateFromThreadAttach,
+  sessionStateFromThreadRestore,
   sessionStateFromThreadResume,
 } from "./codex-session-lifecycle";
 import type { CodexThreadResumeResult } from "./types";
@@ -18,7 +18,7 @@ const threadResumeResponse: CodexThreadResumeResult = {
 };
 
 describe("codex session lifecycle", () => {
-  test("builds equivalent session state for resume and attach responses", () => {
+  test("keeps restore state free of local live status", () => {
     const sharedInput = {
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -36,14 +36,13 @@ describe("codex session lifecycle", () => {
       model,
       threadResumeResponse,
     );
-    const attached = sessionStateFromThreadAttach(
-      sharedInput satisfies AttachAgentSessionInput,
+    const restored = sessionStateFromThreadRestore(
+      sharedInput satisfies AgentSessionRuntimeRef,
       "runtime-1",
       model,
       threadResumeResponse,
     );
 
-    expect(attached).toEqual(resumed);
     expect(resumed).toMatchObject({
       role: "planner",
       runtimeId: "runtime-1",
@@ -63,9 +62,24 @@ describe("codex session lifecycle", () => {
         agentSessionStatus: "running",
       },
     });
+    expect(restored).toMatchObject({
+      role: "planner",
+      runtimeId: "runtime-1",
+      repoPath: "/repo",
+      threadId: "thread-1",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      model,
+      summary: {
+        externalSessionId: "thread-1",
+        role: "planner",
+        status: "running",
+      },
+    });
+    expect(restored.liveStatus).toBeUndefined();
   });
 
-  test("preserves attach-specific optional model absence", () => {
+  test("preserves restore-specific optional model absence", () => {
     const input = {
       repoPath: "/repo",
       runtimeKind: "codex",
@@ -74,16 +88,16 @@ describe("codex session lifecycle", () => {
       role: "qa",
       systemPrompt: "Review the work.",
       externalSessionId: "thread-1",
-    } satisfies AttachAgentSessionInput;
+    } satisfies AgentSessionRuntimeRef;
 
-    const attached = sessionStateFromThreadAttach(input, "runtime-1", undefined, {
+    const restored = sessionStateFromThreadRestore(input, "runtime-1", undefined, {
       ...threadResumeResponse,
       startedAt: "2026-05-07T00:00:00.000Z",
     });
 
-    expect(attached.model).toBeUndefined();
-    expect(attached.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
-    expect(attached.liveStatus?.agentSessionStatus).toBe("running");
+    expect(restored.model).toBeUndefined();
+    expect(restored.summary.startedAt).toBe("2026-05-07T00:00:00.000Z");
+    expect(restored.liveStatus).toBeUndefined();
   });
 
   test("clears local session-scoped state without touching other sessions", () => {

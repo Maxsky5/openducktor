@@ -36,6 +36,7 @@ const handleSelectVariant = () => {};
 const baseReadiness = {
   agentStudioReadinessState: "ready" as const,
   agentStudioReady: true,
+  isRuntimeStarting: false,
   agentStudioBlockedReason: "",
   isLoadingChecks: false,
   refreshChecks: async () => {},
@@ -91,7 +92,7 @@ const baseArgs: BuildArgs = {
     isSessionHistoryHydrating: false,
     isSessionSelectionResolving: false,
     isWaitingForRuntimeReadiness: false,
-    isSessionHistoryHydrationFailed: false,
+    isSessionHistoryLoadFailed: false,
     activeSessionContextUsage: null,
     documents: baseDocuments,
     readiness: baseReadiness,
@@ -154,7 +155,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
     expect(mapped.selectedSession.runtime.isSessionHistoryHydrated).toBe(true);
-    expect(mapped.selectedSession.runtime.isSessionHistoryHydrationFailed).toBe(false);
+    expect(mapped.selectedSession.runtime.isSessionHistoryLoadFailed).toBe(false);
     expect(mapped.selectedSession.runtime.isWaitingForRuntimeReadiness).toBe(false);
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
@@ -219,13 +220,13 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       viewSessionRuntimeDataError: "runtime data failed",
       hasActiveGitConflict: true,
-      isActiveTaskHydrated: false,
-      isActiveTaskHydrationFailed: false,
+      isActiveTaskReady: false,
+      isActiveTaskReadinessFailed: false,
       isSessionHistoryHydrated: false,
       isSessionHistoryHydrating: true,
       isSessionSelectionResolving: true,
       isWaitingForRuntimeReadiness: true,
-      isSessionHistoryHydrationFailed: false,
+      isSessionHistoryLoadFailed: false,
       activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
       documents: baseDocuments,
       readiness: {
@@ -266,12 +267,12 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
         runtime: {
           ...baseArgs.selectedSession.runtime,
           isTaskHydrating: true,
-          isSessionHistoryHydrationFailed: true,
+          isSessionHistoryLoadFailed: true,
         },
       },
     });
 
     expect(failed.selectedSession.runtime.isTaskHydrating).toBe(true);
-    expect(failed.selectedSession.runtime.isSessionHistoryHydrationFailed).toBe(true);
+    expect(failed.selectedSession.runtime.isSessionHistoryLoadFailed).toBe(true);
   });
 });

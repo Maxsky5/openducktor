@@ -147,7 +147,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionHistoryHydrating: false,
     isSessionSelectionResolving: false,
     isWaitingForRuntimeReadiness: false,
-    isSessionHistoryHydrationFailed: false,
+    isSessionHistoryLoadFailed: false,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
     allSessionSummaries,
@@ -174,6 +174,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
   const readiness: AgentStudioSelectedSessionContextInput["readiness"] = {
     agentStudioReadinessState: "ready",
     agentStudioReady: true,
+    isRuntimeStarting: false,
     agentStudioBlockedReason: "",
     isLoadingChecks: false,
     refreshChecks: async () => {},
@@ -257,7 +258,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       isSessionHistoryHydrating: selectedSessionCore.isSessionHistoryHydrating,
       isSessionSelectionResolving: selectedSessionCore.isSessionSelectionResolving,
       isWaitingForRuntimeReadiness: selectedSessionCore.isWaitingForRuntimeReadiness,
-      isSessionHistoryHydrationFailed: selectedSessionCore.isSessionHistoryHydrationFailed,
+      isSessionHistoryLoadFailed: selectedSessionCore.isSessionHistoryLoadFailed,
       activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
         totalTokens: 12,
         contextWindow: 100,
@@ -367,7 +368,6 @@ describe("useAgentStudioPageModels", () => {
   test("preserves active Codex runtime identity for composer accent while catalog loads", async () => {
     const codexSession = createSession("session-codex", {
       runtimeKind: "codex",
-      runtimeId: "codex-runtime",
       selectedModel: null,
       isLoadingModelCatalog: true,
     });
@@ -483,6 +483,7 @@ describe("useAgentStudioPageModels", () => {
         readiness: {
           agentStudioReadinessState: "checking",
           agentStudioReady: false,
+          isRuntimeStarting: true,
         },
       }),
     );
@@ -496,6 +497,100 @@ describe("useAgentStudioPageModels", () => {
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",
     );
+
+    await harness.unmount();
+  });
+
+  test("shows runtime loading instead of kickoff while selected session state is loading", async () => {
+    const selectedSummary = toAgentSessionSummary(createSession("session-pending"));
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          activeSession: null,
+          sessionsForTask: [selectedSummary],
+          allSessionSummaries: [selectedSummary],
+          isSessionHistoryHydrated: false,
+          isSessionHistoryHydrating: true,
+          isWaitingForRuntimeReadiness: true,
+        },
+        readiness: {
+          agentStudioReadinessState: "checking",
+          agentStudioReady: false,
+          isRuntimeStarting: true,
+        },
+        selectedSessionActions: {
+          canKickoffNewSession: true,
+          kickoffLabel: "Start Spec",
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const html = renderToStaticMarkup(
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
+    );
+    expect(html).toContain("Runtime is starting");
+    expect(html).not.toContain("Start Spec");
+
+    await harness.unmount();
+  });
+
+  test("shows runtime loading instead of kickoff before selected session state is known", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          activeSession: null,
+          sessionsForTask: [],
+          allSessionSummaries: [],
+          isWaitingForRuntimeReadiness: false,
+        },
+        readiness: {
+          agentStudioReadinessState: "checking",
+          agentStudioReady: false,
+          isRuntimeStarting: true,
+        },
+        selectedSessionActions: {
+          canKickoffNewSession: true,
+          kickoffLabel: "Start Spec",
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const html = renderToStaticMarkup(
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
+    );
+    expect(html).toContain("Runtime is starting");
+    expect(html).not.toContain("Start Spec");
+
+    await harness.unmount();
+  });
+
+  test("shows session loading instead of kickoff while session read model is resolving", async () => {
+    const harness = createHookHarness(
+      createHookArgs({
+        selectedSessionCore: {
+          activeSession: null,
+          sessionsForTask: [],
+          allSessionSummaries: [],
+          isSessionSelectionResolving: true,
+        },
+        selectedSessionActions: {
+          canKickoffNewSession: true,
+          kickoffLabel: "Start Spec",
+        },
+      }),
+    );
+
+    await harness.mount();
+
+    const html = renderToStaticMarkup(
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
+    );
+    expect(html).toContain("Loading session");
+    expect(html).not.toContain("Start Spec");
 
     await harness.unmount();
   });
@@ -539,7 +634,6 @@ describe("useAgentStudioPageModels", () => {
     const plannerSession = createSession("session-planner", "external-planner", {
       role: "planner",
       runtimeKind: "opencode",
-      runtimeId: "runtime-1",
       workingDirectory: "/repo",
       messages: [
         {

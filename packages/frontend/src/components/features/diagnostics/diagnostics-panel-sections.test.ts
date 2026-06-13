@@ -159,7 +159,7 @@ describe("DiagnosticsPanelSections", () => {
     expect(html).toContain("Repository path:");
     expect(html).toContain("Worktree directory:");
     expect(html).toContain("OpenCode:");
-    expect(html).toContain("Runtime ID:");
+    expect(html).toContain("Working directory:");
     expect(html).toContain("Server name:");
     expect(html).toContain("Status:");
     expect(html).toContain("Tools detected:");

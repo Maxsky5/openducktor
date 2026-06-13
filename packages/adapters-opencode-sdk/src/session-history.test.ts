@@ -7,11 +7,71 @@ import {
   flushAsync,
   makeMockClient,
   OpencodeSdkAdapter,
+  sessionRuntimeRef,
   startDefaultSession,
 } from "./test-support";
 import type { SessionRecord } from "./types";
 
 describe("OpencodeSdkAdapter session history", () => {
+  test("loadSessionHistory maps Opencode user message system prompts to system history once", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "msg-100",
+            role: "user",
+            system: "Use the repo rules.",
+            time: { created: Date.parse("2026-02-17T11:59:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-1",
+              sessionID: "session-opencode-1",
+              messageID: "msg-100",
+              type: "text",
+              text: "Start work",
+              time: { start: Date.now(), end: Date.now() },
+            } as unknown as Part,
+          ],
+        },
+        {
+          info: {
+            id: "msg-101",
+            role: "user",
+            system: "Use the repo rules.",
+            time: { created: Date.parse("2026-02-17T12:00:00Z") },
+          },
+          parts: [
+            {
+              id: "text-user-2",
+              sessionID: "session-opencode-1",
+              messageID: "msg-101",
+              type: "text",
+              text: "Continue",
+              time: { start: Date.now(), end: Date.now() },
+            } as unknown as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      ...defaultRepoRuntimeInput,
+      externalSessionId: "session-opencode-1",
+      limit: 100,
+    });
+
+    expect(history.map((message) => [message.role, message.text])).toEqual([
+      ["system", "System prompt:\n\nUse the repo rules."],
+      ["user", "Start work"],
+      ["user", "Continue"],
+    ]);
+  });
+
   test("loadSessionHistory preserves message model metadata and maps streamed parts", async () => {
     const mock = makeMockClient({
       messagesResponse: [
@@ -747,7 +807,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -879,7 +939,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => {
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -1249,39 +1309,27 @@ describe("OpencodeSdkAdapter session history", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
+    await startDefaultSession(adapter, "spec");
     const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
-    sessions.set("session-opencode-1", {
-      externalSessionId: "session-opencode-1",
-      eventTransportKey: defaultRuntimeConnection.endpoint,
-      input: {
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/feature-worktree",
-        taskId: "task-1",
-        role: "spec",
-        systemPrompt: "System prompt",
-      },
-      messageMetadataById: new Map([
-        [
-          "msg-user-attachment-1",
-          {
-            timestamp: "2026-02-17T11:59:00Z",
-            displayParts: [
-              {
-                kind: "attachment",
-                attachment: {
-                  id: "attachment-image-1",
-                  path: "/tmp/local-screenshot.png",
-                  name: "Screenshot-2026-03-16-at-23.48.30.png",
-                  kind: "image",
-                  mime: "image/png",
-                },
-              },
-            ],
+    const session = sessions.get("session-opencode-1");
+    if (!session) {
+      throw new Error("Expected started session");
+    }
+    session.messageMetadataById.set("msg-user-attachment-1", {
+      timestamp: "2026-02-17T11:59:00Z",
+      displayParts: [
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-image-1",
+            path: "/tmp/local-screenshot.png",
+            name: "Screenshot-2026-03-16-at-23.48.30.png",
+            kind: "image",
+            mime: "image/png",
           },
-        ],
-      ]),
-    } as unknown as SessionRecord);
+        },
+      ],
+    });
 
     const history = await adapter.loadSessionHistory({
       ...defaultRepoRuntimeInput,
@@ -1334,52 +1382,30 @@ describe("OpencodeSdkAdapter session history", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
+    await startDefaultSession(adapter, "spec");
     const sessions = (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
-    sessions.set("session-runtime-a", {
-      externalSessionId: "session-opencode-1",
-      eventTransportKey: defaultRuntimeConnection.endpoint,
-      input: {
-        externalSessionId: "session-runtime-a",
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/feature-worktree",
-        taskId: "task-1",
-        role: "spec",
-        systemPrompt: "System prompt",
-      },
-      messageMetadataById: new Map([
-        [
-          "msg-user-attachment-1",
-          {
-            timestamp: "2026-02-17T11:59:00Z",
-            displayParts: [
-              {
-                kind: "attachment",
-                attachment: {
-                  id: "attachment-image-1",
-                  path: "/tmp/runtime-a-screenshot.png",
-                  name: "Screenshot-2026-03-16-at-23.48.30.png",
-                  kind: "image",
-                  mime: "image/png",
-                },
-              },
-            ],
+    const matchingSession = sessions.get("session-opencode-1");
+    if (!matchingSession) {
+      throw new Error("Expected started session");
+    }
+    matchingSession.messageMetadataById.set("msg-user-attachment-1", {
+      timestamp: "2026-02-17T11:59:00Z",
+      displayParts: [
+        {
+          kind: "attachment",
+          attachment: {
+            id: "attachment-image-1",
+            path: "/tmp/runtime-a-screenshot.png",
+            name: "Screenshot-2026-03-16-at-23.48.30.png",
+            kind: "image",
+            mime: "image/png",
           },
-        ],
-      ]),
-    } as unknown as SessionRecord);
+        },
+      ],
+    });
     sessions.set("session-runtime-b", {
-      externalSessionId: "session-opencode-1",
+      ...matchingSession,
       eventTransportKey: "http://127.0.0.1:12000",
-      input: {
-        externalSessionId: "session-runtime-b",
-        repoPath: "/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/other-worktree",
-        taskId: "task-1",
-        role: "spec",
-        systemPrompt: "System prompt",
-      },
       messageMetadataById: new Map([
         [
           "msg-user-attachment-1",

@@ -20,23 +20,22 @@ export const buildReusableSessionOptions = ({
   const roleSessionNumberById = buildRoleSessionSequenceById(roleSessions);
 
   return roleSessions.sort(compareAgentSessionRecency).map((session, index) => {
-    const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind ?? null;
+    const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind;
     return {
       value: session.externalSessionId,
-      runtimeKind: session.runtimeKind ?? null,
+      runtimeKind: session.runtimeKind,
       label: formatAgentSessionOptionLabel({
         session,
         sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
         roleLabelByRole: AGENT_ROLE_LABELS,
       }),
       description: formatAgentSessionOptionDescription(session),
-      selectedModel:
-        session.selectedModel && runtimeKind
-          ? {
-              ...session.selectedModel,
-              runtimeKind,
-            }
-          : null,
+      selectedModel: session.selectedModel
+        ? {
+            ...session.selectedModel,
+            runtimeKind,
+          }
+        : null,
       ...(index === 0 ? { secondaryLabel: "Latest" } : {}),
     };
   });

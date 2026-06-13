@@ -31,7 +31,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   role: "spec",
   status: "idle",
   startedAt: "2026-02-20T10:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/tmp/work",
   messages: [],
   draftAssistantText: "",

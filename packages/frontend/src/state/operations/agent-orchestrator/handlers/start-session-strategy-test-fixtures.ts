@@ -32,7 +32,7 @@ export const createSessionDependenciesFixture = (
   inFlightStartsByWorkspaceTaskRef: { current: new Map() },
   loadAgentSessions: async () => {},
   persistSessionRecord: async () => {},
-  attachSessionListener: () => {},
+  listenToAgentSession: () => {},
   ...overrides,
 });
 
@@ -66,7 +66,6 @@ export const createBuildSessionFixture = (overrides = {}) =>
       status: "idle",
       startedAt: "2026-02-22T08:20:00.000Z",
       runtimeKind: "opencode",
-      runtimeId: null,
       workingDirectory: "/tmp/repo/worktree",
       selectedModel: null,
       promptOverrides: {},

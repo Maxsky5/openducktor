@@ -8,7 +8,7 @@ import {
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { attachAgentSessionListener } from "../events/session-events";
+import { listenToAgentSessionEvents } from "../events/session-events";
 import {
   createAgentSessionPresenceSnapshotFixture,
   createDeferred,
@@ -24,7 +24,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   role: "build",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/tmp/repo/worktree",
   messages: [],
   draftAssistantText: "",
@@ -63,7 +62,6 @@ const mockAgentSessionPresenceSnapshot = (
 };
 
 type SessionActionDependencies = Parameters<typeof createAgentSessionActions>[0];
-
 const createDefaultActiveWorkspace = () => ({
   repoPath: "/tmp/repo",
   workspaceId: "workspace-1",
@@ -92,12 +90,11 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
       }
       sessionsRef.current[externalSessionId] = updater(current);
     },
-    attachSessionListener: () => {},
+    listenToAgentSession: () => {},
     resolveTaskWorktree: async () => null,
     ensureRuntime: async () => ({
       kind: "opencode",
       runtimeKind: "opencode",
-      runtimeId: null,
       workingDirectory: "/tmp/repo",
     }),
     loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
@@ -157,15 +154,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("stops a workspace-scoped planner session and clears pending state", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
-    adapter.hasSession = () => false;
     const stopTargets: AgentSessionStopTarget[] = [];
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
           role: "planner",
-          runtimeId: null,
           workingDirectory: "/tmp/repo",
           pendingApprovals: [
             {
@@ -223,16 +217,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     } finally {
-      adapter.hasSession = originalHasSession;
     }
   });
 
   test("keeps session active when authoritative session stop fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     let localStopCalls = 0;
-    adapter.hasSession = () => true;
     adapter.stopSession = async () => {
       localStopCalls += 1;
     };
@@ -312,18 +303,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
     }
   });
 
   test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const stopDeferred = createDeferred<void>();
-
-    adapter.hasSession = () => false;
-
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
@@ -353,19 +339,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
-      adapter.hasSession = originalHasSession;
     }
   });
 
   test("preserves the user-stopped notice when local stop emits session_finished", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalSubscribeEvents = adapter.subscribeEvents;
     const originalStopSession = adapter.stopSession;
     let sessionEventListener: ((event: { type: string; [key: string]: unknown }) => void) | null =
       null;
-
-    adapter.hasSession = () => true;
     adapter.subscribeEvents = (_externalSessionId, listener) => {
       sessionEventListener = listener as (event: { type: string; [key: string]: unknown }) => void;
       return () => {
@@ -424,10 +406,16 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef.current[externalSessionId] = updater(current);
     };
 
-    const unsubscribe = attachAgentSessionListener({
+    const unsubscribe = listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
+      sessionRef: {
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      },
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
@@ -453,7 +441,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       taskRef: { current: [] },
       unsubscribersRef: { current: new Map([["session-1", unsubscribe]]) },
       updateSession,
-      attachSessionListener: () => unsubscribe,
+      listenToAgentSession: () => undefined,
     });
 
     try {
@@ -480,7 +468,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
       expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.subscribeEvents = originalSubscribeEvents;
       adapter.stopSession = originalStopSession;
       unsubscribe();
@@ -489,11 +476,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("appends the user-stopped notice when authoritative stop has no local runtime event", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalStopSession = adapter.stopSession;
     let localStopCalls = 0;
-
-    adapter.hasSession = () => false;
     adapter.stopSession = async () => {
       localStopCalls += 1;
     };
@@ -554,20 +538,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
       expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.stopSession = originalStopSession;
     }
   });
 
   test("continues cleanup when local adapter stop fails after authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
-    const originalStopSession = adapter.stopSession;
+    const originalReleaseSession = adapter.releaseSession;
     const callOrder: string[] = [];
-    adapter.hasSession = () => true;
-    adapter.stopSession = async () => {
-      callOrder.push("local-stop");
-      throw new Error("local stop failed");
+    adapter.releaseSession = async () => {
+      callOrder.push("local-release");
+      throw new Error("local release failed");
     };
 
     let clearCalls = 0;
@@ -608,34 +589,30 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(actions.stopAgentSession("session-1")).resolves.toBeUndefined();
-      expect(callOrder).toEqual(["host-stop", "local-stop"]);
+      expect(callOrder).toEqual(["host-stop", "local-release"]);
       expect(clearCalls).toBe(1);
       expect(unsubscribeCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
-      adapter.hasSession = originalHasSession;
-      adapter.stopSession = originalStopSession;
+      adapter.releaseSession = originalReleaseSession;
       console.warn = originalWarn;
     }
   });
 
   test("stops shared-runtime qa sessions authoritatively without runId", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
-    const originalStopSession = adapter.stopSession;
-    adapter.hasSession = () => true;
+    const originalReleaseSession = adapter.releaseSession;
     let buildStopCalls = 0;
-    let localStopCalls = 0;
+    let localReleaseCalls = 0;
 
-    adapter.stopSession = async () => {
-      localStopCalls += 1;
+    adapter.releaseSession = async () => {
+      localReleaseCalls += 1;
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({
           role: "qa",
-          runtimeId: "runtime-1",
         }),
       },
     };
@@ -658,18 +635,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.stopAgentSession("session-1");
       expect(buildStopCalls).toBe(1);
-      expect(localStopCalls).toBe(1);
+      expect(localReleaseCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
-      adapter.hasSession = originalHasSession;
-      adapter.stopSession = originalStopSession;
+      adapter.releaseSession = originalReleaseSession;
     }
   });
 
   test("persists stopped snapshot before reloading host sessions", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
-    adapter.hasSession = () => false;
 
     const persistDeferred = createDeferred<void>();
     const callOrder: string[] = [];
@@ -738,7 +712,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       const stopPromise = actions.stopAgentSession("session-1");
       await Promise.resolve();
 
-      expect(callOrder).toEqual(["stop-authoritative-session", "persist-start"]);
+      expect(callOrder).toContain("stop-authoritative-session");
+      expect(callOrder).not.toContain("load-agent-sessions");
 
       persistDeferred.resolve();
       await stopPromise;
@@ -752,22 +727,19 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     } finally {
-      adapter.hasSession = originalHasSession;
     }
   });
 
   test("refreshes backend-owned state after successful authoritative stop", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
-    const originalStopSession = adapter.stopSession;
-    adapter.hasSession = () => true;
+    const originalReleaseSession = adapter.releaseSession;
     let refreshTaskDataCalls = 0;
     let loadAgentSessionsCalls = 0;
-    let localStopCalls = 0;
+    let localReleaseCalls = 0;
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
 
-    adapter.stopSession = async () => {
-      localStopCalls += 1;
+    adapter.releaseSession = async () => {
+      localReleaseCalls += 1;
     };
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
@@ -795,7 +767,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await actions.stopAgentSession("session-1");
-      expect(localStopCalls).toBe(1);
+      expect(localReleaseCalls).toBe(1);
       expect(refreshTaskDataCalls).toBe(1);
       expect(loadAgentSessionsCalls).toBe(1);
       expect(invalidationCalls).toEqual([
@@ -806,16 +778,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         },
       ]);
     } finally {
-      adapter.hasSession = originalHasSession;
-      adapter.stopSession = originalStopSession;
+      adapter.releaseSession = originalReleaseSession;
     }
   });
 
-  test("refreshes backend-owned state when stop uses current workspace repo fallback", async () => {
+  test("fails fast when stopping without an active workspace", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
-    adapter.hasSession = () => false;
-    const fallbackRepoPath = "/tmp/fallback-repo";
     const stopTargets: AgentSessionStopTarget[] = [];
     const refreshTaskDataCalls: string[] = [];
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
@@ -823,10 +791,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
-        "session-1": buildSession({
-          repoPath: fallbackRepoPath,
-          workingDirectory: `${fallbackRepoPath}/worktree`,
-        }),
+        "session-1": buildSession(),
       },
     };
 
@@ -835,11 +800,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      currentWorkspaceRepoPathRef: { current: fallbackRepoPath },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
-        workingDirectory: fallbackRepoPath,
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
       }),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
@@ -855,39 +820,21 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     });
 
-    try {
-      await actions.stopAgentSession("session-1");
+    await expect(actions.stopAgentSession("session-1")).rejects.toThrow(
+      "Active workspace repo path is unavailable.",
+    );
 
-      expect(stopTargets).toEqual([
-        {
-          repoPath: fallbackRepoPath,
-          taskId: "task-1",
-          runtimeKind: "opencode",
-          workingDirectory: `${fallbackRepoPath}/worktree`,
-          externalSessionId: "external-1",
-        },
-      ]);
-      expect(invalidationCalls).toEqual([
-        {
-          repoPath: fallbackRepoPath,
-          taskId: "task-1",
-          runtimeKind: "opencode",
-        },
-      ]);
-      expect(refreshTaskDataCalls).toEqual([fallbackRepoPath]);
-      expect(loadAgentSessionsCalls).toBe(1);
-    } finally {
-      adapter.hasSession = originalHasSession;
-    }
+    expect(stopTargets).toEqual([]);
+    expect(invalidationCalls).toEqual([]);
+    expect(refreshTaskDataCalls).toEqual([]);
+    expect(loadAgentSessionsCalls).toBe(0);
   });
 
   test("updates selected model and removes resolved permission", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalUpdateSessionModel = adapter.updateSessionModel;
     const originalReplyApproval = adapter.replyApproval;
     let replyCalls = 0;
-    adapter.hasSession = () => true;
     adapter.updateSessionModel = () => {};
     adapter.replyApproval = async () => {
       replyCalls += 1;
@@ -930,7 +877,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -949,7 +896,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
       expect(updateSessionOptions).toEqual([{ persist: true }, { persist: false }]);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.updateSessionModel = originalUpdateSessionModel;
       adapter.replyApproval = originalReplyApproval;
     }
@@ -957,13 +903,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("replies to permission after resuming a session with pending live input", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalResumeSession = adapter.resumeSession;
     const originalReplyApproval = adapter.replyApproval;
     let resumeCalls = 0;
     let replyCalls = 0;
-    adapter.hasSession = () => false;
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({
@@ -1044,23 +988,49 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
-      expect(resumeCalls).toBe(1);
+      expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.resumeSession = originalResumeSession;
       adapter.replyApproval = originalReplyApproval;
     }
   });
 
+  test("requires a loaded local session before replying to permission", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyApproval = adapter.replyApproval;
+    let replyCalls = 0;
+    adapter.replyApproval = async () => {
+      replyCalls += 1;
+    };
+    let updateCalls = 0;
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: { current: {} },
+      updateSession: () => {
+        updateCalls += 1;
+      },
+    });
+
+    try {
+      await expect(
+        actions.replyAgentApproval("session-transcript-1", "perm-1", "approve_once"),
+      ).rejects.toThrow("Session 'session-transcript-1' is not loaded.");
+
+      expect(replyCalls).toBe(0);
+      expect(updateCalls).toBe(0);
+    } finally {
+      adapter.replyApproval = originalReplyApproval;
+    }
+  });
+
   test("answers question and annotates matching tool message metadata", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalReplyQuestion = adapter.replyQuestion;
     let replyCalls = 0;
-    adapter.hasSession = () => true;
     adapter.replyQuestion = async () => {
       replyCalls += 1;
     };
@@ -1129,20 +1099,46 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(message.meta.metadata?.requestId).toBe("question-1");
       expect(message.meta.metadata?.answers).toEqual([["yes"]]);
     } finally {
-      adapter.hasSession = originalHasSession;
+      adapter.replyQuestion = originalReplyQuestion;
+    }
+  });
+
+  test("requires a loaded local session before answering a question", async () => {
+    const adapter = new OpencodeSdkAdapter();
+    const originalReplyQuestion = adapter.replyQuestion;
+    let replyCalls = 0;
+    adapter.replyQuestion = async () => {
+      replyCalls += 1;
+    };
+    let updateCalls = 0;
+
+    const actions = createSessionActions({
+      adapter,
+      sessionsRef: { current: {} },
+      updateSession: () => {
+        updateCalls += 1;
+      },
+    });
+
+    try {
+      await expect(
+        actions.answerAgentQuestion("session-transcript-1", "question-1", [["yes"]]),
+      ).rejects.toThrow("Session 'session-transcript-1' is not loaded.");
+
+      expect(replyCalls).toBe(0);
+      expect(updateCalls).toBe(0);
+    } finally {
       adapter.replyQuestion = originalReplyQuestion;
     }
   });
 
   test("answers question after resuming a session with pending live input", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalResumeSession = adapter.resumeSession;
     const originalReplyQuestion = adapter.replyQuestion;
     let resumeCalls = 0;
     let replyCalls = 0;
-    adapter.hasSession = () => false;
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({
@@ -1210,24 +1206,21 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
-      expect(resumeCalls).toBe(1);
+      expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.resumeSession = originalResumeSession;
       adapter.replyQuestion = originalReplyQuestion;
     }
   });
 
-  test("sends user message without mutating the transcript optimistically", async () => {
+  test("delegates sent user messages to the runtime transcript stream", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
@@ -1255,18 +1248,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
+      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
       expect(sendCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1274,13 +1266,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("releases held starting sessions to running when sending starts", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     const committedStatuses: AgentSessionState["status"][] = [];
-
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({
@@ -1316,7 +1305,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -1328,7 +1317,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(committedStatuses).not.toContain("idle");
       expect(sessionsRef.current["session-1"]?.status).toBe("running");
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1336,11 +1324,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("releases held starting sessions to idle when pending input prevents sending", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-
-    adapter.hasSession = () => true;
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1366,7 +1351,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -1377,18 +1362,28 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sendCalls).toBe(0);
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
-  test("releases held starting sessions to error when ensure-ready fails", async () => {
+  test("releases held starting sessions to idle when persisted-only presence blocks send", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-
-    adapter.hasSession = () => false;
+    adapter.readSessionPresence = async () => ({
+      presence: "persisted_only",
+      classification: "persisted_only",
+      ref: {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        externalSessionId: "external-1",
+      },
+      runtimeId: null,
+      reason: "not running",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1406,7 +1401,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -1417,21 +1412,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       ).rejects.toThrow("Task not found: task-1");
 
       expect(sendCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("error");
+      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
-  test("does not hydrate requested history before sending to an attached session", async () => {
+  test("does not load requested history before sending to a runtime session", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
-
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       callOrder.push("send");
@@ -1441,7 +1432,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       current: {
         "session-1": buildSession({
           status: "idle",
-          historyHydrationState: "not_requested",
+          historyLoadState: "not_requested",
           messages: [],
         }),
       },
@@ -1454,7 +1445,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
       loadAgentSessions: async () => {
@@ -1467,9 +1458,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
       expect(callOrder).toEqual(["send"]);
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.historyHydrationState).toBe("not_requested");
+      expect(sessionsRef.current["session-1"]?.historyLoadState).toBe("not_requested");
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1477,12 +1467,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("does not send a free-form message if ensure-ready reveals pending input", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({
@@ -1511,7 +1498,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       current: {
         "session-1": buildSession({
           status: "idle",
-          historyHydrationState: "not_requested",
+          historyLoadState: "not_requested",
           messages: [],
         }),
       },
@@ -1524,7 +1511,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -1538,7 +1525,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.status).toBe("idle");
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1546,11 +1532,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("does not send free-form messages while waiting for pending input", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-
-    adapter.hasSession = () => true;
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1576,7 +1559,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -1587,18 +1570,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
       expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
   test("rejects send when role is unavailable for the current task", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-
-    adapter.hasSession = () => true;
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -1629,7 +1608,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
     });
@@ -1640,18 +1619,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       expect(sendCalls).toBe(0);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
   test("allows stopping a running session even when role is unavailable", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     let stopCalls = 0;
-
-    adapter.hasSession = () => false;
-
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({ status: "running", role: "build", taskId: "task-1" }),
@@ -1678,7 +1652,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
       stopAuthoritativeSession: async () => {
@@ -1691,18 +1665,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(stopCalls).toBe(1);
       expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     } finally {
-      adapter.hasSession = originalHasSession;
     }
   });
 
   test("marks session as error when send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let clearCalls = 0;
-
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       throw new Error("send failed");
@@ -1721,7 +1691,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
       clearTurnDuration: () => {
@@ -1744,7 +1714,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       });
       expect(clearCalls).toBe(1);
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1752,15 +1721,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("preserves active turn drafts and timing for busy queued sends", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     const sendCalls: Array<{
       externalSessionId: string;
       parts: { kind: string; text?: string }[];
     }> = [];
-
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({ snapshot: { status: { type: "busy" } } }),
@@ -1805,7 +1771,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       turnModelBySessionRef,
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
       clearTurnDuration: () => {
@@ -1826,7 +1792,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1834,12 +1799,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
   test("keeps the active turn running when a busy queued send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalHasSession = adapter.hasSession;
     const originalListAgentSessionPresenceSnapshots = adapter.listSessionPresence;
     const originalSendUserMessage = adapter.sendUserMessage;
     let clearCalls = 0;
-
-    adapter.hasSession = () => true;
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({ snapshot: { status: { type: "busy" } } }),
@@ -1879,7 +1841,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       turnModelBySessionRef,
       ensureRuntime: async () => ({
         kind: "opencode",
-        runtimeId: null,
+        runtimeKind: "opencode",
         workingDirectory: "/tmp/repo",
       }),
       clearTurnDuration: () => {
@@ -1907,7 +1869,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
-      adapter.hasSession = originalHasSession;
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }

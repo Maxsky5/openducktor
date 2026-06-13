@@ -26,7 +26,32 @@ type UseKanbanPageModelsArgs = {
   onCloseDetails: () => void;
 };
 
+type ResetTaskAndReloadSessionsArgs = {
+  taskId: string;
+  resetTask: (taskId: string) => Promise<void>;
+  removeAgentSessions: (input: { taskId: string }) => Promise<void>;
+  loadAgentSessions: (taskId: string) => Promise<void>;
+  onSessionRefreshError?: (error: unknown) => void;
+};
+
 const EMPTY_KANBAN_TASKS = Object.freeze([]) as unknown as TaskCard[];
+
+export const resetTaskAndReloadSessions = async ({
+  taskId,
+  resetTask,
+  removeAgentSessions,
+  loadAgentSessions,
+  onSessionRefreshError,
+}: ResetTaskAndReloadSessionsArgs): Promise<void> => {
+  await resetTask(taskId);
+  await removeAgentSessions({ taskId });
+  try {
+    await loadAgentSessions(taskId);
+  } catch (error: unknown) {
+    onSessionRefreshError?.(error);
+    throw error;
+  }
+};
 
 export const isKanbanForegroundLoading = (args: {
   hasActiveWorkspace: boolean;
@@ -50,8 +75,6 @@ export function useKanbanPageModels({
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspace });
   const {
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     removeAgentSessions,
     startAgentSession,
@@ -123,8 +146,6 @@ export function useKanbanPageModels({
     sessions,
     navigate,
     loadRepoSettings,
-    bootstrapTaskSessions,
-    hydrateRequestedTaskSessionHistory,
     loadAgentSessions,
     humanRequestChangesTask,
     setTaskTargetBranch,
@@ -163,19 +184,17 @@ export function useKanbanPageModels({
   );
   const onResetTask = useCallback(
     async (taskId: string): Promise<void> => {
-      await resetTask(taskId);
-      await removeAgentSessions({
+      await resetTaskAndReloadSessions({
         taskId,
-        roles: ["spec", "planner", "build", "qa"],
+        resetTask,
+        removeAgentSessions,
+        loadAgentSessions,
+        onSessionRefreshError: (error) => {
+          toast.error("Failed to refresh sessions", {
+            description: errorMessage(error),
+          });
+        },
       });
-      try {
-        await loadAgentSessions(taskId);
-      } catch (error: unknown) {
-        toast.error("Failed to refresh sessions", {
-          description: errorMessage(error),
-        });
-        throw error;
-      }
     },
     [loadAgentSessions, removeAgentSessions, resetTask],
   );

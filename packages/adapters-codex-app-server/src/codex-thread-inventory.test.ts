@@ -90,12 +90,12 @@ describe("CodexThreadInventoryReader", () => {
       },
     } as unknown as CodexAppServerClient;
 
-    const attachment = await reader.attachThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
-    expect(attachment).toEqual({
+    expect(historyLoad).toEqual({
       preResumeThread: expect.objectContaining({ id: "thread-idle" }),
       response: {
         thread: expect.objectContaining({
@@ -108,7 +108,7 @@ describe("CodexThreadInventoryReader", () => {
     expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);
   });
 
-  test("marks loaded idle history resumes as history-only attachments", async () => {
+  test("returns the pre-load idle thread with history loads", async () => {
     const reader = new CodexThreadInventoryReader();
     const client = {
       threadLoadedList: async () => ({ data: ["thread-idle"], nextCursor: null }),
@@ -123,12 +123,12 @@ describe("CodexThreadInventoryReader", () => {
       }),
     } as unknown as CodexAppServerClient;
 
-    const attachment = await reader.attachThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
-    expect(attachment).toEqual({
+    expect(historyLoad).toEqual({
       preResumeThread: expect.objectContaining({
         id: "thread-idle",
         status: expect.objectContaining({ agentSessionStatus: "idle" }),
@@ -162,12 +162,12 @@ describe("CodexThreadInventoryReader", () => {
       },
     } as unknown as CodexAppServerClient;
 
-    const attachment = await reader.attachThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
-    expect(attachment).toBeNull();
+    expect(historyLoad).toBeNull();
     expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
   });
 
@@ -189,12 +189,12 @@ describe("CodexThreadInventoryReader", () => {
       },
     } as unknown as CodexAppServerClient;
 
-    const attachment = await reader.attachThreadForHistory(client, "runtime-1", {
+    const historyLoad = await reader.loadThreadForHistory(client, "runtime-1", {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
 
-    expect(attachment).toBeNull();
+    expect(historyLoad).toBeNull();
     expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
   });
 
@@ -209,7 +209,7 @@ describe("CodexThreadInventoryReader", () => {
     } as unknown as CodexAppServerClient;
 
     await expect(
-      reader.attachThreadForHistory(client, "runtime-1", {
+      reader.loadThreadForHistory(client, "runtime-1", {
         externalSessionId: "thread-idle",
         workingDirectory: "/repo",
       }),
@@ -244,7 +244,7 @@ describe("CodexThreadInventoryReader", () => {
     } as unknown as CodexAppServerClient;
 
     const pendingRead = reader.read(client, "runtime-1");
-    const pendingAttachment = reader.attachThreadForHistory(client, "runtime-1", {
+    const pendingHistoryLoad = reader.loadThreadForHistory(client, "runtime-1", {
       externalSessionId: "thread-idle",
       workingDirectory: "/repo",
     });
@@ -252,7 +252,7 @@ describe("CodexThreadInventoryReader", () => {
     threads.resolve(threadListResponse("thread-idle", "Idle inventory"));
 
     await expect(pendingRead).resolves.toMatchObject({ runtimeId: "runtime-1" });
-    await expect(pendingAttachment).resolves.toMatchObject({
+    await expect(pendingHistoryLoad).resolves.toMatchObject({
       preResumeThread: expect.objectContaining({ id: "thread-idle" }),
     });
     expect(calls).toEqual(["thread/loaded/list", "thread/list", "thread/resume"]);

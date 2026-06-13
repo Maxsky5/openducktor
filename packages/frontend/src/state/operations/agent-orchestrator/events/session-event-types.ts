@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentEvent, AgentSessionRef } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -23,14 +23,15 @@ export type RecordTurnTimestamp = (externalSessionId: string, timestamp: string 
 
 export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval">;
 
-export type SessionEvent = Parameters<Parameters<SessionEventAdapter["subscribeEvents"]>[1]>[0];
+export type SessionEvent = AgentEvent;
 export type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
 export type SessionPart = SessionPartEvent["part"];
 
-export type AttachAgentSessionListenerParams = {
+export type ListenToAgentSessionParams = {
   adapter: SessionEventAdapter;
   repoPath: string;
   externalSessionId: string;
+  sessionRef: AgentSessionRef;
   eventBatchWindowMs?: number;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
@@ -43,7 +44,7 @@ export type AttachAgentSessionListenerParams = {
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
-  isSessionListenerAttached?: (externalSessionId: string) => boolean;
+  isSessionListenerActive?: (externalSessionId: string) => boolean;
   recordTurnActivityTimestamp?: RecordTurnTimestamp;
   recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
@@ -57,12 +58,12 @@ export type AttachAgentSessionListenerParams = {
 };
 
 export type SessionStoreContext = Pick<
-  AttachAgentSessionListenerParams,
-  "externalSessionId" | "sessionsRef" | "updateSession" | "isSessionListenerAttached"
+  ListenToAgentSessionParams,
+  "externalSessionId" | "sessionsRef" | "updateSession" | "isSessionListenerActive"
 >;
 
 export type SessionDraftContext = Pick<
-  AttachAgentSessionListenerParams,
+  ListenToAgentSessionParams,
   | "externalSessionId"
   | "draftRawBySessionRef"
   | "draftSourceBySessionRef"
@@ -71,7 +72,7 @@ export type SessionDraftContext = Pick<
 >;
 
 export type SessionTurnContext = Pick<
-  AttachAgentSessionListenerParams,
+  ListenToAgentSessionParams,
   | "externalSessionId"
   | "turnStartedAtBySessionRef"
   | "turnModelBySessionRef"
@@ -83,12 +84,12 @@ export type SessionTurnContext = Pick<
 >;
 
 export type SessionApprovalContext = Pick<
-  AttachAgentSessionListenerParams,
+  ListenToAgentSessionParams,
   "adapter" | "resolveRuntimeDefinition"
 >;
 
 export type SessionRefreshContext = Pick<
-  AttachAgentSessionListenerParams,
+  ListenToAgentSessionParams,
   "repoPath" | "refreshTaskData" | "resolveRuntimeDefinition"
 >;
 
@@ -114,15 +115,15 @@ export type SessionEventHandlerContext = {
 };
 
 export const createSessionEventHandlerContext = (
-  context: AttachAgentSessionListenerParams,
+  context: ListenToAgentSessionParams,
 ): SessionEventHandlerContext => ({
   lifecycle: {
     store: {
       externalSessionId: context.externalSessionId,
       sessionsRef: context.sessionsRef,
       updateSession: context.updateSession,
-      ...(context.isSessionListenerAttached
-        ? { isSessionListenerAttached: context.isSessionListenerAttached }
+      ...(context.isSessionListenerActive
+        ? { isSessionListenerActive: context.isSessionListenerActive }
         : {}),
     },
     drafts: {

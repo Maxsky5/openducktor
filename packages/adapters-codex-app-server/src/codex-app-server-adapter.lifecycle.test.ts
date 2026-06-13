@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  codexSessionRef,
+  codexSessionRuntimeRef,
+  codexUserMessageInput,
   createAdapterWithTransport,
   createHarness,
+  flushCodexAdapterWork,
   makeRuntimeSummary,
   RecordingTransport,
 } from "./codex-app-server-adapter.test-harness";
@@ -19,6 +23,9 @@ class NameFailingTransport extends RecordingTransport {
     return super.request<Response>(request);
   }
 }
+
+const localSessions = (adapter: CodexAppServerAdapter): Map<string, unknown> =>
+  (adapter as unknown as { sessions: Map<string, unknown> }).sessions;
 
 describe("CodexAppServerAdapter lifecycle", () => {
   test("returns the Codex runtime definition", () => {
@@ -85,7 +92,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       }),
     ).rejects.toThrow("name failed");
 
-    expect(adapter.hasSession("thread/start-runtime-ensure")).toBe(true);
+    expect(localSessions(adapter).has("thread/start-runtime-ensure")).toBe(true);
     expect(transport.calls.map((call) => call.method)).toEqual([
       "model/list",
       "thread/start",
@@ -99,19 +106,21 @@ describe("CodexAppServerAdapter lifecycle", () => {
     await adapter.startSession({
       repoPath: "/repo",
       runtimeKind: "codex",
-      runtimeId: "runtime-task-1",
       workingDirectory: "/repo",
       taskId: "task-1",
       role: "spec",
       systemPrompt: "Use repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-task-1",
-      parts: [{ kind: "text", text: "Continue" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    const transport = transports.get("runtime-task-1");
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        role: "spec",
+        parts: [{ kind: "text", text: "Continue" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
+    const transport = transports.get("runtime-ensure");
     expect(transport?.calls.filter((call) => call.method === "model/list")).toHaveLength(1);
   });
 
@@ -136,7 +145,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
     modelByTurnKey.set(stoppedSessionTurnKey, { providerId: "openai" });
     modelByTurnKey.set(otherSessionTurnKey, { providerId: "openai" });
 
-    await adapter.stopSession("thread/start-runtime-ensure");
+    await adapter.stopSession(codexSessionRef("thread/start-runtime-ensure"));
 
     expect(modelByTurnKey.has(stoppedSessionTurnKey)).toBe(false);
     expect(modelByTurnKey.has(otherSessionTurnKey)).toBe(true);
@@ -225,11 +234,14 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Hello Codex" }],
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        role: "spec",
+        parts: [{ kind: "text", text: "Hello Codex" }],
+        model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      }),
+    );
 
     expect(transports.get("runtime-ensure")?.calls.map((call) => call.method)).toEqual([
       "model/list",
@@ -266,10 +278,13 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
     });
 
-    await adapter.sendUserMessage({
-      externalSessionId: "thread/start-runtime-ensure",
-      parts: [{ kind: "text", text: "Use deeper reasoning" }],
-    });
+    await adapter.sendUserMessage(
+      codexUserMessageInput({
+        externalSessionId: "thread/start-runtime-ensure",
+        role: "spec",
+        parts: [{ kind: "text", text: "Use deeper reasoning" }],
+      }),
+    );
 
     expect(transports.get("runtime-ensure")?.calls[3]).toEqual({
       method: "turn/start",
@@ -343,28 +358,6 @@ describe("CodexAppServerAdapter lifecycle", () => {
     expect(transports.has("runtime-ensure")).toBe(true);
   });
 
-  test("uses an explicit runtime id when one is supplied", async () => {
-    const { adapter, transports, ensureRepoRuntime, requireRuntimeById } = createHarness();
-
-    await adapter.startSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      runtimeId: "runtime-task-1",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-
-    expect(ensureRepoRuntime).not.toHaveBeenCalled();
-    expect(requireRuntimeById).toHaveBeenCalledWith(
-      { repoPath: "/repo", runtimeKind: "codex" },
-      "runtime-task-1",
-    );
-    expect(transports.has("runtime-task-1")).toBe(true);
-  });
-
   test("allows event subscription for a known session", async () => {
     const { adapter } = createHarness();
 
@@ -378,44 +371,38 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    const unsubscribe = adapter.subscribeEvents("thread/start-runtime-ensure", () => {});
+    const unsubscribe = adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread/start-runtime-ensure"),
+      () => {},
+    );
 
     expect(typeof unsubscribe).toBe("function");
   });
 
-  test("detaches a Codex session by clearing only local adapter state", async () => {
+  test("releases a Codex session by clearing only local adapter state", async () => {
     const { adapter, transports } = createHarness();
 
-    await adapter.attachSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      taskId: "task-1",
-      role: "build",
-      systemPrompt: "Use the repo rules.",
-      externalSessionId: "thread-saved",
-      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
-    });
-    const unsubscribe = adapter.subscribeEvents("thread-saved", () => {});
+    await adapter.restoreSession(codexSessionRef("thread-saved"));
+    await flushCodexAdapterWork();
+    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), () => {});
     const transport = transports.get("runtime-live");
-    const callsBeforeDetach = transport?.calls.length ?? 0;
+    const callsBeforeRelease = transport?.calls.length ?? 0;
 
-    await adapter.detachSession("thread-saved");
+    await adapter.releaseSession(codexSessionRef("thread-saved"));
 
-    expect(adapter.hasSession("thread-saved")).toBe(false);
-    expect(() => adapter.subscribeEvents("thread-saved", () => {})).toThrow(
-      "Unknown Codex session 'thread-saved'.",
-    );
-    expect(transport?.calls).toHaveLength(callsBeforeDetach);
+    expect(localSessions(adapter).has("thread-saved")).toBe(false);
+    expect(transport?.calls).toHaveLength(callsBeforeRelease);
     unsubscribe();
   });
 
-  test("ignores detach for unknown Codex sessions", async () => {
+  test("ignores release for unknown Codex sessions", async () => {
     const { adapter } = createHarness();
 
-    await expect(adapter.detachSession("missing-thread")).resolves.toBeUndefined();
+    await expect(
+      adapter.releaseSession(codexSessionRef("missing-thread")),
+    ).resolves.toBeUndefined();
 
-    expect(adapter.hasSession("missing-thread")).toBe(false);
+    expect(localSessions(adapter).has("missing-thread")).toBe(false);
   });
 
   test("rejects missing or unsupported model variants", async () => {

@@ -1,5 +1,4 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { RuntimeInfo } from "../runtime/runtime";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
@@ -92,7 +91,6 @@ export const executeForkStart = async ({
     taskId: ctx.taskId,
     role: ctx.role,
     systemPrompt: promptContext.systemPrompt,
-    ...(sourceSession.runtimeId ? { runtimeId: sourceSession.runtimeId } : {}),
     ...(selectedModel ? { model: selectedModel } : {}),
     parentExternalSessionId: sourceSession.externalSessionId,
   });
@@ -100,6 +98,7 @@ export const executeForkStart = async ({
   const startedCtx = {
     ...ctx,
     summary,
+    workingDirectory,
   };
 
   if (ctx.isStaleRepoOperation()) {
@@ -157,9 +156,8 @@ export const executeForkStart = async ({
     ],
   );
 
-  const forkedRuntime: RuntimeInfo = {
+  const forkedRuntime = {
     runtimeKind,
-    runtimeId: sourceSession.runtimeId,
     workingDirectory,
   };
 

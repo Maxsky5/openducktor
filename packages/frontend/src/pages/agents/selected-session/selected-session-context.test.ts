@@ -50,7 +50,7 @@ const createInput = (
     isSessionHistoryHydrating: false,
     isSessionSelectionResolving: false,
     isWaitingForRuntimeReadiness: false,
-    isSessionHistoryHydrationFailed: false,
+    isSessionHistoryLoadFailed: false,
     activeSessionContextUsage: null,
     documents: {
       specDoc: createDoc("spec"),
@@ -60,6 +60,7 @@ const createInput = (
     readiness: {
       agentStudioReadinessState: "ready",
       agentStudioReady: true,
+      isRuntimeStarting: false,
       agentStudioBlockedReason: null,
       isLoadingChecks: false,
       refreshChecks: async () => {},
@@ -224,6 +225,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         readiness: {
           agentStudioReadinessState: "blocked",
           agentStudioReady: false,
+          isRuntimeStarting: false,
           agentStudioBlockedReason: "Runtime unavailable",
           isLoadingChecks: true,
           refreshChecks,
@@ -240,6 +242,48 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       isLoadingChecks: true,
     });
     expect(context.runtime.runtimeReadiness.refreshChecks).toBe(refreshChecks);
+  });
+
+  test("marks no-session task view as waiting while runtime startup is in progress", () => {
+    const context = buildAgentStudioSelectedSessionContext(
+      createInput({
+        activeSession: null,
+        sessionsForTask: [],
+        allSessionSummaries: [],
+        isWaitingForRuntimeReadiness: false,
+        readiness: {
+          agentStudioReadinessState: "checking",
+          agentStudioReady: false,
+          isRuntimeStarting: true,
+          agentStudioBlockedReason: null,
+          isLoadingChecks: true,
+          refreshChecks: async () => {},
+        },
+      }),
+    );
+
+    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(true);
+  });
+
+  test("does not treat generic readiness checking as runtime startup", () => {
+    const context = buildAgentStudioSelectedSessionContext(
+      createInput({
+        activeSession: null,
+        sessionsForTask: [],
+        allSessionSummaries: [],
+        isWaitingForRuntimeReadiness: false,
+        readiness: {
+          agentStudioReadinessState: "checking",
+          agentStudioReady: false,
+          isRuntimeStarting: false,
+          agentStudioBlockedReason: null,
+          isLoadingChecks: true,
+          refreshChecks: async () => {},
+        },
+      }),
+    );
+
+    expect(context.runtime.isWaitingForRuntimeReadiness).toBe(false);
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {

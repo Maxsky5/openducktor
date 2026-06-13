@@ -1,14 +1,14 @@
 import type { AgentRole } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export type AgentSessionOptionSummary = Pick<
-  AgentSessionState,
-  "externalSessionId" | "role" | "startedAt" | "status"
->;
+export type AgentSessionRecencySummary = Pick<AgentSessionState, "externalSessionId" | "startedAt">;
+
+export type AgentSessionOptionSummary = AgentSessionRecencySummary &
+  Pick<AgentSessionState, "role" | "status">;
 
 export const compareAgentSessionRecency = (
-  a: AgentSessionOptionSummary,
-  b: AgentSessionOptionSummary,
+  a: AgentSessionRecencySummary,
+  b: AgentSessionRecencySummary,
 ): number => {
   if (a.startedAt !== b.startedAt) {
     return a.startedAt > b.startedAt ? -1 : 1;

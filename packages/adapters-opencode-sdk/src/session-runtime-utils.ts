@@ -1,8 +1,9 @@
 import type { AgentRole, StartAgentSessionInput } from "@openducktor/core";
 import type { SessionInput } from "./types";
 
-type SessionInputSource = Omit<StartAgentSessionInput, "role"> & {
+type SessionInputSource = Omit<StartAgentSessionInput, "role" | "systemPrompt"> & {
   role: AgentRole | null;
+  systemPrompt?: string;
 };
 
 export const toIsoFromEpoch = (value: unknown, fallback: () => string): string => {
@@ -19,9 +20,8 @@ export const toSessionInput = (input: SessionInputSource): SessionInput => {
     workingDirectory: input.workingDirectory,
     taskId: input.taskId,
     role: input.role,
-    systemPrompt: input.systemPrompt,
+    systemPrompt: input.systemPrompt ?? "",
     runtimeKind: input.runtimeKind,
-    ...(input.runtimeId ? { runtimeId: input.runtimeId } : {}),
     ...(input.model ? { model: input.model } : {}),
   };
 };

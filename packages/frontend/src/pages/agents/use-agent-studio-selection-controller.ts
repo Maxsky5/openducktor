@@ -1,21 +1,29 @@
-import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
-import { useMemo, useRef } from "react";
-import { useAgentChatSessionHydration } from "@/components/features/agents/agent-chat/use-agent-chat-session-hydration";
+import { useMemo } from "react";
+import { useAgentChatSessionReadiness } from "@/components/features/agents/agent-chat/use-agent-chat-session-readiness";
 import { useAgentChatSessionRuntimeData } from "@/components/features/agents/agent-chat/use-agent-chat-session-runtime-data";
 import {
   firstLaunchAction,
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { deriveRepoRuntimeReadiness } from "@/lib/repo-runtime-health";
+import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { SessionRepoReadinessState as AgentStudioReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type {
+  AgentSessionRouteIdentity,
+  AgentSessionState,
+  EnsureSessionReadyForViewResult,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
-import type { AgentStudioReadinessState } from "./agent-studio-task-hydration-state";
 import {
   resolveAgentStudioSessionSelection,
+  resolveAgentStudioSessionSelectionFromCandidates,
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
@@ -23,10 +31,10 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 type UseAgentStudioSelectionControllerArgs = {
   activeWorkspace: ActiveWorkspace | null;
   isRepoNavigationBoundaryPending: boolean;
-  agentStudioReadinessState: AgentStudioReadinessState;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
+  sessionReadModelError: string | null;
   taskIdParam: string;
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -37,16 +45,20 @@ type UseAgentStudioSelectionControllerArgs = {
     role: AgentRole;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
-  hydrateRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-  }) => Promise<void>;
   ensureSessionReadyForView: (input: {
     taskId: string;
     externalSessionId: string;
     repoReadinessState: AgentStudioReadinessState;
-  }) => Promise<boolean>;
+  }) => Promise<EnsureSessionReadyForViewResult>;
   runtimeDefinitions: RuntimeDescriptor[];
+  isLoadingRuntimeDefinitions: ReturnType<
+    typeof useRuntimeDefinitionsContext
+  >["isLoadingRuntimeDefinitions"];
+  runtimeDefinitionsError: ReturnType<
+    typeof useRuntimeDefinitionsContext
+  >["runtimeDefinitionsError"];
+  runtimeHealthByRuntime: ReturnType<typeof useChecksState>["runtimeHealthByRuntime"];
+  isLoadingChecks: boolean;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -90,12 +102,13 @@ export type AgentStudioSelectionControllerResult = {
   viewSessionRuntimeDataError?: string | null;
   viewRole: AgentRole;
   viewLaunchActionId: SessionLaunchActionId;
-  isActiveTaskHydrated: boolean;
-  isActiveTaskHydrationFailed: boolean;
+  isActiveTaskReady: boolean;
+  isActiveTaskReadinessFailed: boolean;
   isViewSessionHistoryHydrated: boolean;
-  isViewSessionHistoryHydrationFailed: boolean;
+  isViewSessionHistoryLoadFailed: boolean;
   isViewSessionHistoryHydrating: boolean;
   isViewSessionWaitingForRuntimeReadiness: boolean;
+  isSelectedSessionLoading: boolean;
 };
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
@@ -113,23 +126,58 @@ const compareSessionsByRecency = (
   return left.externalSessionId > right.externalSessionId ? -1 : 1;
 };
 
-type SessionsByTaskSortCacheEntry = {
-  inputSignature: string;
-  sortedSessionIds: string[];
+const toSelectedSessionRoute = (session: AgentSessionRouteIdentity): AgentSessionRouteIdentity => ({
+  externalSessionId: session.externalSessionId,
+  runtimeKind: session.runtimeKind,
+  workingDirectory: session.workingDirectory,
+});
+
+type ViewSessionSelectionCandidate = AgentSessionRouteIdentity & {
+  role: AgentRole | null;
+  startedAt: string;
+  status?: AgentSessionSummary["status"];
+  summary: AgentSessionSummary | null;
 };
 
-type SessionsByTaskSortCache = Map<string, SessionsByTaskSortCacheEntry>;
+const toLiveViewSessionCandidate = (
+  session: AgentSessionSummary,
+): ViewSessionSelectionCandidate => ({
+  externalSessionId: session.externalSessionId,
+  runtimeKind: session.runtimeKind,
+  workingDirectory: session.workingDirectory,
+  role: session.role,
+  startedAt: session.startedAt,
+  status: session.status,
+  summary: session,
+});
 
-const toTaskInputSignature = (taskSessions: AgentSessionSummary[]): string =>
-  taskSessions
-    .map((session) => `${session.externalSessionId}:${session.startedAt}`)
-    .sort()
-    .join("|");
+const toPersistedViewSessionCandidate = (
+  record: AgentSessionRecord,
+): ViewSessionSelectionCandidate => ({
+  externalSessionId: record.externalSessionId,
+  runtimeKind: record.runtimeKind,
+  workingDirectory: record.workingDirectory,
+  role: record.role,
+  startedAt: record.startedAt,
+  summary: null,
+});
 
-export const buildSessionsByTaskIdWithCache = (
+const buildViewSessionSelectionCandidates = (
+  liveSessions: AgentSessionSummary[],
+  persistedRecords: AgentSessionRecord[],
+): ViewSessionSelectionCandidate[] => {
+  const liveSessionIds = new Set(liveSessions.map((session) => session.externalSessionId));
+  return [
+    ...liveSessions.map(toLiveViewSessionCandidate),
+    ...persistedRecords
+      .filter((record) => !liveSessionIds.has(record.externalSessionId))
+      .map(toPersistedViewSessionCandidate),
+  ];
+};
+
+export const groupSessionsByTaskId = (
   sessions: AgentSessionSummary[],
-  previousCache: SessionsByTaskSortCache,
-): { sessionsByTaskId: Map<string, AgentSessionSummary[]>; nextCache: SessionsByTaskSortCache } => {
+): Map<string, AgentSessionSummary[]> => {
   const grouped = new Map<string, AgentSessionSummary[]>();
   for (const session of sessions) {
     const current = grouped.get(session.taskId);
@@ -140,73 +188,37 @@ export const buildSessionsByTaskIdWithCache = (
     }
   }
 
-  const nextCache: SessionsByTaskSortCache = new Map();
   for (const [taskId, taskSessions] of grouped) {
-    const inputSignature = toTaskInputSignature(taskSessions);
-    const previous = previousCache.get(taskId);
-    const sessionsById = new Map(
-      taskSessions.map((session) => [session.externalSessionId, session]),
-    );
-
-    let sortedSessions: AgentSessionSummary[];
-    if (previous && previous.inputSignature === inputSignature) {
-      sortedSessions = previous.sortedSessionIds.reduce<AgentSessionSummary[]>(
-        (sessions, externalSessionId) => {
-          const session = sessionsById.get(externalSessionId);
-          if (session) {
-            sessions.push(session);
-          }
-          return sessions;
-        },
-        [],
-      );
-
-      if (sortedSessions.length !== taskSessions.length) {
-        sortedSessions = taskSessions.toSorted(compareSessionsByRecency);
-      }
-    } else {
-      sortedSessions = taskSessions.toSorted(compareSessionsByRecency);
-    }
-
-    grouped.set(taskId, sortedSessions);
-    nextCache.set(taskId, {
-      inputSignature,
-      sortedSessionIds: sortedSessions.map((session) => session.externalSessionId),
-    });
+    grouped.set(taskId, taskSessions.toSorted(compareSessionsByRecency));
   }
 
-  return {
-    sessionsByTaskId: grouped,
-    nextCache,
-  };
+  return grouped;
 };
 
 export function useAgentStudioSelectionController({
   activeWorkspace,
   isRepoNavigationBoundaryPending,
-  agentStudioReadinessState,
   tasks,
   isLoadingTasks,
   sessions,
+  sessionReadModelError,
   taskIdParam,
   sessionParam,
   hasExplicitRoleParam,
   roleFromQuery,
   selectionIntent,
   updateQuery,
-  hydrateRequestedTaskSessionHistory: _hydrateRequestedTaskSessionHistory,
   ensureSessionReadyForView,
   runtimeDefinitions,
+  isLoadingRuntimeDefinitions,
+  runtimeDefinitionsError,
+  runtimeHealthByRuntime,
+  isLoadingChecks,
   readSessionModelCatalog,
   readSessionTodos,
   clearComposerInput,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
-  const sessionsByTaskSortCacheRef = useRef<SessionsByTaskSortCache | null>(null);
-  if (sessionsByTaskSortCacheRef.current === null) {
-    sessionsByTaskSortCacheRef.current = new Map();
-  }
-  const sessionsByTaskSortCache = sessionsByTaskSortCacheRef.current;
   const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
   const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
   const effectiveHasExplicitRoleParam = isRepoNavigationBoundaryPending
@@ -232,14 +244,7 @@ export function useAgentStudioSelectionController({
     return new Map(sessions.map((session) => [session.externalSessionId, session]));
   }, [sessions]);
 
-  const sessionsByTaskId = useMemo(() => {
-    const { sessionsByTaskId: grouped, nextCache } = buildSessionsByTaskIdWithCache(
-      sessions,
-      sessionsByTaskSortCache,
-    );
-    sessionsByTaskSortCacheRef.current = nextCache;
-    return grouped;
-  }, [sessions, sessionsByTaskSortCache]);
+  const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
   const selectedSessionById = useMemo(
     () => (selectedSessionParam ? (sessionSummariesById.get(selectedSessionParam) ?? null) : null),
@@ -352,11 +357,14 @@ export function useAgentStudioSelectionController({
       return null;
     }
 
-    const belongsToViewTask = viewSessionsForTask.some(
+    const belongsToSummarizedViewTask = viewSessionsForTask.some(
       (session) => session.externalSessionId === effectiveSessionParam,
     );
-    return belongsToViewTask ? effectiveSessionParam : null;
-  }, [effectiveSessionParam, viewSessionsForTask]);
+    const belongsToPersistedViewTask = (viewSelectedTask?.agentSessions ?? []).some(
+      (record) => record.externalSessionId === effectiveSessionParam,
+    );
+    return belongsToSummarizedViewTask || belongsToPersistedViewTask ? effectiveSessionParam : null;
+  }, [effectiveSessionParam, viewSelectedTask?.agentSessions, viewSessionsForTask]);
 
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
   const hasViewRoleSelection = effectiveHasExplicitRoleParam && !isViewTaskDetachedFromQuery;
@@ -370,9 +378,17 @@ export function useAgentStudioSelectionController({
   const keepViewExplicitRoleSessionless =
     viewSelectionIntent?.externalSessionId === null && viewSessionParam === null;
 
+  const viewSessionSelectionCandidates = useMemo(
+    () =>
+      buildViewSessionSelectionCandidates(
+        viewSessionsForTask,
+        viewSelectedTask?.agentSessions ?? [],
+      ),
+    [viewSelectedTask?.agentSessions, viewSessionsForTask],
+  );
   const viewSelection = useMemo(() => {
-    return resolveAgentStudioSessionSelection({
-      sessionsForTask: viewSessionsForTask,
+    return resolveAgentStudioSessionSelectionFromCandidates({
+      sessionsForTask: viewSessionSelectionCandidates,
       sessionParam: viewSessionParamFromSelection,
       hasExplicitRoleParam: viewHasExplicitRoleSelection,
       roleFromQuery: viewRoleFromSelection,
@@ -387,9 +403,55 @@ export function useAgentStudioSelectionController({
     viewRoleFromSelection,
     viewSelectedTask,
     viewSessionParamFromSelection,
-    viewSessionsForTask,
+    viewSessionSelectionCandidates,
   ]);
-  const viewActiveSession = useAgentSession(viewSelection.activeSession?.externalSessionId ?? null);
+  const viewSelectedSessionRoute = useMemo(() => {
+    return viewSelection.activeSession ? toSelectedSessionRoute(viewSelection.activeSession) : null;
+  }, [viewSelection.activeSession]);
+  const viewActiveSession = useAgentSession(viewSelectedSessionRoute?.externalSessionId ?? null);
+  const activeSessionReadinessState = useMemo(
+    () =>
+      deriveRepoRuntimeReadiness({
+        hasActiveWorkspace: activeWorkspace !== null,
+        runtimeDefinitions,
+        isLoadingRuntimeDefinitions,
+        runtimeDefinitionsError,
+        runtimeHealthByRuntime,
+        isLoadingChecks,
+        runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
+      }).readinessState,
+    [
+      activeSession?.runtimeKind,
+      activeSessionSummary?.runtimeKind,
+      activeWorkspace,
+      isLoadingChecks,
+      isLoadingRuntimeDefinitions,
+      runtimeDefinitions,
+      runtimeDefinitionsError,
+      runtimeHealthByRuntime,
+    ],
+  );
+  const viewSessionReadinessState = useMemo(
+    () =>
+      deriveRepoRuntimeReadiness({
+        hasActiveWorkspace: activeWorkspace !== null,
+        runtimeDefinitions,
+        isLoadingRuntimeDefinitions,
+        runtimeDefinitionsError,
+        runtimeHealthByRuntime,
+        isLoadingChecks,
+        runtimeKind: viewSelectedSessionRoute?.runtimeKind ?? null,
+      }).readinessState,
+    [
+      activeWorkspace,
+      isLoadingChecks,
+      isLoadingRuntimeDefinitions,
+      runtimeDefinitions,
+      runtimeDefinitionsError,
+      runtimeHealthByRuntime,
+      viewSelectedSessionRoute?.runtimeKind,
+    ],
+  );
   const isActiveSessionSameAsViewSession =
     activeSession !== null &&
     viewActiveSession !== null &&
@@ -397,37 +459,46 @@ export function useAgentStudioSelectionController({
   const activeSessionRuntimeDataForDistinctSession = useAgentChatSessionRuntimeData({
     session: isActiveSessionSameAsViewSession ? null : activeSession,
     runtimeDefinitions,
-    repoReadinessState: agentStudioReadinessState,
+    repoReadinessState: activeSessionReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
   });
   const viewSessionRuntimeData = useAgentChatSessionRuntimeData({
     session: viewActiveSession,
     runtimeDefinitions,
-    repoReadinessState: agentStudioReadinessState,
+    repoReadinessState: viewSessionReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
   });
   const activeSessionRuntimeData = isActiveSessionSameAsViewSession
     ? viewSessionRuntimeData
     : activeSessionRuntimeDataForDistinctSession;
+  const isSelectedSessionLoading =
+    Boolean(activeWorkspace) &&
+    !isRepoNavigationBoundaryPending &&
+    viewSessionReadinessState !== "blocked" &&
+    sessionReadModelError === null &&
+    viewSelectedSessionRoute !== null &&
+    viewSessionRuntimeData.session === null;
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"
       ? resolveBuildContinuationLaunchAction(viewSelectedTask)
       : firstLaunchAction(viewRole);
   const {
-    isActiveTaskHydrated,
-    isActiveTaskHydrationFailed,
-    isActiveSessionHistoryHydrated,
-    isActiveSessionHistoryHydrationFailed,
-    isActiveSessionHistoryHydrating,
+    isActiveTaskReady,
+    isActiveTaskReadinessFailed,
+    isActiveSessionHistoryLoaded,
+    isActiveSessionHistoryLoadFailed,
+    isActiveSessionHistoryLoading,
     isWaitingForRuntimeReadiness,
-  } = useAgentChatSessionHydration({
+  } = useAgentChatSessionReadiness({
     activeWorkspace,
     activeTaskId: viewTaskId,
+    selectedSessionRoute: viewSelectedSessionRoute,
     activeSession: viewSessionRuntimeData.session,
-    repoReadinessState: agentStudioReadinessState,
+    repoReadinessState: viewSessionReadinessState,
+    sessionLoadError: sessionReadModelError,
     ensureSessionReadyForView,
   });
 
@@ -452,17 +523,18 @@ export function useAgentStudioSelectionController({
       viewTaskId,
       viewSelectedTask,
       viewSessionsForTask,
-      viewActiveSessionSummary: viewSelection.activeSession,
+      viewActiveSessionSummary: viewSelection.activeSession?.summary ?? null,
       viewActiveSession: viewSessionRuntimeData.session,
       viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
       viewRole,
       viewLaunchActionId,
-      isActiveTaskHydrated,
-      isActiveTaskHydrationFailed,
-      isViewSessionHistoryHydrated: isActiveSessionHistoryHydrated,
-      isViewSessionHistoryHydrationFailed: isActiveSessionHistoryHydrationFailed,
-      isViewSessionHistoryHydrating: isActiveSessionHistoryHydrating,
+      isActiveTaskReady,
+      isActiveTaskReadinessFailed,
+      isViewSessionHistoryHydrated: isActiveSessionHistoryLoaded,
+      isViewSessionHistoryLoadFailed: isActiveSessionHistoryLoadFailed,
+      isViewSessionHistoryHydrating: isActiveSessionHistoryLoading,
       isViewSessionWaitingForRuntimeReadiness: isWaitingForRuntimeReadiness,
+      isSelectedSessionLoading,
     }),
     [
       activeSessionRuntimeData.runtimeDataError,
@@ -474,13 +546,14 @@ export function useAgentStudioSelectionController({
       handleCreateTab,
       handleReorderTab,
       handleSelectTab,
-      isActiveSessionHistoryHydrated,
-      isActiveSessionHistoryHydrationFailed,
-      isActiveSessionHistoryHydrating,
-      isActiveTaskHydrated,
-      isActiveTaskHydrationFailed,
+      isActiveSessionHistoryLoaded,
+      isActiveSessionHistoryLoadFailed,
+      isActiveSessionHistoryLoading,
+      isActiveTaskReady,
+      isActiveTaskReadinessFailed,
       isLoadingTasks,
       isWaitingForRuntimeReadiness,
+      isSelectedSessionLoading,
       selectedSessionById,
       selectedTask,
       sessions,

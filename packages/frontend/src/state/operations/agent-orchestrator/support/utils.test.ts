@@ -9,7 +9,7 @@ import {
   parseTodosFromToolOutput,
   pickDefaultSessionSelectionForCatalog,
   resolveToolMessageId,
-  shouldReattachListenerForAttachedSession,
+  shouldStartSessionListener,
 } from "./utils";
 
 const createSession = (messages: AgentChatMessage[]) => ({
@@ -181,9 +181,9 @@ describe("agent-orchestrator-utils", () => {
     expect(byMessageFallback).toBe("tool:m1:old");
   });
 
-  test("reattaches listener only for non-error attached sessions", () => {
-    expect(shouldReattachListenerForAttachedSession("running", false)).toBe(true);
-    expect(shouldReattachListenerForAttachedSession("idle", true)).toBe(false);
-    expect(shouldReattachListenerForAttachedSession("error", false)).toBe(false);
+  test("restarts listener only for non-error runtime sessions", () => {
+    expect(shouldStartSessionListener("running", false)).toBe(true);
+    expect(shouldStartSessionListener("idle", true)).toBe(false);
+    expect(shouldStartSessionListener("error", false)).toBe(false);
   });
 });

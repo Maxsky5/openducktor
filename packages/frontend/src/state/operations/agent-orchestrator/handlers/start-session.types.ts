@@ -17,6 +17,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { ListenToAgentSession } from "../support/session-runtime-ref";
 
 export type StartAgentSessionInput =
   | {
@@ -32,7 +33,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
-      /** Defaults to `after_listener_attach` for direct low-level starts. */
+      /** Defaults to `after_listener_start` for direct low-level starts. */
       initialStatusRelease?: InitialSessionStatusReleasePolicy;
     }
   | {
@@ -41,7 +42,7 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fork";
       sourceExternalSessionId: string;
-      /** Defaults to `after_listener_attach` for direct low-level starts. */
+      /** Defaults to `after_listener_start` for direct low-level starts. */
       initialStatusRelease?: InitialSessionStatusReleasePolicy;
     };
 
@@ -56,7 +57,7 @@ export type SessionDependencies = {
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  attachSessionListener: (repoPath: string, externalSessionId: string) => void;
+  listenToAgentSession: ListenToAgentSession;
 };
 
 export type RuntimeDependencies = {
@@ -92,7 +93,6 @@ export type ModelDependencies = {
 export type RepoDependencies = {
   activeWorkspace: ActiveWorkspace | null;
   repoEpochRef: { current: number };
-  activeWorkspaceRef?: { current: ActiveWorkspace | null };
   currentWorkspaceRepoPathRef: { current: string | null };
 };
 
@@ -124,6 +124,7 @@ export type StartSessionContext = {
 
 export type StartedSessionContext = StartSessionContext & {
   summary: SessionStartSummary;
+  workingDirectory: string;
 };
 
 export type StartSessionExecutionDependencies = Pick<

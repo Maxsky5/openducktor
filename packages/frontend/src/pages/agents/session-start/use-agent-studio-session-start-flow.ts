@@ -47,7 +47,7 @@ type UseAgentStudioSessionStartFlowArgs = {
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
+  isActiveTaskReady: boolean;
   isSessionWorking: boolean;
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
@@ -72,7 +72,7 @@ export function useAgentStudioSessionStartFlow({
   sessionsForTask,
   selectedTask,
   agentStudioReady,
-  isActiveTaskHydrated,
+  isActiveTaskReady,
   isSessionWorking,
   selectionForNewSession,
   repoSettings,
@@ -169,7 +169,7 @@ export function useAgentStudioSessionStartFlow({
     activeSession,
     selectedTask,
     agentStudioReady,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
     startAgentSession,
     settleStartedAgentSession,
     sendAgentMessage,
@@ -249,7 +249,7 @@ export function useAgentStudioSessionStartFlow({
     if (!taskId || !agentStudioReady) {
       return;
     }
-    if (!isActiveTaskHydrated) {
+    if (!isActiveTaskReady) {
       return;
     }
     if (!canStartSessionForRole(selectedTask, role)) {
@@ -268,7 +268,7 @@ export function useAgentStudioSessionStartFlow({
     }
   }, [
     agentStudioReady,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
     openHumanReviewFeedback,
     launchActionId,
     role,
@@ -284,7 +284,7 @@ export function useAgentStudioSessionStartFlow({
     activeSession,
     selectedTask,
     agentStudioReady,
-    isActiveTaskHydrated,
+    isActiveTaskReady,
     isSessionWorking,
     startAgentSession,
     settleStartedAgentSession,
@@ -299,7 +299,7 @@ export function useAgentStudioSessionStartFlow({
   const handleCreateSessionWithHumanFeedback = useCallback(
     (option: SessionCreateOption): void => {
       if (shouldInterceptCreateSession(option)) {
-        if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
+        if (!taskId || !agentStudioReady || !isActiveTaskReady) {
           return;
         }
         if (!canStartSessionForRole(selectedTask, option.role)) {
@@ -313,7 +313,7 @@ export function useAgentStudioSessionStartFlow({
     [
       agentStudioReady,
       handleCreateSession,
-      isActiveTaskHydrated,
+      isActiveTaskReady,
       openHumanReviewFeedback,
       selectedTask,
       shouldInterceptCreateSession,
@@ -323,7 +323,7 @@ export function useAgentStudioSessionStartFlow({
 
   const handleQuickAction = useCallback(
     (option: AgentStudioQuickActionOption): void => {
-      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskHydrated) {
+      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskReady) {
         return;
       }
       if (isSessionWorking) {
@@ -367,7 +367,7 @@ export function useAgentStudioSessionStartFlow({
     },
     [
       agentStudioReady,
-      isActiveTaskHydrated,
+      isActiveTaskReady,
       isSessionWorking,
       openHumanReviewFeedback,
       startingSessionByTask,

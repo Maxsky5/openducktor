@@ -30,7 +30,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   activeSession: AgentSessionState | null;
   selectedTask: Parameters<typeof canStartSessionForRole>[0];
   agentStudioReady: boolean;
-  isActiveTaskHydrated: boolean;
+  isActiveTaskReady: boolean;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
@@ -52,7 +52,7 @@ export function useAgentStudioSessionStartSession({
   launchActionId,
   selectedTask,
   agentStudioReady,
-  isActiveTaskHydrated,
+  isActiveTaskReady,
   startAgentSession,
   settleStartedAgentSession,
   sendAgentMessage,
@@ -151,7 +151,7 @@ export function useAgentStudioSessionStartSession({
     async (params: {
       postStartAction: SessionStartPostAction;
     }): Promise<SessionStartWorkflowResult | undefined> => {
-      if (!taskId || !agentStudioReady || !isActiveTaskHydrated) {
+      if (!taskId || !agentStudioReady || !isActiveTaskReady) {
         return undefined;
       }
       if (!canStartSessionForRole(selectedTask, role)) {
@@ -195,7 +195,7 @@ export function useAgentStudioSessionStartSession({
     },
     [
       agentStudioReady,
-      isActiveTaskHydrated,
+      isActiveTaskReady,
       role,
       selectedTask,
       launchActionId,

@@ -1,7 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { buildAgentSystemPrompt } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 
 type SessionPromptTask = Pick<
   TaskCard,
@@ -32,6 +32,11 @@ type SessionHeaderInput = {
   startedAt: string;
   includeSystemPrompt?: boolean;
 };
+
+const SYSTEM_PROMPT_MESSAGE_ID_PREFIX = "history:system-prompt:";
+
+export const isSessionSystemPromptMessage = (message: AgentChatMessage): boolean =>
+  message.role === "system" && message.id.startsWith(SYSTEM_PROMPT_MESSAGE_ID_PREFIX);
 
 export const buildSessionSystemPrompt = ({
   role,
@@ -103,8 +108,8 @@ export const buildSessionHeaderMessages = ({
   systemPrompt,
   startedAt,
   includeSystemPrompt = true,
-}: SessionHeaderInput): AgentSessionState["messages"] => {
-  if (!includeSystemPrompt) {
+}: SessionHeaderInput): AgentChatMessage[] => {
+  if (!includeSystemPrompt || systemPrompt.trim().length === 0) {
     return [];
   }
 

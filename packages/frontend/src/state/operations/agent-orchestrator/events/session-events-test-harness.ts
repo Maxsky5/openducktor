@@ -7,8 +7,15 @@ import {
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionEventBatcher } from "./session-event-batching";
-import type { SessionEvent, SessionPartEventContext } from "./session-event-types";
-import { attachAgentSessionListener, type SessionEventAdapter } from "./session-events";
+import type {
+  ListenToAgentSessionParams,
+  SessionEvent,
+  SessionPartEventContext,
+} from "./session-event-types";
+import {
+  listenToAgentSessionEvents as listenToAgentSessionEventsImpl,
+  type SessionEventAdapter,
+} from "./session-events";
 import { handleAssistantPart } from "./session-parts";
 
 export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -19,7 +26,6 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
   role: "spec",
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeId: null,
   workingDirectory: "/tmp/repo",
   messages: [],
   draftAssistantText: "",
@@ -52,6 +58,22 @@ export const getSessionMessages = (
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
+export const listenToAgentSessionEvents = (
+  params: Omit<ListenToAgentSessionParams, "sessionRef"> &
+    Partial<Pick<ListenToAgentSessionParams, "sessionRef">>,
+): (() => void) => {
+  const session = getSession(params.sessionsRef, params.externalSessionId);
+  return listenToAgentSessionEventsImpl({
+    ...params,
+    sessionRef: params.sessionRef ?? {
+      externalSessionId: params.externalSessionId,
+      repoPath: params.repoPath,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
+    },
+  });
+};
+
 export const getLastSessionMessage = (
   sessionsRef: { current: Record<string, AgentSessionState> },
   externalSessionId = "session-1",
@@ -59,7 +81,6 @@ export const getLastSessionMessage = (
 
 export type { AgentSessionState, SessionEvent, SessionEventAdapter, SessionPartEventContext };
 export {
-  attachAgentSessionListener,
   createSessionEventBatcher,
   handleAssistantPart,
   OPENCODE_RUNTIME_DESCRIPTOR,

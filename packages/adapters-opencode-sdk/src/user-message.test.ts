@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { Part } from "@opencode-ai/sdk/v2";
 import type { AgentEvent } from "@openducktor/core";
 import {
   buildQueuedSignature,
   makeMockClient,
   OpencodeSdkAdapter,
+  sessionRuntimeRef,
   startDefaultSession,
 } from "./test-support";
 
@@ -18,12 +20,12 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const events: Array<{ type: string }> = [];
-    adapter.subscribeEvents("session-opencode-1", (event) =>
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
       events.push(event as { type: string }),
     );
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Write and persist spec" }],
       model: {
         providerId: "openai",
@@ -83,16 +85,146 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Recover ids" }],
     });
 
     expect(events.some((event) => event.type === "assistant_part")).toBe(false);
     expect(events.some((event) => event.type === "assistant_message")).toBe(false);
     expect(events.some((event) => event.type === "session_idle")).toBe(false);
+  });
+
+  test("sendUserMessage publishes runtime-owned user messages from history", async () => {
+    const mock = makeMockClient({
+      messagesResponse: [
+        {
+          info: {
+            id: "runtime-user-1",
+            role: "user",
+            time: { created: Date.parse("2026-02-17T12:00:01Z") },
+          },
+          parts: [
+            {
+              id: "runtime-user-part-1",
+              sessionID: "session-opencode-1",
+              messageID: "runtime-user-1",
+              type: "text",
+              text: "Kick off the builder",
+              time: { start: Date.parse("2026-02-17T12:00:01Z") },
+            } as Part,
+          ],
+        },
+      ],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1", { role: "build" }), (event) =>
+      events.push(event),
+    );
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      parts: [{ kind: "text", text: "Kick off the builder" }],
+    });
+
+    const userEvents = events.filter(
+      (event): event is Extract<AgentEvent, { type: "user_message" }> =>
+        event.type === "user_message",
+    );
+    expect(userEvents).toEqual([
+      expect.objectContaining({
+        messageId: "runtime-user-1",
+        message: "Kick off the builder",
+        state: "read",
+        parts: [{ kind: "text", text: "Kick off the builder" }],
+      }),
+    ]);
+    expect(mock.session.messagesCalls).toEqual([
+      {
+        sessionID: "session-opencode-1",
+        directory: "/repo",
+      },
+    ]);
+  });
+
+  test("sendUserMessage does not replay history-seeded user messages", async () => {
+    const oldUserMessage = {
+      info: {
+        id: "runtime-user-old",
+        role: "user" as const,
+        time: { created: Date.parse("2026-02-17T12:00:01Z") },
+      },
+      parts: [
+        {
+          id: "runtime-user-old-part",
+          sessionID: "session-opencode-1",
+          messageID: "runtime-user-old",
+          type: "text",
+          text: "Already visible",
+          time: { start: Date.parse("2026-02-17T12:00:01Z") },
+        } as Part,
+      ],
+    };
+    const newUserMessage = {
+      info: {
+        id: "runtime-user-new",
+        role: "user" as const,
+        time: { created: Date.parse("2026-02-17T12:00:02Z") },
+      },
+      parts: [
+        {
+          id: "runtime-user-new-part",
+          sessionID: "session-opencode-1",
+          messageID: "runtime-user-new",
+          type: "text",
+          text: "Kick off the builder",
+          time: { start: Date.parse("2026-02-17T12:00:02Z") },
+        } as Part,
+      ],
+    };
+    const mock = makeMockClient({
+      messagesResponse: [oldUserMessage],
+    });
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => mock.client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+
+    await startDefaultSession(adapter, "build");
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1", { role: "build" }), (event) =>
+      events.push(event),
+    );
+
+    await adapter.loadSessionHistory(sessionRuntimeRef("session-opencode-1", { role: "build" }));
+    mock.session.messagesResponse = [oldUserMessage, newUserMessage];
+
+    await adapter.sendUserMessage({
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      parts: [{ kind: "text", text: "Kick off the builder" }],
+    });
+
+    const userEvents = events.filter(
+      (event): event is Extract<AgentEvent, { type: "user_message" }> =>
+        event.type === "user_message",
+    );
+    expect(userEvents).toEqual([
+      expect.objectContaining({
+        messageId: "runtime-user-new",
+        message: "Kick off the builder",
+      }),
+    ]);
+    expect(mock.session.messagesCalls).toHaveLength(2);
   });
 
   test("sendUserMessage uses the native session command endpoint for slash commands", async () => {
@@ -105,7 +237,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       parts: [
         {
           kind: "slash_command",
@@ -150,10 +282,10 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       parts: [
         {
           kind: "slash_command",
@@ -186,7 +318,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await expect(
       adapter.sendUserMessage({
-        externalSessionId: "session-opencode-1",
+        ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
         parts: [
           { kind: "text", text: "before " },
           {
@@ -221,11 +353,11 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents("session-opencode-1", (event) => events.push(event));
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
 
     await expect(
       adapter.sendUserMessage({
-        externalSessionId: "session-opencode-1",
+        ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
         parts: [
           {
             kind: "slash_command",
@@ -275,7 +407,7 @@ describe("OpencodeSdkAdapter user message", () => {
     session.hasIdleSinceActivity = true;
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Second turn" }],
     });
 
@@ -310,7 +442,7 @@ describe("OpencodeSdkAdapter user message", () => {
     session.activeAssistantMessageId = null;
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "First turn" }],
     });
 
@@ -347,7 +479,7 @@ describe("OpencodeSdkAdapter user message", () => {
     session.activeAssistantMessageId = "msg-200";
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
@@ -391,7 +523,7 @@ describe("OpencodeSdkAdapter user message", () => {
     }
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       parts: [
         {
           kind: "slash_command",
@@ -408,7 +540,7 @@ describe("OpencodeSdkAdapter user message", () => {
     expect(session.activeAssistantMessageId).toBe("msg-command-assistant-1");
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
       parts: [{ kind: "text", text: "Queued follow-up" }],
     });
 
@@ -436,7 +568,7 @@ describe("OpencodeSdkAdapter user message", () => {
     });
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Continue" }],
     });
 
@@ -468,12 +600,12 @@ describe("OpencodeSdkAdapter user message", () => {
     } as const;
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "First message" }],
       model: selectedModel,
     });
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Second message" }],
       model: selectedModel,
     });
@@ -500,7 +632,7 @@ describe("OpencodeSdkAdapter user message", () => {
     });
 
     await adapter.sendUserMessage({
-      externalSessionId: "session-opencode-1",
+      ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Use the saved model" }],
     });
 
@@ -542,7 +674,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await expect(
       adapter.sendUserMessage({
-        externalSessionId: "session-opencode-1",
+        ...sessionRuntimeRef("session-opencode-1"),
         parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow(
@@ -566,7 +698,7 @@ describe("OpencodeSdkAdapter user message", () => {
 
     await expect(
       adapter.sendUserMessage({
-        externalSessionId: "session-opencode-1",
+        ...sessionRuntimeRef("session-opencode-1"),
         parts: [{ kind: "text", text: "Try again" }],
       }),
     ).rejects.toThrow("OpenCode request failed: prompt session: socket closed");

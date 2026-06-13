@@ -10,7 +10,6 @@ import {
   mergeRuntimePendingRequests,
 } from "./runtime-transcript-pending-requests";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
-import type { RuntimeTranscriptSourceResolution } from "./use-runtime-transcript-source-resolution";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -50,17 +49,8 @@ const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
 const createSource = (
   overrides: Partial<RuntimeSessionTranscriptSource> = {},
 ): RuntimeSessionTranscriptSource => ({
-  runtimeRef: { kind: "opencode", runtimeId: "runtime-1" },
+  runtimeKind: "opencode",
   workingDirectory: "/repo-a",
-  ...overrides,
-});
-
-const resolvedSource = (
-  overrides: Partial<RuntimeTranscriptSourceResolution> = {},
-): RuntimeTranscriptSourceResolution => ({
-  isPending: false,
-  error: null,
-  runtimeId: "runtime-1",
   ...overrides,
 });
 
@@ -68,13 +58,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   session: createAgentSessionFixture({
     externalSessionId: "session-1",
     repoPath: "/repo-a",
-    runtimeId: "runtime-1",
     pendingApprovals: [],
     pendingQuestions: [],
   }),
   source: createSource(),
   externalSessionId: "session-1",
-  sourceResolution: resolvedSource(),
   isRuntimeReady: true,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
@@ -212,7 +200,6 @@ describe("useRuntimeTranscriptInteractions", () => {
         session: createAgentSessionFixture({
           externalSessionId: "session-other",
           repoPath: "/repo-a",
-          runtimeId: "runtime-1",
           pendingApprovals: [],
           pendingQuestions: [],
         }),
@@ -303,14 +290,14 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("keeps actions disabled while source resolution is unavailable", async () => {
+  test("keeps actions disabled while the runtime is not ready", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         source: createSource({
           pendingApprovals: [createApprovalRequest("approval-1")],
           pendingQuestions: [createQuestionRequest("question-1")],
         }),
-        sourceResolution: resolvedSource({ error: "No runtime instance is attached." }),
+        isRuntimeReady: false,
       }),
     );
 

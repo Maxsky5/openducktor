@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeRef } from "@openducktor/contracts";
+import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -542,7 +542,7 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
-  sessionRuntimeRef?: RuntimeRef | null;
+  sessionRuntimeKind?: RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
   subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
@@ -553,7 +553,7 @@ type SubagentMessageProps = {
 
 const SubagentMessage = ({
   meta,
-  sessionRuntimeRef,
+  sessionRuntimeKind,
   sessionWorkingDirectory,
   timeLabel,
   subagentPendingApprovals,
@@ -621,7 +621,7 @@ const SubagentMessage = ({
               ) : null}
             </div>
             <SubagentTranscriptButton
-              sessionRuntimeRef={sessionRuntimeRef ?? null}
+              sessionRuntimeKind={sessionRuntimeKind ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
               pendingApprovals={subagentPendingApprovals}
               pendingQuestions={subagentPendingQuestions}
@@ -656,7 +656,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  sessionRuntimeRef?: RuntimeRef | null;
+  sessionRuntimeKind?: RuntimeKind | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
@@ -671,7 +671,7 @@ type MessageBodyProps = {
 
 export const MessageBody = ({
   message,
-  sessionRuntimeRef,
+  sessionRuntimeKind,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
@@ -717,7 +717,7 @@ export const MessageBody = ({
     return (
       <SubagentMessage
         meta={meta}
-        sessionRuntimeRef={sessionRuntimeRef ?? null}
+        sessionRuntimeKind={sessionRuntimeKind ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
         subagentPendingApprovals={subagentPendingApprovals}

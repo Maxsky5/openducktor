@@ -1,20 +1,17 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  getAgentSessionHistoryHydrationState,
-  requiresHydratedAgentSessionHistory,
-} from "../support/history-hydration";
+  getAgentSessionHistoryLoadState,
+  requiresLoadedAgentSessionHistory,
+} from "../support/history-load-state";
 import { getSessionMessageCount } from "../support/messages";
-import { hasPendingOutboundSend } from "../support/pending-outbound-send";
-import { hasAttachedSessionRuntime } from "../support/session-runtime-attachment";
 
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
 
 export type AgentSessionViewLifecyclePhase =
   | "idle"
   | "blocked_on_repo"
-  | "recovering_runtime"
   | "needs_history"
-  | "hydrating_history"
+  | "loading_history"
   | "history_failed"
   | "ready";
 
@@ -23,9 +20,27 @@ export type AgentSessionViewLifecycle = {
   canReadRuntimeData: boolean;
   canRenderHistory: boolean;
   isWaitingForRuntimeReadiness: boolean;
-  isHydratingHistory: boolean;
-  isHistoryHydrationFailed: boolean;
+  isLoadingHistory: boolean;
+  isHistoryLoadFailed: boolean;
   shouldEnsureReadyForView: boolean;
+};
+
+export type SelectedAgentSessionViewLifecycle = {
+  externalSessionId: string | null;
+  canRenderHistory: boolean;
+  isLoadingHistory: boolean;
+  isHistoryLoadFailed: boolean;
+  isWaitingForRuntimeReadiness: boolean;
+  shouldEnsureReadyForView: boolean;
+};
+
+const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
+  externalSessionId: null,
+  canRenderHistory: false,
+  isLoadingHistory: false,
+  isHistoryLoadFailed: false,
+  isWaitingForRuntimeReadiness: false,
+  shouldEnsureReadyForView: false,
 };
 
 export const deriveAgentSessionViewLifecycle = ({
@@ -41,113 +56,144 @@ export const deriveAgentSessionViewLifecycle = ({
       canReadRuntimeData: false,
       canRenderHistory: false,
       isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: false,
       shouldEnsureReadyForView: false,
     };
   }
 
-  const sessionNeedsHydration = requiresHydratedAgentSessionHistory(session);
-  const historyHydrationState = getAgentSessionHistoryHydrationState(session);
+  const sessionNeedsHistoryLoad = requiresLoadedAgentSessionHistory(session);
+  const historyLoadState = getAgentSessionHistoryLoadState(session);
   const hasTranscript = getSessionMessageCount(session) > 0;
-  const hasRuntimeAttachment = hasAttachedSessionRuntime(session);
-  const shouldRefreshRunningSession =
-    repoReadinessState === "ready" &&
-    session.status === "running" &&
-    !hasPendingOutboundSend(session);
 
-  if (repoReadinessState !== "ready" && sessionNeedsHydration && !hasTranscript) {
+  if (repoReadinessState !== "ready" && sessionNeedsHistoryLoad && !hasTranscript) {
     return {
       phase: "blocked_on_repo",
       canReadRuntimeData: false,
       canRenderHistory: false,
       isWaitingForRuntimeReadiness: true,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: false,
       shouldEnsureReadyForView: false,
     };
   }
 
-  if (session.runtimeRecoveryState === "recovering_runtime") {
-    return {
-      phase: "recovering_runtime",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-      canRenderHistory: hasTranscript,
-      isWaitingForRuntimeReadiness: true,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
-      shouldEnsureReadyForView: false,
-    };
-  }
-
-  if (!sessionNeedsHydration) {
+  if (!sessionNeedsHistoryLoad) {
     return {
       phase: "ready",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
+      canReadRuntimeData: repoReadinessState === "ready",
       canRenderHistory: true,
       isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
-      shouldEnsureReadyForView: shouldRefreshRunningSession,
-    };
-  }
-
-  if (historyHydrationState === "hydrating") {
-    return {
-      phase: "hydrating_history",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-      canRenderHistory: hasTranscript,
-      isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: true,
-      isHistoryHydrationFailed: false,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: false,
       shouldEnsureReadyForView: false,
     };
   }
 
-  if (historyHydrationState === "not_requested") {
+  if (historyLoadState === "loading") {
     return {
-      phase: "needs_history",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
+      phase: "loading_history",
+      canReadRuntimeData: repoReadinessState === "ready",
       canRenderHistory: hasTranscript,
       isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
-      shouldEnsureReadyForView: repoReadinessState === "ready",
+      isLoadingHistory: true,
+      isHistoryLoadFailed: false,
+      shouldEnsureReadyForView: false,
     };
   }
 
-  if (historyHydrationState === "failed" && hasTranscript) {
+  if (historyLoadState === "not_requested") {
     return {
       phase: "needs_history",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-      canRenderHistory: true,
+      canReadRuntimeData: repoReadinessState === "ready",
+      canRenderHistory: hasTranscript,
       isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: false,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: false,
       shouldEnsureReadyForView: repoReadinessState === "ready",
     };
   }
 
-  const shouldShowBlockingHistoryFailure = !hasTranscript && historyHydrationState === "failed";
+  if (historyLoadState === "failed" && hasTranscript) {
+    return {
+      phase: "needs_history",
+      canReadRuntimeData: repoReadinessState === "ready",
+      canRenderHistory: true,
+      isWaitingForRuntimeReadiness: false,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: false,
+      shouldEnsureReadyForView: repoReadinessState === "ready",
+    };
+  }
+
+  const shouldShowBlockingHistoryFailure = !hasTranscript && historyLoadState === "failed";
   if (shouldShowBlockingHistoryFailure) {
     return {
       phase: "history_failed",
-      canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
+      canReadRuntimeData: repoReadinessState === "ready",
       canRenderHistory: false,
       isWaitingForRuntimeReadiness: false,
-      isHydratingHistory: false,
-      isHistoryHydrationFailed: true,
+      isLoadingHistory: false,
+      isHistoryLoadFailed: true,
       shouldEnsureReadyForView: repoReadinessState === "ready",
     };
   }
 
   return {
     phase: "ready",
-    canReadRuntimeData: repoReadinessState === "ready" && hasRuntimeAttachment,
-    canRenderHistory: hasTranscript || historyHydrationState === "hydrated",
+    canReadRuntimeData: repoReadinessState === "ready",
+    canRenderHistory: hasTranscript || historyLoadState === "loaded",
     isWaitingForRuntimeReadiness: false,
-    isHydratingHistory: false,
-    isHistoryHydrationFailed: false,
-    shouldEnsureReadyForView: shouldRefreshRunningSession,
+    isLoadingHistory: false,
+    isHistoryLoadFailed: false,
+    shouldEnsureReadyForView: false,
+  };
+};
+
+export const deriveSelectedAgentSessionViewLifecycle = ({
+  selectedSessionRoute,
+  session,
+  repoReadinessState,
+  sessionLoadError,
+}: {
+  selectedSessionRoute: AgentSessionRouteIdentity | null;
+  session: AgentSessionState | null;
+  repoReadinessState: SessionRepoReadinessState;
+  sessionLoadError?: string | null;
+}): SelectedAgentSessionViewLifecycle => {
+  if (!selectedSessionRoute) {
+    return inactiveSelectedSessionViewLifecycle;
+  }
+
+  if (!session) {
+    const hasLoadFailed = sessionLoadError !== null && sessionLoadError !== undefined;
+    return {
+      externalSessionId: selectedSessionRoute.externalSessionId,
+      canRenderHistory: false,
+      isLoadingHistory: !hasLoadFailed,
+      isHistoryLoadFailed: hasLoadFailed,
+      isWaitingForRuntimeReadiness: !hasLoadFailed && repoReadinessState !== "ready",
+      shouldEnsureReadyForView: false,
+    };
+  }
+
+  const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
+  const isHistoryLoadFailed = lifecycle.isHistoryLoadFailed;
+  const isWaitingForRuntimeReadiness =
+    !isHistoryLoadFailed && lifecycle.isWaitingForRuntimeReadiness;
+  const isLoadingHistory =
+    !isHistoryLoadFailed &&
+    !lifecycle.canRenderHistory &&
+    (isWaitingForRuntimeReadiness ||
+      lifecycle.isLoadingHistory ||
+      lifecycle.shouldEnsureReadyForView);
+
+  return {
+    externalSessionId: selectedSessionRoute.externalSessionId,
+    canRenderHistory: lifecycle.canRenderHistory,
+    isLoadingHistory,
+    isHistoryLoadFailed,
+    isWaitingForRuntimeReadiness,
+    shouldEnsureReadyForView: lifecycle.shouldEnsureReadyForView,
   };
 };

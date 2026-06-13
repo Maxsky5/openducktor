@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { resolveAttachedSessionRuntimeQueryState } from "./session-runtime-query-state";
+import { resolveSessionRuntimeQueryState } from "./session-runtime-query-state";
 
-describe("resolveAttachedSessionRuntimeQueryState", () => {
+describe("resolveSessionRuntimeQueryState", () => {
   test("returns no query state when there is no active session", () => {
-    expect(resolveAttachedSessionRuntimeQueryState(null)).toEqual({
+    expect(resolveSessionRuntimeQueryState(null)).toEqual({
       runtimeQueryInput: null,
       runtimeQueryError: null,
     });
@@ -11,7 +11,7 @@ describe("resolveAttachedSessionRuntimeQueryState", () => {
 
   test("builds query input from active session runtime context", () => {
     expect(
-      resolveAttachedSessionRuntimeQueryState({
+      resolveSessionRuntimeQueryState({
         repoPath: " /repo ",
         runtimeKind: "codex",
         workingDirectory: " /repo/worktree ",
@@ -28,7 +28,7 @@ describe("resolveAttachedSessionRuntimeQueryState", () => {
 
   test("fails active session runtime context when the working directory is missing", () => {
     expect(
-      resolveAttachedSessionRuntimeQueryState({
+      resolveSessionRuntimeQueryState({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "   ",

@@ -12,7 +12,6 @@ const ensureRuntimeWithKind = async (
   return {
     kind: runtimeKind,
     runtimeKind,
-    runtimeId: "runtime-1",
     workingDirectory,
   };
 };
@@ -21,20 +20,14 @@ const withRuntimeKind = async (
   ensureRuntime: StartSessionDependencies["runtime"]["ensureRuntime"],
   ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
 ): Promise<RuntimeInfo> => {
-  const [, , , options] = args;
   const runtime = await ensureRuntime(...args);
-  const runtimeKind = runtime.runtimeKind ?? options?.runtimeKind ?? DEFAULT_RUNTIME_KIND;
-
-  return { ...runtime, runtimeKind };
+  return runtime;
 };
 
 export type FlatStartSessionDependencies = Omit<
   StartSessionDependencies["repo"],
-  "activeWorkspaceRef" | "activeWorkspace"
+  "activeWorkspace"
 > & {
-  activeWorkspaceRef?: {
-    current: { repoPath: string; workspaceId: string; workspaceName: string } | null;
-  };
   activeRepo?: string | null;
   activeWorkspaceId?: string | null;
   loadRepoDefaultModel?: unknown;
@@ -59,7 +52,6 @@ export const toStartSessionDependencies = (
             },
       repoEpochRef: deps.repoEpochRef,
       currentWorkspaceRepoPathRef: deps.currentWorkspaceRepoPathRef,
-      ...(deps.activeWorkspaceRef ? { activeWorkspaceRef: deps.activeWorkspaceRef } : {}),
     },
     session: {
       setSessionsById: deps.setSessionsById,
@@ -67,7 +59,7 @@ export const toStartSessionDependencies = (
       inFlightStartsByWorkspaceTaskRef: deps.inFlightStartsByWorkspaceTaskRef,
       loadAgentSessions: deps.loadAgentSessions,
       persistSessionRecord: deps.persistSessionRecord,
-      attachSessionListener: deps.attachSessionListener,
+      listenToAgentSession: deps.listenToAgentSession,
     },
     runtime: {
       adapter: deps.adapter,
