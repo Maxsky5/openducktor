@@ -73,7 +73,7 @@ describe("session-presence", () => {
     expect(applied.pendingUserMessageStartedAt).toBeUndefined();
   });
 
-  test("settles pending outbound sends and surfaces runtime idle status", () => {
+  test("keeps locally pending outbound sends running on idle runtime presence", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       snapshot: {
@@ -88,12 +88,16 @@ describe("session-presence", () => {
     });
 
     const applied = applyAgentSessionPresenceSnapshotToSession(
-      createSessionState({ pendingUserMessageStartedAt: 123 }),
+      createSessionState({
+        pendingApprovals: [],
+        pendingQuestions: [],
+        pendingUserMessageStartedAt: 123,
+      }),
       snapshot,
     );
 
-    expect(applied.status).toBe("idle");
-    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.status).toBe("running");
+    expect(applied.pendingUserMessageStartedAt).toBe(123);
     expect(applied.draftAssistantText).toBe("");
     expect(applied.draftAssistantMessageId).toBeNull();
     expect(applied.draftReasoningText).toBe("");

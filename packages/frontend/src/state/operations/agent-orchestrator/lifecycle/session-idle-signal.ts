@@ -1,19 +1,13 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-type SessionWithPendingOutboundSend = AgentSessionState & {
-  pendingUserMessageStartedAt: number;
-  status: "running";
-};
+export const shouldHoldSessionOnIdleSignal = (session: AgentSessionState): boolean => {
+  if (session.status === "starting") {
+    return true;
+  }
 
-export const hasPendingOutboundSend = (
-  session: AgentSessionState,
-): session is SessionWithPendingOutboundSend => {
-  return session.pendingUserMessageStartedAt !== undefined && session.status === "running";
-};
-
-export const shouldKeepPendingOutboundSendActiveOnIdle = (session: AgentSessionState): boolean => {
   return (
-    hasPendingOutboundSend(session) &&
+    session.status === "running" &&
+    session.pendingUserMessageStartedAt !== undefined &&
     session.draftAssistantText.trim().length === 0 &&
     session.draftReasoningText.trim().length === 0 &&
     session.pendingApprovals.length === 0 &&
@@ -21,7 +15,7 @@ export const shouldKeepPendingOutboundSendActiveOnIdle = (session: AgentSessionS
   );
 };
 
-export const settlePendingOutboundSendFields = (): Pick<
+export const settleLiveTurnFields = (): Pick<
   AgentSessionState,
   | "pendingUserMessageStartedAt"
   | "draftAssistantText"
@@ -35,3 +29,12 @@ export const settlePendingOutboundSendFields = (): Pick<
   draftReasoningText: "",
   draftReasoningMessageId: null,
 });
+
+export const statusWithoutRuntimePresence = (
+  current: AgentSessionState,
+): AgentSessionState["status"] => {
+  if (current.status === "error" || current.status === "stopped") {
+    return current.status;
+  }
+  return "idle";
+};

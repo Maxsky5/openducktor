@@ -1,7 +1,11 @@
 import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { settlePendingOutboundSendFields } from "../support/pending-outbound-send";
+import {
+  settleLiveTurnFields,
+  shouldHoldSessionOnIdleSignal,
+  statusWithoutRuntimePresence,
+} from "./session-idle-signal";
 
 export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@openducktor/core";
 
@@ -13,24 +17,6 @@ export const shouldListenToAgentSessionPresenceSnapshot = (
 
 export const sessionPresenceHasPendingInput = (snapshot: AgentSessionPresenceSnapshot): boolean => {
   return snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
-};
-
-const shouldKeepStartingUntilSend = (
-  current: AgentSessionState,
-  snapshot: Extract<AgentSessionPresenceSnapshot, { presence: "runtime" }>,
-): boolean => {
-  return (
-    current.status === "starting" &&
-    snapshot.agentSessionStatus === "idle" &&
-    !sessionPresenceHasPendingInput(snapshot)
-  );
-};
-
-const statusWithoutRuntimePresence = (current: AgentSessionState): AgentSessionState["status"] => {
-  if (current.status === "error" || current.status === "stopped") {
-    return current.status;
-  }
-  return "idle";
 };
 
 export const applyAgentSessionPresenceSnapshotToSession = (
@@ -45,11 +31,13 @@ export const applyAgentSessionPresenceSnapshotToSession = (
   const selectedModel = options.selectedModel ?? current.selectedModel;
   const promptOverridesPatch = promptOverrides ? { promptOverrides } : {};
   if (snapshot.presence === "runtime") {
-    // Runtime presence owns live status; local starting survives only until the send is attempted.
-    const status = shouldKeepStartingUntilSend(current, snapshot)
-      ? current.status
-      : snapshot.agentSessionStatus;
-    const pendingOutboundSendFields = status === "idle" ? settlePendingOutboundSendFields() : {};
+    const status =
+      snapshot.agentSessionStatus === "idle" &&
+      !sessionPresenceHasPendingInput(snapshot) &&
+      shouldHoldSessionOnIdleSignal(current)
+        ? current.status
+        : snapshot.agentSessionStatus;
+    const liveTurnFields = status === "idle" ? settleLiveTurnFields() : {};
 
     return {
       ...current,
@@ -59,7 +47,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       title: snapshot.title,
       pendingApprovals: snapshot.pendingApprovals,
       pendingQuestions: snapshot.pendingQuestions,
-      ...pendingOutboundSendFields,
+      ...liveTurnFields,
       ...promptOverridesPatch,
       selectedModel,
     };
@@ -72,7 +60,7 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     status: statusWithoutRuntimePresence(current),
     pendingApprovals: [],
     pendingQuestions: [],
-    ...settlePendingOutboundSendFields(),
+    ...settleLiveTurnFields(),
     ...promptOverridesPatch,
     selectedModel,
   };
