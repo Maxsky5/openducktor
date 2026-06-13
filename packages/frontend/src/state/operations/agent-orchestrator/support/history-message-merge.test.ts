@@ -11,16 +11,16 @@ const createSession = (messages: AgentSessionState["messages"]) => ({
 });
 
 const mergedMessages = (
-  hydratedMessages: AgentChatMessage[],
+  historyMessages: AgentChatMessage[],
   currentMessages: AgentChatMessage[],
 ): AgentChatMessage[] => {
   return sessionMessagesToArray(
-    createSession(mergeHistoryMessages(EXTERNAL_SESSION_ID, hydratedMessages, currentMessages)),
+    createSession(mergeHistoryMessages(EXTERNAL_SESSION_ID, historyMessages, currentMessages)),
   );
 };
 
 describe("agent-orchestrator/support/history-message-merge", () => {
-  test("prefers hydrated final assistant messages while preserving current metadata", () => {
+  test("prefers history final assistant messages while preserving current metadata", () => {
     const merged = mergedMessages(
       [
         {
@@ -73,7 +73,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("updates current final assistant metadata from hydrated duration", () => {
+  test("updates current final assistant metadata from history duration", () => {
     const merged = mergedMessages(
       [
         {
@@ -118,13 +118,13 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("keeps completed current reasoning when hydrated reasoning is still incomplete", () => {
+  test("keeps completed current reasoning when history reasoning is still incomplete", () => {
     const merged = mergedMessages(
       [
         {
           id: "thinking:assistant-1:reasoning-1",
           role: "thinking",
-          content: "Hydrated reasoning",
+          content: "History reasoning",
           timestamp: "2026-03-01T09:00:02.000Z",
           meta: {
             kind: "reasoning",
@@ -161,13 +161,13 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("preserves a current terminal tool row and hydrates identity from the hydrated row", () => {
+  test("preserves a current terminal tool row and loads identity from the history row", () => {
     const merged = mergedMessages(
       [
         {
-          id: "tool:assistant-1:hydrated-tool",
+          id: "tool:assistant-1:history-tool",
           role: "tool",
-          content: "Hydrated running output",
+          content: "History running output",
           timestamp: "2026-03-01T09:00:02.000Z",
           meta: {
             kind: "tool",
@@ -222,7 +222,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
         {
           id: "tool:assistant-1:call-123",
           role: "tool",
-          content: "Hydrated running output",
+          content: "History running output",
           timestamp: "2026-03-01T09:00:02.000Z",
           meta: {
             kind: "tool",
@@ -271,9 +271,9 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     const merged = mergedMessages(
       [
         {
-          id: "tool:assistant-1:hydrated-part",
+          id: "tool:assistant-1:history-part",
           role: "tool",
-          content: "Hydrated completed output",
+          content: "History completed output",
           timestamp: "2026-03-01T09:00:02.000Z",
           meta: {
             kind: "tool",
@@ -307,9 +307,9 @@ describe("agent-orchestrator/support/history-message-merge", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({
-      id: "tool:assistant-1:hydrated-part",
+      id: "tool:assistant-1:history-part",
       role: "tool",
-      content: "Hydrated completed output",
+      content: "History completed output",
       meta: {
         kind: "tool",
         partId: "tool-part-1",
@@ -320,13 +320,13 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("appends unmatched current messages after hydrated history", () => {
+  test("appends unmatched current messages after loaded history", () => {
     const merged = mergedMessages(
       [
         {
           id: "assistant-1",
           role: "assistant",
-          content: "Hydrated history",
+          content: "History history",
           timestamp: "2026-03-01T09:00:01.000Z",
           meta: {
             kind: "assistant",
@@ -416,7 +416,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("absorbs a current subagent session row into only one hydrated part row", () => {
+  test("absorbs a current subagent session row into only one history part row", () => {
     const merged = mergedMessages(
       [
         {
@@ -561,9 +561,9 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     const merged = mergedMessages(
       [
         {
-          id: "tool:assistant-1:hydrated-tool-a",
+          id: "tool:assistant-1:history-tool-a",
           role: "tool",
-          content: "Hydrated running A",
+          content: "History running A",
           timestamp: "2026-03-01T09:00:02.000Z",
           meta: {
             kind: "tool",
@@ -575,9 +575,9 @@ describe("agent-orchestrator/support/history-message-merge", () => {
           },
         },
         {
-          id: "tool:assistant-1:hydrated-tool-b",
+          id: "tool:assistant-1:history-tool-b",
           role: "tool",
-          content: "Hydrated running B",
+          content: "History running B",
           timestamp: "2026-03-01T09:00:03.000Z",
           meta: {
             kind: "tool",
@@ -615,13 +615,13 @@ describe("agent-orchestrator/support/history-message-merge", () => {
       meta: { kind: "tool", status: "completed", output: "done" },
     });
     expect(merged[1]).toMatchObject({
-      id: "tool:assistant-1:hydrated-tool-b",
-      content: "Hydrated running B",
+      id: "tool:assistant-1:history-tool-b",
+      content: "History running B",
       meta: { kind: "tool", status: "running" },
     });
   });
 
-  test("keeps hydrated terminal subagent status and description over stale current state", () => {
+  test("keeps history terminal subagent status and description over stale current state", () => {
     const merged = mergedMessages(
       [
         {
@@ -677,7 +677,7 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     });
   });
 
-  test("updates current user messages from hydrated history by runtime id", () => {
+  test("updates current user messages from loaded history by runtime id", () => {
     const merged = mergedMessages(
       [
         {
@@ -715,6 +715,55 @@ describe("agent-orchestrator/support/history-message-merge", () => {
         id: "runtime-user-queued",
         role: "user",
         content: "Resume the builder after QA rejection",
+        meta: {
+          kind: "user",
+          state: "read",
+          providerId: "openai",
+          modelId: "gpt-5",
+          parts: [{ kind: "text", text: "Resume the builder after QA rejection" }],
+        },
+      }),
+    );
+  });
+
+  test("keeps live user message content when history catches up with the same runtime id", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "runtime-user-queued",
+          role: "user",
+          content: "",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+          },
+        },
+      ],
+      [
+        {
+          id: "runtime-user-queued",
+          role: "user",
+          content: "Resume the builder after QA rejection",
+          timestamp: "2026-03-01T09:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            providerId: "openai",
+            modelId: "gpt-5",
+            parts: [{ kind: "text", text: "Resume the builder after QA rejection" }],
+          },
+        },
+      ],
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(
+      expect.objectContaining({
+        id: "runtime-user-queued",
+        role: "user",
+        content: "Resume the builder after QA rejection",
+        timestamp: "2026-03-01T09:00:01.000Z",
         meta: {
           kind: "user",
           state: "read",

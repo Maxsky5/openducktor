@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { createAdapterWithTransport, createHarness } from "./codex-app-server-adapter.test-harness";
 import type { CodexJsonRpcRequest, CodexJsonRpcTransport } from "./index";
 
-describe("CodexAppServerAdapter history hydration", () => {
-  test("hydrates Codex history and diff from App Server reads", async () => {
+describe("CodexAppServerAdapter history loading", () => {
+  test("loads Codex history and diff from App Server reads", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     await adapter.startSession({
@@ -38,8 +38,14 @@ describe("CodexAppServerAdapter history hydration", () => {
       externalSessionId: "thread/start-runtime-ensure",
     });
 
-    expect(history.some((message) => message.role === "system")).toBe(false);
     expect(history).toEqual([
+      {
+        messageId: "codex-system-prompt:thread/start-runtime-ensure",
+        role: "system",
+        timestamp: "2026-05-07T00:00:00.000Z",
+        text: "System prompt:\n\nUse the repo rules.",
+        parts: [],
+      },
       expect.objectContaining({
         messageId: "user-history-1",
         role: "user",
@@ -216,7 +222,42 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates search command metadata and hides contextual user fragments from thread reads", async () => {
+  test("keeps the runtime-owned system prompt after restoring a live session ref", async () => {
+    const { adapter } = createHarness();
+
+    await adapter.startSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      taskId: "task-1",
+      role: "build",
+      systemPrompt: "Use the repo rules.",
+      model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+    });
+    await adapter.restoreSession({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread/start-runtime-ensure",
+    });
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread/start-runtime-ensure",
+    });
+
+    expect(history[0]).toEqual({
+      messageId: "codex-system-prompt:thread/start-runtime-ensure",
+      role: "system",
+      timestamp: "2026-05-07T00:00:00.000Z",
+      text: "System prompt:\n\nUse the repo rules.",
+      parts: [],
+    });
+  });
+
+  test("loads search command metadata and hides contextual user fragments from thread reads", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -304,7 +345,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates persisted Codex skill marker text into user display parts", async () => {
+  test("loads persisted Codex skill marker text into user display parts", async () => {
     const calls: CodexJsonRpcRequest[] = [];
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
@@ -404,7 +445,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates loaded idle history from Codex token usage replay", async () => {
+  test("loads loaded idle history from Codex token usage replay", async () => {
     const { adapter, drainNotifications, transports } = createHarness();
 
     drainNotifications.mockImplementation(async () => [
@@ -580,7 +621,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates documented thread-read tool item shapes", async () => {
+  test("loads documented thread-read tool item shapes", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -717,7 +758,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     );
   });
 
-  test("hydrates command action read find and bash tools from thread reads", async () => {
+  test("loads command action read find and bash tools from thread reads", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {
@@ -960,7 +1001,7 @@ describe("CodexAppServerAdapter history hydration", () => {
     ]);
   });
 
-  test("hydrates only the selected final Codex agent message as finished", async () => {
+  test("loads only the selected final Codex agent message as finished", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
         if (request.method === "thread/loaded/list") {

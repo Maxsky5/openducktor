@@ -5,6 +5,7 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentModelSelection,
+  AgentSessionHistoryMessage,
   AgentSessionPort,
   AgentSessionPresenceSnapshot,
   AgentSessionRef,
@@ -35,7 +36,10 @@ import type {
   StartAgentSessionInput,
   UpdateAgentSessionModelInput,
 } from "@openducktor/core";
-import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
+import {
+  AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
+  formatWorkflowAgentSessionTitle,
+} from "@openducktor/core";
 import { requireCodexServerRequestId } from "./codex-app-server-approvals";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import {
@@ -142,6 +146,40 @@ const applyRuntimeContextToSession = (
 type HistoryOnlyIdleThreadLoad = {
   repoPath: string;
   workingDirectory: string;
+};
+
+const codexSystemPromptHistoryMessage = (
+  session: CodexSessionState,
+): AgentSessionHistoryMessage | null => {
+  const systemPrompt = session.systemPrompt.trim();
+  if (systemPrompt.length === 0) {
+    return null;
+  }
+
+  return {
+    messageId: `codex-system-prompt:${session.threadId}`,
+    role: "system",
+    timestamp: session.summary.startedAt,
+    text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
+    parts: [],
+  };
+};
+
+const preserveRuntimeContextOnRestore = (
+  restored: CodexSessionState,
+  current: CodexSessionState | undefined,
+): CodexSessionState => {
+  if (!current) {
+    return restored;
+  }
+
+  return {
+    ...restored,
+    ...(restored.model || !current.model ? {} : { model: current.model }),
+    role: restored.role ?? current.role,
+    taskId: restored.taskId || current.taskId,
+    systemPrompt: restored.systemPrompt || current.systemPrompt,
+  };
 };
 
 export class CodexAppServerAdapter
@@ -370,7 +408,7 @@ export class CodexAppServerAdapter
       input.externalSessionId,
     );
     const threadItems = codexTurnItemsFromThreadRead(response);
-    return threadItems
+    const projectedHistory = threadItems
       .flatMap(({ item, turnId, timestamp, isFinalAgentMessage, turnTiming, model }, index) => {
         const turnModel =
           model ??
@@ -420,9 +458,11 @@ export class CodexAppServerAdapter
         }
         return [message];
       })
-      .filter((message): message is import("@openducktor/core").AgentSessionHistoryMessage =>
-        Boolean(message),
-      );
+      .filter((message): message is AgentSessionHistoryMessage => Boolean(message));
+    const systemPromptHistoryMessage = session ? codexSystemPromptHistoryMessage(session) : null;
+    return systemPromptHistoryMessage
+      ? [systemPromptHistoryMessage, ...projectedHistory]
+      : projectedHistory;
   }
 
   private async drainThreadReadTokenUsage(
@@ -547,8 +587,12 @@ export class CodexAppServerAdapter
     });
     const session = sessionStateFromThreadRestore(input, runtimeId, model, response);
     const { summary } = session;
+    const restoredSession = preserveRuntimeContextOnRestore(
+      session,
+      this.sessions.get(summary.externalSessionId),
+    );
     this.clearHistoryOnlyIdleThreadLoad(summary.externalSessionId);
-    this.sessions.set(summary.externalSessionId, session);
+    this.sessions.set(summary.externalSessionId, restoredSession);
     void this.drainBufferedStreamEvents(summary.externalSessionId);
     return summary;
   }

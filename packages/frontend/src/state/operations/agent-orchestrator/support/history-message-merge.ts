@@ -403,13 +403,16 @@ const mergeSameMessageId = (
     currentMessage.role === "user" &&
     currentMessage.meta?.kind === "user"
   ) {
+    const parts = currentMessage.meta.parts ?? loadedMessage.meta.parts;
+    const meta = {
+      ...currentMessage.meta,
+      ...loadedMessage.meta,
+      ...(parts ? { parts } : {}),
+    };
     return {
-      ...currentMessage,
       ...loadedMessage,
-      meta: {
-        ...currentMessage.meta,
-        ...loadedMessage.meta,
-      },
+      ...currentMessage,
+      meta,
     };
   }
 

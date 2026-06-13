@@ -9,6 +9,7 @@ import type {
   ReplyApprovalInput,
   ReplyQuestionInput,
 } from "@openducktor/core";
+import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import {
   normalizeOpenCodeApprovalRequest,
   toOpenCodePermissionReply,
@@ -579,7 +580,7 @@ export const loadSessionHistory = async (
           messageId: `system-prompt:${item.entry.info.id}`,
           role: "system",
           timestamp: item.timestamp,
-          text: `System prompt:\n\n${systemPrompt}`,
+          text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
           parts: [],
         });
         lastRenderedSystemPrompt = systemPrompt;

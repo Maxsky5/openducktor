@@ -96,6 +96,8 @@ export type LoadAgentSessionDiffInput = RuntimeWorkingDirectoryRef & {
 
 export type LoadAgentFileStatusInput = RuntimeWorkingDirectoryRef;
 
+export const AGENT_SESSION_SYSTEM_PROMPT_PREFIX = "System prompt:\n\n";
+
 export type AgentSessionHistoryMessage =
   | {
       messageId: RuntimeHistoryAnchor;
