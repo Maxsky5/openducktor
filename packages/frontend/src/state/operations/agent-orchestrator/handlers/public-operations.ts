@@ -1,8 +1,4 @@
-import type {
-  AgentSessionRecord,
-  RuntimeApprovalReplyOutcome,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { RuntimeApprovalReplyOutcome, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
   AgentModelCatalog,
@@ -17,10 +13,7 @@ import type {
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type {
-  AgentSessionLoadOptions,
-  EnsureSessionReadyForViewResult,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
@@ -47,16 +40,10 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  loadRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<void>;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
+  loadSelectedSessionHistoryForView: (input: {
     externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
-  }) => Promise<EnsureSessionReadyForViewResult>;
+  }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -106,8 +93,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 };
 
 export const createOrchestratorPublicOperations = ({
-  loadRequestedTaskSessionHistory,
-  ensureSessionReadyForView,
+  loadSelectedSessionHistoryForView,
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
@@ -119,10 +105,10 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
-  loadRequestedTaskSessionHistory: (input) =>
-    withErrorToast("Failed to load session history", () => loadRequestedTaskSessionHistory(input)),
-  ensureSessionReadyForView: (input) =>
-    withErrorToast("Failed to prepare session", () => ensureSessionReadyForView(input)),
+  loadSelectedSessionHistoryForView: (input) =>
+    withErrorToast("Failed to load selected session history", () =>
+      loadSelectedSessionHistoryForView(input),
+    ),
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,

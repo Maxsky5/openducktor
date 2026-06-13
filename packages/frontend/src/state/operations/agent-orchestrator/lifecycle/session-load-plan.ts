@@ -1,4 +1,3 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import type {
   AgentSessionHistoryLoadPolicy,
@@ -13,22 +12,17 @@ import {
 import { getAgentSessionHistoryLoadState } from "../support/history-load-state";
 import { someSessionMessage } from "../support/messages";
 import { isSessionSystemPromptMessage } from "../support/session-prompt";
+import type { AgentSessionHistoryTarget } from "./session-history-loader";
 
 type SessionsById = Record<string, AgentSessionState>;
 
 export type RepoSessionLoadPlan = {
   sessionsById: SessionsById;
   liveSessions: AgentSessionRef[];
-  historyRecords: AgentSessionRecord[];
+  historySessions: AgentSessionHistoryTarget[];
 };
 
 const DEFAULT_SESSION_HISTORY_POLICY: AgentSessionHistoryLoadPolicy = "live_if_empty";
-
-const findRecord = (
-  records: AgentSessionRecord[],
-  externalSessionId: string,
-): AgentSessionRecord | null =>
-  records.find((record) => record.externalSessionId === externalSessionId) ?? null;
 
 const shouldLoadLiveSessionHistory = (session: AgentSessionState | undefined): boolean => {
   if (!session) {
@@ -55,17 +49,15 @@ const resolveHistoryPolicy = (
   return options?.targetExternalSessionId ? "requested_only" : DEFAULT_SESSION_HISTORY_POLICY;
 };
 
-const selectSessionHistoryRecords = ({
-  records,
+const selectSessionHistorySessions = ({
   sessionsById,
   liveSessions,
   options,
 }: {
-  records: AgentSessionRecord[];
   sessionsById: Record<string, AgentSessionState>;
   liveSessions: AgentSessionRef[];
   options?: AgentSessionLoadOptions;
-}): AgentSessionRecord[] => {
+}): AgentSessionHistoryTarget[] => {
   const historyPolicy = resolveHistoryPolicy(options);
   if (historyPolicy === "none") {
     return [];
@@ -76,18 +68,17 @@ const selectSessionHistoryRecords = ({
     if (!targetExternalSessionId) {
       return [];
     }
-    const record = findRecord(records, targetExternalSessionId);
-    if (!record) {
+    const session = sessionsById[targetExternalSessionId];
+    if (!session) {
       throw new Error(`Cannot load history for unknown session '${targetExternalSessionId}'.`);
     }
-    return [record];
+    return [session];
   }
 
   const liveSessionIds = new Set(liveSessions.map((session) => session.externalSessionId));
-  return records.filter(
-    (record) =>
-      liveSessionIds.has(record.externalSessionId) &&
-      shouldLoadLiveSessionHistory(sessionsById[record.externalSessionId]),
+  return Object.values(sessionsById).filter(
+    (session) =>
+      liveSessionIds.has(session.externalSessionId) && shouldLoadLiveSessionHistory(session),
   );
 };
 
@@ -110,8 +101,7 @@ export const buildRepoSessionLoadPlan = ({
     currentSessionsById,
     runtimePresence,
   });
-  const historyRecords = selectSessionHistoryRecords({
-    records: tasks.flatMap((task) => task.agentSessions ?? []),
+  const historySessions = selectSessionHistorySessions({
     sessionsById: readModel.sessionsById,
     liveSessions: readModel.liveSessions,
     ...(options ? { options } : {}),
@@ -120,6 +110,6 @@ export const buildRepoSessionLoadPlan = ({
   return {
     sessionsById: readModel.sessionsById,
     liveSessions: readModel.liveSessions,
-    historyRecords,
+    historySessions,
   };
 };

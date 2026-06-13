@@ -13,7 +13,7 @@ import {
 } from "../session-read-model/repo-session-read-model";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import {
-  loadRequestedSessionHistorySnapshot,
+  loadSessionHistorySnapshot,
   loadSessionHistorySnapshots,
   type SessionHistoryLoaderAdapter,
 } from "./session-history-loader";
@@ -74,6 +74,13 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
   queryClient: QueryClient;
+};
+
+type CreateLoadSelectedSessionHistoryArgs = {
+  adapter: SessionHistoryLoaderAdapter;
+  repoEpochRef: MutableRefObject<number>;
+  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
+  updateSession: UpdateSession;
 };
 
 const taskFromSessionRecords = (
@@ -168,7 +175,7 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  if (committedPlan.historyRecords.length === 0) {
+  if (committedPlan.historySessions.length === 0) {
     return;
   }
 
@@ -176,7 +183,7 @@ export const loadRepoAgentSessions = async ({
     repoPath,
     adapter,
     updateSession,
-    records: committedPlan.historyRecords,
+    sessions: committedPlan.historySessions,
     isStaleRepoOperation,
   });
 };
@@ -234,24 +241,20 @@ export const createLoadAgentSessions = ({
   };
 };
 
-export const createLoadAgentSessionHistory = ({
-  activeWorkspace,
+export const createLoadSelectedSessionHistory = ({
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   updateSession,
-  queryClient,
-}: Omit<CreateLoadAgentSessionsArgs, "setSessionsById" | "listenToAgentSession">): ((input: {
-  taskId: string;
-  externalSessionId: string;
-  persistedRecords?: AgentSessionRecord[];
+}: CreateLoadSelectedSessionHistoryArgs): ((input: {
+  session: AgentSessionState;
 }) => Promise<void>) => {
-  return async ({ taskId, externalSessionId, persistedRecords }): Promise<void> => {
-    if (!activeWorkspace?.repoPath || taskId.trim().length === 0) {
+  return async ({ session }): Promise<void> => {
+    if (currentWorkspaceRepoPathRef.current !== session.repoPath) {
       return;
     }
 
-    const repoPath = activeWorkspace.repoPath;
+    const repoPath = session.repoPath;
     const repoEpochAtStart = repoEpochRef.current;
     const isStaleRepoOperation = (): boolean =>
       isRepoOperationStale({
@@ -265,19 +268,15 @@ export const createLoadAgentSessionHistory = ({
       return;
     }
 
-    const records =
-      persistedRecords ?? (await loadAgentSessionListFromQuery(queryClient, repoPath, taskId));
-    if (isStaleRepoOperation()) {
-      return;
-    }
-
-    await loadRequestedSessionHistorySnapshot({
+    const result = await loadSessionHistorySnapshot({
       repoPath,
       adapter,
       updateSession,
-      records,
-      externalSessionId,
+      session,
       isStaleRepoOperation,
     });
+    if (result.status === "failed") {
+      throw result.error;
+    }
   };
 };

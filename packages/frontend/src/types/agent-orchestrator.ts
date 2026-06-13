@@ -204,8 +204,6 @@ export type AgentSessionRouteIdentity = Pick<
 
 export type AgentSessionHistoryLoadPolicy = "none" | "requested_only" | "live_if_empty";
 
-export type EnsureSessionReadyForViewResult = "ready" | "not_needed" | "failed";
-
 export type AgentSessionLoadOptions = {
   targetExternalSessionId?: string | null;
   historyPolicy?: AgentSessionHistoryLoadPolicy;

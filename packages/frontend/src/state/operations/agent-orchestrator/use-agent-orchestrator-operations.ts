@@ -18,7 +18,10 @@ import { useAgentSessionReaders } from "./hooks/use-agent-session-readers";
 import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
-import { createLoadAgentSessionHistory, createLoadAgentSessions } from "./lifecycle/load-sessions";
+import {
+  createLoadAgentSessions,
+  createLoadSelectedSessionHistory,
+} from "./lifecycle/load-sessions";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -121,20 +124,18 @@ export function useAgentOrchestratorOperations({
       updateSession,
     ],
   );
-  const loadAgentSessionHistory = useMemo(
+  const loadSelectedSessionHistory = useMemo(
     () =>
-      createLoadAgentSessionHistory({
-        activeWorkspace,
+      createLoadSelectedSessionHistory({
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         updateSession,
-        queryClient,
       }),
-    [activeWorkspace, agentEngine, queryClient, refBridges, updateSession],
+    [agentEngine, refBridges, updateSession],
   );
-  const { loadRequestedTaskSessionHistory, ensureSessionReadyForView } = useAgentSessionHistory({
-    loadAgentSessionHistory,
+  const { loadSelectedSessionHistoryForView } = useAgentSessionHistory({
+    loadSelectedSessionHistory,
     sessionsRef,
   });
   useRepoSessionReadModelEffects({
@@ -209,8 +210,7 @@ export function useAgentOrchestratorOperations({
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
     const readModelState = { sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: loadRequestedTaskSessionHistory,
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions,
       ...readers,
       removeAgentSession,
@@ -232,11 +232,10 @@ export function useAgentOrchestratorOperations({
   }, [
     sessionReadModelError,
     sessionStore,
-    loadRequestedTaskSessionHistory,
     commitSessions,
     loadAgentSessions,
     readers,
-    ensureSessionReadyForView,
+    loadSelectedSessionHistoryForView,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

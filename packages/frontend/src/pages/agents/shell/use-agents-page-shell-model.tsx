@@ -73,8 +73,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   } = useTasksState();
   const { sessionReadModelError } = useAgentSessionReadModelState();
   const {
-    loadRequestedTaskSessionHistory,
-    ensureSessionReadyForView,
+    loadSelectedSessionHistoryForView,
     readSessionFileSearch,
     readSessionModelCatalog,
     readSessionSlashCommands,
@@ -110,7 +109,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     isForegroundLoadingTasks,
     sessions,
     sessionReadModelError,
-    ensureSessionReadyForView,
+    loadSelectedSessionHistoryForView,
     readSessionModelCatalog,
     readSessionTodos,
   });
@@ -151,7 +150,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     gitConflictQuickActionContextRef,
     openTaskDetails: taskActions.taskDetailsLauncher.openTaskDetails,
     agentOperations: {
-      loadRequestedTaskSessionHistory,
       readSessionFileSearch,
       readSessionSlashCommands,
       ...(readSessionSkills ? { readSessionSkills } : {}),

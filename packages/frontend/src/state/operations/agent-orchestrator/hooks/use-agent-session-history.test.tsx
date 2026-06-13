@@ -32,56 +32,79 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 
 describe("useAgentSessionHistory", () => {
   test("does not load history when a running session history is already loaded", async () => {
-    const loadAgentSessionHistory = mock(async () => undefined);
+    const loadSelectedSessionHistory = mock(async () => undefined);
     const session = createSession({ historyLoadState: "loaded" });
     const sessionsRef = { current: { [session.externalSessionId]: session } };
     const harness = createHookHarness(useAgentSessionHistory, {
-      loadAgentSessionHistory,
+      loadSelectedSessionHistory,
       sessionsRef,
     });
 
     try {
       await harness.mount();
 
-      await harness.run(async ({ ensureSessionReadyForView }) => {
-        const result = await ensureSessionReadyForView({
-          taskId: "task-1",
+      await harness.run(async ({ loadSelectedSessionHistoryForView }) => {
+        await loadSelectedSessionHistoryForView({
           externalSessionId: session.externalSessionId,
           repoReadinessState: "ready",
         });
-        expect(result).toBe("ready");
       });
 
-      expect(loadAgentSessionHistory).not.toHaveBeenCalled();
+      expect(loadSelectedSessionHistory).not.toHaveBeenCalled();
     } finally {
       await harness.unmount();
     }
   });
 
-  test("resolves expected history load failures as a failed readiness outcome", async () => {
-    const loadAgentSessionHistory = mock(async () => {
-      throw new Error("history unavailable");
-    });
+  test("loads selected session history from the selected session state", async () => {
+    const loadSelectedSessionHistory = mock(async () => undefined);
     const session = createSession();
     const sessionsRef = { current: { [session.externalSessionId]: session } };
     const harness = createHookHarness(useAgentSessionHistory, {
-      loadAgentSessionHistory,
+      loadSelectedSessionHistory,
       sessionsRef,
     });
 
     try {
       await harness.mount();
 
-      await harness.run(async ({ ensureSessionReadyForView }) => {
-        const result = await ensureSessionReadyForView({
-          taskId: "task-1",
+      await harness.run(async ({ loadSelectedSessionHistoryForView }) => {
+        await loadSelectedSessionHistoryForView({
           externalSessionId: session.externalSessionId,
           repoReadinessState: "ready",
         });
-        expect(result).toBe("failed");
       });
 
-      expect(loadAgentSessionHistory).toHaveBeenCalledTimes(1);
+      expect(loadSelectedSessionHistory).toHaveBeenCalledWith({ session });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("propagates expected history load failures", async () => {
+    const loadSelectedSessionHistory = mock(async () => {
+      throw new Error("history unavailable");
+    });
+    const session = createSession();
+    const sessionsRef = { current: { [session.externalSessionId]: session } };
+    const harness = createHookHarness(useAgentSessionHistory, {
+      loadSelectedSessionHistory,
+      sessionsRef,
+    });
+
+    try {
+      await harness.mount();
+
+      await expect(
+        harness.run(async ({ loadSelectedSessionHistoryForView }) =>
+          loadSelectedSessionHistoryForView({
+            externalSessionId: session.externalSessionId,
+            repoReadinessState: "ready",
+          }),
+        ),
+      ).rejects.toThrow("history unavailable");
+
+      expect(loadSelectedSessionHistory).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }

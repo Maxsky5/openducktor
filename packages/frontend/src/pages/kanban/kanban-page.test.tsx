@@ -30,9 +30,6 @@ const originalConsoleError = console.error;
 const startAgentSessionMock = mock(async () => "session-1");
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
-const loadRequestedTaskSessionHistoryMock = mock(
-  async (_input: { taskId: string; externalSessionId: string }) => {},
-);
 const loadAgentSessionsMock = mock(
   async (_taskId: string, _options?: AgentSessionLoadOptions) => {},
 );
@@ -466,7 +463,6 @@ describe("KanbanPage session start modal flow", () => {
       useAgentSessionSummaries: () => currentSessionsFixture,
       useAgentActivitySessions: () => [],
       useAgentOperations: () => ({
-        loadRequestedTaskSessionHistory: loadRequestedTaskSessionHistoryMock,
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
         startAgentSession: startAgentSessionMock,
@@ -571,7 +567,6 @@ describe("KanbanPage session start modal flow", () => {
     startAgentSessionMock.mockClear();
     sendAgentMessageMock.mockClear();
     updateAgentSessionModelMock.mockClear();
-    loadRequestedTaskSessionHistoryMock.mockClear();
     loadAgentSessionsMock.mockClear();
     removeAgentSessionsMock.mockClear();
     humanApproveTaskMock.mockClear();

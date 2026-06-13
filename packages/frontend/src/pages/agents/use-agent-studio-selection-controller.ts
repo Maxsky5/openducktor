@@ -17,10 +17,7 @@ import type {
   SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type {
-  AgentSessionState,
-  EnsureSessionReadyForViewResult,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import {
@@ -49,11 +46,10 @@ type UseAgentStudioSelectionControllerArgs = {
     role: AgentRole;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
+  loadSelectedSessionHistoryForView: (input: {
     externalSessionId: string;
     repoReadinessState: AgentStudioReadinessState;
-  }) => Promise<EnsureSessionReadyForViewResult>;
+  }) => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: ReturnType<
     typeof useRuntimeDefinitionsContext
@@ -123,7 +119,7 @@ export function useAgentStudioSelectionController({
   roleFromQuery,
   selectionIntent,
   updateQuery,
-  ensureSessionReadyForView,
+  loadSelectedSessionHistoryForView,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -369,12 +365,11 @@ export function useAgentStudioSelectionController({
       return;
     }
 
-    void ensureSessionReadyForView({
-      taskId: viewTaskId,
+    void loadSelectedSessionHistoryForView({
       externalSessionId: selectedSessionLifecycle.externalSessionId,
       repoReadinessState: viewSessionReadinessState,
     });
-  }, [ensureSessionReadyForView, selectedSessionLifecycle, viewSessionReadinessState, viewTaskId]);
+  }, [loadSelectedSessionHistoryForView, selectedSessionLifecycle, viewSessionReadinessState]);
   const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(

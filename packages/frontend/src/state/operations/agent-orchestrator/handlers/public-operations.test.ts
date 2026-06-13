@@ -25,7 +25,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
-const ensureSessionReadyForView = async () => "not_needed" as const;
+const loadSelectedSessionHistoryForView = async () => undefined;
 
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
@@ -34,8 +34,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions: async () => {
         throw new Error("load failed");
       },
@@ -71,8 +70,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -115,8 +113,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -156,8 +153,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -189,15 +185,14 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("shows toast and rethrows session view readiness errors", async () => {
+  test("shows toast and rethrows selected session history load errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView: async () => {
-        throw new Error("prepare failed");
+      loadSelectedSessionHistoryForView: async () => {
+        throw new Error("history failed");
       },
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
@@ -218,14 +213,13 @@ describe("agent-orchestrator-public-operations", () => {
 
     try {
       await expect(
-        operations.ensureSessionReadyForView({
-          taskId: "task-1",
+        operations.loadSelectedSessionHistoryForView({
           externalSessionId: "session-1",
           repoReadinessState: "ready",
         }),
-      ).rejects.toThrow("prepare failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to prepare session", {
-        description: "prepare failed",
+      ).rejects.toThrow("history failed");
+      expect(toastError).toHaveBeenCalledWith("Failed to load selected session history", {
+        description: "history failed",
       });
     } finally {
       toast.error = originalToastError;
@@ -235,8 +229,7 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit single-session removal without toast wrapping", async () => {
     const removeAgentSession = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -262,8 +255,7 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit session removals without toast wrapping", async () => {
     const removeAgentSessions = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView,
+      loadSelectedSessionHistoryForView,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],

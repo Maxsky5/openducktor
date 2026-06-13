@@ -20,7 +20,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   updateSession: UpdateAgentSession;
   agentEngine: Pick<
     AgentEnginePort,
-    "restoreSession" | "listSessionPresence" | "loadSessionHistory" | "loadSessionTodos"
+    "restoreSession" | "listSessionPresence" | "loadSessionHistory"
   >;
   listenToAgentSession?: ListenToAgentSession;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;

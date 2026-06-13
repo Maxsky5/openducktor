@@ -22,7 +22,6 @@ const createLoaderHarness = ({
   initialSessionsById = {},
   listSessionPresence,
   loadSessionHistory = async () => [],
-  loadSessionTodos = async () => [],
 }: {
   initialSessionsById?: Record<string, AgentSessionState>;
   listSessionPresence: Parameters<
@@ -31,9 +30,6 @@ const createLoaderHarness = ({
   loadSessionHistory?: Parameters<
     typeof createLoadAgentSessions
   >[0]["adapter"]["loadSessionHistory"];
-  loadSessionTodos?: NonNullable<
-    Parameters<typeof createLoadAgentSessions>[0]["adapter"]["loadSessionTodos"]
-  >;
 }) => {
   let sessionsById: Record<string, AgentSessionState> = initialSessionsById;
   const listenedSessions: AgentSessionRef[] = [];
@@ -52,7 +48,6 @@ const createLoaderHarness = ({
       }),
       listSessionPresence,
       loadSessionHistory,
-      loadSessionTodos,
     },
     repoEpochRef: { current: 0 },
     currentWorkspaceRepoPathRef: { current: "/repo" },

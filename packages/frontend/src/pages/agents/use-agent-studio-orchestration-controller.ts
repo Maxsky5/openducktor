@@ -70,7 +70,6 @@ type AgentStudioOrchestrationActionsContext = {
   readSessionFileSearch: AgentStateContextValue["readSessionFileSearch"];
   readSessionSlashCommands: AgentStateContextValue["readSessionSlashCommands"];
   readSessionSkills: AgentStateContextValue["readSessionSkills"];
-  loadRequestedTaskSessionHistory: AgentStateContextValue["loadRequestedTaskSessionHistory"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   replyAgentApproval: AgentStateContextValue["replyAgentApproval"];

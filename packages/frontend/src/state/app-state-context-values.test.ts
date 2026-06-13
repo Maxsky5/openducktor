@@ -115,8 +115,7 @@ describe("app-state-context-values", () => {
     const agentValue: AgentStateContextValue = {
       sessions: [],
       sessionReadModelError: null,
-      loadRequestedTaskSessionHistory: async () => {},
-      ensureSessionReadyForView: async () => "not_needed",
+      loadSelectedSessionHistoryForView: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],

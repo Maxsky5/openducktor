@@ -1,5 +1,4 @@
 import type {
-  AgentSessionRecord,
   GitBranch,
   GitCurrentBranch,
   GitProviderRepository,
@@ -33,7 +32,6 @@ import type { SessionRepoReadinessState } from "@/state/operations/agent-orchest
 import type {
   AgentSessionLoadOptions,
   AgentSessionState,
-  EnsureSessionReadyForViewResult,
   InitialSessionStatusReleasePolicy,
 } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
@@ -168,16 +166,10 @@ export type AgentSessionReadModelStateContextValue = {
 };
 
 export type AgentOperationsContextValue = {
-  loadRequestedTaskSessionHistory: (input: {
-    taskId: string;
-    externalSessionId: string;
-    persistedRecords?: AgentSessionRecord[];
-  }) => Promise<void>;
-  ensureSessionReadyForView: (input: {
-    taskId: string;
+  loadSelectedSessionHistoryForView: (input: {
     externalSessionId: string;
     repoReadinessState: SessionRepoReadinessState;
-  }) => Promise<EnsureSessionReadyForViewResult>;
+  }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,

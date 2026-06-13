@@ -1,81 +1,43 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useCallback } from "react";
-import type {
-  AgentSessionState,
-  EnsureSessionReadyForViewResult,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   deriveAgentSessionViewLifecycle,
   type SessionRepoReadinessState,
 } from "../lifecycle/session-view-lifecycle";
 import { requiresLoadedAgentSessionHistory } from "../support/history-load-state";
 
-type LoadAgentSessionHistory = (input: {
-  taskId: string;
-  externalSessionId: string;
-  persistedRecords?: AgentSessionRecord[];
-}) => Promise<void>;
+type LoadSelectedSessionHistory = (input: { session: AgentSessionState }) => Promise<void>;
 
 export const useAgentSessionHistory = ({
-  loadAgentSessionHistory,
+  loadSelectedSessionHistory,
   sessionsRef,
 }: {
-  loadAgentSessionHistory: LoadAgentSessionHistory;
+  loadSelectedSessionHistory: LoadSelectedSessionHistory;
   sessionsRef: { current: Record<string, AgentSessionState> };
 }) => {
-  const loadRequestedTaskSessionHistory = useCallback(
+  const loadSelectedSessionHistoryForView = useCallback(
     async ({
-      taskId,
-      externalSessionId,
-      persistedRecords,
-    }: {
-      taskId: string;
-      externalSessionId: string;
-      persistedRecords?: AgentSessionRecord[];
-    }): Promise<void> => {
-      await loadAgentSessionHistory({
-        taskId,
-        externalSessionId,
-        ...(persistedRecords ? { persistedRecords } : {}),
-      });
-    },
-    [loadAgentSessionHistory],
-  );
-
-  const ensureSessionReadyForView = useCallback(
-    async ({
-      taskId,
       externalSessionId,
       repoReadinessState,
     }: {
-      taskId: string;
       externalSessionId: string;
       repoReadinessState: SessionRepoReadinessState;
-    }): Promise<EnsureSessionReadyForViewResult> => {
+    }): Promise<void> => {
       const session = sessionsRef.current[externalSessionId] ?? null;
       const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
 
       if (!session || !lifecycle.shouldEnsureReadyForView) {
-        return lifecycle.phase === "ready" ? "ready" : "not_needed";
+        return;
       }
 
       if (requiresLoadedAgentSessionHistory(session)) {
-        try {
-          await loadAgentSessionHistory({
-            taskId,
-            externalSessionId,
-          });
-        } catch {
-          return "failed";
-        }
+        await loadSelectedSessionHistory({ session });
       }
-      return "ready";
     },
-    [loadAgentSessionHistory, sessionsRef],
+    [loadSelectedSessionHistory, sessionsRef],
   );
 
   return {
-    loadRequestedTaskSessionHistory,
-    ensureSessionReadyForView,
+    loadSelectedSessionHistoryForView,
   };
 };

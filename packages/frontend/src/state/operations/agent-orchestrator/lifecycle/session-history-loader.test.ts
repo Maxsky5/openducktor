@@ -1,31 +1,27 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  loadRequestedSessionHistorySnapshot,
-  loadSessionHistorySnapshot,
-} from "./session-history-loader";
+import { loadSessionHistorySnapshot } from "./session-history-loader";
 
-const record: AgentSessionRecord = {
+const sessionTarget = {
   externalSessionId: "external-1",
   role: "build",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  startedAt: "2026-06-12T08:00:00.000Z",
   selectedModel: null,
-};
+} satisfies Parameters<typeof loadSessionHistorySnapshot>[0]["session"];
 
 const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
-    externalSessionId: record.externalSessionId,
+    externalSessionId: sessionTarget.externalSessionId,
     taskId: "task-1",
     repoPath: "/repo",
     runtimeKind: "opencode",
     role: "build",
     status: "running",
-    startedAt: record.startedAt,
-    workingDirectory: record.workingDirectory,
+    startedAt: "2026-06-12T08:00:00.000Z",
+    workingDirectory: sessionTarget.workingDirectory,
     historyLoadState: "not_requested",
   });
 
@@ -38,12 +34,12 @@ describe("session history loader", () => {
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       updateSession,
-      record,
+      session: sessionTarget,
       isStaleRepoOperation: () => true,
     });
 
     expect(result).toEqual({
-      externalSessionId: record.externalSessionId,
+      externalSessionId: sessionTarget.externalSessionId,
       status: "stale",
     });
     expect(loadSessionHistory).not.toHaveBeenCalled();
@@ -63,7 +59,7 @@ describe("session history loader", () => {
       updateSession: (_externalSessionId, updater) => {
         session = updater(session);
       },
-      record,
+      session: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -71,21 +67,32 @@ describe("session history loader", () => {
     expect(session.historyLoadState).toBe("failed");
   });
 
-  test("does not throw an unknown-session error after the repo operation becomes stale", async () => {
-    let staleCheckCount = 0;
+  test("loads transcript history without owning todo hydration", async () => {
+    const existingTodos: AgentSessionTodoItem[] = [
+      {
+        id: "todo-1",
+        content: "Keep visible todo",
+        status: "in_progress",
+        priority: "medium",
+      },
+    ];
+    let session = createSession();
+    session = { ...session, todos: existingTodos };
 
-    await expect(
-      loadRequestedSessionHistorySnapshot({
-        repoPath: "/repo",
-        adapter: { loadSessionHistory: async () => [] },
-        updateSession: () => undefined,
-        records: [],
-        externalSessionId: record.externalSessionId,
-        isStaleRepoOperation: () => {
-          staleCheckCount += 1;
-          return staleCheckCount > 1;
-        },
-      }),
-    ).resolves.toBeUndefined();
+    const result = await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [],
+      },
+      updateSession: (_externalSessionId, updater) => {
+        session = updater(session);
+      },
+      session: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(result.status).toBe("applied");
+    expect(session.historyLoadState).toBe("loaded");
+    expect(session.todos).toBe(existingTodos);
   });
 });

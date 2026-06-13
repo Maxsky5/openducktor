@@ -139,7 +139,7 @@ Must not own:
 4. `readRepoRuntimeSessionPresence` scans each runtime kind and working directory once.
 5. `buildRepoSessionReadModel` overlays runtime presence when it exists; missing runtime evidence is `persisted_only`.
 6. Live sessions are subscribed by route ref.
-7. Initial history is loaded for requested sessions and live empty transcripts.
+7. Initial history is loaded from materialized session state for requested sessions and live empty transcripts.
 8. Subsequent status, transcript, permissions, and questions come from runtime events.
 
 ## Regression Anchors
@@ -156,7 +156,7 @@ Use these compact tests as the first-line safety net:
 | Per-session history failure isolation | `lifecycle/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `lifecycle/session-history-loader.test.ts` |
 | Selected-session runtime/history loading surface | `lifecycle/session-view-lifecycle.test.ts`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-context.test.ts` |
-| Selected-session preparation and runtime loading failures | `lifecycle/ensure-ready.test.ts` |
+| Runtime preparation failures before session start | `lifecycle/ensure-ready.test.ts` |
 | Runtime presence projection onto session state | `lifecycle/session-presence.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
 | Event-driven permission/question lifecycle after startup | `events/session-permissions-questions.test.ts` |
@@ -169,6 +169,9 @@ Use these compact tests as the first-line safety net:
   or reconciliation stages.
 - Do not add runtime transcript open/attach operations to the app-state operations
   context. Readonly transcripts load local history and reply with runtime context refs.
+- Do not load selected transcript history by refetching task session records.
+  The selected session state already owns runtime kind, working directory, role,
+  and selected model for history reads.
 - Do not add fallback runtime routing. Persisted sessions carry `runtimeKind` and
   `workingDirectory`; missing data is an actionable error.
 - Keep runtime ids and runtime routes in low-level adapters/registry code. UI and

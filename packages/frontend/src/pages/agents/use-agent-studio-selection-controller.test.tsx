@@ -107,7 +107,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   roleFromQuery: "spec",
   selectionIntent: null,
   updateQuery: () => {},
-  ensureSessionReadyForView: async () => "not_needed",
+  loadSelectedSessionHistoryForView: async () => undefined,
   runtimeDefinitions: createDefaultRuntimeDefinitions(),
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
@@ -301,8 +301,8 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("prepares the selected view session without opting into live resume", async () => {
-    const ensureSessionReadyForView = mock(async () => "ready" as const);
+  test("loads selected session history without opting into live resume", async () => {
+    const loadSelectedSessionHistoryForView = mock(async () => undefined);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
     });
@@ -312,15 +312,14 @@ describe("useAgentStudioSelectionController", () => {
         sessions: [session],
         taskIdParam: "task-1",
         sessionParam: "session-live",
-        ensureSessionReadyForView,
+        loadSelectedSessionHistoryForView,
       }),
     );
 
     try {
       await harness.mount();
 
-      expect(ensureSessionReadyForView).toHaveBeenCalledWith({
-        taskId: "task-1",
+      expect(loadSelectedSessionHistoryForView).toHaveBeenCalledWith({
         externalSessionId: "session-live",
         repoReadinessState: "ready",
       });
