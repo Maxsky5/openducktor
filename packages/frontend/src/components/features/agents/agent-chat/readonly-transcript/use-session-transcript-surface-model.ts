@@ -4,7 +4,6 @@ import {
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
-import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
@@ -34,13 +33,7 @@ export function useSessionTranscriptSurfaceModel({
   const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
     useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
-  const {
-    readSessionHistory,
-    readSessionModelCatalog,
-    readSessionTodos,
-    replyAgentApproval,
-    answerAgentQuestion,
-  } = useAgentOperations();
+  const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
   const externalSessionId = source?.externalSessionId ?? requestedExternalSessionId ?? null;
   const liveSession = useAgentSession(isOpen ? externalSessionId : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
@@ -82,19 +75,13 @@ export function useSessionTranscriptSurfaceModel({
     answerAgentQuestion,
   });
 
-  const runtimeData = useSessionRuntimeData({
-    session: transcriptInteractions.session,
-    runtimeDefinitions,
-    repoReadinessState: runtimeReadiness.readinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
-  });
   const isSessionWorking =
-    runtimeData.session?.status === "running" || runtimeData.session?.status === "starting";
+    transcriptInteractions.session?.status === "running" ||
+    transcriptInteractions.session?.status === "starting";
   const isTranscriptLoading = sessionHistory.isHistoryLoading;
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
-    runtimeData.session === null &&
+    transcriptInteractions.session === null &&
     isTranscriptLoading;
   const chatSettingsLoadError =
     chatSettingsError && activeWorkspace
@@ -125,7 +112,7 @@ export function useSessionTranscriptSurfaceModel({
 
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
-    session: runtimeData.session,
+    session: transcriptInteractions.session,
     sessionLifecycle: {
       canRenderHistory: !isTranscriptLoading,
       isViewSwitching: isResolvingTranscript,
@@ -135,7 +122,7 @@ export function useSessionTranscriptSurfaceModel({
     chatSettings,
     isSessionWorking,
     runtimeDefinitions,
-    sessionRuntimeDataError: runtimeData.runtimeDataError ?? loadError,
+    sessionRuntimeDataError: loadError,
     runtimeReadiness,
     emptyState,
     pendingQuestions: {
@@ -150,7 +137,7 @@ export function useSessionTranscriptSurfaceModel({
 
   return {
     model,
-    session: runtimeData.session,
-    runtimeDataError: runtimeData.runtimeDataError ?? loadError,
+    session: transcriptInteractions.session,
+    runtimeDataError: loadError,
   };
 }

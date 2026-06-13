@@ -30,8 +30,6 @@ const readSessionHistory = mock(
     },
   ],
 );
-const readSessionModelCatalog = mock(async () => ({ profiles: [], models: [] }));
-const readSessionTodos = mock(async () => []);
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
@@ -45,9 +43,6 @@ let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("../use-repo-runtime-readiness")>;
-let actualRuntimeData: Awaited<
-  typeof import("@/state/operations/agent-orchestrator/hooks/use-session-runtime-data")
->;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 
@@ -157,13 +152,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
       actualAppStateContexts,
       actualHostOperations,
       actualRepoRuntimeReadiness,
-      actualRuntimeData,
     ] = await Promise.all([
       import("@/state/app-state-provider"),
       import("@/state/app-state-contexts"),
       import("@/state/operations/host"),
       import("../use-repo-runtime-readiness"),
-      import("@/state/operations/agent-orchestrator/hooks/use-session-runtime-data"),
     ]);
     originalHostRuntimeList = actualHostOperations.host.runtimeList;
     originalWorkspaceGetSettingsSnapshot = actualHostOperations.host.workspaceGetSettingsSnapshot;
@@ -184,8 +177,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
       ],
     );
-    readSessionModelCatalog.mockClear();
-    readSessionTodos.mockClear();
     replyAgentApproval.mockClear();
     answerAgentQuestion.mockClear();
     useAgentSessionMock.mockClear();
@@ -217,8 +208,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       }),
       useAgentOperations: () => ({
         readSessionHistory,
-        readSessionModelCatalog,
-        readSessionTodos,
         replyAgentApproval,
         answerAgentQuestion,
       }),
@@ -252,13 +241,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
         refreshChecks: async () => {},
       }),
     }));
-
-    mock.module("@/state/operations/agent-orchestrator/hooks/use-session-runtime-data", () => ({
-      useSessionRuntimeData: ({ session }: { session: AgentSessionState | null }) => ({
-        session,
-        runtimeDataError: null,
-      }),
-    }));
   });
 
   afterEach(async () => {
@@ -266,10 +248,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
       ["../use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
-      [
-        "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data",
-        () => Promise.resolve(actualRuntimeData),
-      ],
     ]);
     actualHostOperations.host.runtimeList = originalHostRuntimeList;
     actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
