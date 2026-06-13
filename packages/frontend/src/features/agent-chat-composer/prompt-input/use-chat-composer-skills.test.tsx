@@ -23,8 +23,8 @@ describe("useChatComposerSkills", () => {
       {
         hasActiveSession: true,
         activeSessionStatus: "idle",
-        activeSessionRuntimeQueryInput: null,
-        activeSessionRuntimeQueryError:
+        activeSessionRuntimeRef: null,
+        activeSessionRuntimeRefError:
           "Active session runtime context is missing working directory.",
         supportsSkillReferences: true,
         workspaceRepoPath: "/repo",
@@ -66,12 +66,12 @@ describe("useChatComposerSkills", () => {
       {
         hasActiveSession: true,
         activeSessionStatus: "idle",
-        activeSessionRuntimeQueryInput: {
+        activeSessionRuntimeRef: {
           repoPath: "/repo",
           runtimeKind: "codex",
           workingDirectory: "/repo/worktree",
         },
-        activeSessionRuntimeQueryError: null,
+        activeSessionRuntimeRefError: null,
         supportsSkillReferences: true,
         workspaceRepoPath: "/repo",
         selectedRuntimeKind: "codex",

@@ -1,5 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentSkillCatalog } from "@openducktor/core";
+import type { AgentSkillCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { sessionSkillsQueryOptions } from "@/state/queries/agent-session-runtime";
@@ -10,12 +10,8 @@ const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 type UseChatComposerSkillsArgs = {
   hasActiveSession: boolean;
   activeSessionStatus: string | null;
-  activeSessionRuntimeQueryInput: {
-    repoPath: string;
-    runtimeKind: RuntimeKind;
-    workingDirectory: string;
-  } | null;
-  activeSessionRuntimeQueryError: string | null;
+  activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
+  activeSessionRuntimeRefError: string | null;
   supportsSkillReferences: boolean;
   workspaceRepoPath: string | null;
   selectedRuntimeKind: RuntimeKind | null;
@@ -34,8 +30,8 @@ type UseChatComposerSkillsArgs = {
 export const useChatComposerSkills = ({
   hasActiveSession,
   activeSessionStatus,
-  activeSessionRuntimeQueryInput,
-  activeSessionRuntimeQueryError,
+  activeSessionRuntimeRef,
+  activeSessionRuntimeRefError,
   supportsSkillReferences,
   workspaceRepoPath,
   selectedRuntimeKind,
@@ -48,11 +44,11 @@ export const useChatComposerSkills = ({
   isSkillsLoading: boolean;
 } => {
   const activeSessionSkillsQuery = useQuery({
-    ...(activeSessionRuntimeQueryInput && readSessionSkills
+    ...(activeSessionRuntimeRef && readSessionSkills
       ? sessionSkillsQueryOptions(
-          activeSessionRuntimeQueryInput.repoPath,
-          activeSessionRuntimeQueryInput.runtimeKind,
-          activeSessionRuntimeQueryInput.workingDirectory,
+          activeSessionRuntimeRef.repoPath,
+          activeSessionRuntimeRef.runtimeKind,
+          activeSessionRuntimeRef.workingDirectory,
           readSessionSkills,
         )
       : {
@@ -65,8 +61,8 @@ export const useChatComposerSkills = ({
       supportsSkillReferences &&
       hasActiveSession &&
       activeSessionStatus !== "starting" &&
-      activeSessionRuntimeQueryInput !== null &&
-      activeSessionRuntimeQueryError === null &&
+      activeSessionRuntimeRef !== null &&
+      activeSessionRuntimeRefError === null &&
       readSessionSkills !== undefined,
   });
 
@@ -90,7 +86,7 @@ export const useChatComposerSkills = ({
   if (supportsSkillReferences && hasActiveSession) {
     catalog = activeSessionSkillsQuery.data ?? EMPTY_SKILL_CATALOG;
     error =
-      activeSessionRuntimeQueryError ??
+      activeSessionRuntimeRefError ??
       (activeSessionSkillsQuery.error instanceof Error
         ? activeSessionSkillsQuery.error.message
         : null);

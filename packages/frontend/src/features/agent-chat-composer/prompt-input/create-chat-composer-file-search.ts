@@ -1,14 +1,13 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentFileSearchResult } from "@openducktor/core";
+import type { AgentFileSearchResult, RuntimeWorkingDirectoryRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import type { SessionRuntimeQueryInput } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import { sessionFileSearchQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeFileSearchQueryOptions } from "@/state/queries/runtime-catalog";
 
 export const createChatComposerFileSearch = ({
   hasActiveSession,
-  activeSessionRuntimeQueryInput,
-  activeSessionRuntimeQueryError,
+  activeSessionRuntimeRef,
+  activeSessionRuntimeRefError,
   workspaceRepoPath,
   selectedRuntimeKind,
   supportsFileSearch,
@@ -17,8 +16,8 @@ export const createChatComposerFileSearch = ({
   readSessionFileSearch,
 }: {
   hasActiveSession: boolean;
-  activeSessionRuntimeQueryInput: SessionRuntimeQueryInput | null;
-  activeSessionRuntimeQueryError: string | null;
+  activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
+  activeSessionRuntimeRefError: string | null;
   workspaceRepoPath: string | null;
   selectedRuntimeKind: RuntimeKind | null;
   supportsFileSearch: boolean;
@@ -37,10 +36,10 @@ export const createChatComposerFileSearch = ({
 }): ((query: string) => Promise<AgentFileSearchResult[]>) => {
   return async (query: string): Promise<AgentFileSearchResult[]> => {
     if (hasActiveSession) {
-      if (activeSessionRuntimeQueryError) {
-        throw new Error(activeSessionRuntimeQueryError);
+      if (activeSessionRuntimeRefError) {
+        throw new Error(activeSessionRuntimeRefError);
       }
-      if (activeSessionRuntimeQueryInput == null) {
+      if (activeSessionRuntimeRef == null) {
         throw new Error(
           "Active session file search is unavailable until the session runtime is ready.",
         );
@@ -53,9 +52,9 @@ export const createChatComposerFileSearch = ({
       }
       return queryClient.fetchQuery(
         sessionFileSearchQueryOptions(
-          activeSessionRuntimeQueryInput.repoPath,
-          activeSessionRuntimeQueryInput.runtimeKind,
-          activeSessionRuntimeQueryInput.workingDirectory,
+          activeSessionRuntimeRef.repoPath,
+          activeSessionRuntimeRef.runtimeKind,
+          activeSessionRuntimeRef.workingDirectory,
           query,
           readSessionFileSearch,
         ),

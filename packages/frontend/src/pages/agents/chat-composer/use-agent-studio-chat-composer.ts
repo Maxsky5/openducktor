@@ -33,7 +33,7 @@ import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start"
 import { DEFAULT_RUNTIME_KIND, findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
-import { resolveSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
+import { resolveRuntimeWorkingDirectoryRefState } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
@@ -204,9 +204,9 @@ export function useAgentStudioChatComposer({
     roleDefaultSelection,
     availableRuntimeDefinitions,
   ]);
-  const activeSessionRuntimeQueryState = useMemo(
+  const activeSessionRuntimeRefState = useMemo(
     () =>
-      resolveSessionRuntimeQueryState({
+      resolveRuntimeWorkingDirectoryRefState({
         repoPath: workspaceRepoPath,
         session: hasActiveSession
           ? {
@@ -217,8 +217,8 @@ export function useAgentStudioChatComposer({
       }),
     [activeSessionRuntimeKind, activeSessionWorkingDirectory, hasActiveSession, workspaceRepoPath],
   );
-  const activeSessionRuntimeQueryInput = activeSessionRuntimeQueryState.runtimeQueryInput;
-  const activeSessionRuntimeQueryError = activeSessionRuntimeQueryState.runtimeQueryError;
+  const activeSessionRuntimeRef = activeSessionRuntimeRefState.runtimeRef;
+  const activeSessionRuntimeRefError = activeSessionRuntimeRefState.runtimeRefError;
   const { runtimeSupportsSlashCommands, supportsFileSearch, supportsSkillReferences } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
@@ -277,8 +277,8 @@ export function useAgentStudioChatComposer({
     hasActiveSession,
     activeExternalSessionId,
     activeSessionStatus,
-    activeSessionRuntimeQueryInput,
-    activeSessionRuntimeQueryError,
+    activeSessionRuntimeRef,
+    activeSessionRuntimeRefError,
     runtimeSupportsSlashCommands,
     workspaceRepoPath,
     selectedRuntimeKind,
@@ -289,8 +289,8 @@ export function useAgentStudioChatComposer({
   const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
     hasActiveSession,
     activeSessionStatus,
-    activeSessionRuntimeQueryInput,
-    activeSessionRuntimeQueryError,
+    activeSessionRuntimeRef,
+    activeSessionRuntimeRefError,
     supportsSkillReferences,
     workspaceRepoPath,
     selectedRuntimeKind,
@@ -331,8 +331,8 @@ export function useAgentStudioChatComposer({
     () =>
       createChatComposerFileSearch({
         hasActiveSession,
-        activeSessionRuntimeQueryInput,
-        activeSessionRuntimeQueryError,
+        activeSessionRuntimeRef,
+        activeSessionRuntimeRefError,
         workspaceRepoPath,
         selectedRuntimeKind,
         supportsFileSearch,
@@ -341,8 +341,8 @@ export function useAgentStudioChatComposer({
         ...(readSessionFileSearch ? { readSessionFileSearch } : {}),
       }),
     [
-      activeSessionRuntimeQueryError,
-      activeSessionRuntimeQueryInput,
+      activeSessionRuntimeRef,
+      activeSessionRuntimeRefError,
       selectedRuntimeKind,
       hasActiveSession,
       loadFileSearchForRepo,

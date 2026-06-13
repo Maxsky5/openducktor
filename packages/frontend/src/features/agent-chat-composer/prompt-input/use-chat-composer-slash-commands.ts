@@ -1,10 +1,13 @@
 import type { ReusablePrompt, RuntimeKind } from "@openducktor/contracts";
-import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
+import type {
+  AgentSlashCommand,
+  AgentSlashCommandCatalog,
+  RuntimeWorkingDirectoryRef,
+} from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import type { SessionRuntimeQueryInput } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import { sessionSlashCommandsQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeSlashCommandsQueryOptions } from "@/state/queries/runtime-catalog";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -28,8 +31,8 @@ export const useChatComposerSlashCommands = ({
   hasActiveSession,
   activeExternalSessionId,
   activeSessionStatus,
-  activeSessionRuntimeQueryInput,
-  activeSessionRuntimeQueryError,
+  activeSessionRuntimeRef,
+  activeSessionRuntimeRefError,
   runtimeSupportsSlashCommands,
   workspaceRepoPath,
   selectedRuntimeKind,
@@ -40,8 +43,8 @@ export const useChatComposerSlashCommands = ({
   hasActiveSession: boolean;
   activeExternalSessionId: string | null;
   activeSessionStatus: AgentSessionState["status"] | null;
-  activeSessionRuntimeQueryInput: SessionRuntimeQueryInput | null;
-  activeSessionRuntimeQueryError: string | null;
+  activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
+  activeSessionRuntimeRefError: string | null;
   runtimeSupportsSlashCommands: boolean;
   workspaceRepoPath: string | null;
   selectedRuntimeKind: RuntimeKind | null;
@@ -62,10 +65,10 @@ export const useChatComposerSlashCommands = ({
   isSlashCommandsLoading: boolean;
 } => {
   const activeSessionSlashCommandsQuery = useQuery({
-    ...(activeSessionRuntimeQueryInput && readSessionSlashCommands
+    ...(activeSessionRuntimeRef && readSessionSlashCommands
       ? sessionSlashCommandsQueryOptions(
-          activeSessionRuntimeQueryInput.repoPath,
-          activeSessionRuntimeQueryInput.runtimeKind,
+          activeSessionRuntimeRef.repoPath,
+          activeSessionRuntimeRef.runtimeKind,
           readSessionSlashCommands,
         )
       : {
@@ -78,8 +81,8 @@ export const useChatComposerSlashCommands = ({
       runtimeSupportsSlashCommands &&
       hasActiveSession &&
       activeSessionStatus !== "starting" &&
-      activeSessionRuntimeQueryInput !== null &&
-      activeSessionRuntimeQueryError === null &&
+      activeSessionRuntimeRef !== null &&
+      activeSessionRuntimeRefError === null &&
       readSessionSlashCommands !== undefined,
   });
   const repoSlashCommandsQuery = useQuery({

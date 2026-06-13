@@ -27,7 +27,7 @@ import type {
   RuntimePendingInputRequestId,
 } from "../types/agent-orchestrator";
 
-type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
+export type RuntimeWorkingDirectoryRef = RepoRuntimeRef & {
   workingDirectory: string;
 };
 

@@ -3,7 +3,7 @@ import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import { resolveSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
+import { resolveRuntimeWorkingDirectoryRefState } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_MODEL_CATALOG_STALE_TIME_MS,
@@ -46,13 +46,13 @@ export const useSessionRuntimeData = ({
   readSessionModelCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
-  const { runtimeQueryInput, runtimeQueryError: runtimeDataSupportError } = useMemo(
-    () => resolveSessionRuntimeQueryState({ repoPath, session }),
+  const { runtimeRef, runtimeRefError: runtimeDataSupportError } = useMemo(
+    () => resolveRuntimeWorkingDirectoryRefState({ repoPath, session }),
     [repoPath, session],
   );
   const canReadSessionRuntimeData =
     canReadRuntimeData &&
-    runtimeQueryInput !== null &&
+    runtimeRef !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";
   const runtimeDefinition = session?.runtimeKind
@@ -62,24 +62,21 @@ export const useSessionRuntimeData = ({
     ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
     : false;
   const runtimeSessionRef =
-    runtimeQueryInput && session
+    runtimeRef && session
       ? {
-          ...runtimeQueryInput,
+          ...runtimeRef,
           externalSessionId: session.externalSessionId,
         }
       : null;
   const shouldLoadTodos = canReadSessionRuntimeData && runtimeSessionRef !== null && supportsTodos;
 
   const catalogQuery = useQuery({
-    queryKey: runtimeQueryInput
-      ? agentSessionRuntimeQueryKeys.modelCatalog(
-          runtimeQueryInput.repoPath,
-          runtimeQueryInput.runtimeKind,
-        )
+    queryKey: runtimeRef
+      ? agentSessionRuntimeQueryKeys.modelCatalog(runtimeRef.repoPath, runtimeRef.runtimeKind)
       : agentSessionRuntimeQueryKeys.modelCatalogUnavailable(),
-    queryFn: runtimeQueryInput
+    queryFn: runtimeRef
       ? (): Promise<AgentModelCatalog> =>
-          readSessionModelCatalog(runtimeQueryInput.repoPath, runtimeQueryInput.runtimeKind)
+          readSessionModelCatalog(runtimeRef.repoPath, runtimeRef.runtimeKind)
       : skipToken,
     enabled: canReadSessionRuntimeData,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
