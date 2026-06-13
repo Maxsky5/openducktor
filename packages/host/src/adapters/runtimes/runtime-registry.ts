@@ -12,6 +12,7 @@ import {
 } from "../../effect/host-errors";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type {
+  RuntimeEnsureWorkspaceInput,
   RuntimeRegistryError,
   RuntimeRegistryPort,
   RuntimeWorkspaceHandle,
@@ -20,7 +21,6 @@ import type {
 import { probeCodexSessionStatus } from "../codex/codex-session-status-probe";
 import { stopCodexSession } from "../codex/codex-session-stop";
 import {
-  findWorkspaceRuntime,
   probeCodexMcpStatus,
   probeOpenCodeMcpStatus,
   probeOpenCodeSessionStatus,
@@ -35,6 +35,27 @@ export type CreateRuntimeRegistryInput = {
 
 type RuntimeEnsureFlight = {
   deferred: Deferred.Deferred<RuntimeInstanceSummary, RuntimeRegistryError>;
+};
+
+type RuntimeSessionTargetInput = {
+  runtimeKind: string;
+  repoPath: string;
+};
+
+const findWorkspaceRuntime = (
+  runtimes: Iterable<RuntimeInstanceSummary>,
+  input: RuntimeEnsureWorkspaceInput,
+): RuntimeInstanceSummary | undefined => {
+  for (const runtime of runtimes) {
+    if (
+      runtime.kind === input.runtimeKind &&
+      runtime.repoPath === input.repoPath &&
+      runtime.role === "workspace"
+    ) {
+      return runtime;
+    }
+  }
+  return undefined;
 };
 
 const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
@@ -119,6 +140,47 @@ export const createRuntimeRegistry = ({
     }
     return result;
   };
+  const findWorkspaceSessionRuntime = (input: RuntimeSessionTargetInput) =>
+    Effect.gen(function* () {
+      const runtimes = readRuntimesForRepo({
+        repoPath: input.repoPath,
+        runtimeKind: input.runtimeKind,
+      }).filter(
+        (runtime) =>
+          runtime.kind === input.runtimeKind &&
+          runtime.role === "workspace" &&
+          runtime.taskId === null,
+      );
+      if (runtimes.length === 0) {
+        return null;
+      }
+      if (runtimes.length > 1) {
+        return yield* Effect.fail(
+          new HostOperationError({
+            operation: "runtimeRegistry.resolveWorkspaceSessionRuntime",
+            message: `Multiple live ${input.runtimeKind} workspace runtimes found for repo '${input.repoPath}'.`,
+            details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+          }),
+        );
+      }
+      return runtimes[0] ?? null;
+    });
+  const requireWorkspaceSessionRuntime = (input: RuntimeSessionTargetInput, operation: string) =>
+    findWorkspaceSessionRuntime(input).pipe(
+      Effect.flatMap((runtime) => {
+        if (runtime) {
+          return Effect.succeed(runtime);
+        }
+        return Effect.fail(
+          new HostResourceError({
+            resource: "runtime",
+            operation,
+            message: `No live ${input.runtimeKind} workspace runtime found for repo '${input.repoPath}'.`,
+            details: { runtimeKind: input.runtimeKind, repoPath: input.repoPath },
+          }),
+        );
+      }),
+    );
   for (const runtime of runtimes) {
     upsertRuntime(runtime);
   }
@@ -276,62 +338,79 @@ export const createRuntimeRegistry = ({
       });
     },
     stopSession(input) {
-      if (input.runtimeKind === "opencode") {
-        return stopOpenCodeSession(input);
-      }
-      if (input.runtimeKind === "codex") {
-        if (!codexAppServer) {
-          return Effect.fail(
-            new HostResourceError({
-              resource: "codexAppServer",
-              operation: "runtimeRegistry.stopCodexSession",
-              message: "Codex session stop requires the Codex app-server port.",
-            }),
-          );
+      return Effect.gen(function* () {
+        const runtime = yield* requireWorkspaceSessionRuntime(input, "runtimeRegistry.stopSession");
+        const target = {
+          runtimeKind: input.runtimeKind,
+          runtimeRoute: runtime.runtimeRoute,
+          externalSessionId: input.externalSessionId,
+          workingDirectory: input.workingDirectory,
+        };
+        if (input.runtimeKind === "opencode") {
+          return yield* stopOpenCodeSession(target);
         }
-        return Effect.gen(function* () {
-          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
+        if (input.runtimeKind === "codex") {
+          if (!codexAppServer) {
+            return yield* Effect.fail(
+              new HostResourceError({
+                resource: "codexAppServer",
+                operation: "runtimeRegistry.stopCodexSession",
+                message: "Codex session stop requires the Codex app-server port.",
+              }),
+            );
+          }
+          const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
           return yield* stopCodexSession({
             codexAppServer,
             runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           });
-        });
-      }
-      return Effect.fail(
-        new HostValidationError({
-          message: `Runtime kind ${input.runtimeKind} does not support session stop in the TypeScript host.`,
-          field: "runtimeKind",
-          details: { runtimeKind: input.runtimeKind },
-        }),
-      );
+        }
+        return yield* Effect.fail(
+          new HostValidationError({
+            message: `Runtime kind ${input.runtimeKind} does not support session stop in the TypeScript host.`,
+            field: "runtimeKind",
+            details: { runtimeKind: input.runtimeKind },
+          }),
+        );
+      });
     },
     probeSessionStatus(input) {
-      if (input.runtimeKind === "opencode") {
-        return probeOpenCodeSessionStatus(input);
-      }
-      if (input.runtimeKind === "codex") {
-        if (!codexAppServer) {
-          return Effect.fail(
-            new HostResourceError({
-              resource: "codexAppServer",
-              operation: "runtimeRegistry.probeSessionStatus",
-              message: "Codex session status probing requires the Codex app-server port.",
-            }),
-          );
+      return Effect.gen(function* () {
+        const runtime = yield* findWorkspaceSessionRuntime(input);
+        if (!runtime) {
+          return { supported: true, hasLiveSession: false };
         }
-        return Effect.gen(function* () {
-          const runtimeId = yield* requireCodexRuntimeId(input.runtimeRoute);
+        const target = {
+          runtimeKind: input.runtimeKind,
+          runtimeRoute: runtime.runtimeRoute,
+          externalSessionId: input.externalSessionId,
+          workingDirectory: input.workingDirectory,
+        };
+        if (input.runtimeKind === "opencode") {
+          return yield* probeOpenCodeSessionStatus(target);
+        }
+        if (input.runtimeKind === "codex") {
+          if (!codexAppServer) {
+            return yield* Effect.fail(
+              new HostResourceError({
+                resource: "codexAppServer",
+                operation: "runtimeRegistry.probeSessionStatus",
+                message: "Codex session status probing requires the Codex app-server port.",
+              }),
+            );
+          }
+          const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
           return yield* probeCodexSessionStatus({
             codexAppServer,
             runtimeId,
             externalSessionId: input.externalSessionId,
             workingDirectory: input.workingDirectory,
           });
-        });
-      }
-      return Effect.succeed({ supported: false, hasLiveSession: false });
+        }
+        return { supported: false, hasLiveSession: false };
+      });
     },
     probeMcpStatus(input) {
       if (input.runtimeKind === "opencode") {

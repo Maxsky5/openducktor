@@ -1,13 +1,11 @@
 import {
-  type AgentSessionRecord,
   type RepoRuntimeStartupStatus,
   type RuntimeInstanceSummary,
-  type RuntimeRoute,
   runtimeInstanceSummarySchema,
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { errorMessage } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
@@ -28,11 +26,8 @@ import {
   type RuntimeOrchestratorService,
   resolveRepoPath,
   resolveRuntimeDescriptor,
-  uniqueRuntimeRoutes,
   validateSessionStopTarget,
 } from "./runtime-orchestrator-model";
-
-const SESSION_STOP_ROUTE_PROBE_CONCURRENCY = 4;
 
 export type {
   RuntimeListInput,
@@ -59,86 +54,6 @@ export const createRuntimeOrchestratorService = ({
   const runtimeStartupStatuses = new Map<string, RepoRuntimeStartupStatus>();
   const startupStatusKey = (runtimeKind: string, repoPath: string): string =>
     `${runtimeKind}::${normalizePathForComparison(repoPath)}`;
-  const resolveSessionStopRoute = (
-    request: Parameters<RuntimeOrchestratorService["agentSessionStop"]>[0],
-    repoPath: string,
-    session: AgentSessionRecord,
-  ) =>
-    Effect.gen(function* () {
-      const runtimes = yield* runtimeRegistry.listRuntimesByRepo({
-        repoPath,
-        runtimeKind: request.runtimeKind,
-      });
-      const normalizedWorkingDirectory = normalizePathForComparison(request.workingDirectory);
-      const exactRoutes = uniqueRuntimeRoutes(
-        runtimes
-          .filter(
-            (runtime) =>
-              normalizePathForComparison(runtime.workingDirectory) === normalizedWorkingDirectory,
-          )
-          .map((runtime) => runtime.runtimeRoute),
-      );
-      if (exactRoutes.length === 1) {
-        return exactRoutes[0] as RuntimeRoute;
-      }
-      if (exactRoutes.length > 1) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "runtime_orchestrator.resolve_session_stop_route",
-            message: `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}`,
-            details: { externalSessionId: request.externalSessionId },
-          }),
-        );
-      }
-      const repoRoutes = uniqueRuntimeRoutes(runtimes.map((runtime) => runtime.runtimeRoute));
-      if (repoRoutes.length === 1) {
-        return repoRoutes[0] as RuntimeRoute;
-      }
-      if (repoRoutes.length === 0) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "runtime_orchestrator.resolve_session_stop_route",
-            message: `No live runtime route found for externalSessionId ${request.externalSessionId}`,
-            details: { externalSessionId: request.externalSessionId },
-          }),
-        );
-      }
-      const probeResults = yield* Effect.forEach(
-        repoRoutes,
-        (runtimeRoute) =>
-          runtimeRegistry
-            .probeSessionStatus({
-              runtimeKind: request.runtimeKind,
-              runtimeRoute,
-              externalSessionId: session.externalSessionId,
-              workingDirectory: request.workingDirectory,
-            })
-            .pipe(Effect.map((probe) => ({ runtimeRoute, probe }))),
-        { concurrency: SESSION_STOP_ROUTE_PROBE_CONCURRENCY },
-      );
-      const matchingRoutes = probeResults
-        .filter(({ probe }) => probe.supported && probe.hasLiveSession)
-        .map(({ runtimeRoute }) => runtimeRoute);
-      if (matchingRoutes.length === 1) {
-        return matchingRoutes[0] as RuntimeRoute;
-      }
-      if (matchingRoutes.length === 0) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "runtime_orchestrator.resolve_session_stop_route",
-            message: `No live runtime route found for externalSessionId ${request.externalSessionId}`,
-            details: { externalSessionId: request.externalSessionId },
-          }),
-        );
-      }
-      return yield* Effect.fail(
-        new HostOperationError({
-          operation: "runtime_orchestrator.resolve_session_stop_route",
-          message: `Multiple live runtime routes matched externalSessionId ${request.externalSessionId}`,
-          details: { externalSessionId: request.externalSessionId },
-        }),
-      );
-    });
   const runtimeList: RuntimeOrchestratorService["runtimeList"] = (input) =>
     Effect.gen(function* () {
       const { runtimeKind, repoPath } = input;
@@ -243,10 +158,9 @@ export const createRuntimeOrchestratorService = ({
           request.externalSessionId,
         );
         yield* validateSessionStopTarget(request, session);
-        const runtimeRoute = yield* resolveSessionStopRoute(request, repoPath, session);
         yield* runtimeRegistry.stopSession({
           runtimeKind: request.runtimeKind,
-          runtimeRoute,
+          repoPath,
           externalSessionId: session.externalSessionId,
           workingDirectory: session.workingDirectory,
         });

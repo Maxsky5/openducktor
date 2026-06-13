@@ -37,13 +37,13 @@ export type RuntimeWorkspaceStarterPort = {
 };
 export type RuntimeSessionStopInput = {
   runtimeKind: string;
-  runtimeRoute: RuntimeRoute;
+  repoPath: string;
   externalSessionId: string;
   workingDirectory: string;
 };
 export type RuntimeSessionStatusProbeInput = {
   runtimeKind: string;
-  runtimeRoute: RuntimeRoute;
+  repoPath: string;
   externalSessionId: string;
   workingDirectory: string;
 };

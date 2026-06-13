@@ -124,25 +124,11 @@ export const resolveRepoPath = (gitPort: GitPort, repoPath: string) =>
     }
     return canonicalRepoPath;
   });
-const runtimeRouteKey = (runtimeRoute: RuntimeRoute): string => JSON.stringify(runtimeRoute);
 export const describeRuntimeRoute = (runtimeRoute: RuntimeRoute): string => {
   if (runtimeRoute.type === "local_http") {
     return runtimeRoute.endpoint;
   }
   return `${runtimeRoute.type}:${runtimeRoute.identity}`;
-};
-export const uniqueRuntimeRoutes = (runtimeRoutes: RuntimeRoute[]): RuntimeRoute[] => {
-  const seen = new Set<string>();
-  const unique: RuntimeRoute[] = [];
-  for (const runtimeRoute of runtimeRoutes) {
-    const key = runtimeRouteKey(runtimeRoute);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(runtimeRoute);
-  }
-  return unique;
 };
 export const loadTargetSession = (
   taskReader: TaskReader,

@@ -1,10 +1,5 @@
-import type {
-  AgentSessionRecord,
-  RuntimeInstanceSummary,
-  RuntimeRoute,
-} from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
@@ -14,36 +9,6 @@ export type CreateRuntimeTaskActivityGuardInput = {
 type ActiveWorkEvidence = {
   activeSessionRoles: string[];
 };
-const routeIndexKey = (runtimeKind: string): string => runtimeKind.trim();
-const collectRuntimeRoutes = (runtimeRegistry: RuntimeRegistryPort, repoPath: string) =>
-  Effect.gen(function* () {
-    const normalizedRepoPath = normalizePathForComparison(repoPath);
-    const routesByKind = new Map<string, RuntimeRoute>();
-    for (const runtime of yield* runtimeRegistry.listRuntimesByRepo({ repoPath })) {
-      if (!isWorkspaceRepoRuntime(runtime, normalizedRepoPath)) {
-        continue;
-      }
-      const key = routeIndexKey(runtime.kind);
-      if (routesByKind.has(key)) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: "runtimeTaskActivityGuard.collectRuntimeRoutes",
-            message: `Multiple live ${runtime.kind} repo runtimes found for repo '${repoPath}'; cannot resolve session probe route`,
-            details: { repoPath, runtimeKind: runtime.kind },
-          }),
-        );
-      }
-      routesByKind.set(key, runtime.runtimeRoute);
-    }
-    return routesByKind;
-  });
-const isWorkspaceRepoRuntime = (
-  runtime: RuntimeInstanceSummary,
-  normalizedRepoPath: string,
-): boolean =>
-  normalizePathForComparison(runtime.repoPath) === normalizedRepoPath &&
-  runtime.role === "workspace" &&
-  runtime.taskId === null;
 const uniqueSorted = (values: Iterable<string>): string[] => [...new Set(values)].sort();
 const collectActiveWorkEvidence = (
   runtimeRegistry: RuntimeRegistryPort,
@@ -53,7 +18,6 @@ const collectActiveWorkEvidence = (
 ) =>
   Effect.gen(function* () {
     const allowedRoles = new Set(sessionRoles.map((role) => role.trim()).filter(Boolean));
-    const runtimeRoutes = yield* collectRuntimeRoutes(runtimeRegistry, repoPath);
     const activeRoles: string[] = [];
     for (const session of sessions) {
       const role = session.role.trim();
@@ -65,17 +29,9 @@ const collectActiveWorkEvidence = (
         continue;
       }
       const runtimeKind = session.runtimeKind.trim();
-      const runtimeRoute = runtimeRoutes.get(routeIndexKey(runtimeKind));
-      if (!runtimeRoute) {
-        continue;
-      }
-      if (!runtimeRegistry.probeSessionStatus) {
-        activeRoles.push(role);
-        continue;
-      }
       const probe = yield* runtimeRegistry.probeSessionStatus({
         runtimeKind,
-        runtimeRoute,
+        repoPath,
         externalSessionId,
         workingDirectory: session.workingDirectory,
       });

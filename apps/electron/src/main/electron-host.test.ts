@@ -1278,7 +1278,7 @@ describe("createElectronHostCommandRouter", () => {
     expect(stoppedSessions).toEqual([
       {
         runtimeKind: "opencode",
-        runtimeRoute: sessionRuntime.runtimeRoute,
+        repoPath: "/repo",
         externalSessionId: "external-session-1",
         workingDirectory: "/repo/worktree",
       },

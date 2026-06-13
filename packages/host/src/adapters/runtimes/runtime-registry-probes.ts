@@ -1,8 +1,4 @@
-import {
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
-  type RuntimeInstanceSummary,
-  type RuntimeRoute,
-} from "@openducktor/contracts";
+import { ODT_WORKFLOW_AGENT_TOOL_NAMES, type RuntimeRoute } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   HostOperationError,
@@ -11,18 +7,22 @@ import {
 } from "../../effect/host-errors";
 import { parseJson } from "../../effect/json";
 import type {
-  RuntimeEnsureWorkspaceInput,
   RuntimeMcpStatusProbeInput,
   RuntimeMcpStatusProbeResult,
   RuntimeRegistryError,
-  RuntimeSessionStatusProbeInput,
-  RuntimeSessionStopInput,
 } from "../../ports/runtime-registry-port";
 
 const SESSION_REQUEST_TIMEOUT_MS = 2000;
 const MCP_REQUEST_TIMEOUT_MS = 2000;
 const MAX_ABORT_ERROR_BODY_BYTES = 64 * 1024;
 const CODEX_ODT_TOOL_IDS = [...ODT_WORKFLOW_AGENT_TOOL_NAMES];
+
+type RuntimeSessionRouteInput = {
+  runtimeKind: string;
+  runtimeRoute: RuntimeRoute;
+  externalSessionId: string;
+  workingDirectory: string;
+};
 
 const requireOpenCodeLocalHttpEndpoint = (runtimeRoute: RuntimeRoute, operation: string) =>
   Effect.gen(function* () {
@@ -116,22 +116,6 @@ const parseToolIds = (payload: unknown) => {
   );
 };
 
-export const findWorkspaceRuntime = (
-  runtimes: Iterable<RuntimeInstanceSummary>,
-  input: RuntimeEnsureWorkspaceInput,
-): RuntimeInstanceSummary | undefined => {
-  for (const runtime of runtimes) {
-    if (
-      runtime.kind === input.runtimeKind &&
-      runtime.repoPath === input.repoPath &&
-      runtime.role === "workspace"
-    ) {
-      return runtime;
-    }
-  }
-  return undefined;
-};
-
 const readBoundedResponseText = (response: Response) =>
   Effect.tryPromise({
     try: () => response.text(),
@@ -146,7 +130,7 @@ export const stopOpenCodeSession = ({
   runtimeRoute,
   externalSessionId,
   workingDirectory,
-}: RuntimeSessionStopInput) =>
+}: RuntimeSessionRouteInput) =>
   Effect.gen(function* () {
     const endpoint = yield* requireOpenCodeLocalHttpEndpoint(runtimeRoute, "session abort");
     const url = sessionEndpoint(
@@ -193,7 +177,7 @@ export const probeOpenCodeSessionStatus = ({
   runtimeRoute,
   externalSessionId,
   workingDirectory,
-}: RuntimeSessionStatusProbeInput): Effect.Effect<
+}: RuntimeSessionRouteInput): Effect.Effect<
   {
     supported: boolean;
     hasLiveSession: boolean;
