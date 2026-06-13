@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import {
@@ -10,10 +10,9 @@ import {
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { resolveSessionRuntimeQueryState } from "@/state/operations/agent-orchestrator/support/session-runtime-query-state";
 import {
+  agentSessionRuntimeQueryKeys,
   SESSION_MODEL_CATALOG_STALE_TIME_MS,
   SESSION_TODOS_STALE_TIME_MS,
-  sessionModelCatalogQueryOptions,
-  sessionTodosQueryOptions,
 } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -73,46 +72,40 @@ export const useSessionRuntimeData = ({
     shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
 
   const catalogQuery = useQuery({
-    queryKey:
-      shouldHydrateRuntimeData && runtimeQueryInput
-        ? sessionModelCatalogQueryOptions(
-            runtimeQueryInput.repoPath,
-            runtimeQueryInput.runtimeKind,
-            readSessionModelCatalog,
-          ).queryKey
-        : (["agent-session-runtime", "model-catalog", "", ""] as const),
-    queryFn: async (): Promise<AgentModelCatalog> => {
-      if (!runtimeQueryInput) {
-        throw new Error("Session runtime catalog query is disabled.");
-      }
-      return readSessionModelCatalog(runtimeQueryInput.repoPath, runtimeQueryInput.runtimeKind);
-    },
+    queryKey: runtimeQueryInput
+      ? agentSessionRuntimeQueryKeys.modelCatalog(
+          runtimeQueryInput.repoPath,
+          runtimeQueryInput.runtimeKind,
+        )
+      : agentSessionRuntimeQueryKeys.modelCatalogUnavailable(),
+    queryFn: runtimeQueryInput
+      ? (): Promise<AgentModelCatalog> =>
+          readSessionModelCatalog(runtimeQueryInput.repoPath, runtimeQueryInput.runtimeKind)
+      : skipToken,
     enabled: shouldHydrateRuntimeData,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
   });
 
   const todosQuery = useQuery({
     queryKey:
-      shouldHydrateTodos && runtimeQueryInput && session
-        ? sessionTodosQueryOptions(
+      runtimeQueryInput && session
+        ? agentSessionRuntimeQueryKeys.todos(
             runtimeQueryInput.repoPath,
             runtimeQueryInput.runtimeKind,
             runtimeQueryInput.workingDirectory,
             session.externalSessionId,
-            readSessionTodos,
-          ).queryKey
-        : (["agent-session-runtime", "todos", "", "", "", ""] as const),
-    queryFn: async (): Promise<AgentSessionTodoItem[]> => {
-      if (!runtimeQueryInput || !session) {
-        throw new Error("Session todos query is disabled.");
-      }
-      return readSessionTodos(
-        runtimeQueryInput.repoPath,
-        runtimeQueryInput.runtimeKind,
-        runtimeQueryInput.workingDirectory,
-        session.externalSessionId,
-      );
-    },
+          )
+        : agentSessionRuntimeQueryKeys.todosUnavailable(),
+    queryFn:
+      runtimeQueryInput && session
+        ? (): Promise<AgentSessionTodoItem[]> =>
+            readSessionTodos(
+              runtimeQueryInput.repoPath,
+              runtimeQueryInput.runtimeKind,
+              runtimeQueryInput.workingDirectory,
+              session.externalSessionId,
+            )
+        : skipToken,
     enabled: shouldHydrateTodos,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });

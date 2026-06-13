@@ -33,9 +33,9 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   tasks: [createTask("task-1")],
   taskIdParam: "task-1",
   sessionParam: null,
-  selectedSessionById: null,
-  taskId: "task-1",
-  activeSession: null,
+  sessionFromQuery: null,
+  resolvedTaskId: "task-1",
+  resolvedSession: null,
   roleFromQuery: "spec",
   scheduleQueryUpdate: () => {},
   ...overrides,
@@ -48,7 +48,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1")],
         taskIdParam: "missing-task",
-        taskId: "missing-task",
+        resolvedTaskId: "missing-task",
         scheduleQueryUpdate,
       }),
     );
@@ -76,9 +76,10 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1"), createTask("task-2")],
         taskIdParam: "",
-        sessionParam: "session-2",
-        selectedSessionById: selectedSession,
-        taskId: "task-2",
+        sessionParam: "ext-session-2",
+        sessionFromQuery: selectedSession,
+        resolvedTaskId: "task-2",
+        resolvedSession: selectedSession,
         scheduleQueryUpdate,
       }),
     );
@@ -93,14 +94,14 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("does not clear a session deep link before session reconciliation can repair it", async () => {
+  test("does not clear a session deep link before the session catalog can resolve it", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const harness = createHookHarness(
       createBaseArgs({
         tasks: [createTask("task-1")],
         taskIdParam: "missing-task",
         sessionParam: "session-2",
-        taskId: "",
+        resolvedTaskId: "",
         scheduleQueryUpdate,
       }),
     );
@@ -120,8 +121,8 @@ describe("useAgentStudioQuerySessionSync", () => {
         tasks: [createTask("task-1")],
         taskIdParam: "task-1",
         sessionParam: "removed-session",
-        selectedSessionById: null,
-        taskId: "task-1",
+        sessionFromQuery: null,
+        resolvedTaskId: "task-1",
         scheduleQueryUpdate,
       }),
     );
@@ -136,7 +137,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("skips query reconciliation while repo navigation boundary reset is pending", async () => {
+  test("skips query sync while repo navigation boundary reset is pending", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
     const selectedSession = createSession("task-2", "session-2");
     const harness = createHookHarness(
@@ -144,9 +145,10 @@ describe("useAgentStudioQuerySessionSync", () => {
         isRepoNavigationBoundaryPending: true,
         tasks: [createTask("task-1"), createTask("task-2")],
         taskIdParam: "task-1",
-        sessionParam: "session-2",
-        selectedSessionById: selectedSession,
-        taskId: "task-1",
+        sessionParam: "ext-session-2",
+        sessionFromQuery: selectedSession,
+        resolvedTaskId: "task-1",
+        resolvedSession: selectedSession,
         scheduleQueryUpdate,
       }),
     );
@@ -166,9 +168,10 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1"), createTask("task-2")],
         taskIdParam: "task-1",
-        sessionParam: "session-2",
-        selectedSessionById: selectedSession,
-        taskId: "task-1",
+        sessionParam: "ext-session-2",
+        sessionFromQuery: selectedSession,
+        resolvedTaskId: "task-1",
+        resolvedSession: null,
         scheduleQueryUpdate,
       }),
     );
@@ -183,9 +186,9 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("aligns query params with resolved active session when session param is present", async () => {
+  test("aligns the role param with the resolved session when a session param is present", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const activeSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -194,10 +197,10 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
-        sessionParam: "stale-session-id",
-        selectedSessionById: activeSession,
-        taskId: "task-1",
-        activeSession,
+        sessionParam: "ext-session-1",
+        sessionFromQuery: resolvedSession,
+        resolvedTaskId: "task-1",
+        resolvedSession,
         roleFromQuery: "spec",
         scheduleQueryUpdate,
       }),
@@ -209,7 +212,6 @@ describe("useAgentStudioQuerySessionSync", () => {
       expect(scheduleQueryUpdate).toHaveBeenCalledTimes(1);
       expect(scheduleQueryUpdate.mock.calls[0]).toEqual([
         {
-          session: "ext-session-1",
           agent: "planner",
         },
       ]);
@@ -218,9 +220,9 @@ describe("useAgentStudioQuerySessionSync", () => {
     }
   });
 
-  test("aligns missing task, stale session, and stale role in one query update", async () => {
+  test("aligns missing task and stale role in one query update", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const activeSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -229,10 +231,10 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "",
-        sessionParam: "stale-session-id",
-        selectedSessionById: activeSession,
-        taskId: "task-1",
-        activeSession,
+        sessionParam: "ext-session-1",
+        sessionFromQuery: resolvedSession,
+        resolvedTaskId: "task-1",
+        resolvedSession,
         roleFromQuery: "spec",
         scheduleQueryUpdate,
       }),
@@ -245,7 +247,6 @@ describe("useAgentStudioQuerySessionSync", () => {
       expect(scheduleQueryUpdate.mock.calls[0]).toEqual([
         {
           task: "task-1",
-          session: "ext-session-1",
           agent: "planner",
         },
       ]);
@@ -256,7 +257,7 @@ describe("useAgentStudioQuerySessionSync", () => {
 
   test("does not repin session when query intentionally omits session", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const activeSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -266,8 +267,8 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         taskIdParam: "task-1",
         sessionParam: null,
-        taskId: "task-1",
-        activeSession,
+        resolvedTaskId: "task-1",
+        resolvedSession,
         roleFromQuery: "spec",
         scheduleQueryUpdate,
       }),
@@ -283,7 +284,7 @@ describe("useAgentStudioQuerySessionSync", () => {
 
   test("does not repin build selection for review tasks during task-only navigation", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const activeSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-build",
       taskId: "task-1",
@@ -293,8 +294,8 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         taskIdParam: "task-1",
         sessionParam: null,
-        taskId: "task-1",
-        activeSession,
+        resolvedTaskId: "task-1",
+        resolvedSession,
         roleFromQuery: "qa",
         scheduleQueryUpdate,
       }),

@@ -14,7 +14,7 @@ export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
 const SESSION_SKILLS_STALE_TIME_MS = 5 * 60_000;
 const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
-const SESSION_HISTORY_STALE_TIME_MS = 0;
+export const SESSION_HISTORY_STALE_TIME_MS = 0;
 export const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 export const agentSessionRuntimeQueryKeys = {
@@ -26,6 +26,8 @@ export const agentSessionRuntimeQueryKeys = {
       normalizeWorkingDirectory(repoPath),
       runtimeKind,
     ] as const,
+  modelCatalogUnavailable: () =>
+    [...agentSessionRuntimeQueryKeys.all, "model-catalog-unavailable"] as const,
   slashCommands: (repoPath: string, runtimeKind: RuntimeKind) =>
     [
       ...agentSessionRuntimeQueryKeys.all,
@@ -69,6 +71,7 @@ export const agentSessionRuntimeQueryKeys = {
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
     ] as const,
+  todosUnavailable: () => [...agentSessionRuntimeQueryKeys.all, "todos-unavailable"] as const,
   history: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -83,6 +86,7 @@ export const agentSessionRuntimeQueryKeys = {
       normalizeWorkingDirectory(workingDirectory),
       externalSessionId,
     ] as const,
+  historyUnavailable: () => [...agentSessionRuntimeQueryKeys.all, "history-unavailable"] as const,
 };
 
 export const sessionModelCatalogQueryOptions = (

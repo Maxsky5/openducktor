@@ -1,9 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
-import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/session-purpose";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  type AgentSessionSummary,
+  isWorkflowAgentSessionSummary,
+} from "@/state/agent-sessions-store";
 import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
 type UseAgentStudioQuerySessionSyncArgs = {
@@ -12,9 +13,9 @@ type UseAgentStudioQuerySessionSyncArgs = {
   tasks: TaskCard[];
   taskIdParam: string;
   sessionParam: string | null;
-  selectedSessionById: AgentSessionSummary | null;
-  taskId: string;
-  activeSession: AgentSessionState | null;
+  sessionFromQuery: AgentSessionSummary | null;
+  resolvedTaskId: string;
+  resolvedSession: AgentSessionSummary | null;
   roleFromQuery: AgentRole;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
 };
@@ -30,9 +31,9 @@ const resolveAgentStudioQuerySessionUpdate = ({
   tasks,
   taskIdParam,
   sessionParam,
-  selectedSessionById,
-  taskId,
-  activeSession,
+  sessionFromQuery,
+  resolvedTaskId,
+  resolvedSession,
   roleFromQuery,
 }: ResolveAgentStudioQuerySessionUpdateArgs): AgentStudioQueryUpdate | null => {
   if (isRepoNavigationBoundaryPending) {
@@ -43,7 +44,7 @@ const resolveAgentStudioQuerySessionUpdate = ({
     !isLoadingTasks &&
     taskIdParam &&
     !sessionParam &&
-    !selectedSessionById &&
+    !sessionFromQuery &&
     !tasks.some((entry) => entry.id === taskIdParam)
   ) {
     return {
@@ -55,31 +56,32 @@ const resolveAgentStudioQuerySessionUpdate = ({
 
   const updates: AgentStudioQueryUpdate = {};
 
-  if (selectedSessionById && !taskIdParam) {
-    updates[AGENT_STUDIO_QUERY_KEYS.task] = selectedSessionById.taskId;
+  if (sessionFromQuery && !taskIdParam) {
+    updates[AGENT_STUDIO_QUERY_KEYS.task] = sessionFromQuery.taskId;
   }
 
-  const selectedTaskExists = taskId.length > 0 && tasks.some((entry) => entry.id === taskId);
+  const selectedTaskExists =
+    resolvedTaskId.length > 0 && tasks.some((entry) => entry.id === resolvedTaskId);
   const shouldClearSessionParam =
-    Boolean(sessionParam) && !isLoadingTasks && selectedTaskExists && !selectedSessionById;
+    Boolean(sessionParam) && !isLoadingTasks && selectedTaskExists && !sessionFromQuery;
 
   if (sessionParam) {
-    if (selectedSessionById && taskId && selectedSessionById.taskId !== taskId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.task] = selectedSessionById.taskId;
+    if (sessionFromQuery && resolvedTaskId && sessionFromQuery.taskId !== resolvedTaskId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.task] = sessionFromQuery.taskId;
     } else if (shouldClearSessionParam) {
       updates[AGENT_STUDIO_QUERY_KEYS.session] = undefined;
     }
   }
 
-  if (sessionParam && !shouldClearSessionParam && isWorkflowAgentSession(activeSession)) {
-    if (taskIdParam !== activeSession.taskId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.task] = activeSession.taskId;
+  if (sessionParam && !shouldClearSessionParam && isWorkflowAgentSessionSummary(resolvedSession)) {
+    if (taskIdParam !== resolvedSession.taskId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.task] = resolvedSession.taskId;
     }
-    if (sessionParam !== activeSession.externalSessionId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.session] = activeSession.externalSessionId;
+    if (sessionParam !== resolvedSession.externalSessionId) {
+      updates[AGENT_STUDIO_QUERY_KEYS.session] = resolvedSession.externalSessionId;
     }
-    if (roleFromQuery !== activeSession.role) {
-      updates[AGENT_STUDIO_QUERY_KEYS.agent] = activeSession.role;
+    if (roleFromQuery !== resolvedSession.role) {
+      updates[AGENT_STUDIO_QUERY_KEYS.agent] = resolvedSession.role;
     }
   }
 
@@ -92,9 +94,9 @@ export function useAgentStudioQuerySessionSync({
   tasks,
   taskIdParam,
   sessionParam,
-  selectedSessionById,
-  taskId,
-  activeSession,
+  sessionFromQuery,
+  resolvedTaskId,
+  resolvedSession,
   roleFromQuery,
   scheduleQueryUpdate,
 }: UseAgentStudioQuerySessionSyncArgs): void {
@@ -106,19 +108,19 @@ export function useAgentStudioQuerySessionSync({
         tasks,
         taskIdParam,
         sessionParam,
-        selectedSessionById,
-        taskId,
-        activeSession,
+        sessionFromQuery,
+        resolvedTaskId,
+        resolvedSession,
         roleFromQuery,
       }),
     [
-      activeSession,
       isLoadingTasks,
       isRepoNavigationBoundaryPending,
       roleFromQuery,
-      selectedSessionById,
+      resolvedSession,
+      resolvedTaskId,
+      sessionFromQuery,
       sessionParam,
-      taskId,
       taskIdParam,
       tasks,
     ],
