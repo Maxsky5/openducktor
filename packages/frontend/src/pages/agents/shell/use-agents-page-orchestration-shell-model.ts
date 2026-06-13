@@ -132,12 +132,7 @@ export function useAgentsPageOrchestrationShellModel({
     },
   });
 
-  const activeSessionSummary = useMemo(
-    () =>
-      selection.activeSessionSummary ??
-      (selection.activeSession ? toAgentSessionSummary(selection.activeSession) : null),
-    [selection.activeSession, selection.activeSessionSummary],
-  );
+  const activeSessionSummary = selection.activeSessionSummary;
   const viewActiveSessionSummary = useMemo(
     () =>
       selection.viewActiveSessionSummary ??

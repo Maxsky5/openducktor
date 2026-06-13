@@ -187,7 +187,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.taskId).toBe("task-2");
       expect(latest.selectedTask?.id).toBe("task-2");
-      expect(latest.activeSession?.externalSessionId).toBe("session-2");
+      expect(latest.activeSessionSummary?.externalSessionId).toBe("session-2");
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-2");
     } finally {
@@ -362,7 +362,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.viewRole).toBe("planner");
       expect(latest.viewLaunchActionId).toBe("planner_initial");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-planner");
-      expect(latest.activeSession?.externalSessionId).toBe("session-planner");
+      expect(latest.activeSessionSummary?.externalSessionId).toBe("session-planner");
     } finally {
       await harness.unmount();
     }
@@ -393,7 +393,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.activeSession).toBeNull();
+      expect(latest.activeSessionSummary).toBeNull();
       expect(latest.viewActiveSession).toBeNull();
       expect(latest.viewRole).toBe("build");
       expect(latest.viewLaunchActionId).toBe("build_implementation_start");
@@ -429,7 +429,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.selectedSessionById?.externalSessionId).toBe("session-build");
-      expect(latest.activeSession?.externalSessionId).toBe("session-build");
+      expect(latest.activeSessionSummary?.externalSessionId).toBe("session-build");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-build");
       expect(latest.viewRole).toBe("build");
     } finally {
@@ -470,15 +470,13 @@ describe("useAgentStudioSelectionController", () => {
       await harness.waitFor((latest) => latest.viewActiveSession?.todos.length === 1);
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().activeSession?.todos).toEqual(
-        harness.getLatest().viewActiveSession?.todos,
-      );
+      expect(harness.getLatest().viewActiveSession?.todos[0]?.id).toBe("todo-1");
     } finally {
       await harness.unmount();
     }
   });
 
-  test("loads distinct runtime data when selected and view sessions differ", async () => {
+  test("loads runtime data only for the visible session when selected and view sessions differ", async () => {
     const readSessionTodos = mock(
       async (
         _repoPath: string,
@@ -522,23 +520,22 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
+      await harness.waitFor(
+        (latest) => latest.viewActiveSession?.todos[0]?.id === "todo-session-build",
+      );
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos.mock.calls[0]?.[3]).toBe("session-build");
+      readSessionTodos.mockClear();
+
       await harness.run((state) => {
         state.handleSelectTab("task-2");
       });
       await harness.waitFor(
-        (latest) =>
-          latest.activeSession?.todos[0]?.id === "todo-session-build" &&
-          latest.viewActiveSession?.todos[0]?.id === "todo-session-qa",
+        (latest) => latest.viewActiveSession?.todos[0]?.id === "todo-session-qa",
       );
 
-      expect(readSessionTodos).toHaveBeenCalledTimes(2);
-      expect(readSessionTodos.mock.calls.map((call) => call[3]).sort()).toEqual([
-        "session-build",
-        "session-qa",
-      ]);
-      expect(harness.getLatest().activeSession?.todos).not.toEqual(
-        harness.getLatest().viewActiveSession?.todos,
-      );
+      expect(readSessionTodos).toHaveBeenCalledTimes(1);
+      expect(readSessionTodos.mock.calls[0]?.[3]).toBe("session-qa");
     } finally {
       await harness.unmount();
     }
@@ -573,7 +570,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.selectedSessionById).toBeNull();
       expect(latest.taskId).toBe("");
       expect(latest.selectedTask).toBeNull();
-      expect(latest.activeSession).toBeNull();
+      expect(latest.activeSessionSummary).toBeNull();
       expect(latest.viewTaskId).toBe("");
       expect(latest.viewActiveSession).toBeNull();
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);

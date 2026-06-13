@@ -4,10 +4,10 @@ import {
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
+import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
-import { useAgentChatSessionRuntimeData } from "../use-agent-chat-session-runtime-data";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
@@ -82,7 +82,7 @@ export function useSessionTranscriptSurfaceModel({
     answerAgentQuestion,
   });
 
-  const runtimeData = useAgentChatSessionRuntimeData({
+  const runtimeData = useSessionRuntimeData({
     session: transcriptInteractions.session,
     runtimeDefinitions,
     repoReadinessState: runtimeReadiness.readinessState,

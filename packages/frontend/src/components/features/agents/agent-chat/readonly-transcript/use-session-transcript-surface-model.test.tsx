@@ -45,7 +45,9 @@ let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("../use-repo-runtime-readiness")>;
-let actualRuntimeData: Awaited<typeof import("../use-agent-chat-session-runtime-data")>;
+let actualRuntimeData: Awaited<
+  typeof import("@/state/operations/agent-orchestrator/hooks/use-session-runtime-data")
+>;
 let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 
@@ -161,7 +163,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       import("@/state/app-state-contexts"),
       import("@/state/operations/host"),
       import("../use-repo-runtime-readiness"),
-      import("../use-agent-chat-session-runtime-data"),
+      import("@/state/operations/agent-orchestrator/hooks/use-session-runtime-data"),
     ]);
     originalHostRuntimeList = actualHostOperations.host.runtimeList;
     originalWorkspaceGetSettingsSnapshot = actualHostOperations.host.workspaceGetSettingsSnapshot;
@@ -251,8 +253,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
       }),
     }));
 
-    mock.module("../use-agent-chat-session-runtime-data", () => ({
-      useAgentChatSessionRuntimeData: ({ session }: { session: AgentSessionState | null }) => ({
+    mock.module("@/state/operations/agent-orchestrator/hooks/use-session-runtime-data", () => ({
+      useSessionRuntimeData: ({ session }: { session: AgentSessionState | null }) => ({
         session,
         runtimeDataError: null,
       }),
@@ -264,7 +266,10 @@ describe("useSessionTranscriptSurfaceModel", () => {
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
       ["../use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
-      ["../use-agent-chat-session-runtime-data", () => Promise.resolve(actualRuntimeData)],
+      [
+        "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data",
+        () => Promise.resolve(actualRuntimeData),
+      ],
     ]);
     actualHostOperations.host.runtimeList = originalHostRuntimeList;
     actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;

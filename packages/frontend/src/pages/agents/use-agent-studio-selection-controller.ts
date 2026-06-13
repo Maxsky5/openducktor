@@ -1,7 +1,6 @@
 import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
-import { useAgentChatSessionRuntimeData } from "@/components/features/agents/agent-chat/use-agent-chat-session-runtime-data";
 import {
   firstLaunchAction,
   resolveBuildContinuationLaunchAction,
@@ -12,6 +11,7 @@ import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
+import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
   SelectedAgentSessionViewLifecycle,
@@ -84,8 +84,6 @@ export type AgentStudioSelectionControllerResult = {
   allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
   activeSessionSummary: AgentSessionSummary | null;
-  activeSession: AgentSessionState | null;
-  activeSessionRuntimeDataError?: string | null;
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -204,7 +202,6 @@ export function useAgentStudioSelectionController({
     selectedTask,
     sessionsForTask,
   ]);
-  const activeSession = useAgentSession(activeSessionSummary?.externalSessionId ?? null);
 
   const latestSessionByTaskId = useMemo(() => {
     const latestByTask = new Map<string, AgentSessionSummary>();
@@ -317,28 +314,6 @@ export function useAgentStudioSelectionController({
   ]);
   const viewSelectedSessionRoute = viewSelection.sessionRoute;
   const viewActiveSession = useAgentSession(viewSelectedSessionRoute?.externalSessionId ?? null);
-  const activeSessionReadinessState = useMemo(
-    () =>
-      deriveRepoRuntimeReadiness({
-        hasActiveWorkspace: activeWorkspace !== null,
-        runtimeDefinitions,
-        isLoadingRuntimeDefinitions,
-        runtimeDefinitionsError,
-        runtimeHealthByRuntime,
-        isLoadingChecks,
-        runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
-      }).readinessState,
-    [
-      activeSession?.runtimeKind,
-      activeSessionSummary?.runtimeKind,
-      activeWorkspace,
-      isLoadingChecks,
-      isLoadingRuntimeDefinitions,
-      runtimeDefinitions,
-      runtimeDefinitionsError,
-      runtimeHealthByRuntime,
-    ],
-  );
   const viewSessionReadinessState = useMemo(
     () =>
       deriveRepoRuntimeReadiness({
@@ -360,27 +335,13 @@ export function useAgentStudioSelectionController({
       viewSelectedSessionRoute?.runtimeKind,
     ],
   );
-  const isActiveSessionSameAsViewSession =
-    activeSession !== null &&
-    viewActiveSession !== null &&
-    activeSession.externalSessionId === viewActiveSession.externalSessionId;
-  const activeSessionRuntimeDataForDistinctSession = useAgentChatSessionRuntimeData({
-    session: isActiveSessionSameAsViewSession ? null : activeSession,
-    runtimeDefinitions,
-    repoReadinessState: activeSessionReadinessState,
-    readSessionModelCatalog,
-    readSessionTodos,
-  });
-  const viewSessionRuntimeData = useAgentChatSessionRuntimeData({
+  const viewSessionRuntimeData = useSessionRuntimeData({
     session: viewActiveSession,
     runtimeDefinitions,
     repoReadinessState: viewSessionReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const activeSessionRuntimeData = isActiveSessionSameAsViewSession
-    ? viewSessionRuntimeData
-    : activeSessionRuntimeDataForDistinctSession;
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"
@@ -426,8 +387,6 @@ export function useAgentStudioSelectionController({
       allSessionSummaries: sessions,
       sessionsForTask,
       activeSessionSummary,
-      activeSession: activeSessionRuntimeData.session,
-      activeSessionRuntimeDataError: activeSessionRuntimeData.runtimeDataError,
       isLoadingTasks,
       activeTaskTabId,
       availableTabTasks,
@@ -449,8 +408,6 @@ export function useAgentStudioSelectionController({
       viewSessionLifecycle: selectedSessionLifecycle,
     }),
     [
-      activeSessionRuntimeData.runtimeDataError,
-      activeSessionRuntimeData.session,
       activeSessionSummary,
       activeTaskTabId,
       availableTabTasks,
