@@ -10,11 +10,7 @@ import type {
   AgentRole,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import type {
-  AgentSessionLoadOptions,
-  AgentSessionState,
-  InitialSessionStatusReleasePolicy,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
@@ -33,8 +29,6 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fresh";
       targetWorkingDirectory?: string | null;
-      /** Defaults to `after_listener_start` for direct low-level starts. */
-      initialStatusRelease?: InitialSessionStatusReleasePolicy;
     }
   | {
       taskId: string;
@@ -42,8 +36,6 @@ export type StartAgentSessionInput =
       selectedModel: AgentModelSelection;
       startMode: "fork";
       sourceExternalSessionId: string;
-      /** Defaults to `after_listener_start` for direct low-level starts. */
-      initialStatusRelease?: InitialSessionStatusReleasePolicy;
     };
 
 export type SessionStateById = Record<string, AgentSessionState>;

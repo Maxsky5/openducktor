@@ -156,7 +156,7 @@ let tasksState: TasksStateContextValue = {
 let agentSessions = [createSession()];
 let agentSessionReadModelState = { sessionReadModelError: null as string | null };
 let agentOperations = {
-  loadSelectedSessionHistoryForView: mock(async () => undefined),
+  loadAgentSessionHistory: mock(async () => undefined),
   readSessionFileSearch: mock(async () => []),
   readSessionModelCatalog: mock(async () => ({
     providers: [],
@@ -431,7 +431,7 @@ beforeEach(async () => {
   agentSessions = [session];
   agentSessionReadModelState = { sessionReadModelError: null };
   agentOperations = {
-    loadSelectedSessionHistoryForView: mock(async () => undefined),
+    loadAgentSessionHistory: mock(async () => undefined),
     readSessionFileSearch: mock(async () => []),
     readSessionModelCatalog: mock(async () => ({
       providers: [],

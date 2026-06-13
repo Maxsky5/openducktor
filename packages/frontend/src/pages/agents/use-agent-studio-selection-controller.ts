@@ -13,10 +13,7 @@ import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import type {
-  SessionRepoReadinessState as AgentStudioReadinessState,
-  SelectedAgentSessionViewLifecycle,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
   createFailedSelectedSessionViewLifecycle,
   createResolvingSelectedSessionViewLifecycle,
@@ -54,10 +51,7 @@ type UseAgentStudioSelectionControllerArgs = {
     role: AgentRole;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
-  loadSelectedSessionHistoryForView: (input: {
-    externalSessionId: string;
-    repoReadinessState: AgentStudioReadinessState;
-  }) => Promise<void>;
+  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: ReturnType<
     typeof useRuntimeDefinitionsContext
@@ -131,7 +125,7 @@ export function useAgentStudioSelectionController({
   roleFromQuery,
   selectionIntent,
   updateQuery,
-  loadSelectedSessionHistoryForView,
+  loadAgentSessionHistory,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -387,16 +381,14 @@ export function useAgentStudioSelectionController({
   useEffect(() => {
     if (
       selectedSessionLifecycle.externalSessionId === null ||
-      !shouldEnsureAgentSessionReadyForView(selectedSessionLifecycle)
+      !shouldEnsureAgentSessionReadyForView(selectedSessionLifecycle) ||
+      !viewActiveSession
     ) {
       return;
     }
 
-    void loadSelectedSessionHistoryForView({
-      externalSessionId: selectedSessionLifecycle.externalSessionId,
-      repoReadinessState: viewSessionReadinessState,
-    });
-  }, [loadSelectedSessionHistoryForView, selectedSessionLifecycle, viewSessionReadinessState]);
+    void loadAgentSessionHistory({ session: viewActiveSession });
+  }, [loadAgentSessionHistory, selectedSessionLifecycle, viewActiveSession]);
   const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(

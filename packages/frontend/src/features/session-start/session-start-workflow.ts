@@ -4,7 +4,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
-import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -67,16 +66,6 @@ const requirePostStartMessage = async ({
   });
 };
 
-const resolveInitialStatusRelease = (
-  postStartAction: SessionStartPostAction,
-): InitialSessionStatusReleasePolicy => {
-  if (postStartAction === "none") {
-    return "after_listener_start";
-  }
-
-  return "after_first_send_attempt";
-};
-
 const requirePostStartMessageSender = (
   sendAgentMessage: StartSessionWorkflowArgs["sendAgentMessage"],
 ): NonNullable<StartSessionWorkflowArgs["sendAgentMessage"]> => {
@@ -90,11 +79,11 @@ const requirePostStartMessageSender = (
 const startSessionFromIntent = ({
   intent,
   selection,
-  initialStatusRelease,
   startAgentSession,
-}: Pick<StartSessionWorkflowArgs, "intent" | "selection" | "startAgentSession"> & {
-  initialStatusRelease: InitialSessionStatusReleasePolicy;
-}): Promise<string> => {
+}: Pick<
+  StartSessionWorkflowArgs,
+  "intent" | "selection" | "startAgentSession"
+>): Promise<string> => {
   if (intent.startMode === "reuse") {
     return executeSessionStart({
       taskId: intent.taskId,
@@ -112,7 +101,6 @@ const startSessionFromIntent = ({
       startMode: "fork",
       selectedModel: requireSelectedModel(selection, "fork"),
       sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
-      initialStatusRelease,
       startAgentSession,
     });
   }
@@ -122,7 +110,6 @@ const startSessionFromIntent = ({
     role: intent.role,
     startMode: "fresh" as const,
     selectedModel: requireSelectedModel(selection, "fresh"),
-    initialStatusRelease,
     startAgentSession,
   };
 
@@ -283,18 +270,17 @@ export const startSessionWorkflow = async ({
     ...(humanRequestChangesTask ? { humanRequestChangesTask } : {}),
   });
 
-  const initialStatusRelease = resolveInitialStatusRelease(intent.postStartAction);
   const postStartMessageSender =
     intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
 
   const externalSessionId = await startSessionFromIntent({
     intent,
     selection,
-    initialStatusRelease,
     startAgentSession,
   });
 
   if (intent.postStartAction === "none") {
+    settleStartedAgentSession(externalSessionId);
     return {
       externalSessionId,
       postStartActionError: null,

@@ -28,12 +28,7 @@ import type {
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type {
-  AgentSessionLoadOptions,
-  AgentSessionState,
-  InitialSessionStatusReleasePolicy,
-} from "./agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -166,10 +161,7 @@ export type AgentSessionReadModelStateContextValue = {
 };
 
 export type AgentOperationsContextValue = {
-  loadSelectedSessionHistoryForView: (input: {
-    externalSessionId: string;
-    repoReadinessState: SessionRepoReadinessState;
-  }) => Promise<void>;
+  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -220,7 +212,6 @@ export type AgentOperationsContextValue = {
           selectedModel: AgentModelSelection;
           startMode: "fresh";
           targetWorkingDirectory?: string | null;
-          initialStatusRelease?: InitialSessionStatusReleasePolicy;
         }
       | {
           taskId: string;
@@ -229,7 +220,6 @@ export type AgentOperationsContextValue = {
           selectedModel: AgentModelSelection;
           startMode: "fork";
           sourceExternalSessionId: string;
-          initialStatusRelease?: InitialSessionStatusReleasePolicy;
         },
   ) => Promise<string>;
   settleStartedAgentSession: (externalSessionId: string) => void;

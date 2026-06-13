@@ -1,5 +1,4 @@
 import type { AgentSessionRef } from "@openducktor/core";
-import type { InitialSessionStatusReleasePolicy } from "@/types/agent-orchestrator";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
@@ -119,12 +118,10 @@ const listenToAgentSessionAndGuard = async ({
   startResult,
   session,
   runtime,
-  initialStatusRelease,
 }: {
   startResult: Extract<StartOrReuseResult, { kind: "started" }>;
   session: SessionDependencies;
   runtime: RuntimeDependencies;
-  initialStatusRelease: InitialSessionStatusReleasePolicy;
 }): Promise<void> => {
   const { ctx: startedCtx, runtimeInfo } = startResult;
   const runtimeKind = requireConfiguredRuntimeKind(
@@ -141,23 +138,6 @@ const listenToAgentSessionAndGuard = async ({
   await session.listenToAgentSession(listenerTarget);
 
   if (!startedCtx.isStaleRepoOperation()) {
-    if (initialStatusRelease === "after_first_send_attempt") {
-      return;
-    }
-
-    session.setSessionsById((current) => {
-      const currentSession = current[startedCtx.summary.externalSessionId];
-      if (currentSession?.status !== "starting") {
-        return current;
-      }
-      return {
-        ...current,
-        [startedCtx.summary.externalSessionId]: {
-          ...currentSession,
-          status: "idle",
-        },
-      };
-    });
     return;
   }
 
@@ -166,20 +146,6 @@ const listenToAgentSessionAndGuard = async ({
     runtime,
     startedCtx,
   });
-};
-
-const getInitialStatusRelease = (
-  input: StartAgentSessionInput,
-): InitialSessionStatusReleasePolicy => {
-  if (input.startMode === "reuse") {
-    return "after_listener_start";
-  }
-
-  if (!input.initialStatusRelease) {
-    return "after_listener_start";
-  }
-
-  return input.initialStatusRelease;
 };
 
 export const createStartAgentSession = ({
@@ -229,7 +195,6 @@ export const createStartAgentSession = ({
       freshStartTarget?.normalizedTargetWorkingDirectory ?? "";
     const selectedModelKey =
       input.startMode === "reuse" ? "" : serializeSelectedModelKey(input.selectedModel);
-    const initialStatusRelease = getInitialStatusRelease(input);
     const inFlightKeyParts = [
       repoPath,
       taskId,
@@ -238,7 +203,6 @@ export const createStartAgentSession = ({
       normalizedSourceSessionId,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
-      initialStatusRelease,
     ];
     const inFlightKey = inFlightKeyParts.join("::");
     const existingInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
@@ -279,7 +243,6 @@ export const createStartAgentSession = ({
         startResult,
         session,
         runtime,
-        initialStatusRelease,
       });
 
       return startResult.ctx.summary.externalSessionId;

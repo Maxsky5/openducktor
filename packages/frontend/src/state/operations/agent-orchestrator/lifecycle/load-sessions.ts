@@ -73,7 +73,7 @@ type CreateLoadAgentSessionsArgs = {
   queryClient: QueryClient;
 };
 
-type CreateLoadSelectedSessionHistoryArgs = {
+type CreateLoadAgentSessionHistoryArgs = {
   adapter: SessionHistoryLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
@@ -224,12 +224,12 @@ export const createLoadAgentSessions = ({
   };
 };
 
-export const createLoadSelectedSessionHistory = ({
+export const createLoadAgentSessionHistory = ({
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   updateSession,
-}: CreateLoadSelectedSessionHistoryArgs): ((input: {
+}: CreateLoadAgentSessionHistoryArgs): ((input: {
   session: AgentSessionState;
 }) => Promise<void>) => {
   return async ({ session }): Promise<void> => {

@@ -368,6 +368,7 @@ export function useAgentStudioOrchestrationController({
     launchActionId: viewLaunchActionId,
     activeSession: viewActiveSession,
     activeSessionIsLoadingModelCatalog: viewSessionRuntimeData.isLoadingModelCatalog,
+    activeSessionRuntimeDescriptor: viewSessionRuntimeData.modelCatalog?.runtime ?? null,
     selectedModelSelection,
     selectedModelDescriptor,
     sessionsForTask: viewSessionsForTask,

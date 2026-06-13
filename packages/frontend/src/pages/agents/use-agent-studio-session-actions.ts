@@ -50,6 +50,7 @@ type UseAgentStudioSessionActionsArgs = {
   launchActionId: SessionLaunchActionId;
   activeSession: AgentSessionState | null;
   activeSessionIsLoadingModelCatalog: boolean;
+  activeSessionRuntimeDescriptor?: AgentModelCatalog["runtime"] | null;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   sessionsForTask: AgentSessionSummary[];
@@ -106,6 +107,7 @@ export function useAgentStudioSessionActions({
   launchActionId,
   activeSession,
   activeSessionIsLoadingModelCatalog,
+  activeSessionRuntimeDescriptor = null,
   selectedModelSelection,
   selectedModelDescriptor,
   sessionsForTask,
@@ -129,6 +131,7 @@ export function useAgentStudioSessionActions({
   const sessionState = useAgentStudioSessionActionState({
     activeSession,
     activeSessionIsLoadingModelCatalog,
+    activeSessionRuntimeDescriptor,
     role,
     selectedModelSelection,
   });

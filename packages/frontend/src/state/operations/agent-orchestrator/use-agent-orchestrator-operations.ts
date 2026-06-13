@@ -11,17 +11,13 @@ import type {
 } from "@/types/state-slices";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import { useAgentSessionHistory } from "./hooks/use-agent-session-history";
 import { useAgentSessionListeners } from "./hooks/use-agent-session-listeners";
 import { useAgentSessionMutations } from "./hooks/use-agent-session-mutations";
 import { useAgentSessionReaders } from "./hooks/use-agent-session-readers";
 import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
-import {
-  createLoadAgentSessions,
-  createLoadSelectedSessionHistory,
-} from "./lifecycle/load-sessions";
+import { createLoadAgentSessionHistory, createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -125,9 +121,9 @@ export function useAgentOrchestratorOperations({
       updateSession,
     ],
   );
-  const loadSelectedSessionHistory = useMemo(
+  const loadAgentSessionHistory = useMemo(
     () =>
-      createLoadSelectedSessionHistory({
+      createLoadAgentSessionHistory({
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
@@ -135,10 +131,6 @@ export function useAgentOrchestratorOperations({
       }),
     [agentEngine, refBridges, updateSession],
   );
-  const { loadSelectedSessionHistoryForView } = useAgentSessionHistory({
-    loadSelectedSessionHistory,
-    sessionsRef,
-  });
   useRepoSessionReadModelEffects({
     workspaceRepoPath,
     tasks,
@@ -212,7 +204,7 @@ export function useAgentOrchestratorOperations({
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
     const readModelState = { sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions,
       ...readers,
       removeAgentSession,
@@ -237,7 +229,7 @@ export function useAgentOrchestratorOperations({
     commitSessions,
     loadAgentSessions,
     readers,
-    loadSelectedSessionHistoryForView,
+    loadAgentSessionHistory,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

@@ -12,8 +12,7 @@ import type {
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
@@ -40,10 +39,7 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  loadSelectedSessionHistoryForView: (input: {
-    externalSessionId: string;
-    repoReadinessState: SessionRepoReadinessState;
-  }) => Promise<void>;
+  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -93,7 +89,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 };
 
 export const createOrchestratorPublicOperations = ({
-  loadSelectedSessionHistoryForView,
+  loadAgentSessionHistory,
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
@@ -105,10 +101,8 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
-  loadSelectedSessionHistoryForView: (input) =>
-    withErrorToast("Failed to load selected session history", () =>
-      loadSelectedSessionHistoryForView(input),
-    ),
+  loadAgentSessionHistory: (input) =>
+    withErrorToast("Failed to load agent session history", () => loadAgentSessionHistory(input)),
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions): Promise<void> =>
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,

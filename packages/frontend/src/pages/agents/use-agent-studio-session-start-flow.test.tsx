@@ -422,7 +422,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      initialStatusRelease: "after_listener_start",
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -469,7 +468,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      initialStatusRelease: "after_first_send_attempt",
     });
 
     await harness.unmount();
@@ -526,7 +524,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "planner",
       },
       startMode: "fresh",
-      initialStatusRelease: "after_first_send_attempt",
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",
@@ -698,7 +695,6 @@ describe("useAgentStudioSessionStartFlow", () => {
         profileId: "builder",
       },
       startMode: "fresh" as const,
-      initialStatusRelease: "after_first_send_attempt",
     });
     expect(updateCalls).toContainEqual({
       task: "task-1",

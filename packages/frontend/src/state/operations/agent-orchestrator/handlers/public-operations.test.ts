@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { toast } from "sonner";
+import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createOrchestratorPublicOperations } from "./public-operations";
 
 const BUILD_SELECTION = {
@@ -25,7 +26,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
-const loadSelectedSessionHistoryForView = async () => undefined;
+const loadAgentSessionHistory = async () => undefined;
 
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
@@ -34,7 +35,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions: async () => {
         throw new Error("load failed");
       },
@@ -70,7 +71,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -113,7 +114,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -153,7 +154,7 @@ describe("agent-orchestrator-public-operations", () => {
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -185,13 +186,13 @@ describe("agent-orchestrator-public-operations", () => {
     }
   });
 
-  test("shows toast and rethrows selected session history load errors", async () => {
+  test("shows toast and rethrows agent session history load errors", async () => {
     const originalToastError = toast.error;
     const toastError = mock(() => "");
     toast.error = toastError;
 
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView: async () => {
+      loadAgentSessionHistory: async () => {
         throw new Error("history failed");
       },
       loadAgentSessions: async () => {},
@@ -213,12 +214,11 @@ describe("agent-orchestrator-public-operations", () => {
 
     try {
       await expect(
-        operations.loadSelectedSessionHistoryForView({
-          externalSessionId: "session-1",
-          repoReadinessState: "ready",
+        operations.loadAgentSessionHistory({
+          session: createAgentSessionFixture({ externalSessionId: "session-1" }),
         }),
       ).rejects.toThrow("history failed");
-      expect(toastError).toHaveBeenCalledWith("Failed to load selected session history", {
+      expect(toastError).toHaveBeenCalledWith("Failed to load agent session history", {
         description: "history failed",
       });
     } finally {
@@ -229,7 +229,7 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit single-session removal without toast wrapping", async () => {
     const removeAgentSession = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
@@ -255,7 +255,7 @@ describe("agent-orchestrator-public-operations", () => {
   test("forwards explicit session removals without toast wrapping", async () => {
     const removeAgentSessions = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
-      loadSelectedSessionHistoryForView,
+      loadAgentSessionHistory,
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],

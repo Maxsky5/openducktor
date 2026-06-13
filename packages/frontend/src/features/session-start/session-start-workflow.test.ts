@@ -59,6 +59,7 @@ describe("session-start-workflow", () => {
 
   test("forwards explicit target working directory for fresh starts", async () => {
     const startAgentSession = mock(async () => "session-new");
+    const settleStartedAgentSession = mock(() => undefined);
 
     const result = await startSessionWorkflow({
       activeWorkspace: {
@@ -91,6 +92,7 @@ describe("session-start-workflow", () => {
         targetWorkingDirectory: "/repo/worktrees/conflict-task-1",
       }),
     );
+    expect(settleStartedAgentSession).toHaveBeenCalledWith("session-new");
   });
 
   test("uses the just-selected target branch for pull request kickoff prompts", async () => {
@@ -192,7 +194,8 @@ describe("session-start-workflow", () => {
     expect(sentText).toContain("Use taskId TASK-3 for every odt_* tool call.");
   });
 
-  test("holds fresh kickoff sessions in starting state until the kickoff message runs", async () => {
+  test("leaves fresh kickoff starts unsettled while the kickoff message path owns status", async () => {
+    const settleStartedAgentSession = mock(() => undefined);
     const sendAgentMessage = mock(async () => undefined);
     const startAgentSession = mock(async () => "session-build-new");
 
@@ -219,12 +222,12 @@ describe("session-start-workflow", () => {
       sendAgentMessage,
     });
 
-    expect(startAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startMode: "fresh",
-        initialStatusRelease: "after_first_send_attempt",
-      }),
+    expect(startAgentSession).toHaveBeenCalledWith(expect.objectContaining({ startMode: "fresh" }));
+    expect(sendAgentMessage).toHaveBeenCalledWith(
+      "session-build-new",
+      expect.arrayContaining([expect.objectContaining({ kind: "text" })]),
     );
+    expect(settleStartedAgentSession).not.toHaveBeenCalled();
   });
 
   test("settles started sessions when kickoff message construction fails", async () => {

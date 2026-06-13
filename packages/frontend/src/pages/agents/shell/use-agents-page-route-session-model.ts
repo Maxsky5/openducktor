@@ -6,10 +6,7 @@ import { useNavigationType, useSearchParams } from "react-router-dom";
 import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import {
-  isSelectedAgentSessionResolving,
-  type SessionRepoReadinessState,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { isSelectedAgentSessionResolving } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { agentSessionBulkQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -36,10 +33,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   sessionReadModelError: string | null;
-  loadSelectedSessionHistoryForView: (input: {
-    externalSessionId: string;
-    repoReadinessState: SessionRepoReadinessState;
-  }) => Promise<void>;
+  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -84,7 +78,7 @@ export function useAgentsPageRouteSessionModel({
   isForegroundLoadingTasks,
   sessions,
   sessionReadModelError,
-  loadSelectedSessionHistoryForView,
+  loadAgentSessionHistory,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
@@ -170,7 +164,7 @@ export function useAgentsPageRouteSessionModel({
     roleFromQuery,
     selectionIntent: selectionIntentForController,
     updateQuery: scheduleQueryUpdate,
-    loadSelectedSessionHistoryForView,
+    loadAgentSessionHistory,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,

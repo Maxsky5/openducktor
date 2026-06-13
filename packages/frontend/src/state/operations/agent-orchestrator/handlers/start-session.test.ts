@@ -149,7 +149,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("reuses an existing in-flight start promise", async () => {
     const inFlight = Promise.resolve("session-in-flight");
     const inFlightMap = new Map<string, Promise<string>>([
-      ["/tmp/repo::task-1::build::reuse::session-in-flight::::::after_listener_start", inFlight],
+      ["/tmp/repo::task-1::build::reuse::session-in-flight::::", inFlight],
     ]);
     const sessionsRef = { current: {} };
     const start = createStartAgentSessionWithFlatDeps({
@@ -274,11 +274,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const modelSession = Promise.resolve("session-model");
     const inFlightMap = new Map<string, Promise<string>>([
       [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::after_listener_start",
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build",
         modelSession,
       ],
       [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner::after_listener_start",
+        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner",
         Promise.resolve("session-profile"),
       ],
     ]);
@@ -329,75 +329,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         },
       }),
     ).resolves.toBe("session-profile");
-  });
-
-  test("does not dedupe fresh starts with different initial status release policies", async () => {
-    const heldSession = Promise.resolve("session-held");
-    const inFlightMap = new Map<string, Promise<string>>([
-      [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build::after_first_send_attempt",
-        heldSession,
-      ],
-    ]);
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => ({
-      runtimeKind: "opencode",
-      externalSessionId: "session-listener-release",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      role: "build",
-      status: "idle",
-    });
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionsById: () => {},
-      sessionsRef: { current: {} },
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: inFlightMap },
-      listenToAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-          initialStatusRelease: "after_first_send_attempt",
-        }),
-      ).resolves.toBe("session-held");
-
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-          initialStatusRelease: "after_listener_start",
-        }),
-      ).resolves.toBe("session-listener-release");
-    } finally {
-      adapter.startSession = originalStartSession;
-    }
   });
 
   test("waits for the initial session snapshot to persist before resolving", async () => {
@@ -467,7 +398,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("releases fresh sessions to idle after listener start when requested", async () => {
+  test("keeps fresh sessions starting after listener start", async () => {
     let sessionsById: Record<string, AgentSessionState> = {};
     const lifecycleEvents: string[] = [];
     const sessionsRef = { current: sessionsById };
@@ -519,73 +450,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           role: "planner",
           startMode: "fresh",
           selectedModel: PLANNER_SELECTION,
-          initialStatusRelease: "after_listener_start",
-        }),
-      ).resolves.toBe("planner-external");
-
-      expect(sessionsById["planner-external"]?.status).toBe("idle");
-      expect(lifecycleEvents).toContain("listener:started");
-      expect(lifecycleEvents.indexOf("listener:started")).toBeLessThan(
-        lifecycleEvents.indexOf("status:idle"),
-      );
-    } finally {
-      adapter.startSession = originalStartSession;
-    }
-  });
-
-  test("keeps fresh sessions starting until first send attempt when requested", async () => {
-    let sessionsById: Record<string, AgentSessionState> = {};
-    const lifecycleEvents: string[] = [];
-    const sessionsRef = { current: sessionsById };
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => ({
-      runtimeKind: "opencode",
-      externalSessionId: "planner-external",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      role: "planner",
-      status: "idle",
-    });
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
-        sessionsRef.current = sessionsById;
-        lifecycleEvents.push(`status:${sessionsById["planner-external"]?.status ?? "missing"}`);
-      },
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {
-        lifecycleEvents.push("listener:started");
-      },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "planner",
-          startMode: "fresh",
-          selectedModel: PLANNER_SELECTION,
-          initialStatusRelease: "after_first_send_attempt",
         }),
       ).resolves.toBe("planner-external");
 

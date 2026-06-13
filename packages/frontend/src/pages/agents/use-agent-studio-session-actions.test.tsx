@@ -500,7 +500,6 @@ describe("useAgentStudioSessionActions", () => {
         profileId: "spec",
       },
       startMode: "fresh" as const,
-      initialStatusRelease: "after_listener_start",
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
       { kind: "text", text: "  hello world  " },
@@ -703,21 +702,17 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: createSession({
         externalSessionId: "session-existing",
         status: "running",
-        modelCatalog: {
-          runtime: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: true,
-              },
-            },
-          },
-          models: [],
-          defaultModelsByProvider: {},
-        },
       }),
+      activeSessionRuntimeDescriptor: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          sessionLifecycle: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+            supportsQueuedUserMessages: true,
+          },
+        },
+      },
       sendAgentMessage,
     });
 
@@ -743,21 +738,17 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: createSession({
         externalSessionId: "session-existing",
         status: "running",
-        modelCatalog: {
-          runtime: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: false,
-              },
-            },
-          },
-          models: [],
-          defaultModelsByProvider: {},
-        },
       }),
+      activeSessionRuntimeDescriptor: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          sessionLifecycle: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+            supportsQueuedUserMessages: false,
+          },
+        },
+      },
       sendAgentMessage,
     });
 
@@ -783,7 +774,6 @@ describe("useAgentStudioSessionActions", () => {
         externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
-        modelCatalog: null,
       }),
       sendAgentMessage,
     });
@@ -810,21 +800,17 @@ describe("useAgentStudioSessionActions", () => {
       activeSession: createSession({
         externalSessionId: "session-existing",
         status: "running",
-        modelCatalog: {
-          runtime: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: false,
-              },
-            },
-          },
-          models: [],
-          defaultModelsByProvider: {},
-        },
       }),
+      activeSessionRuntimeDescriptor: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          sessionLifecycle: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+            supportsQueuedUserMessages: false,
+          },
+        },
+      },
       sendAgentMessage,
     });
 
@@ -839,7 +825,6 @@ describe("useAgentStudioSessionActions", () => {
         externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
-        modelCatalog: null,
       }),
       sendAgentMessage,
     });
@@ -856,7 +841,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("onSend allows busy follow-ups when the selected runtime supports queued messages", async () => {
+  test("onSend uses loaded session runtime support before selected runtime defaults", async () => {
     const sendAgentMessage = mock(async () => {});
 
     const harness = createHookHarness({
@@ -865,21 +850,17 @@ describe("useAgentStudioSessionActions", () => {
         externalSessionId: "session-existing",
         status: "running",
         runtimeKind: "opencode",
-        modelCatalog: {
-          runtime: {
-            ...OPENCODE_RUNTIME_DESCRIPTOR,
-            capabilities: {
-              ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
-              sessionLifecycle: {
-                ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
-                supportsQueuedUserMessages: false,
-              },
-            },
-          },
-          models: [],
-          defaultModelsByProvider: {},
-        },
       }),
+      activeSessionRuntimeDescriptor: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          sessionLifecycle: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+            supportsQueuedUserMessages: false,
+          },
+        },
+      },
       selectedModelSelection: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -891,14 +872,14 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
-    await harness.waitFor((state) => state.busySendBlockedReason === null, 1_000);
+    expect(harness.getLatest().busySendBlockedReason).toContain(
+      "does not support queued messages while the session is working",
+    );
     await harness.run(async (state) => {
-      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
+      await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(false);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
-      { kind: "text", text: "hello world" },
-    ]);
+    expect(sendAgentMessage).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

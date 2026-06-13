@@ -1,4 +1,4 @@
-import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -6,6 +6,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 type UseAgentStudioSessionActionStateArgs = {
   activeSession: AgentSessionState | null;
   activeSessionIsLoadingModelCatalog: boolean;
+  activeSessionRuntimeDescriptor?: AgentModelCatalog["runtime"] | null;
   role: AgentRole;
   selectedModelSelection: AgentModelSelection | null;
 };
@@ -28,6 +29,7 @@ type UseAgentStudioSessionActionStateResult = {
 export function useAgentStudioSessionActionState({
   activeSession,
   activeSessionIsLoadingModelCatalog,
+  activeSessionRuntimeDescriptor = null,
   role,
   selectedModelSelection,
 }: UseAgentStudioSessionActionStateArgs): UseAgentStudioSessionActionStateResult {
@@ -52,6 +54,7 @@ export function useAgentStudioSessionActionState({
   const selectedRuntimeKind =
     selectedModelSelection?.runtimeKind ?? activeSessionSelectedModel?.runtimeKind ?? null;
   const activeRuntimeDescriptor =
+    activeSessionRuntimeDescriptor ??
     (selectedRuntimeKind
       ? runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind)
       : null) ??
