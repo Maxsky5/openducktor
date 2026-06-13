@@ -125,12 +125,7 @@ export const useAgentSessionListeners = ({
         return;
       }
 
-      await agentEngine.restoreSession(target);
-      if (unsubscribersRef.current.has(externalSessionId)) {
-        return;
-      }
-
-      const unsubscribe = listenToAgentSessionEvents({
+      const unsubscribe = await listenToAgentSessionEvents({
         adapter: agentEngine,
         repoPath: target.repoPath,
         externalSessionId,
@@ -156,6 +151,10 @@ export const useAgentSessionListeners = ({
           findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind),
       });
 
+      if (unsubscribersRef.current.has(externalSessionId)) {
+        unsubscribe();
+        return;
+      }
       unsubscribersRef.current.set(externalSessionId, unsubscribe);
     },
     [

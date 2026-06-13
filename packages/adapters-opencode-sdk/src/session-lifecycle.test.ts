@@ -14,7 +14,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
   const localSessions = (adapter: OpencodeSdkAdapter): Map<string, SessionRecord> =>
     (adapter as unknown as { sessions: Map<string, SessionRecord> }).sessions;
 
-  test("restoreSession restores session state without emitting a started event", async () => {
+  test("subscribeEvents prepares existing session state without emitting a started event", async () => {
     const mock = makeMockClient({
       messagesResponse: [
         {
@@ -48,15 +48,16 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     });
 
     const events: AgentEvent[] = [];
-    await adapter.restoreSession(sessionRef("session-opencode-1"));
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
+      events.push(event),
+    );
 
     expect(mock.session.getCalls).toHaveLength(1);
     expect(mock.session.messagesCalls).toHaveLength(1);
     expect(events).toEqual([]);
   });
 
-  test("restoreSession rolls back partial registration when runtime event subscription fails", async () => {
+  test("subscribeEvents rolls back partial registration when runtime event subscription fails", async () => {
     const mock = makeMockClient({});
     const unsupportedClient = {
       ...mock.client,
@@ -67,9 +68,9 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await expect(adapter.restoreSession(sessionRef("session-opencode-1"))).rejects.toThrow(
-      "client.global.event()",
-    );
+    await expect(
+      adapter.subscribeEvents(sessionRef("session-opencode-1"), () => {}),
+    ).rejects.toThrow("client.global.event()");
     expect(localSessions(adapter).has("session-opencode-1")).toBe(false);
   });
 
@@ -133,7 +134,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
       now: () => "2026-02-17T12:00:00Z",
     });
 
-    await adapter.restoreSession(sessionRef("session-opencode-1"));
+    await adapter.subscribeEvents(sessionRef("session-opencode-1"), () => {});
 
     const session = localSessions(adapter).get("session-opencode-1");
     if (!session) {
@@ -156,7 +157,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     await startDefaultSession(adapter);
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -186,7 +187,7 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     await startDefaultSession(adapter);
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 

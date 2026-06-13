@@ -13,10 +13,10 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session assistant and subagent updates", () => {
-  test("finalizes assistant draft through status transitions", () => {
+  test("finalizes assistant draft through status transitions", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -46,7 +46,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -109,13 +109,13 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     ).toBe(true);
   });
 
-  test("handles session start and assistant parts matrix", () => {
+  test("handles session start and assistant parts matrix", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     let refreshCalls = 0;
     let clearCalls = 0;
 
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -144,7 +144,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -393,10 +393,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     ).toBe(true);
   });
 
-  test("writes live text parts into transcript messages instead of draft state", () => {
+  test("writes live text parts into transcript messages instead of draft state", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -433,7 +433,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -490,7 +490,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
   });
 
-  test("records explicit tool start timing for live assistant turns", () => {
+  test("records explicit tool start timing for live assistant turns", async () => {
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({ role: "build" }),
@@ -558,10 +558,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
   });
 
-  test("forwards turn timing callbacks to part handlers through listenToAgentSessionEvents", () => {
+  test("forwards turn timing callbacks to part handlers through listenToAgentSessionEvents", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -590,7 +590,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -635,10 +635,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
   });
 
-  test("reuses the spawned subagent row when a later update adds externalSessionId", () => {
+  test("reuses the spawned subagent row when a later update adds externalSessionId", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -666,7 +666,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -738,10 +738,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagentMessages[0].meta.status).toBe("completed");
   });
 
-  test("preserves live subagent runtime error details", () => {
+  test("preserves live subagent runtime error details", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -769,7 +769,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -826,10 +826,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagent.content).toContain("Read the file at ~/maxsky5.omp.json");
   });
 
-  test("keeps same-prompt subagents separate until an exact identity match arrives", () => {
+  test("keeps same-prompt subagents separate until an exact identity match arrives", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -857,7 +857,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -955,10 +955,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(secondSubagent.meta.status).toBe("running");
   });
 
-  test("preserves cancelled subagent updates on the existing live row", () => {
+  test("preserves cancelled subagent updates on the existing live row", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -986,7 +986,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -1060,10 +1060,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagentMessages[0].meta.endedAtMs).toBe(250);
   });
 
-  test("absorbs a unique fallback session-correlated subagent row into the existing live row", () => {
+  test("absorbs a unique fallback session-correlated subagent row into the existing live row", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1091,7 +1091,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -1167,10 +1167,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagent.meta.endedAtMs).toBe(300);
   });
 
-  test("keeps fallback session-correlated subagent rows separate when multiple same-prompt live rows exist", () => {
+  test("keeps fallback session-correlated subagent rows separate when multiple same-prompt live rows exist", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1198,7 +1198,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
@@ -1281,10 +1281,10 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     expect(subagentMessages).toHaveLength(3);
   });
 
-  test("matches an older assistant message when the newest same-text message is outside the timestamp window", () => {
+  test("matches an older assistant message when the newest same-text message is outside the timestamp window", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1328,7 +1328,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

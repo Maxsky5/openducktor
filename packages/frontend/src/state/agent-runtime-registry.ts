@@ -188,7 +188,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
   ) {
     this.startSession = this.startSession.bind(this);
     this.resumeSession = this.resumeSession.bind(this);
-    this.restoreSession = this.restoreSession.bind(this);
     this.releaseSession = this.releaseSession.bind(this);
     this.forkSession = this.forkSession.bind(this);
     this.listRuntimeDefinitions = this.listRuntimeDefinitions.bind(this);
@@ -233,16 +232,6 @@ class RuntimeRegistryAgentEngine implements AgentEnginePort {
     await this.getAdapter(
       this.requireInputRuntimeKind(input.runtimeKind, "session release"),
     ).releaseSession(input);
-  }
-
-  async restoreSession(input: Parameters<AgentEnginePort["restoreSession"]>[0]) {
-    const summary = await this.getAdapter(
-      this.requireInputRuntimeKind(input.runtimeKind, "session restore"),
-    ).restoreSession(input);
-    return {
-      ...summary,
-      runtimeKind: input.runtimeKind,
-    };
   }
 
   async forkSession(input: Parameters<AgentEnginePort["forkSession"]>[0]) {

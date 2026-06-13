@@ -30,7 +30,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -89,7 +89,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     };
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -159,7 +159,7 @@ describe("CodexAppServerAdapter approvals", () => {
       },
     ]);
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
 
@@ -231,7 +231,10 @@ describe("CodexAppServerAdapter approvals", () => {
         parts: [{ kind: "text", text: "Need approval" }],
       }),
     );
-    await adapter.restoreSession(codexSessionRef("thread-saved"));
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      () => {},
+    );
 
     await expect(
       adapter.replyApproval({
@@ -243,6 +246,7 @@ describe("CodexAppServerAdapter approvals", () => {
       "Codex approval request '33' belongs to session 'thread/start-runtime-ensure', not 'thread-saved'.",
     );
     expect(respondServerRequest).not.toHaveBeenCalled();
+    unsubscribe();
   });
 
   test("preserves initial-turn approvals for late listeners and presence snapshots", async () => {
@@ -285,7 +289,7 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     const replayedEvents: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       replayedEvents.push(event),
     );
     expect(replayedEvents).toContainEqual(
@@ -329,7 +333,7 @@ describe("CodexAppServerAdapter approvals", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     await adapter.sendUserMessage(
@@ -618,7 +622,7 @@ describe("CodexAppServerAdapter approvals", () => {
       }),
     );
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -703,7 +707,7 @@ describe("CodexAppServerAdapter approvals", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );

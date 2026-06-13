@@ -75,7 +75,7 @@ export const getSessionMessages = (
 export const listenToAgentSessionEvents = (
   params: Omit<ListenToAgentSessionParams, "sessionRef" | "runtimeDataWriter"> &
     Partial<Pick<ListenToAgentSessionParams, "sessionRef" | "runtimeDataWriter">>,
-): (() => void) => {
+): Promise<() => void> => {
   const session = getSession(params.sessionsRef, params.externalSessionId);
   return listenToAgentSessionEventsImpl({
     ...params,

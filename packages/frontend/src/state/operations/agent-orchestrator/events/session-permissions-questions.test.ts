@@ -11,13 +11,13 @@ import {
 
 type SessionsRef = { current: Record<string, AgentSessionState> };
 
-const startTestSessionListener = (input: {
+const startTestSessionListener = async (input: {
   externalSessionId: string;
   sessionsRef: SessionsRef;
-}): ((event: SessionEvent) => void) => {
+}): Promise<(event: SessionEvent) => void> => {
   const handlers: Array<(event: SessionEvent) => void> = [];
   const adapter: SessionEventAdapter = {
-    subscribeEvents: (_externalSessionId, handler) => {
+    subscribeEvents: async (_externalSessionId, handler) => {
       handlers.push(handler);
       return () => {};
     },
@@ -37,7 +37,7 @@ const startTestSessionListener = (input: {
     };
   };
 
-  listenToAgentSessionEvents({
+  await listenToAgentSessionEvents({
     adapter,
     repoPath: "/tmp/repo",
     externalSessionId: input.externalSessionId,
@@ -66,7 +66,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -95,7 +95,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -145,10 +145,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toBe(true);
   });
 
-  test("patches the parent subagent row when a child permission event has linkage", () => {
+  test("patches the parent subagent row when a child permission event has linkage", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -197,7 +197,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-child-session",
@@ -283,7 +283,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     ]);
   });
 
-  test("clears child and parent subagent approval overlay when permission is resolved", () => {
+  test("clears child and parent subagent approval overlay when permission is resolved", async () => {
     const pendingApproval = {
       requestId: "perm-child-1",
       requestType: "permission_grant" as const,
@@ -313,7 +313,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const handleEvent = startTestSessionListener({
+    const handleEvent = await startTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -334,7 +334,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toBeUndefined();
   });
 
-  test("clears child and parent subagent question overlay when question is resolved", () => {
+  test("clears child and parent subagent question overlay when question is resolved", async () => {
     const pendingQuestion = {
       requestId: "question-child-1",
       questions: [
@@ -361,7 +361,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const handleEvent = startTestSessionListener({
+    const handleEvent = await startTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -382,10 +382,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toBeUndefined();
   });
 
-  test("deduplicates child permissions when subagent correlation arrives after the prompt", () => {
+  test("deduplicates child permissions when subagent correlation arrives after the prompt", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -430,7 +430,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -522,10 +522,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("does not guess the parent subagent row when child permission lacks correlation and multiple rows are running", () => {
+  test("does not guess the parent subagent row when child permission lacks correlation and multiple rows are running", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -585,7 +585,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -632,7 +632,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toEqual([undefined, undefined]);
   });
 
-  test("does not patch a sole parent subagent row without a correlation key", () => {
+  test("does not patch a sole parent subagent row without a correlation key", async () => {
     const correlationKey = "part:assistant-parent:subtask-unlinked";
     const sessionsRef: SessionsRef = {
       current: {
@@ -658,7 +658,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         }),
       },
     };
-    const handleEvent = startTestSessionListener({
+    const handleEvent = await startTestSessionListener({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -697,10 +697,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toHaveLength(1);
   });
 
-  test("patches the parent subagent row with the child external id when handled from parent context", () => {
+  test("patches the parent subagent row with the child external id when handled from parent context", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -748,7 +748,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -819,10 +819,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("records linked child permission overlays when the child listener owns local pending state", () => {
+  test("records linked child permission overlays when the child listener owns local pending state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -871,7 +871,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -944,10 +944,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("records child question overlays and patches the parent subagent row from parent context", () => {
+  test("records child question overlays and patches the parent subagent row from parent context", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -992,7 +992,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1054,10 +1054,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("records linked child question overlays when the child listener owns local pending state", () => {
+  test("records linked child question overlays when the child listener owns local pending state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1106,7 +1106,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1171,10 +1171,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("records parent-observed child questions without a correlation key as subagent pending questions", () => {
+  test("records parent-observed child questions without a correlation key as subagent pending questions", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1203,7 +1203,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1262,7 +1262,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1307,7 +1307,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1373,7 +1373,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1422,7 +1422,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1483,7 +1483,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1532,7 +1532,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
@@ -1549,7 +1549,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-child-session",
@@ -1619,10 +1619,10 @@ describe("agent-orchestrator session permissions and questions", () => {
     ).toBeUndefined();
   });
 
-  test("does not patch the parent subagent row when linked permission lacks a child external id", () => {
+  test("does not patch the parent subagent row when linked permission lacks a child external id", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -1667,7 +1667,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",

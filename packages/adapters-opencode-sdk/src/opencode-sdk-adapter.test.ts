@@ -515,7 +515,7 @@ describe("opencode-sdk-adapter", () => {
 
     const adapterInternals = adapter as unknown as TestAdapterInternals;
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
       events.push(event);
     });
 
@@ -652,7 +652,7 @@ describe("opencode-sdk-adapter", () => {
       throw new Error("Expected test session to be registered.");
     }
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("external-session-1"), (event) => {
       events.push(event);
     });
 

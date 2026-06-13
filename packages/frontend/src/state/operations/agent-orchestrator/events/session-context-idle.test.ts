@@ -11,10 +11,10 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session context usage and idle settlement", () => {
-  test("updates live session context usage from step-finish part tokens", () => {
+  test("updates live session context usage from step-finish part tokens", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -52,7 +52,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -96,13 +96,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
     expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -110,10 +110,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("does not mark a step message as tokenized when the step update is ignored", () => {
+  test("does not mark a step message as tokenized when the step update is ignored", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -143,7 +143,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -184,10 +184,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(contextUsageMessageIdBySessionRef.current["session-1"]).toBeUndefined();
   });
 
-  test("keeps live context usage bound to the in-flight turn model after selection changes", () => {
+  test("keeps live context usage bound to the in-flight turn model after selection changes", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -235,7 +235,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -269,13 +269,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
     expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -283,10 +283,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("preserves step-derived context usage when the final assistant message omits token metadata", () => {
+  test("preserves step-derived context usage when the final assistant message omits token metadata", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -323,7 +323,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -369,6 +369,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
@@ -383,7 +384,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -393,14 +393,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       kind: "assistant",
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
     });
   });
 
-  test("preserves step-derived context usage even when no assistant transcript row exists yet", () => {
+  test("preserves step-derived context usage even when no assistant transcript row exists yet", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -437,7 +436,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -470,6 +469,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         phase: "finish",
         reason: "tool-calls",
         totalTokens: 35_022,
+        contextWindow: 200_000,
       },
     });
 
@@ -484,7 +484,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(sessionsRef.current["session-1"]?.contextUsage).toEqual({
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
@@ -494,14 +493,13 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       kind: "assistant",
       totalTokens: 35_022,
       contextWindow: 200_000,
-      outputLimit: 8_192,
     });
   });
 
-  test("does not carry previous-turn context usage into a new final snapshot without token updates", () => {
+  test("does not carry previous-turn context usage into a new final snapshot without token updates", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -547,7 +545,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -607,10 +605,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
   });
 
-  test("routes reasoning deltas into thinking draft state without finalizing assistant text", () => {
+  test("routes reasoning deltas into thinking draft state without finalizing assistant text", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -639,7 +637,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -685,10 +683,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     ).toBe(false);
   });
 
-  test("keeps starting sessions active when an early idle event arrives before kickoff send", () => {
+  test("keeps starting sessions active when an early idle event arrives before kickoff send", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -717,7 +715,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -746,10 +744,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(sessionsRef.current["session-1"]?.status).toBe("starting");
   });
 
-  test("keeps pending outbound sends running when early idle arrives before runtime activity", () => {
+  test("keeps pending outbound sends running when early idle arrives before runtime activity", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -782,7 +780,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -812,10 +810,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(sessionsRef.current["session-1"]?.pendingUserMessageStartedAt).toBe(123);
   });
 
-  test("flushes buffered text drafts before terminal idle settlement", () => {
+  test("flushes buffered text drafts before terminal idle settlement", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -844,7 +842,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -895,10 +893,10 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("");
   });
 
-  test("upserts the finalized assistant message instead of appending a duplicate", () => {
+  test("upserts the finalized assistant message instead of appending a duplicate", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -943,7 +941,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

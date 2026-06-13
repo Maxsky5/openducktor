@@ -3,7 +3,7 @@ import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-ev
 import type { SessionEvent } from "./session-event-types";
 
 describe("session-event-batching", () => {
-  test("concatenates assistant deltas with the same message key before emitting", () => {
+  test("concatenates assistant deltas with the same message key before emitting", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -36,7 +36,7 @@ describe("session-event-batching", () => {
     ]);
   });
 
-  test("drops streamed text events that are superseded by a final assistant message", () => {
+  test("drops streamed text events that are superseded by a final assistant message", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -103,7 +103,7 @@ describe("session-event-batching", () => {
     ]);
   });
 
-  test("emits completed assistant parts immediately even inside the normal throttle window", () => {
+  test("emits completed assistant parts immediately even inside the normal throttle window", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
@@ -151,7 +151,7 @@ describe("session-event-batching", () => {
     expect(second.nextDelayMs).toBeNull();
   });
 
-  test("reports the shortest remaining delay across deferred event keys", () => {
+  test("reports the shortest remaining delay across deferred event keys", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({ nowMs: () => now });
 
@@ -201,7 +201,7 @@ describe("session-event-batching", () => {
     expect(prepared.nextDelayMs).toBe(250);
   });
 
-  test("classifies only configured session events as immediate", () => {
+  test("classifies only configured session events as immediate", async () => {
     expect(
       isImmediateSessionEvent({
         type: "user_message",

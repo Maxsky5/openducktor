@@ -269,8 +269,8 @@ The startup projection that combines persisted **Task Session History** records 
 _Avoid_: session hydration, reconciliation, presence store, reattach
 
 **Session Observer**:
-The frontend boundary that prepares a live **Agent Session** for runtime events and subscribes to its event stream. A **Session Observer** is created from a runtime kind, working directory, repository path, and external session id; it is not part of the **Repo Session Read Model**.
-_Avoid_: attach session, restore in read model, listener hydration
+The frontend boundary that observes a live **Agent Session** by subscribing to its runtime event stream. A **Session Observer** is created from a runtime kind, working directory, repository path, and external session id; runtime adapters own any internal state preparation needed to make that subscription work.
+_Avoid_: attach session, restore session, listener hydration
 
 **Session History Load**:
 The runtime-owned read that loads the visible **Transcript** for a selected **Agent Session**. **Session History Load** has ordinary loading, loaded, and failed states; it should not invent missing runtime session data.

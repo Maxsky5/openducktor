@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
-  codexSessionRef,
   codexSessionRuntimeRef,
   codexUserMessageInput,
   createHarness,
@@ -8,12 +7,14 @@ import {
 } from "./codex-app-server-adapter.test-harness";
 import type { CodexAppServerAdapter } from "./index";
 
-const restoreSessionState = async (
+const observeSessionState = async (
   adapter: CodexAppServerAdapter,
   externalSessionId: string,
 ): Promise<() => void> => {
-  await adapter.restoreSession(codexSessionRef(externalSessionId));
-  const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef(externalSessionId), () => {});
+  const unsubscribe = await adapter.subscribeEvents(
+    codexSessionRuntimeRef(externalSessionId),
+    () => {},
+  );
   await flushCodexAdapterWork();
   return unsubscribe;
 };
@@ -34,7 +35,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     drainNotifications.mockImplementationOnce(async () => {
@@ -358,7 +359,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     drainNotifications.mockImplementationOnce(async () => {
@@ -513,7 +514,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     drainNotifications.mockImplementationOnce(async () => {
@@ -590,7 +591,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     drainNotifications.mockImplementationOnce(async () => {
@@ -666,7 +667,7 @@ describe("CodexAppServerAdapter streaming", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     transports.get("runtime-ensure")?.turnStartDeferred.resolve({
@@ -801,7 +802,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -864,7 +865,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -945,7 +946,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -1030,7 +1031,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       (event) => events.push(event),
     );
@@ -1083,7 +1084,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
     const { adapter } = createHarness({ subscribeEvents });
 
-    const unsubscribeRestoredListener = await restoreSessionState(adapter, "thread-saved");
+    const unsubscribeRestoredListener = await observeSessionState(adapter, "thread-saved");
     unsubscribeRestoredListener();
 
     streamListeners[0]?.({
@@ -1132,8 +1133,9 @@ describe("CodexAppServerAdapter streaming", () => {
     await Promise.resolve();
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => events.push(event),
     );
 
     expect(events).toContainEqual(
@@ -1171,9 +1173,10 @@ describe("CodexAppServerAdapter streaming", () => {
     const { adapter } = createHarness({ subscribeEvents });
     const events: unknown[] = [];
 
-    await restoreSessionState(adapter, "thread-saved");
-    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
-      events.push(event),
+    await observeSessionState(adapter, "thread-saved");
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => events.push(event),
     );
 
     streamListeners[0]?.({
@@ -1240,7 +1243,7 @@ describe("CodexAppServerAdapter streaming", () => {
     });
 
     const events: unknown[] = [];
-    adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-ensure"), (event) =>
       events.push(event),
     );
     drainNotifications.mockImplementationOnce(async () => {

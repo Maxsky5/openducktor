@@ -58,7 +58,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, listener) => {
+    OpencodeSdkAdapter.prototype.subscribeEvents = async (_externalSessionId, listener) => {
       subscribeCalls += 1;
       eventHandlerRef.current = listener as SessionEventHandler;
       return () => {
@@ -286,7 +286,8 @@ describe("use-agent-orchestrator-operations session state", () => {
         status: "idle",
       };
     };
-    OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => () => {};
+    OpencodeSdkAdapter.prototype.subscribeEvents =
+      async (_externalSessionId, _listener) => () => {};
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},
@@ -351,7 +352,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    OpencodeSdkAdapter.prototype.subscribeEvents = () => () => {};
+    OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
     OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -616,7 +617,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalRestoreSession = OpencodeSdkAdapter.prototype.restoreSession;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
@@ -638,14 +638,7 @@ describe("use-agent-orchestrator-operations session state", () => {
         },
       }),
     ];
-    OpencodeSdkAdapter.prototype.restoreSession = async (input) => ({
-      externalSessionId: input.externalSessionId,
-      role: "build",
-      startedAt: "2026-02-22T08:00:00.000Z",
-      status: "running",
-      runtimeKind: "opencode",
-    });
-    OpencodeSdkAdapter.prototype.subscribeEvents = () => {
+    OpencodeSdkAdapter.prototype.subscribeEvents = async () => {
       subscribeCalls += 1;
       return () => {};
     };
@@ -687,7 +680,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      OpencodeSdkAdapter.prototype.restoreSession = originalRestoreSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;

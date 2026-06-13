@@ -17,7 +17,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       Promise.reject(new Error("network down")),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -66,7 +66,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -133,7 +133,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       Promise.resolve(),
     );
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -170,7 +170,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -223,10 +223,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     ).toBe(true);
   });
 
-  test("records session_error as an error notice and clears pending requests", () => {
+  test("records session_error as an error notice and clears pending requests", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -287,7 +287,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -327,10 +327,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
   });
 
-  test("normalizes JSON-wrapped session_error payloads before rendering the error notice", () => {
+  test("normalizes JSON-wrapped session_error payloads before rendering the error notice", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -361,7 +361,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -400,10 +400,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     });
   });
 
-  test("renders a cancelled session notice when a user-requested stop aborts", () => {
+  test("renders a cancelled session notice when a user-requested stop aborts", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -467,7 +467,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -518,11 +518,11 @@ describe("agent-orchestrator session errors and terminal state", () => {
     ).toBe(false);
   });
 
-  test("handles question/todo updates and terminal finish", () => {
+  test("handles question/todo updates and terminal finish", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const runtimeData = createRecordingRuntimeDataWriter();
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -554,7 +554,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -608,10 +608,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     expect(updateSessionOptions).toContainEqual({ persist: false });
   });
 
-  test("renders a cancelled session notice when a user-requested stop finishes normally", () => {
+  test("renders a cancelled session notice when a user-requested stop finishes normally", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -689,7 +689,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -739,10 +739,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
   });
 
-  test("keeps real failures on the error path even when stop intent was set", () => {
+  test("keeps real failures on the error path even when stop intent was set", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -774,7 +774,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

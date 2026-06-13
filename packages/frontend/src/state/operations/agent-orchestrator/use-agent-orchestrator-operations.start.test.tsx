@@ -74,7 +74,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
-    OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => {
+    OpencodeSdkAdapter.prototype.subscribeEvents = async (_externalSessionId, _listener) => {
       subscribeCalls += 1;
       return () => {};
     };
@@ -137,7 +137,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let subscribeCalls = 0;
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
-    const originalRestoreSession = OpencodeSdkAdapter.prototype.restoreSession;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
@@ -145,16 +144,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.agentSessionUpsert = async () => {};
-    OpencodeSdkAdapter.prototype.restoreSession = async (input) => {
-      return {
-        externalSessionId: input.externalSessionId,
-        role: "planner",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        status: "running",
-        runtimeKind: "opencode",
-      };
-    };
-    OpencodeSdkAdapter.prototype.subscribeEvents = () => {
+    OpencodeSdkAdapter.prototype.subscribeEvents = async () => {
       subscribeCalls += 1;
       return () => {};
     };
@@ -198,7 +188,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
       host.agentSessionUpsert = originalAgentSessionUpsert;
-      OpencodeSdkAdapter.prototype.restoreSession = originalRestoreSession;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
@@ -233,7 +222,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
       source: "active_build_run",
     });
-    OpencodeSdkAdapter.prototype.subscribeEvents = () => () => {};
+    OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
     OpencodeSdkAdapter.prototype.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -350,7 +339,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
         status: "idle",
       } as const;
     };
-    OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => () => {};
+    OpencodeSdkAdapter.prototype.subscribeEvents =
+      async (_externalSessionId, _listener) => () => {};
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},
@@ -475,7 +465,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
       startCalls += 1;
       return startDeferred.promise;
     };
-    OpencodeSdkAdapter.prototype.subscribeEvents = (_externalSessionId, _listener) => () => {};
+    OpencodeSdkAdapter.prototype.subscribeEvents =
+      async (_externalSessionId, _listener) => () => {};
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},

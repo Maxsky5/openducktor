@@ -254,13 +254,7 @@ describe("agent-runtime-registry", () => {
     try {
       const adapter = createAgentRuntimeRegistry().getAdapter("codex");
       const events: Array<{ type?: string }> = [];
-      await adapter.restoreSession({
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        externalSessionId: "thread-live",
-      });
-      const unsubscribe = adapter.subscribeEvents(
+      const unsubscribe = await adapter.subscribeEvents(
         {
           repoPath: "/repo",
           runtimeKind: "codex",
@@ -421,11 +415,11 @@ describe("agent-runtime-registry", () => {
     }
   });
 
-  test("routes event subscriptions through the explicit durable session ref", () => {
+  test("routes event subscriptions through the explicit durable session ref", async () => {
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const subscribedSessionRefs: unknown[] = [];
 
-    OpencodeSdkAdapter.prototype.subscribeEvents = (sessionRef) => {
+    OpencodeSdkAdapter.prototype.subscribeEvents = async (sessionRef) => {
       subscribedSessionRefs.push(sessionRef);
       return () => {};
     };
@@ -440,7 +434,7 @@ describe("agent-runtime-registry", () => {
         runtimeKind: "opencode",
       } as const;
 
-      const unsubscribe = engine.subscribeEvents(sessionRef, () => {});
+      const unsubscribe = await engine.subscribeEvents(sessionRef, () => {});
       expect(subscribedSessionRefs).toEqual([sessionRef]);
 
       unsubscribe();

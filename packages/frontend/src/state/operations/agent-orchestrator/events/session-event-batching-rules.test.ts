@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createSessionEventBatcher, type SessionEvent } from "./session-events-test-harness";
 
 describe("agent-orchestrator session event batching rules", () => {
-  test("centralizes assistant batch coalescing rules in one reducer", () => {
+  test("centralizes assistant batch coalescing rules in one reducer", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -89,7 +89,7 @@ describe("agent-orchestrator session event batching rules", () => {
     ]);
   });
 
-  test("keeps per-type replacement behavior configurable inside the central reducer", () => {
+  test("keeps per-type replacement behavior configurable inside the central reducer", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {
@@ -163,7 +163,7 @@ describe("agent-orchestrator session event batching rules", () => {
     ]);
   });
 
-  test("defers repeated final assistant message snapshots within the emit gate", () => {
+  test("defers repeated final assistant message snapshots within the emit gate", async () => {
     let now = 1_000;
     const batcher = createSessionEventBatcher({
       nowMs: () => now,
@@ -237,7 +237,7 @@ describe("agent-orchestrator session event batching rules", () => {
     expect(second.nextDelayMs).toBe(400);
   });
 
-  test("dedupes identical tool events in the central reducer", () => {
+  test("dedupes identical tool events in the central reducer", async () => {
     const batcher = createSessionEventBatcher();
     const prepared = batcher.prepareQueuedSessionEvents([
       {

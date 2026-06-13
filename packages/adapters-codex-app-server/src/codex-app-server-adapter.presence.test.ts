@@ -1,6 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
-  codexSessionRef,
   codexSessionRuntimeRef,
   createHarness,
   flushCodexAdapterWork,
@@ -134,12 +133,11 @@ const localSessions = (
   (adapter as unknown as { localSessions: { has(externalSessionId: string): boolean } })
     .localSessions;
 
-const restoreSessionState = async (
+const observeSessionState = async (
   adapter: CodexAppServerAdapter,
   externalSessionId: string,
 ): Promise<void> => {
-  await adapter.restoreSession(codexSessionRef(externalSessionId));
-  adapter.subscribeEvents(codexSessionRuntimeRef(externalSessionId), () => {});
+  await adapter.subscribeEvents(codexSessionRuntimeRef(externalSessionId), () => {});
   await flushCodexAdapterWork();
 };
 
@@ -199,7 +197,7 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await restoreSessionState(adapter, "thread-saved");
+    await observeSessionState(adapter, "thread-saved");
 
     transport.threadSavedStatus = { type: "idle" };
 
@@ -430,7 +428,7 @@ describe("CodexAppServerAdapter presence", () => {
   test("restores a missing live Codex session without starting a turn", async () => {
     const { adapter, transports } = createHarness();
 
-    await restoreSessionState(adapter, "thread-saved");
+    await observeSessionState(adapter, "thread-saved");
 
     expect(localSessions(adapter).has("thread-saved")).toBe(true);
     expect(transports.get("runtime-live")?.calls.map((call) => call.method)).toContain(
@@ -447,7 +445,7 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await restoreSessionState(adapter, "thread-saved");
+    await observeSessionState(adapter, "thread-saved");
 
     await expect(
       adapter.readSessionPresence({
@@ -466,7 +464,7 @@ describe("CodexAppServerAdapter presence", () => {
   test("restores an idle Codex thread without marking it running", async () => {
     const { adapter } = createHarness();
 
-    await restoreSessionState(adapter, "thread-idle");
+    await observeSessionState(adapter, "thread-idle");
 
     await expect(
       adapter.readSessionPresence({
@@ -549,7 +547,7 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await restoreSessionState(adapter, "thread-saved");
+    await observeSessionState(adapter, "thread-saved");
 
     const notifications = [
       {
@@ -579,8 +577,9 @@ describe("CodexAppServerAdapter presence", () => {
     ];
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => events.push(event),
     );
     for (const message of notifications) {
       streamListeners[0]?.({ runtimeId: "runtime-live", kind: "notification", message });
@@ -632,11 +631,12 @@ describe("CodexAppServerAdapter presence", () => {
       transportFactory: mock(() => transport),
     });
 
-    await restoreSessionState(adapter, "thread-saved");
+    await observeSessionState(adapter, "thread-saved");
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => events.push(event),
     );
     streamListeners[0]?.({
       runtimeId: "runtime-live",
@@ -698,8 +698,9 @@ describe("CodexAppServerAdapter presence", () => {
     });
 
     const events: unknown[] = [];
-    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), (event) =>
-      events.push(event),
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      (event) => events.push(event),
     );
     streamListeners[0]?.({
       runtimeId: "runtime-live",

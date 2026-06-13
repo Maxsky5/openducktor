@@ -106,7 +106,9 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
   }
 };
 
-export const listenToAgentSessionEvents = (context: ListenToAgentSessionParams): (() => void) => {
+export const listenToAgentSessionEvents = async (
+  context: ListenToAgentSessionParams,
+): Promise<() => void> => {
   const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
     current: {} as Record<string, string>,
   };
@@ -220,7 +222,7 @@ export const listenToAgentSessionEvents = (context: ListenToAgentSessionParams):
     }, delayMs);
   };
 
-  const unsubscribe = context.adapter.subscribeEvents(context.sessionRef, (event) => {
+  const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
       handleSessionEvent(handlerContext, event);

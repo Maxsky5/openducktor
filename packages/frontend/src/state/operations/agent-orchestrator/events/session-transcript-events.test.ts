@@ -13,10 +13,10 @@ import {
 } from "./session-events-test-harness";
 
 describe("agent-orchestrator session transcript events", () => {
-  test("preserves explicit history load state when live transcript changes", () => {
+  test("preserves explicit history load state when live transcript changes", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -43,7 +43,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -75,11 +75,11 @@ describe("agent-orchestrator session transcript events", () => {
     expect(getSession(sessionsRef).historyLoadState).toBe("loaded");
   });
 
-  test("records inputReadyAtMs when tool input first becomes meaningful", () => {
+  test("records inputReadyAtMs when tool input first becomes meaningful", async () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -109,7 +109,7 @@ describe("agent-orchestrator session transcript events", () => {
     };
 
     try {
-      listenToAgentSessionEvents({
+      await listenToAgentSessionEvents({
         adapter,
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
@@ -226,7 +226,7 @@ describe("agent-orchestrator session transcript events", () => {
     await withMockedToast(async ({ toastInfoMock }) => {
       const handlers: Array<(event: SessionEvent) => void> = [];
       const adapter: SessionEventAdapter = {
-        subscribeEvents: (_externalSessionId, handler) => {
+        subscribeEvents: async (_externalSessionId, handler) => {
           handlers.push(handler);
           return () => {};
         },
@@ -238,7 +238,7 @@ describe("agent-orchestrator session transcript events", () => {
         },
       };
 
-      listenToAgentSessionEvents({
+      await listenToAgentSessionEvents({
         adapter,
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
@@ -302,7 +302,7 @@ describe("agent-orchestrator session transcript events", () => {
         const refreshTaskDataArgs: Array<[string, string | undefined]> = [];
 
         const adapter: SessionEventAdapter = {
-          subscribeEvents: (_externalSessionId, handler) => {
+          subscribeEvents: async (_externalSessionId, handler) => {
             handlers.push(
               handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
             );
@@ -331,7 +331,7 @@ describe("agent-orchestrator session transcript events", () => {
           };
         };
 
-        listenToAgentSessionEvents({
+        await listenToAgentSessionEvents({
           adapter,
           repoPath: "/tmp/repo",
           externalSessionId: "session-1",
@@ -405,7 +405,7 @@ describe("agent-orchestrator session transcript events", () => {
   test("writes canonical user_message events into the transcript", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -434,7 +434,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -498,11 +498,11 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessage.meta.state).toBe("read");
   });
 
-  test("appends session compaction notices without changing live session state", () => {
+  test("appends session compaction notices without changing live session state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const updateSessionOptions: Array<{ persist?: boolean } | undefined> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(handler);
         return () => {};
       },
@@ -577,7 +577,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -661,10 +661,10 @@ describe("agent-orchestrator session transcript events", () => {
     );
   });
 
-  test("reconciles queued user_message updates in place when the agent reads the turn", () => {
+  test("reconciles queued user_message updates in place when the agent reads the turn", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -693,7 +693,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -752,10 +752,10 @@ describe("agent-orchestrator session transcript events", () => {
     expect(userMessage.meta.state).toBe("read");
   });
 
-  test("flushes queued non-immediate events in a single session commit", () => {
+  test("flushes queued non-immediate events in a single session commit", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -787,7 +787,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    const unsubscribe = listenToAgentSessionEvents({
+    const unsubscribe = await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -848,10 +848,10 @@ describe("agent-orchestrator session transcript events", () => {
     ]);
   });
 
-  test("flushes queued work before applying an immediate event", () => {
+  test("flushes queued work before applying an immediate event", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -882,7 +882,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -934,10 +934,10 @@ describe("agent-orchestrator session transcript events", () => {
     ]);
   });
 
-  test("collapses assistant stream chunks across a queued flush", () => {
+  test("collapses assistant stream chunks across a queued flush", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -968,7 +968,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
@@ -1059,10 +1059,10 @@ describe("agent-orchestrator session transcript events", () => {
     expect(assistantMessage?.content).toBe("Hello world");
   });
 
-  test("prefers final assistant message over earlier streamed text in the same batch", () => {
+  test("prefers final assistant message over earlier streamed text in the same batch", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1091,7 +1091,7 @@ describe("agent-orchestrator session transcript events", () => {
       };
     };
 
-    listenToAgentSessionEvents({
+    await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",

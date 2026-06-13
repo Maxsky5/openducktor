@@ -18,7 +18,7 @@ const buildToolPart = (tool: string): Extract<SessionPart, { kind: "tool" }> => 
 };
 
 describe("session-tool-parts", () => {
-  test("resolveToolRefreshDecision only triggers on first completion transition", () => {
+  test("resolveToolRefreshDecision only triggers on first completion transition", async () => {
     const cases: Array<{
       name: string;
       tool: string;

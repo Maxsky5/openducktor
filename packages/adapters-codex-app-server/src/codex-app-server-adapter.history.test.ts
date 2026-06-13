@@ -222,7 +222,7 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
-  test("keeps the runtime-owned system prompt after restoring a live session ref", async () => {
+  test("keeps the runtime-owned system prompt after observing a live session ref", async () => {
     const { adapter } = createHarness();
 
     await adapter.startSession({
@@ -234,12 +234,15 @@ describe("CodexAppServerAdapter history loading", () => {
       systemPrompt: "Use the repo rules.",
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
-    await adapter.restoreSession({
-      repoPath: "/repo",
-      runtimeKind: "codex",
-      workingDirectory: "/repo",
-      externalSessionId: "thread/start-runtime-ensure",
-    });
+    const unsubscribe = await adapter.subscribeEvents(
+      {
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread/start-runtime-ensure",
+      },
+      () => {},
+    );
 
     const history = await adapter.loadSessionHistory({
       repoPath: "/repo",
@@ -255,6 +258,7 @@ describe("CodexAppServerAdapter history loading", () => {
       text: "System prompt:\n\nUse the repo rules.",
       parts: [],
     });
+    unsubscribe();
   });
 
   test("loads search command metadata and hides contextual user fragments from thread reads", async () => {

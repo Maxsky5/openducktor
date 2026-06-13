@@ -807,7 +807,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 
@@ -939,7 +939,7 @@ describe("OpencodeSdkAdapter session history", () => {
     });
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
       events.push(event);
     });
 

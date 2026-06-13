@@ -30,7 +30,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalRuntimeEnsure = host.runtimeEnsure;
   const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
   const originalReadAgentSessionPresenceSnapshot = OpencodeSdkAdapter.prototype.readSessionPresence;
-  const originalRestoreSession = OpencodeSdkAdapter.prototype.restoreSession;
+  const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
   const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
   const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
 
@@ -105,13 +105,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
       },
     });
   };
-  OpencodeSdkAdapter.prototype.restoreSession = async (input) => ({
-    externalSessionId: input.externalSessionId,
-    role: null,
-    startedAt: "2026-02-22T08:00:00.000Z",
-    status: "idle",
-    runtimeKind: "opencode",
-  });
+  OpencodeSdkAdapter.prototype.subscribeEvents = async () => () => {};
   OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
   OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
 
@@ -124,7 +118,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.runtimeEnsure = originalRuntimeEnsure;
     opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
     opencodeSdkAdapterPrototype.readSessionPresence = originalReadAgentSessionPresenceSnapshot;
-    OpencodeSdkAdapter.prototype.restoreSession = originalRestoreSession;
+    OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
     OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
   };

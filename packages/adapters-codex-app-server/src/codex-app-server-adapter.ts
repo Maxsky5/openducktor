@@ -223,7 +223,7 @@ export class CodexAppServerAdapter
 
   async sendUserMessage(input: SendAgentUserMessageInput): Promise<void> {
     if (!this.localSessions.has(input.externalSessionId)) {
-      await this.restoreSessionState(input);
+      await this.ensureSessionState(input);
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (session) {
@@ -329,20 +329,12 @@ export class CodexAppServerAdapter
     delete session.model;
   }
 
-  async restoreSession(input: AgentSessionRef): Promise<AgentSessionSummary> {
-    return this.restoreSessionState(input);
-  }
-
-  private async restoreSessionState(
+  private async ensureSessionState(
     input: AgentSessionRef | AgentSessionRuntimeRef,
   ): Promise<AgentSessionSummary> {
-    const { client, runtimeId } = await this.runtimeClients.resolve(
-      input,
-      "restore session state",
-      {
-        requireLive: true,
-      },
-    );
+    const { client, runtimeId } = await this.runtimeClients.resolve(input, "ensure session state", {
+      requireLive: true,
+    });
     this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const model = "model" in input ? (input.model ?? undefined) : undefined;
     if (model) {
@@ -393,7 +385,7 @@ export class CodexAppServerAdapter
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
     const requestId = requireCodexServerRequestId(input.requestId, "approval");
     if (!this.localSessions.has(input.externalSessionId)) {
-      await this.restoreSessionState(input);
+      await this.ensureSessionState(input);
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (session) {
@@ -426,7 +418,7 @@ export class CodexAppServerAdapter
   async replyQuestion(input: ReplyQuestionInput): Promise<void> {
     const requestId = requireCodexServerRequestId(input.requestId, "question");
     if (!this.localSessions.has(input.externalSessionId)) {
-      await this.restoreSessionState(input);
+      await this.ensureSessionState(input);
     }
     const session = this.localSessions.get(input.externalSessionId);
     if (session) {
@@ -477,9 +469,20 @@ export class CodexAppServerAdapter
     }
   }
 
-  subscribeEvents(input: AgentSessionRef, listener: (event: AgentEvent) => void): EventUnsubscribe {
+  async subscribeEvents(
+    input: AgentSessionRef,
+    listener: (event: AgentEvent) => void,
+  ): Promise<EventUnsubscribe> {
     const externalSessionId = input.externalSessionId;
     const unsubscribe = this.sessionEvents.subscribe(externalSessionId, listener);
+    try {
+      if (!this.localSessions.has(externalSessionId)) {
+        await this.ensureSessionState(input);
+      }
+    } catch (error) {
+      unsubscribe();
+      throw error;
+    }
     for (const approval of this.pendingInput.pendingApprovalsForSession(externalSessionId)) {
       listener({
         ...approval,

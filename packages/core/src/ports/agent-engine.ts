@@ -238,7 +238,6 @@ export interface AgentCatalogPort {
 export interface AgentSessionPort {
   startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary>;
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
-  restoreSession(input: AgentSessionRef): Promise<AgentSessionSummary>;
   releaseSession(input: AgentSessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
   listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
@@ -250,7 +249,10 @@ export interface AgentSessionPort {
   sendUserMessage(input: SendAgentUserMessageInput): Promise<void>;
   replyApproval(input: ReplyApprovalInput): Promise<void>;
   replyQuestion(input: ReplyQuestionInput): Promise<void>;
-  subscribeEvents(input: AgentSessionRef, listener: (event: AgentEvent) => void): EventUnsubscribe;
+  subscribeEvents(
+    input: AgentSessionRef,
+    listener: (event: AgentEvent) => void,
+  ): Promise<EventUnsubscribe>;
   stopSession(input: AgentSessionRef): Promise<void>;
 }
 

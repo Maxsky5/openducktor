@@ -346,7 +346,7 @@ describe("CodexAppServerAdapter lifecycle", () => {
       model: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
     });
 
-    const unsubscribe = adapter.subscribeEvents(
+    const unsubscribe = await adapter.subscribeEvents(
       codexSessionRuntimeRef("thread/start-runtime-ensure"),
       () => {},
     );
@@ -357,9 +357,11 @@ describe("CodexAppServerAdapter lifecycle", () => {
   test("releases a Codex session by clearing only local adapter state", async () => {
     const { adapter, transports } = createHarness();
 
-    await adapter.restoreSession(codexSessionRef("thread-saved"));
+    const unsubscribe = await adapter.subscribeEvents(
+      codexSessionRuntimeRef("thread-saved"),
+      () => {},
+    );
     await flushCodexAdapterWork();
-    const unsubscribe = adapter.subscribeEvents(codexSessionRuntimeRef("thread-saved"), () => {});
     const transport = transports.get("runtime-live");
     const callsBeforeRelease = transport?.calls.length ?? 0;
 

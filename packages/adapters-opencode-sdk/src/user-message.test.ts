@@ -20,7 +20,7 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const events: Array<{ type: string }> = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
       events.push(event as { type: string }),
     );
 
@@ -85,7 +85,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "spec");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
+      events.push(event),
+    );
 
     await adapter.sendUserMessage({
       ...sessionRuntimeRef("session-opencode-1"),
@@ -127,8 +129,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1", { role: "build" }), (event) =>
-      events.push(event),
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
     );
 
     await adapter.sendUserMessage({
@@ -202,8 +205,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1", { role: "build" }), (event) =>
-      events.push(event),
+    await adapter.subscribeEvents(
+      sessionRuntimeRef("session-opencode-1", { role: "build" }),
+      (event) => events.push(event),
     );
 
     await adapter.loadSessionHistory(sessionRuntimeRef("session-opencode-1", { role: "build" }));
@@ -282,7 +286,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
+      events.push(event),
+    );
 
     await adapter.sendUserMessage({
       ...sessionRuntimeRef("session-opencode-1", { role: "build" }),
@@ -353,7 +359,9 @@ describe("OpencodeSdkAdapter user message", () => {
     await startDefaultSession(adapter, "build");
 
     const events: AgentEvent[] = [];
-    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => events.push(event));
+    await adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) =>
+      events.push(event),
+    );
 
     await expect(
       adapter.sendUserMessage({

@@ -1825,7 +1825,7 @@ describe("use-task-operations", () => {
     const runsList = mock(async (): Promise<RunSummary[]> => []);
     const adapterHandlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
     const adapter: SessionEventAdapter = {
-      subscribeEvents: (_externalSessionId, handler) => {
+      subscribeEvents: async (_externalSessionId, handler) => {
         adapterHandlers.push(
           handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
         );
@@ -1876,7 +1876,7 @@ describe("use-task-operations", () => {
         1000,
       );
 
-      const unsubscribe = listenToAgentSessionEvents({
+      const unsubscribe = await listenToAgentSessionEvents({
         adapter,
         repoPath: "/repo",
         externalSessionId: "session-1",

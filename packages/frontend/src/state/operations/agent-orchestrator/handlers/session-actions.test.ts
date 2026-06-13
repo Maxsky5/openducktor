@@ -345,7 +345,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const originalStopSession = adapter.stopSession;
     let sessionEventListener: ((event: { type: string; [key: string]: unknown }) => void) | null =
       null;
-    adapter.subscribeEvents = (_externalSessionId, listener) => {
+    adapter.subscribeEvents = async (_externalSessionId, listener) => {
       sessionEventListener = listener as (event: { type: string; [key: string]: unknown }) => void;
       return () => {
         sessionEventListener = null;
@@ -403,7 +403,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef.current[externalSessionId] = updater(current);
     };
 
-    const unsubscribe = listenToAgentSessionEvents({
+    const unsubscribe = await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
