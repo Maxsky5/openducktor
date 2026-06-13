@@ -20,10 +20,7 @@ type UseRepoSessionReadModelEffectsArgs = {
       | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
   ) => void;
   updateSession: UpdateAgentSession;
-  agentEngine: Pick<
-    AgentEnginePort,
-    "restoreSession" | "listSessionPresence" | "loadSessionHistory"
-  >;
+  agentEngine: Pick<AgentEnginePort, "listSessionPresence" | "loadSessionHistory">;
   listenToAgentSession?: ListenToAgentSession;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
   queryClient: QueryClient;

@@ -189,7 +189,9 @@ session history has one frontend read boundary.
 3. Persisted session records remain route candidates while runtime presence is checked.
 4. `readRepoRuntimeSessionPresence` scans each runtime kind and working directory once.
 5. `buildRepoSessionReadModel` commits session state once presence is known; missing runtime evidence is `persisted_only`.
-6. Live sessions are subscribed by route ref.
+6. Live sessions are observed by route ref. The observer owns any runtime-side
+   preparation required before event subscription; the read model must not call
+   restore/attach operations.
 7. Initial history is loaded from materialized session state for requested sessions and live empty transcripts.
 8. Subsequent status, transcript, permissions, and questions come from runtime events.
 
@@ -218,6 +220,9 @@ Use these compact tests as the first-line safety net:
 
 - Do not reintroduce repo hydration coordinators, presence stores, reattach stages,
   or reconciliation stages.
+- Do not make the repo session read model call runtime restore/attach operations.
+  It may project persisted records plus presence snapshots and hand live refs to
+  the session observer only.
 - Do not add runtime transcript open/attach operations to the app-state operations
   context. Readonly transcripts load local history and reply with runtime context refs.
 - Do not load selected transcript history by refetching task session records.

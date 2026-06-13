@@ -2,7 +2,7 @@ import type { AgentSessionRef, AgentSessionRuntimeRef } from "@openducktor/core"
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { requireSessionRuntimeKindForPersistence } from "./session-runtime-metadata";
 
-export type ListenToAgentSession = (session: AgentSessionRef) => void;
+export type ListenToAgentSession = (session: AgentSessionRef) => Promise<void>;
 
 export const toRuntimeSessionRef = (
   repoPath: string,

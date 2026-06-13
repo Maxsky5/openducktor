@@ -119,8 +119,13 @@ export const useAgentSessionListeners = ({
   );
 
   const listenToAgentSession = useCallback<ListenToAgentSession>(
-    (target): void => {
+    async (target): Promise<void> => {
       const externalSessionId = target.externalSessionId;
+      if (unsubscribersRef.current.has(externalSessionId)) {
+        return;
+      }
+
+      await agentEngine.restoreSession(target);
       if (unsubscribersRef.current.has(externalSessionId)) {
         return;
       }

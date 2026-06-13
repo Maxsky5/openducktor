@@ -40,12 +40,6 @@ const createLoaderHarness = ({
       repoPath: "/repo",
     },
     adapter: {
-      restoreSession: async () => ({
-        externalSessionId: record.externalSessionId,
-        role: record.role,
-        startedAt: record.startedAt,
-        status: "idle",
-      }),
       listSessionPresence,
       loadSessionHistory,
     },
@@ -61,7 +55,7 @@ const createLoaderHarness = ({
       }
       sessionsById = { ...sessionsById, [externalSessionId]: updater(current) };
     },
-    listenToAgentSession: (session) => {
+    listenToAgentSession: async (session) => {
       listenedSessions.push(session);
     },
     queryClient: new QueryClient(),

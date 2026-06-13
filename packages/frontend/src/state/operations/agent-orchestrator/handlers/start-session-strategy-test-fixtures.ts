@@ -32,7 +32,7 @@ export const createSessionDependenciesFixture = (
   inFlightStartsByWorkspaceTaskRef: { current: new Map() },
   loadAgentSessions: async () => {},
   persistSessionRecord: async () => {},
-  listenToAgentSession: () => {},
+  listenToAgentSession: async () => {},
   ...overrides,
 });
 

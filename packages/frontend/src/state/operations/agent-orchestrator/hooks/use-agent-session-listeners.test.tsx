@@ -13,6 +13,13 @@ import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
 describe("useAgentSessionListeners", () => {
   test("subscribes with the runtime session route after reload", async () => {
+    const restoreSession = mock(async () => ({
+      externalSessionId: "external-1",
+      role: null,
+      startedAt: "2026-02-22T08:00:00.000Z",
+      status: "idle" as const,
+      runtimeKind: "opencode" as const,
+    }));
     const subscribeEvents = mock(() => () => undefined);
     const queryClient = new QueryClient();
     const Harness = () => {
@@ -26,6 +33,7 @@ describe("useAgentSessionListeners", () => {
       });
       const listeners = useAgentSessionListeners({
         agentEngine: createNoopEngine({
+          restoreSession,
           subscribeEvents,
           listRuntimeDefinitions: () => [],
         }),
@@ -54,9 +62,10 @@ describe("useAgentSessionListeners", () => {
     } as const;
 
     await harness.run(async ({ listeners }) => {
-      listeners.listenToAgentSession(sessionRef);
+      await listeners.listenToAgentSession(sessionRef);
     });
 
+    expect(restoreSession).toHaveBeenCalledWith(sessionRef);
     expect(subscribeEvents).toHaveBeenCalledWith(sessionRef, expect.any(Function));
 
     await harness.unmount();

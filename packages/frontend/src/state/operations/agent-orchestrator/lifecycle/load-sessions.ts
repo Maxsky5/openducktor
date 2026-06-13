@@ -31,7 +31,7 @@ type SessionStateUpdater = SessionsById | ((current: SessionsById) => SessionsBy
 
 type CommitSessions = (updater: SessionStateUpdater) => void;
 
-type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence" | "restoreSession"> &
+type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence"> &
   SessionHistoryLoaderAdapter;
 
 const commitRepoSessionReadModel = ({
@@ -140,9 +140,8 @@ export const loadRepoAgentSessions = async ({
   }
   await Promise.all(
     readModel.liveSessions.map(async (session) => {
-      await adapter.restoreSession(session);
       if (!isStaleRepoOperation()) {
-        listenToAgentSession?.(session);
+        await listenToAgentSession?.(session);
       }
     }),
   );

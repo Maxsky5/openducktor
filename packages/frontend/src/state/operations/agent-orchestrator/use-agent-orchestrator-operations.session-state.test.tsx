@@ -571,12 +571,16 @@ describe("use-agent-orchestrator-operations session state", () => {
 
   test("revisit to the same repo refreshes task sessions again", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
+    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
     const originalRuntimeList = host.runtimeList;
     let persistedListCalls = 0;
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
       return [persistedSessionFixture];
     };
+    host.agentSessionsListBulk = async () => ({
+      "task-1": [persistedSessionFixture],
+    });
     host.runtimeList = async () => [createWorktreeRuntimeFixture()];
 
     const harness = createHookHarness({
@@ -601,6 +605,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     } finally {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
+      host.agentSessionsListBulk = originalAgentSessionsListBulk;
       host.runtimeList = originalRuntimeList;
     }
   });

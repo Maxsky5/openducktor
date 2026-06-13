@@ -94,7 +94,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
       updateSession: () => {},
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -167,7 +167,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {
+      listenToAgentSession: async () => {
         listenCalls += 1;
         unsubscribersRef.current.set("session-1", () => {});
       },
@@ -271,7 +271,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["external-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -387,7 +387,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["external-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -456,7 +456,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
@@ -518,7 +518,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
       updateSession: () => {},
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
@@ -572,7 +572,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
       updateSession: () => {},
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
@@ -692,7 +692,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {
+      listenToAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -813,7 +813,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {
+      listenToAgentSession: async () => {
         listenCalls += 1;
         unsubscribersRef.current.set("session-1", () => {});
       },
@@ -937,7 +937,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {
+      listenToAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -1036,7 +1036,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {
+      listenToAgentSession: async () => {
         listenCalls += 1;
         unsubscribersRef.current.set("session-1", () => {});
       },
@@ -1116,7 +1116,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1211,7 +1211,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {
+      listenToAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -1282,7 +1282,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1347,7 +1347,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1440,7 +1440,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1536,7 +1536,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }
         sessionsRef.current["session-1"] = updater(current);
       },
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
         ensuredRuntimeKind = options?.runtimeKind;
         return {
@@ -1587,7 +1587,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
       updateSession: () => {},
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
@@ -1633,7 +1633,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       unsubscribersRef: { current: new Map() },
       updateSession: () => {},
-      listenToAgentSession: () => {},
+      listenToAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {

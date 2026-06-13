@@ -141,7 +141,7 @@ export const createEnsureSessionReady = ({
         persistFalse ? { persist: false } : undefined,
       );
       if (shouldListen) {
-        listenToAgentSession(
+        await listenToAgentSession(
           toRuntimeSessionRef(repoPath, sessionsRef.current[externalSessionId] ?? session),
         );
       }

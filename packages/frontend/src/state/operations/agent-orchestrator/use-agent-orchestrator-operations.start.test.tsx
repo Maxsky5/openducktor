@@ -291,6 +291,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let persistedListCalls = 0;
 
     const originalAgentSessionsList = host.agentSessionsList;
+    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -308,6 +309,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       persistedListCalls += 1;
       return [];
     };
+    host.agentSessionsListBulk = async () => ({
+      "task-1": [],
+    });
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -391,6 +395,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
+      host.agentSessionsListBulk = originalAgentSessionsListBulk;
       host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
@@ -418,6 +423,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }>();
 
     const originalAgentSessionsList = host.agentSessionsList;
+    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
@@ -434,6 +440,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       persistedListCalls += 1;
       return [];
     };
+    host.agentSessionsListBulk = async () => ({
+      "task-1": [],
+    });
     host.agentSessionUpsert = async () => {};
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
@@ -519,6 +528,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.unmount();
 
       host.agentSessionsList = originalAgentSessionsList;
+      host.agentSessionsListBulk = originalAgentSessionsListBulk;
       host.agentSessionUpsert = originalAgentSessionUpsert;
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;

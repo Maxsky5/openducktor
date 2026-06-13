@@ -87,7 +87,7 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
       }
       sessionsRef.current[externalSessionId] = updater(current);
     },
-    listenToAgentSession: () => {},
+    listenToAgentSession: async () => {},
     resolveTaskWorktree: async () => null,
     ensureRuntime: async () => ({
       kind: "opencode",
@@ -439,7 +439,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       taskRef: { current: [] },
       unsubscribersRef: { current: new Map([["session-1", unsubscribe]]) },
       updateSession,
-      listenToAgentSession: () => undefined,
+      listenToAgentSession: async () => undefined,
     });
 
     try {
