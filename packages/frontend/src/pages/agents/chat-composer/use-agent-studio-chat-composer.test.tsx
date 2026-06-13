@@ -184,7 +184,6 @@ const createRepoSettings = (
 
 const createActiveSession = (overrides = {}) =>
   createAgentSessionFixture({
-    modelCatalog: CATALOG,
     selectedModel: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -257,6 +256,8 @@ const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: createActiveWorkspace("/repo"),
   activeSession: null,
   activeSessionSummary: null,
+  activeSessionModelCatalog: null,
+  activeSessionIsLoadingModelCatalog: false,
   role: "spec",
   reusablePrompts: [],
   repoSettings: createRepoSettings(null),
@@ -560,7 +561,6 @@ describe("useAgentStudioChatComposer", () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const activeSession = createActiveSession({
       runtimeKind: "codex",
-      modelCatalog: CODEX_CATALOG,
       selectedModel: {
         runtimeKind: "codex",
         providerId: "openai",
@@ -574,6 +574,7 @@ describe("useAgentStudioChatComposer", () => {
       createBaseProps({
         repoSettings: createRepoSettings(null, "opencode"),
         activeSession,
+        activeSessionModelCatalog: CODEX_CATALOG,
         loadFileSearch,
         readSessionFileSearch,
       }),
@@ -896,7 +897,6 @@ describe("useAgentStudioChatComposer", () => {
   test("updates active session model when catalog ids differ from provider model option values", async () => {
     const updateAgentSessionModel = mock(() => {});
     const activeSession = createActiveSession({
-      modelCatalog: CATALOG_WITH_TRANSPORT_MODEL_IDS,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "openai",
@@ -907,6 +907,7 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionModelCatalog: CATALOG_WITH_TRANSPORT_MODEL_IDS,
         loadCatalog: async () => CATALOG_WITH_TRANSPORT_MODEL_IDS,
         updateAgentSessionModel,
       }),
@@ -962,13 +963,12 @@ describe("useAgentStudioChatComposer", () => {
 
   test("preserves active session model when catalog cannot produce a replacement", async () => {
     const updateAgentSessionModel = mock(() => {});
-    const activeSession = createActiveSession({
-      modelCatalog: EMPTY_CATALOG,
-    });
+    const activeSession = createActiveSession();
 
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionModelCatalog: EMPTY_CATALOG,
         updateAgentSessionModel,
       }),
     );
@@ -1041,16 +1041,14 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("does not load the repo composer catalog while an active session owns runtime catalog loading", async () => {
+  test("does not load the repo composer catalog while selected-session runtime data is loading", async () => {
     const loadCatalog = mock(async () => CATALOG);
-    const activeSession = createActiveSession({
-      modelCatalog: null,
-      isLoadingModelCatalog: true,
-    });
+    const activeSession = createActiveSession();
 
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionIsLoadingModelCatalog: true,
         loadCatalog,
       }),
     );
@@ -1073,14 +1071,12 @@ describe("useAgentStudioChatComposer", () => {
   });
 
   test("keeps loading while no catalog source is available for an active session", async () => {
-    const activeSession = createActiveSession({
-      modelCatalog: null,
-      isLoadingModelCatalog: true,
-    });
+    const activeSession = createActiveSession();
 
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionIsLoadingModelCatalog: true,
         loadCatalog: async () => CATALOG,
       }),
     );
@@ -1427,7 +1423,6 @@ describe("useAgentStudioChatComposer", () => {
     const activeSession = createActiveSession({
       status: "idle",
       selectedModel: null,
-      modelCatalog: null,
       contextUsage: {
         totalTokens: 31,
       },
@@ -1481,7 +1476,6 @@ describe("useAgentStudioChatComposer", () => {
     };
     const activeSession = createActiveSession({
       status: "idle",
-      modelCatalog: catalogWithSelectionFallback,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -1499,7 +1493,12 @@ describe("useAgentStudioChatComposer", () => {
       ],
     });
 
-    const harness = createHookHarness(createBaseProps({ activeSession }));
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession,
+        activeSessionModelCatalog: catalogWithSelectionFallback,
+      }),
+    );
 
     try {
       await harness.mount();
@@ -1532,7 +1531,6 @@ describe("useAgentStudioChatComposer", () => {
       ],
     };
     const activeSession = createActiveSession({
-      modelCatalog: catalogWithContextFallback,
       selectedModel: {
         runtimeKind: "opencode",
         providerId: "anthropic",
@@ -1548,6 +1546,7 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionModelCatalog: catalogWithContextFallback,
       }),
     );
 

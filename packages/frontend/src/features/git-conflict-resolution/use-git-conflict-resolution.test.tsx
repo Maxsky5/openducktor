@@ -28,9 +28,7 @@ const buildSession = (
     pendingApprovals: [],
     pendingQuestions: [],
     todos: [],
-    modelCatalog: null,
     selectedModel: rest.selectedModel ?? null,
-    isLoadingModelCatalog: false,
   };
 };
 

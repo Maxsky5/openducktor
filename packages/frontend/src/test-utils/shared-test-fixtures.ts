@@ -104,9 +104,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
-  modelCatalog: null,
   selectedModel: null,
-  isLoadingModelCatalog: false,
 };
 
 const BASE_REPO_RUNTIME_HEALTH_FIXTURE: RepoRuntimeHealthCheck = {

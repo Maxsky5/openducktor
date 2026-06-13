@@ -36,8 +36,6 @@ describe("useSessionRuntimeData", () => {
           externalSessionId: "external-1",
           runtimeKind: "opencode",
           workingDirectory: "/repo",
-          modelCatalog: null,
-          isLoadingModelCatalog: true,
         }),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
         repoReadinessState: "ready",
@@ -51,7 +49,7 @@ describe("useSessionRuntimeData", () => {
       await harness.mount();
 
       expect(readSessionTodos).not.toHaveBeenCalled();
-      expect(harness.getLatest().session?.todos).toEqual([]);
+      expect(harness.getLatest().runtimeData.todos).toEqual([]);
       expect(harness.getLatest().runtimeDataError).toBeNull();
     } finally {
       await harness.unmount();

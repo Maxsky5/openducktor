@@ -69,7 +69,6 @@ export const createBuildSessionFixture = (overrides = {}) =>
       workingDirectory: "/tmp/repo/worktree",
       selectedModel: null,
       promptOverrides: {},
-      isLoadingModelCatalog: false,
     },
     overrides,
   );

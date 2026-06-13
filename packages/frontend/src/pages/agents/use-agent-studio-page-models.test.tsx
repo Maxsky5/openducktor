@@ -91,6 +91,12 @@ const createSession = (
   });
 };
 
+const emptyRuntimeData = {
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+};
+
 const createPendingApproval = (
   requestId = "perm-1",
   actionName = "shell",
@@ -145,6 +151,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
     isViewSwitching: false,
+    activeSessionRuntimeData: emptyRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
     allSessionSummaries,
@@ -247,6 +254,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       sessionsForTask: selectedSessionCore.sessionsForTask,
       allSessionSummaries: selectedSessionCore.allSessionSummaries,
       activeSession: selectedSessionCore.activeSession,
+      activeSessionRuntimeData: selectedSessionCore.activeSessionRuntimeData,
       runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
@@ -362,12 +370,16 @@ describe("useAgentStudioPageModels", () => {
     const codexSession = createSession("session-codex", {
       runtimeKind: "codex",
       selectedModel: null,
-      isLoadingModelCatalog: true,
     });
     const harness = createHookHarness(
       createHookArgs({
         selectedSessionCore: {
           activeSession: codexSession,
+          activeSessionRuntimeData: {
+            modelCatalog: null,
+            todos: [],
+            isLoadingModelCatalog: true,
+          },
           sessionsForTask: [toAgentSessionSummary(codexSession)],
           runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         },
@@ -1462,7 +1474,6 @@ describe("useAgentStudioPageModels", () => {
     const initialSession = createSession("session-1", "external-1", {
       role: "spec",
       status: "running",
-      isLoadingModelCatalog: false,
     });
     const baseProps = createHookArgs({
       selectedSessionCore: {
@@ -1484,7 +1495,6 @@ describe("useAgentStudioPageModels", () => {
     const sameSessionIdNewRef = createSession("session-1", "external-1", {
       role: "spec",
       status: "running",
-      isLoadingModelCatalog: false,
     });
     await harness.update(
       createHookArgs({
@@ -1507,7 +1517,6 @@ describe("useAgentStudioPageModels", () => {
       role: "spec",
       status: "running",
       pendingQuestions: [],
-      isLoadingModelCatalog: false,
     });
     const baseProps = createHookArgs({
       selectedSessionCore: {
@@ -1543,7 +1552,6 @@ describe("useAgentStudioPageModels", () => {
           ],
         },
       ],
-      isLoadingModelCatalog: false,
     });
     await harness.update(
       createHookArgs({

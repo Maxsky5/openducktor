@@ -80,6 +80,11 @@ const baseDocuments = {
   planDoc: taskDocument,
   qaDoc: taskDocument,
 };
+const baseActiveSessionRuntimeData = {
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+};
 
 const baseArgs: BuildArgs = {
   view: {
@@ -92,6 +97,7 @@ const baseArgs: BuildArgs = {
     sessionsForTask: [session],
     allSessionSummaries: [session],
     activeSession: session,
+    activeSessionRuntimeData: baseActiveSessionRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
@@ -223,6 +229,7 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       sessionsForTask: [session],
       allSessionSummaries: [session],
       activeSession: session,
+      activeSessionRuntimeData: baseActiveSessionRuntimeData,
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       viewSessionRuntimeDataError: "runtime data failed",
       hasActiveGitConflict: true,

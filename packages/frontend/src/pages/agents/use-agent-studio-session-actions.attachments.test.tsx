@@ -107,6 +107,7 @@ const createBaseArgs = (): HookArgs => ({
   role: "spec",
   launchActionId: "spec_initial",
   activeSession: createAgentSessionFixture({ externalSessionId: "session-existing" }),
+  activeSessionIsLoadingModelCatalog: false,
   selectedModelSelection: null,
   selectedModelDescriptor: {
     id: "openai/gpt-5",

@@ -19,7 +19,7 @@ Files:
 
 Owns:
 
-- reading persisted `TaskCard.agentSessions`
+- reading persisted task session records supplied by the task-session-record query
 - scanning runtime presence by repo path, runtime kind, and working directory
 - merging persisted records plus runtime presence into `AgentSessionState`
 - subscribing to live sessions returned by runtime presence
@@ -93,6 +93,29 @@ Do not resolve live and persisted selections in separate branches.
 Invariant: selected-session lifecycle owns only the selected session's runtime
 and history state. Page route/task switching is orchestration state and must not
 be stored in the lifecycle model.
+
+### Selected Session Runtime Data
+
+Files:
+
+- `hooks/use-session-runtime-data.ts`
+- `pages/agents/use-agent-studio-selection-controller.ts`
+
+Owns:
+
+- reading selected-session model catalog and todos through TanStack Query
+- reporting selected-session runtime-data read errors
+- providing view-only runtime data to Agent Studio
+
+Must not own:
+
+- `AgentSessionState` identity, status, transcript messages, or history load state
+- task session records
+- runtime route resolution
+
+Invariant: runtime-data reads must not rewrite the session store. Agent Studio may
+compose a view session for chat/thread components at the presentation boundary,
+but lifecycle decisions must use the raw selected `AgentSessionState`.
 
 ### Session Actions
 

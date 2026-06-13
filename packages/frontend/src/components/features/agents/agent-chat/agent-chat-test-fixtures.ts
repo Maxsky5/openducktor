@@ -1,7 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
-  AgentModelCatalog,
   AgentModelSelection,
   AgentSessionTodoItem,
 } from "@openducktor/core";
@@ -43,25 +42,6 @@ const baseTask: TaskCard = {
   },
   createdAt: "2026-02-20T10:00:00.000Z",
   updatedAt: "2026-02-20T10:00:00.000Z",
-};
-
-const baseCatalog: AgentModelCatalog = {
-  models: [
-    {
-      id: "openai/gpt-5.3-codex",
-      providerId: "openai",
-      providerName: "OpenAI",
-      modelId: "gpt-5.3-codex",
-      modelName: "GPT-5.3 Codex",
-      variants: ["high", "low"],
-      contextWindow: 400_000,
-      outputLimit: 128_000,
-    },
-  ],
-  defaultModelsByProvider: {
-    openai: "gpt-5.3-codex",
-  },
-  profiles: [{ name: "Hephaestus (Deep Agent)", mode: "primary", color: "#f59e0b" }],
 };
 
 const baseSelection: AgentModelSelection = {
@@ -106,9 +86,7 @@ const baseSession: AgentSessionState = {
   pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
-  modelCatalog: baseCatalog,
   selectedModel: baseSelection,
-  isLoadingModelCatalog: false,
 };
 
 export const TEST_ROLE_OPTIONS: AgentRoleOption[] = [

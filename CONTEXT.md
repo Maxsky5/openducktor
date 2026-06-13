@@ -269,8 +269,12 @@ The startup projection that combines persisted **Task Session History** records 
 _Avoid_: session hydration, reconciliation, presence store, reattach
 
 **Session History Load**:
-The runtime-owned read that loads the visible **Transcript**, **Session Todos**, and other session-scoped runtime data for a selected **Agent Session**. **Session History Load** has ordinary loading, loaded, and failed states; it should not invent missing runtime session data.
+The runtime-owned read that loads the visible **Transcript** for a selected **Agent Session**. **Session History Load** has ordinary loading, loaded, and failed states; it should not invent missing runtime session data.
 _Avoid_: transcript hydration, runtime recovery, fallback loading
+
+**Selected Session Runtime Data**:
+The query-owned selected-session reads for runtime-scoped UI data such as **Session Todos** and model catalog. **Selected Session Runtime Data** may be composed into an **Agent Chat** view model, but it does not own **Agent Session** identity, status, **Transcript**, or history loading.
+_Avoid_: session state overlay, runtime data hydration, transcript store
 
 **Runtime Session Reference**:
 The durable reference used to ask a **Runtime** about one **Agent Session**: runtime kind, repository path, working directory, and external session id, plus task or role context when a user sends or replies. A **Runtime Session Reference** is not a live route.

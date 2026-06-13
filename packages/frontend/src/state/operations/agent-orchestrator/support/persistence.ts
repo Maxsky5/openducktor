@@ -103,7 +103,6 @@ export const fromPersistedSessionRecord = (
       pendingApprovals: [],
       pendingQuestions: [],
       todos: [],
-      modelCatalog: null,
       selectedModel: session.selectedModel
         ? normalizePersistedSelection({
             ...session.selectedModel,
@@ -114,7 +113,6 @@ export const fromPersistedSessionRecord = (
             ),
           })
         : null,
-      isLoadingModelCatalog: false,
     },
     repoPath,
   );

@@ -11,6 +11,7 @@ import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
+import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
@@ -104,6 +105,7 @@ export type AgentStudioSelectionControllerResult = {
   viewSessionsForTask: AgentSessionSummary[];
   viewActiveSessionSummary: AgentSessionSummary | null;
   viewActiveSession: AgentSessionState | null;
+  viewSessionRuntimeData: SessionRuntimeDataState["runtimeData"];
   viewSessionRuntimeDataError?: string | null;
   viewRole: AgentRole;
   viewLaunchActionId: SessionLaunchActionId;
@@ -346,6 +348,15 @@ export function useAgentStudioSelectionController({
     readSessionModelCatalog,
     readSessionTodos,
   });
+  const viewActiveSessionForDisplay = useMemo(() => {
+    if (!viewActiveSession) {
+      return null;
+    }
+    return {
+      ...viewActiveSession,
+      todos: viewSessionRuntimeData.runtimeData.todos,
+    };
+  }, [viewActiveSession, viewSessionRuntimeData.runtimeData.todos]);
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"
@@ -367,7 +378,7 @@ export function useAgentStudioSelectionController({
 
     return deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute: viewSelectedSessionRoute,
-      session: viewSessionRuntimeData.session,
+      session: viewActiveSession,
       repoReadinessState: viewSessionReadinessState,
       sessionLoadError: sessionReadModelError,
     });
@@ -379,7 +390,7 @@ export function useAgentStudioSelectionController({
     viewSelection.sessionRoute,
     viewSessionParamFromSelection,
     viewSessionReadinessState,
-    viewSessionRuntimeData.session,
+    viewActiveSession,
   ]);
   useEffect(() => {
     if (
@@ -416,7 +427,8 @@ export function useAgentStudioSelectionController({
       viewSelectedTask,
       viewSessionsForTask,
       viewActiveSessionSummary: viewSelection.sessionSummary,
-      viewActiveSession: viewSessionRuntimeData.session,
+      viewActiveSession: viewActiveSessionForDisplay,
+      viewSessionRuntimeData: viewSessionRuntimeData.runtimeData,
       viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
       viewRole,
       viewLaunchActionId,
@@ -444,8 +456,9 @@ export function useAgentStudioSelectionController({
       viewRole,
       viewSelectedTask,
       viewSelection.sessionSummary,
+      viewActiveSessionForDisplay,
+      viewSessionRuntimeData.runtimeData,
       viewSessionRuntimeData.runtimeDataError,
-      viewSessionRuntimeData.session,
       viewSessionsForTask,
       viewTaskId,
     ],

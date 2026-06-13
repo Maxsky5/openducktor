@@ -5,6 +5,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 type UseAgentStudioSessionActionStateArgs = {
   activeSession: AgentSessionState | null;
+  activeSessionIsLoadingModelCatalog: boolean;
   role: AgentRole;
   selectedModelSelection: AgentModelSelection | null;
 };
@@ -26,6 +27,7 @@ type UseAgentStudioSessionActionStateResult = {
 
 export function useAgentStudioSessionActionState({
   activeSession,
+  activeSessionIsLoadingModelCatalog,
   role,
   selectedModelSelection,
 }: UseAgentStudioSessionActionStateArgs): UseAgentStudioSessionActionStateResult {
@@ -35,11 +37,9 @@ export function useAgentStudioSessionActionState({
   const activeSessionRole = activeSession?.role ?? role;
   const activeSessionStatus = activeSession?.status ?? "stopped";
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
-  const activeSessionIsLoadingModelCatalog = activeSession?.isLoadingModelCatalog === true;
   const activeSessionPendingApprovals = activeSession?.pendingApprovals ?? [];
   const activeSessionPendingQuestions = activeSession?.pendingQuestions ?? [];
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
-  const activeSessionRuntimeDescriptor = activeSession?.modelCatalog?.runtime ?? null;
   const hasActiveSession = activeSession != null;
   const isSessionBusy =
     hasActiveSession && (activeSessionStatus === "running" || activeSessionStatus === "starting");
@@ -55,7 +55,6 @@ export function useAgentStudioSessionActionState({
     (selectedRuntimeKind
       ? runtimeDefinitions.find((runtime) => runtime.kind === selectedRuntimeKind)
       : null) ??
-    activeSessionRuntimeDescriptor ??
     runtimeDefinitions.find((runtime) => runtime.kind === activeSessionRuntimeKind) ??
     null;
   const supportsQueuedUserMessages =

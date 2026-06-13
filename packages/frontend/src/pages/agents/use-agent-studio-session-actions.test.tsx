@@ -231,6 +231,7 @@ const createBaseArgs = (): HookArgs => {
     role: "spec",
     launchActionId: "spec_initial",
     activeSession: null,
+    activeSessionIsLoadingModelCatalog: false,
     selectedModelSelection: null,
     selectedModelDescriptor: null,
     sessionsForTask: [],

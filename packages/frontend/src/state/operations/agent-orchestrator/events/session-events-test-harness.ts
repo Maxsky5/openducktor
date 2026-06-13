@@ -36,9 +36,7 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
   pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
-  modelCatalog: null,
   selectedModel: null,
-  isLoadingModelCatalog: false,
   ...overrides,
   historyLoadState: overrides.historyLoadState ?? "not_requested",
 });

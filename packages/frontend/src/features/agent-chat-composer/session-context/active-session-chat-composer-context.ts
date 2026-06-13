@@ -8,10 +8,8 @@ export type ActiveSessionChatComposerSession = Pick<
   | "repoPath"
   | "status"
   | "selectedModel"
-  | "modelCatalog"
   | "runtimeKind"
   | "workingDirectory"
-  | "isLoadingModelCatalog"
   | "contextUsage"
   | "messages"
 >;
@@ -26,10 +24,8 @@ export type ActiveSessionChatComposerContext = {
   repoPath: string;
   status: AgentSessionState["status"] | null;
   selectedModel: AgentModelSelection | null;
-  modelCatalog: AgentSessionState["modelCatalog"] | null;
   runtimeKind: AgentSessionState["runtimeKind"] | null;
   workingDirectory: string;
-  isLoadingModelCatalog: boolean;
   liveContextUsage: AgentSessionState["contextUsage"] | null;
   messages: AgentSessionState["messages"] | null;
   hasActiveSession: boolean;
@@ -48,15 +44,11 @@ export const resolveActiveSessionChatComposerContext = (
     repoPath: activeSession?.repoPath?.trim() ?? activeSessionSummary?.repoPath?.trim() ?? "",
     status: activeSession?.status ?? activeSessionSummary?.status ?? null,
     selectedModel,
-    modelCatalog: activeSession?.modelCatalog ?? null,
     runtimeKind: activeSession?.runtimeKind ?? activeSessionSummary?.runtimeKind ?? null,
     workingDirectory:
       activeSession?.workingDirectory?.trim() ??
       activeSessionSummary?.workingDirectory?.trim() ??
       "",
-    isLoadingModelCatalog:
-      activeSession?.isLoadingModelCatalog === true ||
-      (activeSession == null && activeSessionSummary != null),
     liveContextUsage: activeSession?.contextUsage ?? null,
     messages: activeSession?.messages ?? null,
     hasActiveSession: externalSessionId !== null,

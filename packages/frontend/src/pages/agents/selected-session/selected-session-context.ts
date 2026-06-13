@@ -8,6 +8,7 @@ import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
   SelectedAgentSessionViewLifecycle,
@@ -37,13 +38,10 @@ type SelectedSessionRuntimeReadinessContext = {
 type SelectedSessionComposerActiveSession =
   | (Pick<
       AgentSessionState,
-      | "externalSessionId"
-      | "selectedModel"
-      | "isLoadingModelCatalog"
-      | "pendingApprovals"
-      | "pendingQuestions"
+      "externalSessionId" | "selectedModel" | "pendingApprovals" | "pendingQuestions"
     > & {
       runtimeKind: RuntimeKind | null;
+      isLoadingModelCatalog: boolean;
     })
   | null;
 
@@ -124,6 +122,7 @@ export type AgentStudioSelectedSessionContextInput = {
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
   activeSession: AgentSessionState | null;
+  activeSessionRuntimeData: SessionRuntimeDataState["runtimeData"];
   runtimeDefinitions: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   hasActiveGitConflict: boolean;
@@ -243,6 +242,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   sessionsForTask,
   allSessionSummaries,
   activeSession,
+  activeSessionRuntimeData,
   runtimeDefinitions,
   sessionRuntimeDataError,
   hasActiveGitConflict,
@@ -318,7 +318,7 @@ export const buildAgentStudioSelectedSessionContext = ({
             externalSessionId: activeSession.externalSessionId,
             runtimeKind: activeSession.runtimeKind ?? null,
             selectedModel: activeSession.selectedModel,
-            isLoadingModelCatalog: activeSession.isLoadingModelCatalog,
+            isLoadingModelCatalog: activeSessionRuntimeData.isLoadingModelCatalog,
             pendingApprovals: activeSession.pendingApprovals,
             pendingQuestions: activeSession.pendingQuestions,
           }

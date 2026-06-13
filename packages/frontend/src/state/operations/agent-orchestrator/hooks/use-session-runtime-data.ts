@@ -32,9 +32,19 @@ type UseSessionRuntimeDataArgs = {
 };
 
 export type SessionRuntimeDataState = {
-  session: AgentSessionState | null;
+  runtimeData: {
+    modelCatalog: AgentModelCatalog | null;
+    todos: AgentSessionTodoItem[];
+    isLoadingModelCatalog: boolean;
+  };
   runtimeDataError: string | null;
 };
+
+const emptyRuntimeData: SessionRuntimeDataState["runtimeData"] = Object.freeze({
+  modelCatalog: null,
+  todos: [],
+  isLoadingModelCatalog: false,
+});
 
 export const useSessionRuntimeData = ({
   session,
@@ -111,7 +121,7 @@ export const useSessionRuntimeData = ({
   return useMemo(() => {
     if (!session) {
       return {
-        session: null,
+        runtimeData: emptyRuntimeData,
         runtimeDataError: null,
       };
     }
@@ -121,29 +131,17 @@ export const useSessionRuntimeData = ({
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
     const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
-    const resolvedCatalog = session.modelCatalog ?? catalogQuery.data ?? null;
+    const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
     const isLoadingModelCatalog =
       runtimeDataSupportError || catalogQueryError
         ? false
         : canReadSessionRuntimeData
           ? resolvedCatalog === null && catalogQuery.isPending
-          : session.isLoadingModelCatalog && resolvedCatalog === null;
-
-    if (
-      resolvedCatalog === session.modelCatalog &&
-      resolvedTodos === session.todos &&
-      isLoadingModelCatalog === session.isLoadingModelCatalog
-    ) {
-      return {
-        session,
-        runtimeDataError,
-      };
-    }
+          : false;
 
     return {
-      session: {
-        ...session,
+      runtimeData: {
         modelCatalog: resolvedCatalog,
         todos: resolvedTodos,
         isLoadingModelCatalog,

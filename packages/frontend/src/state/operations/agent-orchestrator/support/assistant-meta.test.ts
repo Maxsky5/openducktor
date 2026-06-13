@@ -22,29 +22,12 @@ const sessionFixture: AgentSessionState = {
   pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
-  modelCatalog: {
-    models: [
-      {
-        id: "openai/gpt-5",
-        providerId: "openai",
-        providerName: "OpenAI",
-        modelId: "gpt-5",
-        modelName: "GPT-5",
-        variants: ["high"],
-        contextWindow: 200000,
-        outputLimit: 8000,
-      },
-    ],
-    defaultModelsByProvider: { openai: "gpt-5" },
-    profiles: [],
-  },
   selectedModel: {
     runtimeKind: "opencode",
     providerId: "openai",
     modelId: "gpt-5",
     variant: "high",
   },
-  isLoadingModelCatalog: false,
 };
 
 describe("agent-orchestrator/support/assistant-meta", () => {

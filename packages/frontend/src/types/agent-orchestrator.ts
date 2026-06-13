@@ -6,7 +6,6 @@ import type {
   RuntimeKind,
 } from "@openducktor/contracts";
 import type {
-  AgentModelCatalog,
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
@@ -185,9 +184,7 @@ export type AgentSessionState = {
   /** Live-only parent-session overlay keyed by child runtime session id. */
   subagentPendingQuestionsByExternalSessionId?: Record<string, AgentQuestionRequest[]> | undefined;
   todos: AgentSessionTodoItem[];
-  modelCatalog: AgentModelCatalog | null;
   selectedModel: AgentModelSelection | null;
-  isLoadingModelCatalog: boolean;
   promptOverrides?: RepoPromptOverrides;
   pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;

@@ -51,9 +51,7 @@ const createSessionFixture = (): AgentSessionState => ({
   pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
-  modelCatalog: null,
   selectedModel: null,
-  isLoadingModelCatalog: false,
 });
 
 const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({

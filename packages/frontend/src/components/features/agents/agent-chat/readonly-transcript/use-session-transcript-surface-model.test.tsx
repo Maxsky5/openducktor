@@ -117,9 +117,7 @@ function makeLiveTranscriptSession(): AgentSessionState {
     pendingApprovals: [makePendingApproval()],
     pendingQuestions: [makePendingQuestion()],
     todos: [],
-    modelCatalog: null,
     selectedModel: null,
-    isLoadingModelCatalog: false,
   };
 }
 

@@ -38,7 +38,6 @@ describe("agent-orchestrator/support/persistence", () => {
     expect(hydrated.pendingQuestions).toEqual([]);
     expect(sessionMessagesToArray(hydrated)).toEqual([]);
     expect(hydrated.selectedModel?.modelId).toBe("gpt-5");
-    expect(hydrated.isLoadingModelCatalog).toBe(false);
   });
 
   test("does not persist pending input requests in session snapshots", () => {

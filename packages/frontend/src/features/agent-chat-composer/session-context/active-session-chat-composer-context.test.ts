@@ -29,10 +29,8 @@ const makeHydratedSession = (): ActiveSessionChatComposerSession => ({
     modelId: "gpt-5",
     profileId: "spec-agent",
   },
-  modelCatalog: null,
   runtimeKind: "opencode",
   workingDirectory: "/repo/session-worktree",
-  isLoadingModelCatalog: false,
   contextUsage: null,
   messages: [],
 });
@@ -46,7 +44,6 @@ describe("active-session-chat-composer-context", () => {
     expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo/session-worktree");
-    expect(state.isLoadingModelCatalog).toBe(false);
     expect(state.hasActiveSession).toBe(true);
   });
 
@@ -58,7 +55,6 @@ describe("active-session-chat-composer-context", () => {
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
-    expect(state.isLoadingModelCatalog).toBe(true);
     expect(state.hasActiveSession).toBe(true);
   });
 });

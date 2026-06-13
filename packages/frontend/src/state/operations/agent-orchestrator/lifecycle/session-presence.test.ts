@@ -33,9 +33,7 @@ const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSe
     { requestId: "persisted-question" } as AgentSessionState["pendingQuestions"][number],
   ],
   todos: [],
-  modelCatalog: null,
   selectedModel: null,
-  isLoadingModelCatalog: false,
   promptOverrides: {},
   ...overrides,
 });

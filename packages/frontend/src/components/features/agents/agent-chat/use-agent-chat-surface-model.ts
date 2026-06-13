@@ -114,13 +114,10 @@ type AgentChatComposerConfig = {
   activeSession:
     | (Pick<
         AgentSessionState,
-        | "externalSessionId"
-        | "selectedModel"
-        | "isLoadingModelCatalog"
-        | "pendingApprovals"
-        | "pendingQuestions"
+        "externalSessionId" | "selectedModel" | "pendingApprovals" | "pendingQuestions"
       > & {
         runtimeKind: RuntimeKind | null;
+        isLoadingModelCatalog: boolean;
       })
     | null;
   isSessionWorking: boolean;

@@ -37,10 +37,8 @@ export type AgentSessionActionState = Pick<
   | "role"
   | "status"
   | "selectedModel"
-  | "isLoadingModelCatalog"
   | "pendingApprovals"
   | "pendingQuestions"
-  | "modelCatalog"
   | "runtimeKind"
 >;
 
@@ -51,6 +49,7 @@ type UseAgentStudioSessionActionsArgs = {
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
   activeSession: AgentSessionState | null;
+  activeSessionIsLoadingModelCatalog: boolean;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   sessionsForTask: AgentSessionSummary[];
@@ -106,6 +105,7 @@ export function useAgentStudioSessionActions({
   role,
   launchActionId,
   activeSession,
+  activeSessionIsLoadingModelCatalog,
   selectedModelSelection,
   selectedModelDescriptor,
   sessionsForTask,
@@ -128,6 +128,7 @@ export function useAgentStudioSessionActions({
 }: UseAgentStudioSessionActionsArgs): UseAgentStudioSessionActionsResult {
   const sessionState = useAgentStudioSessionActionState({
     activeSession,
+    activeSessionIsLoadingModelCatalog,
     role,
     selectedModelSelection,
   });

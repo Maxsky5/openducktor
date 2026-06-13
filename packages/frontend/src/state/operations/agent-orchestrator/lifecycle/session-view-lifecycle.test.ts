@@ -28,9 +28,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   pendingApprovals: [],
   pendingQuestions: [],
   todos: [],
-  modelCatalog: null,
   selectedModel: null,
-  isLoadingModelCatalog: false,
   promptOverrides: {},
   ...overrides,
 });

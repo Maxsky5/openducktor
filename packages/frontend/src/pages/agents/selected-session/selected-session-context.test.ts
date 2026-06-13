@@ -47,6 +47,11 @@ const createInput = (
     sessionsForTask,
     allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
     activeSession: null,
+    activeSessionRuntimeData: {
+      modelCatalog: null,
+      todos: [],
+      isLoadingModelCatalog: false,
+    },
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,

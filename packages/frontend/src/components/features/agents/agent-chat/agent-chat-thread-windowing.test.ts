@@ -236,12 +236,10 @@ describe("agent-chat-thread windowing helpers", () => {
     const baseSession = buildSession({
       messages,
       selectedModel: buildModelSelection({ variant: "high" }),
-      isLoadingModelCatalog: false,
     });
     const updatedSession = {
       ...baseSession,
       selectedModel: buildModelSelection({ variant: "low" }),
-      isLoadingModelCatalog: true,
     };
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 

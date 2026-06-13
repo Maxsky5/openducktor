@@ -34,21 +34,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
             variant: "high",
             profileId: "Hephaestus",
           },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
-          },
         }),
       },
     };
@@ -220,31 +205,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
             modelId: "claude-sonnet",
             profileId: "Hephaestus",
           },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-              {
-                id: "anthropic/claude-sonnet",
-                providerId: "anthropic",
-                providerName: "Anthropic",
-                modelId: "claude-sonnet",
-                modelName: "Claude Sonnet",
-                variants: [],
-                contextWindow: 100_000,
-                outputLimit: 4_096,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5", anthropic: "claude-sonnet" },
-          },
         }),
       },
     };
@@ -344,21 +304,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
             modelId: "gpt-5",
             variant: "high",
             profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
           },
         }),
       },
@@ -474,21 +419,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
             variant: "high",
             profileId: "Hephaestus",
           },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
-          },
         }),
       },
     };
@@ -598,21 +528,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
             modelId: "gpt-5",
             variant: "high",
             profileId: "Hephaestus",
-          },
-          modelCatalog: {
-            models: [
-              {
-                id: "openai/gpt-5",
-                providerId: "openai",
-                providerName: "OpenAI",
-                modelId: "gpt-5",
-                modelName: "GPT-5",
-                variants: ["high"],
-                contextWindow: 200_000,
-                outputLimit: 8_192,
-              },
-            ],
-            defaultModelsByProvider: { openai: "gpt-5" },
           },
         }),
       },
