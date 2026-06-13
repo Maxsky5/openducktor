@@ -149,7 +149,7 @@ Owns:
 
 - loading a readonly transcript from runtime history
 - preferring an already-loaded live session when one exists
-- merging parent-observed pending permissions/questions into the local transcript view
+- reading pending permissions/questions from the live session when one exists
 - replying to pending input through an explicit runtime context ref
 
 Must not own:
@@ -157,6 +157,7 @@ Must not own:
 - opening or attaching sessions in the global orchestrator store
 - runtime route resolution
 - workflow session status
+- parent-observed copies of pending permissions/questions
 
 ### Task Session Records
 

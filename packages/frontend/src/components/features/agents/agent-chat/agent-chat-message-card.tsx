@@ -2,7 +2,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
 
@@ -15,10 +15,8 @@ type AgentChatMessageCardProps = {
   sessionAgentColors?: Record<string, string>;
   sessionWorkingDirectory?: string | null | undefined;
   sessionRuntimeKind?: RuntimeKind | null | undefined;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
   subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
 };
@@ -29,10 +27,8 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
-  subagentPendingApprovals,
   subagentPendingApprovalCount,
   subagentPendingApprovalCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
-  subagentPendingQuestions,
   subagentPendingQuestionCount,
   subagentPendingQuestionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
@@ -76,9 +72,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
         systemPromptBody={vm.systemPromptBody}
         sessionWorkingDirectory={sessionWorkingDirectory}
         workflowToolAliasesByCanonical={workflowToolAliasesByCanonical}
-        subagentPendingApprovals={subagentPendingApprovals}
         subagentPendingApprovalCount={resolvedSubagentPendingApprovalCount}
-        subagentPendingQuestions={subagentPendingQuestions}
         subagentPendingQuestionCount={resolvedSubagentPendingQuestionCount}
       />
     </article>

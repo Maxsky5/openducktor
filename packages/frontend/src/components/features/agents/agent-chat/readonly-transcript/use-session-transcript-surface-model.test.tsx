@@ -84,20 +84,6 @@ function makePendingQuestion() {
   };
 }
 
-function makeTranscriptSourceWithPendingQuestion(): RuntimeSessionTranscriptSource {
-  return {
-    ...makeTranscriptSource(),
-    pendingQuestions: [makePendingQuestion()],
-  };
-}
-
-function makeTranscriptSourceWithPendingApproval(): RuntimeSessionTranscriptSource {
-  return {
-    ...makeTranscriptSource(),
-    pendingApprovals: [makePendingApproval()],
-  };
-}
-
 function makeLiveTranscriptSession(): AgentSessionState {
   return {
     runtimeKind: "opencode",
@@ -473,9 +459,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("loads existing history with parent-observed pending inputs", async () => {
+  test("loads existing history as an idle transcript without source-level pending inputs", async () => {
     const transcriptSource = makeTranscriptSource();
-    const pendingApproval = makePendingApproval();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -489,11 +474,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: {
-          ...transcriptSource,
-          pendingApprovals: [pendingApproval],
-          pendingQuestions: [makePendingQuestion()],
-        },
+        source: transcriptSource,
       },
       { wrapper },
     );
@@ -510,14 +491,15 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor(
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
       );
-      expect(harness.getLatest().model.thread.session?.status).toBe("running");
+      expect(harness.getLatest().model.thread.session?.status).toBe("idle");
+      expect(harness.getLatest().model.thread.session?.pendingApprovals).toEqual([]);
+      expect(harness.getLatest().model.thread.session?.pendingQuestions).toEqual([]);
     } finally {
       await harness.unmount();
     }
   });
 
   test("prefers an already-live transcript session when it exists locally", async () => {
-    const pendingApproval = makePendingApproval();
     const liveSession = makeLiveTranscriptSession();
     useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
       requestedSessionId === "session-subagent-1" ? liveSession : null,
@@ -535,10 +517,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: {
-          ...makeTranscriptSource(),
-          pendingApprovals: [pendingApproval],
-        },
+        source: makeTranscriptSource(),
       },
       { wrapper },
     );
@@ -567,9 +546,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("keeps parent-observed subagent approvals on the transcript session", async () => {
-    const transcriptSourceWithPendingApproval = makeTranscriptSourceWithPendingApproval();
+  test("uses live subagent approvals on the transcript session", async () => {
     const pendingApproval = makePendingApproval();
+    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
+      requestedSessionId === "session-subagent-1" ? makeLiveTranscriptSession() : null,
+    );
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -583,7 +564,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithPendingApproval,
+        source: makeTranscriptSource(),
       },
       { wrapper },
     );
@@ -600,8 +581,10 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("replies to parent-observed approvals through the runtime transcript session", async () => {
-    const transcriptSourceWithPendingApproval = makeTranscriptSourceWithPendingApproval();
+  test("replies to live subagent approvals through the runtime transcript session", async () => {
+    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
+      requestedSessionId === "session-subagent-1" ? makeLiveTranscriptSession() : null,
+    );
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -615,7 +598,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithPendingApproval,
+        source: makeTranscriptSource(),
       },
       { wrapper },
     );
@@ -633,15 +616,16 @@ describe("useSessionTranscriptSurfaceModel", () => {
         "permission-1",
         "approve_once",
       );
-      await harness.waitFor((state) => state.model.thread.session?.pendingApprovals.length === 0);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps and replies to parent-observed subagent questions through the runtime transcript session", async () => {
-    const transcriptSourceWithPendingQuestion = makeTranscriptSourceWithPendingQuestion();
+  test("uses and replies to live subagent questions through the runtime transcript session", async () => {
     const pendingQuestion = makePendingQuestion();
+    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
+      requestedSessionId === "session-subagent-1" ? makeLiveTranscriptSession() : null,
+    );
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -655,7 +639,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-subagent-1",
-        source: transcriptSourceWithPendingQuestion,
+        source: makeTranscriptSource(),
       },
       { wrapper },
     );
@@ -671,14 +655,12 @@ describe("useSessionTranscriptSurfaceModel", () => {
       });
 
       expect(answerAgentQuestion).toHaveBeenCalledWith("session-subagent-1", "question-1", [["A"]]);
-      await harness.waitFor((state) => state.model.thread.session?.pendingQuestions.length === 0);
     } finally {
       await harness.unmount();
     }
   });
 
   test("keeps question submission disabled when the active session id does not match the transcript target", async () => {
-    const transcriptSourceWithPendingQuestion = makeTranscriptSourceWithPendingQuestion();
     useAgentSessionMock.mockImplementation(() => ({
       ...makeLiveTranscriptSession(),
       externalSessionId: "session-other",
@@ -696,7 +678,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         },
         isOpen: true,
         externalSessionId: "session-requested",
-        source: transcriptSourceWithPendingQuestion,
+        source: makeTranscriptSource(),
       },
       { wrapper },
     );

@@ -6,11 +6,6 @@ import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-o
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
-import {
-  mergeRuntimePendingApprovals,
-  mergeRuntimePendingQuestions,
-  mergeRuntimePendingRequests,
-} from "./runtime-transcript-pending-requests";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 (
@@ -92,64 +87,14 @@ describe("runtime transcript pending request helpers", () => {
       }),
     ).toBe("session-1\u0000opencode\u0000/repo-a");
   });
-
-  test("merges source and session requests by request id and hides replied requests", () => {
-    const sourceShared = createApprovalRequest("shared", { title: "source shared" });
-    const sessionShared = createApprovalRequest("shared", { title: "session shared" });
-
-    expect(
-      mergeRuntimePendingRequests(
-        [createApprovalRequest("source-only"), sourceShared],
-        [sessionShared, createApprovalRequest("session-only")],
-        new Set(["source-only"]),
-      ),
-    ).toEqual([sessionShared, createApprovalRequest("session-only")]);
-  });
-
-  test("merges typed approval and question requests from transcript sources", () => {
-    const sourceApproval = createApprovalRequest("source-approval");
-    const sessionApproval = createApprovalRequest("session-approval");
-    const sourceQuestion = createQuestionRequest("source-question");
-    const sessionQuestion = createQuestionRequest("session-question");
-    const source = createSource({
-      pendingApprovals: [sourceApproval],
-      pendingQuestions: [sourceQuestion],
-    });
-    const session = createThreadSession({
-      externalSessionId: "session-1",
-      pendingApprovals: [sessionApproval],
-      pendingQuestions: [sessionQuestion],
-    });
-
-    expect(
-      mergeRuntimePendingApprovals({
-        source,
-        session,
-        repliedRequestIds: new Set(["source-approval"]),
-      }),
-    ).toEqual([sessionApproval]);
-    expect(
-      mergeRuntimePendingQuestions({
-        source,
-        session,
-        repliedRequestIds: new Set(["session-question"]),
-      }),
-    ).toEqual([sourceQuestion]);
-  });
 });
 
 describe("useRuntimeTranscriptInteractions", () => {
-  test("merges parent-observed and live-session pending requests onto the transcript session", async () => {
-    const sourceApproval = createApprovalRequest("source-approval");
+  test("uses session-owned pending requests on the transcript session", async () => {
     const sessionApproval = createApprovalRequest("session-approval");
-    const sourceQuestion = createQuestionRequest("source-question");
     const sessionQuestion = createQuestionRequest("session-question");
     const harness = createHookHarness(
       createBaseArgs({
-        source: createSource({
-          pendingApprovals: [sourceApproval],
-          pendingQuestions: [sourceQuestion],
-        }),
         session: createThreadSession({
           externalSessionId: "session-1",
           pendingApprovals: [sessionApproval],
@@ -161,14 +106,8 @@ describe("useRuntimeTranscriptInteractions", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().session?.pendingApprovals).toEqual([
-        sourceApproval,
-        sessionApproval,
-      ]);
-      expect(harness.getLatest().session?.pendingQuestions).toEqual([
-        sourceQuestion,
-        sessionQuestion,
-      ]);
+      expect(harness.getLatest().session?.pendingApprovals).toEqual([sessionApproval]);
+      expect(harness.getLatest().session?.pendingQuestions).toEqual([sessionQuestion]);
       expect(harness.getLatest().approvals.canReply).toBe(true);
       expect(harness.getLatest().pendingQuestions.canSubmit).toBe(true);
     } finally {
@@ -176,7 +115,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("routes approval replies to the transcript session and hides replied approvals", async () => {
+  test("routes approval replies to the transcript session", async () => {
     const replyAgentApproval = mock(
       async (
         _externalSessionId: string,
@@ -187,7 +126,11 @@ describe("useRuntimeTranscriptInteractions", () => {
     const pendingApproval = createApprovalRequest("approval-1");
     const harness = createHookHarness(
       createBaseArgs({
-        source: createSource({ pendingApprovals: [pendingApproval] }),
+        session: createThreadSession({
+          externalSessionId: "session-1",
+          pendingApprovals: [pendingApproval],
+          pendingQuestions: [],
+        }),
         replyAgentApproval,
       }),
     );
@@ -199,7 +142,6 @@ describe("useRuntimeTranscriptInteractions", () => {
       });
 
       expect(replyAgentApproval).toHaveBeenCalledWith("session-1", "approval-1", "approve_once");
-      await harness.waitFor((state) => state.session?.pendingApprovals.length === 0);
     } finally {
       await harness.unmount();
     }
@@ -217,10 +159,9 @@ describe("useRuntimeTranscriptInteractions", () => {
     const harness = createHookHarness(
       createBaseArgs({
         externalSessionId: "session-requested",
-        source: createSource({ pendingApprovals: [pendingApproval] }),
         session: createThreadSession({
           externalSessionId: "session-other",
-          pendingApprovals: [],
+          pendingApprovals: [pendingApproval],
           pendingQuestions: [],
         }),
         replyAgentApproval,
@@ -240,13 +181,17 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("tracks question submission and hides answered questions", async () => {
+  test("tracks question submission until the runtime answer resolves", async () => {
     const deferredAnswer = createDeferred<void>();
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
     const harness = createHookHarness(
       createBaseArgs({
-        source: createSource({ pendingQuestions: [pendingQuestion] }),
+        session: createThreadSession({
+          externalSessionId: "session-1",
+          pendingApprovals: [],
+          pendingQuestions: [pendingQuestion],
+        }),
         answerAgentQuestion,
       }),
     );
@@ -266,7 +211,10 @@ describe("useRuntimeTranscriptInteractions", () => {
         deferredAnswer.resolve(undefined);
         await deferredAnswer.promise;
       });
-      await harness.waitFor((state) => state.session?.pendingQuestions.length === 0);
+      await harness.waitFor(
+        (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === undefined,
+      );
+      expect(harness.getLatest().session?.pendingQuestions).toEqual([pendingQuestion]);
       expect(harness.getLatest().pendingQuestions.isSubmittingByRequestId["question-1"]).toBe(
         undefined,
       );
@@ -276,21 +224,28 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("resets replied request state when the transcript identity changes", async () => {
-    const replyAgentApproval = mock(async () => {});
-    const pendingApproval = createApprovalRequest("approval-1");
+  test("resets question submission state when the transcript identity changes", async () => {
+    const deferredAnswer = createDeferred<void>();
+    const answerAgentQuestion = mock(async () => deferredAnswer.promise);
+    const pendingQuestion = createQuestionRequest("question-1");
     const baseArgs = createBaseArgs({
-      source: createSource({ pendingApprovals: [pendingApproval] }),
-      replyAgentApproval,
+      session: createThreadSession({
+        externalSessionId: "session-1",
+        pendingApprovals: [],
+        pendingQuestions: [pendingQuestion],
+      }),
+      answerAgentQuestion,
     });
     const harness = createHookHarness(baseArgs);
 
     try {
       await harness.mount();
-      await harness.run(async (state) => {
-        await state.approvals.onReply("approval-1", "approve_once");
+      await harness.run((state) => {
+        void state.pendingQuestions.onSubmit("question-1", [["A"]]);
       });
-      await harness.waitFor((state) => state.session?.pendingApprovals.length === 0);
+      await harness.waitFor(
+        (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === true,
+      );
 
       await harness.update({
         ...baseArgs,
@@ -301,10 +256,10 @@ describe("useRuntimeTranscriptInteractions", () => {
           pendingQuestions: [],
         }),
       });
-      await harness.waitFor((state) => state.session?.pendingApprovals.length === 1);
 
-      expect(harness.getLatest().session?.pendingApprovals).toEqual([pendingApproval]);
+      expect(harness.getLatest().pendingQuestions.isSubmittingByRequestId).toEqual({});
     } finally {
+      deferredAnswer.resolve(undefined);
       await harness.unmount();
     }
   });
@@ -312,7 +267,8 @@ describe("useRuntimeTranscriptInteractions", () => {
   test("keeps actions disabled while the runtime is not ready", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        source: createSource({
+        session: createThreadSession({
+          externalSessionId: "session-1",
           pendingApprovals: [createApprovalRequest("approval-1")],
           pendingQuestions: [createQuestionRequest("question-1")],
         }),

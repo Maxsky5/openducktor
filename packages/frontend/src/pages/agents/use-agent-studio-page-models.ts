@@ -420,11 +420,7 @@ export function useAgentStudioPageModels({
     approvals,
     composer: composerConfig,
     sessionAgentColors: modelSelection.activeSessionAgentColors,
-    subagentPendingApprovalsByExternalSessionId:
-      selectedSession.pendingInput.subagentPendingApprovalsByExternalSessionId,
     subagentPendingApprovalCountByExternalSessionId,
-    subagentPendingQuestionsByExternalSessionId:
-      selectedSession.pendingInput.subagentPendingQuestionsByExternalSessionId,
     subagentPendingQuestionCountByExternalSessionId,
   });
   const composerModel = surfaceModel.composer;

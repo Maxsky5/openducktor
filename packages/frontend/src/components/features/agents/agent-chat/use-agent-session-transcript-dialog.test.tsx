@@ -192,31 +192,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
       "./use-agent-session-transcript-dialog"
     );
     const { AgentChatMessageCard } = await import("./agent-chat-message-card");
-    const pendingApproval = {
-      requestId: "permission-1",
-      requestType: "permission_grant" as const,
-      title: "Approve permission: read",
-      summary: "Approval request for read.",
-      affectedPaths: ["~/maxsky5.omp.json"],
-      action: { name: "read" },
-      mutation: "read_only" as const,
-      supportedReplyOutcomes: [
-        "approve_once" as const,
-        "approve_session" as const,
-        "reject" as const,
-      ],
-    };
-    const pendingQuestion = {
-      requestId: "question-1",
-      questions: [
-        {
-          header: "Confirm",
-          question: "Which file should the subagent inspect?",
-          options: [{ label: "omp.json", description: "Use the requested config file" }],
-        },
-      ],
-    };
-
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <QueryProvider useIsolatedClient>
         <AgentSessionTranscriptDialogHost>{children}</AgentSessionTranscriptDialogHost>
@@ -242,9 +217,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         sessionAgentColors={{}}
         sessionRuntimeKind="opencode"
         sessionWorkingDirectory="/repo-a"
-        subagentPendingApprovals={[pendingApproval]}
         subagentPendingApprovalCount={1}
-        subagentPendingQuestions={[pendingQuestion]}
         subagentPendingQuestionCount={1}
       />,
       { wrapper },
@@ -260,8 +233,6 @@ describe("AgentSessionTranscriptDialogHost", () => {
         source: {
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
-          pendingApprovals: [pendingApproval],
-          pendingQuestions: [pendingQuestion],
         },
         title: "Subagent activity",
         description: "View what this subagent did.",

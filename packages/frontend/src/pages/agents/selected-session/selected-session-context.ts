@@ -93,13 +93,7 @@ export type SelectedSessionRuntimeContext = {
 export type SelectedSessionPendingInputContext = {
   pendingQuestions: SelectedSessionPendingQuestionsContext;
   approvals: SelectedSessionApprovalsContext;
-  subagentPendingApprovalsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
-    | undefined;
   subagentPendingApprovalCountByExternalSessionId: Record<string, number>;
-  subagentPendingQuestionsByExternalSessionId:
-    | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
-    | undefined;
   subagentPendingQuestionCountByExternalSessionId: Record<string, number>;
 };
 
@@ -184,8 +178,8 @@ export const keepStablePendingInputCounts = (
 
 const buildSubagentPendingApprovalCountByExternalSessionId = (
   sessions: AgentSessionSummary[],
-  subagentPendingApprovalsByExternalSessionId:
-    | AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
+  subagentPendingApprovalRequestIdsByExternalSessionId:
+    | AgentSessionState["subagentPendingApprovalRequestIdsByExternalSessionId"]
     | undefined,
 ): Record<string, number> => {
   const next: Record<string, number> = {};
@@ -196,11 +190,11 @@ const buildSubagentPendingApprovalCountByExternalSessionId = (
     }
   }
 
-  if (subagentPendingApprovalsByExternalSessionId) {
-    for (const [externalSessionId, pendingApprovals] of Object.entries(
-      subagentPendingApprovalsByExternalSessionId,
+  if (subagentPendingApprovalRequestIdsByExternalSessionId) {
+    for (const [externalSessionId, requestIds] of Object.entries(
+      subagentPendingApprovalRequestIdsByExternalSessionId,
     )) {
-      const pendingApprovalCount = pendingApprovals.length;
+      const pendingApprovalCount = requestIds.length;
       if (pendingApprovalCount > 0) {
         next[externalSessionId] = pendingApprovalCount;
       }
@@ -212,8 +206,8 @@ const buildSubagentPendingApprovalCountByExternalSessionId = (
 
 const buildSubagentPendingQuestionCountByExternalSessionId = (
   sessions: AgentSessionSummary[],
-  subagentPendingQuestionsByExternalSessionId:
-    | AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
+  subagentPendingQuestionRequestIdsByExternalSessionId:
+    | AgentSessionState["subagentPendingQuestionRequestIdsByExternalSessionId"]
     | undefined,
 ): Record<string, number> => {
   const next: Record<string, number> = {};
@@ -224,11 +218,11 @@ const buildSubagentPendingQuestionCountByExternalSessionId = (
     }
   }
 
-  if (subagentPendingQuestionsByExternalSessionId) {
-    for (const [externalSessionId, pendingQuestions] of Object.entries(
-      subagentPendingQuestionsByExternalSessionId,
+  if (subagentPendingQuestionRequestIdsByExternalSessionId) {
+    for (const [externalSessionId, requestIds] of Object.entries(
+      subagentPendingQuestionRequestIdsByExternalSessionId,
     )) {
-      const pendingQuestionCount = pendingQuestions.length;
+      const pendingQuestionCount = requestIds.length;
       if (pendingQuestionCount > 0) {
         next[externalSessionId] = pendingQuestionCount;
       }
@@ -369,19 +363,15 @@ export const buildAgentStudioSelectedSessionContext = ({
         errorByRequestId: approvals.approvalReplyErrorByRequestId,
         onReply: approvals.onReplyApproval,
       },
-      subagentPendingApprovalsByExternalSessionId:
-        activeSession?.subagentPendingApprovalsByExternalSessionId,
       subagentPendingApprovalCountByExternalSessionId:
         buildSubagentPendingApprovalCountByExternalSessionId(
           allSessionSummaries,
-          activeSession?.subagentPendingApprovalsByExternalSessionId,
+          activeSession?.subagentPendingApprovalRequestIdsByExternalSessionId,
         ),
-      subagentPendingQuestionsByExternalSessionId:
-        activeSession?.subagentPendingQuestionsByExternalSessionId,
       subagentPendingQuestionCountByExternalSessionId:
         buildSubagentPendingQuestionCountByExternalSessionId(
           allSessionSummaries,
-          activeSession?.subagentPendingQuestionsByExternalSessionId,
+          activeSession?.subagentPendingQuestionRequestIdsByExternalSessionId,
         ),
     },
   };

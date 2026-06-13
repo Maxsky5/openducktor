@@ -8,11 +8,13 @@ import {
   upsertSessionMessage,
 } from "../support/messages";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
+import { formatSubagentContent } from "../support/subagent-messages";
 import {
+  addSubagentPendingApprovalRequestId,
+  addSubagentPendingQuestionRequestId,
   clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
-} from "../support/subagent-approval-overlay";
-import { formatSubagentContent } from "../support/subagent-messages";
+} from "../support/subagent-pending-input-projection";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { flushDraftBuffers } from "./session-helpers";
 
@@ -140,22 +142,6 @@ const isLinkedChildObservedByParent = (
   );
 };
 
-const appendParentSubagentPendingRequest = <Request extends { requestId: string }>(
-  currentMap: Record<string, Request[]> | undefined,
-  childExternalSessionId: string,
-  request: Request,
-): Record<string, Request[]> => {
-  const map = currentMap ?? {};
-  const currentEntries = map[childExternalSessionId] ?? [];
-  return {
-    ...map,
-    [childExternalSessionId]: [
-      ...currentEntries.filter((entry) => entry.requestId !== request.requestId),
-      request,
-    ],
-  };
-};
-
 const recordParentSubagentPendingApproval = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent,
@@ -169,15 +155,14 @@ const recordParentSubagentPendingApproval = (
     return;
   }
 
-  const pendingApproval = toPendingApproval(event);
   context.store.updateSession(
     event.parentExternalSessionId,
     (current) => ({
       ...current,
-      subagentPendingApprovalsByExternalSessionId: appendParentSubagentPendingRequest(
-        current.subagentPendingApprovalsByExternalSessionId,
+      subagentPendingApprovalRequestIdsByExternalSessionId: addSubagentPendingApprovalRequestId(
+        current.subagentPendingApprovalRequestIdsByExternalSessionId,
         childExternalSessionId,
-        pendingApproval,
+        event.requestId,
       ),
     }),
     { persist: false },
@@ -197,15 +182,14 @@ const recordParentSubagentPendingQuestion = (
     return;
   }
 
-  const pendingQuestion = toPendingQuestion(event);
   context.store.updateSession(
     event.parentExternalSessionId,
     (current) => ({
       ...current,
-      subagentPendingQuestionsByExternalSessionId: appendParentSubagentPendingRequest(
-        current.subagentPendingQuestionsByExternalSessionId,
+      subagentPendingQuestionRequestIdsByExternalSessionId: addSubagentPendingQuestionRequestId(
+        current.subagentPendingQuestionRequestIdsByExternalSessionId,
         childExternalSessionId,
-        pendingQuestion,
+        event.requestId,
       ),
     }),
     { persist: false },

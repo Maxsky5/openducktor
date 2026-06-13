@@ -3,7 +3,6 @@ import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import {
   type OpenAgentSessionTranscriptRequest,
@@ -14,8 +13,6 @@ import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runti
 type SubagentTranscriptButtonProps = {
   sessionRuntimeKind?: RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
-  pendingApprovals?: AgentApprovalRequest[] | undefined;
-  pendingQuestions?: AgentQuestionRequest[] | undefined;
   meta: SubagentMeta;
   className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
@@ -24,8 +21,6 @@ type SubagentTranscriptButtonProps = {
 type TranscriptSourceInput = {
   sessionRuntimeKind: RuntimeKind | null | undefined;
   sessionWorkingDirectory: string | null | undefined;
-  pendingApprovals: AgentApprovalRequest[] | undefined;
-  pendingQuestions: AgentQuestionRequest[] | undefined;
 };
 
 const buildTranscriptRequest = (
@@ -43,8 +38,6 @@ const buildTranscriptRequest = (
 const buildTranscriptSource = ({
   sessionRuntimeKind,
   sessionWorkingDirectory,
-  pendingApprovals,
-  pendingQuestions,
 }: TranscriptSourceInput): RuntimeSessionTranscriptSource | null => {
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
 
@@ -55,16 +48,12 @@ const buildTranscriptSource = ({
   return {
     runtimeKind: sessionRuntimeKind,
     workingDirectory,
-    ...(pendingApprovals ? { pendingApprovals } : {}),
-    ...(pendingQuestions ? { pendingQuestions } : {}),
   };
 };
 
 export function SubagentTranscriptButton({
   sessionRuntimeKind,
   sessionWorkingDirectory,
-  pendingApprovals,
-  pendingQuestions,
   meta,
   className,
   onOpenTranscript,
@@ -75,8 +64,6 @@ export function SubagentTranscriptButton({
   const transcriptSource = buildTranscriptSource({
     sessionRuntimeKind,
     sessionWorkingDirectory,
-    pendingApprovals,
-    pendingQuestions,
   });
 
   if (!externalSessionId || !openTranscript || !transcriptSource) {

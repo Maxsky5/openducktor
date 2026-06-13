@@ -37,12 +37,6 @@ import { useAgentChatLayout } from "./use-agent-chat-layout";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
-const EMPTY_SUBAGENT_PENDING_APPROVALS = Object.freeze({}) as NonNullable<
-  AgentSessionState["subagentPendingApprovalsByExternalSessionId"]
->;
-const EMPTY_SUBAGENT_PENDING_QUESTIONS = Object.freeze({}) as NonNullable<
-  AgentSessionState["subagentPendingQuestionsByExternalSessionId"]
->;
 const EMPTY_COMPOSER_SLASH_COMMANDS = Object.freeze(
   [],
 ) as unknown as AgentChatComposerModel["slashCommands"];
@@ -178,9 +172,7 @@ type UseAgentChatSurfaceModelArgs = {
   approvals: AgentChatPendingApprovalActions;
   composer?: AgentChatComposerConfig;
   sessionAgentColors?: Record<string, string>;
-  subagentPendingApprovalsByExternalSessionId?: AgentSessionState["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
-  subagentPendingQuestionsByExternalSessionId?: AgentSessionState["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
 };
 
@@ -198,9 +190,7 @@ export function useAgentChatSurfaceModel({
   approvals,
   composer,
   sessionAgentColors,
-  subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
-  subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
@@ -278,12 +268,8 @@ export function useAgentChatSurfaceModel({
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
       sessionAgentColors: resolvedSessionAgentColors,
-      subagentPendingApprovalsByExternalSessionId:
-        subagentPendingApprovalsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_APPROVALS,
       subagentPendingApprovalCountByExternalSessionId:
         subagentPendingApprovalCountByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
-      subagentPendingQuestionsByExternalSessionId:
-        subagentPendingQuestionsByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_QUESTIONS,
       subagentPendingQuestionCountByExternalSessionId:
         subagentPendingQuestionCountByExternalSessionId ?? EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
       canSubmitQuestionAnswers,
@@ -321,9 +307,7 @@ export function useAgentChatSurfaceModel({
       runtimeSupportedApprovalReplyOutcomes,
       isWaitingForRuntimeReadiness,
       sessionRuntimeDataError,
-      subagentPendingApprovalsByExternalSessionId,
       subagentPendingApprovalCountByExternalSessionId,
-      subagentPendingQuestionsByExternalSessionId,
       subagentPendingQuestionCountByExternalSessionId,
       threadSession,
     ],

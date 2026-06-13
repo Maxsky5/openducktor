@@ -104,8 +104,6 @@ export function useRuntimeTranscriptSessionHistory({
       runtimeKind: source.runtimeKind,
       workingDirectory: source.workingDirectory,
       history: historyQuery.data,
-      pendingApprovals: source.pendingApprovals ?? [],
-      pendingQuestions: source.pendingQuestions ?? [],
     });
   }, [activeWorkspace, externalSessionId, historyQuery.data, liveSession, source]);
 

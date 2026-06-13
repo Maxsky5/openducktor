@@ -670,8 +670,8 @@ describe("useAgentStudioPageModels", () => {
           },
         },
       ],
-      subagentPendingApprovalsByExternalSessionId: {
-        "external-child": [createPendingApproval("perm-child", "read", ["/repo/omp.json"])],
+      subagentPendingApprovalRequestIdsByExternalSessionId: {
+        "external-child": ["perm-child"],
       },
     });
     const harness = createHookHarness(
@@ -1274,10 +1274,8 @@ describe("useAgentStudioPageModels", () => {
 
   test("derives subagent pending approval counts from parent live event overlay", async () => {
     const parentSession = createSession("session-parent", "external-parent", {
-      subagentPendingApprovalsByExternalSessionId: {
-        "external-child-session": [
-          createPendingApproval("perm-1", "external_directory", ["/tmp/*"]),
-        ],
+      subagentPendingApprovalRequestIdsByExternalSessionId: {
+        "external-child-session": ["perm-1"],
       },
     });
     const childSummary = toAgentSessionSummary(
@@ -1390,8 +1388,8 @@ describe("useAgentStudioPageModels", () => {
 
   test("derives subagent pending question counts from parent live event overlay", async () => {
     const parentSession = createSession("session-parent", "external-parent", {
-      subagentPendingQuestionsByExternalSessionId: {
-        "external-child-session": [createPendingQuestion("question-1")],
+      subagentPendingQuestionRequestIdsByExternalSessionId: {
+        "external-child-session": ["question-1"],
         "external-empty-child-session": [],
       },
     });

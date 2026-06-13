@@ -38,9 +38,7 @@ type AgentChatThreadMotionRowProps = {
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  subagentPendingApprovals: AgentSessionState["pendingApprovals"];
   subagentPendingApprovalCount: number;
-  subagentPendingQuestions: AgentSessionState["pendingQuestions"];
   subagentPendingQuestionCount: number;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
 };
@@ -55,9 +53,7 @@ type AgentChatTranscriptProps = {
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
-  subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
@@ -126,8 +122,6 @@ type AgentChatBottomStackProps = {
   onToggleTodoPanel: () => void;
 };
 
-const EMPTY_PENDING_APPROVALS: AgentSessionState["pendingApprovals"] = [];
-const EMPTY_PENDING_QUESTIONS: AgentSessionState["pendingQuestions"] = [];
 const TURN_CONTENT_VISIBILITY_STYLE = {
   contentVisibility: "auto",
   containIntrinsicSize: "auto 500px",
@@ -158,20 +152,6 @@ const readSubagentPendingApprovalCount = (
   return externalSessionId ? (countsByExternalSessionId?.[externalSessionId] ?? 0) : 0;
 };
 
-const readSubagentPendingApprovals = (
-  row: AgentChatWindowRow,
-  pendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"],
-): AgentSessionState["pendingApprovals"] => {
-  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
-    return EMPTY_PENDING_APPROVALS;
-  }
-
-  const externalSessionId = row.message.meta.externalSessionId;
-  return externalSessionId
-    ? (pendingApprovalsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_APPROVALS)
-    : EMPTY_PENDING_APPROVALS;
-};
-
 const readSubagentPendingQuestionCount = (
   row: AgentChatWindowRow,
   countsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"],
@@ -184,20 +164,6 @@ const readSubagentPendingQuestionCount = (
   return externalSessionId ? (countsByExternalSessionId?.[externalSessionId] ?? 0) : 0;
 };
 
-const readSubagentPendingQuestions = (
-  row: AgentChatWindowRow,
-  pendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"],
-): AgentSessionState["pendingQuestions"] => {
-  if (row.kind !== "message" || row.message.meta?.kind !== "subagent") {
-    return EMPTY_PENDING_QUESTIONS;
-  }
-
-  const externalSessionId = row.message.meta.externalSessionId;
-  return externalSessionId
-    ? (pendingQuestionsByExternalSessionId?.[externalSessionId] ?? EMPTY_PENDING_QUESTIONS)
-    : EMPTY_PENDING_QUESTIONS;
-};
-
 const AgentChatThreadMotionRow = memo(
   function AgentChatThreadMotionRow({
     row,
@@ -205,9 +171,7 @@ const AgentChatThreadMotionRow = memo(
     sessionAgentColors,
     sessionWorkingDirectory,
     sessionRuntimeKind,
-    subagentPendingApprovals,
     subagentPendingApprovalCount,
-    subagentPendingQuestions,
     subagentPendingQuestionCount,
     resolveRowRef,
   }: AgentChatThreadMotionRowProps): ReactElement {
@@ -219,9 +183,7 @@ const AgentChatThreadMotionRow = memo(
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
-          subagentPendingApprovals={subagentPendingApprovals}
           subagentPendingApprovalCount={subagentPendingApprovalCount}
-          subagentPendingQuestions={subagentPendingQuestions}
           subagentPendingQuestionCount={subagentPendingQuestionCount}
         />
       </div>
@@ -231,9 +193,7 @@ const AgentChatThreadMotionRow = memo(
     return (
       previousProps.sessionRuntimeKind === nextProps.sessionRuntimeKind &&
       previousProps.sessionWorkingDirectory === nextProps.sessionWorkingDirectory &&
-      previousProps.subagentPendingApprovals === nextProps.subagentPendingApprovals &&
       previousProps.subagentPendingApprovalCount === nextProps.subagentPendingApprovalCount &&
-      previousProps.subagentPendingQuestions === nextProps.subagentPendingQuestions &&
       previousProps.subagentPendingQuestionCount === nextProps.subagentPendingQuestionCount &&
       previousProps.isStreamingAssistantMessage === nextProps.isStreamingAssistantMessage &&
       previousProps.sessionAgentColors === nextProps.sessionAgentColors &&
@@ -249,9 +209,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
-  subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
-  subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
   resolveRowRef,
   allowTurnContainment,
@@ -261,9 +219,7 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
   sessionAgentColors: Record<string, string>;
   sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
   sessionRuntimeKind: AgentSessionState["runtimeKind"] | null;
-  subagentPendingApprovalsByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalsByExternalSessionId"];
   subagentPendingApprovalCountByExternalSessionId: AgentChatThreadModel["subagentPendingApprovalCountByExternalSessionId"];
-  subagentPendingQuestionsByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionsByExternalSessionId"];
   subagentPendingQuestionCountByExternalSessionId: AgentChatThreadModel["subagentPendingQuestionCountByExternalSessionId"];
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
   allowTurnContainment: boolean;
@@ -280,17 +236,9 @@ const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
           sessionAgentColors={sessionAgentColors}
           sessionWorkingDirectory={sessionWorkingDirectory}
           sessionRuntimeKind={sessionRuntimeKind}
-          subagentPendingApprovals={readSubagentPendingApprovals(
-            row,
-            subagentPendingApprovalsByExternalSessionId,
-          )}
           subagentPendingApprovalCount={readSubagentPendingApprovalCount(
             row,
             subagentPendingApprovalCountByExternalSessionId,
-          )}
-          subagentPendingQuestions={readSubagentPendingQuestions(
-            row,
-            subagentPendingQuestionsByExternalSessionId,
           )}
           subagentPendingQuestionCount={readSubagentPendingQuestionCount(
             row,
@@ -313,9 +261,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   sessionAgentColors,
   sessionWorkingDirectory,
   sessionRuntimeKind,
-  subagentPendingApprovalsByExternalSessionId,
   subagentPendingApprovalCountByExternalSessionId,
-  subagentPendingQuestionsByExternalSessionId,
   subagentPendingQuestionCountByExternalSessionId,
   messagesContainerRef,
   messagesContentRef,
@@ -405,14 +351,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
                 sessionAgentColors={sessionAgentColors}
                 sessionWorkingDirectory={sessionWorkingDirectory}
                 sessionRuntimeKind={sessionRuntimeKind}
-                subagentPendingApprovalsByExternalSessionId={
-                  subagentPendingApprovalsByExternalSessionId
-                }
                 subagentPendingApprovalCountByExternalSessionId={
                   subagentPendingApprovalCountByExternalSessionId
-                }
-                subagentPendingQuestionsByExternalSessionId={
-                  subagentPendingQuestionsByExternalSessionId
                 }
                 subagentPendingQuestionCountByExternalSessionId={
                   subagentPendingQuestionCountByExternalSessionId
@@ -511,9 +451,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isStarting,
     isSending,
     sessionAgentColors,
-    subagentPendingApprovalsByExternalSessionId,
     subagentPendingApprovalCountByExternalSessionId,
-    subagentPendingQuestionsByExternalSessionId,
     subagentPendingQuestionCountByExternalSessionId,
     canSubmitQuestionAnswers,
     isSubmittingQuestionByRequestId,
@@ -725,11 +663,9 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         isSending={isSending}
         isInteractionEnabled={isInteractionEnabled}
         sessionAgentColors={sessionAgentColors}
-        subagentPendingApprovalsByExternalSessionId={subagentPendingApprovalsByExternalSessionId}
         subagentPendingApprovalCountByExternalSessionId={
           subagentPendingApprovalCountByExternalSessionId
         }
-        subagentPendingQuestionsByExternalSessionId={subagentPendingQuestionsByExternalSessionId}
         subagentPendingQuestionCountByExternalSessionId={
           subagentPendingQuestionCountByExternalSessionId
         }

@@ -16,28 +16,6 @@ const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta
   ...overrides,
 });
 
-const pendingApproval = {
-  requestId: "permission-1",
-  requestType: "permission_grant" as const,
-  title: `Approve permission: ${"file.read"}`,
-  summary: `Approval request for ${"file.read"}.`,
-  affectedPaths: ["src/app.ts"],
-  action: { name: "file.read" },
-  mutation: "read_only" as const,
-  supportedReplyOutcomes: ["approve_once" as const, "approve_session" as const, "reject" as const],
-};
-
-const pendingQuestion = {
-  requestId: "question-1",
-  questions: [
-    {
-      header: "Choose path",
-      question: "Which path should the subagent use?",
-      options: [{ label: "A", description: "Path A" }],
-    },
-  ],
-};
-
 describe("SubagentTranscriptButton", () => {
   test("opens a read-only session view request for subagent cards", () => {
     const onOpenTranscript = mock(() => {});
@@ -46,8 +24,6 @@ describe("SubagentTranscriptButton", () => {
       <SubagentTranscriptButton
         sessionRuntimeKind={runtimeKind}
         sessionWorkingDirectory="/repo-a"
-        pendingApprovals={[pendingApproval]}
-        pendingQuestions={[pendingQuestion]}
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -66,8 +42,6 @@ describe("SubagentTranscriptButton", () => {
       source: {
         runtimeKind,
         workingDirectory: "/repo-a",
-        pendingApprovals: [pendingApproval],
-        pendingQuestions: [pendingQuestion],
       },
     });
   });

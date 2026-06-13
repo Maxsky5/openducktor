@@ -39,7 +39,7 @@ import {
 import {
   clearSubagentPendingApprovalFromSessions,
   clearSubagentPendingQuestionFromSessions,
-} from "../support/subagent-approval-overlay";
+} from "../support/subagent-pending-input-projection";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import { createStartAgentSession } from "./start-session";
 

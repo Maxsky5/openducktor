@@ -20,7 +20,7 @@ import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatFileReferenceChip } from "./agent-chat-file-reference-chip";
 import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
@@ -545,9 +545,7 @@ type SubagentMessageProps = {
   sessionRuntimeKind?: RuntimeKind | null;
   sessionWorkingDirectory?: string | null | undefined;
   timeLabel: string;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
 
@@ -556,9 +554,7 @@ const SubagentMessage = ({
   sessionRuntimeKind,
   sessionWorkingDirectory,
   timeLabel,
-  subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
-  subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: SubagentMessageProps): ReactElement => {
   const summary = readSubagentSummary(meta);
@@ -623,8 +619,6 @@ const SubagentMessage = ({
             <SubagentTranscriptButton
               sessionRuntimeKind={sessionRuntimeKind ?? null}
               sessionWorkingDirectory={sessionWorkingDirectory}
-              pendingApprovals={subagentPendingApprovals}
-              pendingQuestions={subagentPendingQuestions}
               meta={meta}
             />
           </div>
@@ -663,9 +657,7 @@ type MessageBodyProps = {
   systemPromptBody: string;
   sessionWorkingDirectory?: string | null | undefined;
   workflowToolAliasesByCanonical?: RuntimeDescriptor["workflowToolAliasesByCanonical"] | undefined;
-  subagentPendingApprovals?: AgentSessionState["pendingApprovals"] | undefined;
   subagentPendingApprovalCount?: number;
-  subagentPendingQuestions?: AgentSessionState["pendingQuestions"] | undefined;
   subagentPendingQuestionCount?: number;
 };
 
@@ -678,9 +670,7 @@ export const MessageBody = ({
   systemPromptBody,
   sessionWorkingDirectory,
   workflowToolAliasesByCanonical,
-  subagentPendingApprovals,
   subagentPendingApprovalCount = 0,
-  subagentPendingQuestions,
   subagentPendingQuestionCount = 0,
 }: MessageBodyProps): ReactElement => {
   const meta = message.meta;
@@ -720,9 +710,7 @@ export const MessageBody = ({
         sessionRuntimeKind={sessionRuntimeKind ?? null}
         sessionWorkingDirectory={sessionWorkingDirectory}
         timeLabel={timeLabel}
-        subagentPendingApprovals={subagentPendingApprovals}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
-        subagentPendingQuestions={subagentPendingQuestions}
         subagentPendingQuestionCount={subagentPendingQuestionCount}
       />
     );

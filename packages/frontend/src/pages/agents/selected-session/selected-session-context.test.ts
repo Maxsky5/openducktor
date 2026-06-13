@@ -313,21 +313,11 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         },
       ],
       pendingQuestions: [{ requestId: "question-main", questions: [] }],
-      subagentPendingApprovalsByExternalSessionId: {
-        "session-sub": [
-          {
-            requestId: "approval-sub",
-            requestType: "runtime_tool",
-            title: "Approve subagent tool",
-            summary: "Approve a subagent tool call.",
-            tool: { name: "shell" },
-            mutation: "mutating",
-            supportedReplyOutcomes: ["approve_once", "reject"],
-          },
-        ],
+      subagentPendingApprovalRequestIdsByExternalSessionId: {
+        "session-sub": ["approval-sub"],
       },
-      subagentPendingQuestionsByExternalSessionId: {
-        "session-sub": [{ requestId: "question-sub", questions: [] }],
+      subagentPendingQuestionRequestIdsByExternalSessionId: {
+        "session-sub": ["question-sub"],
       },
     });
 

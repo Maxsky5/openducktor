@@ -9,8 +9,6 @@ type ReadonlyTranscriptSessionInput = {
   runtimeKind: RuntimeKind;
   workingDirectory: string;
   history: AgentSessionHistoryMessage[];
-  pendingApprovals?: AgentChatThreadSession["pendingApprovals"] | undefined;
-  pendingQuestions?: AgentChatThreadSession["pendingQuestions"] | undefined;
 };
 
 const updateHash = (hash: number, value: string): number => {
@@ -38,12 +36,10 @@ export const createReadonlyTranscriptSession = ({
   runtimeKind,
   workingDirectory,
   history,
-  pendingApprovals = [],
-  pendingQuestions = [],
 }: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
   externalSessionId,
   runtimeKind,
-  status: pendingApprovals.length > 0 || pendingQuestions.length > 0 ? "running" : "idle",
+  status: "idle",
   workingDirectory,
   messages: createSessionMessagesState(
     externalSessionId,
@@ -53,8 +49,8 @@ export const createReadonlyTranscriptSession = ({
     }),
     transcriptHistoryVersion(history),
   ),
-  pendingApprovals,
-  pendingQuestions,
+  pendingApprovals: [],
+  pendingQuestions: [],
   todos: [],
   selectedModel: null,
 });

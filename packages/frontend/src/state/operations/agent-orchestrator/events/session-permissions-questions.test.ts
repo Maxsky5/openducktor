@@ -262,25 +262,9 @@ describe("agent-orchestrator session permissions and questions", () => {
       status: "running",
     });
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-1",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["perm-child-1"]);
   });
 
   test("clears child and parent subagent approval overlay when permission is resolved", async () => {
@@ -302,8 +286,8 @@ describe("agent-orchestrator session permissions and questions", () => {
         "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
-          subagentPendingApprovalsByExternalSessionId: {
-            "external-child-session": [pendingApproval],
+          subagentPendingApprovalRequestIdsByExternalSessionId: {
+            "external-child-session": ["perm-child-1"],
           },
         }),
         "external-child-session": buildSession({
@@ -330,7 +314,8 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toEqual([]);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -350,8 +335,8 @@ describe("agent-orchestrator session permissions and questions", () => {
         "external-parent-session": buildSession({
           externalSessionId: "external-parent-session",
           role: "planner",
-          subagentPendingQuestionsByExternalSessionId: {
-            "external-child-session": [pendingQuestion],
+          subagentPendingQuestionRequestIdsByExternalSessionId: {
+            "external-child-session": ["question-child-1"],
           },
         }),
         "external-child-session": buildSession({
@@ -378,7 +363,8 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(sessionsRef.current["external-child-session"]?.pendingQuestions).toEqual([]);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingQuestionRequestIdsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -483,9 +469,8 @@ describe("agent-orchestrator session permissions and questions", () => {
     }
     expect(firstParentSubagentMeta.externalSessionId).toBeUndefined();
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId?.["external-child-session"],
     ).toHaveLength(1);
     handleEvent({
       ...childPermission,
@@ -494,25 +479,9 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-delayed",
-        requestType: "permission_grant",
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["omp.json"],
-        action: { name: "read" },
-        mutation: "read_only",
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["perm-child-delayed"]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -691,9 +660,8 @@ describe("agent-orchestrator session permissions and questions", () => {
     }
     expect(parentSubagentMeta.externalSessionId).toBeUndefined();
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId?.["external-child-session"],
     ).toHaveLength(1);
   });
 
@@ -791,25 +759,9 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-1",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["perm-child-1"]);
     expect(updateSessionOptions).toContainEqual({ persist: false });
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
@@ -917,25 +869,9 @@ describe("agent-orchestrator session permissions and questions", () => {
     expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "perm-child-active",
-        requestType: "permission_grant" as const,
-        title: `Approve permission: ${"read"}`,
-        summary: `Approval request for ${"read"}.`,
-        affectedPaths: ["src/**"],
-        action: { name: "read" },
-        mutation: "read_only" as const,
-        supportedReplyOutcomes: [
-          "approve_once" as const,
-          "approve_session" as const,
-          "reject" as const,
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["perm-child-active"]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -1031,21 +967,9 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "question-child-1",
-        questions: [
-          {
-            header: "Scope",
-            question: "Pick target",
-            options: [{ label: "A", description: "Option A" }],
-          },
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingQuestionRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["question-child-1"]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -1148,21 +1072,9 @@ describe("agent-orchestrator session permissions and questions", () => {
     expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
     expect(sessionsRef.current["external-child-session"]?.pendingQuestions).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "question-child-active",
-        questions: [
-          {
-            header: "Scope",
-            question: "Pick target",
-            options: [{ label: "A", description: "Option A" }],
-          },
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingQuestionRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["question-child-active"]);
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -1241,21 +1153,9 @@ describe("agent-orchestrator session permissions and questions", () => {
 
     expect(sessionsRef.current["external-parent-session"]?.pendingQuestions).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingQuestionsByExternalSessionId?.[
-        "external-child-session"
-      ],
-    ).toEqual([
-      {
-        requestId: "question-child-2",
-        questions: [
-          {
-            header: "Scope",
-            question: "Pick target",
-            options: [{ label: "A", description: "Option A" }],
-          },
-        ],
-      },
-    ]);
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingQuestionRequestIdsByExternalSessionId?.["external-child-session"],
+    ).toEqual(["question-child-2"]);
   });
 
   test("auto-rejects mutating child permissions observed from a read-only parent context", async () => {
@@ -1359,7 +1259,8 @@ describe("agent-orchestrator session permissions and questions", () => {
     );
     expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId,
     ).toBeUndefined();
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
@@ -1475,7 +1376,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       }),
     );
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId,
     ).toBeUndefined();
   });
 
@@ -1608,14 +1510,16 @@ describe("agent-orchestrator session permissions and questions", () => {
       }),
     );
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId,
     ).toBeUndefined();
 
     handleParentEvent(event);
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(
-      sessionsRef.current["external-parent-session"]?.subagentPendingApprovalsByExternalSessionId,
+      sessionsRef.current["external-parent-session"]
+        ?.subagentPendingApprovalRequestIdsByExternalSessionId,
     ).toBeUndefined();
   });
 

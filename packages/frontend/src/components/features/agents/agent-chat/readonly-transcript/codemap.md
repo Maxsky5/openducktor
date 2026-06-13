@@ -12,10 +12,13 @@ interaction state in focused hooks.
 
 ## Data & Control Flow
 
-Runtime-backed transcript source inputs resolve to either an already-live
-session from app state or a history-loaded transcript session, then feed the
-shared `AgentChatSurface` model in non-interactive mode. Read-only transcripts
-do not load active-session runtime data such as model catalogs or todos.
+Runtime-backed transcript source inputs identify the runtime session only. The
+surface resolves that identity to either an already-live session from app state
+or a history-loaded transcript session, then feeds the shared `AgentChatSurface`
+model in non-interactive mode. Pending runtime input is session-owned; this
+folder must not merge parent-observed request copies into the transcript.
+Read-only transcripts do not load active-session runtime data such as model
+catalogs or todos.
 
 ## Integration Points
 
