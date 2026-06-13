@@ -191,7 +191,6 @@ export const runtimeSessionLifecycleCapabilitiesSchema = z
     supportedStartModes: runtimeSupportedStartModesSchema,
     supportsSessionFork: z.boolean(),
     forkTargets: runtimeForkTargetsSchema,
-    supportsAttachLiveSessions: z.boolean(),
     supportsListLiveSessions: z.boolean(),
     supportsQueuedUserMessages: z.boolean(),
     supportsPendingInputSnapshots: z.boolean(),

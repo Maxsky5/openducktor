@@ -71,7 +71,6 @@
       "forkTargets": [
         "session"
       ],
-      "supportsAttachLiveSessions": true,
       "supportsListLiveSessions": true,
       "supportsQueuedUserMessages": true,
       "supportsPendingInputSnapshots": true

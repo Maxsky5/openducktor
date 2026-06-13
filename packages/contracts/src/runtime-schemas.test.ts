@@ -124,7 +124,6 @@ describe("runtime schemas", () => {
 
   test("Codex descriptor declares live session refresh support", () => {
     expect(CODEX_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle).toMatchObject({
-      supportsAttachLiveSessions: true,
       supportsListLiveSessions: true,
     });
   });
@@ -1256,7 +1255,6 @@ describe("runtime schemas", () => {
           supportedStartModes: ["fresh", "reuse", "fork"],
           supportsSessionFork: true,
           forkTargets: ["session", "message", "item"],
-          supportsAttachLiveSessions: true,
           supportsListLiveSessions: true,
           supportsQueuedUserMessages: true,
           supportsPendingInputSnapshots: true,
