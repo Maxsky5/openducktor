@@ -1,4 +1,4 @@
-import type { AgentSessionHistoryMessage } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
@@ -12,12 +12,7 @@ import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
-type ReadSessionHistory = (
-  repoPath: string,
-  runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-  workingDirectory: string,
-  externalSessionId: string,
-) => Promise<AgentSessionHistoryMessage[]>;
+type ReadSessionHistory = (session: AgentSessionRef) => Promise<AgentSessionHistoryMessage[]>;
 
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
@@ -78,21 +73,10 @@ export function useRuntimeTranscriptSessionHistory({
 
   const historyQuery = useQuery({
     queryKey: historyQueryInput
-      ? agentSessionRuntimeQueryKeys.history(
-          historyQueryInput.repoPath,
-          historyQueryInput.runtimeKind,
-          historyQueryInput.workingDirectory,
-          historyQueryInput.externalSessionId,
-        )
+      ? agentSessionRuntimeQueryKeys.history(historyQueryInput)
       : agentSessionRuntimeQueryKeys.historyUnavailable(),
     queryFn: historyQueryInput
-      ? (): Promise<AgentSessionHistoryMessage[]> =>
-          readSessionHistory(
-            historyQueryInput.repoPath,
-            historyQueryInput.runtimeKind,
-            historyQueryInput.workingDirectory,
-            historyQueryInput.externalSessionId,
-          )
+      ? (): Promise<AgentSessionHistoryMessage[]> => readSessionHistory(historyQueryInput)
       : skipToken,
     enabled: historyQueryEnabled,
     staleTime: SESSION_HISTORY_STALE_TIME_MS,

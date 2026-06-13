@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
@@ -20,12 +20,7 @@ type UseSessionRuntimeDataArgs = {
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
   ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
 export type SessionRuntimeDataState = {
@@ -66,7 +61,14 @@ export const useSessionRuntimeData = ({
   const supportsTodos = runtimeDefinition
     ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
     : false;
-  const shouldLoadTodos = canReadSessionRuntimeData && session !== null && supportsTodos;
+  const runtimeSessionRef =
+    runtimeQueryInput && session
+      ? {
+          ...runtimeQueryInput,
+          externalSessionId: session.externalSessionId,
+        }
+      : null;
+  const shouldLoadTodos = canReadSessionRuntimeData && runtimeSessionRef !== null && supportsTodos;
 
   const catalogQuery = useQuery({
     queryKey: runtimeQueryInput
@@ -84,25 +86,12 @@ export const useSessionRuntimeData = ({
   });
 
   const todosQuery = useQuery({
-    queryKey:
-      runtimeQueryInput && session
-        ? agentSessionRuntimeQueryKeys.todos(
-            runtimeQueryInput.repoPath,
-            runtimeQueryInput.runtimeKind,
-            runtimeQueryInput.workingDirectory,
-            session.externalSessionId,
-          )
-        : agentSessionRuntimeQueryKeys.todosUnavailable(),
-    queryFn:
-      runtimeQueryInput && session
-        ? (): Promise<AgentSessionTodoItem[]> =>
-            readSessionTodos(
-              runtimeQueryInput.repoPath,
-              runtimeQueryInput.runtimeKind,
-              runtimeQueryInput.workingDirectory,
-              session.externalSessionId,
-            )
-        : skipToken,
+    queryKey: runtimeSessionRef
+      ? agentSessionRuntimeQueryKeys.todos(runtimeSessionRef)
+      : agentSessionRuntimeQueryKeys.todosUnavailable(),
+    queryFn: runtimeSessionRef
+      ? (): Promise<AgentSessionTodoItem[]> => readSessionTodos(runtimeSessionRef)
+      : skipToken,
     enabled: shouldLoadTodos,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });

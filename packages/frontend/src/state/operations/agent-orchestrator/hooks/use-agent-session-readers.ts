@@ -1,5 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 
 export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
@@ -9,28 +9,11 @@ export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
     [agentEngine],
   );
   const readSessionTodos = useCallback(
-    (
-      repoPath: string,
-      runtimeKind: RuntimeKind,
-      workingDirectory: string,
-      externalSessionId: string,
-    ) =>
-      agentEngine.loadSessionTodos({ repoPath, runtimeKind, workingDirectory, externalSessionId }),
+    (session: AgentSessionRef) => agentEngine.loadSessionTodos(session),
     [agentEngine],
   );
   const readSessionHistory = useCallback(
-    (
-      repoPath: string,
-      runtimeKind: RuntimeKind,
-      workingDirectory: string,
-      externalSessionId: string,
-    ) =>
-      agentEngine.loadSessionHistory({
-        repoPath,
-        runtimeKind,
-        workingDirectory,
-        externalSessionId,
-      }),
+    (session: AgentSessionRef) => agentEngine.loadSessionHistory(session),
     [agentEngine],
   );
   const readSessionSlashCommands = useCallback(

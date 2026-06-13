@@ -1,5 +1,10 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRole,
+  AgentSessionRef,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
@@ -38,12 +43,7 @@ type UseAgentsPageRouteSessionModelArgs = {
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
   ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
 export type AgentsPageRouteSessionModel = {

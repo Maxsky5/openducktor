@@ -5,6 +5,7 @@ import type {
   AgentModelSelection,
   AgentRole,
   AgentSessionHistoryMessage,
+  AgentSessionRef,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -45,18 +46,8 @@ type CreatePublicOperationsArgs = {
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
-  readSessionHistory: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionHistoryMessage[]>;
+  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
+  readSessionHistory: (session: AgentSessionRef) => Promise<AgentSessionHistoryMessage[]>;
   readSessionSlashCommands: (
     repoPath: string,
     runtimeKind: RuntimeKind,

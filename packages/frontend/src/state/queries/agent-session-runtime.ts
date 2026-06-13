@@ -3,6 +3,7 @@ import type {
   AgentFileSearchResult,
   AgentModelCatalog,
   AgentSessionHistoryMessage,
+  AgentSessionRef,
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
@@ -57,12 +58,7 @@ export const agentSessionRuntimeQueryKeys = {
       normalizeWorkingDirectory(workingDirectory),
       query,
     ] as const,
-  todos: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) =>
+  todos: ({ repoPath, runtimeKind, workingDirectory, externalSessionId }: AgentSessionRef) =>
     [
       ...agentSessionRuntimeQueryKeys.all,
       "todos",
@@ -72,12 +68,7 @@ export const agentSessionRuntimeQueryKeys = {
       externalSessionId,
     ] as const,
   todosUnavailable: () => [...agentSessionRuntimeQueryKeys.all, "todos-unavailable"] as const,
-  history: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) =>
+  history: ({ repoPath, runtimeKind, workingDirectory, externalSessionId }: AgentSessionRef) =>
     [
       ...agentSessionRuntimeQueryKeys.all,
       "history",
@@ -160,50 +151,22 @@ export const sessionFileSearchQueryOptions = (
   });
 
 export const sessionTodosQueryOptions = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-  workingDirectory: string,
-  externalSessionId: string,
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>,
+  session: AgentSessionRef,
+  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>,
 ) =>
   queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.todos(
-      repoPath,
-      runtimeKind,
-      workingDirectory,
-      externalSessionId,
-    ),
-    queryFn: (): Promise<AgentSessionTodoItem[]> =>
-      readSessionTodos(repoPath, runtimeKind, workingDirectory, externalSessionId),
+    queryKey: agentSessionRuntimeQueryKeys.todos(session),
+    queryFn: (): Promise<AgentSessionTodoItem[]> => readSessionTodos(session),
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
 export const sessionHistoryQueryOptions = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-  workingDirectory: string,
-  externalSessionId: string,
-  readSessionHistory: (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionHistoryMessage[]>,
+  session: AgentSessionRef,
+  readSessionHistory: (session: AgentSessionRef) => Promise<AgentSessionHistoryMessage[]>,
 ) =>
   queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.history(
-      repoPath,
-      runtimeKind,
-      workingDirectory,
-      externalSessionId,
-    ),
-    queryFn: (): Promise<AgentSessionHistoryMessage[]> =>
-      readSessionHistory(repoPath, runtimeKind, workingDirectory, externalSessionId),
+    queryKey: agentSessionRuntimeQueryKeys.history(session),
+    queryFn: (): Promise<AgentSessionHistoryMessage[]> => readSessionHistory(session),
     staleTime: SESSION_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });

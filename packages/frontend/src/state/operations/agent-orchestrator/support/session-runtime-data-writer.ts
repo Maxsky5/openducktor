@@ -8,19 +8,11 @@ export type SessionRuntimeDataWriter = {
   updateTodos: (session: AgentSessionRef, updater: SessionTodosUpdater) => void;
 };
 
-const todosQueryKey = ({
-  repoPath,
-  runtimeKind,
-  workingDirectory,
-  externalSessionId,
-}: AgentSessionRef) =>
-  agentSessionRuntimeQueryKeys.todos(repoPath, runtimeKind, workingDirectory, externalSessionId);
-
 export const createSessionRuntimeDataWriter = (
   queryClient: QueryClient,
 ): SessionRuntimeDataWriter => ({
   updateTodos(session, updater): void {
-    const queryKey = todosQueryKey(session);
+    const queryKey = agentSessionRuntimeQueryKeys.todos(session);
     const current = queryClient.getQueryData<AgentSessionTodoItem[]>(queryKey) ?? [];
     queryClient.setQueryData(queryKey, updater(current));
   },

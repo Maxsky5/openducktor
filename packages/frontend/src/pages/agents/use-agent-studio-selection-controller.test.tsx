@@ -521,21 +521,14 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("loads runtime data only for the visible session when selected and view sessions differ", async () => {
-    const readSessionTodos = mock(
-      async (
-        _repoPath: string,
-        _runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-        _workingDirectory: string,
-        externalSessionId: string,
-      ) => [
-        {
-          id: `todo-${externalSessionId}`,
-          content: `Todo for ${externalSessionId}`,
-          status: "pending" as const,
-          priority: "medium" as const,
-        },
-      ],
-    );
+    const readSessionTodos = mock(async ({ externalSessionId }: { externalSessionId: string }) => [
+      {
+        id: `todo-${externalSessionId}`,
+        content: `Todo for ${externalSessionId}`,
+        status: "pending" as const,
+        priority: "medium" as const,
+      },
+    ]);
     const activeSession = createSession("task-1", "session-build", {
       role: "build",
       runtimeKind: "opencode",
@@ -566,7 +559,12 @@ describe("useAgentStudioSelectionController", () => {
         (latest) => latest.viewSessionRuntimeData.todos[0]?.id === "todo-session-build",
       );
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(readSessionTodos.mock.calls[0]?.[3]).toBe("session-build");
+      expect(readSessionTodos).toHaveBeenCalledWith({
+        repoPath: activeWorkspace.repoPath,
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/task-1",
+        externalSessionId: "session-build",
+      });
       readSessionTodos.mockClear();
 
       await harness.run((state) => {
@@ -577,7 +575,12 @@ describe("useAgentStudioSelectionController", () => {
       );
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(readSessionTodos.mock.calls[0]?.[3]).toBe("session-qa");
+      expect(readSessionTodos).toHaveBeenCalledWith({
+        repoPath: activeWorkspace.repoPath,
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/task-2",
+        externalSessionId: "session-qa",
+      });
     } finally {
       await harness.unmount();
     }

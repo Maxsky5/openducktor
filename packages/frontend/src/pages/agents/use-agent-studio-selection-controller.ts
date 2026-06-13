@@ -1,5 +1,10 @@
 import type { AgentSessionRecord, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
+import type {
+  AgentModelCatalog,
+  AgentRole,
+  AgentSessionRef,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import {
   firstLaunchAction,
@@ -65,12 +70,7 @@ type UseAgentStudioSelectionControllerArgs = {
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
   ) => Promise<AgentModelCatalog>;
-  readSessionTodos: (
-    repoPath: string,
-    runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
-    workingDirectory: string,
-    externalSessionId: string,
-  ) => Promise<AgentSessionTodoItem[]>;
+  readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
   clearComposerInput: () => void;
   onContextSwitchIntent?: () => void;
 };

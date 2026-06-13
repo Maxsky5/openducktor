@@ -266,12 +266,12 @@ describe("useSessionTranscriptSurfaceModel", () => {
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
       );
 
-      expect(readSessionHistory).toHaveBeenCalledWith(
-        "/repo-a",
-        "opencode",
-        "/repo-a/worktree",
-        "session-subagent-1",
-      );
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a/worktree",
+        externalSessionId: "session-subagent-1",
+      });
       const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
       expect(session.externalSessionId).toBe("session-subagent-1");
       expect(session.messages).toBeTruthy();
@@ -338,12 +338,12 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
       expect(useAgentSessionMock).toHaveBeenCalledWith("session-requested");
-      expect(readSessionHistory).toHaveBeenCalledWith(
-        "/repo-a",
-        "opencode",
-        "/repo-a",
-        "session-requested",
-      );
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+        externalSessionId: "session-requested",
+      });
     } finally {
       await harness.unmount();
     }
@@ -482,12 +482,12 @@ describe("useSessionTranscriptSurfaceModel", () => {
     try {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
-      expect(readSessionHistory).toHaveBeenCalledWith(
-        "/repo-a",
-        "opencode",
-        "/repo-a",
-        "session-subagent-1",
-      );
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+        externalSessionId: "session-subagent-1",
+      });
       await harness.waitFor(
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
       );

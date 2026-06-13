@@ -65,12 +65,12 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
       await harness.waitFor((state) => state.session !== null);
 
-      expect(readSessionHistory).toHaveBeenCalledWith(
-        "/repo-a",
-        "opencode",
-        "/repo-a/worktree",
-        "session-1",
-      );
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a/worktree",
+        externalSessionId: "session-1",
+      });
       const session = harness.getLatest().session;
       expect(session?.externalSessionId).toBe("session-1");
       expect(session?.runtimeKind).toBe("opencode");
@@ -137,12 +137,12 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
       await harness.waitFor((state) => state.session !== null);
 
-      expect(readSessionHistory).toHaveBeenCalledWith(
-        "/repo-a",
-        "opencode",
-        "/repo-a/worktree",
-        "session-1",
-      );
+      expect(readSessionHistory).toHaveBeenCalledWith({
+        repoPath: "/repo-a",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a/worktree",
+        externalSessionId: "session-1",
+      });
       expect(harness.getLatest().session?.status).toBe("idle");
       expect(harness.getLatest().session?.workingDirectory).toBe("/repo-a/worktree");
     } finally {
