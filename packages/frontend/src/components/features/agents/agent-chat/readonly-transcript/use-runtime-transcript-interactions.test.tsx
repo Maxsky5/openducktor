@@ -4,8 +4,6 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
-import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 (
@@ -43,14 +41,6 @@ const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
   ],
 });
 
-const createSource = (
-  overrides: Partial<RuntimeSessionTranscriptSource> = {},
-): RuntimeSessionTranscriptSource => ({
-  runtimeKind: "opencode",
-  workingDirectory: "/repo-a",
-  ...overrides,
-});
-
 const createThreadSession = (
   overrides: Parameters<typeof createAgentSessionFixture>[0] = {},
 ): AgentChatThreadSession => ({
@@ -64,29 +54,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     pendingApprovals: [],
     pendingQuestions: [],
   }),
-  source: createSource(),
   externalSessionId: "session-1",
   isRuntimeReady: true,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
   ...overrides,
-});
-
-describe("runtime transcript pending request helpers", () => {
-  test("requires an external session id for transcript interaction identity", () => {
-    expect(
-      getRuntimeTranscriptIdentityKey({
-        externalSessionId: null,
-        source: createSource(),
-      }),
-    ).toBeNull();
-    expect(
-      getRuntimeTranscriptIdentityKey({
-        externalSessionId: "session-1",
-        source: createSource(),
-      }),
-    ).toBe("session-1\u0000opencode\u0000/repo-a");
-  });
 });
 
 describe("useRuntimeTranscriptInteractions", () => {
@@ -224,7 +196,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     }
   });
 
-  test("resets question submission state when the transcript identity changes", async () => {
+  test("resets question submission state when the transcript session changes", async () => {
     const deferredAnswer = createDeferred<void>();
     const answerAgentQuestion = mock(async () => deferredAnswer.promise);
     const pendingQuestion = createQuestionRequest("question-1");
@@ -252,6 +224,49 @@ describe("useRuntimeTranscriptInteractions", () => {
         externalSessionId: "session-2",
         session: createThreadSession({
           externalSessionId: "session-2",
+          pendingApprovals: [],
+          pendingQuestions: [],
+        }),
+      });
+
+      expect(harness.getLatest().pendingQuestions.isSubmittingByRequestId).toEqual({});
+    } finally {
+      deferredAnswer.resolve(undefined);
+      await harness.unmount();
+    }
+  });
+
+  test("resets question submission state when the same session id points to another runtime session", async () => {
+    const deferredAnswer = createDeferred<void>();
+    const answerAgentQuestion = mock(async () => deferredAnswer.promise);
+    const pendingQuestion = createQuestionRequest("question-1");
+    const baseArgs = createBaseArgs({
+      session: createThreadSession({
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+        pendingApprovals: [],
+        pendingQuestions: [pendingQuestion],
+      }),
+      answerAgentQuestion,
+    });
+    const harness = createHookHarness(baseArgs);
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        void state.pendingQuestions.onSubmit("question-1", [["A"]]);
+      });
+      await harness.waitFor(
+        (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === true,
+      );
+
+      await harness.update({
+        ...baseArgs,
+        session: createThreadSession({
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-b",
           pendingApprovals: [],
           pendingQuestions: [],
         }),

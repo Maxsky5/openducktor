@@ -68,7 +68,6 @@ export function useSessionTranscriptSurfaceModel({
   });
   const transcriptInteractions = useRuntimeTranscriptInteractions({
     session: sessionHistory.session,
-    source,
     externalSessionId,
     isRuntimeReady: runtimeReadiness.isReady,
     replyAgentApproval,

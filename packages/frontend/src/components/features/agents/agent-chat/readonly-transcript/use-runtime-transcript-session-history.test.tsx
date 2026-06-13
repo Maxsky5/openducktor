@@ -88,6 +88,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     const liveSession = createAgentSessionFixture({
       externalSessionId: "session-1",
       status: "running",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a/worktree",
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -112,6 +114,37 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         todos: [],
       });
       expect(harness.getLatest().isHistoryLoading).toBe(false);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("loads history when a same-id live session belongs to another source", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    const harness = createHookHarness(
+      createBaseArgs({
+        liveSession: createAgentSessionFixture({
+          externalSessionId: "session-1",
+          status: "running",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-b/worktree",
+        }),
+        readSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => state.session !== null);
+
+      expect(readSessionHistory).toHaveBeenCalledWith(
+        "/repo-a",
+        "opencode",
+        "/repo-a/worktree",
+        "session-1",
+      );
+      expect(harness.getLatest().session?.status).toBe("idle");
+      expect(harness.getLatest().session?.workingDirectory).toBe("/repo-a/worktree");
     } finally {
       await harness.unmount();
     }

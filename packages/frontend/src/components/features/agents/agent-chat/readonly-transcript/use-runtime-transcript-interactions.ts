@@ -3,47 +3,43 @@ import { useCallback, useReducer } from "react";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
-import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
 
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
+const TRANSCRIPT_INTERACTION_KEY_SEPARATOR = "\u0000";
 
 type RuntimeTranscriptInteractionState = {
-  transcriptIdentityKey: string | null;
+  sessionKey: string | null;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
 };
 
 type RuntimeTranscriptInteractionAction =
-  | { type: "questionSubmitStarted"; requestId: string; transcriptIdentityKey: string | null }
-  | { type: "questionSubmitFinished"; requestId: string; transcriptIdentityKey: string | null };
+  | { type: "questionSubmitStarted"; requestId: string; sessionKey: string | null }
+  | { type: "questionSubmitFinished"; requestId: string; sessionKey: string | null };
 
 const createRuntimeTranscriptInteractionState = (
-  transcriptIdentityKey: string | null,
+  sessionKey: string | null,
 ): RuntimeTranscriptInteractionState => ({
-  transcriptIdentityKey,
+  sessionKey,
   isSubmittingQuestionByRequestId: {},
 });
 
-const getRuntimeTranscriptInteractionStateForIdentity = (
+const getRuntimeTranscriptInteractionStateForSession = (
   state: RuntimeTranscriptInteractionState,
-  transcriptIdentityKey: string | null,
+  sessionKey: string | null,
 ): RuntimeTranscriptInteractionState => {
-  if (state.transcriptIdentityKey === transcriptIdentityKey) {
+  if (state.sessionKey === sessionKey) {
     return state;
   }
 
-  return createRuntimeTranscriptInteractionState(transcriptIdentityKey);
+  return createRuntimeTranscriptInteractionState(sessionKey);
 };
 
 const runtimeTranscriptInteractionReducer = (
   state: RuntimeTranscriptInteractionState,
   action: RuntimeTranscriptInteractionAction,
 ): RuntimeTranscriptInteractionState => {
-  const currentState = getRuntimeTranscriptInteractionStateForIdentity(
-    state,
-    action.transcriptIdentityKey,
-  );
+  const currentState = getRuntimeTranscriptInteractionStateForSession(state, action.sessionKey);
 
   switch (action.type) {
     case "questionSubmitStarted":
@@ -62,9 +58,21 @@ const runtimeTranscriptInteractionReducer = (
   }
 };
 
+const getRuntimeTranscriptInteractionSessionKey = (
+  session: AgentChatThreadSession | null,
+  externalSessionId: string | null,
+): string | null => {
+  if (!session) {
+    return externalSessionId;
+  }
+
+  return [session.externalSessionId, session.runtimeKind, session.workingDirectory].join(
+    TRANSCRIPT_INTERACTION_KEY_SEPARATOR,
+  );
+};
+
 type UseRuntimeTranscriptInteractionsArgs = {
   session: AgentChatThreadSession | null;
-  source: RuntimeSessionTranscriptSource | null;
   externalSessionId: string | null;
   isRuntimeReady: boolean;
   replyAgentApproval: (
@@ -98,21 +106,20 @@ type RuntimeTranscriptInteractions = {
 
 export function useRuntimeTranscriptInteractions({
   session,
-  source,
   externalSessionId,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
-  const transcriptIdentityKey = getRuntimeTranscriptIdentityKey({ externalSessionId, source });
+  const sessionKey = getRuntimeTranscriptInteractionSessionKey(session, externalSessionId);
   const [interactionState, dispatchInteractionState] = useReducer(
     runtimeTranscriptInteractionReducer,
-    transcriptIdentityKey,
+    sessionKey,
     createRuntimeTranscriptInteractionState,
   );
-  const currentInteractionState = getRuntimeTranscriptInteractionStateForIdentity(
+  const currentInteractionState = getRuntimeTranscriptInteractionStateForSession(
     interactionState,
-    transcriptIdentityKey,
+    sessionKey,
   );
   const { isSubmittingQuestionByRequestId } = currentInteractionState;
   const visiblePendingApprovals = session?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
@@ -154,7 +161,7 @@ export function useRuntimeTranscriptInteractions({
       dispatchInteractionState({
         type: "questionSubmitStarted",
         requestId,
-        transcriptIdentityKey,
+        sessionKey,
       });
       try {
         await answerAgentQuestion(activeSessionId, requestId, answers);
@@ -162,11 +169,11 @@ export function useRuntimeTranscriptInteractions({
         dispatchInteractionState({
           type: "questionSubmitFinished",
           requestId,
-          transcriptIdentityKey,
+          sessionKey,
         });
       }
     },
-    [activeSessionId, answerAgentQuestion, sessionMatchesTranscript, transcriptIdentityKey],
+    [activeSessionId, answerAgentQuestion, sessionMatchesTranscript, sessionKey],
   );
 
   return {

@@ -55,8 +55,16 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
   readSessionHistory,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
+  const sourceLiveSession =
+    liveSession &&
+    source &&
+    liveSession.externalSessionId === externalSessionId &&
+    liveSession.runtimeKind === source.runtimeKind &&
+    liveSession.workingDirectory === source.workingDirectory
+      ? liveSession
+      : null;
   const historyQueryEnabled = Boolean(
-    isOpen && activeWorkspace && externalSessionId && source && liveSession === null,
+    isOpen && activeWorkspace && externalSessionId && source && sourceLiveSession === null,
   );
   const historyQueryInput =
     source && activeWorkspace && externalSessionId
@@ -92,8 +100,8 @@ export function useRuntimeTranscriptSessionHistory({
   });
 
   const session = useMemo(() => {
-    if (liveSession) {
-      return toReadonlyLiveTranscriptSession(liveSession);
+    if (sourceLiveSession) {
+      return toReadonlyLiveTranscriptSession(sourceLiveSession);
     }
     if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
       return null;
@@ -105,7 +113,7 @@ export function useRuntimeTranscriptSessionHistory({
       workingDirectory: source.workingDirectory,
       history: historyQuery.data,
     });
-  }, [activeWorkspace, externalSessionId, historyQuery.data, liveSession, source]);
+  }, [activeWorkspace, externalSessionId, historyQuery.data, sourceLiveSession, source]);
 
   return {
     session,
