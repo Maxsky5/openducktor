@@ -136,7 +136,7 @@ describe("createLoadAgentSessions", () => {
     expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
   });
 
-  test("commits persisted sessions before runtime presence resolves", async () => {
+  test("waits for runtime presence before committing persisted session state", async () => {
     const presenceReady = createDeferred<void>();
     const harness = createLoaderHarness({
       listSessionPresence: async () => {
@@ -150,14 +150,43 @@ describe("createLoadAgentSessions", () => {
 
     const loading = harness.loadAgentSessions("task-1", { persistedRecords: [record] });
 
+    expect(harness.getSession(record.externalSessionId)).toBeNull();
+
+    presenceReady.resolve(undefined);
+    await loading;
+
     const session = harness.getSession(record.externalSessionId);
     expect(session?.status).toBe("stopped");
     expect(session?.runtimeKind).toBe("opencode");
     expect(session?.workingDirectory).toBe(record.workingDirectory);
     expect(session?.historyLoadState).toBe("not_requested");
+  });
 
-    presenceReady.resolve(undefined);
-    await loading;
+  test("commits an empty persisted read model after task session records are removed", async () => {
+    let presenceReads = 0;
+    const harness = createLoaderHarness({
+      initialSessionsById: {
+        [record.externalSessionId]: createAgentSessionFixture({
+          externalSessionId: record.externalSessionId,
+          taskId: "task-1",
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          role: "build",
+          status: "stopped",
+          startedAt: record.startedAt,
+          workingDirectory: record.workingDirectory,
+        }),
+      },
+      listSessionPresence: async () => {
+        presenceReads += 1;
+        return [];
+      },
+    });
+
+    await harness.loadAgentSessions("task-1", { persistedRecords: [] });
+
+    expect(harness.getSession(record.externalSessionId)).toBeNull();
+    expect(presenceReads).toBe(0);
   });
 
   test("loads the runtime history baseline for a running session after reload", async () => {

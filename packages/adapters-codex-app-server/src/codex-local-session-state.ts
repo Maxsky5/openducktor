@@ -1,39 +1,56 @@
 import type { CodexSessionState } from "./types";
 
+export type CodexSessionLookup = {
+  get(externalSessionId: string): CodexSessionState | undefined;
+  values(): IterableIterator<CodexSessionState>;
+};
+
 type CodexLocalSessionStateDeps = {
-  sessions: Map<string, CodexSessionState>;
   sessionEvents: { clear(externalSessionId: string): void };
   activeTurnsBySessionId: { delete(externalSessionId: string): boolean };
   pendingInput: { clearSession(externalSessionId: string): void };
-  runtimeEvents: { clearSession(externalSessionId: string): void };
+  historyPresenceOverlay: { clear(externalSessionId: string): void };
+  runtimeEvents: {
+    clearSession(externalSessionId: string): void;
+    drainBufferedStreamEvents(externalSessionId: string): Promise<void>;
+    stopRuntimeEventSubscription(runtimeId: string): void;
+  };
 };
 
-export class CodexLocalSessionState {
+export class CodexLocalSessionState implements CodexSessionLookup {
+  private readonly sessions = new Map<string, CodexSessionState>();
+
   constructor(private readonly deps: CodexLocalSessionStateDeps) {}
 
-  get sessionsById(): Map<string, CodexSessionState> {
-    return this.deps.sessions;
-  }
-
   get(externalSessionId: string): CodexSessionState | undefined {
-    return this.deps.sessions.get(externalSessionId);
+    return this.sessions.get(externalSessionId);
   }
 
   has(externalSessionId: string): boolean {
-    return this.deps.sessions.has(externalSessionId);
+    return this.sessions.has(externalSessionId);
   }
 
-  set(session: CodexSessionState): void {
-    this.deps.sessions.set(session.threadId, session);
+  remember(session: CodexSessionState): void {
+    this.deps.historyPresenceOverlay.clear(session.threadId);
+    this.sessions.set(session.threadId, session);
+    void this.deps.runtimeEvents.drainBufferedStreamEvents(session.threadId);
   }
 
   values(): IterableIterator<CodexSessionState> {
-    return this.deps.sessions.values();
+    return this.sessions.values();
   }
 
-  clear(externalSessionId: string): CodexSessionState | undefined {
-    const session = this.deps.sessions.get(externalSessionId);
-    this.deps.sessions.delete(externalSessionId);
+  release(externalSessionId: string): CodexSessionState | undefined {
+    const session = this.clearSessionState(externalSessionId);
+    if (session && !this.hasRuntimeSession(session.runtimeId)) {
+      this.deps.runtimeEvents.stopRuntimeEventSubscription(session.runtimeId);
+    }
+    return session;
+  }
+
+  private clearSessionState(externalSessionId: string): CodexSessionState | undefined {
+    const session = this.sessions.get(externalSessionId);
+    this.sessions.delete(externalSessionId);
     this.deps.sessionEvents.clear(externalSessionId);
     this.deps.activeTurnsBySessionId.delete(externalSessionId);
     this.deps.pendingInput.clearSession(externalSessionId);
@@ -41,8 +58,8 @@ export class CodexLocalSessionState {
     return session;
   }
 
-  hasRuntimeSession(runtimeId: string): boolean {
-    for (const session of this.deps.sessions.values()) {
+  private hasRuntimeSession(runtimeId: string): boolean {
+    for (const session of this.sessions.values()) {
       if (session.runtimeId === runtimeId) {
         return true;
       }

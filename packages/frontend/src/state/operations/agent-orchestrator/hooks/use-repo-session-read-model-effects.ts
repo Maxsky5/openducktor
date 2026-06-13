@@ -26,9 +26,6 @@ type UseRepoSessionReadModelEffectsArgs = {
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
 };
 
-const hasPersistedSessionRecords = (tasks: TaskCard[]): boolean =>
-  tasks.some((task) => (task.agentSessions ?? []).length > 0);
-
 export const useRepoSessionReadModelEffects = ({
   workspaceRepoPath,
   tasks,
@@ -40,7 +37,7 @@ export const useRepoSessionReadModelEffects = ({
   setSessionReadModelError,
 }: UseRepoSessionReadModelEffectsArgs) => {
   useEffect(() => {
-    if (!workspaceRepoPath || !hasPersistedSessionRecords(tasks)) {
+    if (!workspaceRepoPath) {
       setSessionReadModelError(null);
       return;
     }

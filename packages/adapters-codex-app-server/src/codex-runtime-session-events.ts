@@ -28,6 +28,7 @@ import {
 } from "./codex-app-server-transcript";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import type { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
+import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import {
   CodexRuntimeEventBuffer,
@@ -47,7 +48,7 @@ type CodexRuntimeSessionEventsDeps = {
   drainServerRequests: CodexAppServerAdapterOptions["drainServerRequests"];
   drainNotifications: CodexAppServerAdapterOptions["drainNotifications"];
   respondServerRequest: CodexAppServerAdapterOptions["respondServerRequest"];
-  sessions: Map<string, CodexSessionState>;
+  sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   sessionEvents: CodexSessionEventBus;
   pendingInput: CodexPendingInputState;

@@ -6,13 +6,14 @@ import {
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
 import { toCodexTurnInputList } from "./codex-app-server-transcript";
+import type { CodexSessionLookup } from "./codex-local-session-state";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
 export type CodexTurnLifecycleContext = {
   subscribeEvents: boolean;
   shouldDrainNotifications: boolean;
-  sessions: Map<string, CodexSessionState>;
+  sessions: CodexSessionLookup;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   clientForRuntime(runtimeId: string): CodexAppServerClient;
   validateModel(

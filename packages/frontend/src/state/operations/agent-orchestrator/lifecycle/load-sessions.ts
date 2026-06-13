@@ -6,7 +6,6 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
-  createEmptyRepoRuntimeSessionPresenceRead,
   type RepoRuntimeSessionPresenceRead,
   readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
@@ -126,18 +125,6 @@ export const loadRepoAgentSessions = async ({
   isStaleRepoOperation: () => boolean;
   options?: AgentSessionLoadOptions;
 }): Promise<void> => {
-  if (isStaleRepoOperation()) {
-    return;
-  }
-
-  commitRepoSessionLoadPlan({
-    repoPath,
-    tasks,
-    runtimePresence: createEmptyRepoRuntimeSessionPresenceRead(),
-    options: { ...(options ?? {}), historyPolicy: "none" },
-    commitSessions,
-  });
-
   if (isStaleRepoOperation()) {
     return;
   }

@@ -78,7 +78,7 @@ import {
   toTransportModelSelection,
 } from "./model-catalog";
 import { toCodexSkillCatalog } from "./skill-catalog";
-import type { CodexAppServerAdapterOptions, CodexSessionState } from "./types";
+import type { CodexAppServerAdapterOptions } from "./types";
 
 export { createCodexAppServerClient } from "./app-server-client";
 
@@ -97,13 +97,15 @@ export class CodexAppServerAdapter
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
-    const sessions = new Map<string, CodexSessionState>();
     this.runtimeEvents = new CodexRuntimeSessionEvents({
       subscribeEvents: options.subscribeEvents,
       drainServerRequests: options.drainServerRequests,
       drainNotifications: options.drainNotifications,
       respondServerRequest: options.respondServerRequest,
-      sessions,
+      sessions: {
+        get: (externalSessionId) => this.localSessions.get(externalSessionId),
+        values: () => this.localSessions.values(),
+      },
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
@@ -111,10 +113,10 @@ export class CodexAppServerAdapter
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
     });
     this.localSessions = new CodexLocalSessionState({
-      sessions,
       sessionEvents: this.sessionEvents,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
+      historyPresenceOverlay: this.historyPresenceOverlay,
       runtimeEvents: this.runtimeEvents,
     });
   }
@@ -159,9 +161,7 @@ export class CodexAppServerAdapter
     const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
     const session = sessionStateFromThreadStart(input, runtimeId, model, response, title);
     const { summary } = session;
-    this.historyPresenceOverlay.clear(summary.externalSessionId);
-    this.localSessions.set(session);
-    void this.runtimeEvents.drainBufferedStreamEvents(summary.externalSessionId);
+    this.localSessions.remember(session);
     await client.threadSetName({
       threadId: session.threadId,
       name: title,
@@ -188,9 +188,7 @@ export class CodexAppServerAdapter
     this.clearThreadInventory(runtimeId);
     const session = sessionStateFromThreadResume(input, runtimeId, model, response);
     const { summary } = session;
-    this.historyPresenceOverlay.clear(summary.externalSessionId);
-    this.localSessions.set(session);
-    void this.runtimeEvents.drainBufferedStreamEvents(summary.externalSessionId);
+    this.localSessions.remember(session);
 
     return summary;
   }
@@ -214,9 +212,7 @@ export class CodexAppServerAdapter
     const title = formatWorkflowAgentSessionTitle(input.role, input.taskId);
     const session = sessionStateFromThreadFork(input, runtimeId, model, response, title);
     const { summary } = session;
-    this.historyPresenceOverlay.clear(summary.externalSessionId);
-    this.localSessions.set(session);
-    void this.runtimeEvents.drainBufferedStreamEvents(summary.externalSessionId);
+    this.localSessions.remember(session);
     await client.threadSetName({
       threadId: session.threadId,
       name: title,
@@ -368,17 +364,12 @@ export class CodexAppServerAdapter
       session,
       this.localSessions.get(summary.externalSessionId),
     );
-    this.historyPresenceOverlay.clear(summary.externalSessionId);
-    this.localSessions.set(restoredSession);
-    void this.runtimeEvents.drainBufferedStreamEvents(summary.externalSessionId);
+    this.localSessions.remember(restoredSession);
     return summary;
   }
 
   async releaseSession(input: AgentSessionRef): Promise<void> {
-    const session = this.localSessions.clear(input.externalSessionId);
-    if (session && !this.localSessions.hasRuntimeSession(session.runtimeId)) {
-      this.runtimeEvents.stopRuntimeEventSubscription(session.runtimeId);
-    }
+    this.localSessions.release(input.externalSessionId);
   }
 
   async listLiveAgentSessions(
@@ -514,17 +505,14 @@ export class CodexAppServerAdapter
     if (!session) {
       throw new Error(`Unknown Codex session '${input.externalSessionId}'.`);
     }
-    this.localSessions.clear(input.externalSessionId);
-    if (!this.localSessions.hasRuntimeSession(session.runtimeId)) {
-      this.runtimeEvents.stopRuntimeEventSubscription(session.runtimeId);
-    }
+    this.localSessions.release(input.externalSessionId);
   }
 
   private presenceReaderDeps() {
     return {
       runtimeClients: this.runtimeClients,
       threadInventory: this.threadInventory,
-      sessions: this.localSessions.sessionsById,
+      sessions: this.localSessions,
       historyPresenceOverlay: this.historyPresenceOverlay,
       pendingInput: this.pendingInput,
       hasActiveTurn: (externalSessionId: string) => {
@@ -542,7 +530,7 @@ export class CodexAppServerAdapter
     return {
       subscribeEvents: Boolean(this.options.subscribeEvents),
       shouldDrainNotifications: Boolean(this.options.drainNotifications),
-      sessions: this.localSessions.sessionsById,
+      sessions: this.localSessions,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
       validateModel: (client, runtimeId, model) => this.models.validate(client, runtimeId, model),

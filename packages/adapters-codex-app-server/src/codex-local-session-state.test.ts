@@ -23,10 +23,11 @@ const createStore = () => {
   const clearedSessionEvents: string[] = [];
   const clearedPendingInput: string[] = [];
   const clearedRuntimeEvents: string[] = [];
-  const sessions = new Map<string, CodexSessionState>();
+  const clearedHistoryPresence: string[] = [];
+  const drainedRuntimeEvents: string[] = [];
+  const stoppedRuntimeSubscriptions: string[] = [];
   const activeTurnsBySessionId = new Map<string, unknown>();
   const store = new CodexLocalSessionState({
-    sessions,
     sessionEvents: {
       clear: (externalSessionId) => clearedSessionEvents.push(externalSessionId),
     },
@@ -34,67 +35,89 @@ const createStore = () => {
     pendingInput: {
       clearSession: (externalSessionId) => clearedPendingInput.push(externalSessionId),
     },
+    historyPresenceOverlay: {
+      clear: (externalSessionId) => clearedHistoryPresence.push(externalSessionId),
+    },
     runtimeEvents: {
       clearSession: (externalSessionId) => clearedRuntimeEvents.push(externalSessionId),
+      drainBufferedStreamEvents: async (externalSessionId) => {
+        drainedRuntimeEvents.push(externalSessionId);
+      },
+      stopRuntimeEventSubscription: (runtimeId) => stoppedRuntimeSubscriptions.push(runtimeId),
     },
   });
   return {
     store,
-    sessions,
     activeTurnsBySessionId,
     clearedSessionEvents,
     clearedPendingInput,
     clearedRuntimeEvents,
+    clearedHistoryPresence,
+    drainedRuntimeEvents,
+    stoppedRuntimeSubscriptions,
   };
 };
 
 describe("CodexLocalSessionState", () => {
-  test("stores sessions and reports runtime ownership", () => {
-    const { store } = createStore();
-    store.set(session("thread-1", "runtime-1"));
-    store.set(session("thread-2", "runtime-2"));
+  test("remembers sessions and drains buffered runtime events", async () => {
+    const { store, clearedHistoryPresence, drainedRuntimeEvents } = createStore();
+    store.remember(session("thread-1", "runtime-1"));
+    store.remember(session("thread-2", "runtime-2"));
+    await Promise.resolve();
 
     expect(store.get("thread-1")?.runtimeId).toBe("runtime-1");
     expect(store.has("thread-2")).toBe(true);
     expect([...store.values()].map((entry) => entry.threadId)).toEqual(["thread-1", "thread-2"]);
-    expect(store.hasRuntimeSession("runtime-1")).toBe(true);
-    expect(store.hasRuntimeSession("missing-runtime")).toBe(false);
+    expect(clearedHistoryPresence).toEqual(["thread-1", "thread-2"]);
+    expect(drainedRuntimeEvents).toEqual(["thread-1", "thread-2"]);
   });
 
   test("clears local session-scoped state without touching other sessions", () => {
     const {
       store,
-      sessions,
       activeTurnsBySessionId,
       clearedSessionEvents,
       clearedPendingInput,
       clearedRuntimeEvents,
+      stoppedRuntimeSubscriptions,
     } = createStore();
-    store.set(session("thread-1"));
-    store.set(session("thread-2"));
+    store.remember(session("thread-1"));
+    store.remember(session("thread-2"));
     activeTurnsBySessionId.set("thread-1", {});
     activeTurnsBySessionId.set("thread-2", {});
 
-    const cleared = store.clear("thread-1");
+    const cleared = store.release("thread-1");
 
     expect(cleared?.threadId).toBe("thread-1");
-    expect(sessions.has("thread-1")).toBe(false);
-    expect(sessions.has("thread-2")).toBe(true);
+    expect(store.has("thread-1")).toBe(false);
+    expect(store.has("thread-2")).toBe(true);
     expect(activeTurnsBySessionId.has("thread-1")).toBe(false);
     expect(activeTurnsBySessionId.has("thread-2")).toBe(true);
     expect(clearedSessionEvents).toEqual(["thread-1"]);
     expect(clearedPendingInput).toEqual(["thread-1"]);
     expect(clearedRuntimeEvents).toEqual(["thread-1"]);
+    expect(stoppedRuntimeSubscriptions).toEqual([]);
+  });
+
+  test("stops runtime subscription when the last local session for a runtime is released", () => {
+    const { store, stoppedRuntimeSubscriptions } = createStore();
+    store.remember(session("thread-1", "runtime-1"));
+    store.remember(session("thread-2", "runtime-2"));
+
+    store.release("thread-1");
+
+    expect(stoppedRuntimeSubscriptions).toEqual(["runtime-1"]);
   });
 
   test("clears missing local sessions without throwing", () => {
-    const { store, sessions, activeTurnsBySessionId } = createStore();
-    store.set(session("thread-2"));
+    const { store, activeTurnsBySessionId, stoppedRuntimeSubscriptions } = createStore();
+    store.remember(session("thread-2"));
     activeTurnsBySessionId.set("thread-2", {});
 
-    expect(store.clear("missing-thread")).toBeUndefined();
+    expect(store.release("missing-thread")).toBeUndefined();
 
-    expect(sessions.has("thread-2")).toBe(true);
+    expect(store.has("thread-2")).toBe(true);
     expect(activeTurnsBySessionId.has("thread-2")).toBe(true);
+    expect(stoppedRuntimeSubscriptions).toEqual([]);
   });
 });

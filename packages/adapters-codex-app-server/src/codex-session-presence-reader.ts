@@ -12,6 +12,7 @@ import {
 } from "./codex-app-server-presence";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
+import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
 import type { CodexThreadInventoryReader } from "./codex-thread-inventory";
@@ -20,7 +21,7 @@ import type { CodexSessionState } from "./types";
 export type CodexSessionPresenceReaderDeps = {
   runtimeClients: CodexRuntimeClientResolver;
   threadInventory: CodexThreadInventoryReader;
-  sessions: Map<string, CodexSessionState>;
+  sessions: CodexSessionLookup;
   historyPresenceOverlay: CodexHistoryPresenceOverlay;
   pendingInput: CodexPendingInputState;
   hasActiveTurn: (externalSessionId: string) => boolean;
