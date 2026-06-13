@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -15,11 +14,8 @@ enableReactActEnvironment();
 
 type UseAgentStudioSelectionControllerHook =
   typeof import("./use-agent-studio-selection-controller")["useAgentStudioSelectionController"];
-type GroupSessionsByTaskIdFn =
-  typeof import("./use-agent-studio-selection-controller")["groupSessionsByTaskId"];
 
 let useAgentStudioSelectionController: UseAgentStudioSelectionControllerHook;
-let groupSessionsByTaskId: GroupSessionsByTaskIdFn;
 
 const sessionByIdRef: { current: Record<string, AgentSessionState> } = {
   current: {},
@@ -164,7 +160,7 @@ describe("useAgentStudioSelectionController", () => {
         externalSessionId ? (sessionByIdRef.current[externalSessionId] ?? null) : null,
     }));
 
-    ({ groupSessionsByTaskId, useAgentStudioSelectionController } = await import(
+    ({ useAgentStudioSelectionController } = await import(
       "./use-agent-studio-selection-controller"
     ));
   });
@@ -172,51 +168,6 @@ describe("useAgentStudioSelectionController", () => {
   afterEach(async () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
-    ]);
-  });
-
-  test("groups sessions by task with newest sessions first", () => {
-    const firstTaskOneOld = createSession("task-1", "session-old", {
-      startedAt: "2026-02-22T10:00:00.000Z",
-    });
-    const firstTaskOneNew = createSession("task-1", "session-new", {
-      startedAt: "2026-02-22T11:00:00.000Z",
-    });
-    const firstTaskTwo = createSession("task-2", "session-2-old", {
-      startedAt: "2026-02-22T09:00:00.000Z",
-    });
-
-    const grouped = groupSessionsByTaskId(
-      [firstTaskOneOld, firstTaskOneNew, firstTaskTwo].map(toAgentSessionSummary),
-    );
-
-    expect(grouped.get("task-1")?.map((session) => session.externalSessionId)).toEqual([
-      "session-new",
-      "session-old",
-    ]);
-    expect(grouped.get("task-2")?.map((session) => session.externalSessionId)).toEqual([
-      "session-2-old",
-    ]);
-  });
-
-  test("keeps grouped session order stable when input order changes", () => {
-    const sessionOld = createSession("task-1", "session-old", {
-      startedAt: "2026-02-22T10:00:00.000Z",
-    });
-    const sessionNew = createSession("task-1", "session-new", {
-      startedAt: "2026-02-22T11:00:00.000Z",
-    });
-
-    const first = groupSessionsByTaskId([sessionOld, sessionNew].map(toAgentSessionSummary));
-    const second = groupSessionsByTaskId([sessionNew, sessionOld].map(toAgentSessionSummary));
-
-    expect(first.get("task-1")?.map((session) => session.externalSessionId)).toEqual([
-      "session-new",
-      "session-old",
-    ]);
-    expect(second.get("task-1")?.map((session) => session.externalSessionId)).toEqual([
-      "session-new",
-      "session-old",
     ]);
   });
 
