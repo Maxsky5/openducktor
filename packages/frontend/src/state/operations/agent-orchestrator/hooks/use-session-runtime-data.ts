@@ -55,7 +55,7 @@ export const useSessionRuntimeData = ({
       }),
     [repoReadinessState, session],
   );
-  const shouldHydrateRuntimeData =
+  const canReadSessionRuntimeData =
     sessionViewLifecycle.canReadRuntimeData &&
     runtimeQueryInput !== null &&
     runtimeDataSupportError === null &&
@@ -66,8 +66,8 @@ export const useSessionRuntimeData = ({
   const supportsTodos = runtimeDefinition
     ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
     : false;
-  const shouldHydrateTodos =
-    shouldHydrateRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
+  const shouldLoadTodos =
+    canReadSessionRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
 
   const catalogQuery = useQuery({
     queryKey: runtimeQueryInput
@@ -80,7 +80,7 @@ export const useSessionRuntimeData = ({
       ? (): Promise<AgentModelCatalog> =>
           readSessionModelCatalog(runtimeQueryInput.repoPath, runtimeQueryInput.runtimeKind)
       : skipToken,
-    enabled: shouldHydrateRuntimeData,
+    enabled: canReadSessionRuntimeData,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
   });
 
@@ -104,7 +104,7 @@ export const useSessionRuntimeData = ({
               session.externalSessionId,
             )
         : skipToken,
-    enabled: shouldHydrateTodos,
+    enabled: shouldLoadTodos,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
@@ -126,7 +126,7 @@ export const useSessionRuntimeData = ({
     const isLoadingModelCatalog =
       runtimeDataSupportError || catalogQueryError
         ? false
-        : shouldHydrateRuntimeData
+        : canReadSessionRuntimeData
           ? resolvedCatalog === null && catalogQuery.isPending
           : session.isLoadingModelCatalog && resolvedCatalog === null;
 
@@ -155,7 +155,7 @@ export const useSessionRuntimeData = ({
     catalogQuery.error,
     catalogQuery.isPending,
     session,
-    shouldHydrateRuntimeData,
+    canReadSessionRuntimeData,
     todosQuery.data,
     todosQuery.error,
     runtimeDataSupportError,

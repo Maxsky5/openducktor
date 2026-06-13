@@ -165,4 +165,37 @@ describe("OpencodeSdkAdapter session lifecycle", () => {
     expect(mock.session.abortCalls).toHaveLength(1);
     expect(events.some((event) => event.type === "session_finished")).toBe(true);
   });
+
+  test("stopSession keeps the local session when runtime abort fails", async () => {
+    const mock = makeMockClient({});
+    const abortError = new Error("abort failed");
+    const client = {
+      ...mock.client,
+      session: {
+        ...mock.client.session,
+        abort: async (input: unknown) => {
+          mock.session.abortCalls.push(input);
+          throw abortError;
+        },
+      },
+    } as unknown as OpencodeClient;
+    const adapter = new OpencodeSdkAdapter({
+      createClient: () => client,
+      now: () => "2026-02-17T12:00:00Z",
+    });
+    await startDefaultSession(adapter);
+
+    const events: AgentEvent[] = [];
+    adapter.subscribeEvents(sessionRuntimeRef("session-opencode-1"), (event) => {
+      events.push(event);
+    });
+
+    await expect(adapter.stopSession(sessionRef("session-opencode-1"))).rejects.toThrow(
+      "abort failed",
+    );
+
+    expect(mock.session.abortCalls).toHaveLength(1);
+    expect(localSessions(adapter).has("session-opencode-1")).toBe(true);
+    expect(events.some((event) => event.type === "session_finished")).toBe(false);
+  });
 });

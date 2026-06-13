@@ -113,10 +113,6 @@ const toPersistedSessionRef = ({
   externalSessionId: record.externalSessionId,
 });
 
-export const createEmptyRepoRuntimeSessionPresenceRead = (): RepoRuntimeSessionPresenceRead => ({
-  snapshotsBySessionKey: new Map(),
-});
-
 export const readRepoRuntimeSessionPresence = async ({
   repoPath,
   tasks,

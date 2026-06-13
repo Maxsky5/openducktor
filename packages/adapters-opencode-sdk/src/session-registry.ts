@@ -401,7 +401,7 @@ export const clearWorkflowToolCacheForDirectory = (
   }
 };
 
-const releaseSessionRuntimeSubscription = async (
+export const releaseSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
@@ -419,27 +419,15 @@ const releaseSessionRuntimeSubscription = async (
   await eventTransport.streamDone.catch(() => undefined);
 };
 
-export const releaseSessionRuntime = async (
-  session: SessionRecord,
-  sessions: Map<string, SessionRecord>,
-  runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
-): Promise<void> => {
-  await releaseSessionRuntimeSubscription(session, sessions, runtimeEventTransports);
-};
-
 export const stopSessionRuntime = async (
   session: SessionRecord,
   sessions: Map<string, SessionRecord>,
   runtimeEventTransports: Map<string, RuntimeEventTransportRecord>,
 ): Promise<void> => {
-  try {
-    await session.client.session.abort({
-      directory: session.input.workingDirectory,
-      sessionID: session.externalSessionId,
-    });
-  } catch (abortError) {
-    void abortError;
-  }
+  await session.client.session.abort({
+    directory: session.input.workingDirectory,
+    sessionID: session.externalSessionId,
+  });
 
-  await releaseSessionRuntimeSubscription(session, sessions, runtimeEventTransports);
+  await releaseSessionRuntime(session, sessions, runtimeEventTransports);
 };

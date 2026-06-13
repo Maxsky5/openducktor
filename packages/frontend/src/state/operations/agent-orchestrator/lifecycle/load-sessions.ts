@@ -6,7 +6,9 @@ import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
+  buildRepoSessionReadModel,
   type RepoRuntimeSessionPresenceRead,
+  type RepoSessionReadModel,
   readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
@@ -15,8 +17,8 @@ import {
   loadSessionHistorySnapshot,
   loadSessionHistorySnapshots,
   type SessionHistoryLoaderAdapter,
+  selectSessionHistoryTargets,
 } from "./session-history-loader";
-import { buildRepoSessionLoadPlan, type RepoSessionLoadPlan } from "./session-load-plan";
 
 type UpdateSession = (
   externalSessionId: string,
@@ -33,35 +35,32 @@ type CommitSessions = (updater: SessionStateUpdater) => void;
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence" | "restoreSession"> &
   SessionHistoryLoaderAdapter;
 
-const commitRepoSessionLoadPlan = ({
+const commitRepoSessionReadModel = ({
   repoPath,
   tasks,
   runtimePresence,
-  options,
   commitSessions,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   runtimePresence: RepoRuntimeSessionPresenceRead;
-  options?: AgentSessionLoadOptions;
   commitSessions: CommitSessions;
-}): RepoSessionLoadPlan => {
-  let committedPlan: RepoSessionLoadPlan | undefined;
+}): RepoSessionReadModel => {
+  let committedReadModel: RepoSessionReadModel | undefined;
   commitSessions((currentSessionsById) => {
-    const nextPlan = buildRepoSessionLoadPlan({
+    const readModel = buildRepoSessionReadModel({
       repoPath,
       tasks,
       currentSessionsById,
       runtimePresence,
-      ...(options ? { options } : {}),
     });
-    committedPlan = nextPlan;
-    return nextPlan.sessionsById;
+    committedReadModel = readModel;
+    return readModel.sessionsById;
   });
-  if (committedPlan === undefined) {
+  if (committedReadModel === undefined) {
     throw new Error("Failed to commit repo session read model.");
   }
-  return committedPlan;
+  return committedReadModel;
 };
 
 type CreateLoadAgentSessionsArgs = {
@@ -138,11 +137,10 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const committedPlan = commitRepoSessionLoadPlan({
+  const readModel = commitRepoSessionReadModel({
     repoPath,
     tasks,
     runtimePresence,
-    ...(options ? { options } : {}),
     commitSessions,
   });
 
@@ -150,7 +148,7 @@ export const loadRepoAgentSessions = async ({
     return;
   }
   await Promise.all(
-    committedPlan.liveSessions.map(async (session) => {
+    readModel.liveSessions.map(async (session) => {
       await adapter.restoreSession(session);
       if (!isStaleRepoOperation()) {
         listenToAgentSession?.(session);
@@ -162,7 +160,13 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  if (committedPlan.historySessions.length === 0) {
+  const historySessions = selectSessionHistoryTargets({
+    sessionsById: readModel.sessionsById,
+    liveSessions: readModel.liveSessions,
+    ...(options ? { options } : {}),
+  });
+
+  if (historySessions.length === 0) {
     return;
   }
 
@@ -170,7 +174,7 @@ export const loadRepoAgentSessions = async ({
     repoPath,
     adapter,
     updateSession,
-    sessions: committedPlan.historySessions,
+    sessions: historySessions,
     isStaleRepoOperation,
   });
 };
