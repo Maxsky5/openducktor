@@ -1,4 +1,4 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "./agent-chat.types";
 
 export type AgentChatThreadLifecycle = {
   canRenderHistory: boolean;
@@ -6,12 +6,12 @@ export type AgentChatThreadLifecycle = {
 };
 
 type ResolveAgentChatThreadContextArgs = {
-  activeSession: AgentSessionState | null;
+  activeSession: AgentChatThreadSession | null;
   lifecycle: AgentChatThreadLifecycle;
 };
 
 export type AgentChatThreadContext = {
-  threadSession: AgentSessionState | null;
+  threadSession: AgentChatThreadSession | null;
   activeExternalSessionId: string | null;
   isContextSwitching: boolean;
 };

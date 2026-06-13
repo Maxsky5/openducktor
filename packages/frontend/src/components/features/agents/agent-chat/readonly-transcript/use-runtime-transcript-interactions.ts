@@ -1,10 +1,7 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useCallback, useMemo, useReducer } from "react";
-import type {
-  AgentApprovalRequest,
-  AgentQuestionRequest,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "../agent-chat.types";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
@@ -96,7 +93,7 @@ const runtimeTranscriptInteractionReducer = (
 };
 
 type UseRuntimeTranscriptInteractionsArgs = {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   source: RuntimeSessionTranscriptSource | null;
   externalSessionId: string | null;
   isRuntimeReady: boolean;
@@ -113,7 +110,7 @@ type UseRuntimeTranscriptInteractionsArgs = {
 };
 
 type RuntimeTranscriptInteractions = {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   visiblePendingApprovals: readonly AgentApprovalRequest[];
   visiblePendingQuestions: readonly AgentQuestionRequest[];
   pendingQuestions: {

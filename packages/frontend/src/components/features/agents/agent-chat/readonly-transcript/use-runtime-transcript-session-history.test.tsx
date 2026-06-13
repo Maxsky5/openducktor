@@ -73,7 +73,8 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       );
       const session = harness.getLatest().session;
       expect(session?.externalSessionId).toBe("session-1");
-      expect(session?.purpose).toBe("transcript");
+      expect(session?.runtimeKind).toBe("opencode");
+      expect(session?.workingDirectory).toBe("/repo-a/worktree");
       expect(session?.status).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
       expect(harness.getLatest().historyError).toBeNull();

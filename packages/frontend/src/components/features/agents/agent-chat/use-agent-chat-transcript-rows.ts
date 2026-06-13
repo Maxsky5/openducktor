@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useMemo, useReducer, useRef } from "react";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionState, SessionMessagesState } from "@/types/agent-orchestrator";
+import type { SessionMessagesState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
   type AgentChatWindowRow,
   type AgentChatWindowRowsCacheEntry,
@@ -17,7 +18,7 @@ const TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT = 100;
 
 type TranscriptRowsRevision = {
   externalSessionId: string | null;
-  sessionStatus: AgentSessionState["status"] | null;
+  sessionStatus: AgentChatThreadSession["status"] | null;
   showThinkingMessages: boolean;
   messagesKind: "state" | "array" | "none";
   messagesExternalSessionId: string | null;
@@ -26,7 +27,7 @@ type TranscriptRowsRevision = {
   rawSessionToken: number | null;
 };
 
-const rawSessionTokenBySession = new WeakMap<AgentSessionState, number>();
+const rawSessionTokenBySession = new WeakMap<AgentChatThreadSession, number>();
 let nextRawSessionToken = 1;
 
 export type TranscriptRowsState = {
@@ -59,7 +60,7 @@ const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
 });
 
 const isSessionMessagesState = (
-  messages: AgentSessionState["messages"],
+  messages: AgentChatThreadSession["messages"],
 ): messages is SessionMessagesState => {
   return (
     typeof messages === "object" &&
@@ -70,7 +71,7 @@ const isSessionMessagesState = (
 };
 
 const buildTranscriptRowsRevision = (
-  session: AgentSessionState | null,
+  session: AgentChatThreadSession | null,
   showThinkingMessages: boolean,
 ): TranscriptRowsRevision => {
   if (!session) {
@@ -123,7 +124,7 @@ const toTranscriptRowsState = ({
   revision,
   rowsState,
 }: {
-  session: AgentSessionState;
+  session: AgentChatThreadSession;
   revision: TranscriptRowsRevision;
   rowsState: Pick<
     TranscriptRowsState,
@@ -150,7 +151,7 @@ const buildImmediateTranscriptRowsState = ({
   showThinkingMessages,
   cache,
 }: {
-  session: AgentSessionState;
+  session: AgentChatThreadSession;
   showThinkingMessages: boolean;
   cache: Map<string, AgentChatWindowRowsCacheEntry>;
 }): TranscriptRowsState => {
@@ -245,7 +246,7 @@ export const useAgentChatTranscriptRows = ({
   showThinkingMessages,
   shouldPauseDerivation,
 }: {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   showThinkingMessages: boolean;
   shouldPauseDerivation: boolean;
 }): {

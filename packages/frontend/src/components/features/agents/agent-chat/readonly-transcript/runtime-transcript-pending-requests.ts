@@ -1,8 +1,5 @@
-import type {
-  AgentApprovalRequest,
-  AgentQuestionRequest,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "../agent-chat.types";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
 type PendingRuntimeRequest = {
@@ -33,7 +30,7 @@ export const mergeRuntimePendingApprovals = ({
   repliedRequestIds,
 }: {
   source: RuntimeSessionTranscriptSource | null;
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   repliedRequestIds: ReadonlySet<string>;
 }): AgentApprovalRequest[] =>
   mergeRuntimePendingRequests(
@@ -48,7 +45,7 @@ export const mergeRuntimePendingQuestions = ({
   repliedRequestIds,
 }: {
   source: RuntimeSessionTranscriptSource | null;
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   repliedRequestIds: ReadonlySet<string>;
 }): AgentQuestionRequest[] =>
   mergeRuntimePendingRequests(

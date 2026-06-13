@@ -30,8 +30,22 @@ export type AgentChatEmptyStateModel = {
   isActionPending?: boolean;
 };
 
+export type AgentChatThreadSession = Pick<
+  AgentSessionState,
+  | "externalSessionId"
+  | "title"
+  | "status"
+  | "runtimeKind"
+  | "workingDirectory"
+  | "messages"
+  | "pendingApprovals"
+  | "pendingQuestions"
+  | "todos"
+  | "selectedModel"
+>;
+
 export type AgentChatThreadModel = {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   isSessionWorking: boolean;
   isSessionViewLoading: boolean;
   isSessionHistoryLoading: boolean;

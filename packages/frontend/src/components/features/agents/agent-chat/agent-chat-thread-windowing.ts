@@ -7,9 +7,9 @@ import {
 import type {
   AgentChatMessage,
   AgentSessionMessages,
-  AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "./agent-chat.types";
 
 /** Initial number of user turns rendered from the bottom of the transcript. */
 export const CHAT_TURN_WINDOW_INIT = 10;
@@ -55,7 +55,7 @@ type AgentChatWindowResolvedState = Pick<
 >;
 
 export type AgentChatWindowRowsCacheEntry = AgentChatWindowRowsState & {
-  messages: AgentSessionState["messages"];
+  messages: AgentChatThreadSession["messages"];
 };
 
 const CHAT_WINDOW_ROWS_CACHE_LIMIT = 6;
@@ -179,7 +179,7 @@ const findActiveStreamingAssistantMessageId = (rows: AgentChatWindowRow[]): stri
 
 const toResolvedWindowRowsState = (
   cacheEntry: AgentChatWindowRowsCacheEntry,
-  sessionStatus: AgentSessionState["status"],
+  sessionStatus: AgentChatThreadSession["status"],
 ): AgentChatWindowResolvedState => {
   return {
     rows: cacheEntry.rows,
@@ -195,7 +195,7 @@ const toResolvedWindowRowsState = (
 };
 
 const createWindowRowsCacheEntry = (
-  sessionMessages: AgentSessionState["messages"],
+  sessionMessages: AgentChatThreadSession["messages"],
   rowsState: AgentChatWindowRowsState,
 ): AgentChatWindowRowsCacheEntry => {
   return {
@@ -210,7 +210,7 @@ export const writeAgentChatWindowRowsCacheEntry = ({
   rowsState,
   cache,
 }: {
-  session: AgentSessionState;
+  session: AgentChatThreadSession;
   showThinkingMessages: boolean;
   rowsState: AgentChatWindowRowsState;
   cache: Map<string, AgentChatWindowRowsCacheEntry>;
@@ -226,7 +226,7 @@ export const peekReusableAgentChatWindowRowsState = ({
   showThinkingMessages,
   cache,
 }: {
-  session: AgentSessionState;
+  session: AgentChatThreadSession;
   showThinkingMessages: boolean;
   cache: Map<string, AgentChatWindowRowsCacheEntry>;
 }): Pick<AgentChatWindowRowsState, keyof AgentChatWindowResolvedState> | null => {
@@ -251,7 +251,7 @@ export const peekReusableAgentChatWindowRowsState = ({
 };
 
 export function createAgentChatWindowRowsStateBuilder(
-  session: AgentSessionState,
+  session: AgentChatThreadSession,
   { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
 ): AgentChatWindowRowsStateBuilder {
   const rows: AgentChatWindowRow[] = [];
@@ -336,14 +336,14 @@ export function createAgentChatWindowRowsStateBuilder(
 }
 
 export function buildAgentChatWindowRowsState(
-  session: AgentSessionState,
+  session: AgentChatThreadSession,
   { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
 ): AgentChatWindowRowsState {
   return createAgentChatWindowRowsStateBuilder(session, { showThinkingMessages }).complete();
 }
 
 export function buildAgentChatWindowRows(
-  session: AgentSessionState,
+  session: AgentChatThreadSession,
   { showThinkingMessages }: BuildAgentChatWindowRowsOptions,
 ): AgentChatWindowRow[] {
   return buildAgentChatWindowRowsState(session, { showThinkingMessages }).rows;
@@ -377,7 +377,7 @@ export function getAgentChatInitialTurnStart(turnCount: number): number {
 }
 
 export function getAgentChatWindowRowsKey(
-  session: AgentSessionState,
+  session: AgentChatThreadSession,
   showThinkingMessages: boolean,
   resolveMessageIdentityToken: (message: AgentChatMessage) => number,
 ): string {

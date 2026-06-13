@@ -15,12 +15,13 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { resolveAgentAccentColor, resolveAgentSessionAccentColor } from "../agent-accent-color";
+import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type {
   AgentChatComposerModel,
   AgentChatEmptyStateModel,
   AgentChatMode,
   AgentChatSurfaceModel,
+  AgentChatThreadSession,
 } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
 import {
@@ -59,28 +60,6 @@ const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string)
     previous.contextSwitchVersion === next.contextSwitchVersion &&
     previous.externalSessionId !== next.externalSessionId
   );
-};
-
-const buildSessionAgentColors = (
-  catalog: AgentModelCatalog | null | undefined,
-): Record<string, string> => {
-  if (!catalog) {
-    return {};
-  }
-
-  const map: Record<string, string> = {};
-  for (const descriptor of catalog.profiles ?? []) {
-    const descriptorId = descriptor.id ?? descriptor.name;
-    const descriptorLabel = descriptor.label ?? descriptor.name;
-    if (!descriptorId || !descriptorLabel) {
-      continue;
-    }
-    const color = resolveAgentAccentColor(descriptorLabel, descriptor.color);
-    if (color) {
-      map[descriptorId] = color;
-    }
-  }
-  return map;
 };
 
 const missingInteractiveComposerAction = (): never => {
@@ -187,7 +166,7 @@ export type AgentChatSurfaceSessionLifecycle = AgentChatThreadLifecycle & {
 
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   sessionLifecycle: AgentChatSurfaceSessionLifecycle;
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
@@ -247,8 +226,8 @@ export function useAgentChatSurfaceModel({
     if (sessionAgentColors) {
       return sessionAgentColors;
     }
-    return buildSessionAgentColors(session?.modelCatalog);
-  }, [session?.modelCatalog, sessionAgentColors]);
+    return {};
+  }, [sessionAgentColors]);
 
   const activeTodoPanelCollapsed = activeExternalSessionId
     ? (todoPanelCollapsedBySession[activeExternalSessionId] ?? true)

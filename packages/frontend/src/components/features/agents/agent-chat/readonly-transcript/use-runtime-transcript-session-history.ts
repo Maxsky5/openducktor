@@ -1,7 +1,10 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { createRuntimeTranscriptSession } from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
+import {
+  createRuntimeTranscriptSession,
+  type RuntimeTranscriptSession,
+} from "@/state/operations/agent-orchestrator/support/runtime-transcript-session";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_HISTORY_STALE_TIME_MS,
@@ -28,7 +31,7 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
 };
 
 type RuntimeTranscriptSessionHistory = {
-  session: AgentSessionState | null;
+  session: AgentSessionState | RuntimeTranscriptSession | null;
   isHistoryLoading: boolean;
   historyError: string | null;
 };
@@ -86,7 +89,6 @@ export function useRuntimeTranscriptSessionHistory({
     }
 
     return createRuntimeTranscriptSession({
-      repoPath: activeWorkspace.repoPath,
       externalSessionId,
       runtimeKind: source.runtimeKind,
       workingDirectory: source.workingDirectory,
