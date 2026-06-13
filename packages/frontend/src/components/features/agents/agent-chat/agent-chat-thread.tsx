@@ -1,3 +1,4 @@
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
 import {
   memo,
@@ -109,7 +110,7 @@ type AgentChatBottomStackProps = {
   externalSessionId: string;
   pendingQuestions: AgentSessionState["pendingQuestions"];
   pendingApprovals: AgentSessionState["pendingApprovals"];
-  todos: AgentSessionState["todos"];
+  todos: AgentSessionTodoItem[];
   sessionRuntimeDataError: string | null;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];

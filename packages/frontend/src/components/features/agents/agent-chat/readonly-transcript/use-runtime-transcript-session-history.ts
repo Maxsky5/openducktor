@@ -34,6 +34,19 @@ type RuntimeTranscriptSessionHistory = {
   historyError: string | null;
 };
 
+const toReadonlyLiveTranscriptSession = (session: AgentSessionState): AgentChatThreadSession => ({
+  externalSessionId: session.externalSessionId,
+  ...(session.title ? { title: session.title } : {}),
+  status: session.status,
+  runtimeKind: session.runtimeKind,
+  workingDirectory: session.workingDirectory,
+  messages: session.messages,
+  pendingApprovals: session.pendingApprovals,
+  pendingQuestions: session.pendingQuestions,
+  selectedModel: session.selectedModel,
+  todos: [],
+});
+
 export function useRuntimeTranscriptSessionHistory({
   isOpen,
   activeWorkspace,
@@ -80,7 +93,7 @@ export function useRuntimeTranscriptSessionHistory({
 
   const session = useMemo(() => {
     if (liveSession) {
-      return liveSession;
+      return toReadonlyLiveTranscriptSession(liveSession);
     }
     if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
       return null;

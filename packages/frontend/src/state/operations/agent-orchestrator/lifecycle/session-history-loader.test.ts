@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionTodoItem } from "@openducktor/core";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import { loadSessionHistorySnapshot } from "./session-history-loader";
 
 const sessionTarget = {
@@ -67,17 +66,23 @@ describe("session history loader", () => {
     expect(session.historyLoadState).toBe("failed");
   });
 
-  test("loads transcript history without owning todo hydration", async () => {
-    const existingTodos: AgentSessionTodoItem[] = [
+  test("loads transcript history without owning live input state", async () => {
+    const pendingQuestions: AgentQuestionRequest[] = [
       {
-        id: "todo-1",
-        content: "Keep visible todo",
-        status: "in_progress",
-        priority: "medium",
+        requestId: "question-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Keep this pending question visible",
+            options: [],
+          },
+        ],
       },
     ];
-    let session = createSession();
-    session = { ...session, todos: existingTodos };
+    let session = {
+      ...createSession(),
+      pendingQuestions,
+    };
 
     const result = await loadSessionHistorySnapshot({
       repoPath: "/repo",
@@ -93,6 +98,6 @@ describe("session history loader", () => {
 
     expect(result.status).toBe("applied");
     expect(session.historyLoadState).toBe("loaded");
-    expect(session.todos).toBe(existingTodos);
+    expect(session.pendingQuestions).toBe(pendingQuestions);
   });
 });

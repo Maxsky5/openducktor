@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act } from "react";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "./agent-chat.types";
 import { buildMessage, buildQuestionRequest, buildSession } from "./agent-chat-test-fixtures";
 import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 
@@ -13,7 +13,7 @@ import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 type HarnessProps = {
-  session: AgentSessionState | null;
+  session: AgentChatThreadSession | null;
   showThinkingMessages: boolean;
   shouldPauseDerivation: boolean;
 };
@@ -62,7 +62,10 @@ const flushTranscriptDerivation = async (): Promise<void> => {
   await waitForTimers();
 };
 
-const createLargeSession = (externalSessionId: string, messageCount = 160): AgentSessionState => {
+const createLargeSession = (
+  externalSessionId: string,
+  messageCount = 160,
+): AgentChatThreadSession => {
   const messages = Array.from({ length: messageCount }, (_, index) => {
     const turnIndex = Math.floor(index / 2);
     if (index % 2 === 0) {

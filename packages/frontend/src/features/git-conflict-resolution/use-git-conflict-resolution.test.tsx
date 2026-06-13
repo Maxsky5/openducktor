@@ -27,7 +27,6 @@ const buildSession = (
     contextUsage: null,
     pendingApprovals: [],
     pendingQuestions: [],
-    todos: [],
     selectedModel: rest.selectedModel ?? null,
   };
 };

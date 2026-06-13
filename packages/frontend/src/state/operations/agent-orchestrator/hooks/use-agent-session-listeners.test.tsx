@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createNoopEngine,
@@ -13,6 +14,7 @@ import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 describe("useAgentSessionListeners", () => {
   test("subscribes with the runtime session route after reload", async () => {
     const subscribeEvents = mock(() => () => undefined);
+    const queryClient = new QueryClient();
     const Harness = () => {
       const state = useOrchestratorSessionState({
         activeWorkspace: {
@@ -31,6 +33,7 @@ describe("useAgentSessionListeners", () => {
         sessionsRef: state.refBridges.sessionsRef,
         commitSessions: state.commitSessions,
         updateSession: () => undefined,
+        queryClient,
         recordTurnActivityTimestamp: () => undefined,
         recordTurnUserMessageTimestamp: () => undefined,
         resolveTurnDurationMs: () => undefined,
@@ -61,6 +64,7 @@ describe("useAgentSessionListeners", () => {
 
   test("removal clears subscriptions, draft refs, timing refs, and session state", async () => {
     const unsubscribe = mock(() => undefined);
+    const queryClient = new QueryClient();
     const Harness = () => {
       const state = useOrchestratorSessionState({
         activeWorkspace: {
@@ -76,6 +80,7 @@ describe("useAgentSessionListeners", () => {
         sessionsRef: state.refBridges.sessionsRef,
         commitSessions: state.commitSessions,
         updateSession: () => undefined,
+        queryClient,
         recordTurnActivityTimestamp: () => undefined,
         recordTurnUserMessageTimestamp: () => undefined,
         resolveTurnDurationMs: () => undefined,

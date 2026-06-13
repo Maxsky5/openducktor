@@ -1,17 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
   type AgentChatThreadLifecycle,
   resolveAgentChatThreadContext,
 } from "./agent-chat-thread-context";
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
-  createAgentSessionFixture({
+const createSession = (overrides: Partial<AgentSessionState> = {}): AgentChatThreadSession => ({
+  ...createAgentSessionFixture({
     status: "idle",
     runtimeKind: "opencode",
     ...overrides,
-  });
+  }),
+  todos: [],
+});
 
 const createLifecycle = (
   overrides: Partial<AgentChatThreadLifecycle> = {},

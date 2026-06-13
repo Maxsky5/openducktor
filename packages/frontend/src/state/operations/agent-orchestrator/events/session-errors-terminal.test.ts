@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   type AgentSessionState,
   buildSession,
+  createRecordingRuntimeDataWriter,
   getLastSessionMessage,
   getSessionMessages,
   listenToAgentSessionEvents,
@@ -519,6 +520,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
   test("handles question/todo updates and terminal finish", () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const runtimeData = createRecordingRuntimeDataWriter();
     const adapter: SessionEventAdapter = {
       subscribeEvents: (_externalSessionId, handler) => {
         handlers.push(
@@ -561,6 +563,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       draftSourceBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
+      runtimeDataWriter: runtimeData.writer,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -599,7 +602,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:04.000Z",
     });
 
-    expect(sessionsRef.current["session-1"]?.todos).toHaveLength(1);
+    expect(runtimeData.getTodos()).toHaveLength(1);
     expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
     expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
     expect(updateSessionOptions).toContainEqual({ persist: false });

@@ -1,4 +1,5 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import type { AgentSessionTodoItem } from "@openducktor/core";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   lastSessionMessageForTest,
@@ -18,6 +19,21 @@ import {
 } from "./session-events";
 import { handleAssistantPart } from "./session-parts";
 
+export const createRecordingRuntimeDataWriter = () => {
+  let todos: AgentSessionTodoItem[] = [];
+  return {
+    writer: {
+      updateTodos: (
+        _session: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[0],
+        updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
+      ) => {
+        todos = updater(todos);
+      },
+    },
+    getTodos: () => todos,
+  };
+};
+
 export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
   externalSessionId: "external-1",
@@ -35,7 +51,6 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
   contextUsage: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
   selectedModel: null,
   ...overrides,
   historyLoadState: overrides.historyLoadState ?? "not_requested",
@@ -58,12 +73,15 @@ export const getSessionMessages = (
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
 export const listenToAgentSessionEvents = (
-  params: Omit<ListenToAgentSessionParams, "sessionRef"> &
-    Partial<Pick<ListenToAgentSessionParams, "sessionRef">>,
+  params: Omit<ListenToAgentSessionParams, "sessionRef" | "runtimeDataWriter"> &
+    Partial<Pick<ListenToAgentSessionParams, "sessionRef" | "runtimeDataWriter">>,
 ): (() => void) => {
   const session = getSession(params.sessionsRef, params.externalSessionId);
   return listenToAgentSessionEventsImpl({
     ...params,
+    runtimeDataWriter: params.runtimeDataWriter ?? {
+      updateTodos: () => {},
+    },
     sessionRef: params.sessionRef ?? {
       externalSessionId: params.externalSessionId,
       repoPath: params.repoPath,

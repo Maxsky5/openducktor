@@ -76,8 +76,7 @@ export const useSessionRuntimeData = ({
   const supportsTodos = runtimeDefinition
     ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
     : false;
-  const shouldLoadTodos =
-    canReadSessionRuntimeData && session !== null && session.todos.length === 0 && supportsTodos;
+  const shouldLoadTodos = canReadSessionRuntimeData && session !== null && supportsTodos;
 
   const catalogQuery = useQuery({
     queryKey: runtimeQueryInput
@@ -132,7 +131,7 @@ export const useSessionRuntimeData = ({
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
     const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
     const resolvedCatalog = catalogQuery.data ?? null;
-    const resolvedTodos = session.todos.length > 0 ? session.todos : (todosQuery.data ?? []);
+    const resolvedTodos = todosQuery.data ?? [];
     const isLoadingModelCatalog =
       runtimeDataSupportError || catalogQueryError
         ? false

@@ -9,7 +9,6 @@ import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
   AgentRole,
-  AgentSessionTodoItem,
   AgentSubagentExecutionMode,
   AgentSubagentStatus,
   AgentUserMessageDisplayPart,
@@ -183,7 +182,6 @@ export type AgentSessionState = {
   subagentPendingApprovalsByExternalSessionId?: Record<string, AgentApprovalRequest[]> | undefined;
   /** Live-only parent-session overlay keyed by child runtime session id. */
   subagentPendingQuestionsByExternalSessionId?: Record<string, AgentQuestionRequest[]> | undefined;
-  todos: AgentSessionTodoItem[];
   selectedModel: AgentModelSelection | null;
   promptOverrides?: RepoPromptOverrides;
   pendingUserMessageStartedAt?: number | undefined;

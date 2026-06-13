@@ -499,7 +499,6 @@ describe("useAgentStudioSelectionController", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo",
       status: "running",
-      todos: [],
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -515,10 +514,10 @@ describe("useAgentStudioSelectionController", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor((latest) => latest.viewActiveSession?.todos.length === 1);
+      await harness.waitFor((latest) => latest.viewSessionRuntimeData.todos.length === 1);
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().viewActiveSession?.todos[0]?.id).toBe("todo-1");
+      expect(harness.getLatest().viewSessionRuntimeData.todos[0]?.id).toBe("todo-1");
     } finally {
       await harness.unmount();
     }
@@ -545,14 +544,12 @@ describe("useAgentStudioSelectionController", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-1",
       status: "running",
-      todos: [],
     });
     const viewSession = createSession("task-2", "session-qa", {
       role: "qa",
       runtimeKind: "opencode",
       workingDirectory: "/repo/task-2",
       status: "running",
-      todos: [],
     });
     const harness = createHookHarness(
       createBaseArgs({
@@ -569,7 +566,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
       await harness.waitFor(
-        (latest) => latest.viewActiveSession?.todos[0]?.id === "todo-session-build",
+        (latest) => latest.viewSessionRuntimeData.todos[0]?.id === "todo-session-build",
       );
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(readSessionTodos.mock.calls[0]?.[3]).toBe("session-build");
@@ -579,7 +576,7 @@ describe("useAgentStudioSelectionController", () => {
         state.handleSelectTab("task-2");
       });
       await harness.waitFor(
-        (latest) => latest.viewActiveSession?.todos[0]?.id === "todo-session-qa",
+        (latest) => latest.viewSessionRuntimeData.todos[0]?.id === "todo-session-qa",
       );
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);

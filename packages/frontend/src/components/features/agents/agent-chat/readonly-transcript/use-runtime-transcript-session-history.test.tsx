@@ -101,7 +101,17 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().session).toEqual(liveSession);
+      expect(harness.getLatest().session).toEqual({
+        externalSessionId: liveSession.externalSessionId,
+        status: liveSession.status,
+        runtimeKind: liveSession.runtimeKind,
+        workingDirectory: liveSession.workingDirectory,
+        messages: liveSession.messages,
+        pendingApprovals: liveSession.pendingApprovals,
+        pendingQuestions: liveSession.pendingQuestions,
+        selectedModel: liveSession.selectedModel,
+        todos: [],
+      });
       expect(harness.getLatest().isHistoryLoading).toBe(false);
     } finally {
       await harness.unmount();

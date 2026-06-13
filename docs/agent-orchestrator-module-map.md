@@ -45,6 +45,7 @@ Files:
 Owns:
 
 - applying runtime events to loaded sessions
+- routing runtime todo events into the selected-session runtime-data writer
 - pending permission and question updates after startup
 - transcript streaming and batching
 - terminal status transitions such as idle, finished, and error
@@ -99,23 +100,27 @@ be stored in the lifecycle model.
 Files:
 
 - `hooks/use-session-runtime-data.ts`
+- `support/session-runtime-data-writer.ts`
 - `pages/agents/use-agent-studio-selection-controller.ts`
 
 Owns:
 
 - reading selected-session model catalog and todos through TanStack Query
+- owning live todo state through the same todos query cache used for selected-session reads
 - reporting selected-session runtime-data read errors
 - providing view-only runtime data to Agent Studio
 
 Must not own:
 
 - `AgentSessionState` identity, status, transcript messages, or history load state
+- canonical session todos; todos are runtime data, not session state
 - task session records
 - runtime route resolution
 
-Invariant: runtime-data reads must not rewrite the session store. Agent Studio may
-compose a view session for chat/thread components at the presentation boundary,
-but lifecycle decisions must use the raw selected `AgentSessionState`.
+Invariant: runtime-data reads and runtime todo events must not rewrite the session
+store. Agent Studio may compose a chat thread session from raw
+`AgentSessionState` plus selected-session runtime data at the presentation
+boundary, but lifecycle decisions must use the raw selected `AgentSessionState`.
 
 ### Session Actions
 

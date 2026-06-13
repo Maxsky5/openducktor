@@ -765,7 +765,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: null,
           },
         },
@@ -837,7 +836,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: null,
           },
           "external-chosen": {
@@ -857,7 +855,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: null,
           },
         },
@@ -943,7 +940,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: null,
           },
         },
@@ -1017,7 +1013,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: BUILD_SELECTION,
           },
         },
@@ -1086,7 +1081,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           draftReasoningMessageId: null,
           pendingApprovals: [],
           pendingQuestions: [],
-          todos: [],
           selectedModel: existingSelectedModel,
         },
       },
@@ -1195,7 +1189,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: {
               runtimeKind: "opencode",
               providerId: "openai",
@@ -1292,7 +1285,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: {
               runtimeKind: "opencode",
               providerId: "openai",
@@ -1399,7 +1391,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: null,
           },
         },
@@ -1478,7 +1469,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           draftReasoningMessageId: null,
           pendingApprovals: [],
           pendingQuestions: [],
-          todos: [],
           selectedModel: null,
         },
       },
@@ -1604,7 +1594,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: null,
           },
         };
@@ -1647,7 +1636,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         draftReasoningMessageId: null,
         pendingApprovals: [],
         pendingQuestions: [],
-        todos: [],
         selectedModel: {
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1804,7 +1792,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         contextUsage: null,
         pendingApprovals: [],
         pendingQuestions: [],
-        todos: [],
         selectedModel: BUILD_SELECTION,
       },
     };
@@ -1941,7 +1928,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         draftReasoningMessageId: null,
         pendingApprovals: [],
         pendingQuestions: [],
-        todos: [],
         selectedModel: BUILD_SELECTION,
       },
     };
@@ -2030,7 +2016,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           draftReasoningMessageId: null,
           pendingApprovals: [],
           pendingQuestions: [],
-          todos: [],
           selectedModel: BUILD_SELECTION,
         } as unknown as AgentSessionState,
       },
@@ -2114,7 +2099,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         contextUsage: null,
         pendingApprovals: [],
         pendingQuestions: [],
-        todos: [],
         selectedModel: BUILD_SELECTION,
       },
     };
@@ -2209,7 +2193,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         contextUsage: null,
         pendingApprovals: [],
         pendingQuestions: [],
-        todos: [],
         selectedModel: BUILD_SELECTION,
       },
     };
@@ -2374,7 +2357,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: {
               runtimeKind: "opencode",
               providerId: "openai",
@@ -2480,7 +2462,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
             draftReasoningMessageId: null,
             pendingApprovals: [],
             pendingQuestions: [],
-            todos: [],
             selectedModel: {
               runtimeKind: "opencode",
               providerId: "anthropic",

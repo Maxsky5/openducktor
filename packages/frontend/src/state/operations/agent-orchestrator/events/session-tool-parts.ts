@@ -140,7 +140,6 @@ const composeToolPartSessionUpdate = ({
   input,
   output,
   error,
-  todoUpdateFromTool,
   timestamp,
   workflowToolAliasesByCanonical,
 }: {
@@ -152,7 +151,6 @@ const composeToolPartSessionUpdate = ({
   input: Record<string, unknown> | undefined;
   output: string | undefined;
   error: string | undefined;
-  todoUpdateFromTool: ReturnType<typeof resolveTodoUpdateFromTool>;
   timestamp: string;
   workflowToolAliasesByCanonical?: Parameters<typeof isOdtWorkflowMutationToolName>[1];
 }): ToolPartSessionUpdate => {
@@ -189,9 +187,6 @@ const composeToolPartSessionUpdate = ({
     nextState: {
       ...prepared,
       status: "running",
-      ...(todoUpdateFromTool
-        ? { todos: mergeTodoListPreservingOrder(prepared.todos, todoUpdateFromTool) }
-        : {}),
       messages: upsertSessionMessage(prepared, {
         id: messageId,
         role: "tool",
@@ -241,10 +236,14 @@ export const handleToolPart = (
         input,
         output,
         error,
-        todoUpdateFromTool,
         timestamp: event.timestamp,
         workflowToolAliasesByCanonical,
       });
+      if (todoUpdateFromTool) {
+        context.runtimeData.runtimeDataWriter.updateTodos(current, (todos) =>
+          mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
+        );
+      }
 
       shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
 

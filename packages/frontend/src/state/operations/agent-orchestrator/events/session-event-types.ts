@@ -2,6 +2,7 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentEvent, AgentSessionRef } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { SessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
 
 export type DraftChannel = "reasoning";
 export type DraftSource = "delta" | "part";
@@ -44,6 +45,7 @@ export type ListenToAgentSessionParams = {
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
+  runtimeDataWriter: SessionRuntimeDataWriter;
   isSessionListenerActive?: (externalSessionId: string) => boolean;
   recordTurnActivityTimestamp?: RecordTurnTimestamp;
   recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
@@ -61,6 +63,8 @@ export type SessionStoreContext = Pick<
   ListenToAgentSessionParams,
   "externalSessionId" | "sessionsRef" | "updateSession" | "isSessionListenerActive"
 >;
+
+export type SessionRuntimeDataContext = Pick<ListenToAgentSessionParams, "runtimeDataWriter">;
 
 export type SessionDraftContext = Pick<
   ListenToAgentSessionParams,
@@ -98,6 +102,7 @@ export type SessionLifecycleEventContext = {
   drafts: SessionDraftContext;
   turn: SessionTurnContext;
   approvals: SessionApprovalContext;
+  runtimeData: SessionRuntimeDataContext;
 };
 
 export type SessionPartEventContext = {
@@ -105,9 +110,13 @@ export type SessionPartEventContext = {
   drafts: SessionDraftContext;
   turn: SessionTurnContext;
   refresh: SessionRefreshContext;
+  runtimeData: SessionRuntimeDataContext;
 };
 
-export type SessionToolPartEventContext = Pick<SessionPartEventContext, "store" | "refresh">;
+export type SessionToolPartEventContext = Pick<
+  SessionPartEventContext,
+  "store" | "refresh" | "runtimeData"
+>;
 
 export type SessionEventHandlerContext = {
   lifecycle: SessionLifecycleEventContext;
@@ -161,6 +170,9 @@ export const createSessionEventHandlerContext = (
         ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
         : {}),
     },
+    runtimeData: {
+      runtimeDataWriter: context.runtimeDataWriter,
+    },
   },
   parts: {
     store: {
@@ -203,6 +215,9 @@ export const createSessionEventHandlerContext = (
       ...(context.resolveRuntimeDefinition
         ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
         : {}),
+    },
+    runtimeData: {
+      runtimeDataWriter: context.runtimeDataWriter,
     },
   },
 });

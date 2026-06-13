@@ -273,7 +273,7 @@ The runtime-owned read that loads the visible **Transcript** for a selected **Ag
 _Avoid_: transcript hydration, runtime recovery, fallback loading
 
 **Selected Session Runtime Data**:
-The query-owned selected-session reads for runtime-scoped UI data such as **Session Todos** and model catalog. **Selected Session Runtime Data** may be composed into an **Agent Chat** view model, but it does not own **Agent Session** identity, status, **Transcript**, or history loading.
+The query-owned selected-session data for runtime-scoped UI surfaces such as **Session Todos** and model catalog. **Selected Session Runtime Data** is also the live owner for **Session Todos** updated by runtime events. It may be composed into an **Agent Chat** view model, but it does not own **Agent Session** identity, status, **Transcript**, or history loading.
 _Avoid_: session state overlay, runtime data hydration, transcript store
 
 **Runtime Session Reference**:
@@ -381,7 +381,7 @@ The token and context-window information reported for an **Agent Session** or as
 _Avoid_: Task estimate, cost only, Transcript length
 
 **Session Todo**:
-A runtime-owned todo item for an **Agent Session**. **Session Todos** can have `pending`, `in_progress`, `completed`, or `cancelled` status and `high`, `medium`, or `low` priority. **Session Todos** are not **Tasks**.
+A runtime-owned todo item for an **Agent Session**. **Session Todos** can have `pending`, `in_progress`, `completed`, or `cancelled` status and `high`, `medium`, or `low` priority. **Session Todos** are not **Tasks**, and they are not part of canonical **Agent Session** state.
 _Avoid_: Task, Subtask, checklist item
 
 **Pending Input**:

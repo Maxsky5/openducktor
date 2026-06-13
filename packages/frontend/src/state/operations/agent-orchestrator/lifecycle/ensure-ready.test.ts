@@ -63,7 +63,6 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
   selectedModel: null,
   ...overrides,
   historyLoadState: overrides.historyLoadState ?? "not_requested",

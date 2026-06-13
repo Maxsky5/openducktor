@@ -14,7 +14,7 @@ import type {
   AgentQuestionRequest,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { AgentRoleOption } from "./agent-chat.types";
+import type { AgentChatThreadSession, AgentRoleOption } from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
 
 const baseTask: TaskCard = {
@@ -85,7 +85,6 @@ const baseSession: AgentSessionState = {
   draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
   selectedModel: baseSelection,
 };
 
@@ -101,18 +100,29 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => {
+type AgentChatThreadSessionOverrides = Partial<AgentSessionState> & {
+  todos?: AgentChatThreadSession["todos"];
+};
+
+export const buildSession = (
+  overrides: AgentChatThreadSessionOverrides = {},
+): AgentChatThreadSession => {
   const repoPath = overrides.repoPath ?? baseSession.repoPath ?? "/repo";
   const { repoPath: _baseRepoPath, ...baseRepoSession } = baseSession;
-  const { repoPath: _overrideRepoPath, ...overrideSession } = overrides;
+  const { repoPath: _overrideRepoPath, todos = [], ...overrideSession } = overrides;
 
-  return createRepoScopedAgentSessionState(
+  const session = createRepoScopedAgentSessionState(
     {
       ...baseRepoSession,
       ...overrideSession,
     },
     repoPath,
   );
+
+  return {
+    ...session,
+    todos,
+  };
 };
 
 export const buildMessage = (

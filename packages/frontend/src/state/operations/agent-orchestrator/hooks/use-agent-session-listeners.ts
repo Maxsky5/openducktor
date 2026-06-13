@@ -1,9 +1,11 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentRole } from "@openducktor/core";
-import { useCallback } from "react";
+import type { QueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { listenToAgentSessionEvents } from "../events/session-events";
+import { createSessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 import type { useOrchestratorSessionState } from "./use-orchestrator-session-state";
@@ -20,6 +22,7 @@ type UseAgentSessionListenersArgs = {
       | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
   ) => void;
   updateSession: UpdateAgentSession;
+  queryClient: QueryClient;
   recordTurnActivityTimestamp: (externalSessionId: string, timestamp: string | number) => void;
   recordTurnUserMessageTimestamp: (externalSessionId: string, timestamp: string | number) => void;
   resolveTurnDurationMs: (
@@ -41,6 +44,7 @@ export const useAgentSessionListeners = ({
   sessionsRef,
   commitSessions,
   updateSession,
+  queryClient,
   recordTurnActivityTimestamp,
   recordTurnUserMessageTimestamp,
   resolveTurnDurationMs,
@@ -48,6 +52,10 @@ export const useAgentSessionListeners = ({
   refreshTaskData,
 }: UseAgentSessionListenersArgs) => {
   const { unsubscribersRef } = refBridges;
+  const runtimeDataWriter = useMemo(
+    () => createSessionRuntimeDataWriter(queryClient),
+    [queryClient],
+  );
 
   const removeSessionIds = useCallback(
     (externalSessionIds: string[]): void => {
@@ -130,6 +138,7 @@ export const useAgentSessionListeners = ({
         turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
+        runtimeDataWriter,
         isSessionListenerActive: (candidateSessionId) =>
           candidateSessionId === externalSessionId ||
           unsubscribersRef.current.has(candidateSessionId),
@@ -152,6 +161,7 @@ export const useAgentSessionListeners = ({
       recordTurnActivityTimestamp,
       recordTurnUserMessageTimestamp,
       resolveTurnDurationMs,
+      runtimeDataWriter,
       unsubscribersRef,
       updateSession,
     ],

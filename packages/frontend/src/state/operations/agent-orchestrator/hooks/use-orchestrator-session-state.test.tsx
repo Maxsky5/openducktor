@@ -50,7 +50,6 @@ const createSessionFixture = (): AgentSessionState => ({
   draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
   selectedModel: null,
 });
 

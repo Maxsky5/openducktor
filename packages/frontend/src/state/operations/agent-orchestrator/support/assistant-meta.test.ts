@@ -21,7 +21,6 @@ const sessionFixture: AgentSessionState = {
   draftReasoningMessageId: null,
   pendingApprovals: [],
   pendingQuestions: [],
-  todos: [],
   selectedModel: {
     runtimeKind: "opencode",
     providerId: "openai",

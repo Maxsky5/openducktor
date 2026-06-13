@@ -95,6 +95,7 @@ export function useAgentOrchestratorOperations({
       sessionsRef,
       commitSessions,
       updateSession,
+      queryClient,
       ...turnTiming,
       refreshTaskData,
     });

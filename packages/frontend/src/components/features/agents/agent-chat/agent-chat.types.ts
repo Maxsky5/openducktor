@@ -4,6 +4,7 @@ import type {
   AgentModelCatalog,
   AgentModelSelection,
   AgentRole,
+  AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSkillReference,
   AgentSlashCommand,
@@ -40,9 +41,10 @@ export type AgentChatThreadSession = Pick<
   | "messages"
   | "pendingApprovals"
   | "pendingQuestions"
-  | "todos"
   | "selectedModel"
->;
+> & {
+  todos: AgentSessionTodoItem[];
+};
 
 export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;

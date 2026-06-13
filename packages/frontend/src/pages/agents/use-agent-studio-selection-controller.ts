@@ -348,15 +348,6 @@ export function useAgentStudioSelectionController({
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const viewActiveSessionForDisplay = useMemo(() => {
-    if (!viewActiveSession) {
-      return null;
-    }
-    return {
-      ...viewActiveSession,
-      todos: viewSessionRuntimeData.runtimeData.todos,
-    };
-  }, [viewActiveSession, viewSessionRuntimeData.runtimeData.todos]);
   const viewRole = viewSelection.role;
   const viewLaunchActionId: SessionLaunchActionId =
     viewRole === "build"
@@ -427,7 +418,7 @@ export function useAgentStudioSelectionController({
       viewSelectedTask,
       viewSessionsForTask,
       viewActiveSessionSummary: viewSelection.sessionSummary,
-      viewActiveSession: viewActiveSessionForDisplay,
+      viewActiveSession,
       viewSessionRuntimeData: viewSessionRuntimeData.runtimeData,
       viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
       viewRole,
@@ -456,7 +447,7 @@ export function useAgentStudioSelectionController({
       viewRole,
       viewSelectedTask,
       viewSelection.sessionSummary,
-      viewActiveSessionForDisplay,
+      viewActiveSession,
       viewSessionRuntimeData.runtimeData,
       viewSessionRuntimeData.runtimeDataError,
       viewSessionsForTask,

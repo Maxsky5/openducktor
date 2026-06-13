@@ -6,7 +6,10 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
-import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import type {
+  AgentChatModel,
+  AgentChatThreadSession,
+} from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type {
@@ -106,7 +109,7 @@ export type AgentStudioSelectedSessionContext = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
   allSessionSummaries: AgentSessionSummary[];
-  activeSession: AgentSessionState | null;
+  activeSession: AgentChatThreadSession | null;
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
   rightPanel: SelectedSessionRightPanelContext;
@@ -290,6 +293,20 @@ export const buildAgentStudioSelectedSessionContext = ({
   });
   const hasPendingQuestions = (activeSession?.pendingQuestions ?? []).length > 0;
   const hasPendingApprovals = (activeSession?.pendingApprovals ?? []).length > 0;
+  const activeThreadSession: AgentChatThreadSession | null = activeSession
+    ? {
+        externalSessionId: activeSession.externalSessionId,
+        ...(activeSession.title ? { title: activeSession.title } : {}),
+        status: activeSession.status,
+        runtimeKind: activeSession.runtimeKind,
+        workingDirectory: activeSession.workingDirectory,
+        messages: activeSession.messages,
+        pendingApprovals: activeSession.pendingApprovals,
+        pendingQuestions: activeSession.pendingQuestions,
+        selectedModel: activeSession.selectedModel,
+        todos: activeSessionRuntimeData.todos,
+      }
+    : null;
 
   return {
     taskId,
@@ -297,7 +314,7 @@ export const buildAgentStudioSelectedSessionContext = ({
     selectedTask,
     sessionsForTask,
     allSessionSummaries,
-    activeSession,
+    activeSession: activeThreadSession,
     workflow,
     documents: {
       activeDocumentRole,

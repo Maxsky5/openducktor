@@ -3,6 +3,7 @@ import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "../agent-chat.types";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { getRuntimeTranscriptIdentityKey } from "./runtime-transcript-identity";
 import {
@@ -55,8 +56,15 @@ const createSource = (
   ...overrides,
 });
 
+const createThreadSession = (
+  overrides: Parameters<typeof createAgentSessionFixture>[0] = {},
+): AgentChatThreadSession => ({
+  ...createAgentSessionFixture(overrides),
+  todos: [],
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  session: createAgentSessionFixture({
+  session: createThreadSession({
     externalSessionId: "session-1",
     repoPath: "/repo-a",
     pendingApprovals: [],
@@ -108,7 +116,7 @@ describe("runtime transcript pending request helpers", () => {
       pendingApprovals: [sourceApproval],
       pendingQuestions: [sourceQuestion],
     });
-    const session = createAgentSessionFixture({
+    const session = createThreadSession({
       externalSessionId: "session-1",
       repoPath: "/repo-a",
       pendingApprovals: [sessionApproval],
@@ -144,7 +152,7 @@ describe("useRuntimeTranscriptInteractions", () => {
           pendingApprovals: [sourceApproval],
           pendingQuestions: [sourceQuestion],
         }),
-        session: createAgentSessionFixture({
+        session: createThreadSession({
           externalSessionId: "session-1",
           repoPath: "/repo-a",
           pendingApprovals: [sessionApproval],
@@ -213,7 +221,7 @@ describe("useRuntimeTranscriptInteractions", () => {
       createBaseArgs({
         externalSessionId: "session-requested",
         source: createSource({ pendingApprovals: [pendingApproval] }),
-        session: createAgentSessionFixture({
+        session: createThreadSession({
           externalSessionId: "session-other",
           repoPath: "/repo-a",
           pendingApprovals: [],
@@ -291,7 +299,7 @@ describe("useRuntimeTranscriptInteractions", () => {
       await harness.update({
         ...baseArgs,
         externalSessionId: "session-2",
-        session: createAgentSessionFixture({
+        session: createThreadSession({
           externalSessionId: "session-2",
           repoPath: "/repo-a",
           pendingApprovals: [],

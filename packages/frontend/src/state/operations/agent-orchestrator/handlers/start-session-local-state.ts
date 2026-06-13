@@ -55,7 +55,6 @@ export const buildInitialSession = ({
       contextUsage: null,
       pendingApprovals: [],
       pendingQuestions: [],
-      todos: [],
       selectedModel,
       promptOverrides,
     },

@@ -15,6 +15,7 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "../agent-chat.types";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
 const readSessionHistory = mock(
@@ -116,7 +117,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
     contextUsage: null,
     pendingApprovals: [makePendingApproval()],
     pendingQuestions: [makePendingQuestion()],
-    todos: [],
     selectedModel: null,
   };
 }
@@ -287,7 +287,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         "/repo-a/worktree",
         "session-subagent-1",
       );
-      const session = harness.getLatest().model.thread.session as AgentSessionState;
+      const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
       expect(session.externalSessionId).toBe("session-subagent-1");
       expect(session.messages).toBeTruthy();
       expect(harness.getLatest().model.chatSettings).toEqual(createChatSettingsFixture());
@@ -548,7 +548,17 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
 
       const model = harness.getLatest().model;
-      expect(model.thread.session).toEqual(liveSession);
+      expect(model.thread.session).toEqual({
+        externalSessionId: liveSession.externalSessionId,
+        status: liveSession.status,
+        runtimeKind: liveSession.runtimeKind,
+        workingDirectory: liveSession.workingDirectory,
+        messages: liveSession.messages,
+        pendingApprovals: liveSession.pendingApprovals,
+        pendingQuestions: liveSession.pendingQuestions,
+        selectedModel: liveSession.selectedModel,
+        todos: [],
+      });
       expect(model.thread.isSessionViewLoading).toBe(false);
       expect(model.thread.isSessionHistoryLoading).toBe(false);
       expect(model.thread.canReplyToApprovals).toBe(true);
@@ -583,7 +593,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor((state) => state.model.thread.session?.pendingApprovals.length === 1);
 
-      const session = harness.getLatest().model.thread.session as AgentSessionState;
+      const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
       expect(session.pendingApprovals).toEqual([pendingApproval]);
       expect(harness.getLatest().model.thread.canReplyToApprovals).toBe(true);
     } finally {
@@ -655,7 +665,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor((state) => state.model.thread.canSubmitQuestionAnswers === true);
 
-      const session = harness.getLatest().model.thread.session as AgentSessionState;
+      const session = harness.getLatest().model.thread.session as AgentChatThreadSession;
       expect(session.pendingQuestions).toEqual([pendingQuestion]);
       await harness.run(async () => {
         await harness.getLatest().model.thread.onSubmitQuestionAnswers("question-1", [["A"]]);

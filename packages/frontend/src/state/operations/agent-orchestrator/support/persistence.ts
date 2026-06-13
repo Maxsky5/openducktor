@@ -102,7 +102,6 @@ export const fromPersistedSessionRecord = (
       contextUsage: null,
       pendingApprovals: [],
       pendingQuestions: [],
-      todos: [],
       selectedModel: session.selectedModel
         ? normalizePersistedSelection({
             ...session.selectedModel,

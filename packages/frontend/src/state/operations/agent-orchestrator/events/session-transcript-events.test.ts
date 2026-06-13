@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionState,
   buildSession,
+  createRecordingRuntimeDataWriter,
   getSession,
   getSessionMessages,
   listenToAgentSessionEvents,
@@ -768,6 +769,7 @@ describe("agent-orchestrator session transcript events", () => {
         "session-1": buildSession({ status: "starting" }),
       },
     };
+    const runtimeData = createRecordingRuntimeDataWriter();
     let updateSessionCalls = 0;
 
     const updateSession = (
@@ -797,6 +799,7 @@ describe("agent-orchestrator session transcript events", () => {
       draftFlushTimeoutBySessionRef: { current: {} },
       turnStartedAtBySessionRef: { current: {} },
       updateSession,
+      runtimeDataWriter: runtimeData.writer,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -835,7 +838,7 @@ describe("agent-orchestrator session transcript events", () => {
     expect(updateSessionCalls).toBe(1);
     expect(sessionsRef.current["session-1"]?.status).toBe("running");
     expect(getSessionMessages(sessionsRef)).toHaveLength(1);
-    expect(sessionsRef.current["session-1"]?.todos).toEqual([
+    expect(runtimeData.getTodos()).toEqual([
       {
         id: "todo-1",
         content: "Investigate live performance",

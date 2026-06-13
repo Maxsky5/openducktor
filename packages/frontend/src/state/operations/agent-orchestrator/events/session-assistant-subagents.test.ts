@@ -532,6 +532,9 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         refreshTaskData: async () => {},
         resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       },
+      runtimeData: {
+        runtimeDataWriter: { updateTodos: () => {} },
+      },
     };
 
     handleAssistantPart(context, {

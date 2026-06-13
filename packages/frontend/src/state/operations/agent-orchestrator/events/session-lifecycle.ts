@@ -256,16 +256,20 @@ export const handleSessionStatus = (
 };
 
 export const handleSessionTodosUpdated = (
-  context: Pick<SessionLifecycleEventContext, "store">,
+  context: Pick<SessionLifecycleEventContext, "store" | "runtimeData">,
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
   context.store.updateSession(
     context.store.externalSessionId,
-    (current) => ({
-      ...current,
-      todos: mergeTodoListPreservingOrder(current.todos, event.todos),
-      messages: settleDanglingTodoToolMessages(current, event.timestamp),
-    }),
+    (current) => {
+      context.runtimeData.runtimeDataWriter.updateTodos(current, (todos) =>
+        mergeTodoListPreservingOrder(todos, event.todos),
+      );
+      return {
+        ...current,
+        messages: settleDanglingTodoToolMessages(current, event.timestamp),
+      };
+    },
     { persist: false },
   );
 };
