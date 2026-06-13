@@ -11,7 +11,6 @@ import {
   toRefreshedPresenceSnapshot,
 } from "./codex-app-server-presence";
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
-import type { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import type { CodexPendingInputState } from "./codex-pending-input-state";
 import type { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
@@ -22,7 +21,6 @@ export type CodexSessionPresenceReaderDeps = {
   runtimeClients: CodexRuntimeClientResolver;
   threadInventory: CodexThreadInventoryReader;
   sessions: CodexSessionLookup;
-  historyPresenceOverlay: CodexHistoryPresenceOverlay;
   pendingInput: CodexPendingInputState;
   hasActiveTurn: (externalSessionId: string) => boolean;
 };
@@ -85,7 +83,6 @@ export const listLiveCodexAgentSessions = async (
     requireLive: true,
   });
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
-  deps.historyPresenceOverlay.clearMissingLoadedThreads(inventory);
   if (inventory.loadedIds.size === 0) {
     return [];
   }
@@ -93,7 +90,6 @@ export const listLiveCodexAgentSessions = async (
   return [...inventory.threadsById.values()]
     .filter((thread) => inventory.loadedIds.has(thread.id))
     .filter((thread) => threadMatchesDirectories(thread, directories))
-    .map((thread) => deps.historyPresenceOverlay.apply(thread, input.repoPath))
     .map(toLiveSessionSummary);
 };
 
@@ -122,17 +118,11 @@ export const listCodexSessionPresence = async (
     requireLive: true,
   });
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
-  deps.historyPresenceOverlay.clearMissingLoadedThreads(inventory);
   const remoteSnapshots = [...inventory.threadsById.values()]
     .filter((thread) => inventory.loadedIds.has(thread.id))
     .filter((thread) => !localThreadIds.has(thread.id))
     .filter((thread) => threadMatchesDirectories(thread, directories))
-    .map((thread) =>
-      toPresenceSnapshotFromThread(
-        deps.historyPresenceOverlay.apply(thread, input.repoPath),
-        input,
-      ),
-    );
+    .map((thread) => toPresenceSnapshotFromThread(thread, input));
   return [...localSnapshots, ...remoteSnapshots];
 };
 
@@ -149,7 +139,6 @@ export const readCodexSessionPresence = async (
     requireLive: true,
   });
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
-  deps.historyPresenceOverlay.clearMissingLoadedThreads(inventory);
   if (!inventory.loadedIds.has(input.externalSessionId)) {
     return stalePresence(input);
   }
@@ -157,8 +146,5 @@ export const readCodexSessionPresence = async (
   if (!snapshot || snapshot.cwd !== input.workingDirectory) {
     return stalePresence(input);
   }
-  return toPresenceSnapshotFromThread(
-    deps.historyPresenceOverlay.apply(snapshot, input.repoPath),
-    input,
-  );
+  return toPresenceSnapshotFromThread(snapshot, input);
 };

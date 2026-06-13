@@ -6,7 +6,6 @@ import {
 } from "@openducktor/core";
 import { applyFinalAssistantTurnMetadata } from "./codex-app-server-history";
 import { codexTurnKey } from "./codex-app-server-requests";
-import type { CodexThreadSnapshot } from "./codex-app-server-threads";
 import {
   type CodexTokenUsageTotals,
   codexTurnItemsFromThreadRead,
@@ -37,10 +36,6 @@ type CodexSessionHistoryInput = {
     runtimeId: string,
     threadId: string,
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
-  rememberHistoryOnlyIdleThreadLoad: (
-    input: LoadAgentSessionHistoryInput,
-    preResumeThread: CodexThreadSnapshot,
-  ) => void;
 };
 
 const codexSystemPromptHistoryMessage = (
@@ -138,7 +133,6 @@ export const loadCodexSessionHistory = async ({
   modelByTurnKey,
   tokenUsageByTurnKey,
   drainThreadReadTokenUsage,
-  rememberHistoryOnlyIdleThreadLoad,
 }: CodexSessionHistoryInput): Promise<AgentSessionHistoryMessage[]> => {
   const { client, runtimeId } = runtime;
   const preResumeThread = session
@@ -149,9 +143,6 @@ export const loadCodexSessionHistory = async ({
     : Boolean(preResumeThread);
   if (!isThreadReadable) {
     return [];
-  }
-  if (preResumeThread) {
-    rememberHistoryOnlyIdleThreadLoad(input, preResumeThread);
   }
   const response = await threadInventory.readThreadWithTurns(client, input.externalSessionId);
   const tokenUsageByTurnId = await drainThreadReadTokenUsage(runtimeId, input.externalSessionId);

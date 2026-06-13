@@ -43,7 +43,6 @@ import {
 } from "./codex-app-server-shared";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { toFileDiffs } from "./codex-file-diffs";
-import { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
 import { CodexLocalSessionState } from "./codex-local-session-state";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeClientResolver } from "./codex-runtime-client-resolver";
@@ -93,7 +92,6 @@ export class CodexAppServerAdapter
   private readonly runtimeEvents: CodexRuntimeSessionEvents;
   private readonly models = new CodexModels();
   private readonly threadInventory = new CodexThreadInventoryReader();
-  private readonly historyPresenceOverlay = new CodexHistoryPresenceOverlay();
 
   constructor(private readonly options: CodexAppServerAdapterOptions) {
     this.runtimeClients = new CodexRuntimeClientResolver(options);
@@ -109,14 +107,14 @@ export class CodexAppServerAdapter
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       sessionEvents: this.sessionEvents,
       pendingInput: this.pendingInput,
-      historyPresenceOverlay: this.historyPresenceOverlay,
+      threadInventory: this.threadInventory,
       flushQueuedUserMessagesLater: (activeTurn) => this.flushQueuedUserMessagesLater(activeTurn),
     });
     this.localSessions = new CodexLocalSessionState({
       sessionEvents: this.sessionEvents,
       activeTurnsBySessionId: this.activeTurnsBySessionId,
       pendingInput: this.pendingInput,
-      historyPresenceOverlay: this.historyPresenceOverlay,
+      threadInventory: this.threadInventory,
       runtimeEvents: this.runtimeEvents,
     });
   }
@@ -283,8 +281,6 @@ export class CodexAppServerAdapter
       runtime,
       threadInventory: this.threadInventory,
       ...this.runtimeEvents.historyLoadContext(),
-      rememberHistoryOnlyIdleThreadLoad: (historyInput, preResumeThread) =>
-        this.historyPresenceOverlay.rememberIdleHistoryLoad(historyInput, preResumeThread),
     });
   }
 
@@ -516,7 +512,6 @@ export class CodexAppServerAdapter
       runtimeClients: this.runtimeClients,
       threadInventory: this.threadInventory,
       sessions: this.localSessions,
-      historyPresenceOverlay: this.historyPresenceOverlay,
       pendingInput: this.pendingInput,
       hasActiveTurn: (externalSessionId: string) => {
         const activeTurn = this.activeTurnsBySessionId.get(externalSessionId);
