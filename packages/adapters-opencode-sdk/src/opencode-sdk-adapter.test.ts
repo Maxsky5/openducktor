@@ -940,7 +940,7 @@ describe("opencode-sdk-adapter", () => {
     ]);
   });
 
-  test("readSessionPresence keeps a newly started local session active through idle runtime status", async () => {
+  test("readSessionPresence trusts runtime idle after the runtime lists the session", async () => {
     const mock = makeMockClient();
     const idleStatusClient = {
       ...mock.client,
@@ -1012,9 +1012,9 @@ describe("opencode-sdk-adapter", () => {
 
     expect(snapshot).toMatchObject({
       presence: "runtime",
-      classification: "running",
-      agentSessionStatus: "running",
-      status: { type: "busy" },
+      classification: "idle",
+      agentSessionStatus: "idle",
+      status: { type: "idle" },
     });
     expect(mock.listCalls).toEqual([undefined]);
     expect(mock.statusCalls).toEqual([{ directory: defaultWorkingDirectory }]);

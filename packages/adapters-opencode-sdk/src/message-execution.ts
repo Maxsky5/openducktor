@@ -3,7 +3,6 @@ import {
   normalizeAgentUserMessageParts,
   type SendAgentUserMessageInput,
 } from "@openducktor/core";
-import { setSessionActive } from "./event-stream/shared";
 import { detectAgentFileReferenceMime } from "./file-reference-utils";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 import { resolveAgainstWorkingDirectory, toFileUrl } from "./path-utils";
@@ -287,7 +286,6 @@ export const sendUserMessage = async (input: {
     pendingQueuedUserMessages.push(queuedEntry);
   }
 
-  setSessionActive(input.session);
   try {
     const { assistantMessageId } = await preparedSend.execute({
       session: input.session,

@@ -68,7 +68,8 @@ const createSession = (overrides?: {
     },
     activeAssistantMessageId: null,
     pendingQueuedUserMessages: [],
-    hasIdleSinceActivity: true,
+    streamTurnStatus: "idle",
+    isSendingUserMessage: false,
   } as unknown as SessionRecord;
 
   return { session, command, promptAsync };

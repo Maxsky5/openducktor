@@ -1,6 +1,7 @@
 import type { Event, Part } from "@opencode-ai/sdk/v2/client";
 import type { AgentEvent } from "@openducktor/core";
 import { asUnknownRecord, readRecordProp, readStringProp } from "../guards";
+import { isStreamTurnIdle, markStreamTurnActive, markStreamTurnIdle } from "../session-activity";
 import type { SessionInput, SessionRecord } from "../types";
 import { readEventProperties } from "./schemas";
 
@@ -165,21 +166,6 @@ export const bindSubagentExternalSession = (
   state.subagentPartIdByExternalSessionId.set(externalSessionId, partId);
 };
 
-export const setSessionActive = (session: SessionRecord | undefined): void => {
-  if (!session) {
-    return;
-  }
-  session.hasIdleSinceActivity = false;
-};
-
-export const setSessionIdle = (session: SessionRecord | undefined): void => {
-  if (!session) {
-    return;
-  }
-  session.hasIdleSinceActivity = true;
-  session.activeAssistantMessageId = null;
-};
-
 type SessionIdleEmitter = {
   externalSessionId: string;
   emit: (externalSessionId: string, event: AgentEvent) => void;
@@ -190,10 +176,10 @@ const emitIdleForSession = (
   session: SessionRecord | undefined,
   emitter: SessionIdleEmitter,
 ): boolean => {
-  if (session?.hasIdleSinceActivity) {
+  if (!session || isStreamTurnIdle(session)) {
     return false;
   }
-  setSessionIdle(session);
+  markStreamTurnIdle(session);
   emitter.emit(emitter.externalSessionId, {
     type: "session_idle",
     externalSessionId: emitter.externalSessionId,
@@ -211,13 +197,13 @@ const getSessionRecord = (
 export const markSessionActive = (
   context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): void => {
-  setSessionActive(getSessionRecord(context));
+  markStreamTurnActive(getSessionRecord(context));
 };
 
 export const markSessionIdle = (
   context: Pick<EventStreamContext, "externalSessionId" | "getSession">,
 ): void => {
-  setSessionIdle(getSessionRecord(context));
+  markStreamTurnIdle(getSessionRecord(context));
 };
 
 export const emitSessionIdle = (

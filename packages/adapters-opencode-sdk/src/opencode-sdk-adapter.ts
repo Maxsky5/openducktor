@@ -60,7 +60,6 @@ import {
   emitHistoryUserMessage,
   seedHistoryUserMessage,
 } from "./event-stream/message-events/user-emitter";
-import { setSessionActive, setSessionIdle } from "./event-stream/shared";
 import {
   listOpencodeLiveAgentSessionSnapshots,
   normalizeSessionDirectory,
@@ -77,6 +76,13 @@ import {
   type OpencodeRuntimeResolutionInput,
   toOpencodeRuntimeClientInput,
 } from "./runtime-connection";
+import {
+  finishUserMessageSend,
+  isLocalSessionBusy,
+  isUserMessageSendInFlight,
+  markStreamTurnIdle,
+  startUserMessageSend,
+} from "./session-activity";
 import {
   clearWorkflowToolCacheForDirectory,
   registerSession,
@@ -257,13 +263,13 @@ export class OpencodeSdkAdapter
         : "OpenCode",
       workingDirectory: session.input.workingDirectory,
       startedAt: session.summary.startedAt,
-      status: session.hasIdleSinceActivity ? { type: "idle" } : { type: "busy" },
+      status: isLocalSessionBusy(session) ? { type: "busy" } : { type: "idle" },
       pendingApprovals: [],
       pendingQuestions: [],
     };
   }
 
-  private applyLocalActivityToPresenceSnapshot(
+  private applyInFlightSendToPresenceSnapshot(
     runtimeEndpoint: string,
     snapshot: LiveAgentSessionSnapshot,
   ): LiveAgentSessionSnapshot {
@@ -271,7 +277,7 @@ export class OpencodeSdkAdapter
     if (
       !localSession ||
       localSession.eventTransportKey !== runtimeEndpoint ||
-      localSession.hasIdleSinceActivity ||
+      !isUserMessageSendInFlight(localSession) ||
       snapshot.status.type !== "idle"
     ) {
       return snapshot;
@@ -571,7 +577,7 @@ export class OpencodeSdkAdapter
           workingDirectory: snapshot.workingDirectory,
           externalSessionId: snapshot.externalSessionId,
         },
-        snapshot: this.applyLocalActivityToPresenceSnapshot(
+        snapshot: this.applyInFlightSendToPresenceSnapshot(
           runtimeClientInput.runtimeEndpoint,
           snapshot,
         ),
@@ -626,7 +632,7 @@ export class OpencodeSdkAdapter
         ...input,
         workingDirectory: canonicalWorkingDirectory,
       },
-      snapshot: this.applyLocalActivityToPresenceSnapshot(
+      snapshot: this.applyInFlightSendToPresenceSnapshot(
         runtimeClientInput.runtimeEndpoint,
         snapshot,
       ),
@@ -761,7 +767,7 @@ export class OpencodeSdkAdapter
     }
     const session = requireSession(this.sessions, input.externalSessionId);
     applyRuntimeContextToSession(session, input);
-    setSessionActive(session);
+    startUserMessageSend(session);
     this.emit(input.externalSessionId, {
       type: "session_status",
       externalSessionId: input.externalSessionId,
@@ -778,13 +784,15 @@ export class OpencodeSdkAdapter
       });
       await this.publishNewRuntimeUserMessagesFromHistory(session, knownUserMessageIds);
     } catch (error) {
-      setSessionIdle(session);
+      markStreamTurnIdle(session);
       this.emit(input.externalSessionId, {
         type: "session_idle",
         externalSessionId: input.externalSessionId,
         timestamp: this.now(),
       });
       throw error;
+    } finally {
+      finishUserMessageSend(session);
     }
   }
 

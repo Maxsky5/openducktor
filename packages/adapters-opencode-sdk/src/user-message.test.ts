@@ -385,7 +385,7 @@ describe("OpencodeSdkAdapter user message", () => {
     });
   });
 
-  test("sendUserMessage resets session activity so the next stream idle can settle the turn", async () => {
+  test("sendUserMessage keeps stream activity owned by runtime events", async () => {
     const mock = makeMockClient({});
     const adapter = new OpencodeSdkAdapter({
       createClient: () => mock.client,
@@ -396,7 +396,10 @@ describe("OpencodeSdkAdapter user message", () => {
 
     const sessions = (
       adapter as unknown as {
-        sessions: Map<string, { hasIdleSinceActivity: boolean }>;
+        sessions: Map<
+          string,
+          { streamTurnStatus: "active" | "idle"; isSendingUserMessage: boolean }
+        >;
       }
     ).sessions;
     const session = sessions.get("session-opencode-1");
@@ -404,14 +407,15 @@ describe("OpencodeSdkAdapter user message", () => {
       throw new Error("Expected adapter session record");
     }
 
-    session.hasIdleSinceActivity = true;
+    session.streamTurnStatus = "idle";
 
     await adapter.sendUserMessage({
       ...sessionRuntimeRef("session-opencode-1"),
       parts: [{ kind: "text", text: "Second turn" }],
     });
 
-    expect(session.hasIdleSinceActivity).toBe(false);
+    expect(session.streamTurnStatus).toBe("idle");
+    expect(session.isSendingUserMessage).toBe(false);
   });
 
   test("sendUserMessage does not pre-queue the first turn without a pending assistant boundary", async () => {
@@ -463,7 +467,6 @@ describe("OpencodeSdkAdapter user message", () => {
         sessions: Map<
           string,
           {
-            hasIdleSinceActivity: boolean;
             activeAssistantMessageId: string | null;
             pendingQueuedUserMessages: Array<{ signature: string }>;
           }
@@ -475,7 +478,6 @@ describe("OpencodeSdkAdapter user message", () => {
       throw new Error("Expected adapter session record");
     }
 
-    session.hasIdleSinceActivity = true;
     session.activeAssistantMessageId = "msg-200";
 
     await adapter.sendUserMessage({

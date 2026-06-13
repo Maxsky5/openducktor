@@ -5,6 +5,7 @@ import {
   readTextFromParts,
   sanitizeAssistantMessage,
 } from "../../message-normalizers";
+import { isStreamTurnIdle } from "../../session-activity";
 import { mapPartToAgentStreamPart } from "../../stream-part-mapper";
 import type { EventStreamRuntime } from "../shared";
 import {
@@ -31,10 +32,12 @@ export const shouldSuppressAssistantStreamingAfterIdle = (
   roleHint?: string,
 ): boolean => {
   const session = runtime.getSession(runtime.externalSessionId);
-  return Boolean(
-    session?.hasIdleSinceActivity &&
-      isAssistantMessage(runtime, messageId, roleHint) &&
-      session.completedAssistantMessageIds.has(messageId),
+  if (!session || !isStreamTurnIdle(session)) {
+    return false;
+  }
+  return (
+    isAssistantMessage(runtime, messageId, roleHint) &&
+    session.completedAssistantMessageIds.has(messageId)
   );
 };
 

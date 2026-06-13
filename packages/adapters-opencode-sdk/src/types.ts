@@ -40,13 +40,16 @@ export type SessionMessageMetadata = {
   displayParts?: AgentUserMessageDisplayPart[];
 };
 
+export type SessionStreamTurnStatus = "active" | "idle";
+
 export type SessionRecord = {
   summary: AgentSessionSummary;
   input: SessionInput;
   client: OpencodeClient;
   externalSessionId: string;
   eventTransportKey: string;
-  hasIdleSinceActivity: boolean;
+  streamTurnStatus: SessionStreamTurnStatus;
+  isSendingUserMessage: boolean;
   activeAssistantMessageId: string | null;
   completedAssistantMessageIds: Set<string>;
   emittedAssistantMessageIds: Set<string>;
