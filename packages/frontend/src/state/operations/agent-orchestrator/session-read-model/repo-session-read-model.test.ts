@@ -320,7 +320,7 @@ describe("repo session read model", () => {
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
   });
 
-  test("keeps the current session object when pending input only changes order", async () => {
+  test("keeps pending input in runtime presence order", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const firstQuestion = { requestId: "question-1", questions: [] };
@@ -341,10 +341,6 @@ describe("repo session read model", () => {
       tasks,
       runtimePresence: firstPresence,
     });
-    const currentSession = firstRead.sessionsById[record.externalSessionId];
-    if (!currentSession) {
-      throw new Error(`Expected ${record.externalSessionId} to be present.`);
-    }
     const secondPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
@@ -364,10 +360,9 @@ describe("repo session read model", () => {
       runtimePresence: secondPresence,
     });
 
-    expect(secondRead.sessionsById[record.externalSessionId]).toBe(currentSession);
     expect(secondRead.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([
-      firstQuestion,
       secondQuestion,
+      firstQuestion,
     ]);
   });
 

@@ -5,11 +5,7 @@ import type {
   AgentSessionRef,
 } from "@openducktor/core";
 import { toPersistedOnlyAgentSessionPresenceSnapshot } from "@openducktor/core";
-import type {
-  AgentApprovalRequest,
-  AgentQuestionRequest,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   applyAgentSessionPresenceSnapshotToSession,
   shouldListenToAgentSessionPresenceSnapshot,
@@ -74,98 +70,6 @@ const selectLocalSessions = (
       shouldKeepLocalSession(session, persistedSessionIds),
     ),
   );
-};
-
-const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const areValuesEquivalent = (left: unknown, right: unknown): boolean => {
-  if (Object.is(left, right)) {
-    return true;
-  }
-
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return (
-      left.length === right.length &&
-      left.every((leftValue, index) => areValuesEquivalent(leftValue, right[index]))
-    );
-  }
-
-  if (isPlainRecord(left) && isPlainRecord(right)) {
-    const leftKeys = Object.keys(left).sort();
-    const rightKeys = Object.keys(right).sort();
-    return (
-      leftKeys.length === rightKeys.length &&
-      leftKeys.every(
-        (key, index) => key === rightKeys[index] && areValuesEquivalent(left[key], right[key]),
-      )
-    );
-  }
-
-  return false;
-};
-
-const sortPendingRequestsById = <T extends { requestId: string }>(requests: readonly T[]): T[] =>
-  [...requests].sort((left, right) => left.requestId.localeCompare(right.requestId));
-
-const normalizeSessionPendingRequests = (session: AgentSessionState): AgentSessionState => ({
-  ...session,
-  pendingApprovals: sortPendingRequestsById(session.pendingApprovals),
-  pendingQuestions: sortPendingRequestsById(session.pendingQuestions),
-});
-
-const arePendingRequestsEquivalent = <T extends AgentApprovalRequest | AgentQuestionRequest>(
-  left: readonly T[],
-  right: readonly T[],
-): boolean => {
-  if (left.length !== right.length) {
-    return false;
-  }
-  const leftRequests = sortPendingRequestsById(left);
-  const rightRequests = sortPendingRequestsById(right);
-  return leftRequests.every((request, index) => areValuesEquivalent(request, rightRequests[index]));
-};
-
-const areModelSelectionsEquivalent = (
-  left: AgentSessionState["selectedModel"],
-  right: AgentSessionState["selectedModel"],
-): boolean => {
-  if (left === right) {
-    return true;
-  }
-  if (!left || !right) {
-    return false;
-  }
-  return (
-    left.runtimeKind === right.runtimeKind &&
-    left.providerId === right.providerId &&
-    left.modelId === right.modelId &&
-    left.variant === right.variant &&
-    left.profileId === right.profileId
-  );
-};
-
-const areReadModelFieldsEquivalent = (left: AgentSessionState, right: AgentSessionState): boolean =>
-  left.title === right.title &&
-  left.taskId === right.taskId &&
-  left.repoPath === right.repoPath &&
-  left.runtimeKind === right.runtimeKind &&
-  left.role === right.role &&
-  left.status === right.status &&
-  left.startedAt === right.startedAt &&
-  left.workingDirectory === right.workingDirectory &&
-  areModelSelectionsEquivalent(left.selectedModel, right.selectedModel) &&
-  arePendingRequestsEquivalent(left.pendingApprovals, right.pendingApprovals) &&
-  arePendingRequestsEquivalent(left.pendingQuestions, right.pendingQuestions);
-
-const reuseCurrentSessionWhenReadModelIsEquivalent = (
-  current: AgentSessionState | undefined,
-  next: AgentSessionState,
-): AgentSessionState => {
-  if (!current) {
-    return next;
-  }
-  return areReadModelFieldsEquivalent(current, next) ? current : next;
 };
 
 const toPersistedSessionView = ({
@@ -289,15 +193,11 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const nextSession = normalizeSessionPendingRequests(
-      applyAgentSessionPresenceSnapshotToSession(baseSession, snapshot),
-    );
-
-    const storedSession = reuseCurrentSessionWhenReadModelIsEquivalent(current, nextSession);
-    sessionsById[record.externalSessionId] = storedSession;
+    const session = applyAgentSessionPresenceSnapshotToSession(baseSession, snapshot);
+    sessionsById[record.externalSessionId] = session;
 
     if (shouldListenToAgentSessionPresenceSnapshot(snapshot)) {
-      liveSessions.push(toRuntimeSessionRef(storedSession));
+      liveSessions.push(toRuntimeSessionRef(session));
     }
   }
 
