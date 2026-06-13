@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -8,6 +8,7 @@ export type TaskDetailsSheetProps = {
   task: TaskCard | null;
   allTasks: TaskCard[];
   taskSessions?: KanbanTaskSession[];
+  historicalSessions?: AgentSessionRecord[];
   hasActiveSession?: boolean;
   activeSessionRole?: AgentRole;
   activeSessionPresentationState?: KanbanTaskSession["presentationState"];

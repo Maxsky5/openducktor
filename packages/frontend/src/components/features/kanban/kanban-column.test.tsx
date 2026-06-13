@@ -59,6 +59,7 @@ describe("KanbanColumn", () => {
             tasks: [waitingTask, activeTask, idleTask],
           },
           taskSessionsByTaskId,
+          historicalSessionsByTaskId: new Map(),
           taskActivityStateByTaskId,
           activeTaskSessionContextByTaskId: new Map(),
           onOpenDetails: noop,

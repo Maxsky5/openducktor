@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { ExternalLink, PlayCircle, Tag } from "lucide-react";
 import { memo, type ReactElement, useId, useMemo } from "react";
@@ -35,6 +35,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 type KanbanTaskCardProps = {
   task: TaskCard;
   taskSessions?: KanbanTaskSession[] | undefined;
+  historicalSessions?: AgentSessionRecord[] | undefined;
   hasActiveSession?: boolean;
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
@@ -81,7 +82,6 @@ const areTaskCardsEquivalent = (left: TaskCard, right: TaskCard): boolean =>
   left.pullRequest?.number === right.pullRequest?.number &&
   left.pullRequest?.url === right.pullRequest?.url &&
   left.pullRequest?.state === right.pullRequest?.state &&
-  areTaskAgentSessionsEqual(left.agentSessions, right.agentSessions) &&
   areStringArraysEqual(left.availableActions, right.availableActions);
 
 const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
@@ -98,9 +98,9 @@ const TASK_CARD_WORKFLOW_ACTIONS: readonly TaskWorkflowAction[] = [
   "reset_implementation",
 ];
 
-const areTaskAgentSessionsEqual = (
-  left: TaskCard["agentSessions"] | undefined,
-  right: TaskCard["agentSessions"] | undefined,
+const areHistoricalSessionsEqual = (
+  left: AgentSessionRecord[] | undefined,
+  right: AgentSessionRecord[] | undefined,
 ): boolean => {
   const leftSessions = left ?? [];
   const rightSessions = right ?? [];
@@ -164,6 +164,7 @@ const areKanbanTaskCardPropsEqual = (
 ): boolean =>
   areTaskCardsEquivalent(previous.task, next.task) &&
   areRunningTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
+  areHistoricalSessionsEqual(previous.historicalSessions, next.historicalSessions) &&
   previous.hasActiveSession === next.hasActiveSession &&
   previous.activeSessionRole === next.activeSessionRole &&
   previous.taskActivityState === next.taskActivityState &&
@@ -328,6 +329,7 @@ function TaskActions({
   onHumanRequestChanges,
   onResetImplementation,
   taskSessions,
+  historicalSessions,
   hasActiveSession,
   activeSessionRole,
   taskActivityState,
@@ -347,11 +349,12 @@ function TaskActions({
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;
   taskSessions: KanbanTaskSession[];
+  historicalSessions: AgentSessionRecord[];
   hasActiveSession: boolean;
   activeSessionRole?: AgentRole;
   taskActivityState: KanbanTaskActivityState;
 }): ReactElement | null {
-  const historicalSessionRoles = resolveHistoricalSessionRoles(task);
+  const historicalSessionRoles = resolveHistoricalSessionRoles(historicalSessions);
   const workflowActions = resolveTaskCardActions(task, {
     include: TASK_CARD_WORKFLOW_ACTIONS,
     hasActiveSession,
@@ -372,7 +375,7 @@ function TaskActions({
     (taskActivityState === "waiting_input" && hasActiveSession);
 
   const openRoleSession = (role: AgentRole): void => {
-    const sessionOptions = resolveSessionTargetOptions(task, taskSessions, role);
+    const sessionOptions = resolveSessionTargetOptions(historicalSessions, taskSessions, role);
 
     if (onOpenSession) {
       onOpenSession(task.id, role, sessionOptions);
@@ -477,6 +480,7 @@ function TaskActions({
 export const KanbanTaskCard = memo(function KanbanTaskCard({
   task,
   taskSessions = [],
+  historicalSessions = [],
   hasActiveSession,
   activeSessionRole,
   taskActivityState,
@@ -542,6 +546,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         <TaskActions
           task={task}
           taskSessions={taskSessions}
+          historicalSessions={historicalSessions}
           hasActiveSession={hasActiveSessionValue}
           {...(activeSessionRole ? { activeSessionRole } : {})}
           taskActivityState={taskActivityState}

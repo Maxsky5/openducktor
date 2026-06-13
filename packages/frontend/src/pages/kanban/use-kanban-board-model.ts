@@ -1,4 +1,8 @@
-import type { KanbanEmptyColumnDisplay, TaskCard } from "@openducktor/contracts";
+import type {
+  AgentSessionRecord,
+  KanbanEmptyColumnDisplay,
+  TaskCard,
+} from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
@@ -210,6 +214,7 @@ type UseKanbanBoardModelArgs = {
   isSwitchingWorkspace: boolean;
   emptyColumnDisplay: KanbanEmptyColumnDisplay;
   tasks: TaskCard[];
+  historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   sessions: AgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
@@ -232,6 +237,7 @@ export function useKanbanBoardModel({
   isSwitchingWorkspace,
   emptyColumnDisplay,
   tasks,
+  historicalSessionsByTaskId,
   sessions,
   onOpenDetails,
   onDelegate,
@@ -273,6 +279,7 @@ export function useKanbanBoardModel({
     emptyColumnDisplay,
     columns: columnsWithSortedTasks,
     taskSessionsByTaskId,
+    historicalSessionsByTaskId,
     activeTaskSessionContextByTaskId,
     taskActivityStateByTaskId,
     onOpenDetails,

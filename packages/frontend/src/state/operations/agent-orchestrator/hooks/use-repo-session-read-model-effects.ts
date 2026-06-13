@@ -4,9 +4,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
-import { loadAgentSessionListsFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { loadRepoAgentSessions } from "../lifecycle/load-sessions";
+import { loadTaskSessionRecordsForTasks } from "../session-read-model/task-session-records";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 
@@ -57,20 +57,17 @@ export const useRepoSessionReadModelEffects = ({
       }
       setSessionReadModelError(null);
       try {
-        const taskIds = tasks.map((task) => task.id);
-        const recordsByTaskId =
-          taskIds.length > 0
-            ? await loadAgentSessionListsFromQuery(queryClient, workspaceRepoPath, taskIds)
-            : {};
+        const taskSessionRecords = await loadTaskSessionRecordsForTasks({
+          queryClient,
+          repoPath: workspaceRepoPath,
+          tasks,
+        });
         if (!isCurrentRepo()) {
           return;
         }
         await loadRepoAgentSessions({
           repoPath: workspaceRepoPath,
-          tasks: tasks.map((task) => ({
-            id: task.id,
-            agentSessions: recordsByTaskId[task.id] ?? [],
-          })),
+          tasks: taskSessionRecords,
           adapter: agentEngine,
           commitSessions,
           updateSession,

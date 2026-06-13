@@ -22,7 +22,7 @@ type TaskSessionRecord = {
 
 export type TaskSessionRecords = {
   id: string;
-  agentSessions?: AgentSessionRecord[] | undefined;
+  agentSessions: AgentSessionRecord[];
 };
 
 export type RepoRuntimeSessionPresenceRead = {
@@ -43,7 +43,7 @@ const toSessionKey = (
 const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionRecord[] => {
   const records: TaskSessionRecord[] = [];
   for (const task of tasks) {
-    for (const record of task.agentSessions ?? []) {
+    for (const record of task.agentSessions) {
       records.push({ taskId: task.id, record });
     }
   }

@@ -29,6 +29,7 @@ function renderKanbanColumn(
       key={column.id}
       column={column}
       taskSessionsByTaskId={model.taskSessionsByTaskId}
+      historicalSessionsByTaskId={model.historicalSessionsByTaskId}
       activeTaskSessionContextByTaskId={model.activeTaskSessionContextByTaskId}
       taskActivityStateByTaskId={model.taskActivityStateByTaskId}
       onOpenDetails={model.onOpenDetails}

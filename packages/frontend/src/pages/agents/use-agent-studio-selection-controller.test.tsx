@@ -104,6 +104,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isRepoNavigationBoundaryPending: false,
   tasks: [createTask("task-1"), createTask("task-2")],
   isLoadingTasks: false,
+  taskSessionRecordsByTaskId: {},
+  isLoadingTaskSessionRecords: false,
   sessions: [],
   sessionReadModelError: null,
   taskIdParam: "task-1",
@@ -201,11 +203,13 @@ describe("useAgentStudioSelectionController", () => {
   });
 
   test("marks selected task session read model loading until persisted records are summarized", async () => {
-    const taskWithPersistedSession = createTaskWithPersistedReloadedSession();
     const harness = createHookHarness(
       createBaseArgs({
         activeWorkspace,
-        tasks: [taskWithPersistedSession, createTask("task-2")],
+        tasks: [createTask("task-1"), createTask("task-2")],
+        taskSessionRecordsByTaskId: {
+          "task-1": [persistedReloadedSessionRecord],
+        },
         sessions: [],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -226,7 +230,10 @@ describe("useAgentStudioSelectionController", () => {
       await harness.update(
         createBaseArgs({
           activeWorkspace,
-          tasks: [taskWithPersistedSession, createTask("task-2")],
+          tasks: [createTask("task-1"), createTask("task-2")],
+          taskSessionRecordsByTaskId: {
+            "task-1": [persistedReloadedSessionRecord],
+          },
           sessions: [loadedSession],
           taskIdParam: "task-1",
           hasExplicitRoleParam: false,
@@ -235,6 +242,33 @@ describe("useAgentStudioSelectionController", () => {
 
       expect(isSelectedAgentSessionResolving(harness.getLatest().viewSessionLifecycle)).toBe(false);
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-reloaded");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps the selected task resolving while task session records are loading", async () => {
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspace,
+        tasks: [createTask("task-1")],
+        taskSessionRecordsByTaskId: {},
+        isLoadingTaskSessionRecords: true,
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionParam: null,
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(isSelectedAgentSessionResolving(latest.viewSessionLifecycle)).toBe(true);
+      expect(isSelectedAgentSessionHistoryLoading(latest.viewSessionLifecycle)).toBe(true);
+      expect(latest.viewSessionLifecycle.phase).toBe("resolving_session");
+      expect(latest.viewActiveSession).toBeNull();
     } finally {
       await harness.unmount();
     }
@@ -254,6 +288,9 @@ describe("useAgentStudioSelectionController", () => {
           }),
         },
         tasks: [taskWithPersistedSession],
+        taskSessionRecordsByTaskId: {
+          "task-1": [persistedReloadedSessionRecord],
+        },
         sessions: [],
         taskIdParam: "task-1",
         sessionParam: "session-reloaded",
@@ -286,6 +323,9 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         activeWorkspace,
         tasks: [taskWithPersistedSession],
+        taskSessionRecordsByTaskId: {
+          "task-1": [persistedReloadedSessionRecord],
+        },
         sessions: [],
         sessionReadModelError: "Failed to load agent session read model",
         taskIdParam: "task-1",

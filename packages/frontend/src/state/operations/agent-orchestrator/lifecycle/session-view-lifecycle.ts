@@ -55,6 +55,24 @@ const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = 
   historyRequest: "none",
 };
 
+export const createResolvingSelectedSessionViewLifecycle = (
+  externalSessionId: string | null = null,
+): SelectedAgentSessionViewLifecycle => ({
+  externalSessionId,
+  phase: "resolving_session",
+  canRenderHistory: false,
+  historyRequest: "none",
+});
+
+export const createFailedSelectedSessionViewLifecycle = (
+  externalSessionId: string | null = null,
+): SelectedAgentSessionViewLifecycle => ({
+  externalSessionId,
+  phase: "history_failed",
+  canRenderHistory: false,
+  historyRequest: "none",
+});
+
 const createAgentSessionViewLifecycle = ({
   phase,
   repoReadinessState,

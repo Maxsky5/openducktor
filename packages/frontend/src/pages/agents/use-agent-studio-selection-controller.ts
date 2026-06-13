@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
 import {
@@ -17,6 +17,8 @@ import type {
   SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
+  createFailedSelectedSessionViewLifecycle,
+  createResolvingSelectedSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
   shouldEnsureSelectedAgentSessionReadyForView,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
@@ -37,6 +39,8 @@ type UseAgentStudioSelectionControllerArgs = {
   isRepoNavigationBoundaryPending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
+  taskSessionRecordsByTaskId: Record<string, AgentSessionRecord[]>;
+  isLoadingTaskSessionRecords: boolean;
   sessions: AgentSessionSummary[];
   sessionReadModelError: string | null;
   taskIdParam: string;
@@ -108,12 +112,15 @@ export type AgentStudioSelectionControllerResult = {
 };
 
 const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
+const EMPTY_PERSISTED_SESSION_RECORDS: AgentSessionRecord[] = [];
 
 export function useAgentStudioSelectionController({
   activeWorkspace,
   isRepoNavigationBoundaryPending,
   tasks,
   isLoadingTasks,
+  taskSessionRecordsByTaskId,
+  isLoadingTaskSessionRecords,
   sessions,
   sessionReadModelError,
   taskIdParam,
@@ -264,10 +271,9 @@ export function useAgentStudioSelectionController({
     }
     return sessionsByTaskId.get(viewTaskId) ?? [];
   }, [sessionsByTaskId, viewTaskId]);
-  const viewPersistedSessionRecords = useMemo(
-    () => viewSelectedTask?.agentSessions ?? [],
-    [viewSelectedTask?.agentSessions],
-  );
+  const viewPersistedSessionRecords = viewTaskId
+    ? (taskSessionRecordsByTaskId[viewTaskId] ?? EMPTY_PERSISTED_SESSION_RECORDS)
+    : EMPTY_PERSISTED_SESSION_RECORDS;
 
   const viewSessionParam = useMemo(() => {
     return resolveAgentStudioViewSessionParam({
@@ -345,21 +351,36 @@ export function useAgentStudioSelectionController({
     viewRole === "build"
       ? resolveBuildContinuationLaunchAction(viewSelectedTask)
       : firstLaunchAction(viewRole);
-  const selectedSessionLifecycle = useMemo(
-    () =>
-      deriveSelectedAgentSessionViewLifecycle({
-        selectedSessionRoute: viewSelectedSessionRoute,
-        session: viewSessionRuntimeData.session,
-        repoReadinessState: viewSessionReadinessState,
-        sessionLoadError: sessionReadModelError,
-      }),
-    [
-      sessionReadModelError,
-      viewSelectedSessionRoute,
-      viewSessionReadinessState,
-      viewSessionRuntimeData.session,
-    ],
-  );
+  const shouldWaitForTaskSessionRecords =
+    isLoadingTaskSessionRecords &&
+    viewSelection.sessionRoute === null &&
+    viewSessionsForTask.length === 0 &&
+    viewSelectedTask !== null;
+  const selectedSessionLifecycle = useMemo(() => {
+    if (sessionReadModelError && viewSelection.sessionRoute === null && viewSelectedTask !== null) {
+      return createFailedSelectedSessionViewLifecycle(viewSessionParamFromSelection);
+    }
+
+    if (shouldWaitForTaskSessionRecords) {
+      return createResolvingSelectedSessionViewLifecycle(viewSessionParamFromSelection);
+    }
+
+    return deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute: viewSelectedSessionRoute,
+      session: viewSessionRuntimeData.session,
+      repoReadinessState: viewSessionReadinessState,
+      sessionLoadError: sessionReadModelError,
+    });
+  }, [
+    sessionReadModelError,
+    shouldWaitForTaskSessionRecords,
+    viewSelectedSessionRoute,
+    viewSelectedTask,
+    viewSelection.sessionRoute,
+    viewSessionParamFromSelection,
+    viewSessionReadinessState,
+    viewSessionRuntimeData.session,
+  ]);
   useEffect(() => {
     if (
       selectedSessionLifecycle.externalSessionId === null ||

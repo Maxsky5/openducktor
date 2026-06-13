@@ -25,6 +25,7 @@ const model: KanbanPageContentModel = {
     },
   ],
   taskSessionsByTaskId: new Map(),
+  historicalSessionsByTaskId: new Map(),
   activeTaskSessionContextByTaskId: new Map(),
   taskActivityStateByTaskId: new Map(),
   onOpenDetails: () => {},

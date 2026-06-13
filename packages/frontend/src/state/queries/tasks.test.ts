@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, SettingsSnapshot, TaskCard } from "@openducktor/contracts";
+import type { SettingsSnapshot, TaskCard } from "@openducktor/contracts";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { hostClient as host } from "@/lib/host-client";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -12,7 +12,6 @@ import {
   refreshCachedKanbanQueries,
   repoTaskDataQueryOptions,
   taskQueryKeys,
-  upsertAgentSessionInRepoTaskData,
 } from "./tasks";
 import { settingsSnapshotQueryOptions, workspaceQueryKeys } from "./workspace";
 
@@ -76,15 +75,6 @@ const taskFixture: TaskCard = {
   createdAt: "2026-03-22T12:00:00.000Z",
 };
 
-const sessionFixture: AgentSessionRecord = {
-  externalSessionId: "external-1",
-  role: "build",
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-  startedAt: "2026-03-22T12:00:00.000Z",
-  selectedModel: null,
-};
-
 describe("tasks query cache helpers", () => {
   const originalTasksList = host.tasksList;
   const originalWorkspaceGetSettingsSnapshot = host.workspaceGetSettingsSnapshot;
@@ -94,46 +84,6 @@ describe("tasks query cache helpers", () => {
     host.tasksList = originalTasksList;
     host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
     host.taskDocumentGetFresh = originalTaskDocumentGetFresh;
-  });
-
-  test("upsertAgentSessionInRepoTaskData inserts a persisted session into the repo task cache", () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
-      tasks: [taskFixture],
-    });
-
-    upsertAgentSessionInRepoTaskData(queryClient, "/repo", "task-1", sessionFixture);
-
-    const repoTaskData = queryClient.getQueryData<{
-      tasks: TaskCard[];
-    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
-
-    expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([sessionFixture]);
-  });
-
-  test("upsertAgentSessionInRepoTaskData replaces the existing persisted session for the same id", () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS), {
-      tasks: [
-        {
-          ...taskFixture,
-          agentSessions: [sessionFixture],
-        },
-      ],
-    });
-
-    const updatedSession: AgentSessionRecord = {
-      ...sessionFixture,
-      workingDirectory: "/tmp/repo/worktree-2",
-    };
-
-    upsertAgentSessionInRepoTaskData(queryClient, "/repo", "task-1", updatedSession);
-
-    const repoTaskData = queryClient.getQueryData<{
-      tasks: TaskCard[];
-    }>(taskQueryKeys.repoData("/repo", DONE_VISIBLE_DAYS));
-
-    expect(repoTaskData?.tasks[0]?.agentSessions).toEqual([updatedSession]);
   });
 
   test("canonical repo task-data query loads visible board tasks", async () => {

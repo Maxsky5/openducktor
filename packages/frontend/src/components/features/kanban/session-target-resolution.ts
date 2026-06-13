@@ -1,4 +1,4 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type {
   KanbanSessionPresentationState,
@@ -70,17 +70,19 @@ export const resolvePreferredActiveSession = (
 };
 
 const resolveLatestHistoricalSessionByRole = (
-  task: TaskCard,
+  historicalSessions: readonly AgentSessionRecord[],
   role: AgentRole,
-): NonNullable<TaskCard["agentSessions"]>[number] | null => {
-  const matchingTaskAgentSessions = (task.agentSessions ?? [])
+): AgentSessionRecord | null => {
+  const matchingTaskAgentSessions = historicalSessions
     .filter((session) => session.role === role)
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
   return matchingTaskAgentSessions[0] ?? null;
 };
 
-export const resolveHistoricalSessionRoles = (task: TaskCard): AgentRole[] => {
-  const sortedTaskAgentSessions = (task.agentSessions ?? []).toSorted((left, right) =>
+export const resolveHistoricalSessionRoles = (
+  historicalSessions: readonly AgentSessionRecord[],
+): AgentRole[] => {
+  const sortedTaskAgentSessions = historicalSessions.toSorted((left, right) =>
     right.startedAt.localeCompare(left.startedAt),
   );
   const roles: AgentRole[] = [];
@@ -98,12 +100,12 @@ export const resolveHistoricalSessionRoles = (task: TaskCard): AgentRole[] => {
 };
 
 export const resolveSessionTargetOptions = (
-  task: TaskCard,
+  historicalSessions: readonly AgentSessionRecord[],
   taskSessions: readonly KanbanTaskSession[],
   role: AgentRole,
 ): SessionTargetOptions | undefined => {
   const activeSession = resolvePreferredActiveSession(taskSessions, role);
-  const historicalSession = resolveLatestHistoricalSessionByRole(task, role);
+  const historicalSession = resolveLatestHistoricalSessionByRole(historicalSessions, role);
   const externalSessionId =
     activeSession?.externalSessionId ?? historicalSession?.externalSessionId;
 

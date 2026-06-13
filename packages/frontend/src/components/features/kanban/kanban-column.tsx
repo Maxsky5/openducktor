@@ -21,11 +21,14 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 type TaskSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["taskSessions"]>;
+type HistoricalSessions = NonNullable<ComponentProps<typeof KanbanTaskCard>["historicalSessions"]>;
 const EMPTY_TASK_SESSIONS: TaskSessions = [];
+const EMPTY_HISTORICAL_SESSIONS: HistoricalSessions = [];
 
 type KanbanColumnProps = {
   column: KanbanColumnData;
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
+  historicalSessionsByTaskId: Map<string, HistoricalSessions>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
@@ -75,6 +78,7 @@ type TaskCardHandlers = Pick<
 const MeasuredTaskCard = memo(function MeasuredTaskCard({
   task,
   taskSessions,
+  historicalSessions,
   hasActiveSession,
   activeSessionRole,
   activeSessionPresentationState,
@@ -94,6 +98,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
 }: {
   task: KanbanColumnData["tasks"][number];
   taskSessions: TaskSessions | undefined;
+  historicalSessions: HistoricalSessions | undefined;
   hasActiveSession: boolean;
   activeSessionRole: AgentRole | undefined;
   activeSessionPresentationState: KanbanTaskSession["presentationState"] | undefined;
@@ -121,11 +126,16 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
           `${session.externalSessionId}:${session.role}:${session.status}:${session.presentationState}`,
       )
       .join("|") ?? "";
+  const historicalSessionsMeasurementKey =
+    historicalSessions
+      ?.map((session) => `${session.externalSessionId}:${session.role}:${session.startedAt}`)
+      .join("|") ?? "";
   const measurementTrigger = [
     measurementVersion,
     taskActivityState,
     taskMeasurementKey,
     taskSessionsMeasurementKey,
+    historicalSessionsMeasurementKey,
     hasActiveSession ? "active" : "idle",
     activeSessionRole ?? "",
     activeSessionPresentationState ?? "",
@@ -167,6 +177,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
       <KanbanTaskCard
         task={task}
         taskSessions={taskSessions}
+        historicalSessions={historicalSessions}
         hasActiveSession={hasActiveSession}
         {...(activeSessionRole ? { activeSessionRole } : {})}
         taskActivityState={taskActivityState}
@@ -240,6 +251,7 @@ function LaneEmptyState({ id }: { id: KanbanColumnId }): ReactElement {
 export function KanbanColumn({
   column,
   taskSessionsByTaskId,
+  historicalSessionsByTaskId,
   activeTaskSessionContextByTaskId,
   taskActivityStateByTaskId,
   onOpenDetails,
@@ -289,6 +301,9 @@ export function KanbanColumn({
                     key={task.id}
                     task={task}
                     taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                    historicalSessions={
+                      historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
+                    }
                     hasActiveSession={Boolean(activeSessionContext)}
                     activeSessionRole={activeSessionContext?.role}
                     activeSessionPresentationState={activeSessionContext?.presentationState}
@@ -327,6 +342,9 @@ export function KanbanColumn({
                   key={task.id}
                   task={task}
                   taskSessions={taskSessionsByTaskId.get(task.id) ?? EMPTY_TASK_SESSIONS}
+                  historicalSessions={
+                    historicalSessionsByTaskId.get(task.id) ?? EMPTY_HISTORICAL_SESSIONS
+                  }
                   hasActiveSession={Boolean(activeSessionContext)}
                   {...(activeSessionContext?.role
                     ? { activeSessionRole: activeSessionContext.role }

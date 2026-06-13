@@ -5,7 +5,7 @@ import {
   upsertAgentSessionRecordInQuery,
 } from "@/state/queries/agent-sessions";
 import { runtimeQueryKeys } from "@/state/queries/runtime";
-import { invalidateRepoTaskQueries, upsertAgentSessionInRepoTaskData } from "@/state/queries/tasks";
+import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 
 type CreateSessionCacheEffectsArgs = {
@@ -28,7 +28,6 @@ export const createSessionCacheEffects = ({
     }
     await hostPort.agentSessionUpsert(workspaceRepoPath, taskId, record);
     upsertAgentSessionRecordInQuery(queryClient, workspaceRepoPath, taskId, record);
-    upsertAgentSessionInRepoTaskData(queryClient, workspaceRepoPath, taskId, record);
   };
 
   const invalidateSessionStopQueries = async ({

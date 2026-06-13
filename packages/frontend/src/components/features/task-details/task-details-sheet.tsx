@@ -46,6 +46,7 @@ export function TaskDetailsSheet({
   task,
   allTasks,
   taskSessions = EMPTY_TASK_SESSIONS,
+  historicalSessions = [],
   hasActiveSession = false,
   activeSessionRole,
   open,
@@ -82,7 +83,7 @@ export function TaskDetailsSheet({
     ...(task
       ? {
           resolveSessionOptionsByRole: (role: AgentRole) =>
-            resolveSessionTargetOptions(task, taskSessions, role),
+            resolveSessionTargetOptions(historicalSessions, taskSessions, role),
         }
       : {}),
     onDelegate,
@@ -93,7 +94,7 @@ export function TaskDetailsSheet({
     onDelete,
   });
 
-  const historicalSessionRoles = task ? resolveHistoricalSessionRoles(task) : [];
+  const historicalSessionRoles = task ? resolveHistoricalSessionRoles(historicalSessions) : [];
 
   if (!task) {
     return (

@@ -1,13 +1,16 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
-import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   isSelectedAgentSessionResolving,
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { agentSessionBulkQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
@@ -136,14 +139,31 @@ export function useAgentsPageRouteSessionModel({
     isLoadingChecks,
     refreshChecks,
   });
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
+  const shouldLoadTaskSessionRecords = workspaceRepoPath !== null && taskIds.length > 0;
+  const taskSessionRecordsQuery = useQuery({
+    ...agentSessionBulkQueryOptions(workspaceRepoPath ?? "", taskIds),
+    enabled: shouldLoadTaskSessionRecords,
+  });
+  const taskSessionRecordsByTaskId = taskSessionRecordsQuery.data ?? {};
+  const taskSessionRecordsError = taskSessionRecordsQuery.error
+    ? `Failed to load agent session records for repo '${workspaceRepoPath}': ${errorMessage(
+        taskSessionRecordsQuery.error,
+      )}`
+    : null;
 
   const selection = useAgentStudioSelectionController({
     activeWorkspace,
     isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
+    taskSessionRecordsByTaskId,
+    isLoadingTaskSessionRecords:
+      shouldLoadTaskSessionRecords &&
+      taskSessionRecordsQuery.data === undefined &&
+      taskSessionRecordsQuery.isFetching,
     sessions,
-    sessionReadModelError,
+    sessionReadModelError: sessionReadModelError ?? taskSessionRecordsError,
     taskIdParam,
     sessionParam,
     hasExplicitRoleParam,

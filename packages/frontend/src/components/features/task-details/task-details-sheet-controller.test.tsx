@@ -78,6 +78,7 @@ describe("TaskDetailsSheetController", () => {
         activeWorkspace,
         allTasks: [task],
         taskSessionsByTaskId: new Map(),
+        historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
         workflowActionsEnabled: false,
       });
@@ -130,6 +131,7 @@ describe("TaskDetailsSheetController", () => {
         activeWorkspace,
         allTasks: [task],
         taskSessionsByTaskId: new Map(),
+        historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
         workflowActionsEnabled: false,
         onDetectPullRequest,
@@ -171,6 +173,7 @@ describe("TaskDetailsSheetController", () => {
         ref: controllerRef,
         allTasks,
         taskSessionsByTaskId: new Map(),
+        historicalSessionsByTaskId: new Map(),
         activeTaskSessionContextByTaskId: new Map(),
         workflowActionsEnabled: false,
       });

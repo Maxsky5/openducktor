@@ -1,6 +1,6 @@
 import { DEFAULT_KANBAN_SETTINGS, type TaskCard } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { GitConflict } from "@/features/agent-studio-git";
@@ -12,6 +12,7 @@ import {
   useTasksState,
   useWorkspaceState,
 } from "@/state";
+import { agentSessionBulkQueryOptions } from "@/state/queries/agent-sessions";
 import { settingsSnapshotQueryOptions } from "@/state/queries/workspace";
 import { useAgentStudioRepoSettings } from "../agents/use-agent-studio-repo-settings";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -128,6 +129,33 @@ export function useKanbanPageModels({
 
   const kanbanTasks =
     workspaceRepoPath && !settingsSnapshotQuery.isError ? tasks : EMPTY_KANBAN_TASKS;
+  const kanbanTaskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
+  const shouldLoadHistoricalSessions = workspaceRepoPath !== null && kanbanTaskIds.length > 0;
+  const historicalSessionsQuery = useQuery({
+    ...agentSessionBulkQueryOptions(workspaceRepoPath ?? "", kanbanTaskIds),
+    enabled: shouldLoadHistoricalSessions,
+  });
+  const historicalSessionsByTaskId = useMemo(
+    () => new Map(Object.entries(historicalSessionsQuery.data ?? {})),
+    [historicalSessionsQuery.data],
+  );
+  const reportedHistoricalSessionsErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!historicalSessionsQuery.isError) {
+      reportedHistoricalSessionsErrorRef.current = null;
+      return;
+    }
+
+    const description = errorMessage(historicalSessionsQuery.error);
+    if (reportedHistoricalSessionsErrorRef.current === description) {
+      return;
+    }
+
+    reportedHistoricalSessionsErrorRef.current = description;
+    toast.error("Failed to load task session history", {
+      description,
+    });
+  }, [historicalSessionsQuery.error, historicalSessionsQuery.isError]);
   const isLoadingKanbanTasks = isKanbanForegroundLoading({
     hasActiveWorkspace: workspaceRepoPath !== null,
     isForegroundLoadingTasks,
@@ -271,6 +299,7 @@ export function useKanbanPageModels({
     isSwitchingWorkspace,
     emptyColumnDisplay,
     tasks: kanbanTasks,
+    historicalSessionsByTaskId,
     sessions,
     onOpenDetails,
     onDelegate,
@@ -297,6 +326,7 @@ export function useKanbanPageModels({
       activeWorkspace,
       allTasks: kanbanTasks,
       taskSessionsByTaskId: content.taskSessionsByTaskId,
+      historicalSessionsByTaskId: content.historicalSessionsByTaskId,
       activeTaskSessionContextByTaskId: content.activeTaskSessionContextByTaskId,
       onOpenSession,
       onPlan,

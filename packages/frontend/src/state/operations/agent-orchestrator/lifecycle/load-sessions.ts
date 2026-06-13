@@ -1,8 +1,6 @@
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import { loadAgentSessionListFromQuery } from "@/state/queries/agent-sessions";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -12,6 +10,7 @@ import {
   readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
+import { loadTaskSessionRecordsForTask } from "../session-read-model/task-session-records";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import {
   loadSessionHistorySnapshot,
@@ -80,14 +79,6 @@ type CreateLoadSelectedSessionHistoryArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   updateSession: UpdateSession;
 };
-
-const taskFromSessionRecords = (
-  taskId: string,
-  agentSessions: AgentSessionRecord[],
-): TaskSessionRecords => ({
-  id: taskId,
-  agentSessions,
-});
 
 const isRepoOperationStale = ({
   repoPath,
@@ -211,14 +202,16 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const records =
-      options?.persistedRecords ??
-      (await loadAgentSessionListFromQuery(queryClient, repoPath, taskId));
+    const task = await loadTaskSessionRecordsForTask({
+      queryClient,
+      repoPath,
+      taskId,
+      persistedRecords: options?.persistedRecords,
+    });
     if (isStaleRepoOperation()) {
       return;
     }
 
-    const task = taskFromSessionRecords(taskId, records);
     await loadRepoAgentSessions({
       repoPath,
       tasks: [task],
