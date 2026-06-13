@@ -61,10 +61,6 @@ export type AgentStudioSelectedSessionLifecycle = SelectedAgentSessionViewLifecy
   isSessionSelectionResolving: boolean;
 };
 
-export const isSelectedSessionHistoryBlockingRender = (
-  lifecycle: Pick<SelectedAgentSessionViewLifecycle, "canRenderHistory" | "isLoadingHistory">,
-): boolean => lifecycle.isLoadingHistory && !lifecycle.canRenderHistory;
-
 export const deriveAgentStudioSelectedSessionLifecycle = ({
   taskId,
   isActiveTaskReady,

@@ -7,6 +7,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -63,9 +64,7 @@ type SelectionState = {
   activeSession: SessionFixture | null;
   isActiveTaskReady: boolean;
   isActiveTaskReadinessFailed: boolean;
-  isViewSessionHistoryLoadFailed: boolean;
-  isViewSessionHistoryLoading: boolean;
-  isSelectedSessionLoading: boolean;
+  viewSessionLifecycle: ReturnType<typeof createSelectedSessionLifecycleFixture>;
   sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
@@ -204,9 +203,7 @@ let selectionState: SelectionState = {
   activeSession: initialSelectionSession,
   isActiveTaskReady: true,
   isActiveTaskReadinessFailed: false,
-  isViewSessionHistoryLoadFailed: false,
-  isViewSessionHistoryLoading: false,
-  isSelectedSessionLoading: false,
+  viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
   sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
@@ -482,9 +479,7 @@ beforeEach(async () => {
     activeSession: session,
     isActiveTaskReady: true,
     isActiveTaskReadinessFailed: false,
-    isViewSessionHistoryLoadFailed: false,
-    isViewSessionHistoryLoading: false,
-    isSelectedSessionLoading: false,
+    viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
     sessionsForTask: [session],
     handleCreateTab: mock((_taskId: string) => {}),
     handleCloseTab: mock((_taskId: string) => {}),

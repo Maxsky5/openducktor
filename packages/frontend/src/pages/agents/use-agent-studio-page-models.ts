@@ -6,7 +6,6 @@ import type { AgentChatComposerDraft } from "@/components/features/agents/agent-
 import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-chat/use-agent-chat-surface-model";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import { isSelectedSessionHistoryBlockingRender } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -251,8 +250,6 @@ export function useAgentStudioPageModels({
   );
   const selectedRuntimeReadiness = selectedSession.runtime.runtimeReadiness;
   const selectedSessionLifecycle = selectedSession.runtime.lifecycle;
-  const isSessionHistoryBlockingRender =
-    isSelectedSessionHistoryBlockingRender(selectedSessionLifecycle);
   const runtimeReadiness = useMemo(
     () => ({
       readinessState: selectedRuntimeReadiness.readinessState,
@@ -405,12 +402,9 @@ export function useAgentStudioPageModels({
   const surfaceModel = useAgentChatSurfaceModel({
     mode: "interactive",
     session: selectedSession.activeSession,
-    isTaskViewResolving: selectedSessionLifecycle.isTaskViewResolving,
-    isSessionSelectionResolving: selectedSessionLifecycle.isSessionSelectionResolving,
+    sessionLifecycle: selectedSessionLifecycle,
     chatSettings,
     isSessionWorking: sessionActions.isSessionWorking,
-    isSessionHistoryLoading: isSessionHistoryBlockingRender,
-    isWaitingForRuntimeReadiness: selectedSessionLifecycle.isWaitingForRuntimeReadiness,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
     sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,
     runtimeReadiness,

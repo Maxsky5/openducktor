@@ -1,7 +1,6 @@
 import type { AgentSessionRecord, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentSessionTodoItem } from "@openducktor/core";
-import { useMemo } from "react";
-import { useAgentChatSessionReadiness } from "@/components/features/agents/agent-chat/use-agent-chat-session-readiness";
+import { useEffect, useMemo } from "react";
 import { useAgentChatSessionRuntimeData } from "@/components/features/agents/agent-chat/use-agent-chat-session-runtime-data";
 import {
   firstLaunchAction,
@@ -17,6 +16,7 @@ import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
   SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
   AgentSessionRouteIdentity,
   AgentSessionState,
@@ -477,16 +477,37 @@ export function useAgentStudioSelectionController({
     viewRole === "build"
       ? resolveBuildContinuationLaunchAction(viewSelectedTask)
       : firstLaunchAction(viewRole);
-  const { isActiveTaskReady, isActiveTaskReadinessFailed, selectedSessionLifecycle } =
-    useAgentChatSessionReadiness({
-      activeWorkspace,
-      activeTaskId: viewTaskId,
-      selectedSessionRoute: viewSelectedSessionRoute,
-      activeSession: viewSessionRuntimeData.session,
+  const selectedSessionLifecycle = useMemo(
+    () =>
+      deriveSelectedAgentSessionViewLifecycle({
+        selectedSessionRoute: viewSelectedSessionRoute,
+        session: viewSessionRuntimeData.session,
+        repoReadinessState: viewSessionReadinessState,
+        sessionLoadError: sessionReadModelError,
+      }),
+    [
+      sessionReadModelError,
+      viewSelectedSessionRoute,
+      viewSessionReadinessState,
+      viewSessionRuntimeData.session,
+    ],
+  );
+  useEffect(() => {
+    if (
+      selectedSessionLifecycle.externalSessionId === null ||
+      !selectedSessionLifecycle.shouldEnsureReadyForView
+    ) {
+      return;
+    }
+
+    void ensureSessionReadyForView({
+      taskId: viewTaskId,
+      externalSessionId: selectedSessionLifecycle.externalSessionId,
       repoReadinessState: viewSessionReadinessState,
-      sessionLoadError: sessionReadModelError,
-      ensureSessionReadyForView,
     });
+  }, [ensureSessionReadyForView, selectedSessionLifecycle, viewSessionReadinessState, viewTaskId]);
+  const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
+  const isActiveTaskReadinessFailed = false;
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
@@ -529,7 +550,6 @@ export function useAgentStudioSelectionController({
       handleReorderTab,
       handleSelectTab,
       isActiveTaskReady,
-      isActiveTaskReadinessFailed,
       isLoadingTasks,
       selectedSessionLifecycle,
       selectedSessionById,

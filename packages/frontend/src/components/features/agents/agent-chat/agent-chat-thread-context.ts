@@ -1,24 +1,30 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-type UseAgentChatThreadContextArgs = {
-  activeSession: AgentSessionState | null;
+export type AgentChatThreadLifecycle = {
+  canRenderHistory: boolean;
   isTaskViewResolving: boolean;
   isSessionSelectionResolving: boolean;
 };
 
-type AgentChatThreadContext = {
+type ResolveAgentChatThreadContextArgs = {
+  activeSession: AgentSessionState | null;
+  lifecycle: AgentChatThreadLifecycle;
+};
+
+export type AgentChatThreadContext = {
   threadSession: AgentSessionState | null;
   activeExternalSessionId: string | null;
   isContextSwitching: boolean;
 };
 
-export const useAgentChatThreadContext = ({
+export const resolveAgentChatThreadContext = ({
   activeSession,
-  isTaskViewResolving,
-  isSessionSelectionResolving,
-}: UseAgentChatThreadContextArgs): AgentChatThreadContext => {
+  lifecycle,
+}: ResolveAgentChatThreadContextArgs): AgentChatThreadContext => {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const shouldClearThread = isTaskViewResolving || isSessionSelectionResolving;
+  const isResolvingSelection =
+    lifecycle.isTaskViewResolving || lifecycle.isSessionSelectionResolving;
+  const shouldClearThread = isResolvingSelection && !lifecycle.canRenderHistory;
 
   return {
     threadSession: shouldClearThread ? null : activeSession,

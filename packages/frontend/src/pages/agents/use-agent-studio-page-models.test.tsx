@@ -576,6 +576,9 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [],
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
+            phase: "resolving_session",
+            canRenderHistory: false,
+            isLoadingHistory: true,
             isSessionSelectionResolving: true,
           }),
         },

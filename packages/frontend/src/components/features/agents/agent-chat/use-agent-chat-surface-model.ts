@@ -23,8 +23,11 @@ import type {
   AgentChatSurfaceModel,
 } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
+import {
+  type AgentChatThreadLifecycle,
+  resolveAgentChatThreadContext,
+} from "./agent-chat-thread-context";
 import { useAgentChatLayout } from "./use-agent-chat-layout";
-import { useAgentChatThreadContext } from "./use-agent-chat-thread-context";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -177,15 +180,17 @@ type AgentChatComposerConfig = {
   onSelectVariant: (variant: string) => void;
 };
 
+export type AgentChatSurfaceSessionLifecycle = AgentChatThreadLifecycle & {
+  isLoadingHistory: boolean;
+  isWaitingForRuntimeReadiness: boolean;
+};
+
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;
   session: AgentSessionState | null;
-  isTaskViewResolving: boolean;
-  isSessionSelectionResolving: boolean;
+  sessionLifecycle: AgentChatSurfaceSessionLifecycle;
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
-  isSessionHistoryLoading: boolean;
-  isWaitingForRuntimeReadiness: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   runtimeReadiness: AgentChatRuntimeReadiness;
@@ -203,12 +208,9 @@ type UseAgentChatSurfaceModelArgs = {
 export function useAgentChatSurfaceModel({
   mode,
   session,
-  isTaskViewResolving,
-  isSessionSelectionResolving,
+  sessionLifecycle,
   chatSettings,
   isSessionWorking,
-  isSessionHistoryLoading,
-  isWaitingForRuntimeReadiness,
   runtimeDefinitions = [],
   sessionRuntimeDataError,
   runtimeReadiness,
@@ -225,11 +227,13 @@ export function useAgentChatSurfaceModel({
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const { threadSession, activeExternalSessionId, isContextSwitching } = useAgentChatThreadContext({
-    activeSession: session,
-    isTaskViewResolving,
-    isSessionSelectionResolving,
-  });
+  const { threadSession, activeExternalSessionId, isContextSwitching } =
+    resolveAgentChatThreadContext({
+      activeSession: session,
+      lifecycle: sessionLifecycle,
+    });
+  const isSessionHistoryLoading =
+    sessionLifecycle.isLoadingHistory && !sessionLifecycle.canRenderHistory;
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
@@ -280,7 +284,7 @@ export function useAgentChatSurfaceModel({
       isSessionWorking,
       isSessionViewLoading: isContextSwitching,
       isSessionHistoryLoading,
-      isWaitingForRuntimeReadiness,
+      isWaitingForRuntimeReadiness: sessionLifecycle.isWaitingForRuntimeReadiness,
       readinessState: runtimeReadiness.readinessState,
       isInteractionEnabled: isComposerInteractionEnabled,
       blockedReason: runtimeReadiness.blockedReason,
@@ -327,7 +331,7 @@ export function useAgentChatSurfaceModel({
       isComposerInteractionEnabled,
       isSessionHistoryLoading,
       isSessionWorking,
-      isWaitingForRuntimeReadiness,
+      sessionLifecycle.isWaitingForRuntimeReadiness,
       messagesContainerRef,
       pendingQuestions,
       approvals,
