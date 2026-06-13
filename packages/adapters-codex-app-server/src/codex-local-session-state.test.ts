@@ -23,7 +23,7 @@ const createStore = () => {
   const clearedSessionEvents: string[] = [];
   const clearedPendingInput: string[] = [];
   const clearedRuntimeEvents: string[] = [];
-  const clearedHistoryPresence: string[] = [];
+  const clearedReadOnlyHistoryLoads: string[] = [];
   const drainedRuntimeEvents: string[] = [];
   const stoppedRuntimeSubscriptions: string[] = [];
   const activeTurnsBySessionId = new Map<string, unknown>();
@@ -35,8 +35,9 @@ const createStore = () => {
     pendingInput: {
       clearSession: (externalSessionId) => clearedPendingInput.push(externalSessionId),
     },
-    historyPresenceOverlay: {
-      clear: (externalSessionId) => clearedHistoryPresence.push(externalSessionId),
+    threadInventory: {
+      clearReadOnlyHistoryLoad: (externalSessionId) =>
+        clearedReadOnlyHistoryLoads.push(externalSessionId),
     },
     runtimeEvents: {
       clearSession: (externalSessionId) => clearedRuntimeEvents.push(externalSessionId),
@@ -52,7 +53,7 @@ const createStore = () => {
     clearedSessionEvents,
     clearedPendingInput,
     clearedRuntimeEvents,
-    clearedHistoryPresence,
+    clearedReadOnlyHistoryLoads,
     drainedRuntimeEvents,
     stoppedRuntimeSubscriptions,
   };
@@ -60,7 +61,7 @@ const createStore = () => {
 
 describe("CodexLocalSessionState", () => {
   test("remembers sessions and drains buffered runtime events", async () => {
-    const { store, clearedHistoryPresence, drainedRuntimeEvents } = createStore();
+    const { store, clearedReadOnlyHistoryLoads, drainedRuntimeEvents } = createStore();
     store.remember(session("thread-1", "runtime-1"));
     store.remember(session("thread-2", "runtime-2"));
     await Promise.resolve();
@@ -68,7 +69,7 @@ describe("CodexLocalSessionState", () => {
     expect(store.get("thread-1")?.runtimeId).toBe("runtime-1");
     expect(store.has("thread-2")).toBe(true);
     expect([...store.values()].map((entry) => entry.threadId)).toEqual(["thread-1", "thread-2"]);
-    expect(clearedHistoryPresence).toEqual(["thread-1", "thread-2"]);
+    expect(clearedReadOnlyHistoryLoads).toEqual(["thread-1", "thread-2"]);
     expect(drainedRuntimeEvents).toEqual(["thread-1", "thread-2"]);
   });
 

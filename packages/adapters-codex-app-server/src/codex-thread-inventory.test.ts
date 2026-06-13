@@ -3,14 +3,19 @@ import { createDeferred } from "./codex-app-server-adapter.test-harness";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import type { CodexAppServerClient } from "./types";
 
-const threadListResponse = (id: string, preview: string, cwd = "/repo"): unknown => ({
+const threadListResponse = (
+  id: string,
+  preview: string,
+  cwd = "/repo",
+  status: Record<string, unknown> = { type: "idle" },
+): unknown => ({
   data: [
     {
       id,
       cwd,
       createdAt: 1,
       preview,
-      status: { type: "idle" },
+      status,
     },
   ],
   nextCursor: null,
@@ -125,6 +130,57 @@ describe("CodexThreadInventoryReader", () => {
         status: expect.objectContaining({ agentSessionStatus: "idle" }),
       }),
     );
+  });
+
+  test("keeps a history-only idle load idle across runtime route changes", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const loadedResponses = [
+      { data: [], nextCursor: null },
+      { data: ["thread-idle"], nextCursor: null },
+    ];
+    const threadResponses = [
+      threadListResponse("thread-idle", "Idle inventory"),
+      threadListResponse("thread-idle", "Loaded by history read", "/repo", {
+        type: "active",
+        activeFlags: [],
+      }),
+    ];
+    const client = {
+      threadLoadedList: async () => {
+        const response = loadedResponses.shift();
+        if (!response) {
+          throw new Error("Unexpected thread/loaded/list call.");
+        }
+        return response;
+      },
+      threadList: async () => {
+        const response = threadResponses.shift();
+        if (!response) {
+          throw new Error("Unexpected thread/list call.");
+        }
+        return response;
+      },
+      threadResume: async () => ({
+        thread: {
+          id: "thread-idle",
+          cwd: "/repo",
+          status: { type: "idle" },
+          turns: [],
+        },
+      }),
+    } as unknown as CodexAppServerClient;
+
+    await reader.loadThreadForHistory(client, "runtime-ensure", {
+      externalSessionId: "thread-idle",
+      workingDirectory: "/repo",
+    });
+    const refreshedInventory = await reader.refresh(client, "runtime-live");
+
+    expect(refreshedInventory.threadsById.get("thread-idle")?.status).toMatchObject({
+      agentSessionStatus: "idle",
+      classification: "idle",
+      status: { type: "idle" },
+    });
   });
 
   test("returns null without resuming when the thread is missing from inventory", async () => {

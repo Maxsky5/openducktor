@@ -22,10 +22,7 @@ type ReadOnlyIdleHistoryLoad = {
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
   private readonly pendingInventoryByRuntimeId = new Map<string, Promise<CodexThreadInventory>>();
-  private readonly readOnlyIdleHistoryLoadsByRuntimeId = new Map<
-    string,
-    Map<string, ReadOnlyIdleHistoryLoad>
-  >();
+  private readonly readOnlyIdleHistoryLoadsByThreadId = new Map<string, ReadOnlyIdleHistoryLoad>();
 
   clear(runtimeId: string): void {
     this.inventoryByRuntimeId.delete(runtimeId);
@@ -33,9 +30,7 @@ export class CodexThreadInventoryReader {
   }
 
   clearReadOnlyHistoryLoad(threadId: string): void {
-    for (const loadsByThreadId of this.readOnlyIdleHistoryLoadsByRuntimeId.values()) {
-      loadsByThreadId.delete(threadId);
-    }
+    this.readOnlyIdleHistoryLoadsByThreadId.delete(threadId);
   }
 
   clearReadOnlyHistoryLoadForNotification(
@@ -147,7 +142,7 @@ export class CodexThreadInventoryReader {
       threadId: input.externalSessionId,
       cwd: input.workingDirectory,
     });
-    this.rememberReadOnlyIdleHistoryLoad(runtimeId, thread);
+    this.rememberReadOnlyIdleHistoryLoad(thread);
     this.clear(runtimeId);
     return thread;
   }
@@ -188,51 +183,39 @@ export class CodexThreadInventoryReader {
   }
 
   private hasReadOnlyHistoryLoad(threadId: string): boolean {
-    for (const loadsByThreadId of this.readOnlyIdleHistoryLoadsByRuntimeId.values()) {
-      if (loadsByThreadId.has(threadId)) {
-        return true;
-      }
-    }
-    return false;
+    return this.readOnlyIdleHistoryLoadsByThreadId.has(threadId);
   }
 
-  private rememberReadOnlyIdleHistoryLoad(runtimeId: string, thread: CodexThreadSnapshot): void {
+  private rememberReadOnlyIdleHistoryLoad(thread: CodexThreadSnapshot): void {
     if (thread.status.agentSessionStatus !== "idle") {
       this.clearReadOnlyHistoryLoad(thread.id);
       return;
     }
-    const loadsByThreadId = this.readOnlyIdleHistoryLoadsByRuntimeId.get(runtimeId) ?? new Map();
-    loadsByThreadId.set(thread.id, {
+    this.readOnlyIdleHistoryLoadsByThreadId.set(thread.id, {
       workingDirectory: thread.cwd,
       status: thread.status,
     });
-    this.readOnlyIdleHistoryLoadsByRuntimeId.set(runtimeId, loadsByThreadId);
   }
 
   private withReadOnlyHistoryStatuses(inventory: CodexThreadInventory): CodexThreadInventory {
-    const loadsByThreadId = this.readOnlyIdleHistoryLoadsByRuntimeId.get(inventory.runtimeId);
-    if (!loadsByThreadId) {
-      return inventory;
-    }
-    for (const threadId of loadsByThreadId.keys()) {
-      if (!inventory.loadedIds.has(threadId)) {
-        loadsByThreadId.delete(threadId);
-      }
-    }
-    if (loadsByThreadId.size === 0) {
-      this.readOnlyIdleHistoryLoadsByRuntimeId.delete(inventory.runtimeId);
+    if (this.readOnlyIdleHistoryLoadsByThreadId.size === 0) {
       return inventory;
     }
 
     const threadsById = new Map(inventory.threadsById);
-    for (const [threadId, readOnlyLoad] of loadsByThreadId) {
+    for (const [threadId, readOnlyLoad] of this.readOnlyIdleHistoryLoadsByThreadId) {
       const thread = threadsById.get(threadId);
-      if (!thread || thread.cwd !== readOnlyLoad.workingDirectory) {
+      if (!thread) {
+        this.clearReadOnlyHistoryLoad(threadId);
+        continue;
+      }
+      if (thread.cwd !== readOnlyLoad.workingDirectory || !inventory.loadedIds.has(threadId)) {
+        this.clearReadOnlyHistoryLoad(threadId);
         continue;
       }
       if (thread.status.classification !== "running") {
         if (thread.status.classification !== "idle") {
-          loadsByThreadId.delete(threadId);
+          this.clearReadOnlyHistoryLoad(threadId);
         }
         continue;
       }

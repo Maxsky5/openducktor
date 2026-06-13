@@ -2,11 +2,15 @@ import { describe, expect, test } from "bun:test";
 import type { AgentModelSelection } from "@openducktor/core";
 import { codexTurnKey } from "./codex-app-server-requests";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
-import { CodexHistoryPresenceOverlay } from "./codex-history-presence-overlay";
 import { CodexPendingInputState } from "./codex-pending-input-state";
 import { CodexRuntimeSessionEvents } from "./codex-runtime-session-events";
 import { CodexSessionEventBus } from "./codex-session-event-bus";
 import type { CodexSessionState } from "./types";
+
+const createThreadInventory = () => ({
+  clearReadOnlyHistoryLoad: () => undefined,
+  clearReadOnlyHistoryLoadForNotification: () => undefined,
+});
 
 const createRuntimeEvents = () =>
   new CodexRuntimeSessionEvents({
@@ -18,7 +22,7 @@ const createRuntimeEvents = () =>
     activeTurnsBySessionId: new Map(),
     sessionEvents: new CodexSessionEventBus(),
     pendingInput: new CodexPendingInputState(),
-    historyPresenceOverlay: new CodexHistoryPresenceOverlay(),
+    threadInventory: createThreadInventory(),
     flushQueuedUserMessagesLater: () => undefined,
   });
 
