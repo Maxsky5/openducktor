@@ -66,7 +66,7 @@ export type SessionStoreContext = Pick<
 
 export type SessionRuntimeDataContext = Pick<
   ListenToAgentSessionParams,
-  "repoPath" | "runtimeDataWriter"
+  "sessionRef" | "runtimeDataWriter"
 >;
 
 export type SessionDraftContext = Pick<
@@ -174,7 +174,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     runtimeData: {
-      repoPath: context.repoPath,
+      sessionRef: context.sessionRef,
       runtimeDataWriter: context.runtimeDataWriter,
     },
   },
@@ -221,7 +221,7 @@ export const createSessionEventHandlerContext = (
         : {}),
     },
     runtimeData: {
-      repoPath: context.repoPath,
+      sessionRef: context.sessionRef,
       runtimeDataWriter: context.runtimeDataWriter,
     },
   },

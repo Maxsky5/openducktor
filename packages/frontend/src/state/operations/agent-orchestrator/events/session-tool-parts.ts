@@ -224,6 +224,12 @@ export const handleToolPart = (
       : null;
   const workflowToolAliasesByCanonical = runtimeDescriptor?.workflowToolAliasesByCanonical;
 
+  if (todoUpdateFromTool && activeSession) {
+    context.runtimeData.runtimeDataWriter.updateTodos(context.runtimeData.sessionRef, (todos) =>
+      mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
+    );
+  }
+
   context.store.updateSession(
     context.store.externalSessionId,
     (current) => {
@@ -239,13 +245,6 @@ export const handleToolPart = (
         timestamp: event.timestamp,
         workflowToolAliasesByCanonical,
       });
-      if (todoUpdateFromTool) {
-        context.runtimeData.runtimeDataWriter.updateTodos(
-          context.runtimeData.repoPath,
-          current,
-          (todos) => mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
-        );
-      }
 
       shouldRefreshTaskData = refreshDecision.shouldRefreshTaskData;
 

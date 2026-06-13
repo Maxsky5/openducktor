@@ -21,17 +21,20 @@ import { handleAssistantPart } from "./session-parts";
 
 export const createRecordingRuntimeDataWriter = () => {
   let todos: AgentSessionTodoItem[] = [];
+  let sessionRefs: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[0][] =
+    [];
   return {
     writer: {
       updateTodos: (
-        _repoPath: string,
-        _session: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[1],
+        session: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[0],
         updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
       ) => {
+        sessionRefs = [...sessionRefs, session];
         todos = updater(todos);
       },
     },
     getTodos: () => todos,
+    getSessionRefs: () => sessionRefs,
   };
 };
 

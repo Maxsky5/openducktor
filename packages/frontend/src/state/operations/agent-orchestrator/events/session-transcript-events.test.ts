@@ -846,6 +846,14 @@ describe("agent-orchestrator session transcript events", () => {
         priority: "high",
       },
     ]);
+    expect(runtimeData.getSessionRefs()).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+        externalSessionId: "session-1",
+      },
+    ]);
   });
 
   test("flushes queued work before applying an immediate event", async () => {

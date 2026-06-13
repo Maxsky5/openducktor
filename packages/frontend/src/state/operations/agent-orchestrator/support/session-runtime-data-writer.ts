@@ -1,22 +1,11 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentSessionTodoItem } from "@openducktor/core";
+import type { AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { agentSessionRuntimeQueryKeys } from "@/state/queries/agent-session-runtime";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-
-export type SessionRuntimeDataSessionRef = Pick<
-  AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory"
->;
 
 type SessionTodosUpdater = (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[];
 
 export type SessionRuntimeDataWriter = {
-  updateTodos: (
-    repoPath: string,
-    session: SessionRuntimeDataSessionRef,
-    updater: SessionTodosUpdater,
-  ) => void;
+  updateTodos: (session: AgentSessionRef, updater: SessionTodosUpdater) => void;
 };
 
 const todosQueryKey = ({
@@ -24,19 +13,14 @@ const todosQueryKey = ({
   runtimeKind,
   workingDirectory,
   externalSessionId,
-}: {
-  repoPath: string;
-  runtimeKind: RuntimeKind;
-  workingDirectory: string;
-  externalSessionId: string;
-}) =>
+}: AgentSessionRef) =>
   agentSessionRuntimeQueryKeys.todos(repoPath, runtimeKind, workingDirectory, externalSessionId);
 
 export const createSessionRuntimeDataWriter = (
   queryClient: QueryClient,
 ): SessionRuntimeDataWriter => ({
-  updateTodos(repoPath, session, updater): void {
-    const queryKey = todosQueryKey({ ...session, repoPath });
+  updateTodos(session, updater): void {
+    const queryKey = todosQueryKey(session);
     const current = queryClient.getQueryData<AgentSessionTodoItem[]>(queryKey) ?? [];
     queryClient.setQueryData(queryKey, updater(current));
   },

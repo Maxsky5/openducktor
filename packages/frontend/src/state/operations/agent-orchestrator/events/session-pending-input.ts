@@ -255,7 +255,7 @@ const autoRejectMutatingApproval = (
 
   void context.approvals.adapter
     .replyApproval({
-      ...toRuntimeSessionContextRef(context.runtimeData.repoPath, replySession),
+      ...toRuntimeSessionContextRef(context.runtimeData.sessionRef.repoPath, replySession),
       requestId: event.requestId,
       outcome: "reject",
       message: rejectionMessage,

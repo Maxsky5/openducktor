@@ -259,19 +259,20 @@ export const handleSessionTodosUpdated = (
   context: Pick<SessionLifecycleEventContext, "store" | "runtimeData">,
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
+  const current = context.store.sessionsRef.current[context.store.externalSessionId];
+  if (!current) {
+    return;
+  }
+
+  context.runtimeData.runtimeDataWriter.updateTodos(context.runtimeData.sessionRef, (todos) =>
+    mergeTodoListPreservingOrder(todos, event.todos),
+  );
   context.store.updateSession(
     context.store.externalSessionId,
-    (current) => {
-      context.runtimeData.runtimeDataWriter.updateTodos(
-        context.runtimeData.repoPath,
-        current,
-        (todos) => mergeTodoListPreservingOrder(todos, event.todos),
-      );
-      return {
-        ...current,
-        messages: settleDanglingTodoToolMessages(current, event.timestamp),
-      };
-    },
+    (current) => ({
+      ...current,
+      messages: settleDanglingTodoToolMessages(current, event.timestamp),
+    }),
     { persist: false },
   );
 };

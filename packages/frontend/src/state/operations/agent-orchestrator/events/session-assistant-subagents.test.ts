@@ -533,7 +533,12 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       },
       runtimeData: {
-        repoPath: "/tmp/repo",
+        sessionRef: {
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo",
+          externalSessionId: "session-1",
+        },
         runtimeDataWriter: { updateTodos: () => {} },
       },
     };
