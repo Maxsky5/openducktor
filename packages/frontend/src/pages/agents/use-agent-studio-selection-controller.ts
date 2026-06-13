@@ -274,7 +274,7 @@ export function useAgentStudioSelectionController({
   const viewSessionParam = useMemo(() => {
     return resolveAgentStudioViewSessionParam({
       sessionParam: effectiveSessionParam,
-      liveSessions: viewSessionsForTask,
+      sessionSummaries: viewSessionsForTask,
       persistedRecords: viewPersistedSessionRecords,
     });
   }, [effectiveSessionParam, viewPersistedSessionRecords, viewSessionsForTask]);
@@ -293,7 +293,7 @@ export function useAgentStudioSelectionController({
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
-      liveSessions: viewSessionsForTask,
+      sessionSummaries: viewSessionsForTask,
       persistedRecords: viewPersistedSessionRecords,
       sessionParam: viewSessionParamFromSelection,
       hasExplicitRoleParam: viewHasExplicitRoleSelection,

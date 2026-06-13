@@ -263,7 +263,7 @@ const toSelectedSessionRoute = (session: AgentSessionRouteIdentity): AgentSessio
   workingDirectory: session.workingDirectory,
 });
 
-const toLiveViewSessionCandidate = (
+const toSummaryViewSessionCandidate = (
   session: AgentSessionSummary,
 ): ViewSessionSelectionCandidate => ({
   externalSessionId: session.externalSessionId,
@@ -287,41 +287,39 @@ const toPersistedViewSessionCandidate = (
 });
 
 const buildViewSessionSelectionCandidates = (
-  liveSessions: AgentSessionSummary[],
+  sessionSummaries: AgentSessionSummary[],
   persistedRecords: AgentSessionRecord[],
 ): ViewSessionSelectionCandidate[] => {
-  const liveSessionIds = new Set(liveSessions.map((session) => session.externalSessionId));
+  const summarySessionIds = new Set(sessionSummaries.map((session) => session.externalSessionId));
   return [
-    ...liveSessions.map(toLiveViewSessionCandidate),
+    ...sessionSummaries.map(toSummaryViewSessionCandidate),
     ...persistedRecords
-      .filter((record) => !liveSessionIds.has(record.externalSessionId))
+      .filter((record) => !summarySessionIds.has(record.externalSessionId))
       .map(toPersistedViewSessionCandidate),
   ];
 };
 
 export const resolveAgentStudioViewSessionParam = ({
   sessionParam,
-  liveSessions,
+  sessionSummaries,
   persistedRecords,
 }: {
   sessionParam: string | null;
-  liveSessions: AgentSessionSummary[];
+  sessionSummaries: AgentSessionSummary[];
   persistedRecords: AgentSessionRecord[];
 }): string | null => {
   if (!sessionParam) {
     return null;
   }
-  const belongsToLiveSession = liveSessions.some(
-    (session) => session.externalSessionId === sessionParam,
-  );
-  const belongsToPersistedSession = persistedRecords.some(
-    (record) => record.externalSessionId === sessionParam,
-  );
-  return belongsToLiveSession || belongsToPersistedSession ? sessionParam : null;
+  const belongsToVisibleSession = buildViewSessionSelectionCandidates(
+    sessionSummaries,
+    persistedRecords,
+  ).some((session) => session.externalSessionId === sessionParam);
+  return belongsToVisibleSession ? sessionParam : null;
 };
 
 export const resolveAgentStudioViewSessionSelection = ({
-  liveSessions,
+  sessionSummaries,
   persistedRecords,
   sessionParam,
   hasExplicitRoleParam,
@@ -330,7 +328,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   fallbackRole,
   keepExplicitRoleSessionless = false,
 }: {
-  liveSessions: AgentSessionSummary[];
+  sessionSummaries: AgentSessionSummary[];
   persistedRecords: AgentSessionRecord[];
   sessionParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -344,7 +342,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   sessionSummary: AgentSessionSummary | null;
 } => {
   const selection = resolveAgentStudioSessionSelectionFromCandidates({
-    sessionsForTask: buildViewSessionSelectionCandidates(liveSessions, persistedRecords),
+    sessionsForTask: buildViewSessionSelectionCandidates(sessionSummaries, persistedRecords),
     sessionParam,
     hasExplicitRoleParam,
     roleFromQuery,

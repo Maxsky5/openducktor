@@ -64,11 +64,11 @@ describe("Agent Studio view session selection", () => {
     ]);
   });
 
-  test("resolves selected route from persisted records until a live summary exists", () => {
-    const liveSession = toAgentSessionSummary(
+  test("resolves selected route from persisted records until a session summary exists", () => {
+    const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
-        externalSessionId: "session-live",
+        externalSessionId: "session-summary",
         taskId: "task-1",
         role: "build",
         status: "idle",
@@ -86,7 +86,7 @@ describe("Agent Studio view session selection", () => {
     };
 
     const persistedSelection = resolveAgentStudioViewSessionSelection({
-      liveSessions: [liveSession],
+      sessionSummaries: [sessionSummary],
       persistedRecords: [persistedSession],
       sessionParam: "session-persisted",
       hasExplicitRoleParam: true,
@@ -106,35 +106,35 @@ describe("Agent Studio view session selection", () => {
     });
 
     const liveSelection = resolveAgentStudioViewSessionSelection({
-      liveSessions: [liveSession],
+      sessionSummaries: [sessionSummary],
       persistedRecords: [
         {
           ...persistedSession,
-          externalSessionId: liveSession.externalSessionId,
+          externalSessionId: sessionSummary.externalSessionId,
           runtimeKind: "codex",
           workingDirectory: "/repo/stale-persisted",
         },
       ],
-      sessionParam: liveSession.externalSessionId,
+      sessionParam: sessionSummary.externalSessionId,
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
       fallbackRole: "build",
     });
 
-    expect(liveSelection.sessionSummary).toBe(liveSession);
+    expect(liveSelection.sessionSummary).toBe(sessionSummary);
     expect(liveSelection.sessionRoute).toEqual({
-      externalSessionId: liveSession.externalSessionId,
+      externalSessionId: sessionSummary.externalSessionId,
       runtimeKind: "opencode",
       workingDirectory: "/repo/live",
     });
   });
 
-  test("keeps only live or persisted session params for the visible task", () => {
-    const liveSession = toAgentSessionSummary(
+  test("keeps only summarized or persisted session params for the visible task", () => {
+    const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
-        externalSessionId: "session-live",
+        externalSessionId: "session-summary",
         taskId: "task-1",
       }),
     );
@@ -149,22 +149,22 @@ describe("Agent Studio view session selection", () => {
 
     expect(
       resolveAgentStudioViewSessionParam({
-        sessionParam: "session-live",
-        liveSessions: [liveSession],
+        sessionParam: "session-summary",
+        sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
       }),
-    ).toBe("session-live");
+    ).toBe("session-summary");
     expect(
       resolveAgentStudioViewSessionParam({
         sessionParam: "session-persisted",
-        liveSessions: [liveSession],
+        sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
       }),
     ).toBe("session-persisted");
     expect(
       resolveAgentStudioViewSessionParam({
         sessionParam: "session-other-task",
-        liveSessions: [liveSession],
+        sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
       }),
     ).toBeNull();
