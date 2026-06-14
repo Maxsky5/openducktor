@@ -1420,6 +1420,12 @@ describe("agent-orchestrator-ensure-ready", () => {
         }),
       },
     };
+    const promptOverrides = {
+      "system.role.build.base": {
+        template: "Build override for {{task.title}}",
+        baseVersion: 1,
+      },
+    };
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1446,7 +1452,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadRepoPromptOverrides: async () => ({}),
+      loadRepoPromptOverrides: async () => promptOverrides,
     });
 
     try {
@@ -1461,6 +1467,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         },
       });
       expect(sessionsRef.current["session-1"]?.title).toBe("Builder Session");
+      expect(sessionsRef.current["session-1"]?.promptOverrides).toEqual(promptOverrides);
     } finally {
       adapter.resumeSession = originalResumeSession;
       adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;

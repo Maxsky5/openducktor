@@ -104,4 +104,27 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     expect(store.getActivitySessionsSnapshot()).toEqual([]);
   });
+
+  test("resets workspace-scoped activity atomically", () => {
+    const store = createAgentSessionsStore("/repo-a");
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      status: "running",
+    });
+
+    store.setSessionsById({ [session.externalSessionId]: session });
+    expect(store.getActivitySnapshot()).toMatchObject({
+      workspaceRepoPath: "/repo-a",
+      sessions: [expect.objectContaining({ externalSessionId: "session-1" })],
+    });
+
+    store.resetWorkspace("/repo-b");
+
+    expect(store.getSessionsByIdSnapshot()).toEqual({});
+    expect(store.getActivitySnapshot()).toEqual({
+      workspaceRepoPath: "/repo-b",
+      sessions: [],
+    });
+  });
 });

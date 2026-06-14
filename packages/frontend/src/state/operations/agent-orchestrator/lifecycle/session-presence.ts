@@ -1,4 +1,3 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -22,14 +21,7 @@ export const sessionPresenceHasPendingInput = (snapshot: AgentSessionPresenceSna
 export const applyAgentSessionPresenceSnapshotToSession = (
   current: AgentSessionState,
   snapshot: AgentSessionPresenceSnapshot,
-  options: {
-    promptOverrides?: RepoPromptOverrides;
-    selectedModel?: AgentSessionState["selectedModel"];
-  } = {},
 ): AgentSessionState => {
-  const promptOverrides = options.promptOverrides ?? current.promptOverrides;
-  const selectedModel = options.selectedModel ?? current.selectedModel;
-  const promptOverridesPatch = promptOverrides ? { promptOverrides } : {};
   if (snapshot.presence === "runtime") {
     const status =
       snapshot.agentSessionStatus === "idle" &&
@@ -48,8 +40,6 @@ export const applyAgentSessionPresenceSnapshotToSession = (
       pendingApprovals: snapshot.pendingApprovals,
       pendingQuestions: snapshot.pendingQuestions,
       ...liveTurnFields,
-      ...promptOverridesPatch,
-      selectedModel,
     };
   }
 
@@ -61,7 +51,5 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     pendingApprovals: [],
     pendingQuestions: [],
     ...settleLiveTurnFields(),
-    ...promptOverridesPatch,
-    selectedModel,
   };
 };

@@ -39,6 +39,11 @@ export type AgentActivitySessionSummary = Pick<
   hasPendingQuestions: boolean;
 };
 
+export type AgentActivitySessionsSnapshot = {
+  workspaceRepoPath: string | null;
+  sessions: AgentActivitySessionSummary[];
+};
+
 type Listener = () => void;
 
 export type AgentSessionsStore = {
@@ -46,9 +51,11 @@ export type AgentSessionsStore = {
   getSessionsSnapshot: () => AgentSessionState[];
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
   getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
+  getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionsByIdSnapshot: () => AgentSessionsById;
   getSessionSnapshot: (externalSessionId: string | null) => AgentSessionState | null;
   setSessionsById: (nextSessionsById: AgentSessionsById) => void;
+  resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
 const sortByStartedAtDesc = (left: AgentSessionState, right: AgentSessionState): number =>
@@ -132,11 +139,23 @@ const areArraysReferenceEqual = <T>(left: T[], right: T[]): boolean => {
   return true;
 };
 
-export const createAgentSessionsStore = (): AgentSessionsStore => {
+const createActivitySnapshot = (
+  workspaceRepoPath: string | null,
+  sessions: AgentActivitySessionSummary[],
+): AgentActivitySessionsSnapshot => ({
+  workspaceRepoPath,
+  sessions,
+});
+
+export const createAgentSessionsStore = (
+  initialWorkspaceRepoPath: string | null = null,
+): AgentSessionsStore => {
+  let workspaceRepoPath = initialWorkspaceRepoPath;
   let sessionsById: AgentSessionsById = {};
   let sessions: AgentSessionState[] = [];
   let sessionSummaries: AgentSessionSummary[] = [];
   let activitySessionSummaries: AgentActivitySessionSummary[] = [];
+  let activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
   let hasPendingNotification = false;
   let framePending = false;
   const listeners = new Set<Listener>();
@@ -182,6 +201,7 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
     getSessionsSnapshot: () => sessions,
     getSessionSummariesSnapshot: () => sessionSummaries,
     getActivitySessionsSnapshot: () => activitySessionSummaries,
+    getActivitySnapshot: () => activitySnapshot,
     getSessionsByIdSnapshot: () => sessionsById,
     getSessionSnapshot: (externalSessionId) =>
       externalSessionId ? (sessionsById[externalSessionId] ?? null) : null,
@@ -229,6 +249,18 @@ export const createAgentSessionsStore = (): AgentSessionsStore => {
       )
         ? activitySessionSummaries
         : nextActivitySessionSummaries;
+      if (activitySnapshot.sessions !== activitySessionSummaries) {
+        activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
+      }
+      scheduleNotification();
+    },
+    resetWorkspace: (nextWorkspaceRepoPath) => {
+      workspaceRepoPath = nextWorkspaceRepoPath;
+      sessionsById = {};
+      sessions = [];
+      sessionSummaries = [];
+      activitySessionSummaries = [];
+      activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
       scheduleNotification();
     },
   };

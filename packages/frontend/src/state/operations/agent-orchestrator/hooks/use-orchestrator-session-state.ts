@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   type AgentSessionsById,
   type AgentSessionsStore,
@@ -192,7 +192,11 @@ export const useOrchestratorSessionState = ({
   tasks,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const sessionStore = useMemo(() => createAgentSessionsStore(), []);
+  const initialWorkspaceRepoPathRef = useRef(workspaceRepoPath);
+  const sessionStore = useMemo(
+    () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current),
+    [],
+  );
   const mutableStateRef = useRef<OrchestratorMutableState>({
     sessionsById: {},
     tasks,
@@ -261,7 +265,7 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.tasks = tasks;
   }, [tasks]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mutableStateRef.current.currentWorkspaceRepoPath === workspaceRepoPath) {
       return;
     }
@@ -281,8 +285,9 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.assistantTurnTimingBySession = {};
     mutableStateRef.current.turnModelBySession = {};
     mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
-    commitSessions({});
-  }, [workspaceRepoPath, commitSessions]);
+    mutableStateRef.current.sessionsById = {};
+    sessionStore.resetWorkspace(workspaceRepoPath);
+  }, [workspaceRepoPath, sessionStore]);
 
   const clearMutableSessionState = useCallback(() => {
     clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);

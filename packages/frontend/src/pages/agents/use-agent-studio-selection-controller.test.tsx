@@ -150,6 +150,9 @@ describe("useAgentStudioSelectionController", () => {
       useAgentActivitySessions: () => {
         throw new Error("useAgentActivitySessions is not used in this test");
       },
+      useAgentActivitySnapshot: () => {
+        throw new Error("useAgentActivitySnapshot is not used in this test");
+      },
       useWorkspaceState: () => {
         throw new Error("useWorkspaceState is not used in this test");
       },

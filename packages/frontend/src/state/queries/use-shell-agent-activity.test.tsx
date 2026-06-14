@@ -9,6 +9,7 @@ import {
 } from "@/pages/agents/agent-studio-test-utils";
 import {
   type AgentActivitySessionSummary,
+  type AgentActivitySessionsSnapshot,
   type AgentSessionSummary,
   type AgentSessionsById,
   type AgentSessionsStore,
@@ -50,6 +51,7 @@ const createActivityStore = (
   setActivitySessions: (nextSessions: AgentActivitySessionSummary[]) => void;
 } => {
   let activitySessions = initialSessions;
+  let activityWorkspaceRepoPath: string | null = null;
   const listeners = new Set<() => void>();
 
   return {
@@ -62,10 +64,18 @@ const createActivityStore = (
     getSessionsSnapshot: (): AgentSessionState[] => [],
     getSessionSummariesSnapshot: (): AgentSessionSummary[] => [],
     getActivitySessionsSnapshot: (): AgentActivitySessionSummary[] => activitySessions,
+    getActivitySnapshot: (): AgentActivitySessionsSnapshot => ({
+      workspaceRepoPath: activityWorkspaceRepoPath,
+      sessions: activitySessions,
+    }),
     getSessionsByIdSnapshot: (): AgentSessionsById => ({}),
     getSessionSnapshot: (): AgentSessionState | null => null,
     setSessionsById: (): void => {
       throw new Error("setSessionsById is not used in this test");
+    },
+    resetWorkspace: (workspaceRepoPath): void => {
+      activityWorkspaceRepoPath = workspaceRepoPath;
+      activitySessions = [];
     },
     setActivitySessions: (nextSessions) => {
       activitySessions = nextSessions;
@@ -77,14 +87,27 @@ const createActivityStore = (
 };
 
 let currentVisibleTasks: Array<{ id: string; title: string }> = [];
-let currentActivitySessions: AgentActivitySessionSummary[] = [];
+let currentActivitySnapshot: AgentActivitySessionsSnapshot = {
+  workspaceRepoPath: null,
+  sessions: [],
+};
 let useShellAgentActivity: typeof import("./use-shell-agent-activity").useShellAgentActivity;
 const originalTasksList = host.tasksList;
+
+const setCurrentActivitySnapshot = (
+  workspaceRepoPath: string | null,
+  sessions: AgentActivitySessionSummary[],
+): void => {
+  currentActivitySnapshot = {
+    workspaceRepoPath,
+    sessions,
+  };
+};
 
 const createHarness = (initialProps: HookArgs, initialSessions: AgentActivitySessionSummary[]) => {
   const queryClient = createQueryClient();
   const sessionStore = createActivityStore(initialSessions);
-  currentActivitySessions = initialSessions;
+  setCurrentActivitySnapshot(initialProps.activeWorkspace?.repoPath ?? null, initialSessions);
 
   const wrapper = ({ children }: PropsWithChildren): ReactElement => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -104,11 +127,11 @@ const createHarness = (initialProps: HookArgs, initialSessions: AgentActivitySes
 
 beforeEach(async () => {
   currentVisibleTasks = [];
-  currentActivitySessions = [];
+  setCurrentActivitySnapshot(null, []);
   host.tasksList = async () => currentVisibleTasks as never;
   mock.module("../app-state-provider", () => ({
     ...actualAppStateProviderModule,
-    useAgentActivitySessions: () => currentActivitySessions,
+    useAgentActivitySnapshot: () => currentActivitySnapshot,
     useTasksState: () => ({ tasks: currentVisibleTasks }),
   }));
   ({ useShellAgentActivity } = await import("./use-shell-agent-activity"));
@@ -116,7 +139,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   host.tasksList = originalTasksList;
-  currentActivitySessions = [];
+  setCurrentActivitySnapshot(null, []);
   await restoreMockedModules([
     ["../app-state-provider", async () => actualAppStateProviderModule],
     ["./use-shell-agent-activity", async () => actualShellAgentActivityModule],
@@ -186,7 +209,7 @@ describe("useShellAgentActivity", () => {
 
       await harness.run(() => {
         harness.sessionStore.setActivitySessions([]);
-        currentActivitySessions = [];
+        setCurrentActivitySnapshot("/repo", []);
       });
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo") });
       expect(harness.getLatest()).toEqual({
@@ -217,7 +240,7 @@ describe("useShellAgentActivity", () => {
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
       await harness.run(() => {
         harness.sessionStore.setActivitySessions([]);
-        currentActivitySessions = [];
+        setCurrentActivitySnapshot("/repo-b", []);
       });
       expect(harness.getLatest()).toEqual({
         activeSessionCount: 0,
@@ -235,7 +258,7 @@ describe("useShellAgentActivity", () => {
           }),
         ];
         harness.sessionStore.setActivitySessions(nextSessions);
-        currentActivitySessions = nextSessions;
+        setCurrentActivitySnapshot("/repo-b", nextSessions);
       });
       await harness.update({ activeWorkspace: createActiveWorkspace("/repo-b") });
 

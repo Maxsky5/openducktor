@@ -6,7 +6,7 @@ import {
   summarizeAgentActivity,
 } from "@/state/read-models/agent-activity-read-model";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useAgentActivitySessions, useTasksState } from "../app-state-provider";
+import { useAgentActivitySnapshot, useTasksState } from "../app-state-provider";
 
 const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
   activeSessionCount: 0,
@@ -25,15 +25,20 @@ const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string
   return [...taskIds];
 };
 
-const filterSessionsForRepo = (
-  sessions: AgentActivitySessionSummary[],
-  activeWorkspace: ActiveWorkspace | null,
-): AgentActivitySessionSummary[] => {
+const selectVisibleActivitySessions = ({
+  activeWorkspace,
+  workspaceRepoPath,
+  sessions,
+}: {
+  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
+  sessions: AgentActivitySessionSummary[];
+}): AgentActivitySessionSummary[] => {
   if (activeWorkspace === null) {
     return [];
   }
 
-  return sessions;
+  return workspaceRepoPath === activeWorkspace.repoPath ? sessions : [];
 };
 
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
@@ -57,11 +62,16 @@ const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
 export const useShellAgentActivity = (
   activeWorkspace: ActiveWorkspace | null,
 ): AgentActivitySummary => {
-  const sessions = useAgentActivitySessions();
+  const activitySnapshot = useAgentActivitySnapshot();
   const { tasks } = useTasksState();
   const visibleSessions = useMemo(
-    () => filterSessionsForRepo(sessions, activeWorkspace),
-    [activeWorkspace, sessions],
+    () =>
+      selectVisibleActivitySessions({
+        activeWorkspace,
+        workspaceRepoPath: activitySnapshot.workspaceRepoPath,
+        sessions: activitySnapshot.sessions,
+      }),
+    [activeWorkspace, activitySnapshot],
   );
   const activityTaskIds = useMemo(() => collectActivityTaskIds(visibleSessions), [visibleSessions]);
   const selectTaskTitles = useMemo(

@@ -113,14 +113,16 @@ export const createEnsureSessionReady = ({
         promptOverrides?: RepoPromptOverrides;
       },
     ): Promise<void> => {
-      const applyOptions: Parameters<typeof applyAgentSessionPresenceSnapshotToSession>[2] = {};
-      if (promptOverrides) {
-        Object.assign(applyOptions, { promptOverrides });
-      }
-
-      updateSession(externalSessionId, (current) =>
-        applyAgentSessionPresenceSnapshotToSession(current, snapshot, applyOptions),
-      );
+      updateSession(externalSessionId, (current) => {
+        const sessionWithPresence = applyAgentSessionPresenceSnapshotToSession(current, snapshot);
+        if (!promptOverrides) {
+          return sessionWithPresence;
+        }
+        return {
+          ...sessionWithPresence,
+          promptOverrides,
+        };
+      });
       if (shouldListen) {
         await listenToAgentSession(
           toRuntimeSessionRef(repoPath, sessionsRef.current[externalSessionId] ?? session),

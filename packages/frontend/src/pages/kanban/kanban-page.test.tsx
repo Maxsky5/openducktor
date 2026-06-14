@@ -462,6 +462,7 @@ describe("KanbanPage session start modal flow", () => {
       }),
       useAgentSessionSummaries: () => currentSessionsFixture,
       useAgentActivitySessions: () => [],
+      useAgentActivitySnapshot: () => ({ workspaceRepoPath: "/repo", sessions: [] }),
       useAgentOperations: () => ({
         loadAgentSessions: loadAgentSessionsMock,
         removeAgentSessions: removeAgentSessionsMock,
@@ -512,6 +513,7 @@ describe("KanbanPage session start modal flow", () => {
         workspaceGetRepoConfig: workspaceGetRepoConfigMock,
         workspaceGetSettingsSnapshot: workspaceGetSettingsSnapshotMock,
         tasksList: tasksListMock,
+        agentSessionsListBulk: async () => ({}),
         taskWorktreeGet: taskWorktreeGetMock,
       },
     }));

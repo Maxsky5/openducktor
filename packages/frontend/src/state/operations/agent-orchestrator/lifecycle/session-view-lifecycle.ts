@@ -26,12 +26,7 @@ export type AgentSessionViewLifecycle = {
   historyRequest: AgentSessionHistoryRequest;
 };
 
-export type SelectedAgentSessionViewLifecycle = {
-  phase: AgentSessionViewLifecyclePhase;
-  canReadRuntimeData: boolean;
-  canRenderHistory: boolean;
-  historyRequest: AgentSessionHistoryRequest;
-};
+export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
 
 type SelectedAgentSessionLifecyclePhaseInput = Pick<SelectedAgentSessionViewLifecycle, "phase">;
 
@@ -200,12 +195,5 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
     };
   }
 
-  const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
-
-  return {
-    phase: lifecycle.phase,
-    canReadRuntimeData: lifecycle.canReadRuntimeData,
-    canRenderHistory: lifecycle.canRenderHistory,
-    historyRequest: lifecycle.historyRequest,
-  };
+  return deriveAgentSessionViewLifecycle({ session, repoReadinessState });
 };
