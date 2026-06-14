@@ -5,6 +5,7 @@ import {
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
+import { isAgentSessionTranscriptLoading } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -80,7 +81,7 @@ export function useSessionTranscriptSurfaceModel({
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && target) &&
     transcriptInteractions.session === null &&
-    (transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading");
+    isAgentSessionTranscriptLoading(transcriptState);
   const chatSettingsLoadError =
     chatSettingsError && activeWorkspace
       ? `Failed to load chat settings: ${errorMessageFromUnknown(
