@@ -44,17 +44,6 @@ const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = 
   repoReadinessState: "ready",
 };
 
-export const createResolvingSelectedSessionViewLifecycle =
-  (): SelectedAgentSessionViewLifecycle => ({
-    phase: "resolving_session",
-    repoReadinessState: "ready",
-  });
-
-export const createFailedSelectedSessionViewLifecycle = (): SelectedAgentSessionViewLifecycle => ({
-  phase: "history_failed",
-  repoReadinessState: "ready",
-});
-
 export const getAgentSessionTranscriptState = ({
   phase,
 }: Pick<AgentSessionViewLifecycle, "phase">): AgentSessionTranscriptState => {
@@ -208,17 +197,32 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
   hasSelectedTask,
   repoReadinessState,
   sessionLoadError,
+  isLoadingTaskSessionRecords = false,
 }: {
   selectedSessionRoute: AgentSessionRouteIdentity | null;
   session: AgentSessionState | null;
   hasSelectedTask: boolean;
   repoReadinessState: SessionRepoReadinessState;
   sessionLoadError?: string | null;
+  isLoadingTaskSessionRecords?: boolean;
 }): SelectedAgentSessionViewLifecycle => {
+  if (sessionLoadError && selectedSessionRoute === null && hasSelectedTask) {
+    return {
+      phase: "history_failed",
+      repoReadinessState,
+    };
+  }
+
   if (!selectedSessionRoute) {
     if (hasSelectedTask && repoReadinessState !== "ready") {
       return {
         phase: "waiting_for_runtime",
+        repoReadinessState,
+      };
+    }
+    if (hasSelectedTask && isLoadingTaskSessionRecords) {
+      return {
+        phase: "resolving_session",
         repoReadinessState,
       };
     }

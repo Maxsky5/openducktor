@@ -21,8 +21,6 @@ import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestra
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
-  createFailedSelectedSessionViewLifecycle,
-  createResolvingSelectedSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
   shouldLoadAgentSessionHistory,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
@@ -336,20 +334,13 @@ export function useAgentStudioSelectionController({
     viewSessionsForTask.length === 0 &&
     viewSelectedTask !== null;
   const selectedSessionLifecycle = useMemo(() => {
-    if (sessionReadModelError && viewSelectedSessionRoute === null && viewSelectedTask !== null) {
-      return createFailedSelectedSessionViewLifecycle();
-    }
-
-    if (shouldWaitForTaskSessionRecords) {
-      return createResolvingSelectedSessionViewLifecycle();
-    }
-
     return deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute: viewSelectedSessionRoute,
       session: viewActiveSession,
       hasSelectedTask: viewSelectedTask !== null,
       repoReadinessState: viewSessionReadinessState,
       sessionLoadError: sessionReadModelError,
+      isLoadingTaskSessionRecords: shouldWaitForTaskSessionRecords,
     });
   }, [
     sessionReadModelError,

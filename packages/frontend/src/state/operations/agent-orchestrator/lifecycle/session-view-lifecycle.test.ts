@@ -348,6 +348,43 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(true);
   });
 
+  test("waits for runtime readiness before resolving loading task session records", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute: null,
+      session: null,
+      hasSelectedTask: true,
+      repoReadinessState: "checking",
+      sessionLoadError: null,
+      isLoadingTaskSessionRecords: true,
+    });
+
+    expect(lifecycle).toMatchObject({
+      phase: "waiting_for_runtime",
+    });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "runtime_waiting",
+    });
+  });
+
+  test("resolves selected session records through the lifecycle owner once runtime is ready", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute: null,
+      session: null,
+      hasSelectedTask: true,
+      repoReadinessState: "ready",
+      sessionLoadError: null,
+      isLoadingTaskSessionRecords: true,
+    });
+
+    expect(lifecycle).toMatchObject({
+      phase: "resolving_session",
+    });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "session_loading",
+      reason: "preparing",
+    });
+  });
+
   test("keeps sessionless selection inactive once runtime is ready", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute: null,
