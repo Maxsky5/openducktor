@@ -10,7 +10,6 @@ import type {
 import {
   type AgentEnginePort,
   type AgentModelSelection,
-  type AgentRole,
   type AgentUserMessagePart,
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
@@ -22,7 +21,7 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
-import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
@@ -63,7 +62,7 @@ type SessionActionsDependencies = {
   ) => void;
   listenToAgentSession: ListenToAgentSession;
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
-  ensureRuntime: (repoPath: string, taskId: string, role: AgentRole) => Promise<RuntimeInfo>;
+  ensureRuntime: EnsureRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;

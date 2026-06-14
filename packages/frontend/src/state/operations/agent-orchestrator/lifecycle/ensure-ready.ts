@@ -1,9 +1,9 @@
-import type { RepoPromptOverrides, RuntimeKind, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRole } from "@openducktor/core";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
 import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
-import type { RuntimeInfo } from "../runtime/runtime";
+import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
@@ -29,16 +29,7 @@ type EnsureSessionReadyDependencies = {
     options?: { persist?: boolean },
   ) => void;
   listenToAgentSession: ListenToAgentSession;
-  ensureRuntime: (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    options?: {
-      workspaceId?: string | null;
-      targetWorkingDirectory?: string | null;
-      runtimeKind?: RuntimeKind | null;
-    },
-  ) => Promise<RuntimeInfo>;
+  ensureRuntime: EnsureRuntime;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -63,13 +54,7 @@ export const createEnsureSessionReady = ({
   ensureRuntime,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
-  return async (
-    externalSessionId: string,
-    options?: {
-      allowPendingInput?: boolean;
-    },
-  ): Promise<void> => {
-    const allowPendingInput = options?.allowPendingInput === true;
+  return async (externalSessionId: string): Promise<void> => {
     const repoPath = requireActiveRepo(activeWorkspace?.repoPath ?? null);
     const workspaceId = activeWorkspace?.workspaceId;
     if (!workspaceId) {
@@ -122,12 +107,10 @@ export const createEnsureSessionReady = ({
         session,
         shouldListen,
         promptOverrides,
-        persistFalse = false,
       }: {
         session: WorkflowAgentSessionState;
         shouldListen: boolean;
         promptOverrides?: RepoPromptOverrides;
-        persistFalse?: boolean;
       },
     ): Promise<void> => {
       const applyOptions: Parameters<typeof applyAgentSessionPresenceSnapshotToSession>[2] = {};
@@ -135,17 +118,15 @@ export const createEnsureSessionReady = ({
         Object.assign(applyOptions, { promptOverrides });
       }
 
-      updateSession(
-        externalSessionId,
-        (current) => applyAgentSessionPresenceSnapshotToSession(current, snapshot, applyOptions),
-        persistFalse ? { persist: false } : undefined,
+      updateSession(externalSessionId, (current) =>
+        applyAgentSessionPresenceSnapshotToSession(current, snapshot, applyOptions),
       );
       if (shouldListen) {
         await listenToAgentSession(
           toRuntimeSessionRef(repoPath, sessionsRef.current[externalSessionId] ?? session),
         );
       }
-      if (!allowPendingInput && sessionPresenceHasPendingInput(snapshot)) {
+      if (sessionPresenceHasPendingInput(snapshot)) {
         throw new Error(PENDING_INPUT_NOT_READY_ERROR);
       }
     };
@@ -211,7 +192,6 @@ export const createEnsureSessionReady = ({
         await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
           session,
           shouldListen: !unsubscribersRef.current.has(externalSessionId),
-          persistFalse: true,
         });
         return;
       }

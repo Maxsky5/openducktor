@@ -21,6 +21,19 @@ export type RuntimeInfo = {
   workingDirectory: string;
 };
 
+export type EnsureRuntimeOptions = {
+  workspaceId?: string | null;
+  targetWorkingDirectory?: string | null;
+  runtimeKind?: RuntimeKind | null;
+};
+
+export type EnsureRuntime = (
+  repoPath: string,
+  taskId: string,
+  role: AgentRole,
+  options?: EnsureRuntimeOptions,
+) => Promise<RuntimeInfo>;
+
 export type TaskDocuments = {
   specMarkdown: string;
   planMarkdown: string;
@@ -147,17 +160,8 @@ export const createEnsureRuntime = ({
   hostClient = host,
   queryClient = appQueryClient,
   repoConfigLoader = defaultRepoConfigLoader,
-}: EnsureRuntimeDependencies) => {
-  return async (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    options?: {
-      workspaceId?: string | null;
-      targetWorkingDirectory?: string | null;
-      runtimeKind?: RuntimeKind | null;
-    },
-  ): Promise<RuntimeInfo> => {
+}: EnsureRuntimeDependencies): EnsureRuntime => {
+  return async (repoPath, taskId, role, options): Promise<RuntimeInfo> => {
     const targetWorkingDirectory = options?.targetWorkingDirectory?.trim() ?? "";
     const workspaceId = options?.workspaceId?.trim() ?? "";
     const explicitRuntimeKind = options?.runtimeKind;

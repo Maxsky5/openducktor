@@ -12,7 +12,7 @@ import type {
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { RuntimeInfo, TaskDocuments } from "../runtime/runtime";
+import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 
 export type StartAgentSessionInput =
@@ -55,16 +55,7 @@ export type SessionDependencies = {
 export type RuntimeDependencies = {
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   adapter: AgentEnginePort;
-  ensureRuntime: (
-    repoPath: string,
-    taskId: string,
-    role: AgentRole,
-    options?: {
-      workspaceId?: string | null;
-      targetWorkingDirectory?: string | null;
-      runtimeKind?: AgentModelSelection["runtimeKind"] | null;
-    },
-  ) => Promise<RuntimeInfo>;
+  ensureRuntime: EnsureRuntime;
 };
 
 export type TaskDependencies = {
