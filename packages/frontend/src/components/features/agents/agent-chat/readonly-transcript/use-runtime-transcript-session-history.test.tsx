@@ -77,7 +77,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.status).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
       expect(harness.getLatest().lifecycle).toMatchObject({
-        phase: "ready",
         repoReadinessState: "ready",
       });
       expect(harness.getLatest().historyError).toBeNull();
@@ -117,7 +116,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         todos: [],
       });
       expect(harness.getLatest().lifecycle).toMatchObject({
-        phase: "ready",
         repoReadinessState: "ready",
       });
     } finally {
@@ -172,7 +170,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(harness.getLatest()).toMatchObject({
         session: null,
         lifecycle: {
-          phase: "waiting_for_runtime",
           repoReadinessState: "checking",
         },
         historyError: null,
@@ -195,7 +192,6 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(harness.getLatest()).toMatchObject({
         session: null,
         lifecycle: {
-          phase: "history_failed",
           repoReadinessState: "ready",
         },
         historyError: "history unavailable",

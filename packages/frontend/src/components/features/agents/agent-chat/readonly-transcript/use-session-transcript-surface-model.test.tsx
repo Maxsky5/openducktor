@@ -416,8 +416,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
-      expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
-        phase: "loading_history",
+      expect(harness.getLatest().model.thread.sessionLifecycle.transcriptState).toEqual({
+        kind: "session_loading",
+        reason: "history",
       });
       expect(harness.getLatest().model.thread.emptyState).toBe(null);
 
@@ -475,7 +476,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
-        phase: "waiting_for_runtime",
         repoReadinessState: "checking",
       });
       expect(harness.getLatest().model.thread.emptyState).toBe(null);
@@ -558,9 +558,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         selectedModel: liveSession.selectedModel,
         todos: [],
       });
-      expect(model.thread.sessionLifecycle).toMatchObject({
-        phase: "ready",
-      });
+      expect(model.thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
       expect(model.thread.canReplyToApprovals).toBe(true);
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
@@ -732,8 +730,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
-        phase: "history_failed",
+      expect(harness.getLatest().model.thread.sessionLifecycle.transcriptState).toEqual({
+        kind: "failed",
       });
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: history unavailable",

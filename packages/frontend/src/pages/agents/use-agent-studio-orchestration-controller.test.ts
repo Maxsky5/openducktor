@@ -160,7 +160,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
-    expect(mapped.selectedSession.runtime.lifecycle.phase).toBe("ready");
     expect(mapped.selectedSession.runtime.lifecycle.transcriptState).toEqual({
       kind: "visible",
     });
@@ -232,7 +231,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       isActiveTaskReady: false,
       isSessionSelectionResolving: true,
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
-        phase: "resolving_runtime",
         transcriptState: { kind: "runtime_waiting" },
         isResolving: true,
         isRuntimeWaiting: true,
@@ -277,7 +275,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
         runtime: {
           ...baseArgs.selectedSession.runtime,
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "history_failed",
             transcriptState: { kind: "failed" },
             canReadRuntimeData: true,
           }),
@@ -290,6 +287,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
     });
 
     expect(failed.selectedSession.chat.isContextSwitching).toBe(true);
-    expect(failed.selectedSession.runtime.lifecycle.phase).toBe("history_failed");
+    expect(failed.selectedSession.runtime.lifecycle.transcriptState).toEqual({ kind: "failed" });
   });
 });

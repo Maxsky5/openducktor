@@ -44,7 +44,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("needs_history");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(true);
@@ -66,7 +65,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("needs_history");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(lifecycle.shouldLoadHistory).toBe(true);
   });
@@ -90,7 +88,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(false);
@@ -115,7 +112,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(lifecycle.canReadRuntimeData).toBe(true);
     expect(lifecycle.shouldLoadHistory).toBe(false);
@@ -133,7 +129,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("needs_initial_history");
     expect(lifecycle.transcriptState).toEqual({
       kind: "session_loading",
       reason: "history",
@@ -153,7 +148,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("loading_history");
     expect(lifecycle.transcriptState).toEqual({
       kind: "session_loading",
       reason: "history",
@@ -180,7 +174,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("refreshing_history");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(false);
@@ -206,7 +199,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("ready");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(lifecycle.shouldLoadHistory).toBe(false);
   });
@@ -222,10 +214,7 @@ describe("deriveAgentSessionTargetViewLifecycle", () => {
       repoReadinessState: "checking",
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "waiting_for_runtime",
-      repoReadinessState: "checking",
-    });
+    expect(lifecycle.repoReadinessState).toBe("checking");
     expect(lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
   });
 
@@ -238,10 +227,7 @@ describe("deriveAgentSessionTargetViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "ready",
-      repoReadinessState: "ready",
-    });
+    expect(lifecycle.repoReadinessState).toBe("ready");
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
   });
 
@@ -251,10 +237,7 @@ describe("deriveAgentSessionTargetViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "inactive",
-      repoReadinessState: "ready",
-    });
+    expect(lifecycle.repoReadinessState).toBe("ready");
   });
 });
 
@@ -274,9 +257,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       sessionLoadError: null,
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "resolving_runtime",
-    });
     expect(lifecycle.transcriptState).toEqual({
       kind: "runtime_waiting",
     });
@@ -294,9 +274,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       sessionLoadError: "Session history failed",
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "history_failed",
-    });
     expect(lifecycle.transcriptState).toEqual({ kind: "failed" });
     expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.isRuntimeWaiting).toBe(false);
@@ -312,9 +289,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       sessionLoadError: null,
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "needs_initial_history",
-    });
     expect(lifecycle.transcriptState).toEqual({
       kind: "session_loading",
       reason: "history",
@@ -333,9 +307,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       sessionLoadError: null,
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "waiting_for_runtime",
-    });
     expect(lifecycle.transcriptState).toEqual({
       kind: "runtime_waiting",
     });
@@ -353,9 +324,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       isLoadingTaskSessionRecords: true,
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "waiting_for_runtime",
-    });
     expect(lifecycle.transcriptState).toEqual({
       kind: "runtime_waiting",
     });
@@ -371,9 +339,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       isLoadingTaskSessionRecords: true,
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "resolving_session",
-    });
     expect(lifecycle.transcriptState).toEqual({
       kind: "session_loading",
       reason: "preparing",
@@ -389,9 +354,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       sessionLoadError: null,
     });
 
-    expect(lifecycle).toMatchObject({
-      phase: "inactive",
-    });
     expect(lifecycle.transcriptState).toEqual({ kind: "empty" });
     expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.isRuntimeWaiting).toBe(false);

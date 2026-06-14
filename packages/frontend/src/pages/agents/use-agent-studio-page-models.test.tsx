@@ -483,7 +483,6 @@ describe("useAgentStudioPageModels", () => {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "needs_history",
             repoReadinessState: "checking",
             transcriptState: { kind: "visible" },
             canReadRuntimeData: false,
@@ -518,7 +517,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [selectedSummary],
           allSessionSummaries: [selectedSummary],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "resolving_runtime",
             transcriptState: { kind: "runtime_waiting" },
             isResolving: true,
             isRuntimeWaiting: true,
@@ -556,7 +554,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [],
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "resolving_runtime",
             transcriptState: { kind: "runtime_waiting" },
             isResolving: true,
             isRuntimeWaiting: true,
@@ -594,7 +591,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [],
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "resolving_session",
             transcriptState: { kind: "session_loading", reason: "preparing" },
             isResolving: true,
             isLoading: true,
@@ -636,7 +632,6 @@ describe("useAgentStudioPageModels", () => {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "refreshing_history",
             transcriptState: { kind: "visible" },
           }),
         },
@@ -646,9 +641,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.sessionLifecycle).toMatchObject({
-      phase: "refreshing_history",
-    });
+    expect(thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
@@ -722,7 +715,6 @@ describe("useAgentStudioPageModels", () => {
           activeSession: pendingSession,
           sessionsForTask: [pendingSession],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "loading_history",
             transcriptState: { kind: "session_loading", reason: "history" },
             isLoading: true,
           }),
@@ -732,8 +724,9 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.sessionLifecycle).toMatchObject({
-      phase: "loading_history",
+    expect(harness.getLatest().agentChatModel.thread.sessionLifecycle.transcriptState).toEqual({
+      kind: "session_loading",
+      reason: "history",
     });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
