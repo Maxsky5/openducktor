@@ -20,7 +20,6 @@ const createLifecycle = (
   overrides: Partial<AgentChatThreadLifecycle> = {},
 ): AgentChatThreadLifecycle => ({
   canRenderHistory: true,
-  isViewSwitching: false,
   ...overrides,
 });
 
@@ -35,6 +34,7 @@ describe("resolveAgentChatThreadContext", () => {
       resolveAgentChatThreadContext({
         activeSession: session,
         lifecycle: createLifecycle(),
+        isContextSwitching: false,
       }),
     ).toMatchObject({
       threadSession: session,
@@ -49,8 +49,8 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: null,
         lifecycle: createLifecycle({
           canRenderHistory: false,
-          isViewSwitching: true,
         }),
+        isContextSwitching: true,
       }),
     ).toEqual({
       threadSession: null,
@@ -70,8 +70,8 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: staleSession,
         lifecycle: createLifecycle({
           canRenderHistory: false,
-          isViewSwitching: true,
         }),
+        isContextSwitching: true,
       }),
     ).toEqual({
       threadSession: null,
@@ -91,8 +91,8 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: session,
         lifecycle: createLifecycle({
           canRenderHistory: false,
-          isViewSwitching: true,
         }),
+        isContextSwitching: true,
       }),
     ).toEqual({
       threadSession: null,
@@ -112,8 +112,8 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: session,
         lifecycle: createLifecycle({
           canRenderHistory: true,
-          isViewSwitching: true,
         }),
+        isContextSwitching: true,
       }),
     ).toMatchObject({
       threadSession: session,

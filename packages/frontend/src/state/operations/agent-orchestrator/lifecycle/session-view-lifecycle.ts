@@ -32,7 +32,6 @@ export type SelectedAgentSessionViewLifecycle = {
   canReadRuntimeData: boolean;
   canRenderHistory: boolean;
   historyRequest: AgentSessionHistoryRequest;
-  isViewSwitching: boolean;
 };
 
 type SelectedAgentSessionLifecyclePhaseInput = Pick<SelectedAgentSessionViewLifecycle, "phase">;
@@ -45,7 +44,6 @@ const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = 
   canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
-  isViewSwitching: false,
 };
 
 export const createResolvingSelectedSessionViewLifecycle = (
@@ -56,7 +54,6 @@ export const createResolvingSelectedSessionViewLifecycle = (
   canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
-  isViewSwitching: false,
 });
 
 export const createFailedSelectedSessionViewLifecycle = (
@@ -67,7 +64,6 @@ export const createFailedSelectedSessionViewLifecycle = (
   canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
-  isViewSwitching: false,
 });
 
 const createAgentSessionViewLifecycle = ({
@@ -209,7 +205,6 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
       canReadRuntimeData: false,
       canRenderHistory: false,
       historyRequest: "none",
-      isViewSwitching: false,
     };
   }
 
@@ -221,6 +216,5 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
     canReadRuntimeData: lifecycle.canReadRuntimeData,
     canRenderHistory: lifecycle.canRenderHistory,
     historyRequest: lifecycle.historyRequest,
-    isViewSwitching: false,
   };
 };

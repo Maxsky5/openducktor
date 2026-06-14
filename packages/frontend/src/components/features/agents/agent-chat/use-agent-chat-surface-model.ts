@@ -154,13 +154,14 @@ type AgentChatComposerConfig = {
 
 export type AgentChatSurfaceSessionLifecycle = Pick<
   SelectedAgentSessionViewLifecycle,
-  "phase" | "canRenderHistory" | "historyRequest" | "isViewSwitching"
+  "phase" | "canRenderHistory" | "historyRequest"
 >;
 
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;
   session: AgentChatThreadSession | null;
   sessionLifecycle: AgentChatSurfaceSessionLifecycle;
+  isContextSwitching: boolean;
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
@@ -179,6 +180,7 @@ export function useAgentChatSurfaceModel({
   mode,
   session,
   sessionLifecycle,
+  isContextSwitching,
   chatSettings,
   isSessionWorking,
   runtimeDefinitions = [],
@@ -195,11 +197,15 @@ export function useAgentChatSurfaceModel({
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const { threadSession, activeExternalSessionId, isContextSwitching } =
-    resolveAgentChatThreadContext({
-      activeSession: session,
-      lifecycle: sessionLifecycle,
-    });
+  const {
+    threadSession,
+    activeExternalSessionId,
+    isContextSwitching: isThreadContextSwitching,
+  } = resolveAgentChatThreadContext({
+    activeSession: session,
+    lifecycle: sessionLifecycle,
+    isContextSwitching,
+  });
   const isSessionHistoryLoading =
     isSelectedAgentSessionHistoryLoading(sessionLifecycle) && !sessionLifecycle.canRenderHistory;
   const isWaitingForRuntimeReadiness =
@@ -252,7 +258,7 @@ export function useAgentChatSurfaceModel({
     () => ({
       session: threadSession,
       isSessionWorking,
-      isSessionViewLoading: isContextSwitching,
+      isSessionViewLoading: isThreadContextSwitching,
       isSessionHistoryLoading,
       isWaitingForRuntimeReadiness:
         isWaitingForRuntimeReadiness || runtimeReadiness.isRuntimeStarting,
@@ -294,7 +300,7 @@ export function useAgentChatSurfaceModel({
       composer?.isStarting,
       emptyState,
       handleToggleTodoPanel,
-      isContextSwitching,
+      isThreadContextSwitching,
       isComposerInteractionEnabled,
       isSessionHistoryLoading,
       isSessionWorking,

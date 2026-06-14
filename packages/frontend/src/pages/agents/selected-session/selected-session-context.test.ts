@@ -57,6 +57,7 @@ const createInput = (
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
     activeSessionContextUsage: null,
+    isChatContextSwitching: false,
     documents: {
       specDoc: createDoc("spec"),
       planDoc: createDoc("plan"),

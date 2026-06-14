@@ -61,7 +61,6 @@ export const createSelectedSessionLifecycleFixture = (
   canReadRuntimeData: true,
   canRenderHistory: true,
   historyRequest: "none",
-  isViewSwitching: false,
   ...overrides,
 });
 

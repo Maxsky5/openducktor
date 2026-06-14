@@ -2,12 +2,12 @@ import type { AgentChatThreadSession } from "./agent-chat.types";
 
 export type AgentChatThreadLifecycle = {
   canRenderHistory: boolean;
-  isViewSwitching: boolean;
 };
 
 type ResolveAgentChatThreadContextArgs = {
   activeSession: AgentChatThreadSession | null;
   lifecycle: AgentChatThreadLifecycle;
+  isContextSwitching: boolean;
 };
 
 export type AgentChatThreadContext = {
@@ -19,9 +19,10 @@ export type AgentChatThreadContext = {
 export const resolveAgentChatThreadContext = ({
   activeSession,
   lifecycle,
+  isContextSwitching,
 }: ResolveAgentChatThreadContextArgs): AgentChatThreadContext => {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const shouldClearThread = lifecycle.isViewSwitching && !lifecycle.canRenderHistory;
+  const shouldClearThread = isContextSwitching && !lifecycle.canRenderHistory;
 
   return {
     threadSession: shouldClearThread ? null : activeSession,

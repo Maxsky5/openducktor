@@ -404,6 +404,7 @@ export function useAgentStudioPageModels({
     mode: "interactive",
     session: selectedSession.activeSession,
     sessionLifecycle: selectedSessionLifecycle,
+    isContextSwitching: selectedSession.chat.isContextSwitching,
     chatSettings,
     isSessionWorking: sessionActions.isSessionWorking,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,

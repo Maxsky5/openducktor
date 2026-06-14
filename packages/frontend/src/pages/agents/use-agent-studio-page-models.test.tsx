@@ -150,6 +150,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
+    isChatContextSwitching: false,
     activeSessionRuntimeData: emptyRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
@@ -262,6 +263,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
         totalTokens: 12,
         contextWindow: 100,
       },
+      isChatContextSwitching: selectedSessionCore.isChatContextSwitching ?? false,
       documents,
       readiness,
       sessionActions: selectedSessionActions,
@@ -586,8 +588,8 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_session",
             canRenderHistory: false,
-            isViewSwitching: true,
           }),
+          isChatContextSwitching: true,
         },
         selectedSessionActions: {
           canKickoffNewSession: true,
