@@ -17,7 +17,7 @@ import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
-import { getAgentChatThreadState } from "./agent-chat-thread-state";
+import { type AgentChatThreadState, getAgentChatThreadState } from "./agent-chat-thread-state";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
@@ -60,33 +60,65 @@ type AgentChatTranscriptProps = {
   renderedTurns: AgentChatRenderedTurn[];
   allowTurnContainment: boolean;
   resolveRowRef: (rowKey: string) => (element: HTMLDivElement | null) => void;
-  statusOverlay: {
-    kind: "runtime_waiting" | "session_loading";
-    title: string;
-    description: string;
-  } | null;
-  showRuntimeBlockedCard: boolean;
+  transcriptNotice: AgentChatThreadState["transcriptNotice"];
   runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
-  showSessionLoadingOverlay: boolean;
 };
 
-const AgentChatStatusOverlay = memo(function AgentChatStatusOverlay({
-  title,
-  description,
+const AgentChatTranscriptNotice = memo(function AgentChatTranscriptNotice({
+  notice,
+  runtimeReadiness,
 }: {
-  title: string;
-  description: string;
+  notice: NonNullable<AgentChatThreadState["transcriptNotice"]>;
+  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
 }): ReactElement {
+  const isLoadingNotice = notice.kind === "runtime_waiting" || notice.kind === "session_loading";
+  const isRuntimeBlocked = notice.kind === "runtime_blocked";
+
   return (
     <div className="sticky top-0 z-20 mb-4">
-      <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 text-sm shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85">
-        <div className="mt-0.5 rounded-full bg-muted p-2 text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" />
+      <div
+        className={cn(
+          "mx-auto flex max-w-3xl items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm backdrop-blur",
+          isLoadingNotice
+            ? "border-border bg-card/95 supports-[backdrop-filter]:bg-card/85"
+            : "border-destructive-border bg-destructive-surface text-destructive-muted",
+        )}
+      >
+        <div
+          className={cn(
+            "mt-0.5 rounded-full p-2",
+            isLoadingNotice ? "bg-muted text-muted-foreground" : "text-destructive-muted",
+          )}
+        >
+          {isLoadingNotice ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <AlertTriangle className="size-4" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">{title}</p>
-          <p className="text-muted-foreground">{description}</p>
+          <p className={cn("font-medium", isLoadingNotice ? "text-foreground" : "")}>
+            {notice.title}
+          </p>
+          <p className={isLoadingNotice ? "text-muted-foreground" : ""}>{notice.description}</p>
         </div>
+        {isRuntimeBlocked ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
+            disabled={runtimeReadiness.isLoadingChecks}
+            onClick={() => {
+              void runtimeReadiness.refreshChecks();
+            }}
+          >
+            <RefreshCcw
+              className={cn("size-3.5", runtimeReadiness.isLoadingChecks ? "animate-spin" : "")}
+            />
+            Recheck
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -266,55 +298,20 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   renderedTurns,
   allowTurnContainment,
   resolveRowRef,
-  statusOverlay,
-  showRuntimeBlockedCard,
+  transcriptNotice,
   runtimeReadiness,
-  showSessionLoadingOverlay,
 }: AgentChatTranscriptProps): ReactElement {
-  const visibleStatusOverlay =
-    statusOverlay !== null &&
-    (statusOverlay.kind === "runtime_waiting" || showSessionLoadingOverlay)
-      ? statusOverlay
-      : null;
-
   return (
     <div
       ref={messagesContainerRef}
       className="agent-chat-scroll-region hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
     >
-      {visibleStatusOverlay ? (
-        <AgentChatStatusOverlay
-          title={visibleStatusOverlay.title}
-          description={visibleStatusOverlay.description}
-        />
-      ) : null}
-
-      {showRuntimeBlockedCard ? (
-        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-3 text-sm text-destructive-muted shadow-sm">
-          <div className="flex min-w-0 items-start gap-2">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <p className="min-w-0">{runtimeReadiness.blockedReason}</p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-            disabled={runtimeReadiness.isLoadingChecks}
-            onClick={() => {
-              void runtimeReadiness.refreshChecks();
-            }}
-          >
-            <RefreshCcw
-              className={cn("size-3.5", runtimeReadiness.isLoadingChecks ? "animate-spin" : "")}
-            />
-            Recheck
-          </Button>
-        </div>
+      {transcriptNotice ? (
+        <AgentChatTranscriptNotice notice={transcriptNotice} runtimeReadiness={runtimeReadiness} />
       ) : null}
 
       <div ref={messagesContentRef} className="space-y-1">
-        {!hasSession && !visibleStatusOverlay && !showRuntimeBlockedCard && emptyState ? (
+        {!hasSession && !transcriptNotice && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
             <p>{emptyState.title}</p>
             {emptyState.actionLabel && emptyState.onAction ? (
@@ -476,17 +473,16 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     showThinkingMessages,
     shouldPauseDerivation: isTranscriptRenderDeferred,
   });
-  const { hideTranscriptWhileDeferred, statusOverlay, showRuntimeBlockedCard } =
-    getAgentChatThreadState({
-      sessionLifecycle,
-      runtimeReadiness,
-      isSessionContextSwitching: isContextSwitching,
-      isTranscriptRenderDeferred,
-      isTranscriptRowsMissing,
-    });
+  const { hideTranscriptRows, transcriptNotice } = getAgentChatThreadState({
+    sessionLifecycle,
+    runtimeReadiness,
+    isSessionContextSwitching: isContextSwitching,
+    isTranscriptRenderDeferred,
+    isTranscriptRowsMissing,
+  });
 
   const shouldResetTranscriptWindowForLoading =
-    hideTranscriptWhileDeferred || statusOverlay?.kind === "session_loading";
+    hideTranscriptRows || transcriptNotice?.kind === "session_loading";
   const rows = transcriptState.rows;
   const transcriptTurns = transcriptState.turns;
   const hasAttachmentMessages = transcriptState.hasAttachmentMessages;
@@ -590,7 +586,6 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     return `${session.externalSessionId}:${transcriptState.lastUserMessageId}`;
   }, [session, transcriptState.lastUserMessageId]);
   const activeStreamingAssistantMessageId = transcriptState.activeStreamingAssistantMessageId;
-  const showSessionLoadingOverlay = statusOverlay?.kind === "session_loading";
   const renderedTurns = useMemo(() => {
     return stagedWindowTurns.map((turn) => ({
       key: turn.key,
@@ -665,14 +660,12 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         messagesContainerRef={messagesContainerRef}
         messagesContentRef={messagesContentRef}
         renderedTurns={
-          rows.length > 0 && !hideTranscriptWhileDeferred ? renderedTurns : EMPTY_RENDERED_TURNS
+          rows.length > 0 && !hideTranscriptRows ? renderedTurns : EMPTY_RENDERED_TURNS
         }
         allowTurnContainment={allowTurnContainment}
         resolveRowRef={resolveRowRef}
-        statusOverlay={statusOverlay}
-        showRuntimeBlockedCard={showRuntimeBlockedCard}
+        transcriptNotice={transcriptNotice}
         runtimeReadiness={runtimeReadiness}
-        showSessionLoadingOverlay={showSessionLoadingOverlay}
       />
 
       {hasBottomStack && session ? (

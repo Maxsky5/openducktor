@@ -356,6 +356,7 @@ export function useAgentStudioSelectionController({
     return deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute: viewSelectedSessionRoute,
       session: viewActiveSession,
+      hasSelectedTask: viewSelectedTask !== null,
       repoReadinessState: viewSessionReadinessState,
       sessionLoadError: sessionReadModelError,
     });

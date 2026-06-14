@@ -13,6 +13,13 @@ export type AgentSessionViewLifecyclePhase =
   | "history_failed"
   | "ready";
 
+export type AgentSessionTranscriptState =
+  | { kind: "empty" }
+  | { kind: "runtime_waiting" }
+  | { kind: "session_loading"; reason: "preparing" | "history" }
+  | { kind: "visible" }
+  | { kind: "failed" };
+
 export type AgentSessionViewLifecycle = {
   phase: AgentSessionViewLifecyclePhase;
   canReadRuntimeData: boolean;
@@ -62,6 +69,30 @@ const createAgentSessionViewLifecycle = ({
   canRenderHistory,
   shouldLoadHistory,
 });
+
+export const getAgentSessionTranscriptState = ({
+  phase,
+  canRenderHistory,
+}: Pick<AgentSessionViewLifecycle, "phase" | "canRenderHistory">): AgentSessionTranscriptState => {
+  switch (phase) {
+    case "inactive":
+      return { kind: "empty" };
+    case "resolving_runtime":
+    case "waiting_for_runtime":
+      return { kind: "runtime_waiting" };
+    case "resolving_session":
+      return { kind: "session_loading", reason: "preparing" };
+    case "loading_history":
+      return canRenderHistory
+        ? { kind: "visible" }
+        : { kind: "session_loading", reason: "history" };
+    case "history_failed":
+      return canRenderHistory ? { kind: "visible" } : { kind: "failed" };
+    case "needs_history":
+    case "ready":
+      return { kind: "visible" };
+  }
+};
 
 export const isSelectedAgentSessionResolving = (
   lifecycle: SelectedAgentSessionLifecyclePhaseInput,
@@ -136,15 +167,23 @@ export const deriveAgentSessionViewLifecycle = ({
 export const deriveSelectedAgentSessionViewLifecycle = ({
   selectedSessionRoute,
   session,
+  hasSelectedTask,
   repoReadinessState,
   sessionLoadError,
 }: {
   selectedSessionRoute: AgentSessionRouteIdentity | null;
   session: AgentSessionState | null;
+  hasSelectedTask: boolean;
   repoReadinessState: SessionRepoReadinessState;
   sessionLoadError?: string | null;
 }): SelectedAgentSessionViewLifecycle => {
   if (!selectedSessionRoute) {
+    if (hasSelectedTask && repoReadinessState !== "ready") {
+      return createAgentSessionViewLifecycle({
+        phase: "waiting_for_runtime",
+        repoReadinessState,
+      });
+    }
     return inactiveSelectedSessionViewLifecycle;
   }
 

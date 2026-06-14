@@ -374,6 +374,27 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("No conversation available.");
   });
 
+  test("renders failed session loading state instead of a blank transcript", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          sessionLifecycle: {
+            phase: "history_failed",
+            canRenderHistory: false,
+            shouldLoadHistory: false,
+          },
+          isInteractionEnabled: false,
+          session: null,
+        },
+      }),
+    );
+
+    expect(html).toContain("Failed to load session");
+    expect(html).toContain("The selected conversation could not be loaded.");
+    expect(html).not.toContain("Send a message to start a new session automatically.");
+  });
+
   test("renders the runtime-starting overlay without unmounting transcript content", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
@@ -420,10 +441,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Session runtime is reconnecting");
-    expect(html).toContain(
-      "Waiting for the selected session runtime to become available before loading this session.",
-    );
+    expect(html).toContain("Runtime is starting");
+    expect(html).toContain("Waiting for runtime and MCP health before loading this session.");
     expect(html).toContain("Cached transcript");
   });
 

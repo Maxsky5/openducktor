@@ -1,4 +1,4 @@
-import { isSelectedAgentSessionWaitingForRuntimeReadiness } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 
 type BuildAgentChatThreadStateArgs = Pick<
@@ -11,14 +11,12 @@ type BuildAgentChatThreadStateArgs = Pick<
 };
 
 export type AgentChatThreadState = {
-  isTranscriptLoading: boolean;
-  hideTranscriptWhileDeferred: boolean;
-  statusOverlay: {
-    kind: "runtime_waiting" | "session_loading";
+  hideTranscriptRows: boolean;
+  transcriptNotice: {
+    kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
     title: string;
     description: string;
   } | null;
-  showRuntimeBlockedCard: boolean;
 };
 
 export const getAgentChatThreadState = ({
@@ -28,58 +26,62 @@ export const getAgentChatThreadState = ({
   isTranscriptRenderDeferred,
   isTranscriptRowsMissing = false,
 }: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
-  const isWaitingForRuntimeReadiness =
-    isSelectedAgentSessionWaitingForRuntimeReadiness(sessionLifecycle) ||
-    runtimeReadiness.isRuntimeStarting;
-  const isPreparingSessionView =
-    isSessionContextSwitching || sessionLifecycle.phase === "resolving_session";
-  const isBlockingHistoryLoad =
-    sessionLifecycle.phase === "loading_history" && !sessionLifecycle.canRenderHistory;
-  const isTranscriptLoading =
-    !isWaitingForRuntimeReadiness &&
-    (isPreparingSessionView ||
-      isBlockingHistoryLoad ||
-      isTranscriptRenderDeferred ||
-      isTranscriptRowsMissing);
-  const hideTranscriptWhileDeferred = isTranscriptRenderDeferred;
-  const statusOverlay = (() => {
-    if (
-      isWaitingForRuntimeReadiness &&
-      (runtimeReadiness.readinessState === "checking" ||
-        runtimeReadiness.readinessState === "ready")
-    ) {
+  const isRenderLocallyLoading =
+    isSessionContextSwitching || isTranscriptRenderDeferred || isTranscriptRowsMissing;
+  const hideTranscriptRows = isTranscriptRenderDeferred;
+  const transcriptState = getAgentSessionTranscriptState(sessionLifecycle);
+  const transcriptNotice = (() => {
+    if (runtimeReadiness.readinessState === "blocked" && runtimeReadiness.blockedReason) {
       return {
-        kind: "runtime_waiting" as const,
-        title:
-          runtimeReadiness.readinessState === "ready"
-            ? "Session runtime is reconnecting"
-            : "Runtime is starting",
-        description:
-          runtimeReadiness.readinessState === "ready"
-            ? "Waiting for the selected session runtime to become available before loading this session."
-            : "Waiting for runtime and MCP health before loading this session.",
+        kind: "runtime_blocked" as const,
+        title: "Runtime unavailable",
+        description: runtimeReadiness.blockedReason,
       };
     }
 
-    if (!isTranscriptLoading) {
-      return null;
+    if (transcriptState.kind === "runtime_waiting") {
+      return {
+        kind: "runtime_waiting" as const,
+        title: "Runtime is starting",
+        description: "Waiting for runtime and MCP health before loading this session.",
+      };
     }
 
-    return {
-      kind: "session_loading" as const,
-      title: "Loading session",
-      description:
-        isBlockingHistoryLoad || isTranscriptRenderDeferred || isTranscriptRowsMissing
-          ? "Loading the selected conversation."
-          : "Preparing the selected session view.",
-    };
+    if (transcriptState.kind === "session_loading") {
+      return {
+        kind: "session_loading" as const,
+        title: "Loading session",
+        description:
+          transcriptState.reason === "history"
+            ? "Loading the selected conversation."
+            : "Preparing the selected session view.",
+      };
+    }
+
+    if (transcriptState.kind === "failed") {
+      return {
+        kind: "session_failed" as const,
+        title: "Failed to load session",
+        description: "The selected conversation could not be loaded.",
+      };
+    }
+
+    if (isRenderLocallyLoading) {
+      return {
+        kind: "session_loading" as const,
+        title: "Loading session",
+        description:
+          isTranscriptRowsMissing || isTranscriptRenderDeferred
+            ? "Loading the selected conversation."
+            : "Preparing the selected session view.",
+      };
+    }
+
+    return null;
   })();
 
   return {
-    isTranscriptLoading,
-    hideTranscriptWhileDeferred,
-    statusOverlay,
-    showRuntimeBlockedCard:
-      runtimeReadiness.readinessState === "blocked" && Boolean(runtimeReadiness.blockedReason),
+    hideTranscriptRows,
+    transcriptNotice,
   };
 };

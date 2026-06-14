@@ -26,18 +26,14 @@ describe("getAgentChatThreadState", () => {
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
-        readinessState: "checking",
-        isReady: false,
-        isRuntimeStarting: true,
       },
       isSessionContextSwitching: false,
       isTranscriptRenderDeferred: false,
     });
 
-    expect(state.statusOverlay?.kind).toBe("runtime_waiting");
-    expect(state.statusOverlay?.title).toBe("Runtime is starting");
-    expect(state.hideTranscriptWhileDeferred).toBe(false);
-    expect(state.isTranscriptLoading).toBe(false);
+    expect(state.transcriptNotice?.kind).toBe("runtime_waiting");
+    expect(state.transcriptNotice?.title).toBe("Runtime is starting");
+    expect(state.hideTranscriptRows).toBe(false);
   });
 
   test("treats history load as conversation-loading state", () => {
@@ -52,10 +48,9 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
 
-    expect(state.isTranscriptLoading).toBe(true);
-    expect(state.hideTranscriptWhileDeferred).toBe(false);
-    expect(state.statusOverlay?.kind).toBe("session_loading");
-    expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
+    expect(state.hideTranscriptRows).toBe(false);
+    expect(state.transcriptNotice?.kind).toBe("session_loading");
+    expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
 
   test("treats session context switching as view preparation", () => {
@@ -66,9 +61,8 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
 
-    expect(state.isTranscriptLoading).toBe(true);
-    expect(state.statusOverlay?.kind).toBe("session_loading");
-    expect(state.statusOverlay?.description).toBe("Preparing the selected session view.");
+    expect(state.transcriptNotice?.kind).toBe("session_loading");
+    expect(state.transcriptNotice?.description).toBe("Preparing the selected session view.");
   });
 
   test("treats missing transcript rows as conversation-loading state", () => {
@@ -80,13 +74,31 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRowsMissing: true,
     });
 
-    expect(state.isTranscriptLoading).toBe(true);
-    expect(state.hideTranscriptWhileDeferred).toBe(false);
-    expect(state.statusOverlay?.kind).toBe("session_loading");
-    expect(state.statusOverlay?.description).toBe("Loading the selected conversation.");
+    expect(state.hideTranscriptRows).toBe(false);
+    expect(state.transcriptNotice?.kind).toBe("session_loading");
+    expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
 
-  test("shows blocked card only for explicit blocked reason", () => {
+  test("surfaces failed selected-session history as a transcript notice", () => {
+    const state = getAgentChatThreadState({
+      sessionLifecycle: {
+        phase: "history_failed",
+        canRenderHistory: false,
+        shouldLoadHistory: false,
+      },
+      runtimeReadiness: readyRuntimeReadiness,
+      isSessionContextSwitching: false,
+      isTranscriptRenderDeferred: false,
+    });
+
+    expect(state.transcriptNotice).toEqual({
+      kind: "session_failed",
+      title: "Failed to load session",
+      description: "The selected conversation could not be loaded.",
+    });
+  });
+
+  test("shows blocked runtime notice only for explicit blocked reason", () => {
     const visible = getAgentChatThreadState({
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: {
@@ -110,7 +122,11 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
 
-    expect(visible.showRuntimeBlockedCard).toBe(true);
-    expect(hidden.showRuntimeBlockedCard).toBe(false);
+    expect(visible.transcriptNotice).toEqual({
+      kind: "runtime_blocked",
+      title: "Runtime unavailable",
+      description: "Runtime unavailable",
+    });
+    expect(hidden.transcriptNotice).toBe(null);
   });
 });

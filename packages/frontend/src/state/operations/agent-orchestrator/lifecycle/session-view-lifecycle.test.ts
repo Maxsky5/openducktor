@@ -3,6 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   deriveAgentSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
+  getAgentSessionTranscriptState,
   isSelectedAgentSessionViewLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
 } from "./session-view-lifecycle";
@@ -191,6 +192,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute,
       session: null,
+      hasSelectedTask: true,
       repoReadinessState: "checking",
       sessionLoadError: null,
     });
@@ -201,6 +203,9 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       canRenderHistory: false,
       shouldLoadHistory: false,
     });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "runtime_waiting",
+    });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(true);
     expect(lifecycle.shouldLoadHistory).toBe(false);
@@ -210,6 +215,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute,
       session: null,
+      hasSelectedTask: true,
       repoReadinessState: "ready",
       sessionLoadError: "Session history failed",
     });
@@ -220,6 +226,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       canRenderHistory: false,
       shouldLoadHistory: false,
     });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "failed" });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(false);
@@ -229,6 +236,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute,
       session: createSession({ historyLoadState: "not_requested", messages: [] }),
+      hasSelectedTask: true,
       repoReadinessState: "ready",
       sessionLoadError: null,
     });
@@ -239,8 +247,54 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       canRenderHistory: false,
       shouldLoadHistory: true,
     });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(true);
+  });
+
+  test("keeps a selected task in runtime loading instead of inactive while repo runtime is checking", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute: null,
+      session: null,
+      hasSelectedTask: true,
+      repoReadinessState: "checking",
+      sessionLoadError: null,
+    });
+
+    expect(lifecycle).toMatchObject({
+      phase: "waiting_for_runtime",
+      canReadRuntimeData: false,
+      canRenderHistory: false,
+      shouldLoadHistory: false,
+    });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "runtime_waiting",
+    });
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
+    expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(true);
+  });
+
+  test("keeps sessionless selection inactive once runtime is ready", () => {
+    const lifecycle = deriveSelectedAgentSessionViewLifecycle({
+      selectedSessionRoute: null,
+      session: null,
+      hasSelectedTask: true,
+      repoReadinessState: "ready",
+      sessionLoadError: null,
+    });
+
+    expect(lifecycle).toMatchObject({
+      phase: "inactive",
+      canReadRuntimeData: false,
+      canRenderHistory: false,
+      shouldLoadHistory: false,
+    });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "empty" });
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
+    expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
   });
 });
