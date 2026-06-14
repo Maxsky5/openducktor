@@ -1,13 +1,16 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useCallback, useReducer } from "react";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import {
+  agentSessionIdentityKey,
+  matchesAgentSessionIdentity,
+} from "@/state/operations/agent-orchestrator/support/session-identity";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+} from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
-import {
-  matchesRuntimeSessionTranscriptTarget,
-  type RuntimeSessionTranscriptTarget,
-  runtimeSessionTranscriptTargetKey,
-} from "./runtime-session-transcript-target";
 
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
@@ -64,22 +67,22 @@ const runtimeTranscriptInteractionReducer = (
 
 const getRuntimeTranscriptInteractionSessionKey = (
   session: AgentChatThreadSession | null,
-  target: RuntimeSessionTranscriptTarget | null,
+  target: AgentSessionIdentity | null,
 ): string | null => {
   if (session) {
-    return runtimeSessionTranscriptTargetKey(session);
+    return agentSessionIdentityKey(session);
   }
 
   if (!target) {
     return null;
   }
 
-  return runtimeSessionTranscriptTargetKey(target);
+  return agentSessionIdentityKey(target);
 };
 
 type UseRuntimeTranscriptInteractionsArgs = {
   session: AgentChatThreadSession | null;
-  target: RuntimeSessionTranscriptTarget | null;
+  target: AgentSessionIdentity | null;
   isRuntimeReady: boolean;
   replyAgentApproval: (
     externalSessionId: string,
@@ -126,7 +129,7 @@ export function useRuntimeTranscriptInteractions({
     sessionKey,
   );
   const { isSubmittingQuestionByRequestId } = currentInteractionState;
-  const matchedExternalSessionId = matchesRuntimeSessionTranscriptTarget(session, target)
+  const matchedExternalSessionId = matchesAgentSessionIdentity(session, target)
     ? session.externalSessionId
     : null;
   const canReplyToRuntimeRequest = isRuntimeReady && matchedExternalSessionId !== null;

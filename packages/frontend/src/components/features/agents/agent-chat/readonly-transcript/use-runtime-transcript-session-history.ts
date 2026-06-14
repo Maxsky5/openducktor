@@ -8,19 +8,16 @@ import {
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import { matchesAgentSessionIdentity } from "@/state/operations/agent-orchestrator/support/session-identity";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_HISTORY_STALE_TIME_MS,
 } from "@/state/queries/agent-session-runtime";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
-import {
-  matchesRuntimeSessionTranscriptTarget,
-  type RuntimeSessionTranscriptTarget,
-} from "./runtime-session-transcript-target";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
 type ReadSessionHistory = (
@@ -30,7 +27,7 @@ type ReadSessionHistory = (
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
   activeWorkspace: ActiveWorkspace | null;
-  target: RuntimeSessionTranscriptTarget | null;
+  target: AgentSessionIdentity | null;
   repoReadinessState: SessionRepoReadinessState;
   liveSession: AgentSessionState | null;
   readSessionHistory: ReadSessionHistory;
@@ -50,9 +47,7 @@ export function useRuntimeTranscriptSessionHistory({
   liveSession,
   readSessionHistory,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
-  const targetLiveSession = matchesRuntimeSessionTranscriptTarget(liveSession, target)
-    ? liveSession
-    : null;
+  const targetLiveSession = matchesAgentSessionIdentity(liveSession, target) ? liveSession : null;
   const historyQueryEnabled = Boolean(
     isOpen && activeWorkspace && target && targetLiveSession === null,
   );

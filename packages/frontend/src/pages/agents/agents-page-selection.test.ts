@@ -757,4 +757,49 @@ describe("agents-page-selection", () => {
       "build-secondary",
     ]);
   });
+
+  test("keeps build sessions distinct when only external id matches", () => {
+    const liveBuildSession = createAgentSessionFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "build-shared",
+      taskId: "task-1",
+      role: "build",
+      workingDirectory: "/repo/live",
+    });
+    const persistedBuildSession = createAgentSessionFixture({
+      runtimeKind: "codex",
+      externalSessionId: "build-shared",
+      taskId: "task-1",
+      role: "build",
+      workingDirectory: "/repo/persisted",
+    });
+
+    const sessions = resolveAgentStudioBuilderSessionsForTask({
+      taskId: "task-1",
+      viewActiveSession: liveBuildSession,
+      activeSession: null,
+      selectedSessionById: persistedBuildSession,
+      viewSessionsForTask: [],
+      sessionsForTask: [],
+    });
+
+    expect(
+      sessions.map((session) => ({
+        externalSessionId: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+      })),
+    ).toEqual([
+      {
+        externalSessionId: "build-shared",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/live",
+      },
+      {
+        externalSessionId: "build-shared",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/persisted",
+      },
+    ]);
+  });
 });

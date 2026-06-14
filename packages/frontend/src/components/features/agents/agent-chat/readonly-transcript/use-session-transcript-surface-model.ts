@@ -7,11 +7,11 @@ import {
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
 import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
-import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
@@ -19,7 +19,7 @@ import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-ses
 type UseSessionTranscriptSurfaceModelArgs = {
   isOpen: boolean;
   activeWorkspace: ActiveWorkspace | null;
-  target: RuntimeSessionTranscriptTarget | null;
+  target: AgentSessionIdentity | null;
 };
 
 export function useSessionTranscriptSurfaceModel({

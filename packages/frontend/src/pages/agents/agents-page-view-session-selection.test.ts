@@ -129,6 +129,48 @@ describe("Agent Studio view session selection", () => {
     });
   });
 
+  test("does not collapse persisted and live sessions that only share external id", () => {
+    const liveBuildSummary = toAgentSessionSummary(
+      createAgentSessionFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "shared-session-id",
+        taskId: "task-1",
+        role: "build",
+        status: "idle",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        workingDirectory: "/repo/live",
+      }),
+    );
+    const persistedPlannerSession: AgentSessionRecord = {
+      runtimeKind: "codex",
+      externalSessionId: "shared-session-id",
+      role: "planner",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      workingDirectory: "/repo/persisted",
+      selectedModel: null,
+    };
+
+    const selection = resolveAgentStudioViewSessionSelection({
+      sessionSummaries: [liveBuildSummary],
+      persistedRecords: [persistedPlannerSession],
+      sessionParam: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "spec",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
+      fallbackRole: "spec",
+    });
+
+    expect(selection).toEqual({
+      role: "planner",
+      sessionSummary: null,
+      sessionRoute: {
+        externalSessionId: "shared-session-id",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/persisted",
+      },
+    });
+  });
+
   test("sanitizes the route session before resolving view selection", () => {
     const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({

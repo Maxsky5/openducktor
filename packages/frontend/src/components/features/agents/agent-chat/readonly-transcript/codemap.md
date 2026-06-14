@@ -12,8 +12,8 @@ interaction state in focused hooks.
 
 ## Data & Control Flow
 
-Runtime-backed transcript targets identify one runtime session with external
-session id, runtime kind, and working directory. The surface resolves that
+Runtime-backed transcript targets use the canonical agent session identity:
+external session id, runtime kind, and working directory. The surface resolves that
 target to either an already-live session from app state or a history-loaded
 transcript session, then feeds the shared `AgentChatSurface` model in
 non-interactive mode. Pending runtime input is session-owned; this folder must
@@ -21,9 +21,10 @@ not merge parent-observed request copies into the transcript.
 Read-only transcripts do not load active-session runtime data such as model
 catalogs or todos.
 
-`runtime-session-transcript-target.ts` owns transcript target equality and
-stable target keys. Do not hand-roll externalSessionId/runtimeKind/working
-directory comparisons in the hooks.
+Session identity equality and stable identity keys are owned by
+`state/operations/agent-orchestrator/support/session-identity.ts`. Do not
+hand-roll externalSessionId/runtimeKind/working directory comparisons in the
+hooks.
 
 ## Integration Points
 

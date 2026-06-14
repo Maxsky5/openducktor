@@ -176,10 +176,12 @@ export type WorkflowAgentSessionState = AgentSessionState & {
   role: AgentRole;
 };
 
-export type AgentSessionRouteIdentity = Pick<
+export type AgentSessionIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
+
+export type AgentSessionRouteIdentity = AgentSessionIdentity;
 
 export type AgentSessionLoadOptions = {
   targetExternalSessionId?: string | null;

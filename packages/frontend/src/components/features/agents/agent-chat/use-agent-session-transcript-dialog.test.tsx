@@ -4,21 +4,21 @@ import { createRef, type PropsWithChildren, type ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
-import type { RuntimeSessionTranscriptTarget } from "./readonly-transcript/runtime-session-transcript-target";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 let latestDialogProps: {
-  target: RuntimeSessionTranscriptTarget | null;
+  target: AgentSessionIdentity | null;
   title: string;
   description: string;
 } | null = null;
 
-const transcriptTarget: RuntimeSessionTranscriptTarget = {
+const transcriptTarget: AgentSessionIdentity = {
   externalSessionId: "session-child-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a",
@@ -85,7 +85,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     mock.module("./agent-session-transcript-dialog", () => ({
       AgentSessionTranscriptDialog: (props: {
-        target: RuntimeSessionTranscriptTarget | null;
+        target: AgentSessionIdentity | null;
         title: string;
         description: string;
       }): ReactElement => {

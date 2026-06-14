@@ -10,9 +10,8 @@ import {
   createDeferred,
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadRuntimeReadiness, AgentChatThreadSession } from "../agent-chat.types";
-import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 
 const readSessionHistory = mock(
   async (): Promise<AgentSessionHistoryMessage[]> => [
@@ -48,9 +47,7 @@ let runtimeReadiness: AgentChatThreadRuntimeReadiness = {
   refreshChecks: async () => {},
 };
 
-function makeTranscriptTarget(
-  overrides: Partial<RuntimeSessionTranscriptTarget> = {},
-): RuntimeSessionTranscriptTarget {
+function makeTranscriptTarget(overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity {
   return {
     externalSessionId: "session-subagent-1",
     runtimeKind: "opencode",

@@ -3,12 +3,12 @@ import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
-import type { RuntimeSessionTranscriptTarget } from "./readonly-transcript/runtime-session-transcript-target";
 
 type SubagentTranscriptButtonProps = {
   sessionRuntimeKind?: RuntimeKind | null;
@@ -25,7 +25,7 @@ type TranscriptTargetInput = {
 };
 
 const buildTranscriptRequest = (
-  target: RuntimeSessionTranscriptTarget,
+  target: AgentSessionIdentity,
 ): OpenAgentSessionTranscriptRequest => {
   return {
     target,
@@ -38,7 +38,7 @@ const buildTranscriptTarget = ({
   externalSessionId,
   sessionRuntimeKind,
   sessionWorkingDirectory,
-}: TranscriptTargetInput): RuntimeSessionTranscriptTarget | null => {
+}: TranscriptTargetInput): AgentSessionIdentity | null => {
   const resolvedExternalSessionId = externalSessionId?.trim() || null;
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
 

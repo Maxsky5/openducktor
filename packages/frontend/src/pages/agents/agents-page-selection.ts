@@ -10,6 +10,7 @@ import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import { agentSessionIdentityKey } from "@/state/operations/agent-orchestrator/support/session-identity";
 import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
@@ -288,11 +289,11 @@ const buildViewSessionSelectionCandidates = (
   sessionSummaries: AgentSessionSummary[],
   persistedRecords: AgentSessionRecord[],
 ): ViewSessionSelectionCandidate[] => {
-  const summarySessionIds = new Set(sessionSummaries.map((session) => session.externalSessionId));
+  const summarySessionKeys = new Set(sessionSummaries.map(agentSessionIdentityKey));
   return [
     ...sessionSummaries.map(toSummaryViewSessionCandidate),
     ...persistedRecords
-      .filter((record) => !summarySessionIds.has(record.externalSessionId))
+      .filter((record) => !summarySessionKeys.has(agentSessionIdentityKey(record)))
       .map(toPersistedViewSessionCandidate),
   ];
 };
@@ -376,7 +377,7 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
     return [];
   }
 
-  const seenSessionIds = new Set<string>();
+  const seenSessionKeys = new Set<string>();
   const candidates = [
     viewActiveSession,
     activeSession,
@@ -390,10 +391,11 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
     if (session?.role !== "build" || session.taskId !== taskId) {
       continue;
     }
-    if (seenSessionIds.has(session.externalSessionId)) {
+    const sessionKey = agentSessionIdentityKey(session);
+    if (seenSessionKeys.has(sessionKey)) {
       continue;
     }
-    seenSessionIds.add(session.externalSessionId);
+    seenSessionKeys.add(sessionKey);
     sessions.push(session);
   }
 

@@ -2,9 +2,12 @@ import { describe, expect, mock, test } from "bun:test";
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
-import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
+import type {
+  AgentApprovalRequest,
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+} from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
-import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 (
@@ -53,9 +56,7 @@ const createThreadSession = (
   todos: [],
 });
 
-const createTarget = (
-  overrides: Partial<RuntimeSessionTranscriptTarget> = {},
-): RuntimeSessionTranscriptTarget => ({
+const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity => ({
   externalSessionId: "session-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a",

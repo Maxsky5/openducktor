@@ -5,8 +5,8 @@ import { QueryProvider } from "@/lib/query-provider";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 (
@@ -28,9 +28,7 @@ const activeWorkspace: ActiveWorkspace = {
   repoPath: "/repo-a",
 };
 
-const createTarget = (
-  overrides: Partial<RuntimeSessionTranscriptTarget> = {},
-): RuntimeSessionTranscriptTarget => ({
+const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity => ({
   externalSessionId: "session-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a/worktree",
