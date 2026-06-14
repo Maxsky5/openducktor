@@ -12,6 +12,7 @@ type BuildAgentChatThreadStateArgs = Pick<
 
 export type AgentChatThreadState = {
   hideTranscriptRows: boolean;
+  shouldResetTranscriptWindow: boolean;
   transcriptNotice: {
     kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
     title: string;
@@ -30,8 +31,14 @@ export const getAgentChatThreadState = ({
     isSessionContextSwitching || isTranscriptRenderDeferred || isTranscriptRowsMissing;
   const hideTranscriptRows = isTranscriptRenderDeferred;
   const transcriptState = getAgentSessionTranscriptState(sessionLifecycle);
+  const shouldResetTranscriptWindow =
+    isRenderLocallyLoading || transcriptState.kind === "session_loading";
   const transcriptNotice = (() => {
-    if (runtimeReadiness.readinessState === "blocked" && runtimeReadiness.blockedReason) {
+    if (
+      transcriptState.kind === "runtime_waiting" &&
+      runtimeReadiness.readinessState === "blocked" &&
+      runtimeReadiness.blockedReason
+    ) {
       return {
         kind: "runtime_blocked" as const,
         title: "Runtime unavailable",
@@ -82,6 +89,7 @@ export const getAgentChatThreadState = ({
 
   return {
     hideTranscriptRows,
+    shouldResetTranscriptWindow,
     transcriptNotice,
   };
 };

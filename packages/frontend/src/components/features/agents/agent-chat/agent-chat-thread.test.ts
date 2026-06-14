@@ -356,6 +356,11 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
+          sessionLifecycle: {
+            phase: "waiting_for_runtime",
+            canRenderHistory: false,
+            shouldLoadHistory: false,
+          },
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
             readinessState: "blocked",
@@ -372,6 +377,30 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Recheck");
     expect(html).not.toContain("Send a message to start a new session automatically.");
     expect(html).not.toContain("No conversation available.");
+  });
+
+  test("keeps renderable transcript visible when runtime readiness becomes blocked", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          runtimeReadiness: {
+            ...buildBaseModel().runtimeReadiness,
+            readinessState: "blocked",
+            isReady: false,
+            blockedReason: "OpenCode runtime is unavailable",
+          },
+          isInteractionEnabled: false,
+          session: buildSession({
+            messages: [buildMessage("assistant", "Already loaded transcript", { id: "loaded-1" })],
+          }),
+        },
+      }),
+    );
+
+    expect(html).toContain("Already loaded transcript");
+    expect(html).not.toContain("OpenCode runtime is unavailable");
+    expect(html).not.toContain("Recheck");
   });
 
   test("renders failed session loading state instead of a blank transcript", () => {

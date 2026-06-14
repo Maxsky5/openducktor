@@ -49,6 +49,7 @@ describe("getAgentChatThreadState", () => {
     });
 
     expect(state.hideTranscriptRows).toBe(false);
+    expect(state.shouldResetTranscriptWindow).toBe(true);
     expect(state.transcriptNotice?.kind).toBe("session_loading");
     expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
@@ -61,6 +62,7 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
 
+    expect(state.shouldResetTranscriptWindow).toBe(true);
     expect(state.transcriptNotice?.kind).toBe("session_loading");
     expect(state.transcriptNotice?.description).toBe("Preparing the selected session view.");
   });
@@ -75,6 +77,7 @@ describe("getAgentChatThreadState", () => {
     });
 
     expect(state.hideTranscriptRows).toBe(false);
+    expect(state.shouldResetTranscriptWindow).toBe(true);
     expect(state.transcriptNotice?.kind).toBe("session_loading");
     expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
@@ -98,9 +101,59 @@ describe("getAgentChatThreadState", () => {
     });
   });
 
-  test("shows blocked runtime notice only for explicit blocked reason", () => {
+  test("does not let blocked runtime readiness hide a renderable transcript", () => {
+    const state = getAgentChatThreadState({
+      sessionLifecycle: {
+        phase: "loading_history",
+        canRenderHistory: true,
+        shouldLoadHistory: false,
+      },
+      runtimeReadiness: {
+        ...readyRuntimeReadiness,
+        readinessState: "blocked",
+        isReady: false,
+        blockedReason: "Runtime unavailable",
+      },
+      isSessionContextSwitching: false,
+      isTranscriptRenderDeferred: false,
+    });
+
+    expect(state.transcriptNotice).toBe(null);
+    expect(state.hideTranscriptRows).toBe(false);
+    expect(state.shouldResetTranscriptWindow).toBe(false);
+  });
+
+  test("keeps history failures distinct from runtime readiness failures", () => {
+    const state = getAgentChatThreadState({
+      sessionLifecycle: {
+        phase: "history_failed",
+        canRenderHistory: false,
+        shouldLoadHistory: false,
+      },
+      runtimeReadiness: {
+        ...readyRuntimeReadiness,
+        readinessState: "blocked",
+        isReady: false,
+        blockedReason: "Runtime unavailable",
+      },
+      isSessionContextSwitching: false,
+      isTranscriptRenderDeferred: false,
+    });
+
+    expect(state.transcriptNotice).toEqual({
+      kind: "session_failed",
+      title: "Failed to load session",
+      description: "The selected conversation could not be loaded.",
+    });
+  });
+
+  test("shows blocked runtime notice only when no transcript can render", () => {
     const visible = getAgentChatThreadState({
-      sessionLifecycle: readyLifecycle,
+      sessionLifecycle: {
+        phase: "waiting_for_runtime",
+        canRenderHistory: false,
+        shouldLoadHistory: false,
+      },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         readinessState: "blocked",
@@ -111,7 +164,11 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
     const hidden = getAgentChatThreadState({
-      sessionLifecycle: readyLifecycle,
+      sessionLifecycle: {
+        phase: "waiting_for_runtime",
+        canRenderHistory: false,
+        shouldLoadHistory: false,
+      },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         readinessState: "blocked",
@@ -127,6 +184,6 @@ describe("getAgentChatThreadState", () => {
       title: "Runtime unavailable",
       description: "Runtime unavailable",
     });
-    expect(hidden.transcriptNotice).toBe(null);
+    expect(hidden.transcriptNotice?.kind).toBe("runtime_waiting");
   });
 });

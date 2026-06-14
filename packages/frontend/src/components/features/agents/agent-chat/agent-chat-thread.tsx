@@ -473,16 +473,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     showThinkingMessages,
     shouldPauseDerivation: isTranscriptRenderDeferred,
   });
-  const { hideTranscriptRows, transcriptNotice } = getAgentChatThreadState({
-    sessionLifecycle,
-    runtimeReadiness,
-    isSessionContextSwitching: isContextSwitching,
-    isTranscriptRenderDeferred,
-    isTranscriptRowsMissing,
-  });
+  const { hideTranscriptRows, shouldResetTranscriptWindow, transcriptNotice } =
+    getAgentChatThreadState({
+      sessionLifecycle,
+      runtimeReadiness,
+      isSessionContextSwitching: isContextSwitching,
+      isTranscriptRenderDeferred,
+      isTranscriptRowsMissing,
+    });
 
-  const shouldResetTranscriptWindowForLoading =
-    hideTranscriptRows || transcriptNotice?.kind === "session_loading";
   const rows = transcriptState.rows;
   const transcriptTurns = transcriptState.turns;
   const hasAttachmentMessages = transcriptState.hasAttachmentMessages;
@@ -502,7 +501,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     rows,
     turns: transcriptTurns,
     activeExternalSessionId,
-    isSessionViewLoading: shouldResetTranscriptWindowForLoading,
+    isSessionViewLoading: shouldResetTranscriptWindow,
     isSessionWorking,
     messagesContainerRef,
     messagesContentRef,

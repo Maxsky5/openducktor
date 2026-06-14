@@ -18,6 +18,7 @@ import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
   SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
@@ -356,7 +357,7 @@ const buildSelectedSessionChatEmptyState = ({
     };
   }
 
-  if (lifecycle.phase !== "inactive") {
+  if (getAgentSessionTranscriptState(lifecycle).kind !== "empty") {
     return null;
   }
 
