@@ -57,6 +57,7 @@ const createLoaderHarness = ({
   listSessionPresence,
   loadSessionHistory = async () => [],
   tasks = [taskFixture],
+  sessionRecordsByTaskId = { [taskFixture.id]: [record] },
   loadRepoPromptOverrides = async () => ({}),
 }: {
   initialSessionCollection?: AgentSessionCollection;
@@ -67,10 +68,18 @@ const createLoaderHarness = ({
     typeof createLoadAgentSessions
   >[0]["adapter"]["loadSessionHistory"];
   tasks?: TaskCard[];
+  sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
   loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 }) => {
   let sessionCollection: AgentSessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
+  const queryClient = new QueryClient();
+  for (const task of tasks) {
+    queryClient.setQueryData(
+      agentSessionQueryKeys.list("/repo", task.id),
+      sessionRecordsByTaskId[task.id] ?? [],
+    );
+  }
   const loadAgentSessions = createLoadAgentSessions({
     activeWorkspace: {
       workspaceId: "workspace-1",
@@ -101,7 +110,7 @@ const createLoaderHarness = ({
     listenToAgentSession: async (session) => {
       listenedSessions.push(session);
     },
-    queryClient: new QueryClient(),
+    queryClient,
     taskRef: { current: tasks },
     loadRepoPromptOverrides,
   });
@@ -195,7 +204,7 @@ describe("createLoadAgentSessions", () => {
       ],
     });
 
-    await harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+    await harness.loadAgentSessions("task-1");
 
     expect(harness.getSession("external-1")?.status).toBe("running");
     expect(harness.getSession("external-1")?.runtimeKind).toBe("opencode");
@@ -221,7 +230,6 @@ describe("createLoadAgentSessions", () => {
 
     await harness.loadAgentSessions("task-1", {
       targetExternalSessionId: " external-1 ",
-      persistedRecords: [record],
     });
 
     expect(historyLoads).toBe(1);
@@ -239,7 +247,6 @@ describe("createLoadAgentSessions", () => {
     await expect(
       harness.loadAgentSessions("task-1", {
         targetExternalSessionId: "missing-session",
-        persistedRecords: [record],
       }),
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });
@@ -256,7 +263,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    const loading = harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+    const loading = harness.loadAgentSessions("task-1");
 
     expect(harness.getSession(record.externalSessionId)).toBeNull();
 
@@ -288,9 +295,10 @@ describe("createLoadAgentSessions", () => {
         presenceReads += 1;
         return [];
       },
+      sessionRecordsByTaskId: { [taskFixture.id]: [] },
     });
 
-    await harness.loadAgentSessions("task-1", { persistedRecords: [] });
+    await harness.loadAgentSessions("task-1");
 
     expect(harness.getSession(record.externalSessionId)).toBeNull();
     expect(presenceReads).toBe(0);
@@ -339,7 +347,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    await harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+    await harness.loadAgentSessions("task-1");
 
     const session = harness.getSession("external-1");
     if (!session) {
@@ -395,7 +403,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    const loading = harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+    const loading = harness.loadAgentSessions("task-1");
     harness.setSessions((current) =>
       replaceAgentSession(current, {
         ...createAgentSessionFixture({
@@ -484,9 +492,10 @@ describe("createLoadAgentSessions", () => {
         ];
       },
       loadRepoPromptOverrides: async () => ({}),
+      sessionRecordsByTaskId: { [taskFixture.id]: [codexRecord] },
     });
 
-    await harness.loadAgentSessions("task-1", { persistedRecords: [codexRecord] });
+    await harness.loadAgentSessions("task-1");
 
     const session = harness.getSession("external-1");
     if (!session) {
@@ -563,7 +572,7 @@ describe("createLoadAgentSessions", () => {
       ],
     });
 
-    await harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+    await harness.loadAgentSessions("task-1");
 
     expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
     expect(harness.getSession("external-1")?.contextUsage).toEqual(liveContextUsage);
@@ -600,7 +609,7 @@ describe("createLoadAgentSessions", () => {
       },
     });
 
-    await harness.loadAgentSessions("task-1", { persistedRecords: [record] });
+    await harness.loadAgentSessions("task-1");
 
     const session = harness.getSession(record.externalSessionId);
     if (!session) {
@@ -656,11 +665,10 @@ describe("createLoadAgentSessions", () => {
           },
         ];
       },
+      sessionRecordsByTaskId: { [taskFixture.id]: [record, secondRecord] },
     });
 
-    await expect(
-      harness.loadAgentSessions("task-1", { persistedRecords: [record, secondRecord] }),
-    ).resolves.toBeUndefined();
+    await expect(harness.loadAgentSessions("task-1")).resolves.toBeUndefined();
 
     expect(harness.getSession(record.externalSessionId)?.status).toBe("running");
     expect(harness.getSession(record.externalSessionId)?.historyLoadState).toBe("failed");

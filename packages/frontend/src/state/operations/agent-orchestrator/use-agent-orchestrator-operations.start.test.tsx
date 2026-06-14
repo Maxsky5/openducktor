@@ -175,12 +175,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
     try {
       await harness.mount();
       await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedSessionFixture],
-        });
-        await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedSessionFixture],
-        });
+        await harness.getLatest().loadAgentSessions("task-1");
+        await harness.getLatest().loadAgentSessions("task-1");
       });
 
       expect(subscribeCalls).toBe(1);

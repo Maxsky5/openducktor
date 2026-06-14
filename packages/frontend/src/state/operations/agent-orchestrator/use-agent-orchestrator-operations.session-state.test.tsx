@@ -661,9 +661,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       await harness.run(async () => {
-        await harness.getLatest().loadAgentSessions("task-1", {
-          persistedRecords: [persistedSessionFixture],
-        });
+        await harness.getLatest().loadAgentSessions("task-1");
       });
       const resolved = await harness.waitFor((state) =>
         state.sessions.some(

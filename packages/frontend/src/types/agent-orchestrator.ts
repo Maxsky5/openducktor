@@ -1,9 +1,4 @@
-import type {
-  AgentSessionRecord,
-  FileContent,
-  FileDiff,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { FileContent, FileDiff, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingApprovalRequest,
@@ -185,5 +180,4 @@ export type AgentSessionRouteIdentity = AgentSessionIdentity;
 
 export type AgentSessionLoadOptions = {
   targetExternalSessionId?: string | null;
-  persistedRecords?: AgentSessionRecord[];
 };

@@ -233,7 +233,6 @@ export const createLoadAgentSessions = ({
       queryClient,
       repoPath,
       taskId,
-      persistedRecords: options?.persistedRecords,
     });
     if (isStaleRepoOperation()) {
       return;
