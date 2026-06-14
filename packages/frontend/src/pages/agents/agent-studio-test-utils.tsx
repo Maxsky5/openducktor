@@ -59,7 +59,7 @@ export const createSelectedSessionLifecycleFixture = (
   phase: "ready",
   canReadRuntimeData: true,
   canRenderHistory: true,
-  historyRequest: "none",
+  shouldLoadHistory: false,
   ...overrides,
 });
 

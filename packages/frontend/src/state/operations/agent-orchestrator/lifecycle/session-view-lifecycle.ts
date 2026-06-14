@@ -1,8 +1,4 @@
 import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  getAgentSessionHistoryLoadState,
-  requiresLoadedAgentSessionHistory,
-} from "../support/history-load-state";
 import { getSessionMessageCount } from "../support/messages";
 
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
@@ -17,26 +13,22 @@ export type AgentSessionViewLifecyclePhase =
   | "history_failed"
   | "ready";
 
-export type AgentSessionHistoryRequest = "none" | "load";
-
 export type AgentSessionViewLifecycle = {
   phase: AgentSessionViewLifecyclePhase;
   canReadRuntimeData: boolean;
   canRenderHistory: boolean;
-  historyRequest: AgentSessionHistoryRequest;
+  shouldLoadHistory: boolean;
 };
 
 export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
 
 type SelectedAgentSessionLifecyclePhaseInput = Pick<SelectedAgentSessionViewLifecycle, "phase">;
 
-type AgentSessionLifecycleHistoryInput = Pick<AgentSessionViewLifecycle, "historyRequest">;
-
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
   phase: "inactive",
   canReadRuntimeData: false,
   canRenderHistory: false,
-  historyRequest: "none",
+  shouldLoadHistory: false,
 };
 
 export const createResolvingSelectedSessionViewLifecycle =
@@ -44,36 +36,32 @@ export const createResolvingSelectedSessionViewLifecycle =
     phase: "resolving_session",
     canReadRuntimeData: false,
     canRenderHistory: false,
-    historyRequest: "none",
+    shouldLoadHistory: false,
   });
 
 export const createFailedSelectedSessionViewLifecycle = (): SelectedAgentSessionViewLifecycle => ({
   phase: "history_failed",
   canReadRuntimeData: false,
   canRenderHistory: false,
-  historyRequest: "none",
+  shouldLoadHistory: false,
 });
 
 const createAgentSessionViewLifecycle = ({
   phase,
   repoReadinessState,
   canRenderHistory = false,
-  historyRequest = "none",
+  shouldLoadHistory = false,
 }: {
   phase: AgentSessionViewLifecyclePhase;
   repoReadinessState: SessionRepoReadinessState;
   canRenderHistory?: boolean;
-  historyRequest?: AgentSessionHistoryRequest;
+  shouldLoadHistory?: boolean;
 }): AgentSessionViewLifecycle => ({
   phase,
   canReadRuntimeData: repoReadinessState === "ready" && phase !== "inactive",
   canRenderHistory,
-  historyRequest,
+  shouldLoadHistory,
 });
-
-export const shouldEnsureAgentSessionReadyForView = (
-  lifecycle: AgentSessionLifecycleHistoryInput,
-): boolean => lifecycle.historyRequest === "load";
 
 export const isSelectedAgentSessionResolving = (
   lifecycle: SelectedAgentSessionLifecyclePhaseInput,
@@ -105,65 +93,44 @@ export const deriveAgentSessionViewLifecycle = ({
     });
   }
 
-  const sessionNeedsHistoryLoad = requiresLoadedAgentSessionHistory(session);
-  const historyLoadState = getAgentSessionHistoryLoadState(session);
+  const historyLoadState = session.historyLoadState;
   const hasTranscript = getSessionMessageCount(session) > 0;
 
-  if (repoReadinessState !== "ready" && sessionNeedsHistoryLoad && !hasTranscript) {
+  if (repoReadinessState !== "ready" && historyLoadState !== "loaded" && !hasTranscript) {
     return createAgentSessionViewLifecycle({
       phase: "waiting_for_runtime",
       repoReadinessState,
     });
   }
 
-  if (!sessionNeedsHistoryLoad) {
-    return createAgentSessionViewLifecycle({
-      phase: "ready",
-      repoReadinessState,
-      canRenderHistory: true,
-    });
+  switch (historyLoadState) {
+    case "loaded":
+      return createAgentSessionViewLifecycle({
+        phase: "ready",
+        repoReadinessState,
+        canRenderHistory: true,
+      });
+    case "loading":
+      return createAgentSessionViewLifecycle({
+        phase: "loading_history",
+        repoReadinessState,
+        canRenderHistory: hasTranscript,
+      });
+    case "not_requested":
+      return createAgentSessionViewLifecycle({
+        phase: hasTranscript ? "needs_history" : "loading_history",
+        repoReadinessState,
+        canRenderHistory: hasTranscript,
+        shouldLoadHistory: repoReadinessState === "ready",
+      });
+    case "failed":
+      return createAgentSessionViewLifecycle({
+        phase: hasTranscript ? "needs_history" : "history_failed",
+        repoReadinessState,
+        canRenderHistory: hasTranscript,
+        shouldLoadHistory: repoReadinessState === "ready",
+      });
   }
-
-  if (historyLoadState === "loading") {
-    return createAgentSessionViewLifecycle({
-      phase: "loading_history",
-      repoReadinessState,
-      canRenderHistory: hasTranscript,
-    });
-  }
-
-  if (historyLoadState === "not_requested") {
-    return createAgentSessionViewLifecycle({
-      phase: hasTranscript ? "needs_history" : "loading_history",
-      repoReadinessState,
-      canRenderHistory: hasTranscript,
-      historyRequest: repoReadinessState === "ready" ? "load" : "none",
-    });
-  }
-
-  if (historyLoadState === "failed" && hasTranscript) {
-    return createAgentSessionViewLifecycle({
-      phase: "needs_history",
-      repoReadinessState,
-      canRenderHistory: true,
-      historyRequest: repoReadinessState === "ready" ? "load" : "none",
-    });
-  }
-
-  const shouldShowBlockingHistoryFailure = !hasTranscript && historyLoadState === "failed";
-  if (shouldShowBlockingHistoryFailure) {
-    return createAgentSessionViewLifecycle({
-      phase: "history_failed",
-      repoReadinessState,
-      historyRequest: repoReadinessState === "ready" ? "load" : "none",
-    });
-  }
-
-  return createAgentSessionViewLifecycle({
-    phase: "ready",
-    repoReadinessState,
-    canRenderHistory: hasTranscript || historyLoadState === "loaded",
-  });
 };
 
 export const deriveSelectedAgentSessionViewLifecycle = ({
@@ -191,7 +158,7 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
           : "resolving_session",
       canReadRuntimeData: false,
       canRenderHistory: false,
-      historyRequest: "none",
+      shouldLoadHistory: false,
     };
   }
 

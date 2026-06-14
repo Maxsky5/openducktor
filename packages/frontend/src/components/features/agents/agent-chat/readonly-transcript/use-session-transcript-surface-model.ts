@@ -115,7 +115,7 @@ export function useSessionTranscriptSurfaceModel({
     sessionLifecycle: {
       phase: isTranscriptLoading ? "loading_history" : "ready",
       canRenderHistory: !isTranscriptLoading,
-      historyRequest: "none",
+      shouldLoadHistory: false,
     },
     isContextSwitching: isResolvingTranscript,
     chatSettings,

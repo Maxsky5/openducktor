@@ -1445,7 +1445,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         workingDirectory: "/tmp/repo",
       }),
       loadAgentSessions: async () => {
-        callOrder.push("hydrate");
+        callOrder.push("load");
       },
     });
 

@@ -23,7 +23,6 @@ import {
   createFailedSelectedSessionViewLifecycle,
   createResolvingSelectedSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
-  shouldEnsureAgentSessionReadyForView,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -379,7 +378,7 @@ export function useAgentStudioSelectionController({
   useEffect(() => {
     if (
       viewSelectedSessionRoute === null ||
-      !shouldEnsureAgentSessionReadyForView(selectedSessionLifecycle) ||
+      !selectedSessionLifecycle.shouldLoadHistory ||
       !viewActiveSession
     ) {
       return;

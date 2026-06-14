@@ -70,7 +70,6 @@ export const useRepoSessionReadModelEffects = ({
           updateSession,
           ...(listenToAgentSession ? { listenToAgentSession } : {}),
           isStaleRepoOperation: () => !isCurrentRepo(),
-          options: { historyPolicy: "live_if_empty" },
         });
       } catch (error) {
         if (isCurrentRepo()) {

@@ -38,7 +38,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     await clearAppQueryClient();
   });
 
-  test("hydrates and returns a persisted reusable session", async () => {
+  test("loads and returns a persisted reusable session", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
     const sessionsRef = { current: {} as Record<string, AgentSessionState> };
     let loadCalls = 0;

@@ -600,8 +600,8 @@ describe("use-agent-orchestrator-operations session state", () => {
         activeRepo: "/tmp/repo-a",
         tasks: [taskFixtureWithPersistedBuildSession],
       });
-      const hydrated = await harness.waitFor((state) => state.sessions.length === 1);
-      expect(hydrated.sessions[0]?.externalSessionId).toBe("external-1");
+      const loaded = await harness.waitFor((state) => state.sessions.length === 1);
+      expect(loaded.sessions[0]?.externalSessionId).toBe("external-1");
       expect(persistedListCalls).toBe(0);
     } finally {
       await harness.unmount();
@@ -660,7 +660,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          historyPolicy: "none",
           persistedRecords: [persistedSessionFixture],
         });
       });

@@ -3,7 +3,6 @@ import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { requiresLoadedAgentSessionHistory } from "../support/history-load-state";
 import type {
   StartSessionContext,
   StartSessionCreationInput,
@@ -43,7 +42,6 @@ const loadSessionForReuse = async ({
   if (forceReload || !deps.session.sessionsRef.current[externalSessionId]) {
     await deps.session.loadAgentSessions(ctx.taskId, {
       targetExternalSessionId: externalSessionId,
-      historyPolicy: "requested_only",
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
@@ -142,7 +140,7 @@ export const resolveLoadedSourceSession = async ({
       entry.externalSessionId === sourceExternalSessionId,
   );
   if (existingSourceSession) {
-    if (requiresLoadedAgentSessionHistory(existingSourceSession)) {
+    if (existingSourceSession.historyLoadState !== "loaded") {
       return loadSessionForReuse({
         ctx,
         deps,

@@ -1366,7 +1366,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("returns the requested persisted session for the same role and hydrates when missing from memory", async () => {
+  test("returns the requested persisted session for the same role and loads it when missing from memory", async () => {
     let loadAgentSessionsCalls = 0;
 
     setPersistedSessionListFixture("/tmp/repo", "task-1", [
@@ -1616,7 +1616,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("hydrates a stopped source session before forking so inherited history is available immediately", async () => {
+  test("loads a stopped source session before forking so inherited history is available immediately", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
@@ -1645,7 +1645,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
-      externalSessionId: "external-forked-from-hydrated-source",
+      externalSessionId: "external-forked-from-loaded-source",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
       status: "idle",
@@ -1656,7 +1656,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         role: "user",
         state: "read",
         timestamp: "2026-02-22T08:21:00.000Z",
-        text: "Hydrated child history",
+        text: "Loaded child history",
         displayParts: [],
         parts: [],
       },
@@ -1718,19 +1718,19 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sourceExternalSessionId: "external-source-build",
       });
 
-      expect(externalSessionId).toBe("external-forked-from-hydrated-source");
+      expect(externalSessionId).toBe("external-forked-from-loaded-source");
       expect(loadAgentSessionsCalls).toEqual([
         {
           taskId: "task-1",
           targetExternalSessionId: "external-source-build",
         },
       ]);
-      const forkedMessages = sessionsById["external-forked-from-hydrated-source"]
-        ? sessionMessagesToArray(sessionsById["external-forked-from-hydrated-source"])
+      const forkedMessages = sessionsById["external-forked-from-loaded-source"]
+        ? sessionMessagesToArray(sessionsById["external-forked-from-loaded-source"])
         : [];
       expect(forkedMessages.slice(0, 2)).toEqual([
         {
-          id: "history:system-prompt:external-forked-from-hydrated-source",
+          id: "history:system-prompt:external-forked-from-loaded-source",
           role: "system",
           content: forkedMessages[0]?.content ?? "",
           timestamp: "2026-02-22T08:20:00.000Z",
@@ -1738,7 +1738,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         {
           id: "child-user-1",
           role: "user",
-          content: "Hydrated child history",
+          content: "Loaded child history",
           timestamp: "2026-02-22T08:21:00.000Z",
           meta: {
             kind: "user",
@@ -1753,7 +1753,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("forks from a hydrated source session without live runtime transport", async () => {
+  test("forks from a loaded source session without live runtime transport", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
@@ -1919,7 +1919,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("stops the forked session when child history hydration fails", async () => {
+  test("stops the forked session when child history load fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
@@ -2011,7 +2011,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("stops the forked session when the repo becomes stale after child history hydration", async () => {
+  test("stops the forked session when the repo becomes stale after child history load", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;

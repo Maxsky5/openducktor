@@ -142,7 +142,7 @@ type AgentChatComposerConfig = {
 
 export type AgentChatSurfaceSessionLifecycle = Pick<
   SelectedAgentSessionViewLifecycle,
-  "phase" | "canRenderHistory" | "historyRequest"
+  "phase" | "canRenderHistory" | "shouldLoadHistory"
 >;
 
 type UseAgentChatSurfaceModelArgs = {

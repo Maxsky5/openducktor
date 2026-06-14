@@ -25,7 +25,7 @@ const buildBaseModel = () => ({
   sessionLifecycle: {
     phase: "ready" as const,
     canRenderHistory: true,
-    historyRequest: "none" as const,
+    shouldLoadHistory: false as const,
   },
   runtimeReadiness: {
     readinessState: "ready" as const,
@@ -382,7 +382,7 @@ describe("AgentChatThread", () => {
           sessionLifecycle: {
             phase: "waiting_for_runtime",
             canRenderHistory: true,
-            historyRequest: "none",
+            shouldLoadHistory: false,
           },
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
@@ -411,7 +411,7 @@ describe("AgentChatThread", () => {
           sessionLifecycle: {
             phase: "waiting_for_runtime",
             canRenderHistory: true,
-            historyRequest: "none",
+            shouldLoadHistory: false,
           },
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
@@ -1051,7 +1051,7 @@ describe("AgentChatThread", () => {
           sessionLifecycle: {
             phase: "resolving_session",
             canRenderHistory: false,
-            historyRequest: "none",
+            shouldLoadHistory: false,
           },
           isContextSwitching: true,
           session: buildSession({
@@ -1074,7 +1074,7 @@ describe("AgentChatThread", () => {
           sessionLifecycle: {
             phase: "loading_history",
             canRenderHistory: false,
-            historyRequest: "none",
+            shouldLoadHistory: false,
           },
           session: buildSession({
             externalSessionId: "session-hydrating",
@@ -1114,7 +1114,7 @@ describe("AgentChatThread", () => {
       sessionLifecycle: {
         phase: "loading_history" as const,
         canRenderHistory: false,
-        historyRequest: "none" as const,
+        shouldLoadHistory: false as const,
       },
       session,
     };

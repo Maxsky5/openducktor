@@ -32,7 +32,7 @@ const createThreadModel = (
   sessionLifecycle: {
     phase: "ready",
     canRenderHistory: true,
-    historyRequest: "none",
+    shouldLoadHistory: false,
   },
   runtimeReadiness: {
     readinessState: "ready",

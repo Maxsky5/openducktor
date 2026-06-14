@@ -4,7 +4,7 @@ import { getAgentChatThreadState } from "./agent-chat-thread-state";
 const readyLifecycle = {
   phase: "ready" as const,
   canRenderHistory: true,
-  historyRequest: "none" as const,
+  shouldLoadHistory: false as const,
 };
 
 const readyRuntimeReadiness = {
@@ -22,7 +22,7 @@ describe("getAgentChatThreadState", () => {
       sessionLifecycle: {
         phase: "waiting_for_runtime",
         canRenderHistory: false,
-        historyRequest: "none",
+        shouldLoadHistory: false,
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -45,7 +45,7 @@ describe("getAgentChatThreadState", () => {
       sessionLifecycle: {
         phase: "loading_history",
         canRenderHistory: false,
-        historyRequest: "none",
+        shouldLoadHistory: false,
       },
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,

@@ -183,10 +183,7 @@ export type AgentSessionRouteIdentity = Pick<
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
 
-export type AgentSessionHistoryLoadPolicy = "none" | "requested_only" | "live_if_empty";
-
 export type AgentSessionLoadOptions = {
   targetExternalSessionId?: string | null;
-  historyPolicy?: AgentSessionHistoryLoadPolicy;
   persistedRecords?: AgentSessionRecord[];
 };

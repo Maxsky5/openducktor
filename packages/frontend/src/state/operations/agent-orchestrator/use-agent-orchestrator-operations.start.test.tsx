@@ -105,7 +105,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
       const externalSessionId = sessionState.sessions[0]?.externalSessionId;
       if (!externalSessionId) {
-        throw new Error("Expected hydrated session id");
+        throw new Error("Expected loaded session id");
       }
 
       await harness.run(async () => {
@@ -139,6 +139,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalAgentSessionUpsert = host.agentSessionUpsert;
     const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
     const originalListSessionPresence = opencodeSdkAdapterPrototype.listSessionPresence;
 
@@ -149,6 +150,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       return () => {};
     };
     OpencodeSdkAdapter.prototype.loadSessionTodos = async () => [];
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async () => [];
     OpencodeSdkAdapter.prototype.listAvailableModels = async () => ({
       models: [],
       defaultModelsByProvider: {},
@@ -174,11 +176,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.mount();
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1", {
-          historyPolicy: "none",
           persistedRecords: [persistedSessionFixture],
         });
         await harness.getLatest().loadAgentSessions("task-1", {
-          historyPolicy: "none",
           persistedRecords: [persistedSessionFixture],
         });
       });
@@ -190,6 +190,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.agentSessionUpsert = originalAgentSessionUpsert;
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       opencodeSdkAdapterPrototype.listSessionPresence = originalListSessionPresence;
     }

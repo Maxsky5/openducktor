@@ -1,8 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AgentSessionRef } from "@openducktor/core";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
-import { loadSessionHistorySnapshot } from "./session-history-loader";
+import { loadSessionHistorySnapshot, selectSessionHistoryTargets } from "./session-history-loader";
 
 const sessionTarget = {
   externalSessionId: "external-1",
@@ -27,6 +28,52 @@ const createSession = (): AgentSessionState =>
   });
 
 describe("session history loader", () => {
+  test("selects live history loads from history state, not transcript contents", () => {
+    const liveRef = {
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "external-1",
+    } satisfies AgentSessionRef;
+    const sessionWithLiveMessage = createAgentSessionFixture({
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      historyLoadState: "not_requested",
+      messages: [
+        {
+          id: "runtime-user-new",
+          role: "user",
+          content: "Resume after QA rejection",
+          timestamp: "2026-06-12T08:00:01.000Z",
+        },
+      ],
+    });
+    const sessionWithLoadedHistory = createAgentSessionFixture({
+      externalSessionId: "external-2",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      historyLoadState: "loaded",
+      messages: [],
+    });
+
+    const targets = selectSessionHistoryTargets({
+      sessionsById: {
+        "external-1": sessionWithLiveMessage,
+        "external-2": sessionWithLoadedHistory,
+      },
+      liveSessions: [
+        liveRef,
+        {
+          ...liveRef,
+          externalSessionId: "external-2",
+        },
+      ],
+    });
+
+    expect(targets.map((target) => target.externalSessionId)).toEqual(["external-1"]);
+  });
+
   test("treats a stale operation as neither applied nor failed", async () => {
     const loadSessionHistory = mock(async () => []);
     const updateSession = mock(() => undefined);

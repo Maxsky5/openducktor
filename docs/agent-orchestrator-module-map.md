@@ -23,7 +23,7 @@ Owns:
 - scanning runtime presence by repo path, runtime kind, and working directory
 - merging persisted records plus runtime presence into `AgentSessionState`
 - subscribing to live sessions returned by runtime presence
-- loading initial history only for requested sessions or live sessions with empty transcripts
+- loading initial history only for requested sessions or live sessions whose history has not been requested
 
 Must not own:
 
@@ -199,7 +199,7 @@ session history has one frontend read boundary.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter owns any runtime-side state preparation
    needed before events can flow.
-7. Initial history is loaded from materialized session state for requested sessions and live empty transcripts.
+7. Initial history is loaded from materialized session state for requested sessions and live sessions whose history has not been requested.
 8. Subsequent status, transcript, permissions, and questions come from runtime events.
 
 ## Regression Anchors

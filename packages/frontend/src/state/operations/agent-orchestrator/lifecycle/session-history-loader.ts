@@ -3,16 +3,10 @@ import type {
   AgentSessionHistorySystemPromptContext,
   AgentSessionRef,
 } from "@openducktor/core";
-import type {
-  AgentSessionHistoryLoadPolicy,
-  AgentSessionLoadOptions,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
-import { getAgentSessionHistoryLoadState } from "../support/history-load-state";
+import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHistoryMessages } from "../support/history-message-merge";
-import { createSessionMessagesState, someSessionMessage } from "../support/messages";
+import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
-import { isSessionSystemPromptMessage } from "../support/session-prompt";
 
 type UpdateSession = (
   externalSessionId: string,
@@ -41,32 +35,6 @@ export type AgentSessionHistoryTarget = Pick<
 };
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
-const DEFAULT_SESSION_HISTORY_POLICY: AgentSessionHistoryLoadPolicy = "live_if_empty";
-
-const shouldLoadLiveSessionHistory = (session: AgentSessionState | undefined): boolean => {
-  if (!session) {
-    return false;
-  }
-
-  const hasRuntimeTranscriptMessages = someSessionMessage(
-    session,
-    (message) => !isSessionSystemPromptMessage(message),
-  );
-  if (hasRuntimeTranscriptMessages) {
-    return false;
-  }
-
-  return getAgentSessionHistoryLoadState(session) === "not_requested";
-};
-
-const resolveHistoryPolicy = (
-  options: Pick<AgentSessionLoadOptions, "historyPolicy" | "targetExternalSessionId"> | undefined,
-): AgentSessionHistoryLoadPolicy => {
-  if (options?.historyPolicy) {
-    return options.historyPolicy;
-  }
-  return options?.targetExternalSessionId ? "requested_only" : DEFAULT_SESSION_HISTORY_POLICY;
-};
 
 export const selectSessionHistoryTargets = ({
   sessionsById,
@@ -77,16 +45,8 @@ export const selectSessionHistoryTargets = ({
   liveSessions: AgentSessionRef[];
   options?: AgentSessionLoadOptions;
 }): AgentSessionHistoryTarget[] => {
-  const historyPolicy = resolveHistoryPolicy(options);
-  if (historyPolicy === "none") {
-    return [];
-  }
-
   const targetExternalSessionId = options?.targetExternalSessionId?.trim();
-  if (historyPolicy === "requested_only") {
-    if (!targetExternalSessionId) {
-      return [];
-    }
+  if (targetExternalSessionId) {
     const session = sessionsById[targetExternalSessionId];
     if (!session) {
       throw new Error(`Cannot load history for unknown session '${targetExternalSessionId}'.`);
@@ -97,7 +57,7 @@ export const selectSessionHistoryTargets = ({
   const liveSessionIds = new Set(liveSessions.map((session) => session.externalSessionId));
   return Object.values(sessionsById).filter(
     (session) =>
-      liveSessionIds.has(session.externalSessionId) && shouldLoadLiveSessionHistory(session),
+      liveSessionIds.has(session.externalSessionId) && session.historyLoadState === "not_requested",
   );
 };
 

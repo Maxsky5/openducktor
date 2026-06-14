@@ -275,6 +275,7 @@ describe("createLoadAgentSessions", () => {
 
   test("does not erase a live user message that arrives while the repo read model is loading", async () => {
     const presenceReady = createDeferred<void>();
+    let historyLoads = 0;
     const harness = createLoaderHarness({
       listSessionPresence: async () => {
         await presenceReady.promise;
@@ -298,7 +299,18 @@ describe("createLoadAgentSessions", () => {
           }),
         ];
       },
-      loadSessionHistory: async () => [],
+      loadSessionHistory: async () => {
+        historyLoads += 1;
+        return [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:00.500Z",
+            text: "Previous transcript",
+            parts: [],
+          },
+        ];
+      },
     });
 
     const loading = harness.loadAgentSessions("task-1", { persistedRecords: [record] });
@@ -313,15 +325,9 @@ describe("createLoadAgentSessions", () => {
           status: "running",
           startedAt: record.startedAt,
           workingDirectory: record.workingDirectory,
-          historyLoadState: "loaded",
+          historyLoadState: "not_requested",
         }),
         messages: createSessionMessagesState(record.externalSessionId, [
-          {
-            id: "history:system-prompt:external-1",
-            role: "system",
-            content: "System prompt:\n\nBuild the task from the repository rules.",
-            timestamp: record.startedAt,
-          },
           {
             id: "runtime-user-new",
             role: "user",
@@ -345,12 +351,13 @@ describe("createLoadAgentSessions", () => {
     }
     expect(session.status).toBe("running");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
-      "System prompt:\n\nBuild the task from the repository rules.",
+      "Previous transcript",
       "Resume after QA rejection",
     ]);
+    expect(historyLoads).toBe(1);
   });
 
-  test("passes recomputed prompt context to hydrated Codex history without persisting it", async () => {
+  test("passes recomputed prompt context to loaded Codex history without persisting it", async () => {
     const codexRecord: AgentSessionRecord = {
       ...record,
       runtimeKind: "codex",
