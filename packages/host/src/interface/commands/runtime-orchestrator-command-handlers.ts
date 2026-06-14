@@ -53,6 +53,8 @@ export const createRuntimeOrchestratorCommandHandlers = (
     runtimeOrchestratorService.agentSessionStop(parseAgentSessionStopInput(args)),
   runtime_ensure: (args) =>
     runtimeOrchestratorService.runtimeEnsure(parseRuntimeRepoInput(args, "runtime_ensure")),
+  runtime_require: (args) =>
+    runtimeOrchestratorService.runtimeRequire(parseRuntimeRepoInput(args, "runtime_require")),
   runtime_list: (args) => runtimeOrchestratorService.runtimeList(parseRuntimeListInput(args)),
   runtime_startup_status: (args) =>
     runtimeOrchestratorService.runtimeStartupStatus(

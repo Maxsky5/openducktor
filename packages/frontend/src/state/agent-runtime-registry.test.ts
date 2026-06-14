@@ -62,10 +62,10 @@ describe("agent-runtime-registry", () => {
 
   test("codex adapter resolves host-managed runtime ids through the host bridge", async () => {
     const originalRuntimeEnsure = host.runtimeEnsure;
-    const originalRuntimeList = host.runtimeList;
+    const originalRuntimeRequire = host.runtimeRequire;
     const originalCodexAppServerRequest = host.codexAppServerRequest;
     const runtimeEnsureCalls: unknown[][] = [];
-    const runtimeListCalls: unknown[][] = [];
+    const runtimeRequireCalls: unknown[][] = [];
     const codexRequestCalls: unknown[][] = [];
 
     host.runtimeEnsure = mock(async (...args: unknown[]) => {
@@ -82,22 +82,20 @@ describe("agent-runtime-registry", () => {
         descriptor: CODEX_RUNTIME_DESCRIPTOR,
       };
     }) as typeof host.runtimeEnsure;
-    host.runtimeList = mock(async (...args: unknown[]) => {
-      runtimeListCalls.push(args);
-      return [
-        {
-          kind: "codex",
-          runtimeId: "runtime-codex-live",
-          repoPath: "/repo",
-          taskId: null,
-          role: "workspace",
-          workingDirectory: "/repo",
-          runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
-          startedAt: "2026-02-22T09:00:00.000Z",
-          descriptor: CODEX_RUNTIME_DESCRIPTOR,
-        },
-      ];
-    }) as typeof host.runtimeList;
+    host.runtimeRequire = mock(async (...args: unknown[]) => {
+      runtimeRequireCalls.push(args);
+      return {
+        kind: "codex",
+        runtimeId: "runtime-codex-live",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
+        startedAt: "2026-02-22T09:00:00.000Z",
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+      };
+    }) as typeof host.runtimeRequire;
     host.codexAppServerRequest = mock(async (...args: unknown[]) => {
       codexRequestCalls.push(args);
       const [, method] = args as [string, string, unknown?];
@@ -163,7 +161,7 @@ describe("agent-runtime-registry", () => {
       ).resolves.toMatchObject({ runtime: { kind: "codex" } });
 
       expect(runtimeEnsureCalls).toEqual([["/repo", "codex"]]);
-      expect(runtimeListCalls).toEqual([["/repo", "codex"]]);
+      expect(runtimeRequireCalls).toEqual([["/repo", "codex"]]);
       expect(codexRequestCalls.map(([runtimeId, method]) => [runtimeId, method])).toEqual([
         ["runtime-codex-ensure", "model/list"],
         ["runtime-codex-ensure", "thread/start"],
@@ -176,7 +174,7 @@ describe("agent-runtime-registry", () => {
       });
     } finally {
       host.runtimeEnsure = originalRuntimeEnsure;
-      host.runtimeList = originalRuntimeList;
+      host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
       configureShellBridge(createUnavailableShellBridge());
     }
@@ -184,23 +182,21 @@ describe("agent-runtime-registry", () => {
 
   test("codex adapter receives live app-server events from the shell bridge", async () => {
     await clearAppQueryClient();
-    const originalRuntimeList = host.runtimeList;
+    const originalRuntimeRequire = host.runtimeRequire;
     const originalCodexAppServerRequest = host.codexAppServerRequest;
     const codexEventBridge: { listener?: (payload: unknown) => void } = {};
 
-    host.runtimeList = mock(async () => [
-      {
-        kind: "codex",
-        runtimeId: "runtime-codex-live",
-        repoPath: "/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/repo",
-        runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
-        startedAt: "2026-02-22T09:00:00.000Z",
-        descriptor: CODEX_RUNTIME_DESCRIPTOR,
-      },
-    ]) as typeof host.runtimeList;
+    host.runtimeRequire = mock(async () => ({
+      kind: "codex",
+      runtimeId: "runtime-codex-live",
+      repoPath: "/repo",
+      taskId: null,
+      role: "workspace",
+      workingDirectory: "/repo",
+      runtimeRoute: { type: "stdio" as const, identity: "runtime-codex-live" },
+      startedAt: "2026-02-22T09:00:00.000Z",
+      descriptor: CODEX_RUNTIME_DESCRIPTOR,
+    })) as typeof host.runtimeRequire;
     host.codexAppServerRequest = mock(async (_runtimeId, method) => {
       if (method === "model/list") {
         return {
@@ -298,7 +294,7 @@ describe("agent-runtime-registry", () => {
       expect(appQueryClient.getQueryState(sessionSkillKey)?.isInvalidated).toBe(true);
       unsubscribe();
     } finally {
-      host.runtimeList = originalRuntimeList;
+      host.runtimeRequire = originalRuntimeRequire;
       host.codexAppServerRequest = originalCodexAppServerRequest;
       await clearAppQueryClient();
       configureShellBridge(createUnavailableShellBridge());
@@ -329,25 +325,23 @@ describe("agent-runtime-registry", () => {
     );
   });
 
-  test("requires live repo runtimes using the host runtimeList repo-kind argument order", async () => {
-    const originalRuntimeList = host.runtimeList;
-    const runtimeListCalls: unknown[] = [];
-    host.runtimeList = mock(async (...args: unknown[]) => {
-      runtimeListCalls.push(args);
-      return [
-        {
-          kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: "/repo",
-          taskId: null,
-          role: "workspace",
-          workingDirectory: "/repo",
-          runtimeRoute: { type: "stdio" as const, identity: "runtime-stdio" },
-          startedAt: "2026-02-22T09:00:00.000Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        },
-      ];
-    }) as typeof host.runtimeList;
+  test("requires live repo runtimes through the host runtimeRequire boundary", async () => {
+    const originalRuntimeRequire = host.runtimeRequire;
+    const runtimeRequireCalls: unknown[] = [];
+    host.runtimeRequire = mock(async (...args: unknown[]) => {
+      runtimeRequireCalls.push(args);
+      return {
+        kind: "opencode",
+        runtimeId: "runtime-1",
+        repoPath: "/repo",
+        taskId: null,
+        role: "workspace",
+        workingDirectory: "/repo",
+        runtimeRoute: { type: "stdio" as const, identity: "runtime-stdio" },
+        startedAt: "2026-02-22T09:00:00.000Z",
+        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+      };
+    }) as typeof host.runtimeRequire;
 
     try {
       await expect(
@@ -357,9 +351,9 @@ describe("agent-runtime-registry", () => {
         }),
       ).rejects.toThrow("OpenCode runtime route 'stdio' is unsupported");
 
-      expect(runtimeListCalls).toEqual([["/repo", "opencode"]]);
+      expect(runtimeRequireCalls).toEqual([["/repo", "opencode"]]);
     } finally {
-      host.runtimeList = originalRuntimeList;
+      host.runtimeRequire = originalRuntimeRequire;
     }
   });
 

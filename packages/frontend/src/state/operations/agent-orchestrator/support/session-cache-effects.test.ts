@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { taskQueryKeys } from "@/state/queries/tasks";
 import { createSessionCacheEffects } from "./session-cache-effects";
 
@@ -59,11 +58,9 @@ describe("createSessionCacheEffects", () => {
     await effects.invalidateSessionStopQueries({
       repoPath: "/repo",
       taskId: "task-1",
-      runtimeKind: "opencode",
     });
 
     expect(invalidatedKeys).toContainEqual(taskQueryKeys.repoDataPrefix("/repo"));
     expect(invalidatedKeys).toContainEqual(agentSessionQueryKeys.list("/repo", "task-1"));
-    expect(invalidatedKeys).toContainEqual(runtimeQueryKeys.list("opencode", "/repo"));
   });
 });

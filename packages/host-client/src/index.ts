@@ -76,6 +76,7 @@ const AGENT_METHODS = [
   "taskWorktreeGet",
   "runtimeStop",
   "runtimeEnsure",
+  "runtimeRequire",
   "runtimeStartupStatus",
   "repoRuntimeHealth",
   "repoRuntimeHealthStatus",

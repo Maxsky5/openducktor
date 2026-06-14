@@ -51,6 +51,7 @@ export const HOST_COMMAND_NAMES = [
   "runtime_definitions_list",
   "runtime_ensure",
   "runtime_list",
+  "runtime_require",
   "runtime_startup_status",
   "runtime_stop",
   "set_plan",

@@ -4,7 +4,6 @@ import {
   type RepoRuntimeHealthCheck,
   type RepoRuntimeStartupStatus,
   type RuntimeInstanceSummary,
-  type RuntimeKind,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -139,7 +138,6 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
       failureKind: "timeout",
     },
   }),
-  listRuntimesForRepo: async (_runtimeKind: RuntimeKind, _repoPath: string) => [runtimeFixture],
   listAvailableModels: async () => catalogFixture,
   listAvailableSlashCommands: async () => slashCommandCatalogFixture,
   searchFiles: async () => fileSearchResultsFixture,
@@ -148,11 +146,9 @@ const createDeps = (overrides: Partial<CatalogDependencies> = {}): CatalogDepend
 
 describe("runtime-catalog", () => {
   test("loads repo model catalog from runtime coordinates", async () => {
-    const listRuntimesForRepo = mock(async () => [runtimeFixture]);
     const listAvailableModels = mock(async () => catalogFixture);
     const operations = createRuntimeCatalogOperations(
       createDeps({
-        listRuntimesForRepo,
         listAvailableModels,
       }),
     );
@@ -160,25 +156,18 @@ describe("runtime-catalog", () => {
     await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).resolves.toEqual(
       catalogFixture,
     );
-    expect(listRuntimesForRepo).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableModels).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",
     });
   });
 
-  test("fails fast when no runtime matches the requested repo path", async () => {
-    const listRuntimesForRepo = mock(async () => [
-      {
-        ...runtimeFixture,
-        repoPath: "/tmp/other-repo",
-        workingDirectory: "/tmp/other-repo",
-      },
-    ]);
-    const listAvailableModels = mock(async () => catalogFixture);
+  test("propagates adapter runtime resolution failures", async () => {
+    const listAvailableModels = mock(async () => {
+      throw new Error("No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.");
+    });
     const operations = createRuntimeCatalogOperations(
       createDeps({
-        listRuntimesForRepo,
         listAvailableModels,
       }),
     );
@@ -186,40 +175,16 @@ describe("runtime-catalog", () => {
     await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).rejects.toThrow(
       "No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.",
     );
-    expect(listAvailableModels).not.toHaveBeenCalled();
+    expect(listAvailableModels).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+    });
   });
 
-  test("fails fast when returned runtimes do not match the requested runtime kind", async () => {
-    const listRuntimesForRepo = mock(async () => [
-      {
-        ...runtimeFixture,
-        kind: "other-runtime" as RuntimeInstanceSummary["kind"],
-        descriptor: {
-          ...runtimeFixture.descriptor,
-          kind: "other-runtime" as RuntimeInstanceSummary["descriptor"]["kind"],
-        },
-      },
-    ]);
-    const listAvailableModels = mock(async () => catalogFixture);
-    const operations = createRuntimeCatalogOperations(
-      createDeps({
-        listRuntimesForRepo,
-        listAvailableModels,
-      }),
-    );
-
-    await expect(operations.loadRepoRuntimeCatalog("/tmp/repo", "opencode")).rejects.toThrow(
-      "No live repo runtime found for repo '/tmp/repo' and runtime 'opencode'.",
-    );
-    expect(listAvailableModels).not.toHaveBeenCalled();
-  });
-
-  test("requires an existing live repo runtime for slash commands", async () => {
-    const listRuntimesForRepo = mock(async () => [runtimeFixture]);
+  test("loads slash commands from runtime coordinates", async () => {
     const listAvailableSlashCommands = mock(async () => slashCommandCatalogFixture);
     const operations = createRuntimeCatalogOperations(
       createDeps({
-        listRuntimesForRepo,
         listAvailableSlashCommands,
       }),
     );
@@ -227,7 +192,6 @@ describe("runtime-catalog", () => {
     await expect(operations.loadRepoRuntimeSlashCommands("/tmp/repo", "opencode")).resolves.toEqual(
       slashCommandCatalogFixture,
     );
-    expect(listRuntimesForRepo).toHaveBeenCalledWith("opencode", "/tmp/repo");
     expect(listAvailableSlashCommands).toHaveBeenCalledWith({
       repoPath: "/tmp/repo",
       runtimeKind: "opencode",

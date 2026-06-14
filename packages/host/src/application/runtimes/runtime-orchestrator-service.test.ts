@@ -48,6 +48,29 @@ describe("createRuntimeOrchestratorService", () => {
       Effect.runPromise(service.runtimeList({ runtimeKind: "opencode", repoPath: "/repo" })),
     ).resolves.toEqual([runtime]);
   });
+  test("requires a live workspace runtime by kind and canonical repository", async () => {
+    const runtime = createRuntime();
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([runtime]),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(service.runtimeRequire({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).resolves.toEqual(runtime);
+  });
+  test("fails when requiring a missing workspace runtime", async () => {
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: createRegistry([]),
+      taskReader: createTaskStore(),
+    });
+    await expect(
+      Effect.runPromise(service.runtimeRequire({ runtimeKind: "opencode", repoPath: "/repo" })),
+    ).rejects.toThrow("No live repo runtime found for repo '/canonical/repo', runtime 'opencode'.");
+  });
   test("uses keyed repository lookup for repo-scoped runtime lists", async () => {
     const runtime = createRuntime();
     const keyedLookups: unknown[] = [];

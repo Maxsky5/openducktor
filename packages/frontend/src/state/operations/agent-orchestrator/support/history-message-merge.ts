@@ -33,7 +33,17 @@ const mergeReasoningMessages = (
   return loadedMessage;
 };
 
-const findMatchingCurrentNonSubagentMessages = ({
+const sameIdCurrentMessageOrEmpty = (
+  currentMessage: AgentChatMessage | undefined,
+  absorbedCurrentMessageIds: ReadonlySet<string>,
+): AgentChatMessage[] => {
+  if (!currentMessage || absorbedCurrentMessageIds.has(currentMessage.id)) {
+    return [];
+  }
+  return [currentMessage];
+};
+
+const findMatchingCurrentToolMessages = ({
   currentOwner,
   loadedMessage,
   sameIdCurrentMessage,
@@ -44,10 +54,7 @@ const findMatchingCurrentNonSubagentMessages = ({
   sameIdCurrentMessage: AgentChatMessage | undefined;
   absorbedCurrentMessageIds: ReadonlySet<string>;
 }): AgentChatMessage[] => {
-  const matches =
-    sameIdCurrentMessage && !absorbedCurrentMessageIds.has(sameIdCurrentMessage.id)
-      ? [sameIdCurrentMessage]
-      : [];
+  const matches = sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
   const seenIds = new Set(matches.map((message) => message.id));
   const currentSlice = getSessionMessagesSlice(currentOwner, 0);
   for (let index = currentSlice.length - 1; index >= 0; index -= 1) {
@@ -128,12 +135,16 @@ const findMatchingCurrentMessages = ({
     });
   }
 
-  return findMatchingCurrentNonSubagentMessages({
-    currentOwner,
-    loadedMessage,
-    sameIdCurrentMessage,
-    absorbedCurrentMessageIds,
-  });
+  if (loadedMessage.meta?.kind === "tool") {
+    return findMatchingCurrentToolMessages({
+      currentOwner,
+      loadedMessage,
+      sameIdCurrentMessage,
+      absorbedCurrentMessageIds,
+    });
+  }
+
+  return sameIdCurrentMessageOrEmpty(sameIdCurrentMessage, absorbedCurrentMessageIds);
 };
 
 const mergeSameMessageId = (

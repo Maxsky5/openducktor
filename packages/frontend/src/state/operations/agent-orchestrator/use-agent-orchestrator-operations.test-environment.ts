@@ -28,6 +28,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalAgentSessionsListBulk = host.agentSessionsListBulk;
   const originalRuntimeList = host.runtimeList;
   const originalRuntimeEnsure = host.runtimeEnsure;
+  const originalRuntimeRequire = host.runtimeRequire;
   const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
   const originalReadAgentSessionPresenceSnapshot = OpencodeSdkAdapter.prototype.readSessionPresence;
   const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
@@ -78,6 +79,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
       kind: runtimeKind,
     },
   });
+  host.runtimeRequire = host.runtimeEnsure;
   opencodeSdkAdapterPrototype.listSessionPresence = async () => [
     createAgentSessionPresenceSnapshotFixture(),
   ];
@@ -116,6 +118,7 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.agentSessionsListBulk = originalAgentSessionsListBulk;
     host.runtimeList = originalRuntimeList;
     host.runtimeEnsure = originalRuntimeEnsure;
+    host.runtimeRequire = originalRuntimeRequire;
     opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
     opencodeSdkAdapterPrototype.readSessionPresence = originalReadAgentSessionPresenceSnapshot;
     OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;

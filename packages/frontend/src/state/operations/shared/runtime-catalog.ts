@@ -1,4 +1,4 @@
-import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentFileSearchResult,
@@ -6,9 +6,6 @@ import type {
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
-import { appQueryClient } from "@/lib/query-client";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
-import { ensureRuntimeListFromQuery } from "@/state/queries/runtime";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 import { host } from "./host";
 
@@ -27,10 +24,6 @@ type RuntimeCatalogDependencies = {
     runtimeKind: RuntimeKind,
     repoPath: string,
   ) => Promise<RepoRuntimeHealthCheck>;
-  listRuntimesForRepo: (
-    runtimeKind: RuntimeKind,
-    repoPath: string,
-  ) => Promise<RuntimeInstanceSummary[]>;
   listAvailableModels: (input: ListCatalogInput) => Promise<AgentModelCatalog>;
   listAvailableSlashCommands: (input: ListCatalogInput) => Promise<AgentSlashCommandCatalog>;
   listAvailableSkills?: (
@@ -44,51 +37,19 @@ const toRuntimeInput = (repoPath: string, runtimeKind: RuntimeKind): ListCatalog
   runtimeKind,
 });
 
-const selectCatalogRuntime = (
-  runtimes: RuntimeInstanceSummary[],
-  repoPath: string,
-  runtimeKind: RuntimeKind,
-): RuntimeInstanceSummary | null => {
-  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-  return (
-    runtimes.find(
-      (runtime) =>
-        runtime.kind === runtimeKind &&
-        normalizeWorkingDirectory(runtime.repoPath) === normalizedRepoPath,
-    ) ?? null
-  );
-};
-
 export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies) => {
-  const resolveCatalogInput = async (
-    repoPath: string,
-    runtimeKind: RuntimeKind,
-  ): Promise<ListCatalogInput> => {
-    const existingRuntime = selectCatalogRuntime(
-      await deps.listRuntimesForRepo(runtimeKind, repoPath),
-      repoPath,
-      runtimeKind,
-    );
-    if (!existingRuntime) {
-      throw new Error(
-        `No live repo runtime found for repo '${repoPath}' and runtime '${runtimeKind}'.`,
-      );
-    }
-    return toRuntimeInput(repoPath, runtimeKind);
-  };
-
   const loadRepoRuntimeCatalog = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<AgentModelCatalog> => {
-    return deps.listAvailableModels(await resolveCatalogInput(repoPath, runtimeKind));
+    return deps.listAvailableModels(toRuntimeInput(repoPath, runtimeKind));
   };
 
   const loadRepoRuntimeSlashCommands = async (
     repoPath: string,
     runtimeKind: RuntimeKind,
   ): Promise<AgentSlashCommandCatalog> => {
-    return deps.listAvailableSlashCommands(await resolveCatalogInput(repoPath, runtimeKind));
+    return deps.listAvailableSlashCommands(toRuntimeInput(repoPath, runtimeKind));
   };
 
   const loadRepoRuntimeSkills = async (
@@ -100,7 +61,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
       throw new Error("Runtime skill catalog loading is unavailable.");
     }
     return deps.listAvailableSkills({
-      ...(await resolveCatalogInput(repoPath, runtimeKind)),
+      ...toRuntimeInput(repoPath, runtimeKind),
       workingDirectory,
     });
   };
@@ -111,7 +72,7 @@ export const createRuntimeCatalogOperations = (deps: RuntimeCatalogDependencies)
     query: string,
   ): Promise<AgentFileSearchResult[]> => {
     return deps.searchFiles({
-      ...(await resolveCatalogInput(repoPath, runtimeKind)),
+      ...toRuntimeInput(repoPath, runtimeKind),
       query,
     });
   };
@@ -140,8 +101,6 @@ export const createHostRuntimeCatalogOperations = (
   createRuntimeCatalogOperations({
     repoRuntimeHealthStatus: (runtimeKind, repoPath) =>
       host.repoRuntimeHealthStatus(repoPath, runtimeKind),
-    listRuntimesForRepo: (runtimeKind, repoPath) =>
-      ensureRuntimeListFromQuery(appQueryClient, runtimeKind, repoPath),
     listAvailableModels: (input) =>
       getAdapter(input.runtimeKind).listAvailableModels({
         repoPath: input.repoPath,

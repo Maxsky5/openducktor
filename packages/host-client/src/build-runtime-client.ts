@@ -213,6 +213,18 @@ const runtimeEnsure = async (
   }
 };
 
+const runtimeRequire = async (
+  invokeFn: InvokeFn,
+  repoPath: string,
+  runtimeKind: RuntimeKind,
+): Promise<RuntimeInstanceSummary> => {
+  const payload = await invokeFn("runtime_require", {
+    repoPath,
+    runtimeKind,
+  });
+  return runtimeInstanceSummarySchema.parse(payload);
+};
+
 const runtimeStartupStatus = async (
   invokeFn: InvokeFn,
   repoPath: string,
@@ -550,6 +562,13 @@ export class HostAgentClient {
 
   async runtimeEnsure(repoPath: string, runtimeKind: RuntimeKind): Promise<RuntimeInstanceSummary> {
     return runtimeEnsure(this.invokeFn, repoPath, runtimeKind);
+  }
+
+  async runtimeRequire(
+    repoPath: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<RuntimeInstanceSummary> {
+    return runtimeRequire(this.invokeFn, repoPath, runtimeKind);
   }
 
   async runtimeStartupStatus(

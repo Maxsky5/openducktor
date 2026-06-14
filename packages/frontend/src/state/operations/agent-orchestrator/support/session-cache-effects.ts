@@ -1,10 +1,9 @@
-import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   agentSessionQueryKeys,
   upsertAgentSessionRecordInQuery,
 } from "@/state/queries/agent-sessions";
-import { runtimeQueryKeys } from "@/state/queries/runtime";
 import { invalidateRepoTaskQueries } from "@/state/queries/tasks";
 import type { AgentOrchestratorHostPort } from "./orchestrator-ports";
 
@@ -33,11 +32,9 @@ export const createSessionCacheEffects = ({
   const invalidateSessionStopQueries = async ({
     repoPath,
     taskId,
-    runtimeKind,
   }: {
     repoPath: string;
     taskId: string;
-    runtimeKind?: RuntimeKind;
   }): Promise<void> => {
     await Promise.all([
       invalidateRepoTaskQueries(queryClient, repoPath),
@@ -46,15 +43,6 @@ export const createSessionCacheEffects = ({
         exact: true,
         refetchType: "none",
       }),
-      ...(runtimeKind
-        ? [
-            queryClient.invalidateQueries({
-              queryKey: runtimeQueryKeys.list(runtimeKind, repoPath),
-              exact: true,
-              refetchType: "none",
-            }),
-          ]
-        : []),
     ]);
   };
 

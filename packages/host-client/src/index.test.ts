@@ -1382,6 +1382,22 @@ describe("HostClient", () => {
           descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
         };
       }
+      if (command === "runtime_require") {
+        return {
+          kind: "opencode",
+          runtimeId: "runtime-main",
+          repoPath: "/repo",
+          taskId: null,
+          role: "workspace",
+          workingDirectory: "/repo",
+          runtimeRoute: {
+            type: "local_http",
+            endpoint: "http://127.0.0.1:4180",
+          },
+          startedAt: "2026-02-17T12:00:00Z",
+          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+        };
+      }
       if (command === "runtime_startup_status") {
         return {
           runtimeKind: "opencode",
@@ -1489,6 +1505,7 @@ describe("HostClient", () => {
     const qaTarget = await client.taskWorktreeGet("/repo", "task-1");
     const runtimes = await client.runtimeList("/repo", "opencode");
     const ensured = await client.runtimeEnsure("/repo", "opencode");
+    const required = await client.runtimeRequire("/repo", "opencode");
     const startupStatus = await client.runtimeStartupStatus("/repo", "opencode");
     const repoRuntimeHealth = await client.repoRuntimeHealth("/repo", "opencode");
     const repoRuntimeHealthStatus = await client.repoRuntimeHealthStatus("/repo", "opencode");
@@ -1509,6 +1526,7 @@ describe("HostClient", () => {
     expect(ensured.descriptor.workflowToolAliasesByCanonical).toEqual(
       OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
     );
+    expect(required.runtimeId).toBe("runtime-main");
     expect(startupStatus.stage).toBe("waiting_for_runtime");
     expect(repoRuntimeHealth.mcp?.status).toBe("connected");
     expect(repoRuntimeHealthStatus.mcp?.status).toBe("checking");
@@ -1518,6 +1536,7 @@ describe("HostClient", () => {
       "task_worktree_get",
       "runtime_list",
       "runtime_ensure",
+      "runtime_require",
       "runtime_startup_status",
       "repo_runtime_health",
       "repo_runtime_health_status",
@@ -1528,6 +1547,10 @@ describe("HostClient", () => {
       runtimeKind: "opencode",
     });
     expect(calls[3]?.args).toEqual({
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+    });
+    expect(calls[4]?.args).toEqual({
       repoPath: "/repo",
       runtimeKind: "opencode",
     });

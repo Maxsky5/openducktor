@@ -16,7 +16,6 @@ import type {
 import { DEFAULT_RUNTIME_KIND, validateRuntimeDefinitionForOpenDucktor } from "@/lib/agent-runtime";
 import { subscribeCodexAppServerEvents } from "@/lib/host-client";
 import { appQueryClient } from "@/lib/query-client";
-import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { host } from "./operations/shared/host";
 import type { RuntimeCatalogAdapter } from "./operations/shared/runtime-catalog";
 import { agentSessionRuntimeQueryKeys } from "./queries/agent-session-runtime";
@@ -43,37 +42,13 @@ type HostRepoRuntimeResolver = {
   requireRepoRuntime(ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary>;
 };
 
-const requireListedRuntime = async (
-  { repoPath, runtimeKind }: RepoRuntimeRef,
-  predicate: (runtime: RuntimeInstanceSummary) => boolean,
-  errorDetails: string,
-): Promise<RuntimeInstanceSummary> => {
-  const normalizedRepoPath = normalizeWorkingDirectory(repoPath);
-  const runtimes = await host.runtimeList(repoPath, runtimeKind);
-  const runtime = runtimes.find(
-    (entry) =>
-      entry.kind === runtimeKind &&
-      normalizeWorkingDirectory(entry.repoPath) === normalizedRepoPath &&
-      predicate(entry),
-  );
-  if (!runtime) {
-    throw new Error(errorDetails);
-  }
-  return runtime;
-};
-
-const requireRepoRuntime = (ref: RepoRuntimeRef): Promise<RuntimeInstanceSummary> =>
-  requireListedRuntime(
-    ref,
-    () => true,
-    `No live repo runtime found for repo '${ref.repoPath}', runtime '${ref.runtimeKind}'.`,
-  );
-
 const hostRepoRuntimeResolver: HostRepoRuntimeResolver = {
   ensureRepoRuntime: async ({ repoPath, runtimeKind }) => {
     return host.runtimeEnsure(repoPath, runtimeKind);
   },
-  requireRepoRuntime,
+  requireRepoRuntime: async ({ repoPath, runtimeKind }) => {
+    return host.runtimeRequire(repoPath, runtimeKind);
+  },
 };
 
 export { DEFAULT_RUNTIME_KIND };

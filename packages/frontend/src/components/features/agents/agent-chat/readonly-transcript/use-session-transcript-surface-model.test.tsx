@@ -1,9 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type {
-  ChatSettings,
-  RuntimeInstanceSummary,
-  SettingsSnapshot,
-} from "@openducktor/contracts";
+import type { ChatSettings, SettingsSnapshot } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/lib/query-provider";
@@ -38,13 +34,10 @@ const useAgentSessionMock = mock(
 );
 let settingsChat: ChatSettings = createChatSettingsFixture();
 let settingsSnapshotError: Error | null = null;
-let runtimeList: RuntimeInstanceSummary[] = [];
-let runtimeListError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("../use-repo-runtime-readiness")>;
-let originalHostRuntimeList: typeof import("@/state/operations/host").host.runtimeList;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
@@ -106,20 +99,6 @@ function makeLiveTranscriptSession(): AgentSessionState {
   };
 }
 
-function makeRuntime(): RuntimeInstanceSummary {
-  return {
-    kind: "opencode",
-    runtimeId: "runtime-1",
-    repoPath: "/repo-a",
-    taskId: null,
-    role: "workspace",
-    workingDirectory: "/repo-a",
-    runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
-    startedAt: "2026-02-22T11:59:00.000Z",
-    descriptor: {} as RuntimeInstanceSummary["descriptor"],
-  } satisfies RuntimeInstanceSummary;
-}
-
 function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {
   return createSettingsSnapshotFixture({ chat });
 }
@@ -141,7 +120,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       import("@/state/operations/host"),
       import("../use-repo-runtime-readiness"),
     ]);
-    originalHostRuntimeList = actualHostOperations.host.runtimeList;
     originalWorkspaceGetSettingsSnapshot = actualHostOperations.host.workspaceGetSettingsSnapshot;
   });
 
@@ -168,14 +146,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
     );
     settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
-    runtimeList = [makeRuntime()];
-    runtimeListError = null;
-    actualHostOperations.host.runtimeList = async () => {
-      if (runtimeListError) {
-        throw runtimeListError;
-      }
-      return runtimeList;
-    };
     actualHostOperations.host.workspaceGetSettingsSnapshot = async () => {
       if (settingsSnapshotError) {
         throw settingsSnapshotError;
@@ -232,7 +202,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
       ["../use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
     ]);
-    actualHostOperations.host.runtimeList = originalHostRuntimeList;
     actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });
 

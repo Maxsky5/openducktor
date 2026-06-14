@@ -38,6 +38,9 @@ export type RuntimeOrchestratorService = {
   runtimeEnsure(
     input: RuntimeRepoInput,
   ): Effect.Effect<RuntimeInstanceSummary, RuntimeOrchestratorError>;
+  runtimeRequire(
+    input: RuntimeRepoInput,
+  ): Effect.Effect<RuntimeInstanceSummary, RuntimeOrchestratorError>;
   runtimeList(
     input: RuntimeListInput,
   ): Effect.Effect<RuntimeInstanceSummary[], RuntimeOrchestratorError>;

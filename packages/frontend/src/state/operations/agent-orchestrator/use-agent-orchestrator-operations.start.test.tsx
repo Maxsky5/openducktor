@@ -543,7 +543,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalSpecGet = host.specGet;
     const originalPlanGet = host.planGet;
     const originalQaGetReport = host.qaGetReport;
-    const originalRuntimeList = host.runtimeList;
     const originalRuntimeEnsure = host.runtimeEnsure;
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
 
@@ -562,22 +561,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    host.runtimeList = async () => [
-      {
-        runtimeId: "runtime-1",
-        kind: "opencode",
-        repoPath: "/tmp/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/tmp/repo/worktree",
-        runtimeRoute: {
-          type: "local_http",
-          endpoint: "http://127.0.0.1:4555",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
     host.runtimeEnsure = async () => ({
       runtimeId: "runtime-1",
       kind: "opencode",
@@ -647,7 +630,6 @@ describe("use-agent-orchestrator-operations start and send", () => {
       host.specGet = originalSpecGet;
       host.planGet = originalPlanGet;
       host.qaGetReport = originalQaGetReport;
-      host.runtimeList = originalRuntimeList;
       host.runtimeEnsure = originalRuntimeEnsure;
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
 

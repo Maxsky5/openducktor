@@ -473,7 +473,6 @@ export const createAgentSessionActions = ({
         invalidateSessionStopQueries({
           repoPath: stopRepoPath,
           taskId: session.taskId,
-          runtimeKind: session.runtimeKind,
         }),
         refreshTaskData(stopRepoPath),
         loadAgentSessions(session.taskId),

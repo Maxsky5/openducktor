@@ -772,7 +772,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         {
           repoPath: "/tmp/repo",
           taskId: "task-1",
-          runtimeKind: "opencode",
         },
       ]);
     } finally {

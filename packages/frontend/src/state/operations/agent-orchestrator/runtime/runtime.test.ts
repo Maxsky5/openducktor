@@ -229,7 +229,7 @@ describe("agent-orchestrator-runtime", () => {
       targetWorkingDirectory: "/tmp/repo/conflict-worktree",
     });
 
-    expect(invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
   });
 
   test("uses task worktree for qa when builder worktree exists", async () => {

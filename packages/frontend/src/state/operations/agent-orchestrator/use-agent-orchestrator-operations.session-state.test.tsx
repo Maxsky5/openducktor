@@ -6,9 +6,7 @@ import {
   createAgentSessionPresenceSnapshotFixture,
   createHookHarness,
   createUnavailableBuildTaskFixture,
-  createWorktreeRuntimeFixture,
   host,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
   persistedSessionFixture,
@@ -573,7 +571,6 @@ describe("use-agent-orchestrator-operations session state", () => {
   test("revisit to the same repo refreshes task sessions again", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionsListBulk = host.agentSessionsListBulk;
-    const originalRuntimeList = host.runtimeList;
     let persistedListCalls = 0;
     host.agentSessionsList = async () => {
       persistedListCalls += 1;
@@ -582,7 +579,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.agentSessionsListBulk = async () => ({
       "task-1": [persistedSessionFixture],
     });
-    host.runtimeList = async () => [createWorktreeRuntimeFixture()];
 
     const harness = createHookHarness({
       activeRepo: "/tmp/repo-a",
@@ -607,7 +603,6 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.unmount();
       host.agentSessionsList = originalAgentSessionsList;
       host.agentSessionsListBulk = originalAgentSessionsListBulk;
-      host.runtimeList = originalRuntimeList;
     }
   });
 
@@ -705,22 +700,6 @@ describe("use-agent-orchestrator-operations session state", () => {
     host.specGet = async () => ({ markdown: "", updatedAt: null });
     host.planGet = async () => ({ markdown: "", updatedAt: null });
     host.qaGetReport = async () => ({ markdown: "", updatedAt: null });
-    host.runtimeList = async () => [
-      {
-        kind: "opencode",
-        runtimeId: "runtime-1",
-        repoPath: "/tmp/repo",
-        taskId: null,
-        role: "workspace",
-        workingDirectory: "/tmp/repo/worktree",
-        runtimeRoute: {
-          type: "local_http" as const,
-          endpoint: "http://127.0.0.1:4444",
-        },
-        startedAt: "2026-02-22T08:00:00.000Z",
-        descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-      },
-    ];
     opencodeSdkAdapterPrototype.listSessionPresence = async () => {
       liveSnapshotScans += 1;
       return [

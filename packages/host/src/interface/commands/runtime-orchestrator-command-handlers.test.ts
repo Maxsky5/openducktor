@@ -60,6 +60,30 @@ const createRecordingService = () => {
           }),
       });
     },
+    runtimeRequire(input) {
+      return Effect.tryPromise({
+        try: async () => {
+          calls.push({ method: "runtimeRequire", input });
+          return {
+            kind: "opencode",
+            runtimeId: "runtime-1",
+            repoPath: "/repo",
+            taskId: null,
+            role: "workspace",
+            workingDirectory: "/repo",
+            runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4096" },
+            startedAt: "2026-05-10T10:00:00.000Z",
+            descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+          };
+        },
+        catch: (cause) =>
+          new HostOperationError({
+            operation: "test.effect",
+            message: cause instanceof Error ? cause.message : String(cause),
+            cause: cause,
+          }),
+      });
+    },
     runtimeList(input) {
       return Effect.tryPromise({
         try: async () => {
@@ -200,6 +224,9 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
       router.invoke("runtime_ensure", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toMatchObject({ runtimeId: "runtime-1" });
     await expect(
+      router.invoke("runtime_require", { runtimeKind: "opencode", repoPath: "/repo" }),
+    ).resolves.toMatchObject({ runtimeId: "runtime-1" });
+    await expect(
       router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toEqual([]);
     await expect(router.invoke("runtime_stop", { runtimeId: "runtime-1" })).resolves.toEqual({
@@ -236,6 +263,10 @@ describe("createRuntimeOrchestratorCommandHandlers", () => {
       },
       {
         method: "runtimeEnsure",
+        input: { runtimeKind: "opencode", repoPath: "/repo" },
+      },
+      {
+        method: "runtimeRequire",
         input: { runtimeKind: "opencode", repoPath: "/repo" },
       },
       {

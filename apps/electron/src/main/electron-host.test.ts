@@ -722,6 +722,9 @@ describe("createElectronHostCommandRouter", () => {
     await expect(
       router.invoke("runtime_list", { runtimeKind: "opencode", repoPath: "/repo" }),
     ).resolves.toMatchObject([{ runtimeId: "runtime-1" }]);
+    await expect(
+      router.invoke("runtime_require", { runtimeKind: "opencode", repoPath: "/repo" }),
+    ).resolves.toMatchObject({ runtimeId: "runtime-1" });
     expect(runtimeStarts).toEqual([
       {
         runtimeKind: "opencode",

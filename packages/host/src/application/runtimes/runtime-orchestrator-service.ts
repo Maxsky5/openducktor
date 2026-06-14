@@ -5,7 +5,7 @@ import {
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
-import { errorMessage } from "../../effect/host-errors";
+import { errorMessage, HostValidationError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
@@ -70,6 +70,30 @@ export const createRuntimeOrchestratorService = ({
         runtimes = registeredRuntimes.filter((runtime) => runtime.kind === runtimeKind);
       }
       return runtimes.map((runtime) => runtimeInstanceSummarySchema.parse(runtime));
+    });
+  const runtimeRequire: RuntimeOrchestratorService["runtimeRequire"] = (input) =>
+    Effect.gen(function* () {
+      const { runtimeKind, repoPath } = input;
+      yield* resolveRuntimeDescriptor(runtimeDefinitionsService, runtimeKind);
+      const canonicalRepoPath = yield* resolveRepoPath(gitPort, repoPath);
+      const runtime = findWorkspaceRuntime(
+        yield* runtimeRegistry.listRuntimesByRepo({
+          repoPath: canonicalRepoPath,
+          runtimeKind,
+        }),
+        runtimeKind,
+        canonicalRepoPath,
+      );
+      if (!runtime) {
+        return yield* Effect.fail(
+          new HostValidationError({
+            field: "runtimeKind",
+            message: `No live repo runtime found for repo '${canonicalRepoPath}', runtime '${runtimeKind}'.`,
+            details: { repoPath: canonicalRepoPath, runtimeKind },
+          }),
+        );
+      }
+      return runtimeInstanceSummarySchema.parse(runtime);
     });
   const runtimeStartupStatus: RuntimeOrchestratorService["runtimeStartupStatus"] = (input) =>
     Effect.gen(function* () {
@@ -168,6 +192,7 @@ export const createRuntimeOrchestratorService = ({
       });
     },
     runtimeEnsure,
+    runtimeRequire,
     runtimeList,
     runtimeStop(input) {
       return Effect.gen(function* () {
