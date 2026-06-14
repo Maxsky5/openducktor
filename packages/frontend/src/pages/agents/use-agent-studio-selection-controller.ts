@@ -101,6 +101,7 @@ export type AgentStudioSelectionControllerResult = {
   viewRole: AgentRole;
   viewLaunchActionId: SessionLaunchActionId;
   isActiveTaskReady: boolean;
+  isViewSessionResolving: boolean;
   viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
@@ -347,6 +348,10 @@ export function useAgentStudioSelectionController({
     viewSessionReadinessState,
     viewActiveSession,
   ]);
+  const isViewSessionResolving =
+    viewSelectedSessionRoute !== null
+      ? viewActiveSession === null && !sessionReadModelError
+      : shouldWaitForTaskSessionRecords && viewSessionReadinessState === "ready";
   const viewSessionRuntimeData = useSessionRuntimeData({
     repoPath: activeWorkspace?.repoPath ?? null,
     session: viewActiveSession,
@@ -399,6 +404,7 @@ export function useAgentStudioSelectionController({
       viewRole,
       viewLaunchActionId,
       isActiveTaskReady,
+      isViewSessionResolving,
       viewSessionLifecycle: selectedSessionLifecycle,
     }),
     [
@@ -410,6 +416,7 @@ export function useAgentStudioSelectionController({
       handleReorderTab,
       handleSelectTab,
       isActiveTaskReady,
+      isViewSessionResolving,
       isLoadingTasks,
       selectedSessionLifecycle,
       selectedSessionFromRoute,

@@ -236,7 +236,6 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       expect(harness.getLatest().worktree).toMatchObject({
         path: "/repo/.worktrees/task-25",
         status: "resolved",
-        isResolving: true,
         shouldBlockDiffLoading: false,
       });
       expect(useAgentStudioDiffDataMock.mock.calls.at(-1)?.[0]).toMatchObject({

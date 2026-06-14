@@ -517,7 +517,6 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [selectedSummary],
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "runtime_waiting" },
-            isResolving: true,
           }),
         },
         readiness: {
@@ -552,7 +551,6 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "runtime_waiting" },
-            isResolving: true,
           }),
         },
         readiness: {
@@ -587,7 +585,6 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "session_loading", reason: "preparing" },
-            isResolving: true,
           }),
           isChatContextSwitching: true,
         },

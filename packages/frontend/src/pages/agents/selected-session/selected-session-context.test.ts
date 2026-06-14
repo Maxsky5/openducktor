@@ -265,7 +265,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         allSessionSummaries: [],
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "runtime_waiting" },
-          isResolving: true,
         }),
         readiness: {
           agentStudioReadinessState: "checking",

@@ -231,7 +231,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       isSessionSelectionResolving: true,
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
         transcriptState: { kind: "runtime_waiting" },
-        isResolving: true,
       }),
       activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
       documents: baseDocuments,

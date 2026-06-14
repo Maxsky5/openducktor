@@ -23,7 +23,6 @@ export type AgentSessionTranscriptState =
 export type AgentSessionViewLifecycle = {
   repoReadinessState: SessionRepoReadinessState;
   transcriptState: AgentSessionTranscriptState;
-  isResolving: boolean;
 };
 
 export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
@@ -31,15 +30,12 @@ export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
 const lifecycle = ({
   repoReadinessState,
   transcriptState,
-  isResolving = false,
 }: {
   repoReadinessState: SessionRepoReadinessState;
   transcriptState: AgentSessionTranscriptState;
-  isResolving?: boolean;
 }): AgentSessionViewLifecycle => ({
   repoReadinessState,
   transcriptState,
-  isResolving,
 });
 
 export const isAgentSessionTranscriptLoading = (
@@ -168,7 +164,6 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
       return lifecycle({
         repoReadinessState,
         transcriptState: { kind: "session_loading", reason: "preparing" },
-        isResolving: true,
       });
     }
     return inactiveSelectedSessionViewLifecycle;
@@ -186,13 +181,11 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
       return lifecycle({
         repoReadinessState,
         transcriptState: { kind: "runtime_waiting" },
-        isResolving: true,
       });
     }
     return lifecycle({
       repoReadinessState,
       transcriptState: { kind: "session_loading", reason: "preparing" },
-      isResolving: true,
     });
   }
 

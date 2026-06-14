@@ -58,7 +58,6 @@ export const createSelectedSessionLifecycleFixture = (
 ): SelectedAgentSessionViewLifecycle => ({
   repoReadinessState: "ready",
   transcriptState: { kind: "visible" },
-  isResolving: false,
   ...overrides,
 });
 
