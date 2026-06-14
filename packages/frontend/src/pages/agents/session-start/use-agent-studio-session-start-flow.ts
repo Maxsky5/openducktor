@@ -363,8 +363,8 @@ export function useAgentStudioSessionStartFlow({
         ...(option.existingSessionOptions
           ? { existingSessionOptions: option.existingSessionOptions }
           : {}),
-        ...(option.initialSourceExternalSessionId !== undefined
-          ? { initialSourceExternalSessionId: option.initialSourceExternalSessionId }
+        ...(option.initialSourceSession !== undefined
+          ? { initialSourceSession: option.initialSourceSession }
           : {}),
       });
       startingSessionByTask.set(startKey, startPromise);

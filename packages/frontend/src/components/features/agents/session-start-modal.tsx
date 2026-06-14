@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { sessionStartModeButtonLabel } from "@/features/session-start/session-start-display";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type SessionStartModalConfirmInput =
   | boolean
@@ -24,14 +25,13 @@ type SessionStartModalConfirmInput =
       runInBackground: boolean;
       startMode: AgentSessionStartMode;
       sourceSessionOptionValue: string | null;
-      sourceExternalSessionId: string | null;
       targetBranch?: string;
     };
 type SessionStartModalConfirmPayload = Exclude<SessionStartModalConfirmInput, boolean>;
 type SessionStartModalConfirmDraft = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
 type ExistingSessionOption = ComboboxOption & {
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
 };
 
 export type SessionStartModalModel = {
@@ -461,9 +461,6 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const confirmInput = {
     startMode: selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
-    sourceExternalSessionId: requiresExistingSession
-      ? (selectedSourceSessionOption?.sourceExternalSessionId ?? null)
-      : null,
     ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
   };
   const handleConfirm = (): void => {

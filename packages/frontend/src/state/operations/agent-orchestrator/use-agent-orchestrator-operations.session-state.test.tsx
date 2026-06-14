@@ -480,7 +480,11 @@ describe("use-agent-orchestrator-operations session state", () => {
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
-          sourceExternalSessionId: "external-1",
+          sourceSession: {
+            externalSessionId: "external-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         });
         reusedSessionId = session.externalSessionId;
       });

@@ -1,10 +1,11 @@
 import type { GitTargetBranch, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 
 export type SessionStartExistingSessionOption = {
   value: string;
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
   label: string;
   description: string;
   secondaryLabel?: string;
@@ -21,7 +22,7 @@ export type NewSessionStartRequest = {
   initialTargetBranch?: GitTargetBranch | null;
   initialTargetBranchError?: string | null;
   existingSessionOptions?: SessionStartExistingSessionOption[];
-  initialSourceExternalSessionId?: string | null;
+  initialSourceSession?: AgentSessionIdentity | null;
 };
 
 export type FreshSessionStartDecision = {
@@ -32,14 +33,14 @@ export type FreshSessionStartDecision = {
 
 export type ReuseSessionStartDecision = {
   startMode: "reuse";
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
   targetBranch?: GitTargetBranch;
 };
 
 export type ForkSessionStartDecision = {
   startMode: "fork";
   selectedModel: AgentModelSelection;
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
   targetBranch?: GitTargetBranch;
 };
 

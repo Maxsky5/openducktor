@@ -3,6 +3,7 @@ import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/co
 import type { QueryClient } from "@tanstack/react-query";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
@@ -89,7 +90,7 @@ const resolveExistingSessionOptions = (
   });
 };
 
-const resolveInitialSourceExternalSessionId = ({
+const resolveInitialSourceSession = ({
   request,
   existingSessionOptions,
   activeSession,
@@ -97,9 +98,9 @@ const resolveInitialSourceExternalSessionId = ({
   request: SessionStartFlowRequest;
   existingSessionOptions: ReturnType<typeof resolveExistingSessionOptions>;
   activeSession?: SessionStartContextSession | null | undefined;
-}): string | null => {
-  if (request.initialSourceExternalSessionId !== undefined) {
-    return request.initialSourceExternalSessionId;
+}): AgentSessionIdentity | null => {
+  if (request.initialSourceSession !== undefined) {
+    return request.initialSourceSession;
   }
 
   if (
@@ -108,10 +109,14 @@ const resolveInitialSourceExternalSessionId = ({
     activeSession.role === request.role &&
     existingSessionOptions.some((option) => option.value === agentSessionIdentityKey(activeSession))
   ) {
-    return activeSession.externalSessionId;
+    return {
+      externalSessionId: activeSession.externalSessionId,
+      runtimeKind: activeSession.runtimeKind,
+      workingDirectory: activeSession.workingDirectory,
+    };
   }
 
-  return existingSessionOptions[0]?.sourceExternalSessionId ?? null;
+  return existingSessionOptions[0]?.sourceSession ?? null;
 };
 
 export const buildSessionStartModalRequest = ({
@@ -123,7 +128,7 @@ export const buildSessionStartModalRequest = ({
   selectedTask,
 }: BuildSessionStartModalRequestArgs): SessionStartModalRunRequest => {
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
-  const initialSourceExternalSessionId = resolveInitialSourceExternalSessionId({
+  const initialSourceSession = resolveInitialSourceSession({
     request,
     existingSessionOptions,
     activeSession,
@@ -146,7 +151,7 @@ export const buildSessionStartModalRequest = ({
       : {}),
     ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
     ...(existingSessionOptions.length > 0 ? { existingSessionOptions } : {}),
-    ...(initialSourceExternalSessionId !== undefined ? { initialSourceExternalSessionId } : {}),
+    ...(initialSourceSession !== undefined ? { initialSourceSession } : {}),
   };
 };
 
@@ -183,7 +188,7 @@ export const executeSessionStartFromDecision = async ({
       ...(request.message ? { message: request.message } : {}),
       ...(request.beforeStartAction ? { beforeStartAction: request.beforeStartAction } : {}),
       ...(decision.startMode === "reuse" || decision.startMode === "fork"
-        ? { sourceExternalSessionId: decision.sourceExternalSessionId }
+        ? { sourceSession: decision.sourceSession }
         : {}),
     },
     selection: decision.startMode === "reuse" ? null : decision.selectedModel,

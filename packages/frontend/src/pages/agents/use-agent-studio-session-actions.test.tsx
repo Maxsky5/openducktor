@@ -225,7 +225,6 @@ const confirmSessionStartModal = async (
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode: "fresh",
-      sourceExternalSessionId: null,
       sourceSessionOptionValue: null,
     });
   });
@@ -365,12 +364,20 @@ describe("useAgentStudioSessionActions", () => {
         existingSessionOptions: [
           {
             value: "builder-1",
-            sourceExternalSessionId: "builder-1",
+            sourceSession: {
+              externalSessionId: "builder-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder #1",
             description: "Existing Builder session",
           },
         ],
-        initialSourceExternalSessionId: "builder-1",
+        initialSourceSession: {
+          externalSessionId: "builder-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         initialStartMode: "reuse",
       });
     });
@@ -456,7 +463,6 @@ describe("useAgentStudioSessionActions", () => {
       state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
-        sourceExternalSessionId: null,
         sourceSessionOptionValue: null,
       });
     });

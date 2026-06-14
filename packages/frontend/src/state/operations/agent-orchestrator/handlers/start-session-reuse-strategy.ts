@@ -1,11 +1,9 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient } from "@/lib/query-client";
-import {
-  getAgentSessionByExternalSessionId,
-  listAgentSessions,
-} from "@/state/agent-session-collection";
+import { getAgentSession } from "@/state/agent-session-collection";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import type {
   StartOrReuseResult,
@@ -34,34 +32,28 @@ const loadPersistedSessionsForRole = async ({
 const loadSessionForReuse = async ({
   ctx,
   deps,
-  externalSessionId,
+  sourceSession,
   mode,
   forceReload = false,
 }: {
   ctx: StartSessionContext;
   deps: StartSessionExecutionDependencies;
-  externalSessionId: string;
+  sourceSession: AgentSessionIdentity;
   mode: "reuse" | "fork";
   forceReload?: boolean;
 }): Promise<AgentSessionState> => {
-  const currentSession = getAgentSessionByExternalSessionId(
-    deps.session.sessionsRef.current,
-    externalSessionId,
-  );
+  const currentSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
   if (forceReload || !currentSession) {
     await deps.session.loadAgentSessions(ctx.taskId, {
-      historyTargetExternalSessionId: externalSessionId,
+      historyTargetSession: sourceSession,
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const loadedSession = getAgentSessionByExternalSessionId(
-    deps.session.sessionsRef.current,
-    externalSessionId,
-  );
+  const loadedSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
   if (!loadedSession) {
     throw new Error(
-      `Failed to load session "${externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
+      `Failed to load session "${sourceSession.externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
     );
   }
 
@@ -136,27 +128,56 @@ const validateReusableSession = async ({
   return reuseError;
 };
 
+const matchesSourceIdentity = (
+  session: Pick<
+    AgentSessionState | AgentSessionRecord,
+    "externalSessionId" | "runtimeKind" | "workingDirectory"
+  >,
+  sourceSession: AgentSessionIdentity,
+): boolean => agentSessionIdentityKey(session) === agentSessionIdentityKey(sourceSession);
+
+const matchesLoadedSourceSession = (
+  session: Pick<
+    AgentSessionState,
+    "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role"
+  >,
+  ctx: StartSessionContext,
+  sourceSession: AgentSessionIdentity,
+): boolean =>
+  session.taskId === ctx.taskId &&
+  session.role === ctx.role &&
+  matchesSourceIdentity(session, sourceSession);
+
+const matchesPersistedSourceSession = (
+  session: Pick<
+    AgentSessionRecord,
+    "externalSessionId" | "runtimeKind" | "workingDirectory" | "role"
+  >,
+  ctx: StartSessionContext,
+  sourceSession: AgentSessionIdentity,
+): boolean => session.role === ctx.role && matchesSourceIdentity(session, sourceSession);
+
 export const resolveLoadedSourceSession = async ({
   ctx,
   deps,
-  sourceExternalSessionId,
+  sourceSession,
 }: {
   ctx: StartSessionContext;
   deps: StartSessionExecutionDependencies;
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
 }): Promise<AgentSessionState> => {
-  const existingSourceSession = listAgentSessions(deps.session.sessionsRef.current).find(
-    (entry) =>
-      entry.taskId === ctx.taskId &&
-      entry.role === ctx.role &&
-      entry.externalSessionId === sourceExternalSessionId,
-  );
+  const existingSourceSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
   if (existingSourceSession) {
+    if (!matchesLoadedSourceSession(existingSourceSession, ctx, sourceSession)) {
+      throw new Error(
+        `Session "${sourceSession.externalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
+      );
+    }
     if (existingSourceSession.historyLoadState !== "loaded") {
       return loadSessionForReuse({
         ctx,
         deps,
-        externalSessionId: existingSourceSession.externalSessionId,
+        sourceSession,
         mode: "fork",
         forceReload: true,
       });
@@ -164,21 +185,21 @@ export const resolveLoadedSourceSession = async ({
     return existingSourceSession;
   }
 
-  const persistedSourceSession = (await loadPersistedSessionsForRole({ ctx })).find(
-    (entry) => entry.externalSessionId === sourceExternalSessionId,
+  const persistedSourceSession = (await loadPersistedSessionsForRole({ ctx })).find((entry) =>
+    matchesPersistedSourceSession(entry, ctx, sourceSession),
   );
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   if (!persistedSourceSession) {
     throw new Error(
-      `Session "${sourceExternalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
+      `Session "${sourceSession.externalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
     );
   }
 
   return loadSessionForReuse({
     ctx,
     deps,
-    externalSessionId: persistedSourceSession.externalSessionId,
+    sourceSession,
     mode: "fork",
   });
 };
@@ -193,13 +214,13 @@ export const executeReuseStart = async ({
   }
   const { matchesQaTarget, matchesBuildTarget } = createWorkingDirectoryMatchers({ ctx, deps });
 
-  const existingSession = listAgentSessions(deps.session.sessionsRef.current).find(
-    (entry) =>
-      entry.taskId === ctx.taskId &&
-      entry.role === ctx.role &&
-      entry.externalSessionId === input.sourceExternalSessionId,
-  );
+  const existingSession = getAgentSession(deps.session.sessionsRef.current, input.sourceSession);
   if (existingSession) {
+    if (!matchesLoadedSourceSession(existingSession, ctx, input.sourceSession)) {
+      throw new Error(
+        `Session "${input.sourceSession.externalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
+      );
+    }
     const reuseError = await validateReusableSession({
       session: existingSession,
       matchesQaTarget,
@@ -212,18 +233,18 @@ export const executeReuseStart = async ({
       };
     }
     throw new Error(
-      `Session "${input.sourceExternalSessionId}" cannot be reused because ${reuseError}.`,
+      `Session "${input.sourceSession.externalSessionId}" cannot be reused because ${reuseError}.`,
     );
   }
 
-  const persistedSession = (await loadPersistedSessionsForRole({ ctx })).find(
-    (entry) => entry.externalSessionId === input.sourceExternalSessionId,
+  const persistedSession = (await loadPersistedSessionsForRole({ ctx })).find((entry) =>
+    matchesPersistedSourceSession(entry, ctx, input.sourceSession),
   );
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   if (!persistedSession) {
     throw new Error(
-      `Session "${input.sourceExternalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
+      `Session "${input.sourceSession.externalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
     );
   }
 
@@ -234,14 +255,14 @@ export const executeReuseStart = async ({
   });
   if (reuseError) {
     throw new Error(
-      `Session "${input.sourceExternalSessionId}" cannot be reused because ${reuseError}.`,
+      `Session "${input.sourceSession.externalSessionId}" cannot be reused because ${reuseError}.`,
     );
   }
 
   const loadedSession = await loadSessionForReuse({
     ctx,
     deps,
-    externalSessionId: persistedSession.externalSessionId,
+    sourceSession: input.sourceSession,
     mode: "reuse",
   });
 

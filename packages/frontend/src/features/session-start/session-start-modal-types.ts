@@ -1,5 +1,6 @@
 import type { GitTargetBranch } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole, AgentSessionStartMode } from "@openducktor/core";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 
@@ -13,7 +14,7 @@ export type SessionStartModalIntent = {
   launchActionId: SessionLaunchActionId;
   initialStartMode?: AgentSessionStartMode;
   existingSessionOptions?: SessionStartExistingSessionOption[];
-  initialSourceExternalSessionId?: string | null;
+  initialSourceSession?: AgentSessionIdentity | null;
   targetWorkingDirectory?: string | null;
   initialTargetBranch?: GitTargetBranch | null;
   initialTargetBranchError?: string | null;

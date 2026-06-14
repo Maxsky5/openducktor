@@ -83,7 +83,11 @@ describe("human-review-feedback-flow", () => {
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_after_human_request_changes",
-        initialSourceExternalSessionId: "builder-session-2",
+        initialSourceSession: {
+          externalSessionId: "builder-session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         message: "Use the standard request-changes workflow.",
         beforeStartAction: {
@@ -97,11 +101,19 @@ describe("human-review-feedback-flow", () => {
         existingSessionOptions: [
           expect.objectContaining({
             value: agentSessionIdentityKey(latestBuilderSession),
-            sourceExternalSessionId: "builder-session-2",
+            sourceSession: {
+              externalSessionId: "builder-session-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
           }),
           expect.objectContaining({
             value: agentSessionIdentityKey(previousBuilderSession),
-            sourceExternalSessionId: "builder-session-1",
+            sourceSession: {
+              externalSessionId: "builder-session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
           }),
         ],
       }),

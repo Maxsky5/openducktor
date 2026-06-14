@@ -25,7 +25,7 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel?: never;
       startMode: "reuse";
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
     }
   | {
       taskId: string;
@@ -39,7 +39,7 @@ export type StartAgentSessionInput =
       role: AgentRole;
       selectedModel: AgentModelSelection;
       startMode: "fork";
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
     };
 
 export type StartAgentSessionResult = AgentSessionRouteIdentity;
@@ -120,7 +120,7 @@ export type StartSessionCreationInput =
   | {
       startMode: "reuse";
       selectedModel?: never;
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
     }
   | {
       startMode: "fresh";
@@ -130,7 +130,7 @@ export type StartSessionCreationInput =
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
     };
 
 export type ResolvedRuntimeAndModel = {

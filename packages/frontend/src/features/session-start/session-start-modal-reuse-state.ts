@@ -9,6 +9,8 @@ import {
   filterRuntimeDefinitionsForStartMode,
   resolveRuntimeKindSelection,
 } from "@/lib/agent-runtime";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
 import { resolveLaunchStartMode } from "./session-start-mode";
@@ -48,15 +50,14 @@ const resolveSelectedSourceSessionValue = (
 
 const resolveInitialSourceSessionValue = (
   options: SessionStartExistingSessionOption[],
-  sourceExternalSessionId: string | null | undefined,
+  sourceSession: AgentSessionIdentity | null | undefined,
 ): string => {
-  const normalizedExternalSessionId = sourceExternalSessionId?.trim() ?? "";
-  if (!normalizedExternalSessionId) {
+  if (!sourceSession) {
     return firstSourceSessionValue(options);
   }
 
-  const matchingOption = options.find(
-    (option) => option.sourceExternalSessionId === normalizedExternalSessionId,
+  const matchingOption = options.find((option) =>
+    matchesAgentSessionIdentity(option.sourceSession, sourceSession),
   );
 
   return matchingOption?.value ?? firstSourceSessionValue(options);
@@ -64,12 +65,12 @@ const resolveInitialSourceSessionValue = (
 
 const resolveInitialStartState = ({
   existingSessionOptions,
-  initialSourceExternalSessionId,
+  initialSourceSession,
   initialStartMode,
   launchActionId,
 }: {
   existingSessionOptions: SessionStartExistingSessionOption[];
-  initialSourceExternalSessionId: string | null | undefined;
+  initialSourceSession: AgentSessionIdentity | null | undefined;
   initialStartMode: AgentSessionStartMode | undefined;
   launchActionId: SessionLaunchActionId;
 }): {
@@ -100,7 +101,7 @@ const resolveInitialStartState = ({
     selectedStartMode,
     selectedSourceSessionValue: resolveInitialSourceSessionValue(
       existingSessionOptions,
-      initialSourceExternalSessionId,
+      initialSourceSession,
     ),
   };
 };
@@ -224,7 +225,7 @@ export function useSessionStartModalReuseState({
         launchActionId: nextIntent.launchActionId,
         existingSessionOptions: nextIntent.existingSessionOptions ?? [],
         initialStartMode: nextIntent.initialStartMode,
-        initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
+        initialSourceSession: nextIntent.initialSourceSession,
       });
       setSelectedStartMode(nextState.selectedStartMode);
       setSelectedSourceSessionValue(nextState.selectedSourceSessionValue);

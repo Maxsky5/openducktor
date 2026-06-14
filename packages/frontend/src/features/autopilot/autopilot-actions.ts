@@ -12,11 +12,13 @@ import {
   roleDefaultSelectionFor,
 } from "@/features/session-start/session-start-selection";
 import type { startSessionWorkflow } from "@/features/session-start/session-start-workflow";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { MISSING_BUILD_TARGET_ERROR } from "@/lib/session-start-errors";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import { loadRepoConfigFromQuery, toRepoSettingsInput } from "@/state/queries/workspace";
 import { AGENT_ROLE_LABELS } from "@/types";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { getSessionLaunchAction } from "../session-start/session-start-launch-options";
 import { AUTOPILOT_ACTION_DEFINITIONS, type AutopilotActionDefinition } from "./autopilot-catalog";
@@ -54,7 +56,7 @@ type StartSessionWorkflowFn = typeof startSessionWorkflow;
 type ResolvedAutopilotStart = {
   kind: "start";
   startMode: "fresh" | "reuse" | "fork";
-  sourceExternalSessionId?: string | null;
+  sourceSession?: AgentSessionIdentity | null;
   targetWorkingDirectory?: string | null;
   preferredSelection?: AgentModelSelection | null;
 };
@@ -180,7 +182,7 @@ const resolveAutopilotStart = async ({
     return {
       kind: "start",
       startMode: action.startPolicy.startMode,
-      sourceExternalSessionId: latestRoleSession.externalSessionId,
+      sourceSession: toAgentSessionIdentity(latestRoleSession),
       preferredSelection: toAgentModelSelection(latestRoleSession.selectedModel),
     };
   }
@@ -206,7 +208,7 @@ const resolveAutopilotStart = async ({
     return {
       kind: "start",
       startMode: "reuse",
-      sourceExternalSessionId: latestRoleSession.externalSessionId,
+      sourceSession: toAgentSessionIdentity(latestRoleSession),
       targetWorkingDirectory: continuationTarget.workingDirectory,
     };
   }
@@ -254,9 +256,7 @@ export const executeAutopilotAction = async ({
         role: action.role,
         launchActionId: action.launchActionId,
         startMode: startResolution.startMode,
-        ...(startResolution.sourceExternalSessionId
-          ? { sourceExternalSessionId: startResolution.sourceExternalSessionId }
-          : {}),
+        ...(startResolution.sourceSession ? { sourceSession: startResolution.sourceSession } : {}),
         ...(startResolution.targetWorkingDirectory !== undefined
           ? { targetWorkingDirectory: startResolution.targetWorkingDirectory }
           : {}),

@@ -5,11 +5,7 @@ import {
   type AgentPendingQuestionRequest,
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
-import {
-  createAgentSessionCollection,
-  getAgentSessionByExternalSessionId,
-  listAgentSessions,
-} from "@/state/agent-session-collection";
+import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
@@ -22,7 +18,9 @@ import {
 type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModel>;
 
 const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
-  getAgentSessionByExternalSessionId(readModel.sessionCollection, externalSessionId);
+  listAgentSessions(readModel.sessionCollection).find(
+    (session) => session.externalSessionId === externalSessionId,
+  ) ?? null;
 
 const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   externalSessionId: "external-1",

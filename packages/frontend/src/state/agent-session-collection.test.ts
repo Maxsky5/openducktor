@@ -3,7 +3,6 @@ import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-util
 import {
   createAgentSessionCollection,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
   listAgentSessions,
   removeAgentSession,
   replaceAgentSession,
@@ -34,25 +33,6 @@ describe("agent-session-collection", () => {
     expect(listAgentSessions(nextCollection)).toHaveLength(2);
   });
 
-  test("keeps external-id-only lookup fail-fast when the id is ambiguous", () => {
-    const collection = createAgentSessionCollection([
-      createAgentSessionFixture({
-        externalSessionId: "external-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo-a",
-      }),
-      createAgentSessionFixture({
-        externalSessionId: "external-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo-b",
-      }),
-    ]);
-
-    expect(() => getAgentSessionByExternalSessionId(collection, "external-1")).toThrow(
-      "Session 'external-1' is duplicated in the local session collection.",
-    );
-  });
-
   test("moves a session when an update changes its identity fields", () => {
     const original = createAgentSessionFixture({
       externalSessionId: "external-1",
@@ -71,7 +51,6 @@ describe("agent-session-collection", () => {
 
     expect(getAgentSession(nextCollection, original)).toBeNull();
     expect(getAgentSession(nextCollection, movedSession)).toBe(movedSession);
-    expect(getAgentSessionByExternalSessionId(nextCollection, "external-1")).toBe(movedSession);
     expect(listAgentSessions(nextCollection)).toEqual([movedSession]);
   });
 

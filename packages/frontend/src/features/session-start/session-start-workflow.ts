@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
-import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -23,7 +23,7 @@ export type SessionStartWorkflowIntent = {
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
   startMode: AgentSessionStartMode;
-  sourceExternalSessionId?: string | null;
+  sourceSession?: AgentSessionIdentity | null;
   targetBranch?: GitTargetBranch;
   targetWorkingDirectory?: string | null;
   postStartAction: SessionStartPostAction;
@@ -89,7 +89,7 @@ const startSessionFromIntent = ({
       taskId: intent.taskId,
       role: intent.role,
       startMode: "reuse",
-      sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "reuse"),
+      sourceSession: requireSourceSession(intent.sourceSession, "reuse"),
       startAgentSession,
     });
   }
@@ -100,7 +100,7 @@ const startSessionFromIntent = ({
       role: intent.role,
       startMode: "fork",
       selectedModel: requireSelectedModel(selection, "fork"),
-      sourceExternalSessionId: requireSourceSessionId(intent.sourceExternalSessionId, "fork"),
+      sourceSession: requireSourceSession(intent.sourceSession, "fork"),
       startAgentSession,
     });
   }
@@ -135,12 +135,12 @@ const requireSelectedModel = (
   );
 };
 
-const requireSourceSessionId = (
-  sourceExternalSessionId: string | null | undefined,
+const requireSourceSession = (
+  sourceSession: AgentSessionIdentity | null | undefined,
   startMode: "reuse" | "fork",
-): string => {
-  if (sourceExternalSessionId) {
-    return sourceExternalSessionId;
+): AgentSessionIdentity => {
+  if (sourceSession) {
+    return sourceSession;
   }
   throw new Error(
     `${startMode === "fork" ? "Fork" : "Reuse"} session start requires a source session.`,

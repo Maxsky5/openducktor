@@ -22,7 +22,11 @@ reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const noop = () => {};
 const existingSessionOption = (externalSessionId: string) => ({
   value: `opencode\u0000${externalSessionId}\u0000/repo/worktree`,
-  sourceExternalSessionId: externalSessionId,
+  sourceSession: {
+    externalSessionId,
+    runtimeKind: "opencode" as const,
+    workingDirectory: "/repo/worktree",
+  },
   label: "Session #1",
 });
 
@@ -140,7 +144,6 @@ describe("SessionStartModal", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       runInBackground: false,
       startMode: "fresh",
-      sourceExternalSessionId: null,
       sourceSessionOptionValue: null,
     });
 
@@ -206,7 +209,6 @@ describe("SessionStartModal", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       runInBackground: false,
       startMode: "reuse",
-      sourceExternalSessionId: "session-1",
       sourceSessionOptionValue: existingSessionOption("session-1").value,
     });
 

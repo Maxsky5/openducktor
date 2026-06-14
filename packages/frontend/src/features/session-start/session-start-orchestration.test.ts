@@ -32,7 +32,7 @@ const sessionIdentity = (
 ) => ({
   externalSessionId,
   runtimeKind,
-  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+  workingDirectory: "/tmp/repo/worktree",
 });
 
 describe("session-start-orchestration", () => {
@@ -72,15 +72,15 @@ describe("session-start-orchestration", () => {
     });
 
     expect(request.selectedModel).toEqual(BUILD_SELECTION);
-    expect(request.initialSourceExternalSessionId).toBe("builder-session-1");
+    expect(request.initialSourceSession).toEqual(sessionIdentity("builder-session-1"));
     expect(request.initialTargetBranch).toEqual({
       remote: "origin",
       branch: "release/2026.04",
     });
     expect(request.initialTargetBranchError).toBe("saved target branch is invalid");
     expect(request.existingSessionOptions).toEqual([
-      expect.objectContaining({ sourceExternalSessionId: "builder-session-2" }),
-      expect.objectContaining({ sourceExternalSessionId: "builder-session-1" }),
+      expect.objectContaining({ sourceSession: sessionIdentity("builder-session-2") }),
+      expect.objectContaining({ sourceSession: sessionIdentity("builder-session-1") }),
     ]);
   });
 
@@ -110,7 +110,7 @@ describe("session-start-orchestration", () => {
       taskSessions: [latestSession, olderSession],
     });
 
-    expect(request.initialSourceExternalSessionId).toBe("builder-session-2");
+    expect(request.initialSourceSession).toEqual(sessionIdentity("builder-session-2"));
   });
 
   test("does not auto-build reusable options for fresh-only launch actions and preserves overrides", () => {
@@ -135,7 +135,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(request.existingSessionOptions).toBeUndefined();
-    expect(request.initialSourceExternalSessionId).toBeNull();
+    expect(request.initialSourceSession).toBeNull();
     expect(request.initialStartMode).toBe("fresh");
     expect(request.targetWorkingDirectory).toBe("/repo/worktrees/TASK-1");
   });
@@ -160,7 +160,7 @@ describe("session-start-orchestration", () => {
         taskId: "TASK-1",
         role: "build",
         launchActionId: "build_implementation_start",
-        initialSourceExternalSessionId: "builder-session-2",
+        initialSourceSession: sessionIdentity("builder-session-2"),
         postStartAction: "kickoff",
       },
       selectedModel: null,
@@ -168,7 +168,7 @@ describe("session-start-orchestration", () => {
       activeSession,
     });
 
-    expect(request.initialSourceExternalSessionId).toBe("builder-session-2");
+    expect(request.initialSourceSession).toEqual(sessionIdentity("builder-session-2"));
   });
 
   test("keeps an explicit target branch override instead of selected task defaults", () => {
@@ -218,7 +218,11 @@ describe("session-start-orchestration", () => {
       },
       decision: {
         startMode: "reuse",
-        sourceExternalSessionId: "builder-session-1",
+        sourceSession: {
+          externalSessionId: "builder-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
@@ -232,7 +236,11 @@ describe("session-start-orchestration", () => {
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         startMode: "reuse",
-        sourceExternalSessionId: "builder-session-1",
+        sourceSession: {
+          externalSessionId: "builder-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
     expect(startAgentSession).not.toHaveBeenCalledWith(
@@ -255,7 +263,11 @@ describe("session-start-orchestration", () => {
         existingSessionOptions: [
           {
             value: "codex-session-1",
-            sourceExternalSessionId: "codex-session-1",
+            sourceSession: {
+              externalSessionId: "codex-session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Codex session",
             description: "Existing Codex builder session",
             runtimeKind: "codex",
@@ -265,7 +277,11 @@ describe("session-start-orchestration", () => {
       },
       decision: {
         startMode: "reuse",
-        sourceExternalSessionId: "codex-session-1",
+        sourceSession: {
+          externalSessionId: "codex-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
@@ -287,7 +303,11 @@ describe("session-start-orchestration", () => {
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         startMode: "reuse",
-        sourceExternalSessionId: "codex-session-1",
+        sourceSession: {
+          externalSessionId: "codex-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
   });
@@ -307,7 +327,11 @@ describe("session-start-orchestration", () => {
       decision: {
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
-        sourceExternalSessionId: "builder-session-1",
+        sourceSession: {
+          externalSessionId: "builder-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       },
       task: createTaskCardFixture({ id: "TASK-1" }),
       startAgentSession,
@@ -318,7 +342,11 @@ describe("session-start-orchestration", () => {
       expect.objectContaining({
         startMode: "fork",
         selectedModel: BUILD_SELECTION,
-        sourceExternalSessionId: "builder-session-1",
+        sourceSession: {
+          externalSessionId: "builder-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
   });

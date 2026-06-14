@@ -12,6 +12,7 @@ import type {
 } from "@/features/session-start";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { ActiveWorkspace } from "../../types/state-slices";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
@@ -43,7 +44,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
       message: string;
       targetWorkingDirectory?: string | null;
       existingSessionOptions?: SessionStartExistingSessionOption[];
-      initialSourceExternalSessionId?: string | null;
+      initialSourceSession?: AgentSessionIdentity | null;
     },
   ) => Promise<SessionStartWorkflowResult | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -74,8 +75,8 @@ export function useAgentStudioRebaseConflictResolution({
         ...(request.existingSessionOptions.length > 0
           ? { existingSessionOptions: request.existingSessionOptions }
           : {}),
-        ...(request.initialSourceExternalSessionId !== undefined
-          ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
+        ...(request.initialSourceSession !== undefined
+          ? { initialSourceSession: request.initialSourceSession }
           : {}),
       }),
     [startSessionRequest],

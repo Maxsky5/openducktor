@@ -4,7 +4,6 @@ import {
   type AgentSessionCollection,
   createAgentSessionCollection,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
   listAgentSessions,
 } from "@/state/agent-session-collection";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
@@ -44,9 +43,11 @@ describe("useAgentSessionMutations", () => {
     });
     await Promise.resolve();
 
-    expect(getAgentSessionByExternalSessionId(sessionsRef.current, "external-1")?.status).toBe(
-      "running",
-    );
+    expect(
+      listAgentSessions(sessionsRef.current).find(
+        (entry) => entry.externalSessionId === "external-1",
+      )?.status,
+    ).toBe("running");
     expect(persisted).toHaveLength(1);
 
     await harness.run(({ updateSession }) => {
@@ -90,7 +91,9 @@ describe("useAgentSessionMutations", () => {
     ).toThrow("Session 'external-1' is not a workflow session.");
 
     expect(
-      getAgentSessionByExternalSessionId(sessionsRef.current, "external-1")?.role,
+      listAgentSessions(sessionsRef.current).find(
+        (entry) => entry.externalSessionId === "external-1",
+      )?.role,
     ).not.toBeNull();
     expect(persisted).toEqual([]);
     await harness.unmount();
@@ -131,9 +134,6 @@ describe("useAgentSessionMutations", () => {
 
     expect(getAgentSession(sessionsRef.current, session)).toBeNull();
     expect(getAgentSession(sessionsRef.current, movedSession)).toBe(movedSession);
-    expect(getAgentSessionByExternalSessionId(sessionsRef.current, "external-1")).toBe(
-      movedSession,
-    );
     expect(listAgentSessions(sessionsRef.current)).toEqual([movedSession]);
     await harness.unmount();
   });

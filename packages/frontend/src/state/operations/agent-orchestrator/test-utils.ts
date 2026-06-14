@@ -9,7 +9,7 @@ import {
   type AgentSessionCollection,
   createAgentSessionCollection,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
+  listAgentSessions,
   replaceAgentSession,
   replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
@@ -112,7 +112,9 @@ export const findAgentSessionFixture = (
   sessionsRef: AgentSessionCollectionRef,
   externalSessionId = "session-1",
 ): AgentSessionState | undefined =>
-  getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId) ?? undefined;
+  listAgentSessions(sessionsRef.current).find(
+    (session) => session.externalSessionId === externalSessionId,
+  );
 
 export const getAgentSessionFixture = (
   sessionsRef: AgentSessionCollectionRef,

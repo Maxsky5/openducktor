@@ -231,10 +231,10 @@ describe("useAgentStudioFreshSessionCreation", () => {
 
   test("reuses an existing session without starting a fresh one", async () => {
     const startAgentSession = mock(
-      async (input: { startMode: string; sourceExternalSessionId?: string }) =>
+      async (input: { startMode: string; sourceSession?: { externalSessionId: string } }) =>
         sessionIdentity(
           input.startMode === "reuse"
-            ? (input.sourceExternalSessionId ?? "session-existing")
+            ? (input.sourceSession?.externalSessionId ?? "session-existing")
             : "session-new",
         ),
     );
@@ -254,7 +254,11 @@ describe("useAgentStudioFreshSessionCreation", () => {
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
-            sourceExternalSessionId: "session-existing",
+            sourceSession: {
+              externalSessionId: "session-existing",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
           }),
       }),
     );
@@ -277,7 +281,11 @@ describe("useAgentStudioFreshSessionCreation", () => {
         taskId: "task-1",
         role: "build",
         startMode: "reuse",
-        sourceExternalSessionId: "session-existing",
+        sourceSession: {
+          externalSessionId: "session-existing",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
@@ -306,7 +314,11 @@ describe("useAgentStudioFreshSessionCreation", () => {
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
-            sourceExternalSessionId: "session-existing",
+            sourceSession: {
+              externalSessionId: "session-existing",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
           }),
       }),
     );

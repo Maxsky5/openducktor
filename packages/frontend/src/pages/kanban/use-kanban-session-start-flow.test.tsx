@@ -355,14 +355,22 @@ describe("useKanbanSessionStartFlow", () => {
     );
     expect(modal?.existingSessionOptions).toEqual([
       expect.objectContaining({
-        sourceExternalSessionId: "builder-session-2",
+        sourceSession: {
+          externalSessionId: "builder-session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         label: "Builder #2",
         description: "3/20/2026, 12:00:00 PM · idle · builder-",
         secondaryLabel: "Latest",
         selectedModel: expect.objectContaining({ profileId: "builder" }),
       }),
       expect.objectContaining({
-        sourceExternalSessionId: "builder-session-1",
+        sourceSession: {
+          externalSessionId: "builder-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         label: "Builder #1",
         description: "3/19/2026, 12:00:00 PM · idle · builder-",
         selectedModel: expect.objectContaining({ profileId: "builder" }),
@@ -419,7 +427,6 @@ describe("useKanbanSessionStartFlow", () => {
       await state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "reuse",
-        sourceExternalSessionId: "builder-session-2",
         sourceSessionOptionValue: selectedSourceSessionValue,
       });
       await Promise.resolve();
@@ -432,7 +439,11 @@ describe("useKanbanSessionStartFlow", () => {
         taskId: "TASK-1",
         role: "build",
         startMode: "reuse",
-        sourceExternalSessionId: "builder-session-2",
+        sourceSession: {
+          externalSessionId: "builder-session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
 
@@ -481,7 +492,6 @@ describe("useKanbanSessionStartFlow", () => {
       await state.sessionStartModal?.onConfirm({
         runInBackground: false,
         startMode: "fresh",
-        sourceExternalSessionId: null,
         sourceSessionOptionValue: null,
         targetBranch: "refs/remotes/origin/release/2026.04",
       });
@@ -524,7 +534,6 @@ describe("useKanbanSessionStartFlow", () => {
         await state.sessionStartModal?.onConfirm({
           runInBackground: true,
           startMode: "fresh",
-          sourceExternalSessionId: null,
           sourceSessionOptionValue: null,
         });
         await Promise.resolve();
@@ -546,7 +555,6 @@ describe("useKanbanSessionStartFlow", () => {
         state.sessionStartModal?.onConfirm({
           runInBackground: true,
           startMode: "fresh",
-          sourceExternalSessionId: null,
           sourceSessionOptionValue: null,
         });
         await Promise.resolve();
@@ -581,7 +589,6 @@ describe("useKanbanSessionStartFlow", () => {
         state.sessionStartModal?.onConfirm({
           runInBackground: true,
           startMode: "fresh",
-          sourceExternalSessionId: null,
           sourceSessionOptionValue: null,
         });
         await Promise.resolve();
@@ -696,7 +703,6 @@ describe("useKanbanSessionStartFlow", () => {
         modal?.onConfirm({
           runInBackground: false,
           startMode: "reuse",
-          sourceExternalSessionId: "builder-session-2",
           sourceSessionOptionValue: selectedSourceSessionValue,
         });
         await Promise.resolve();
@@ -710,7 +716,11 @@ describe("useKanbanSessionStartFlow", () => {
           taskId: "TASK-1",
           role: "build",
           startMode: "reuse",
-          sourceExternalSessionId: "builder-session-2",
+          sourceSession: {
+            externalSessionId: "builder-session-2",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         }),
       );
 
@@ -760,8 +770,12 @@ describe("useKanbanSessionStartFlow", () => {
     );
     expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
     expect(sessionStartModal?.existingSessionOptions).toEqual([
-      expect.objectContaining({ sourceExternalSessionId: "builder-session-2" }),
-      expect.objectContaining({ sourceExternalSessionId: "builder-session-1" }),
+      expect.objectContaining({
+        sourceSession: expect.objectContaining({ externalSessionId: "builder-session-2" }),
+      }),
+      expect.objectContaining({
+        sourceSession: expect.objectContaining({ externalSessionId: "builder-session-1" }),
+      }),
     ]);
     expect(humanRequestChangesTask).not.toHaveBeenCalled();
     expect(startAgentSession).not.toHaveBeenCalled();

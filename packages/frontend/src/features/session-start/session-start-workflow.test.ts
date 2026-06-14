@@ -116,7 +116,11 @@ describe("session-start-workflow", () => {
         role: "build",
         launchActionId: "build_pull_request_generation",
         startMode: "reuse",
-        sourceExternalSessionId: "builder-session-1",
+        sourceSession: {
+          externalSessionId: "builder-session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         targetBranch: {
           remote: "origin",
           branch: "release/2026.04",
@@ -332,7 +336,11 @@ describe("session-start-workflow", () => {
         role: "build",
         launchActionId: "build_implementation_start",
         startMode: "reuse",
-        sourceExternalSessionId: "session-codex-reuse",
+        sourceSession: {
+          externalSessionId: "session-codex-reuse",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
       },
       selection: CODEX_BUILD_SELECTION,
@@ -361,7 +369,11 @@ describe("session-start-workflow", () => {
     expect(startAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         startMode: "reuse",
-        sourceExternalSessionId: "session-codex-reuse",
+        sourceSession: {
+          externalSessionId: "session-codex-reuse",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
   });

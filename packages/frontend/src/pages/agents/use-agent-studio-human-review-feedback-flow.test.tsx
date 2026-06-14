@@ -168,7 +168,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: string;
       role: "build";
       existingSessionOptions: Array<{ value: string }>;
-      initialSourceExternalSessionId?: string | null;
+      initialSourceSession?: { externalSessionId: string } | null;
       initialStartMode?: "fresh" | "reuse" | "fork";
       postStartAction: "kickoff";
       message?: string;
@@ -205,7 +205,11 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       taskId: "task-1",
       role: "build",
       launchActionId: "build_after_human_request_changes",
-      initialSourceExternalSessionId: "session-build-existing",
+      initialSourceSession: {
+        externalSessionId: "session-build-existing",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+      },
       postStartAction: "kickoff",
       message: "Ship the requested fixes.",
       beforeStartAction: {

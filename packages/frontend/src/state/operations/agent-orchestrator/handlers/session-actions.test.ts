@@ -5,7 +5,6 @@ import {
   type AgentSessionCollection,
   createAgentSessionCollection,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
   listAgentSessions,
   replaceAgentSession,
   replaceAgentSessionByIdentity,
@@ -50,7 +49,10 @@ const getSession = (
   sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ): AgentSessionState => {
-  const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+  const session =
+    listAgentSessions(sessionsRef.current).find(
+      (entry) => entry.externalSessionId === externalSessionId,
+    ) ?? null;
   if (!session) {
     throw new Error(`Expected session ${externalSessionId}`);
   }

@@ -73,7 +73,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
           ctx: createStartSessionContextFixture(),
           input: {
             startMode: "reuse",
-            sourceExternalSessionId: "ext-build",
+            sourceSession: {
+              externalSessionId: "ext-build",
+              runtimeKind: "opencode",
+              workingDirectory: "/tmp/repo/worktree",
+            },
           },
           deps: {
             session: sessionDependencies,
@@ -105,6 +109,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
     const sessionDependencies = createSessionDependenciesFixture({
       sessionsRef: createSessionsRef([
         createBuildSessionFixture({
+          externalSessionId: "ext-build",
           workingDirectory: "/tmp/repo/old-worktree",
         }),
       ]),
@@ -115,7 +120,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         ctx: createStartSessionContextFixture(),
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "ext-build",
+          sourceSession: {
+            externalSessionId: "ext-build",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/old-worktree",
+          },
         },
         deps: {
           session: sessionDependencies,
@@ -147,7 +156,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "ext-qa",
+          sourceSession: {
+            externalSessionId: "ext-qa",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/worktree",
+          },
         },
         deps: {
           session: sessionDependencies,
@@ -212,7 +225,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
           startMode: "reuse",
-          sourceExternalSessionId: "ext-qa",
+          sourceSession: {
+            externalSessionId: "ext-qa",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo/worktree",
+          },
         },
         deps: {
           session: sessionDependencies,

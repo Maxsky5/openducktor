@@ -16,6 +16,7 @@ import type {
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 
 type UseAgentStudioHumanReviewFeedbackFlowArgs = {
@@ -27,7 +28,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
       role: "build";
       launchActionId: SessionLaunchActionId;
       existingSessionOptions: SessionStartExistingSessionOption[];
-      initialSourceExternalSessionId?: string | null;
+      initialSourceSession?: AgentSessionIdentity | null;
       postStartAction: SessionStartPostAction;
     },
   ) => Promise<SessionStartWorkflowResult | undefined>;
@@ -99,8 +100,8 @@ export function useAgentStudioHumanReviewFeedbackFlow({
             role: request.role,
             launchActionId: request.launchActionId,
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceExternalSessionId !== undefined
-              ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
+            ...(request.initialSourceSession !== undefined
+              ? { initialSourceSession: request.initialSourceSession }
               : {}),
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             postStartAction: request.postStartAction,

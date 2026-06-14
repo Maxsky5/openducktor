@@ -10,6 +10,7 @@ import {
   type SessionStartFlowRequest,
   type SessionStartWorkflowResult,
 } from "@/features/session-start";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -99,7 +100,7 @@ export function useAgentStudioFreshSessionCreation({
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const reuseTargetSession =
           decision.startMode === "reuse" &&
-          activeSession?.externalSessionId === decision.sourceExternalSessionId
+          matchesAgentSessionIdentity(activeSession, decision.sourceSession)
             ? activeSession
             : null;
         const shouldSwitchContext = shouldTriggerContextSwitchIntent({

@@ -22,6 +22,7 @@ import {
   resolveBuildContinuationLaunchAction,
   useSessionStartModalRunner,
 } from "@/features/session-start";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
@@ -275,7 +276,9 @@ export function useKanbanSessionStartFlow({
         taskId,
         role: "build",
         launchActionId: "build_pull_request_generation",
-        initialSourceExternalSessionId: builderSessions[0]?.externalSessionId ?? null,
+        initialSourceSession: builderSessions[0]
+          ? toAgentSessionIdentity(builderSessions[0])
+          : null,
         existingSessionOptions: buildReusableSessionOptions({
           sessions: builderSessions,
           role: "build",
@@ -410,8 +413,8 @@ export function useKanbanSessionStartFlow({
             launchActionId: request.launchActionId,
             ...(request.initialStartMode ? { initialStartMode: request.initialStartMode } : {}),
             existingSessionOptions: request.existingSessionOptions,
-            ...(request.initialSourceExternalSessionId !== undefined
-              ? { initialSourceExternalSessionId: request.initialSourceExternalSessionId }
+            ...(request.initialSourceSession !== undefined
+              ? { initialSourceSession: request.initialSourceSession }
               : {}),
             postStartAction: request.postStartAction,
             message: request.message,

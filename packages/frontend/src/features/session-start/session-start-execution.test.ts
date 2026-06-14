@@ -21,14 +21,14 @@ describe("session-start-execution", () => {
       taskId: "TASK-1",
       role: "build",
       startMode: "reuse",
-      sourceExternalSessionId: "session-build-1",
+      sourceSession: sessionIdentity("session-build-1"),
     });
 
     expect(result).toEqual({
       taskId: "TASK-1",
       role: "build",
       startMode: "reuse",
-      sourceExternalSessionId: "session-build-1",
+      sourceSession: sessionIdentity("session-build-1"),
     });
   });
 
@@ -69,14 +69,14 @@ describe("session-start-execution", () => {
       taskId: "TASK-1",
       role: "build",
       startMode: "reuse",
-      sourceExternalSessionId: "session-build-1",
+      sourceSession: sessionIdentity("session-build-1"),
       startAgentSession,
     });
 
     expect(startAgentSession).toHaveBeenLastCalledWith(
       expect.objectContaining({
         startMode: "reuse",
-        sourceExternalSessionId: "session-build-1",
+        sourceSession: sessionIdentity("session-build-1"),
       }),
     );
   });

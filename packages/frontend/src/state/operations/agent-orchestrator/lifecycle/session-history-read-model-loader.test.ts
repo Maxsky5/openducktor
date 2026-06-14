@@ -116,7 +116,11 @@ describe("loadSessionHistoryForReadModel", () => {
         liveSessionRefs: [],
         historyRuntimeContext: promptContext,
         isStaleRepoOperation: () => false,
-        requestedExternalSessionId: "missing-session",
+        requestedSession: {
+          externalSessionId: "missing-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildAgentStudioQuickActions,
@@ -133,7 +132,9 @@ describe("agent-studio-quick-actions", () => {
     });
     expect(humanReviewOptions[0]).toMatchObject({
       launchActionId: "build_pull_request_generation",
-      initialSourceExternalSessionId: agentSessionIdentityKey(humanReviewBuilderSession),
+      initialSourceSession: expect.objectContaining({
+        externalSessionId: humanReviewBuilderSession.externalSessionId,
+      }),
     });
     expect(humanReviewOptions.map((option) => option.launchActionId)).toEqual([
       "build_pull_request_generation",
@@ -413,7 +414,9 @@ describe("agent-studio-quick-actions", () => {
     expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
         launchActionId: "build_pull_request_generation",
-        initialSourceExternalSessionId: agentSessionIdentityKey(humanReviewBuilderSession),
+        initialSourceSession: expect.objectContaining({
+          externalSessionId: humanReviewBuilderSession.externalSessionId,
+        }),
       }),
     );
   });

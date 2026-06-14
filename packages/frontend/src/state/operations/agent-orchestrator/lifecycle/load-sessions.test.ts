@@ -8,7 +8,7 @@ import {
   createAgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
+  listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
@@ -119,7 +119,9 @@ const createLoaderHarness = ({
     loadAgentSessions,
     listenedSessions,
     getSession: (externalSessionId: string) =>
-      getAgentSessionByExternalSessionId(sessionCollection, externalSessionId),
+      listAgentSessions(sessionCollection).find(
+        (session) => session.externalSessionId === externalSessionId,
+      ) ?? null,
     setSessions: (updater: (current: AgentSessionCollection) => AgentSessionCollection) => {
       sessionCollection = updater(sessionCollection);
     },
@@ -174,7 +176,11 @@ describe("createLoadAgentSessions", () => {
     });
 
     expect(presenceReads).toBe(1);
-    expect(getAgentSessionByExternalSessionId(sessionCollection, record.externalSessionId)).toEqual(
+    expect(
+      listAgentSessions(sessionCollection).find(
+        (session) => session.externalSessionId === record.externalSessionId,
+      ) ?? null,
+    ).toEqual(
       expect.objectContaining({
         externalSessionId: record.externalSessionId,
         status: "stopped",
@@ -232,7 +238,11 @@ describe("createLoadAgentSessions", () => {
     });
 
     await harness.loadAgentSessions("task-1", {
-      historyTargetExternalSessionId: " external-1 ",
+      historyTargetSession: {
+        externalSessionId: "external-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+      },
     });
 
     expect(historyLoads).toBe(1);
@@ -249,7 +259,11 @@ describe("createLoadAgentSessions", () => {
 
     await expect(
       harness.loadAgentSessions("task-1", {
-        historyTargetExternalSessionId: "missing-session",
+        historyTargetSession: {
+          externalSessionId: "missing-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });

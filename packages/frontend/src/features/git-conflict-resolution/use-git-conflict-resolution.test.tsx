@@ -97,11 +97,19 @@ describe("useGitConflictResolution", () => {
           existingSessionOptions: [
             expect.objectContaining({
               value: agentSessionIdentityKey(matchingWorktreeSession),
-              sourceExternalSessionId: "external-build-1",
+              sourceSession: {
+                externalSessionId: "external-build-1",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo/worktree",
+              },
             }),
           ],
           initialStartMode: "reuse",
-          initialSourceExternalSessionId: "external-build-1",
+          initialSourceSession: {
+            externalSessionId: "external-build-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         }),
       );
       expect(openedSessions).toEqual(["external-build-1"]);
@@ -143,7 +151,11 @@ describe("useGitConflictResolution", () => {
       expect(startConflictResolutionSession).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
-          initialSourceExternalSessionId: "external-build-1",
+          initialSourceSession: {
+            externalSessionId: "external-build-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
           targetWorkingDirectory: "/repo/worktrees/task-1",
         }),
       );

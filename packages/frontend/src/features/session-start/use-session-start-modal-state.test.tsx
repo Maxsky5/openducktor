@@ -215,7 +215,11 @@ const createExistingSessionWithModel = ({
   value: string;
 }) => ({
   value,
-  sourceExternalSessionId: sourceExternalSessionId ?? value,
+  sourceSession: {
+    externalSessionId: sourceExternalSessionId ?? value,
+    runtimeKind,
+    workingDirectory: "/repo/worktree",
+  },
   label,
   description,
   runtimeKind,
@@ -545,7 +549,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-build-1",
-            sourceExternalSessionId: "session-build-1",
+            sourceSession: {
+              externalSessionId: "session-build-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 1",
             description: "Latest builder session",
             selectedModel: null,
@@ -567,7 +575,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-build-pr",
-            sourceExternalSessionId: "session-build-pr",
+            sourceSession: {
+              externalSessionId: "session-build-pr",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session PR",
             description: "Builder session for PR generation",
             selectedModel: null,
@@ -854,18 +866,30 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-2",
-            sourceExternalSessionId: "session-2",
+            sourceSession: {
+              externalSessionId: "session-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "QA session 2",
             description: "Second session",
           },
           {
             value: "session-1",
-            sourceExternalSessionId: "session-1",
+            sourceSession: {
+              externalSessionId: "session-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "QA session 1",
             description: "First session",
           },
         ],
-        initialSourceExternalSessionId: "session-1",
+        initialSourceSession: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start QA Session",
       });
@@ -892,7 +916,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-fallback",
-            sourceExternalSessionId: "session-fallback",
+            sourceSession: {
+              externalSessionId: "session-fallback",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session fallback",
             description: "Fallback builder session",
             selectedModel: {
@@ -904,7 +932,11 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceExternalSessionId: "missing-session",
+        initialSourceSession: {
+          externalSessionId: "missing-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -965,7 +997,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-newer",
-            sourceExternalSessionId: "session-newer",
+            sourceSession: {
+              externalSessionId: "session-newer",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
@@ -978,7 +1014,11 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-older",
-            sourceExternalSessionId: "session-older",
+            sourceSession: {
+              externalSessionId: "session-older",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 1",
             description: "Older builder session",
             selectedModel: {
@@ -990,7 +1030,11 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceExternalSessionId: "session-older",
+        initialSourceSession: {
+          externalSessionId: "session-older",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -1040,7 +1084,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-pr-2",
-            sourceExternalSessionId: "session-pr-2",
+            sourceSession: {
+              externalSessionId: "session-pr-2",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
@@ -1053,7 +1101,11 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-pr-1",
-            sourceExternalSessionId: "session-pr-1",
+            sourceSession: {
+              externalSessionId: "session-pr-1",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session 1",
             description: "Older builder session",
             selectedModel: {
@@ -1065,7 +1117,11 @@ describe("useSessionStartModalState", () => {
             },
           },
         ],
-        initialSourceExternalSessionId: "session-pr-1",
+        initialSourceSession: {
+          externalSessionId: "session-pr-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -1291,7 +1347,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-with-model",
-            sourceExternalSessionId: "session-with-model",
+            sourceSession: {
+              externalSessionId: "session-with-model",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session with model",
             description: "Session with persisted model",
             selectedModel: {
@@ -1304,13 +1364,21 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-without-model",
-            sourceExternalSessionId: "session-without-model",
+            sourceSession: {
+              externalSessionId: "session-without-model",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session without model",
             description: "Session without persisted model",
             selectedModel: null,
           },
         ],
-        initialSourceExternalSessionId: "session-with-model",
+        initialSourceSession: {
+          externalSessionId: "session-with-model",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
         postStartAction: "kickoff",
         title: "Start Builder Session",
       });
@@ -1347,7 +1415,11 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-valid",
-            sourceExternalSessionId: "session-valid",
+            sourceSession: {
+              externalSessionId: "session-valid",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
             label: "Builder session valid",
             description: "Valid builder session",
             selectedModel: {

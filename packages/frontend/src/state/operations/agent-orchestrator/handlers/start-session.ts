@@ -1,4 +1,5 @@
 import type { AgentSessionRef } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { createRepoStaleGuard, throwIfRepoStale } from "../support/core";
@@ -59,7 +60,7 @@ const toSessionCreationInput = ({
   if (input.startMode === "reuse") {
     return {
       startMode: "reuse",
-      sourceExternalSessionId: input.sourceExternalSessionId,
+      sourceSession: input.sourceSession,
     };
   }
 
@@ -67,7 +68,7 @@ const toSessionCreationInput = ({
     return {
       startMode: "fork",
       selectedModel: input.selectedModel,
-      sourceExternalSessionId: input.sourceExternalSessionId,
+      sourceSession: input.sourceSession,
     };
   }
 
@@ -185,8 +186,8 @@ export const createStartAgentSession = ({
       void requireSelectedModelRuntimeKindForStart(role, input.selectedModel);
     }
 
-    const normalizedSourceSessionId =
-      input.startMode === "fresh" ? "" : input.sourceExternalSessionId.trim();
+    const sourceSessionKey =
+      input.startMode === "fresh" ? "" : agentSessionIdentityKey(input.sourceSession);
     const freshStartTarget = await resolveFreshStartTarget({
       input,
       ctx: startCtx,
@@ -201,7 +202,7 @@ export const createStartAgentSession = ({
       taskId,
       role,
       startMode,
-      normalizedSourceSessionId,
+      sourceSessionKey,
       normalizedTargetWorkingDirectory,
       selectedModelKey,
     ];

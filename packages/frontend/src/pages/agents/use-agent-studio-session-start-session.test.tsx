@@ -191,10 +191,10 @@ describe("useAgentStudioSessionStartSession", () => {
   test("does not overwrite selected model when reusing an existing session", async () => {
     const updateQuery = mock(() => {});
     const startAgentSession = mock(
-      async (input: { startMode: string; sourceExternalSessionId?: string }) =>
+      async (input: { startMode: string; sourceSession?: { externalSessionId: string } }) =>
         sessionIdentity(
           input.startMode === "reuse"
-            ? (input.sourceExternalSessionId ?? "session-existing")
+            ? (input.sourceSession?.externalSessionId ?? "session-existing")
             : "session-new",
         ),
     );
@@ -205,7 +205,11 @@ describe("useAgentStudioSessionStartSession", () => {
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
-            sourceExternalSessionId: "session-existing",
+            sourceSession: {
+              externalSessionId: "session-existing",
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktree",
+            },
           }),
       }),
     );
@@ -220,7 +224,11 @@ describe("useAgentStudioSessionStartSession", () => {
         taskId: "task-1",
         role: "spec",
         startMode: "reuse",
-        sourceExternalSessionId: "session-existing",
+        sourceSession: {
+          externalSessionId: "session-existing",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+        },
       }),
     );
     expect(updateQuery).toHaveBeenCalledWith(

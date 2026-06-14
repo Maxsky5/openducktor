@@ -17,6 +17,7 @@ import {
 } from "@/features/task-workflow/task-workflow-actions";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type AgentStudioQuickActionOption = {
   id: string;
@@ -29,7 +30,7 @@ export type AgentStudioQuickActionOption = {
   disabledReason?: string;
   initialStartMode?: AgentSessionStartMode;
   existingSessionOptions?: SessionStartExistingSessionOption[];
-  initialSourceExternalSessionId?: string | null;
+  initialSourceSession?: AgentSessionIdentity | null;
   requiresHumanFeedback?: boolean;
 };
 
@@ -243,7 +244,7 @@ export const buildAgentStudioQuickActions = (params: {
             initialStartMode: getSessionLaunchAction("build_pull_request_generation")
               .defaultStartMode,
             existingSessionOptions: builderSessionOptions,
-            initialSourceExternalSessionId: builderSessionOptions[0]?.value ?? null,
+            initialSourceSession: builderSessionOptions[0]?.sourceSession ?? null,
           }
         : {}),
     });

@@ -35,21 +35,6 @@ export const getAgentSession = (
   return collection.get(agentSessionCollectionKey(identity)) ?? null;
 };
 
-export const getAgentSessionByExternalSessionId = (
-  collection: AgentSessionCollection,
-  externalSessionId: string,
-): AgentSessionState | null => {
-  const matches = listAgentSessions(collection).filter(
-    (session) => session.externalSessionId === externalSessionId,
-  );
-  if (matches.length > 1) {
-    throw new Error(
-      `Session '${externalSessionId}' is duplicated in the local session collection.`,
-    );
-  }
-  return matches[0] ?? null;
-};
-
 export const replaceAgentSession = (
   collection: AgentSessionCollection,
   session: AgentSessionState,

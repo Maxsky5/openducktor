@@ -266,7 +266,7 @@ const confirmSessionStartModal = async ({
       const selectedOption = modal.existingSessionOptions.find(
         (option) => option.value === modal.selectedSourceSessionValue,
       );
-      return selectedOption?.sourceExternalSessionId === sourceExternalSessionId;
+      return selectedOption?.sourceSession.externalSessionId === sourceExternalSessionId;
     }
 
     const selection = modal.selectedModelSelection;
@@ -282,7 +282,6 @@ const confirmSessionStartModal = async ({
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode,
-      sourceExternalSessionId,
       sourceSessionOptionValue:
         startMode === "fresh" ? null : (modal?.selectedSourceSessionValue ?? null),
     });
@@ -721,10 +720,10 @@ describe("useAgentStudioSessionStartFlow", () => {
 
   test("handleCreateSession for human changes opens the feedback modal before model selection", async () => {
     const startAgentSession = mock(
-      async (input: { startMode: string; sourceExternalSessionId?: string }) =>
+      async (input: { startMode: string; sourceSession?: { externalSessionId: string } }) =>
         sessionIdentity(
           input.startMode === "reuse"
-            ? (input.sourceExternalSessionId ?? "session-build-latest")
+            ? (input.sourceSession?.externalSessionId ?? "session-build-latest")
             : "session-build-human",
         ),
     );
@@ -922,8 +921,12 @@ describe("useAgentStudioSessionStartFlow", () => {
     }
     expect(modal.selectedSourceSessionValue).toBe(selectedSourceOption.value);
     expect(modal.existingSessionOptions).toEqual([
-      expect.objectContaining({ sourceExternalSessionId: "session-build-latest" }),
-      expect.objectContaining({ sourceExternalSessionId: "session-build-older" }),
+      expect.objectContaining({
+        sourceSession: expect.objectContaining({ externalSessionId: "session-build-latest" }),
+      }),
+      expect.objectContaining({
+        sourceSession: expect.objectContaining({ externalSessionId: "session-build-older" }),
+      }),
     ]);
     expect(startAgentSession).not.toHaveBeenCalled();
 

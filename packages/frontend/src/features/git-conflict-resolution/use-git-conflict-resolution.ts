@@ -5,7 +5,7 @@ import {
   buildGitConflictResolutionPrompt,
   buildReusableSessionOptions,
 } from "@/features/session-start";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
@@ -21,7 +21,7 @@ export type StartGitConflictResolutionSessionInput = {
   message: string;
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
-  initialSourceExternalSessionId: string | null;
+  initialSourceSession: AgentSessionRouteIdentity | null;
   targetWorkingDirectory: string;
 };
 
@@ -134,7 +134,9 @@ export function useGitConflictResolution({
           role: "build",
         }),
         initialStartMode: defaultBuilderSession ? "reuse" : "fresh",
-        initialSourceExternalSessionId: defaultBuilderSession?.externalSessionId ?? null,
+        initialSourceSession: defaultBuilderSession
+          ? toAgentSessionIdentity(defaultBuilderSession)
+          : null,
         targetWorkingDirectory: conflictWorkingDirectory,
       });
 

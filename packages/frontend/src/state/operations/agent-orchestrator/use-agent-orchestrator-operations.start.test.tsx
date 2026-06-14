@@ -374,7 +374,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
-          sourceExternalSessionId: "external-in-memory",
+          sourceSession: {
+            externalSessionId: "external-in-memory",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         });
         secondSessionId = session.externalSessionId;
       });
@@ -616,7 +620,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
-          sourceExternalSessionId: "external-1",
+          sourceSession: {
+            externalSessionId: "external-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         });
         externalSessionId = session.externalSessionId;
       });

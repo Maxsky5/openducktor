@@ -133,7 +133,7 @@ export const loadRepoAgentSessions = async ({
     liveSessionRefs: readModel.liveSessionRefs,
     historyRuntimeContext,
     isStaleRepoOperation,
-    requestedExternalSessionId: options?.historyTargetExternalSessionId,
+    requestedSession: options?.historyTargetSession,
   });
 };
 

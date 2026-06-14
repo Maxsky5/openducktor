@@ -105,7 +105,11 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           role: "build",
           postStartAction: "send_message",
           initialStartMode: "reuse",
-          initialSourceExternalSessionId: "build-1",
+          initialSourceSession: {
+            externalSessionId: "build-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         }),
       );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
@@ -149,10 +153,18 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           existingSessionOptions: [
             expect.objectContaining({
               value: agentSessionIdentityKey(matchingBuilderSession),
-              sourceExternalSessionId: "build-1",
+              sourceSession: {
+                externalSessionId: "build-1",
+                runtimeKind: "opencode",
+                workingDirectory: "/repo/worktree",
+              },
             }),
           ],
-          initialSourceExternalSessionId: "build-1",
+          initialSourceSession: {
+            externalSessionId: "build-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         }),
       );
     } finally {
@@ -192,7 +204,11 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
           initialStartMode: "reuse",
-          initialSourceExternalSessionId: "build-1",
+          initialSourceSession: {
+            externalSessionId: "build-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
           targetWorkingDirectory: "/repo/worktrees/task-1",
         }),
       );

@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
 type StartAgentSessionInput = Parameters<AgentStateContextValue["startAgentSession"]>[0];
@@ -11,7 +11,7 @@ type SessionStartExecutionRequestBase = {
 
 export type ReuseSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "reuse";
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
 };
 
 export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
@@ -23,7 +23,7 @@ export type FreshSessionStartExecutionRequest = SessionStartExecutionRequestBase
 export type ForkSessionStartExecutionRequest = SessionStartExecutionRequestBase & {
   startMode: "fork";
   selectedModel: AgentModelSelection;
-  sourceExternalSessionId: string;
+  sourceSession: AgentSessionIdentity;
 };
 
 export type SessionStartExecutionRequest =
@@ -51,25 +51,25 @@ const prepareFreshSessionStartInput = ({
 const prepareReuseSessionStartInput = ({
   taskId,
   role,
-  sourceExternalSessionId,
+  sourceSession,
 }: ReuseSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   startMode: "reuse",
-  sourceExternalSessionId,
+  sourceSession,
 });
 
 const prepareForkSessionStartInput = ({
   taskId,
   role,
   selectedModel,
-  sourceExternalSessionId,
+  sourceSession,
 }: ForkSessionStartExecutionRequest): StartAgentSessionInput => ({
   taskId,
   role,
   selectedModel,
   startMode: "fork",
-  sourceExternalSessionId,
+  sourceSession,
 });
 
 export const prepareSessionStartInput = (

@@ -358,18 +358,27 @@ const confirmSessionStartModal = async (input?: {
   }
 
   await act(async () => {
+    const existingSessionOptions =
+      (latestSessionStartModalModel?.existingSessionOptions as
+        | Array<{ value: string; sourceSession: { externalSessionId: string } }>
+        | undefined) ?? [];
+    const sourceSessionOptionValue = input?.sourceExternalSessionId
+      ? (existingSessionOptions.find(
+          (option) => option.sourceSession.externalSessionId === input.sourceExternalSessionId,
+        )?.value ?? null)
+      : null;
     await (
       latestSessionStartModalModel?.onConfirm as
         | ((value: {
             runInBackground?: boolean;
             startMode?: "fresh" | "reuse" | "fork";
-            sourceExternalSessionId?: string | null;
+            sourceSessionOptionValue?: string | null;
           }) => Promise<void> | void)
         | undefined
     )?.({
       runInBackground: input?.runInBackground ?? false,
       startMode: input?.startMode ?? "fresh",
-      sourceExternalSessionId: input?.sourceExternalSessionId ?? null,
+      sourceSessionOptionValue,
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -748,11 +757,12 @@ describe("KanbanPage session start modal flow", () => {
         latestSessionStartModalModel?.onConfirm as (input: {
           runInBackground?: boolean;
           startMode?: "fresh" | "reuse" | "fork";
-          sourceExternalSessionId?: string | null;
+          sourceSessionOptionValue?: string | null;
         }) => void
       )({
         startMode: "reuse",
-        sourceExternalSessionId: "session-build-latest",
+        sourceSessionOptionValue:
+          (latestSessionStartModalModel?.selectedSourceSessionValue as string | undefined) ?? null,
       });
       await Promise.resolve();
     });
@@ -1048,8 +1058,12 @@ describe("KanbanPage session start modal flow", () => {
       selectedSourceOption.value,
     );
     expect(latestSessionStartModalModel?.existingSessionOptions).toEqual([
-      expect.objectContaining({ sourceExternalSessionId: "session-build-latest" }),
-      expect.objectContaining({ sourceExternalSessionId: "session-build-older" }),
+      expect.objectContaining({
+        sourceSession: expect.objectContaining({ externalSessionId: "session-build-latest" }),
+      }),
+      expect.objectContaining({
+        sourceSession: expect.objectContaining({ externalSessionId: "session-build-older" }),
+      }),
     ]);
 
     await act(async () => {

@@ -1,10 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { isReadOnlyAgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import {
-  getAgentSession,
-  getAgentSessionByExternalSessionId,
-} from "@/state/agent-session-collection";
+import { getAgentSession } from "@/state/agent-session-collection";
 import type {
   AgentApprovalRequest,
   AgentSessionIdentity,
@@ -59,19 +56,23 @@ const normalizeSessionId = (externalSessionId: string | undefined): string | nul
   return trimmed ? trimmed : null;
 };
 
-const resolveLoadedSessionByExternalId = (
+const resolveLoadedSessionInEventRuntime = (
   context: Pick<SessionLifecycleEventContext, "store">,
   externalSessionId: string,
 ): AgentSessionState | null =>
-  getAgentSessionByExternalSessionId(context.store.sessionsRef.current, externalSessionId);
+  getAgentSession(context.store.sessionsRef.current, {
+    externalSessionId,
+    runtimeKind: context.store.sessionIdentity.runtimeKind,
+    workingDirectory: context.store.sessionIdentity.workingDirectory,
+  });
 
 const resolvePermissionPolicyRole = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: ApprovalRequiredEvent,
 ): AgentRole | undefined => {
   if (event.parentExternalSessionId) {
-    const parentRole = getAgentSessionByExternalSessionId(
-      context.store.sessionsRef.current,
+    const parentRole = resolveLoadedSessionInEventRuntime(
+      context,
       event.parentExternalSessionId,
     )?.role;
     if (parentRole) {
@@ -113,7 +114,7 @@ const patchParentSubagentSessionLink = (
   if (!childExternalSessionId) {
     return;
   }
-  const parentSession = resolveLoadedSessionByExternalId(context, event.parentExternalSessionId);
+  const parentSession = resolveLoadedSessionInEventRuntime(context, event.parentExternalSessionId);
   if (!parentSession) {
     return;
   }
@@ -255,7 +256,7 @@ const resolvePendingInputRoute = (
     kind: "session",
     shouldPatchParentLink,
     targetSession: childExternalSessionId
-      ? resolveLoadedSessionByExternalId(context, childExternalSessionId)
+      ? resolveLoadedSessionInEventRuntime(context, childExternalSessionId)
       : context.store.sessionIdentity,
   };
 };
@@ -388,7 +389,7 @@ export const handlePermissionResolved = (
   if (!targetSessionId) {
     return;
   }
-  const targetSession = resolveLoadedSessionByExternalId(context, targetSessionId);
+  const targetSession = resolveLoadedSessionInEventRuntime(context, targetSessionId);
   if (!targetSession) {
     return;
   }
@@ -431,7 +432,7 @@ export const handleQuestionResolved = (
   if (!targetSessionId) {
     return;
   }
-  const targetSession = resolveLoadedSessionByExternalId(context, targetSessionId);
+  const targetSession = resolveLoadedSessionInEventRuntime(context, targetSessionId);
   if (!targetSession) {
     return;
   }

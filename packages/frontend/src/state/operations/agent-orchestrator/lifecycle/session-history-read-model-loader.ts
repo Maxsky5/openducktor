@@ -1,10 +1,6 @@
 import type { AgentSessionRef } from "@openducktor/core";
-import {
-  type AgentSessionCollection,
-  getAgentSession,
-  getAgentSessionByExternalSessionId,
-} from "@/state/agent-session-collection";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   loadSessionHistorySnapshots,
   type SessionHistoryLoaderAdapter,
@@ -20,17 +16,18 @@ type UpdateSession = Parameters<typeof loadSessionHistorySnapshots>[0]["updateSe
 const selectSessionHistoryTargets = ({
   sessionCollection,
   liveSessionRefs,
-  requestedExternalSessionId,
+  requestedSession,
 }: {
   sessionCollection: AgentSessionCollection;
   liveSessionRefs: AgentSessionRef[];
-  requestedExternalSessionId?: string | null | undefined;
+  requestedSession?: AgentSessionIdentity | null | undefined;
 }): AgentSessionState[] => {
-  const requestedSessionId = requestedExternalSessionId?.trim();
-  if (requestedSessionId) {
-    const session = getAgentSessionByExternalSessionId(sessionCollection, requestedSessionId);
+  if (requestedSession) {
+    const session = getAgentSession(sessionCollection, requestedSession);
     if (!session) {
-      throw new Error(`Cannot load history for unknown session '${requestedSessionId}'.`);
+      throw new Error(
+        `Cannot load history for unknown session '${requestedSession.externalSessionId}'.`,
+      );
     }
     return [session];
   }
@@ -58,7 +55,7 @@ export const loadSessionHistoryForReadModel = async ({
   liveSessionRefs,
   historyRuntimeContext,
   isStaleRepoOperation,
-  requestedExternalSessionId,
+  requestedSession,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
@@ -67,12 +64,12 @@ export const loadSessionHistoryForReadModel = async ({
   liveSessionRefs: AgentSessionRef[];
   historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
-  requestedExternalSessionId?: string | null | undefined;
+  requestedSession?: AgentSessionIdentity | null | undefined;
 }): Promise<SessionHistoryLoadResult[]> => {
   const historySessions = selectSessionHistoryTargets({
     sessionCollection,
     liveSessionRefs,
-    requestedExternalSessionId,
+    requestedSession,
   });
 
   if (historySessions.length === 0) {

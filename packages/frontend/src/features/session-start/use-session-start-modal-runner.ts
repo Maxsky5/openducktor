@@ -15,6 +15,7 @@ import {
   targetBranchFromSelection,
   taskTargetBranchValidationError,
 } from "@/lib/target-branch";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
@@ -29,13 +30,13 @@ export type SessionStartModalDecision =
     }
   | {
       startMode: "reuse";
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
       targetBranch?: GitTargetBranch;
     }
   | {
       startMode: "fork";
       selectedModel: AgentModelSelection;
-      sourceExternalSessionId: string;
+      sourceSession: AgentSessionIdentity;
       targetBranch?: GitTargetBranch;
     };
 
@@ -80,12 +81,16 @@ const requireSelectedModel = (
   );
 };
 
-const requireSourceSessionId = (
-  sourceExternalSessionId: string | null,
+const requireSourceSession = (
+  sourceSessionOptionValue: string | null,
+  existingSessionOptions: SessionStartExistingSessionOption[],
   request: SessionStartDecisionRequestContext,
-): string => {
-  if (sourceExternalSessionId) {
-    return sourceExternalSessionId;
+): AgentSessionIdentity => {
+  const sourceSessionOption = existingSessionOptions.find(
+    (option) => option.value === sourceSessionOptionValue,
+  );
+  if (sourceSessionOption) {
+    return sourceSessionOption.sourceSession;
   }
 
   throw new Error(
@@ -95,10 +100,12 @@ const requireSourceSessionId = (
 
 export const buildSessionStartModalDecision = ({
   input,
+  existingSessionOptions,
   requestContext,
   selectedModel,
 }: {
   input: SessionStartDecisionInput;
+  existingSessionOptions: SessionStartExistingSessionOption[];
   requestContext: SessionStartDecisionRequestContext;
   selectedModel: AgentModelSelection | null;
 }): SessionStartModalDecision => {
@@ -106,14 +113,15 @@ export const buildSessionStartModalDecision = ({
     input.targetBranch ? { targetBranch: targetBranchFromSelection(input.targetBranch) } : {};
 
   if (input.startMode === "reuse") {
-    const sourceExternalSessionId = requireSourceSessionId(
-      input.sourceExternalSessionId,
+    const sourceSession = requireSourceSession(
+      input.sourceSessionOptionValue,
+      existingSessionOptions,
       requestContext,
     );
 
     return {
       startMode: "reuse",
-      sourceExternalSessionId,
+      sourceSession,
       ...buildTargetBranchFields(),
     };
   }
@@ -121,15 +129,16 @@ export const buildSessionStartModalDecision = ({
   const resolvedSelectedModel = requireSelectedModel(selectedModel, requestContext);
 
   if (input.startMode === "fork") {
-    const sourceExternalSessionId = requireSourceSessionId(
-      input.sourceExternalSessionId,
+    const sourceSession = requireSourceSession(
+      input.sourceSessionOptionValue,
+      existingSessionOptions,
       requestContext,
     );
 
     return {
       startMode: "fork",
       selectedModel: resolvedSelectedModel,
-      sourceExternalSessionId,
+      sourceSession,
       ...buildTargetBranchFields(),
     };
   }
@@ -144,8 +153,7 @@ export const buildSessionStartModalDecision = ({
 export const requireSourceSessionRuntimeKind = (
   sourceSession: SessionStartExistingSessionOption | null | undefined,
 ): RuntimeKind => {
-  const runtimeKind =
-    sourceSession?.runtimeKind ?? sourceSession?.selectedModel?.runtimeKind ?? null;
+  const runtimeKind = sourceSession?.sourceSession.runtimeKind ?? null;
   if (runtimeKind) {
     return runtimeKind;
   }
@@ -307,6 +315,7 @@ export function useSessionStartModalRunner({
       try {
         const decision = buildSessionStartModalDecision({
           input,
+          existingSessionOptions,
           requestContext,
           selectedModel: selectionRef.current,
         });

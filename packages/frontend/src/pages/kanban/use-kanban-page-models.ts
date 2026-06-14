@@ -235,7 +235,7 @@ export function useKanbanPageModels({
         launchActionId: "build_rebase_conflict_resolution",
         initialStartMode: request.initialStartMode,
         targetWorkingDirectory: request.targetWorkingDirectory,
-        initialSourceExternalSessionId: request.initialSourceExternalSessionId,
+        initialSourceSession: request.initialSourceSession,
         existingSessionOptions: request.existingSessionOptions,
         postStartAction: "send_message",
         message: request.message,

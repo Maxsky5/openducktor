@@ -1,9 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
-import {
-  createAgentSessionCollection,
-  getAgentSessionByExternalSessionId,
-} from "@/state/agent-session-collection";
+import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
   hasSessionListenerForExternalSessionId,
@@ -204,10 +201,9 @@ describe("useAgentSessionListeners", () => {
     expect(state.refBridges.draftRawBySessionRef.current["external-1"]).toBeUndefined();
     expect(state.refBridges.assistantTurnTimingBySessionRef.current["external-1"]).toBeUndefined();
     expect(
-      getAgentSessionByExternalSessionId(
-        state.sessionStore.getSessionCollectionSnapshot(),
-        "external-1",
-      ),
+      listAgentSessions(state.sessionStore.getSessionCollectionSnapshot()).find(
+        (session) => session.externalSessionId === "external-1",
+      ) ?? null,
     ).toBeNull();
     await harness.unmount();
   });

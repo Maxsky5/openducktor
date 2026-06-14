@@ -168,7 +168,7 @@ export type AgentSessionReadModelStateContextValue = {
 };
 
 export type LoadAgentSessionsOptions = {
-  historyTargetExternalSessionId?: string | null;
+  historyTargetSession?: AgentSessionIdentity | null;
 };
 
 export type AgentOperationsContextValue = {
@@ -206,7 +206,7 @@ export type AgentOperationsContextValue = {
           role: AgentRole;
           runtimeKind?: RuntimeKind;
           startMode: "reuse";
-          sourceExternalSessionId: string;
+          sourceSession: AgentSessionIdentity;
         }
       | {
           taskId: string;
@@ -222,7 +222,7 @@ export type AgentOperationsContextValue = {
           runtimeKind?: RuntimeKind;
           selectedModel: AgentModelSelection;
           startMode: "fork";
-          sourceExternalSessionId: string;
+          sourceSession: AgentSessionIdentity;
         },
   ) => Promise<AgentSessionRouteIdentity>;
   settleStartedAgentSession: (session: AgentSessionIdentity) => void;

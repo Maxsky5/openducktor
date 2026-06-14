@@ -30,7 +30,6 @@ type ForkStrategyInput = {
 };
 
 const requireForkSourceRuntime = (
-  sourceExternalSessionId: string,
   sourceSession: AgentSessionState,
 ): {
   runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
@@ -39,14 +38,14 @@ const requireForkSourceRuntime = (
   const sourceRuntimeKind = sourceSession.runtimeKind;
   if (!sourceRuntimeKind) {
     throw new Error(
-      `Session "${sourceExternalSessionId}" is missing runtime kind metadata required for forking.`,
+      `Session "${sourceSession.externalSessionId}" is missing runtime kind metadata required for forking.`,
     );
   }
 
   const sourceWorkingDirectory = normalizeWorkingDirectory(sourceSession.workingDirectory);
   if (!sourceWorkingDirectory) {
     throw new Error(
-      `Session "${sourceExternalSessionId}" is missing working directory metadata required for forking.`,
+      `Session "${sourceSession.externalSessionId}" is missing working directory metadata required for forking.`,
     );
   }
 
@@ -61,18 +60,16 @@ export const executeForkStart = async ({
   const sourceSession = await resolveLoadedSourceSession({
     ctx,
     deps,
-    sourceExternalSessionId: input.sourceExternalSessionId,
+    sourceSession: input.sourceSession,
   });
-  const { runtimeKind: sourceRuntimeKind, workingDirectory } = requireForkSourceRuntime(
-    input.sourceExternalSessionId,
-    sourceSession,
-  );
+  const { runtimeKind: sourceRuntimeKind, workingDirectory } =
+    requireForkSourceRuntime(sourceSession);
   const taskCard = resolveStartTask({ ctx, task: deps.task });
   const selectedModel = input.selectedModel;
 
   if (selectedModel.runtimeKind && sourceRuntimeKind !== selectedModel.runtimeKind) {
     throw new Error(
-      `Session "${input.sourceExternalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
+      `Session "${input.sourceSession.externalSessionId}" cannot be forked with runtime "${selectedModel.runtimeKind}" because it belongs to runtime "${sourceRuntimeKind}".`,
     );
   }
 

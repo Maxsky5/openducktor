@@ -348,7 +348,11 @@ describe("autopilot feature helpers", () => {
       expect.objectContaining({
         intent: expect.objectContaining({
           startMode: "reuse",
-          sourceExternalSessionId: "qa-session-1",
+          sourceSession: {
+            externalSessionId: "qa-session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         }),
         selection: null,
       }),
@@ -384,7 +388,11 @@ describe("autopilot feature helpers", () => {
       expect.objectContaining({
         intent: expect.objectContaining({
           startMode: "reuse",
-          sourceExternalSessionId: "codex-builder-session-1",
+          sourceSession: {
+            externalSessionId: "codex-builder-session-1",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo/worktree",
+          },
         }),
         selection: null,
       }),
