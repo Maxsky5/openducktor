@@ -70,7 +70,7 @@ import { loadAndSeedSessionHistory, loadSessionHistory, loadSessionTodos } from 
 import { replyApproval, replyQuestion } from "./pending-input-ops";
 import {
   type OpencodeRuntimeResolutionInput,
-  toOpencodeRuntimeClientInput,
+  resolveOpencodeRuntimeClientInput,
 } from "./runtime-connection";
 import {
   finishUserMessageSend,
@@ -191,54 +191,12 @@ export class OpencodeSdkAdapter
     action: string,
     options: { requireLive?: boolean } = {},
   ) {
-    if (!this.repoRuntimeResolver) {
-      throw new Error(
-        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
-      );
-    }
-    const runtimeRef = {
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-    };
-    const runtime = options.requireLive
-      ? await this.repoRuntimeResolver.requireRepoRuntime(runtimeRef)
-      : await this.repoRuntimeResolver.ensureRepoRuntime(runtimeRef);
-    return toOpencodeRuntimeClientInput({
-      runtime,
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-      workingDirectory: input.workingDirectory,
+    return resolveOpencodeRuntimeClientInput({
+      repoRuntimeResolver: this.repoRuntimeResolver,
+      input,
       action,
+      requireLive: options.requireLive === true,
     });
-  }
-
-  private async resolveRuntimeClientInputWithRuntimeId(
-    input: OpencodeRuntimeResolutionInput,
-    action: string,
-    options: { requireLive?: boolean } = {},
-  ) {
-    if (!this.repoRuntimeResolver) {
-      throw new Error(
-        `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
-      );
-    }
-    const runtimeRef = {
-      repoPath: input.repoPath,
-      runtimeKind: input.runtimeKind,
-    };
-    const runtime = options.requireLive
-      ? await this.repoRuntimeResolver.requireRepoRuntime(runtimeRef)
-      : await this.repoRuntimeResolver.ensureRepoRuntime(runtimeRef);
-    return {
-      ...toOpencodeRuntimeClientInput({
-        runtime,
-        repoPath: input.repoPath,
-        runtimeKind: input.runtimeKind,
-        workingDirectory: input.workingDirectory,
-        action,
-      }),
-      runtimeId: runtime.runtimeId,
-    };
   }
 
   getRuntimeDefinition(): RuntimeDescriptor {
@@ -454,7 +412,7 @@ export class OpencodeSdkAdapter
   async listSessionPresence(
     input: ListSessionPresenceInput,
   ): Promise<AgentSessionPresenceSnapshot[]> {
-    const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
+    const runtimeClientInput = await this.resolveRuntimeClientInput(
       { ...input, workingDirectory: input.repoPath },
       "list session presence",
       { requireLive: true },
@@ -496,7 +454,7 @@ export class OpencodeSdkAdapter
   async readSessionPresence(
     input: ReadSessionPresenceInput,
   ): Promise<AgentSessionPresenceSnapshot> {
-    const runtimeClientInput = await this.resolveRuntimeClientInputWithRuntimeId(
+    const runtimeClientInput = await this.resolveRuntimeClientInput(
       input,
       "read session presence",
       { requireLive: true },

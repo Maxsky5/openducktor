@@ -1,14 +1,26 @@
 import type { RepoRuntimeRef, RuntimeInstanceSummary } from "@openducktor/contracts";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
+import type { RepoRuntimeResolverPort } from "./types";
 
 export type OpencodeRuntimeClientInput = {
   runtimeEndpoint: string;
   workingDirectory: string;
 };
 
+export type ResolvedOpencodeRuntimeClientInput = OpencodeRuntimeClientInput & {
+  runtimeId: string;
+};
+
 export type OpencodeRuntimeResolutionInput = RepoRuntimeRef & {
   workingDirectory?: string | null;
+};
+
+export type ResolveOpencodeRuntimeClientInputRequest = {
+  repoRuntimeResolver: RepoRuntimeResolverPort | undefined;
+  input: OpencodeRuntimeResolutionInput;
+  action: string;
+  requireLive?: boolean;
 };
 
 const requireOpencodeRuntimeEndpoint = (
@@ -53,3 +65,32 @@ export const toOpencodeRuntimeClientInput = (input: {
   runtimeEndpoint: requireOpencodeRuntimeEndpoint(input.runtime, input, input.action),
   workingDirectory: requireSessionWorkingDirectory(input.workingDirectory, input.action),
 });
+
+export const resolveOpencodeRuntimeClientInput = async ({
+  repoRuntimeResolver,
+  input,
+  action,
+  requireLive = false,
+}: ResolveOpencodeRuntimeClientInputRequest): Promise<ResolvedOpencodeRuntimeClientInput> => {
+  if (!repoRuntimeResolver) {
+    throw new Error(
+      `Repo runtime resolver is required to ${action} for repo '${input.repoPath}' and runtime '${input.runtimeKind}'.`,
+    );
+  }
+
+  const runtimeRef = requireRepoRuntimeRef(input, action);
+  const runtime = requireLive
+    ? await repoRuntimeResolver.requireRepoRuntime(runtimeRef)
+    : await repoRuntimeResolver.ensureRepoRuntime(runtimeRef);
+
+  return {
+    ...toOpencodeRuntimeClientInput({
+      runtime,
+      repoPath: runtimeRef.repoPath,
+      runtimeKind: runtimeRef.runtimeKind,
+      workingDirectory: input.workingDirectory,
+      action,
+    }),
+    runtimeId: runtime.runtimeId,
+  };
+};
