@@ -48,8 +48,9 @@ export function useRuntimeTranscriptSessionHistory({
   readSessionHistory,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
   const targetLiveSession = matchesAgentSessionIdentity(liveSession, target) ? liveSession : null;
+  const canLoadRuntimeHistory = repoReadinessState === "ready";
   const historyQueryEnabled = Boolean(
-    isOpen && activeWorkspace && target && targetLiveSession === null,
+    isOpen && activeWorkspace && target && targetLiveSession === null && canLoadRuntimeHistory,
   );
   const historyQueryInput =
     target && activeWorkspace

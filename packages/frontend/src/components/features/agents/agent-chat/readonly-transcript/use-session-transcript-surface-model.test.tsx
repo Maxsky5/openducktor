@@ -451,8 +451,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       isLoadingChecks: true,
       refreshChecks: async () => {},
     };
-    const deferredHistory = createDeferred<AgentSessionHistoryMessage[]>();
-    readSessionHistory.mockImplementationOnce(async () => deferredHistory.promise);
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -472,15 +470,14 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
     try {
       await harness.mount();
-      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
+      expect(readSessionHistory).not.toHaveBeenCalled();
       expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
         phase: "waiting_for_runtime",
         repoReadinessState: "checking",
       });
       expect(harness.getLatest().model.thread.emptyState).toBe(null);
     } finally {
-      deferredHistory.resolve([]);
       await harness.unmount();
     }
   });

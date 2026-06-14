@@ -156,6 +156,32 @@ describe("useRuntimeTranscriptSessionHistory", () => {
     }
   });
 
+  test("waits for runtime readiness before loading history", async () => {
+    const readSessionHistory = mock(async () => [createHistoryMessage()]);
+    const harness = createHookHarness(
+      createBaseArgs({
+        repoReadinessState: "checking",
+        readSessionHistory,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(readSessionHistory).not.toHaveBeenCalled();
+      expect(harness.getLatest()).toEqual({
+        session: null,
+        lifecycle: {
+          phase: "waiting_for_runtime",
+          repoReadinessState: "checking",
+        },
+        historyError: null,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("surfaces history load failures", async () => {
     const readSessionHistory = mock(async () => {
       throw new Error("history unavailable");
