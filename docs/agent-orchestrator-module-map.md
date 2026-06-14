@@ -195,7 +195,7 @@ session history has one frontend read boundary.
    `loadRepoAgentSessions`.
 3. Persisted session records remain route candidates while runtime presence is checked.
 4. `readRepoRuntimeSessionPresence` scans each runtime kind and working directory once.
-5. `buildRepoSessionReadModel` commits session state once presence is known; missing runtime evidence is `persisted_only`.
+5. `buildRepoSessionReadModel` commits session state once presence is known; missing runtime evidence is `missing`.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter owns any runtime-side state preparation
    needed before events can flow.

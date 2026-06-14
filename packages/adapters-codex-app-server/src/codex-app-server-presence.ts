@@ -11,7 +11,7 @@ import type { CodexSessionState } from "./types";
 export type CodexPresenceSource =
   | { type: "local" }
   | { type: "thread"; thread: CodexThreadSnapshot }
-  | { type: "stale" };
+  | { type: "missing" };
 
 export type ResolveCodexPresenceSourceInput = {
   session: CodexSessionState;
@@ -31,11 +31,11 @@ export const resolveCodexPresenceSource = ({
   if (!thread || !threadIsLoaded) {
     return session.liveStatus || hasPendingInput || hasActiveTurn
       ? { type: "local" }
-      : { type: "stale" };
+      : { type: "missing" };
   }
 
   if (thread.cwd !== session.workingDirectory) {
-    return { type: "stale" };
+    return { type: "missing" };
   }
 
   if (
@@ -140,15 +140,15 @@ export const toRefreshedPresenceSnapshot = ({
   if (presenceSource.type === "local") {
     return toPresenceSnapshot(session, pendingApprovals, pendingQuestions);
   }
-  if (presenceSource.type === "stale") {
-    return stalePresence(ref);
+  if (presenceSource.type === "missing") {
+    return missingPresence(ref);
   }
   return toPresenceSnapshotFromThread(presenceSource.thread, ref);
 };
 
-export const stalePresence = (input: AgentSessionRef): AgentSessionPresenceSnapshot => ({
-  presence: "stale",
-  classification: "stale",
+export const missingPresence = (input: AgentSessionRef): AgentSessionPresenceSnapshot => ({
+  presence: "missing",
+  classification: "missing",
   ref: input,
   pendingApprovals: [],
   pendingQuestions: [],

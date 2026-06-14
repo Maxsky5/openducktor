@@ -61,13 +61,7 @@ export const toAgentSessionPresenceSnapshotFromLiveSnapshot = (
 ): AgentSessionPresenceSnapshot => {
   const { ref, snapshot } = input;
   if (!snapshot) {
-    return {
-      presence: "stale",
-      classification: "stale",
-      ref,
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
+    return toMissingAgentSessionPresenceSnapshot(ref);
   }
 
   const classification = classifyLiveAgentSessionSnapshot(snapshot);
@@ -84,17 +78,12 @@ export const toAgentSessionPresenceSnapshotFromLiveSnapshot = (
   };
 };
 
-export const toPersistedOnlyAgentSessionPresenceSnapshot = ({
+export const toMissingAgentSessionPresenceSnapshot = (
+  ref: AgentSessionRef,
+): AgentSessionPresenceSnapshot => ({
+  presence: "missing",
+  classification: "missing",
   ref,
-  reason,
-}: {
-  ref: AgentSessionRef;
-  reason: string;
-}): AgentSessionPresenceSnapshot => ({
-  presence: "persisted_only",
-  classification: "persisted_only",
-  ref,
-  reason,
   pendingApprovals: [],
   pendingQuestions: [],
 });

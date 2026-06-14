@@ -4,7 +4,7 @@ import type {
   AgentSessionPresenceSnapshot,
   AgentSessionRef,
 } from "@openducktor/core";
-import { toPersistedOnlyAgentSessionPresenceSnapshot } from "@openducktor/core";
+import { toMissingAgentSessionPresenceSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   applyAgentSessionPresenceSnapshotToSession,
@@ -179,10 +179,7 @@ export const buildRepoSessionReadModel = ({
     const current = currentSessionsById[record.externalSessionId];
     const snapshot =
       runtimePresence.snapshotsBySessionKey.get(sessionKey) ??
-      toPersistedOnlyAgentSessionPresenceSnapshot({
-        ref,
-        reason: "No live runtime session found for persisted session.",
-      });
+      toMissingAgentSessionPresenceSnapshot(ref);
     const persistedSessionView = toPersistedSessionView({
       taskId,
       record,

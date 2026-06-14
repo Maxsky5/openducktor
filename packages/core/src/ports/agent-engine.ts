@@ -172,7 +172,7 @@ export type AgentSessionActivity =
   | "running"
   | "idle";
 
-export type AgentSessionPresence = "runtime" | "persisted_only" | "stale";
+export type AgentSessionPresence = "runtime" | "missing";
 
 export type AgentSessionPresenceSnapshot =
   | {
@@ -187,17 +187,9 @@ export type AgentSessionPresenceSnapshot =
       pendingQuestions: AgentPendingQuestionRequest[];
     }
   | {
-      presence: "stale";
-      classification: "stale";
+      presence: "missing";
+      classification: "missing";
       ref: AgentSessionRef;
-      pendingApprovals: [];
-      pendingQuestions: [];
-    }
-  | {
-      presence: "persisted_only";
-      classification: "persisted_only";
-      ref: AgentSessionRef;
-      reason: string;
       pendingApprovals: [];
       pendingQuestions: [];
     };

@@ -1364,21 +1364,19 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("releases held starting sessions to idle when persisted-only presence blocks send", async () => {
+  test("releases held starting sessions to idle when missing presence blocks send", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     adapter.readSessionPresence = async () => ({
-      presence: "persisted_only",
-      classification: "persisted_only",
+      presence: "missing",
+      classification: "missing",
       ref: {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "external-1",
       },
-      runtimeId: null,
-      reason: "not running",
       pendingApprovals: [],
       pendingQuestions: [],
     });

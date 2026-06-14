@@ -1154,8 +1154,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(snapshot).toMatchObject({
-      presence: "stale",
-      classification: "stale",
+      presence: "missing",
+      classification: "missing",
       ref: {
         externalSessionId: "external-session-1",
         workingDirectory: "/other",

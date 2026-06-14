@@ -6,7 +6,7 @@ import type {
   ReadSessionPresenceInput,
 } from "@openducktor/core";
 import {
-  stalePresence,
+  missingPresence,
   toPresenceSnapshotFromThread,
   toRefreshedPresenceSnapshot,
 } from "./codex-app-server-presence";
@@ -140,11 +140,11 @@ export const readCodexSessionPresence = async (
   });
   const inventory = await deps.threadInventory.refresh(client, runtimeId);
   if (!inventory.loadedIds.has(input.externalSessionId)) {
-    return stalePresence(input);
+    return missingPresence(input);
   }
   const snapshot = inventory.threadsById.get(input.externalSessionId) ?? null;
   if (!snapshot || snapshot.cwd !== input.workingDirectory) {
-    return stalePresence(input);
+    return missingPresence(input);
   }
   return toPresenceSnapshotFromThread(snapshot, input);
 };

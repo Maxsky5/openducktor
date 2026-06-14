@@ -85,7 +85,7 @@ describe("resolveCodexPresenceSource", () => {
     ).toEqual({ type: "local" });
   });
 
-  test("returns stale only when neither inventory nor local runtime state can prove presence", () => {
+  test("returns missing only when neither inventory nor local runtime state can prove presence", () => {
     expect(
       resolveCodexPresenceSource({
         session: createSession(),
@@ -94,6 +94,6 @@ describe("resolveCodexPresenceSource", () => {
         hasPendingInput: false,
         hasActiveTurn: false,
       }),
-    ).toEqual({ type: "stale" });
+    ).toEqual({ type: "missing" });
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type AgentSessionPresenceSnapshot,
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
-  toPersistedOnlyAgentSessionPresenceSnapshot,
+  toMissingAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -44,7 +44,7 @@ const sessionRefFixture = {
 };
 
 describe("session-presence", () => {
-  test("classifies missing live session as stale and demotes live-only state", () => {
+  test("classifies missing live session and demotes live-only state", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       snapshot: null,
@@ -52,13 +52,13 @@ describe("session-presence", () => {
 
     const applied = applyAgentSessionPresenceSnapshotToSession(createSessionState(), snapshot);
 
-    expect(snapshot.classification).toBe("stale");
+    expect(snapshot.classification).toBe("missing");
     expect(applied.status).toBe("idle");
     expect(applied.pendingApprovals).toEqual([]);
     expect(applied.pendingQuestions).toEqual([]);
   });
 
-  test("settles pending outbound sends when stale presence arrives", () => {
+  test("settles pending outbound sends when missing presence arrives", () => {
     const snapshot = toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: sessionRefFixture,
       snapshot: null,
@@ -192,10 +192,7 @@ describe("session-presence", () => {
   });
 
   test("demotes non-terminal state when no runtime presence exists", () => {
-    const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
-      ref: sessionRefFixture,
-      reason: "No live repo runtime found.",
-    });
+    const snapshot = toMissingAgentSessionPresenceSnapshot(sessionRefFixture);
 
     const applied = applyAgentSessionPresenceSnapshotToSession(
       createSessionState({ pendingUserMessageStartedAt: 123 }),
@@ -208,11 +205,8 @@ describe("session-presence", () => {
     expect(applied.pendingQuestions).toEqual([]);
   });
 
-  test("settles fresh persisted-only records without mounted live state", () => {
-    const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
-      ref: sessionRefFixture,
-      reason: "No live repo runtime found.",
-    });
+  test("settles fresh records without mounted live state", () => {
+    const snapshot = toMissingAgentSessionPresenceSnapshot(sessionRefFixture);
 
     const applied = applyAgentSessionPresenceSnapshotToSession(
       createSessionState({

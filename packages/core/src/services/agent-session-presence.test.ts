@@ -3,7 +3,7 @@ import {
   classifyLiveAgentSessionSnapshot,
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
   toLiveAgentSessionRuntimeStatus,
-  toPersistedOnlyAgentSessionPresenceSnapshot,
+  toMissingAgentSessionPresenceSnapshot,
 } from "./agent-session-presence";
 
 describe("agent-session-presence", () => {
@@ -99,7 +99,7 @@ describe("agent-session-presence", () => {
     });
   });
 
-  test("builds stale snapshot when a runtime snapshot is absent", () => {
+  test("builds missing snapshot when a runtime snapshot is absent", () => {
     const ref = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -113,15 +113,15 @@ describe("agent-session-presence", () => {
         snapshot: null,
       }),
     ).toEqual({
-      presence: "stale",
-      classification: "stale",
+      presence: "missing",
+      classification: "missing",
       ref,
       pendingApprovals: [],
       pendingQuestions: [],
     });
   });
 
-  test("builds persisted-only snapshot for records without a live runtime", () => {
+  test("builds missing snapshot for records without a live runtime", () => {
     const ref = {
       repoPath: "/repo",
       runtimeKind: "opencode" as const,
@@ -129,16 +129,10 @@ describe("agent-session-presence", () => {
       externalSessionId: "session-1",
     };
 
-    expect(
-      toPersistedOnlyAgentSessionPresenceSnapshot({
-        ref,
-        reason: "runtime missing",
-      }),
-    ).toEqual({
-      presence: "persisted_only",
-      classification: "persisted_only",
+    expect(toMissingAgentSessionPresenceSnapshot(ref)).toEqual({
+      presence: "missing",
+      classification: "missing",
       ref,
-      reason: "runtime missing",
       pendingApprovals: [],
       pendingQuestions: [],
     });
