@@ -190,7 +190,7 @@ describe("repo session read model", () => {
     expect(idleRead.sessionsById[record.externalSessionId]?.status).toBe("idle");
   });
 
-  test("demotes an active session when a runtime scan misses it", async () => {
+  test("preserves a mounted active session when a repo runtime scan misses it", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyPresence = await readRepoRuntimeSessionPresence({
@@ -222,10 +222,10 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
+    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("running");
   });
 
-  test("preserves an already mounted persisted session instead of rebuilding from its thin record", async () => {
+  test("preserves an already mounted live session instead of rebuilding from its thin record", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -267,7 +267,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("idle");
+    expect(session?.status).toBe("running");
     expect(session?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",

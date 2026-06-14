@@ -191,7 +191,7 @@ describe("session-presence", () => {
     expect(applied.pendingApprovals).toEqual([liveApproval]);
   });
 
-  test("settles persisted-only pending outbound sends", () => {
+  test("preserves mounted live state when repo scans only see the persisted record", () => {
     const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
       ref: sessionRefFixture,
       reason: "No live repo runtime found.",
@@ -202,8 +202,32 @@ describe("session-presence", () => {
       snapshot,
     );
 
-    expect(applied.status).toBe("idle");
-    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.status).toBe("running");
+    expect(applied.pendingUserMessageStartedAt).toBe(123);
+    expect(applied.pendingApprovals).toEqual([
+      { requestId: "persisted-approval" } as AgentSessionState["pendingApprovals"][number],
+    ]);
+    expect(applied.pendingQuestions).toEqual([
+      { requestId: "persisted-question" } as AgentSessionState["pendingQuestions"][number],
+    ]);
+  });
+
+  test("settles fresh persisted-only records without mounted live state", () => {
+    const snapshot = toPersistedOnlyAgentSessionPresenceSnapshot({
+      ref: sessionRefFixture,
+      reason: "No live repo runtime found.",
+    });
+
+    const applied = applyAgentSessionPresenceSnapshotToSession(
+      createSessionState({
+        status: "stopped",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+      snapshot,
+    );
+
+    expect(applied.status).toBe("stopped");
     expect(applied.pendingApprovals).toEqual([]);
     expect(applied.pendingQuestions).toEqual([]);
   });
