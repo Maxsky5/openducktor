@@ -811,7 +811,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Active session runtime context is missing runtime kind.",
+        "Runtime kind is required to read active session runtime data.",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {

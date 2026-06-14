@@ -7,6 +7,7 @@ import {
   listAgentSessions,
   removeAgentSession,
   replaceAgentSession,
+  replaceAgentSessionByIdentity,
 } from "./agent-session-collection";
 
 describe("agent-session-collection", () => {
@@ -50,6 +51,28 @@ describe("agent-session-collection", () => {
     expect(() => getAgentSessionByExternalSessionId(collection, "external-1")).toThrow(
       "Session 'external-1' is duplicated in the local session collection.",
     );
+  });
+
+  test("moves a session when an update changes its identity fields", () => {
+    const original = createAgentSessionFixture({
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      status: "idle",
+    });
+    const movedSession = {
+      ...original,
+      workingDirectory: "/repo-b",
+      status: "running" as const,
+    };
+
+    const collection = createAgentSessionCollection([original]);
+    const nextCollection = replaceAgentSessionByIdentity(collection, original, movedSession);
+
+    expect(getAgentSession(nextCollection, original)).toBeNull();
+    expect(getAgentSession(nextCollection, movedSession)).toBe(movedSession);
+    expect(getAgentSessionByExternalSessionId(nextCollection, "external-1")).toBe(movedSession);
+    expect(listAgentSessions(nextCollection)).toEqual([movedSession]);
   });
 
   test("removes only the matching session identity", () => {

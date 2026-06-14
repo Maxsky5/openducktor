@@ -11,6 +11,7 @@ import {
   getAgentSession,
   getAgentSessionByExternalSessionId,
   replaceAgentSession,
+  replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import {
   createDeferred as createSharedDeferred,
@@ -138,7 +139,11 @@ export const updateAgentSessionFixture = (
   if (!current) {
     return;
   }
-  sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+  sessionsRef.current = replaceAgentSessionByIdentity(
+    sessionsRef.current,
+    identity,
+    updater(current),
+  );
 };
 
 const createLiveAgentSessionSnapshotFixture = (

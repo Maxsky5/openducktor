@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
 import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
+import { replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionCollectionRefFixture,
@@ -10,7 +11,6 @@ import {
   createSessionListenerRegistryRefFixture,
   findAgentSessionFixture,
   hasSessionListenerFixture,
-  replaceAgentSessionFixture,
   setSessionListenerFixture,
 } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
@@ -113,7 +113,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow("Session not found: session-1");
+      await expect(ensureReady(buildSession())).rejects.toThrow("Session not found: session-1");
     } finally {
     }
   });
@@ -165,12 +165,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -187,7 +191,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
       expect(listenCalls).toBe(1);
       expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
       expect(stopCalls).toBe(0);
@@ -240,12 +244,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         throw new Error("Existing listener should be reused.");
@@ -258,7 +266,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       loadRepoPromptOverrides: async () => ({}),
     });
 
-    await ensureReady("session-1");
+    await ensureReady(buildSession());
 
     expect(unsubscribeCalls).toBe(0);
     expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
@@ -323,12 +331,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "external-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -340,7 +352,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("external-1")).rejects.toThrow(
+      await expect(ensureReady(buildSession({ externalSessionId: "external-1" }))).rejects.toThrow(
         "Runtime did not report resumed session 'external-1'.",
       );
       expect(releaseCalls).toBe(0);
@@ -437,13 +449,17 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         updateCalls += 1;
         const current = findAgentSessionFixture(sessionsRef, "external-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -456,7 +472,9 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     try {
       await withCapturedConsoleError(async (calls) => {
-        await expect(ensureReady("external-1")).rejects.toThrow("stop boom");
+        await expect(
+          ensureReady(buildSession({ externalSessionId: "external-1" })),
+        ).rejects.toThrow("stop boom");
         expect(calls).toHaveLength(0);
       });
       expect(updateCalls).toBe(1);
@@ -507,12 +525,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => {
@@ -527,7 +549,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
 
       expect(ensureRuntimeCalls).toBe(0);
       expect(findAgentSessionFixture(sessionsRef, "session-1")?.runtimeKind).toBe("opencode");
@@ -587,7 +609,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
 
       expect(ensureRuntimeCalls).toBe(0);
       expect(findAgentSessionFixture(sessionsRef, "session-1")?.runtimeKind).toBe("opencode");
@@ -637,9 +659,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
-        "Session 'session-1' is missing runtime kind metadata.",
-      );
+      await expect(ensureReady(buildSession())).rejects.toThrow("Session not found: session-1");
       expect(ensureRuntimeCalls).toBe(0);
     } finally {
     }
@@ -735,12 +755,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -754,7 +778,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
+      await expect(ensureReady(buildSession())).rejects.toThrow(
         "Session is waiting for pending runtime input.",
       );
       expect(listenCalls).toBe(1);
@@ -854,12 +878,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -879,7 +907,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
+      await expect(ensureReady(buildSession())).rejects.toThrow(
         "Runtime did not report resumed session 'session-1'.",
       );
 
@@ -978,12 +1006,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -997,7 +1029,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
+      await expect(ensureReady(buildSession())).rejects.toThrow(
         "Runtime did not report resumed session 'session-1'.",
       );
 
@@ -1071,12 +1103,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -1093,7 +1129,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
 
       expect(resumeCalls).toBe(1);
       expect(unsubscribeCalls).toBe(1);
@@ -1147,12 +1183,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1165,7 +1205,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     try {
       await withCapturedConsoleError(async (calls) => {
-        await expect(ensureReady("session-1")).rejects.toThrow("stop boom");
+        await expect(ensureReady(buildSession())).rejects.toThrow("stop boom");
         expect(calls).toHaveLength(0);
       });
       expect(resumeCalls).toBe(1);
@@ -1236,12 +1276,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -1255,7 +1299,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
 
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(1);
@@ -1303,12 +1347,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1320,7 +1368,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow(
+      await expect(ensureReady(buildSession())).rejects.toThrow(
         "Workspace changed while preparing session.",
       );
       expect(stopCalls).toBe(1);
@@ -1364,12 +1412,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1382,7 +1434,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     try {
       await withCapturedConsoleError(async (calls) => {
-        await expect(ensureReady("session-1")).rejects.toThrow("stop boom");
+        await expect(ensureReady(buildSession())).rejects.toThrow("stop boom");
         expect(calls).toHaveLength(0);
       });
     } finally {
@@ -1461,12 +1513,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1478,7 +1534,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
       expect(resumedInput).toMatchObject({
         externalSessionId: "session-1",
         model: {
@@ -1558,12 +1614,16 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionsRef,
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
-      updateSession: (_externalSessionId, updater) => {
+      updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+        sessionsRef.current = replaceAgentSessionByIdentity(
+          sessionsRef.current,
+          identity,
+          updater(current),
+        );
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
@@ -1578,7 +1638,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await ensureReady("session-1");
+      await ensureReady(buildSession());
 
       expect(String(ensuredRuntimeKind)).toBe("opencode");
       expect(resumedInput).toMatchObject({
@@ -1628,7 +1688,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      await expect(ensureReady("session-1")).rejects.toThrow("prompt override load failed");
+      await expect(ensureReady(buildSession())).rejects.toThrow("prompt override load failed");
       expect(runtimeCalls).toBe(0);
     } finally {
     }
@@ -1668,7 +1728,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     });
 
     try {
-      const ensurePromise = ensureReady("session-1");
+      const ensurePromise = ensureReady(buildSession());
       repoEpochRef.current = 2;
       currentWorkspaceRepoPathRef.current = "/tmp/other-repo";
       promptOverridesDeferred.resolve({});

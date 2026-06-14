@@ -8,6 +8,7 @@ import {
   createAgentSessionCollection,
   getAgentSession,
   listAgentSessions,
+  replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
@@ -100,7 +101,11 @@ export const createSessionUpdater = (sessionsRef: { current: AgentSessionCollect
     if (!current) {
       return;
     }
-    sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+    sessionsRef.current = replaceAgentSessionByIdentity(
+      sessionsRef.current,
+      identity,
+      updater(current),
+    );
   };
 };
 

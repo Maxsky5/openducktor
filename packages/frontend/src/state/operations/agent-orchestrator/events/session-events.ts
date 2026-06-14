@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
+import { getAgentSession, replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
 import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   ListenToAgentSessionParams,
@@ -184,7 +184,11 @@ export const listenToAgentSessionEvents = async (
         if (options?.persist === true) {
           shouldPersistBufferedSession = true;
         }
-        batchedSessionsRef.current = replaceAgentSession(batchedSessionsRef.current, next);
+        batchedSessionsRef.current = replaceAgentSessionByIdentity(
+          batchedSessionsRef.current,
+          targetSessionIdentity,
+          next,
+        );
       },
     });
 

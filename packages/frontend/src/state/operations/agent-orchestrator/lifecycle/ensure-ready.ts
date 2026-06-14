@@ -1,9 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
-import {
-  type AgentSessionCollection,
-  getAgentSessionByExternalSessionId,
-} from "@/state/agent-session-collection";
+import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
@@ -14,7 +11,7 @@ import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import {
-  hasSessionListenerForExternalSessionId,
+  hasSessionListener,
   removeSessionListenersByExternalSessionId,
   type SessionListenerRegistry,
 } from "../support/session-listener-registry";
@@ -70,9 +67,10 @@ export const createEnsureSessionReady = ({
   ensureRuntime,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
-  return async (externalSessionId: string): Promise<void> => {
+  return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionIdentity> => {
     const repoPath = requireActiveRepo(activeWorkspace?.repoPath ?? null);
     const workspaceId = activeWorkspace?.workspaceId;
+    const externalSessionId = sessionIdentity.externalSessionId;
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }
@@ -90,28 +88,22 @@ export const createEnsureSessionReady = ({
     const applyRuntimePresenceSnapshot = async (
       snapshot: ConfirmedAgentSessionPresenceSnapshot,
       session: WorkflowAgentSessionState,
-    ): Promise<void> => {
+    ): Promise<AgentSessionIdentity> => {
       updateSession(session, (current) =>
         applyAgentSessionPresenceSnapshotToSession(current, snapshot),
       );
-      if (
-        !hasSessionListenerForExternalSessionId(
-          sessionListenerRegistryRef.current,
-          session.externalSessionId,
-        )
-      ) {
-        const currentSession =
-          getAgentSessionByExternalSessionId(sessionsRef.current, session.externalSessionId) ??
-          session;
-        await listenToAgentSession(toRuntimeSessionRef(repoPath, currentSession));
+      const sessionRef = snapshot.ref;
+      if (!hasSessionListener(sessionListenerRegistryRef.current, sessionRef)) {
+        await listenToAgentSession(sessionRef);
       }
       if (sessionPresenceHasPendingInput(snapshot)) {
         throw new Error(PENDING_INPUT_NOT_READY_ERROR);
       }
+      return sessionRef;
     };
 
     assertNotStale();
-    const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+    const session = getAgentSession(sessionsRef.current, sessionIdentity);
     if (!session) {
       throw new Error(`Session not found: ${externalSessionId}`);
     }
@@ -154,8 +146,7 @@ export const createEnsureSessionReady = ({
       const sessionPresence = await adapter.readSessionPresence(sessionRef);
       assertNotStale();
       if (sessionPresence.presence === "runtime") {
-        await applyRuntimePresenceSnapshot(sessionPresence, session);
-        return;
+        return applyRuntimePresenceSnapshot(sessionPresence, session);
       }
       updateSession(
         session,
@@ -206,10 +197,12 @@ export const createEnsureSessionReady = ({
       sessionListenerRegistryRef.current,
       externalSessionId,
     );
-    await applyRuntimePresenceSnapshot(sessionPresence, session);
+    const readySessionIdentity = await applyRuntimePresenceSnapshot(sessionPresence, session);
 
     if (isStaleRepoOperation()) {
-      return;
+      return readySessionIdentity;
     }
+
+    return readySessionIdentity;
   };
 };

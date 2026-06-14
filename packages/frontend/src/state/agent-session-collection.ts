@@ -63,6 +63,23 @@ export const replaceAgentSession = (
   return next;
 };
 
+export const replaceAgentSessionByIdentity = (
+  collection: AgentSessionCollection,
+  identity: AgentSessionIdentity,
+  session: AgentSessionState,
+): AgentSessionCollection => {
+  const currentKey = agentSessionCollectionKey(identity);
+  const nextKey = agentSessionCollectionKey(session);
+  if (currentKey === nextKey && collection.get(nextKey) === session) {
+    return collection;
+  }
+
+  const next = new Map(collection);
+  next.delete(currentKey);
+  next.set(nextKey, session);
+  return next;
+};
+
 export const removeAgentSession = (
   collection: AgentSessionCollection,
   identity: AgentSessionIdentity,

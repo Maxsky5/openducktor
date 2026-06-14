@@ -8,6 +8,7 @@ import {
   getAgentSessionByExternalSessionId,
   listAgentSessions,
   replaceAgentSession,
+  replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import {
   findSessionMessageForTest,
@@ -64,7 +65,7 @@ const mockAgentSessionPresenceSnapshot = (
   adapter: OpencodeSdkAdapter,
   snapshot: ReturnType<
     typeof createAgentSessionPresenceSnapshotFixture
-  > = createAgentSessionPresenceSnapshotFixture(),
+  > = createAgentSessionPresenceSnapshotFixture({ ref: { externalSessionId: "session-1" } }),
 ): ReturnType<typeof createAgentSessionPresenceSnapshotFixture> => {
   adapter.listSessionPresence = async () => [snapshot];
   adapter.readSessionPresence = async () => snapshot;
@@ -111,7 +112,11 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
       if (!current) {
         return;
       }
-      sessionsRef.current = replaceAgentSession(sessionsRef.current, updater(current));
+      sessionsRef.current = replaceAgentSessionByIdentity(
+        sessionsRef.current,
+        identity,
+        updater(current),
+      );
     },
     listenToAgentSession: async () => {},
     resolveTaskWorktree: async () => null,
@@ -1264,6 +1269,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({
+        ref: { externalSessionId: "session-1" },
         snapshot: { status: { type: "idle" } },
       }),
     );
@@ -1712,7 +1718,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }> = [];
     mockAgentSessionPresenceSnapshot(
       adapter,
-      createAgentSessionPresenceSnapshotFixture({ snapshot: { status: { type: "busy" } } }),
+      createAgentSessionPresenceSnapshotFixture({
+        ref: { externalSessionId: "session-1" },
+        snapshot: { status: { type: "busy" } },
+      }),
     );
     adapter.sendUserMessage = async (input) => {
       sendCalls.push({
@@ -1791,7 +1800,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     let clearCalls = 0;
     mockAgentSessionPresenceSnapshot(
       adapter,
-      createAgentSessionPresenceSnapshotFixture({ snapshot: { status: { type: "busy" } } }),
+      createAgentSessionPresenceSnapshotFixture({
+        ref: { externalSessionId: "session-1" },
+        snapshot: { status: { type: "busy" } },
+      }),
     );
     adapter.sendUserMessage = async () => {
       throw new Error("queued send failed");

@@ -3,7 +3,9 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
+  getAgentSession,
   getAgentSessionByExternalSessionId,
+  listAgentSessions,
 } from "@/state/agent-session-collection";
 import { createAgentSessionsStore } from "@/state/agent-sessions-store";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
@@ -91,6 +93,48 @@ describe("useAgentSessionMutations", () => {
       getAgentSessionByExternalSessionId(sessionsRef.current, "external-1")?.role,
     ).not.toBeNull();
     expect(persisted).toEqual([]);
+    await harness.unmount();
+  });
+
+  test("moves sessions when runtime identity changes during an update", async () => {
+    const store = createAgentSessionsStore();
+    const session = createSession({
+      externalSessionId: "external-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/old",
+    });
+    const movedSession = {
+      ...session,
+      workingDirectory: "/tmp/repo/new",
+      status: "running" as const,
+    };
+    const sessionsRef: { current: AgentSessionCollection } = {
+      current: createAgentSessionCollection([session]),
+    };
+    const Harness = () =>
+      useAgentSessionMutations({
+        workspaceRepoPath: "/tmp/repo",
+        sessionsRef,
+        commitSessions: (updater) => {
+          sessionsRef.current =
+            typeof updater === "function" ? updater(sessionsRef.current) : updater;
+          store.setSessionCollection(sessionsRef.current);
+        },
+        persistSessionRecord: async () => {},
+      });
+    const harness = createHookHarness(Harness, undefined);
+    await harness.mount();
+
+    await harness.run(({ updateSession }) => {
+      updateSession(session, () => movedSession);
+    });
+
+    expect(getAgentSession(sessionsRef.current, session)).toBeNull();
+    expect(getAgentSession(sessionsRef.current, movedSession)).toBe(movedSession);
+    expect(getAgentSessionByExternalSessionId(sessionsRef.current, "external-1")).toBe(
+      movedSession,
+    );
+    expect(listAgentSessions(sessionsRef.current)).toEqual([movedSession]);
     await harness.unmount();
   });
 });

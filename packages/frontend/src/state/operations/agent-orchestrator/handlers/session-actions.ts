@@ -20,6 +20,7 @@ import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-
 import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
+  getAgentSession,
   getAgentSessionByExternalSessionId,
 } from "@/state/agent-session-collection";
 import type {
@@ -141,20 +142,20 @@ const requireWorkspaceRepoPath = (workspaceRepoPath: string | null): string => {
 };
 
 const ensureSessionReadyForSend = async ({
-  externalSessionId,
+  session,
   ensureSessionReady,
   sessionsRef,
   updateSession,
 }: {
-  externalSessionId: string;
-  ensureSessionReady: (externalSessionId: string) => Promise<void>;
+  session: AgentSessionState;
+  ensureSessionReady: (session: AgentSessionIdentity) => Promise<AgentSessionIdentity>;
   sessionsRef: { current: AgentSessionCollection };
   updateSession: SessionActionsDependencies["updateSession"];
-}): Promise<void> => {
+}): Promise<AgentSessionIdentity> => {
   try {
-    await ensureSessionReady(externalSessionId);
+    return await ensureSessionReady(session);
   } catch (error) {
-    settleStartingSession(externalSessionId, "error", sessionsRef, updateSession);
+    settleStartingSession(session.externalSessionId, "error", sessionsRef, updateSession);
     throw error;
   }
 };
@@ -259,28 +260,29 @@ export const createAgentSessionActions = ({
       sessionsRef.current,
       externalSessionId,
     );
-    if (currentSession) {
-      if (!isWorkflowAgentSession(currentSession)) {
-        throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
-      }
-      const task = taskRef.current.find((entry) => entry.id === currentSession.taskId);
-      if (task && !isRoleAvailableForTask(task, currentSession.role)) {
-        throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
-      }
-      if (isAgentSessionWaitingInput(currentSession)) {
-        settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
-        return;
-      }
+    if (!currentSession) {
+      throw new Error(`Session not found: ${externalSessionId}`);
+    }
+    if (!isWorkflowAgentSession(currentSession)) {
+      throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
+    }
+    const task = taskRef.current.find((entry) => entry.id === currentSession.taskId);
+    if (task && !isRoleAvailableForTask(task, currentSession.role)) {
+      throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
+    }
+    if (isAgentSessionWaitingInput(currentSession)) {
+      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
+      return;
     }
 
-    await ensureSessionReadyForSend({
-      externalSessionId,
+    const readySessionIdentity = await ensureSessionReadyForSend({
+      session: currentSession,
       ensureSessionReady,
       sessionsRef,
       updateSession,
     });
 
-    const readySession = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+    const readySession = getAgentSession(sessionsRef.current, readySessionIdentity);
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
       settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
       return;

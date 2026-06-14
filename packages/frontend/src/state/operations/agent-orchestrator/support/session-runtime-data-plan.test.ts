@@ -88,7 +88,7 @@ describe("deriveSessionRuntimeDataPlan", () => {
     expect(plan.runtimeRef).toBeNull();
     expect(plan.sessionRef).toBeNull();
     expect(plan.runtimeDataSupportError).toBe(
-      "Active session runtime context is missing working directory.",
+      "Session workingDirectory is required to read active session runtime data.",
     );
     expect(plan.canReadModelCatalog).toBe(false);
     expect(plan.canReadTodos).toBe(false);

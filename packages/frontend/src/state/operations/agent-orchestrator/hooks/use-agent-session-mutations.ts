@@ -4,7 +4,7 @@ import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
   getAgentSession,
-  replaceAgentSession,
+  replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -59,7 +59,7 @@ export const useAgentSessionMutations = ({
         throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
       }
 
-      commitSessions(replaceAgentSession(currentSessions, nextSession));
+      commitSessions(replaceAgentSessionByIdentity(currentSessions, identity, nextSession));
 
       if (shouldPersist) {
         runOrchestratorSideEffect(
