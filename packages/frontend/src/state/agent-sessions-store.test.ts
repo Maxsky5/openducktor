@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import { createAgentSessionCollection, listAgentSessions } from "./agent-session-collection";
 import { createAgentSessionsStore, toAgentSessionSummary } from "./agent-sessions-store";
+import {
+  createSessionMessagesState,
+  getSessionMessageCount,
+} from "./operations/agent-orchestrator/support/messages";
 
 describe("toAgentSessionSummary", () => {
   test("preserves session working directory for build-session consumers", () => {
@@ -44,6 +48,57 @@ describe("createAgentSessionsStore session snapshots", () => {
         workingDirectory: "/repo/worktree",
       }),
     ).toBeNull();
+  });
+
+  test("notifies subscribers for consecutive loading and loaded transcript commits", () => {
+    const store = createAgentSessionsStore();
+    const identity = {
+      externalSessionId: "session-1",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+    };
+    const session = {
+      ...createAgentSessionFixture({
+        ...identity,
+        taskId: "task-1",
+        historyLoadState: "not_requested",
+      }),
+      messages: createSessionMessagesState(identity.externalSessionId),
+    };
+    store.setSessionCollection(createAgentSessionCollection([session]));
+
+    const observedStates: string[] = [];
+    const unsubscribe = store.subscribe(() => {
+      const current = store.getSessionSnapshot(identity);
+      observedStates.push(
+        `${current?.historyLoadState ?? "missing"}:${
+          current ? getSessionMessageCount(current) : "missing"
+        }`,
+      );
+    });
+
+    store.setSessionCollection(
+      createAgentSessionCollection([{ ...session, historyLoadState: "loading" }]),
+    );
+    store.setSessionCollection(
+      createAgentSessionCollection([
+        {
+          ...session,
+          historyLoadState: "loaded",
+          messages: createSessionMessagesState(identity.externalSessionId, [
+            {
+              id: "message-1",
+              role: "assistant",
+              content: "Loaded transcript",
+              timestamp: "2026-06-14T00:00:00.000Z",
+            },
+          ]),
+        },
+      ]),
+    );
+    unsubscribe();
+
+    expect(observedStates).toEqual(["loading:0", "loaded:1"]);
   });
 });
 

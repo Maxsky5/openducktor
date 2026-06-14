@@ -15,7 +15,7 @@ import type {
 import { createSessionMessagesState } from "../support/messages";
 import {
   createLoadAgentSessionHistory,
-  loadSessionHistorySnapshot,
+  loadSessionHistoryIntoStore,
   shouldLoadSelectedSessionHistory,
 } from "./session-history-loader";
 
@@ -47,13 +47,9 @@ const taskFixture: TaskCard = {
 
 const sessionTarget = {
   externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "build",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-  startedAt: "2026-06-12T08:00:00.000Z",
-  selectedModel: null,
-} satisfies Parameters<typeof loadSessionHistorySnapshot>[0]["session"];
+} satisfies Parameters<typeof loadSessionHistoryIntoStore>[0]["target"];
 
 const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
@@ -142,12 +138,12 @@ describe("session history loader", () => {
     const updateSession = mock(() => undefined);
     const harness = createHistoryLoadHarness();
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       sessionsRef: harness.sessionsRef,
       updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => true,
     });
 
@@ -163,7 +159,7 @@ describe("session history loader", () => {
     const harness = createHistoryLoadHarness();
     let stale = false;
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -173,7 +169,7 @@ describe("session history loader", () => {
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => stale,
     });
 
@@ -187,7 +183,7 @@ describe("session history loader", () => {
   test("marks the session failed when history loading fails for the current repo operation", async () => {
     const harness = createHistoryLoadHarness();
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => {
@@ -196,7 +192,7 @@ describe("session history loader", () => {
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -282,12 +278,12 @@ describe("session history loader", () => {
       historyLoadState: "loading",
     });
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -306,12 +302,12 @@ describe("session history loader", () => {
       historyLoadState: "loaded",
     });
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -341,14 +337,14 @@ describe("session history loader", () => {
       pendingQuestions,
     });
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [],
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -375,7 +371,7 @@ describe("session history loader", () => {
       ]),
     });
 
-    await loadSessionHistorySnapshot({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [
@@ -390,7 +386,7 @@ describe("session history loader", () => {
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -412,7 +408,7 @@ describe("session history loader", () => {
       contextUsage: liveContextUsage,
     });
 
-    await loadSessionHistorySnapshot({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [
@@ -437,7 +433,7 @@ describe("session history loader", () => {
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: sessionTarget,
+      target: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -449,11 +445,11 @@ describe("session history loader", () => {
     const harness = createHistoryLoadHarness();
     let historyInput:
       | Parameters<
-          Parameters<typeof loadSessionHistorySnapshot>[0]["adapter"]["loadSessionHistory"]
+          Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
         >[0]
       | null = null;
 
-    const result = await loadSessionHistorySnapshot({
+    const result = await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async (input) => {
@@ -471,7 +467,7 @@ describe("session history loader", () => {
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: {
+      target: {
         ...sessionTarget,
         systemPromptContext: {
           systemPrompt: "Build from current task context.",
@@ -497,7 +493,7 @@ describe("session history loader", () => {
   test("keeps the runtime-owned system prompt when history provides one", async () => {
     const harness = createHistoryLoadHarness();
 
-    await loadSessionHistorySnapshot({
+    await loadSessionHistoryIntoStore({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [
@@ -512,7 +508,7 @@ describe("session history loader", () => {
       },
       sessionsRef: harness.sessionsRef,
       updateSession: harness.updateSession,
-      session: {
+      target: {
         ...sessionTarget,
         systemPromptContext: {
           systemPrompt: "Computed display prompt.",

@@ -201,40 +201,6 @@ const toTranscriptRowsRevisionKey = (revision: TranscriptRowsRevision): string =
   ].join("\u001f");
 };
 
-const scheduleAfterSwitchPaint = (callback: () => void): (() => void) => {
-  let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-  let frameId: number | null = null;
-  let cancelled = false;
-
-  const run = (): void => {
-    if (cancelled) {
-      return;
-    }
-    timeoutId = globalThis.setTimeout(() => {
-      timeoutId = null;
-      if (!cancelled) {
-        callback();
-      }
-    }, 0);
-  };
-
-  if (typeof globalThis.requestAnimationFrame === "function") {
-    frameId = globalThis.requestAnimationFrame(run);
-  } else {
-    run();
-  }
-
-  return () => {
-    cancelled = true;
-    if (frameId !== null && typeof globalThis.cancelAnimationFrame === "function") {
-      globalThis.cancelAnimationFrame(frameId);
-    }
-    if (timeoutId !== null) {
-      globalThis.clearTimeout(timeoutId);
-    }
-  };
-};
-
 const now = (): number => {
   return typeof globalThis.performance?.now === "function"
     ? globalThis.performance.now()
@@ -350,6 +316,24 @@ export const useAgentChatTranscriptRows = ({
     }
 
     const builder = createAgentChatWindowRowsStateBuilder(currentSession, { showThinkingMessages });
+    if (getSessionMessageCount(currentSession) <= TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT) {
+      const rowsState = builder.complete();
+      writeAgentChatWindowRowsCacheEntry({
+        session: currentSession,
+        showThinkingMessages,
+        rowsState,
+        cache: rowsCache,
+      });
+      dispatchResolvedTranscriptState(
+        toTranscriptRowsState({
+          session: currentSession,
+          revision: currentRevision,
+          rowsState,
+        }),
+      );
+      return;
+    }
+
     let scheduledWorkId: ReturnType<typeof globalThis.setTimeout> | null = null;
     const scheduleNextChunk = (): void => {
       scheduledWorkId = globalThis.setTimeout(() => {
@@ -397,10 +381,9 @@ export const useAgentChatTranscriptRows = ({
       }, 0);
     };
 
-    const cancelAfterPaint = scheduleAfterSwitchPaint(scheduleNextChunk);
+    scheduleNextChunk();
 
     return () => {
-      cancelAfterPaint();
       if (scheduledWorkId) {
         globalThis.clearTimeout(scheduledWorkId);
       }

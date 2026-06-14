@@ -13,6 +13,7 @@ and selected-session UI derives loading state from one selected route.
 
 Files:
 
+- `lifecycle/load-sessions.ts`
 - `session-read-model/repo-session-read-model.ts`
 - `hooks/use-repo-session-read-model-effects.ts`
 
@@ -41,20 +42,19 @@ Must not own:
 
 Files:
 
-- `lifecycle/load-sessions.ts`
 - `lifecycle/session-history-loader.ts`
-- `lifecycle/session-history-read-model-loader.ts`
 - `lifecycle/session-history-runtime-context.ts`
 
 Owns:
 
-- observing projected live session refs
-- selecting history loads for requested sessions or live sessions whose
-  history has not been requested
 - deciding when a selected session should retry or start its history load
 - passing transient runtime prompt context to history loads without storing it in
   session state
 - merging runtime history into transcript messages without erasing live messages
+
+Invariant: history loading is explicit and singular. The selected session view or
+session action asks to load one concrete session route; the repo projection never
+bulk-loads transcripts.
 
 ### Event Stream
 

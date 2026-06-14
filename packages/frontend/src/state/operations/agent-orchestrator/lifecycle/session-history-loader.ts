@@ -30,16 +30,7 @@ export type SessionHistoryLoadResult =
   | { externalSessionId: string; status: "skipped" }
   | { externalSessionId: string; status: "failed"; error: unknown };
 
-export type AgentSessionHistoryTarget = Pick<
-  AgentSessionState,
-  | "externalSessionId"
-  | "runtimeKind"
-  | "workingDirectory"
-  | "role"
-  | "selectedModel"
-  | "taskId"
-  | "startedAt"
-> & {
+type AgentSessionHistoryTarget = AgentSessionIdentity & {
   systemPromptContext?: AgentSessionHistorySystemPromptContext;
 };
 
@@ -93,28 +84,28 @@ export const shouldLoadSelectedSessionHistory = ({
   return shouldLoadSessionHistory(session);
 };
 
-export const loadSessionHistorySnapshot = async ({
+export const loadSessionHistoryIntoStore = async ({
   repoPath,
   adapter,
   sessionsRef,
   updateSession,
-  session,
+  target,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   sessionsRef: SessionsSnapshotRef;
   updateSession: UpdateSession;
-  session: AgentSessionHistoryTarget;
+  target: AgentSessionHistoryTarget;
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult> => {
   if (isStaleRepoOperation()) {
-    return { externalSessionId: session.externalSessionId, status: "stale" };
+    return { externalSessionId: target.externalSessionId, status: "stale" };
   }
 
-  const currentSession = getAgentSession(sessionsRef.current, session);
+  const currentSession = getAgentSession(sessionsRef.current, target);
   if (!currentSession || !shouldLoadSessionHistory(currentSession)) {
-    return { externalSessionId: session.externalSessionId, status: "skipped" };
+    return { externalSessionId: target.externalSessionId, status: "skipped" };
   }
 
   updateSession(
@@ -132,7 +123,7 @@ export const loadSessionHistorySnapshot = async ({
 
   const claimedSession = getAgentSession(sessionsRef.current, currentSession);
   if (claimedSession?.historyLoadState !== "loading") {
-    return { externalSessionId: session.externalSessionId, status: "skipped" };
+    return { externalSessionId: target.externalSessionId, status: "skipped" };
   }
 
   try {
@@ -141,13 +132,13 @@ export const loadSessionHistorySnapshot = async ({
       runtimeKind: claimedSession.runtimeKind,
       workingDirectory: claimedSession.workingDirectory,
       externalSessionId: claimedSession.externalSessionId,
-      ...(session.systemPromptContext ? { systemPromptContext: session.systemPromptContext } : {}),
+      ...(target.systemPromptContext ? { systemPromptContext: target.systemPromptContext } : {}),
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
 
     if (isStaleRepoOperation()) {
       releaseStaleHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: session.externalSessionId, status: "stale" };
+      return { externalSessionId: target.externalSessionId, status: "stale" };
     }
 
     const historyMessages = historyToChatMessages(history, {
@@ -175,7 +166,7 @@ export const loadSessionHistorySnapshot = async ({
   } catch (error) {
     if (isStaleRepoOperation()) {
       releaseStaleHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: session.externalSessionId, status: "stale" };
+      return { externalSessionId: target.externalSessionId, status: "stale" };
     }
     updateSession(
       claimedSession,
@@ -187,37 +178,9 @@ export const loadSessionHistorySnapshot = async ({
         persist: false,
       },
     );
-    return { externalSessionId: session.externalSessionId, status: "failed", error };
+    return { externalSessionId: target.externalSessionId, status: "failed", error };
   }
 };
-
-export const loadSessionHistorySnapshots = async ({
-  repoPath,
-  adapter,
-  sessionsRef,
-  updateSession,
-  sessions,
-  isStaleRepoOperation,
-}: {
-  repoPath: string;
-  adapter: SessionHistoryLoaderAdapter;
-  sessionsRef: SessionsSnapshotRef;
-  updateSession: UpdateSession;
-  sessions: AgentSessionHistoryTarget[];
-  isStaleRepoOperation: () => boolean;
-}): Promise<SessionHistoryLoadResult[]> =>
-  Promise.all(
-    sessions.map((session) => {
-      return loadSessionHistorySnapshot({
-        repoPath,
-        adapter,
-        sessionsRef,
-        updateSession,
-        session,
-        isStaleRepoOperation,
-      });
-    }),
-  );
 
 export const createLoadAgentSessionHistory = ({
   activeWorkspace,
@@ -265,15 +228,13 @@ export const createLoadAgentSessionHistory = ({
       return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
     }
 
-    const [result] = await loadSessionHistorySnapshots({
+    return loadSessionHistoryIntoStore({
       repoPath,
       adapter,
       sessionsRef,
       updateSession,
-      sessions: [historySession],
+      target: historySession,
       isStaleRepoOperation,
     });
-
-    return result ?? { externalSessionId: sessionIdentity.externalSessionId, status: "skipped" };
   };
 };

@@ -176,39 +176,12 @@ export const createAgentSessionsStore = (
   let sessionSummaries: AgentSessionSummary[] = [];
   let activitySessionSummaries: AgentActivitySessionSummary[] = [];
   let activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
-  let hasPendingNotification = false;
-  let framePending = false;
   const listeners = new Set<Listener>();
 
   const notifyListeners = (): void => {
     for (const listener of [...listeners]) {
       listener();
     }
-  };
-
-  const flushNotifications = (): void => {
-    framePending = false;
-    if (!hasPendingNotification) {
-      return;
-    }
-
-    hasPendingNotification = false;
-    notifyListeners();
-  };
-
-  const scheduleNotification = (): void => {
-    if (process.env.NODE_ENV === "test" || typeof requestAnimationFrame !== "function") {
-      notifyListeners();
-      return;
-    }
-
-    hasPendingNotification = true;
-    if (framePending) {
-      return;
-    }
-
-    framePending = true;
-    requestAnimationFrame(flushNotifications);
   };
 
   return {
@@ -273,7 +246,7 @@ export const createAgentSessionsStore = (
       if (activitySnapshot.sessions !== activitySessionSummaries) {
         activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
       }
-      scheduleNotification();
+      notifyListeners();
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       workspaceRepoPath = nextWorkspaceRepoPath;
@@ -282,7 +255,7 @@ export const createAgentSessionsStore = (
       sessionSummaries = [];
       activitySessionSummaries = [];
       activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
-      scheduleNotification();
+      notifyListeners();
     },
   };
 };
