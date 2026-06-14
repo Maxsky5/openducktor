@@ -1395,9 +1395,10 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     await harness.mount();
+    const sessionTwoValue = agentSessionIdentityKey(sessionTwo);
     await harness.run((state) => {
-      state.handleSessionSelectionChange("session-2");
-      state.handleWorkflowStepSelect("spec", "session-2");
+      state.handleSessionSelectionChange(sessionTwoValue);
+      state.handleWorkflowStepSelect("spec", sessionTwoValue);
     });
 
     expect(updateCalls).toContainEqual({

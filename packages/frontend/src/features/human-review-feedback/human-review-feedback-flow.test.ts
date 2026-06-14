@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -60,16 +61,15 @@ describe("human-review-feedback-flow", () => {
 
   test("submitHumanReviewFeedback builds a kickoff-based shared start-session request", async () => {
     const startRequestChangesSession = mock(async () => "session-new");
-    const builderSessions = [
-      createBuilderSession({
-        externalSessionId: "builder-session-2",
-        startedAt: "2026-03-20T12:00:00.000Z",
-      }),
-      createBuilderSession({
-        externalSessionId: "builder-session-1",
-        startedAt: "2026-03-19T12:00:00.000Z",
-      }),
-    ];
+    const latestBuilderSession = createBuilderSession({
+      externalSessionId: "builder-session-2",
+      startedAt: "2026-03-20T12:00:00.000Z",
+    });
+    const previousBuilderSession = createBuilderSession({
+      externalSessionId: "builder-session-1",
+      startedAt: "2026-03-19T12:00:00.000Z",
+    });
+    const builderSessions = [latestBuilderSession, previousBuilderSession];
 
     const result = await submitHumanReviewFeedback({
       state: createState({ message: "  Use the standard request-changes workflow.  " }),
@@ -95,8 +95,14 @@ describe("human-review-feedback-flow", () => {
     expect(startRequestChangesSession).toHaveBeenCalledWith(
       expect.objectContaining({
         existingSessionOptions: [
-          expect.objectContaining({ value: "builder-session-2" }),
-          expect.objectContaining({ value: "builder-session-1" }),
+          expect.objectContaining({
+            value: agentSessionIdentityKey(latestBuilderSession),
+            sourceExternalSessionId: "builder-session-2",
+          }),
+          expect.objectContaining({
+            value: agentSessionIdentityKey(previousBuilderSession),
+            sourceExternalSessionId: "builder-session-1",
+          }),
         ],
       }),
     );

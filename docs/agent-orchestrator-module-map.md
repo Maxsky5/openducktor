@@ -120,6 +120,7 @@ Files:
 
 - `pages/agents/agents-page-selection.ts`
 - `pages/agents/use-agent-studio-selection-controller.ts`
+- `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`
 - `pages/agents/selected-session/selected-session-context.ts`
 - `components/features/agents/agent-chat/agent-chat-thread-context.ts`
 - `lifecycle/session-view-lifecycle.ts`
@@ -151,7 +152,7 @@ Files:
 
 - `hooks/use-session-runtime-data.ts`
 - `support/session-runtime-data-writer.ts`
-- `pages/agents/use-agent-studio-selection-controller.ts`
+- `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`
 
 Owns:
 

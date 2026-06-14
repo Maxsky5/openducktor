@@ -87,7 +87,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
             },
           },
         }),
-      ).resolves.toEqual({
+      ).resolves.toMatchObject({
         kind: "reused",
         session: {
           externalSessionId: "ext-build",

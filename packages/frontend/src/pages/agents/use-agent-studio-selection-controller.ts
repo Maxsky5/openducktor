@@ -5,23 +5,11 @@ import type {
   AgentSessionRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { useEffect, useMemo } from "react";
-import {
-  firstLaunchAction,
-  resolveBuildContinuationLaunchAction,
-  type SessionLaunchActionId,
-} from "@/features/session-start";
+import { useMemo } from "react";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
-import { deriveRepoRuntimeReadiness } from "@/lib/repo-runtime-health";
 import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { useAgentSession } from "@/state/app-state-provider";
-import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
-import { shouldLoadSelectedSessionHistory } from "@/state/operations/agent-orchestrator/lifecycle/session-history-loader";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -30,8 +18,11 @@ import {
   groupSessionsByTaskId,
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
-  resolveAgentStudioViewSessionSelection,
 } from "./agents-page-selection";
+import {
+  type AgentStudioSelectedSessionView,
+  useAgentStudioSelectedSessionView,
+} from "./selected-session/use-agent-studio-selected-session-view";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
@@ -96,13 +87,13 @@ export type AgentStudioSelectionControllerResult = {
   viewSessionsForTask: AgentSessionSummary[];
   viewActiveSessionSummary: AgentSessionSummary | null;
   viewActiveSession: AgentSessionState | null;
-  viewSessionRuntimeData: SessionRuntimeDataState["runtimeData"];
-  viewSessionRuntimeDataError?: string | null;
+  viewSessionRuntimeData: AgentStudioSelectedSessionView["runtimeData"];
+  viewSessionRuntimeDataError?: AgentStudioSelectedSessionView["runtimeDataError"];
   viewRole: AgentRole;
-  viewLaunchActionId: SessionLaunchActionId;
+  viewLaunchActionId: AgentStudioSelectedSessionView["launchActionId"];
   isActiveTaskReady: boolean;
   isViewSessionResolving: boolean;
-  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
+  viewSessionLifecycle: AgentStudioSelectedSessionView["lifecycle"];
 };
 
 const EMPTY_PERSISTED_SESSION_RECORDS: AgentSessionRecord[] = [];
@@ -275,107 +266,28 @@ export function useAgentStudioSelectionController({
   const viewSessionParamFromSelection =
     viewSelectionIntent?.externalSessionId ?? effectiveSessionParam;
 
-  const viewSelection = useMemo(() => {
-    return resolveAgentStudioViewSessionSelection({
-      sessionSummaries: viewSessionsForTask,
-      persistedRecords: viewPersistedSessionRecords,
-      externalSessionId: viewSessionParamFromSelection,
-      hasExplicitRoleParam: viewHasExplicitRoleSelection,
-      roleFromQuery: viewRoleFromSelection,
-      selectedTask: viewSelectedTask,
-      fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
-      keepExplicitRoleSessionless:
-        viewSelectionIntent?.externalSessionId === null && effectiveSessionParam === null,
-    });
-  }, [
-    viewHasExplicitRoleSelection,
-    isViewTaskDetachedFromQuery,
-    viewRoleFromSelection,
-    viewSelectedTask,
-    viewSessionParamFromSelection,
-    effectiveSessionParam,
-    viewSelectionIntent?.externalSessionId,
-    viewPersistedSessionRecords,
-    viewSessionsForTask,
-  ]);
-  const viewSelectedSessionRoute = viewSelection.sessionRoute;
-  const viewActiveSession = useAgentSession(viewSelectedSessionRoute);
-  const viewSessionReadinessState = useMemo(
-    () =>
-      deriveRepoRuntimeReadiness({
-        hasActiveWorkspace: activeWorkspace !== null,
-        runtimeDefinitions,
-        isLoadingRuntimeDefinitions,
-        runtimeDefinitionsError,
-        runtimeHealthByRuntime,
-        isLoadingChecks,
-        runtimeKind: viewSelectedSessionRoute?.runtimeKind ?? null,
-      }).readinessState,
-    [
-      activeWorkspace,
-      isLoadingChecks,
-      isLoadingRuntimeDefinitions,
-      runtimeDefinitions,
-      runtimeDefinitionsError,
-      runtimeHealthByRuntime,
-      viewSelectedSessionRoute?.runtimeKind,
-    ],
-  );
-  const viewRole = viewSelection.role;
-  const viewLaunchActionId: SessionLaunchActionId =
-    viewRole === "build"
-      ? resolveBuildContinuationLaunchAction(viewSelectedTask)
-      : firstLaunchAction(viewRole);
-  const shouldWaitForTaskSessionRecords =
-    isLoadingTaskSessionRecords &&
-    viewSelectedSessionRoute === null &&
-    viewSessionsForTask.length === 0 &&
-    viewSelectedTask !== null;
-  const selectedSessionLifecycle = useMemo(() => {
-    return deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute: viewSelectedSessionRoute,
-      session: viewActiveSession,
-      hasSelectedTask: viewSelectedTask !== null,
-      repoReadinessState: viewSessionReadinessState,
-      sessionLoadError: sessionReadModelError,
-      isLoadingTaskSessionRecords: shouldWaitForTaskSessionRecords,
-    });
-  }, [
+  const selectedSessionView = useAgentStudioSelectedSessionView({
+    activeWorkspace,
+    selectedTask: viewSelectedTask,
+    sessionSummaries: viewSessionsForTask,
+    persistedRecords: viewPersistedSessionRecords,
+    externalSessionId: viewSessionParamFromSelection,
+    hasExplicitRoleSelection: viewHasExplicitRoleSelection,
+    roleSelection: viewRoleFromSelection,
+    fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
+    keepExplicitRoleSessionless:
+      viewSelectionIntent?.externalSessionId === null && effectiveSessionParam === null,
     sessionReadModelError,
-    shouldWaitForTaskSessionRecords,
-    viewSelectedSessionRoute,
-    viewSelectedTask,
-    viewSessionReadinessState,
-    viewActiveSession,
-  ]);
-  const isViewSessionResolving =
-    viewSelectedSessionRoute !== null
-      ? viewActiveSession === null && !sessionReadModelError
-      : shouldWaitForTaskSessionRecords && viewSessionReadinessState === "ready";
-  const viewSessionRuntimeData = useSessionRuntimeData({
-    repoPath: activeWorkspace?.repoPath ?? null,
-    session: viewActiveSession,
+    isLoadingTaskSessionRecords,
     runtimeDefinitions,
-    repoReadinessState: viewSessionReadinessState,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeHealthByRuntime,
+    isLoadingChecks,
+    loadAgentSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const shouldLoadViewSessionHistory = shouldLoadSelectedSessionHistory({
-    repoReadinessState: viewSessionReadinessState,
-    session: viewActiveSession,
-  });
-  useEffect(() => {
-    if (viewSelectedSessionRoute === null || !shouldLoadViewSessionHistory || !viewActiveSession) {
-      return;
-    }
-
-    void loadAgentSessionHistory({ session: viewActiveSession });
-  }, [
-    loadAgentSessionHistory,
-    shouldLoadViewSessionHistory,
-    viewActiveSession,
-    viewSelectedSessionRoute,
-  ]);
   const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(
@@ -397,15 +309,15 @@ export function useAgentStudioSelectionController({
       viewTaskId,
       viewSelectedTask,
       viewSessionsForTask,
-      viewActiveSessionSummary: viewSelection.sessionSummary,
-      viewActiveSession,
-      viewSessionRuntimeData: viewSessionRuntimeData.runtimeData,
-      viewSessionRuntimeDataError: viewSessionRuntimeData.runtimeDataError,
-      viewRole,
-      viewLaunchActionId,
+      viewActiveSessionSummary: selectedSessionView.sessionSummary,
+      viewActiveSession: selectedSessionView.session,
+      viewSessionRuntimeData: selectedSessionView.runtimeData,
+      viewSessionRuntimeDataError: selectedSessionView.runtimeDataError,
+      viewRole: selectedSessionView.role,
+      viewLaunchActionId: selectedSessionView.launchActionId,
       isActiveTaskReady,
-      isViewSessionResolving,
-      viewSessionLifecycle: selectedSessionLifecycle,
+      isViewSessionResolving: selectedSessionView.isResolving,
+      viewSessionLifecycle: selectedSessionView.lifecycle,
     }),
     [
       activeSessionSummary,
@@ -416,22 +328,22 @@ export function useAgentStudioSelectionController({
       handleReorderTab,
       handleSelectTab,
       isActiveTaskReady,
-      isViewSessionResolving,
       isLoadingTasks,
-      selectedSessionLifecycle,
+      selectedSessionView.isResolving,
+      selectedSessionView.launchActionId,
+      selectedSessionView.lifecycle,
+      selectedSessionView.role,
+      selectedSessionView.runtimeData,
+      selectedSessionView.runtimeDataError,
+      selectedSessionView.session,
+      selectedSessionView.sessionSummary,
       selectedSessionFromRoute,
       selectedTask,
       sessions,
       sessionsForTask,
       taskId,
       taskTabs,
-      viewLaunchActionId,
-      viewRole,
       viewSelectedTask,
-      viewSelection.sessionSummary,
-      viewActiveSession,
-      viewSessionRuntimeData.runtimeData,
-      viewSessionRuntimeData.runtimeDataError,
       viewSessionsForTask,
       viewTaskId,
     ],

@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createTaskCardFixture } from "../../pages/agents/agent-studio-test-utils";
@@ -95,7 +96,8 @@ describe("useGitConflictResolution", () => {
           message: expect.any(String),
           existingSessionOptions: [
             expect.objectContaining({
-              value: "external-build-1",
+              value: agentSessionIdentityKey(matchingWorktreeSession),
+              sourceExternalSessionId: "external-build-1",
             }),
           ],
           initialStartMode: "reuse",

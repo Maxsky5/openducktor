@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
@@ -110,8 +111,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktrees/build-1",
         agent: "build",
       });
       expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(1);
@@ -147,7 +146,12 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(resolved).toBe(true);
       expect(args.startSessionRequest).toHaveBeenCalledWith(
         expect.objectContaining({
-          existingSessionOptions: [expect.objectContaining({ value: "build-1" })],
+          existingSessionOptions: [
+            expect.objectContaining({
+              value: agentSessionIdentityKey(matchingBuilderSession),
+              sourceExternalSessionId: "build-1",
+            }),
+          ],
           initialSourceExternalSessionId: "build-1",
         }),
       );
@@ -195,8 +199,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktrees/build-new-9",
         agent: "build",
       });
     } finally {
@@ -230,8 +232,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktrees/build-new-9",
         agent: "build",
       });
     } finally {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -978,38 +979,37 @@ describe("agents-page-session-tabs", () => {
   });
 
   test("builds grouped session selector options", () => {
+    const specSessionOne = buildSession({
+      runtimeKind: "opencode",
+      externalSessionId: "spec-1",
+      role: "spec",
+      startedAt: "2026-02-22T09:20:00.000Z",
+    });
+    const specSessionTwo = buildSession({
+      runtimeKind: "opencode",
+      externalSessionId: "spec-2",
+      role: "spec",
+      startedAt: "2026-02-22T08:20:00.000Z",
+    });
+    const plannerSession = buildSession({
+      runtimeKind: "opencode",
+      externalSessionId: "planner-1",
+      role: "planner",
+      startedAt: "2026-02-22T10:20:00.000Z",
+    });
     const groups = buildSessionSelectorGroups({
-      sessionsForTask: [
-        buildSession({
-          runtimeKind: "opencode",
-          externalSessionId: "spec-1",
-          role: "spec",
-          startedAt: "2026-02-22T09:20:00.000Z",
-        }),
-        buildSession({
-          runtimeKind: "opencode",
-          externalSessionId: "spec-2",
-          role: "spec",
-          startedAt: "2026-02-22T08:20:00.000Z",
-        }),
-        buildSession({
-          runtimeKind: "opencode",
-          externalSessionId: "planner-1",
-          role: "planner",
-          startedAt: "2026-02-22T10:20:00.000Z",
-        }),
-      ],
+      sessionsForTask: [specSessionOne, specSessionTwo, plannerSession],
       roleLabelByRole: { ...AGENT_ROLE_LABELS },
     });
 
     expect(groups[0]?.label).toBe("Spec");
-    expect(groups[0]?.options[0]?.value).toBe("spec-1");
+    expect(groups[0]?.options[0]?.value).toBe(agentSessionIdentityKey(specSessionOne));
     expect(groups[0]?.options[0]?.label).toBe("Spec #2");
-    expect(groups[0]?.options[1]?.value).toBe("spec-2");
+    expect(groups[0]?.options[1]?.value).toBe(agentSessionIdentityKey(specSessionTwo));
     expect(groups[0]?.options[1]?.label).toBe("Spec #1");
     expect(groups[0]?.options[0]?.secondaryLabel).toBeUndefined();
     expect(groups[1]?.label).toBe("Planner");
-    expect(groups[1]?.options[0]?.value).toBe("planner-1");
+    expect(groups[1]?.options[0]?.value).toBe(agentSessionIdentityKey(plannerSession));
     expect(groups[1]?.options[0]?.label).toBe("Planner #1");
   });
 

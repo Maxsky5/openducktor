@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
@@ -112,8 +113,9 @@ describe("use-agent-studio-page-model-builders", () => {
     expect(context.selectedInteractionRole).toBe("planner");
     expect(context.selectedRoleAvailable).toBe(false);
     expect(context.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
-    expect(context.sessionSelectorValue).toBe("planner-session");
-    expect(context.sessionSelectorAutofocusByValue[plannerSession.externalSessionId]).toBe(false);
+    const plannerSessionValue = agentSessionIdentityKey(plannerSession);
+    expect(context.sessionSelectorValue).toBe(plannerSessionValue);
+    expect(context.sessionSelectorAutofocusByValue[plannerSessionValue]).toBe(false);
     expect(context.createSessionDisabled).toBe(false);
   });
 
@@ -149,8 +151,8 @@ describe("use-agent-studio-page-model-builders", () => {
     });
 
     expect(context.sessionSelectorAutofocusByValue).toEqual({
-      [specSession.externalSessionId]: true,
-      [qaWaitingSession.externalSessionId]: false,
+      [agentSessionIdentityKey(specSession)]: true,
+      [agentSessionIdentityKey(qaWaitingSession)]: false,
     });
   });
 

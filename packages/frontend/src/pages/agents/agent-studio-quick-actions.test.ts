@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildAgentStudioQuickActions,
@@ -115,11 +116,14 @@ describe("agent-studio-quick-actions", () => {
         "human_request_changes",
       ],
     });
+    const humanReviewBuilderSession = buildSession({
+      taskId: "task-1",
+      role: "build",
+      externalSessionId: "builder-1",
+    });
     const humanReviewOptions = buildAgentStudioQuickActions({
       selectedTask: humanReviewTask,
-      sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
-      ],
+      sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
     });
@@ -129,7 +133,7 @@ describe("agent-studio-quick-actions", () => {
     });
     expect(humanReviewOptions[0]).toMatchObject({
       launchActionId: "build_pull_request_generation",
-      initialSourceExternalSessionId: "builder-1",
+      initialSourceExternalSessionId: agentSessionIdentityKey(humanReviewBuilderSession),
     });
     expect(humanReviewOptions.map((option) => option.launchActionId)).toEqual([
       "build_pull_request_generation",
@@ -394,11 +398,14 @@ describe("agent-studio-quick-actions", () => {
       ...aiReviewTask,
       status: "human_review",
     });
+    const humanReviewBuilderSession = buildSession({
+      taskId: "task-1",
+      role: "build",
+      externalSessionId: "builder-1",
+    });
     const humanReviewOptions = buildAgentStudioQuickActions({
       selectedTask: humanReviewTask,
-      sessionsForTask: [
-        buildSession({ taskId: "task-1", role: "build", externalSessionId: "builder-1" }),
-      ],
+      sessionsForTask: [humanReviewBuilderSession],
       roleEnabledByTask: buildRoleEnabledMapForTask(humanReviewTask),
       createSessionDisabled: false,
     });
@@ -406,7 +413,7 @@ describe("agent-studio-quick-actions", () => {
     expect(humanReviewOptions).toContainEqual(
       expect.objectContaining({
         launchActionId: "build_pull_request_generation",
-        initialSourceExternalSessionId: "builder-1",
+        initialSourceExternalSessionId: agentSessionIdentityKey(humanReviewBuilderSession),
       }),
     );
   });
