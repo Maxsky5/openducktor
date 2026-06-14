@@ -38,7 +38,7 @@ const createThreadModel = (
     isLoadingChecks: false,
     refreshChecks: async () => {},
   },
-  isContextSwitching: false,
+  isTranscriptPending: false,
   isInteractionEnabled: true,
   emptyState: null,
   isStarting: false,

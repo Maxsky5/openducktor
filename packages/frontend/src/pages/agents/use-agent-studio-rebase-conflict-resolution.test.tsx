@@ -108,7 +108,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           initialSourceSession: {
             externalSessionId: "build-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/repo/worktrees/task-1",
           },
         }),
       );
@@ -156,14 +156,14 @@ describe("useAgentStudioRebaseConflictResolution", () => {
               sourceSession: {
                 externalSessionId: "build-1",
                 runtimeKind: "opencode",
-                workingDirectory: "/repo/worktree",
+                workingDirectory: "/repo/worktrees/task-1",
               },
             }),
           ],
           initialSourceSession: {
             externalSessionId: "build-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/repo/worktrees/task-1",
           },
         }),
       );
@@ -207,7 +207,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           initialSourceSession: {
             externalSessionId: "build-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/repo/worktrees/task-1",
           },
           targetWorkingDirectory: "/repo/worktrees/task-1",
         }),

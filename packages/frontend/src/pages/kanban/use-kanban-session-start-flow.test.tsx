@@ -358,7 +358,7 @@ describe("useKanbanSessionStartFlow", () => {
         sourceSession: {
           externalSessionId: "builder-session-2",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/repo/worktrees/builder-session-2",
         },
         label: "Builder #2",
         description: "3/20/2026, 12:00:00 PM · idle · builder-",
@@ -369,7 +369,7 @@ describe("useKanbanSessionStartFlow", () => {
         sourceSession: {
           externalSessionId: "builder-session-1",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/repo/worktrees/builder-session-1",
         },
         label: "Builder #1",
         description: "3/19/2026, 12:00:00 PM · idle · builder-",
@@ -442,7 +442,7 @@ describe("useKanbanSessionStartFlow", () => {
         sourceSession: {
           externalSessionId: "builder-session-2",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/repo/worktrees/builder-session-2",
         },
       }),
     );
@@ -719,7 +719,7 @@ describe("useKanbanSessionStartFlow", () => {
           sourceSession: {
             externalSessionId: "builder-session-2",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/repo/worktrees/builder-session-2",
           },
         }),
       );

@@ -43,6 +43,10 @@ export const isAgentSessionTranscriptLoading = (
 ): boolean =>
   transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading";
 
+export const isAgentSessionTranscriptVisible = (
+  transcriptState: AgentSessionTranscriptState,
+): boolean => transcriptState.kind === "visible";
+
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = lifecycle({
   repoReadinessState: "ready",
   transcriptState: { kind: "empty" },

@@ -28,7 +28,7 @@ const buildModel = () => ({
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },
-    isContextSwitching: false,
+    isTranscriptPending: false,
     isInteractionEnabled: true,
     emptyState: {
       title: "Send a message to start a new session automatically.",

@@ -113,7 +113,6 @@ export function useSessionTranscriptSurfaceModel({
     mode: "non_interactive",
     session: transcriptInteractions.session,
     sessionLifecycle,
-    isContextSwitching: isResolvingTranscript,
     chatSettings,
     isSessionWorking,
     runtimeDefinitions,

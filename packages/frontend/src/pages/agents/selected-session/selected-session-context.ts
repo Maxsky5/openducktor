@@ -83,7 +83,6 @@ export type SelectedSessionChatContext = {
   emptyState: AgentChatEmptyStateModel | null;
   contextUsage: AgentChatModel["composer"]["contextUsage"];
   activeComposerSession: SelectedSessionComposerActiveSession;
-  isContextSwitching: boolean;
   composerReadOnly: boolean;
   composerReadOnlyReason: string | null;
 };
@@ -130,7 +129,6 @@ export type AgentStudioSelectedSessionContextInput = {
   hasActiveGitConflict: boolean;
   lifecycle: SelectedAgentSessionViewLifecycle;
   activeSessionContextUsage: AgentStudioSessionContextUsage;
-  isChatContextSwitching: boolean;
   documents: AgentStudioDocumentsContext;
   readiness: {
     agentStudioReadinessState: AgentStudioReadinessState;
@@ -222,7 +220,6 @@ export const buildAgentStudioSelectedSessionContext = ({
   hasActiveGitConflict,
   lifecycle,
   activeSessionContextUsage,
-  isChatContextSwitching,
   documents,
   readiness,
   sessionActions,
@@ -304,7 +301,6 @@ export const buildAgentStudioSelectedSessionContext = ({
             pendingQuestions: activeSession.pendingQuestions,
           }
         : null,
-      isContextSwitching: isChatContextSwitching,
       composerReadOnly,
       composerReadOnlyReason: composerReadOnly ? workflow.selectedRoleReadOnlyReason : null,
     },

@@ -99,7 +99,6 @@ const baseArgs: BuildArgs = {
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
     activeSessionContextUsage: null,
-    isChatContextSwitching: false,
     documents: baseDocuments,
     readiness: baseReadiness,
     sessionActions: baseSessionActions,
@@ -227,8 +226,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       viewSessionRuntimeDataError: "runtime data failed",
       hasActiveGitConflict: true,
-      isActiveTaskReady: false,
-      isSessionSelectionResolving: true,
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
         transcriptState: { kind: "runtime_waiting" },
       }),
@@ -247,7 +244,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     });
 
-    expect(context.chat.isContextSwitching).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
     expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
@@ -273,14 +269,9 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
             transcriptState: { kind: "failed" },
           }),
         },
-        chat: {
-          ...baseArgs.selectedSession.chat,
-          isContextSwitching: true,
-        },
       },
     });
 
-    expect(failed.selectedSession.chat.isContextSwitching).toBe(true);
     expect(failed.selectedSession.runtime.lifecycle.transcriptState).toEqual({ kind: "failed" });
   });
 });

@@ -13,6 +13,7 @@ import {
   LAUNCH_ACTION_LABELS,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
@@ -231,7 +232,7 @@ export function useAgentStudioSessionActions({
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentStudioQuestionActions({
-      activeSession,
+      activeSession: activeSession ? toAgentSessionIdentity(activeSession) : null,
       agentStudioReady,
       pendingQuestions: sessionState.activeSessionPendingQuestions,
       answerAgentQuestion,

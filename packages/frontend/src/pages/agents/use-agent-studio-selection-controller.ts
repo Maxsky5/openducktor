@@ -91,7 +91,6 @@ export type AgentStudioSelectionControllerResult = {
   viewRole: AgentRole;
   viewLaunchActionId: AgentStudioSelectedSessionView["launchActionId"];
   isActiveTaskReady: boolean;
-  isViewSessionResolving: boolean;
   viewSessionLifecycle: AgentStudioSelectedSessionView["lifecycle"];
 };
 
@@ -308,7 +307,6 @@ export function useAgentStudioSelectionController({
       viewRole: selectedSessionView.role,
       viewLaunchActionId: selectedSessionView.launchActionId,
       isActiveTaskReady,
-      isViewSessionResolving: selectedSessionView.isResolving,
       viewSessionLifecycle: selectedSessionView.lifecycle,
     }),
     [
@@ -321,7 +319,6 @@ export function useAgentStudioSelectionController({
       handleSelectTab,
       isActiveTaskReady,
       isLoadingTasks,
-      selectedSessionView.isResolving,
       selectedSessionView.launchActionId,
       selectedSessionView.lifecycle,
       selectedSessionView.role,

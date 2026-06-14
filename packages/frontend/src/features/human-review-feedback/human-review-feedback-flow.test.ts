@@ -86,7 +86,7 @@ describe("human-review-feedback-flow", () => {
         initialSourceSession: {
           externalSessionId: "builder-session-2",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/tmp/repo/worktree",
         },
         postStartAction: "kickoff",
         message: "Use the standard request-changes workflow.",
@@ -104,7 +104,7 @@ describe("human-review-feedback-flow", () => {
             sourceSession: {
               externalSessionId: "builder-session-2",
               runtimeKind: "opencode",
-              workingDirectory: "/repo/worktree",
+              workingDirectory: "/tmp/repo/worktree",
             },
           }),
           expect.objectContaining({
@@ -112,7 +112,7 @@ describe("human-review-feedback-flow", () => {
             sourceSession: {
               externalSessionId: "builder-session-1",
               runtimeKind: "opencode",
-              workingDirectory: "/repo/worktree",
+              workingDirectory: "/tmp/repo/worktree",
             },
           }),
         ],

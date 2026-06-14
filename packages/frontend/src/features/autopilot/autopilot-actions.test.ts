@@ -351,7 +351,7 @@ describe("autopilot feature helpers", () => {
           sourceSession: {
             externalSessionId: "qa-session-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/current-worktree",
           },
         }),
         selection: null,
@@ -390,8 +390,8 @@ describe("autopilot feature helpers", () => {
           startMode: "reuse",
           sourceSession: {
             externalSessionId: "codex-builder-session-1",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            runtimeKind: "codex",
+            workingDirectory: "/tmp/repo/current-worktree",
           },
         }),
         selection: null,

@@ -438,7 +438,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     session,
     sessionLifecycle,
     runtimeReadiness,
-    isContextSwitching,
+    isTranscriptPending,
     isInteractionEnabled,
     emptyState,
     isStarting,
@@ -466,7 +466,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const activeExternalSessionId = session?.externalSessionId ?? null;
   const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
     activeExternalSessionId,
-    shouldDefer: isContextSwitching,
+    shouldDefer: isTranscriptPending,
   });
   const { transcriptState, isTranscriptRowsMissing } = useAgentChatTranscriptRows({
     session,
@@ -477,7 +477,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     getAgentChatThreadState({
       sessionLifecycle,
       runtimeReadiness,
-      isSessionContextSwitching: isContextSwitching,
+      isTranscriptPending,
       isTranscriptRenderDeferred,
       isTranscriptRowsMissing,
     });

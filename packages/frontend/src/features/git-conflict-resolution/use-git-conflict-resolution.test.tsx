@@ -100,7 +100,7 @@ describe("useGitConflictResolution", () => {
               sourceSession: {
                 externalSessionId: "external-build-1",
                 runtimeKind: "opencode",
-                workingDirectory: "/repo/worktree",
+                workingDirectory: "/repo/worktrees/task-1",
               },
             }),
           ],
@@ -108,7 +108,7 @@ describe("useGitConflictResolution", () => {
           initialSourceSession: {
             externalSessionId: "external-build-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/repo/worktrees/task-1",
           },
         }),
       );
@@ -154,7 +154,7 @@ describe("useGitConflictResolution", () => {
           initialSourceSession: {
             externalSessionId: "external-build-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/repo/worktrees/task-1",
           },
           targetWorkingDirectory: "/repo/worktrees/task-1",
         }),

@@ -64,7 +64,7 @@ export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;
   sessionLifecycle: AgentChatThreadSessionLifecycle;
   runtimeReadiness: AgentChatThreadRuntimeReadiness;
-  isContextSwitching: boolean;
+  isTranscriptPending: boolean;
   isSessionWorking: boolean;
   isInteractionEnabled: boolean;
   emptyState: AgentChatEmptyStateModel | null;

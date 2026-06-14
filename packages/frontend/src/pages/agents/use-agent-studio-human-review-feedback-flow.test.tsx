@@ -208,7 +208,7 @@ describe("useAgentStudioHumanReviewFeedbackFlow", () => {
       initialSourceSession: {
         externalSessionId: "session-build-existing",
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
+        workingDirectory: "/repo",
       },
       postStartAction: "kickoff",
       message: "Ship the requested fixes.",

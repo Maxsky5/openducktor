@@ -32,7 +32,7 @@ const buildBaseModel = () => ({
     isLoadingChecks: false,
     refreshChecks: async () => {},
   },
-  isContextSwitching: false,
+  isTranscriptPending: false,
   isInteractionEnabled: true,
   emptyState: {
     title: "Send a message to start a new session automatically.",
@@ -1080,7 +1080,7 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  test("shows loading overlay while session context is switching", () => {
+  test("shows loading overlay while transcript is pending", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
@@ -1088,7 +1088,7 @@ describe("AgentChatThread", () => {
           sessionLifecycle: buildThreadLifecycle({
             transcriptState: { kind: "session_loading", reason: "preparing" },
           }),
-          isContextSwitching: true,
+          isTranscriptPending: true,
           session: buildSession({
             externalSessionId: "session-loading",
             messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
   type AgentSessionCollection,
@@ -176,9 +177,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("reuses an existing in-flight start promise", async () => {
-    const inFlight = Promise.resolve(sessionIdentity("session-in-flight"));
+    const inFlight = Promise.resolve(sessionIdentity("session-in-flight", "/tmp/repo/worktree"));
     const inFlightMap = new Map<string, Promise<ReturnType<typeof sessionIdentity>>>([
-      ["/tmp/repo::task-1::build::reuse::session-in-flight::::", inFlight],
+      [
+        [
+          "/tmp/repo",
+          "task-1",
+          "build",
+          "reuse",
+          agentSessionIdentityKey(sessionIdentity("session-in-flight", "/tmp/repo/worktree")),
+          "",
+          "",
+        ].join("::"),
+        inFlight,
+      ],
     ]);
     const sessionsRef = createSessionsRef();
     const start = createStartAgentSessionWithFlatDeps({
@@ -214,10 +226,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sourceSession: {
           externalSessionId: "session-in-flight",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/tmp/repo/worktree",
         },
       }),
-    ).resolves.toEqual(sessionIdentity("session-in-flight"));
+    ).resolves.toEqual(sessionIdentity("session-in-flight", "/tmp/repo/worktree"));
   });
 
   test("does not dedupe in-flight starts across different roles", async () => {
@@ -701,7 +713,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-newer",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-newer" }));
@@ -791,7 +803,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-chosen",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-chosen" }));
@@ -949,7 +961,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-chosen",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-chosen" }));
@@ -1034,7 +1046,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-reused",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
@@ -1132,7 +1144,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-reused",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
@@ -1230,7 +1242,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-reused",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
@@ -1511,7 +1523,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sourceSession: {
         externalSessionId: "external-build-newer",
         runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
+        workingDirectory: "/tmp/repo/worktree",
       },
     });
     expect(externalSessionId).toEqual(
@@ -1629,7 +1641,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sourceSession: {
           externalSessionId: "external-source-build",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/tmp/repo/worktree",
         },
       });
 
@@ -1906,94 +1918,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-source-build",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(
         expect.objectContaining({ externalSessionId: "external-forked-from-runtime-connection" }),
       );
       expect(forkCalls).toHaveLength(1);
-    } finally {
-      adapter.forkSession = originalForkSession;
-    }
-  });
-
-  test("fails explicitly when fork source runtime kind metadata is missing", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalForkSession = adapter.forkSession;
-    const forkCalls: unknown[] = [];
-    const sessionsRef = createSessionsRef([
-      {
-        externalSessionId: "external-source-build",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        historyLoadState: "not_requested",
-        messages: [],
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        selectedModel: BUILD_SELECTION,
-      } as unknown as AgentSessionState,
-    ]);
-    adapter.forkSession = async (input) => {
-      forkCalls.push(input);
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "unexpected-external-fork",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fork",
-          selectedModel: BUILD_SELECTION,
-          sourceSession: {
-            externalSessionId: "external-source-build",
-            runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
-          },
-        }),
-      ).rejects.toThrow(
-        'Session "external-source-build" is missing runtime kind metadata required for forking.',
-      );
-      expect(forkCalls).toHaveLength(0);
     } finally {
       adapter.forkSession = originalForkSession;
     }
@@ -2080,7 +2011,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-source-build",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).rejects.toThrow(
@@ -2190,7 +2121,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-source-build",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
@@ -2308,7 +2239,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceSession: {
             externalSessionId: "external-opencode",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         }),
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-opencode" }));
@@ -2414,7 +2345,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sourceSession: {
           externalSessionId: "external-claude",
           runtimeKind: "opencode",
-          workingDirectory: "/repo/worktree",
+          workingDirectory: "/tmp/repo/worktree",
         },
       });
       expect(externalSessionId).toEqual(

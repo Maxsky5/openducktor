@@ -209,9 +209,15 @@ export function useAgentStudioPageModels({
   const activeComposerIsLoadingModelCatalog =
     selectedActiveComposerSession?.isLoadingModelCatalog ?? false;
   const activeComposerPendingApprovals =
-    selectedActiveComposerSession?.pendingApprovals ?? EMPTY_ACTIVE_COMPOSER_PENDING_APPROVALS;
+    selectedActiveComposerSession?.pendingApprovals &&
+    selectedActiveComposerSession.pendingApprovals.length > 0
+      ? selectedActiveComposerSession.pendingApprovals
+      : EMPTY_ACTIVE_COMPOSER_PENDING_APPROVALS;
   const activeComposerPendingQuestions =
-    selectedActiveComposerSession?.pendingQuestions ?? EMPTY_ACTIVE_COMPOSER_PENDING_QUESTIONS;
+    selectedActiveComposerSession?.pendingQuestions &&
+    selectedActiveComposerSession.pendingQuestions.length > 0
+      ? selectedActiveComposerSession.pendingQuestions
+      : EMPTY_ACTIVE_COMPOSER_PENDING_QUESTIONS;
   const activeComposerSession = useMemo(() => {
     if (
       !activeComposerExternalSessionId ||
@@ -412,7 +418,6 @@ export function useAgentStudioPageModels({
     mode: "interactive",
     session: selectedSession.activeSession,
     sessionLifecycle: selectedSessionLifecycle,
-    isContextSwitching: selectedSession.chat.isContextSwitching,
     chatSettings,
     isSessionWorking: sessionActions.isSessionWorking,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,

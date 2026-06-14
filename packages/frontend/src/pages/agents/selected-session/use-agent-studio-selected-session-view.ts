@@ -54,7 +54,6 @@ export type AgentStudioSelectedSessionView = {
   runtimeDataError: string | null;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  isResolving: boolean;
   lifecycle: SelectedAgentSessionViewLifecycle;
 };
 
@@ -151,11 +150,6 @@ export function useAgentStudioSelectedSessionView({
     sessionRoute,
   ]);
 
-  const isResolving =
-    sessionRoute !== null
-      ? session === null && !sessionReadModelError
-      : isWaitingForSessionReadModel && repoReadinessState === "ready";
-
   const runtimeData = useSessionRuntimeData({
     repoPath: activeWorkspace?.repoPath ?? null,
     session,
@@ -185,11 +179,9 @@ export function useAgentStudioSelectedSessionView({
       runtimeDataError: runtimeData.runtimeDataError,
       role: selection.role,
       launchActionId,
-      isResolving,
       lifecycle,
     }),
     [
-      isResolving,
       launchActionId,
       lifecycle,
       runtimeData.runtimeData,

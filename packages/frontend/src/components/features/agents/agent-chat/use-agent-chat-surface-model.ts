@@ -12,7 +12,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  type AgentSessionTranscriptState,
+  isAgentSessionTranscriptLoading,
+  isAgentSessionTranscriptVisible,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
@@ -25,7 +29,6 @@ import type {
   AgentChatThreadSession,
 } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
-import { resolveAgentChatThreadContext } from "./agent-chat-thread-context";
 import { useAgentChatLayout } from "./use-agent-chat-layout";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -151,7 +154,6 @@ type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;
   session: AgentChatThreadSession | null;
   sessionLifecycle: AgentChatSurfaceSessionLifecycle;
-  isContextSwitching: boolean;
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
@@ -170,7 +172,6 @@ export function useAgentChatSurfaceModel({
   mode,
   session,
   sessionLifecycle,
-  isContextSwitching,
   chatSettings,
   isSessionWorking,
   runtimeDefinitions = [],
@@ -187,15 +188,11 @@ export function useAgentChatSurfaceModel({
   const [todoPanelCollapsedBySession, setTodoPanelCollapsedBySession] = useState<
     Record<string, boolean>
   >({});
-  const {
-    threadSession,
-    activeExternalSessionId,
-    isContextSwitching: isThreadContextSwitching,
-  } = resolveAgentChatThreadContext({
-    activeSession: session,
-    lifecycle: sessionLifecycle,
-    isContextSwitching,
-  });
+  const threadSession = isAgentSessionTranscriptVisible(sessionLifecycle.transcriptState)
+    ? session
+    : null;
+  const activeExternalSessionId = threadSession?.externalSessionId ?? null;
+  const isTranscriptPending = isAgentSessionTranscriptLoading(sessionLifecycle.transcriptState);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
@@ -245,7 +242,7 @@ export function useAgentChatSurfaceModel({
       session: threadSession,
       sessionLifecycle,
       runtimeReadiness,
-      isContextSwitching: isThreadContextSwitching,
+      isTranscriptPending,
       isSessionWorking,
       isInteractionEnabled: isComposerInteractionEnabled,
       emptyState,
@@ -279,7 +276,7 @@ export function useAgentChatSurfaceModel({
       composer?.isStarting,
       emptyState,
       handleToggleTodoPanel,
-      isThreadContextSwitching,
+      isTranscriptPending,
       isComposerInteractionEnabled,
       isSessionWorking,
       messagesContainerRef,

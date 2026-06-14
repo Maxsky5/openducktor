@@ -22,7 +22,7 @@ describe("getAgentChatThreadState", () => {
       runtimeReadiness: {
         ...readyRuntimeReadiness,
       },
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
 
@@ -37,7 +37,7 @@ describe("getAgentChatThreadState", () => {
         transcriptState: { kind: "session_loading", reason: "history" },
       }),
       runtimeReadiness: readyRuntimeReadiness,
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
 
@@ -47,11 +47,11 @@ describe("getAgentChatThreadState", () => {
     expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
 
-  test("does not present local context switching as session loading", () => {
+  test("does not present local transcript pending state as session loading", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: readyRuntimeReadiness,
-      isSessionContextSwitching: true,
+      isTranscriptPending: true,
       isTranscriptRenderDeferred: false,
     });
 
@@ -63,7 +63,7 @@ describe("getAgentChatThreadState", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: readyRuntimeReadiness,
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
       isTranscriptRowsMissing: true,
     });
@@ -79,7 +79,7 @@ describe("getAgentChatThreadState", () => {
         transcriptState: { kind: "failed" },
       }),
       runtimeReadiness: readyRuntimeReadiness,
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
 
@@ -101,7 +101,7 @@ describe("getAgentChatThreadState", () => {
         isReady: false,
         blockedReason: "Runtime unavailable",
       },
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
 
@@ -121,7 +121,7 @@ describe("getAgentChatThreadState", () => {
         isReady: false,
         blockedReason: "Runtime unavailable",
       },
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
 
@@ -143,7 +143,7 @@ describe("getAgentChatThreadState", () => {
         isReady: false,
         blockedReason: "Runtime unavailable",
       },
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
     const hidden = getAgentChatThreadState({
@@ -156,7 +156,7 @@ describe("getAgentChatThreadState", () => {
         isReady: false,
         blockedReason: "",
       },
-      isSessionContextSwitching: false,
+      isTranscriptPending: false,
       isTranscriptRenderDeferred: false,
     });
 

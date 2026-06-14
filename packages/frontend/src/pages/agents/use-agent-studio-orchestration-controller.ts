@@ -13,6 +13,7 @@ import type {
 } from "@/components/features/agents";
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type {
   SessionRepoReadinessState as AgentStudioReadinessState,
   SelectedAgentSessionViewLifecycle,
@@ -164,18 +165,14 @@ type BuildAgentStudioPageModelsArgsInput = {
 
 type BuildSelectedSessionContextFromOrchestrationInput = Omit<
   AgentStudioSelectedSessionContextInput,
-  "lifecycle" | "sessionRuntimeDataError" | "isChatContextSwitching"
+  "lifecycle" | "sessionRuntimeDataError"
 > & {
   viewSessionRuntimeDataError?: string | null;
-  isActiveTaskReady: boolean;
-  isSessionSelectionResolving: boolean;
   viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
 export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
   viewSessionRuntimeDataError,
-  isActiveTaskReady,
-  isSessionSelectionResolving,
   viewSessionLifecycle,
   ...input
 }: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext => {
@@ -183,8 +180,6 @@ export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
     ...input,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
     lifecycle: viewSessionLifecycle,
-    isChatContextSwitching:
-      Boolean(input.taskId && !isActiveTaskReady) || isSessionSelectionResolving,
   });
 };
 
@@ -394,7 +389,7 @@ export function useAgentStudioOrchestrationController({
 
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeSession: viewActiveSession,
+      activeSession: viewActiveSession ? toAgentSessionIdentity(viewActiveSession) : null,
       pendingApprovals: viewActiveSession?.pendingApprovals ?? [],
       agentStudioReady,
       replyAgentApproval,
@@ -414,9 +409,7 @@ export function useAgentStudioOrchestrationController({
         runtimeDefinitions,
         viewSessionRuntimeDataError,
         hasActiveGitConflict,
-        isActiveTaskReady,
         viewSessionLifecycle: selection.viewSessionLifecycle,
-        isSessionSelectionResolving: selection.isSessionSelectionResolving,
         activeSessionContextUsage,
         documents: {
           specDoc,
@@ -445,7 +438,6 @@ export function useAgentStudioOrchestrationController({
       approvalReplyErrorByRequestId,
       canKickoffNewSession,
       hasActiveGitConflict,
-      isActiveTaskReady,
       isSessionWorking,
       isStarting,
       isSubmittingApprovalByRequestId,
@@ -459,7 +451,6 @@ export function useAgentStudioOrchestrationController({
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
-      selection.isSessionSelectionResolving,
       selection.viewSessionLifecycle,
       specDoc,
       startLaunchKickoff,

@@ -111,16 +111,13 @@ export function useAgentsPageRouteSessionModel({
     setContextSwitchVersion((current) => current + 1);
   }, []);
 
-  const {
-    selectionIntentForController,
-    isSessionSelectionResolving: isSelectionIntentResolving,
-    scheduleSelectionIntent,
-  } = useAgentStudioSelectionIntentState({
-    isRepoNavigationBoundaryPending,
-    taskIdParam,
-    sessionParam,
-    roleFromQuery,
-  });
+  const { selectionIntentForController, isSessionSelectionResolving, scheduleSelectionIntent } =
+    useAgentStudioSelectionIntentState({
+      isRepoNavigationBoundaryPending,
+      taskIdParam,
+      sessionParam,
+      roleFromQuery,
+    });
 
   const readiness = useAgentStudioReadiness({
     activeWorkspace,
@@ -157,9 +154,6 @@ export function useAgentsPageRouteSessionModel({
     clearComposerInput: signalContextSwitchIntent,
     onContextSwitchIntent: signalContextSwitchIntent,
   });
-  const isSessionSelectionResolving =
-    isSelectionIntentResolving || selection.isViewSessionResolving;
-
   const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
     workspaceRepoPath,
     selection,
