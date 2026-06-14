@@ -30,6 +30,15 @@ const buildSession = (
   };
 };
 
+const sessionIdentity = (
+  externalSessionId: string,
+  workingDirectory = "/repo/worktrees/task-1",
+) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory,
+});
+
 const createConflict = (overrides: Record<string, unknown> = {}) => ({
   operation: "rebase" as const,
   currentBranch: "feature/task-1",
@@ -42,7 +51,9 @@ const createConflict = (overrides: Record<string, unknown> = {}) => ({
 
 describe("useGitConflictResolution", () => {
   test("filters reusable Builder sessions to the conflicted worktree", async () => {
-    const startConflictResolutionSession = mock(async () => "external-build-1");
+    const startConflictResolutionSession = mock(async () =>
+      sessionIdentity("external-build-1", "/repo/worktrees/task-1"),
+    );
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
         workspaceId: "workspace-repo",
@@ -70,9 +81,9 @@ describe("useGitConflictResolution", () => {
         taskId: "task-1",
         task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
         builderSessions: [wrongWorktreeSession, matchingWorktreeSession],
-        currentViewSessionId: "build-other",
-        onOpenSession: (externalSessionId) => {
-          openedSessions.push(externalSessionId);
+        currentViewSession: wrongWorktreeSession,
+        onOpenSession: (session) => {
+          openedSessions.push(session.externalSessionId);
         },
       });
 
@@ -98,7 +109,7 @@ describe("useGitConflictResolution", () => {
   });
 
   test("allows starting a new conflict-resolution session without an existing selected model", async () => {
-    const startConflictResolutionSession = mock(async () => "build-new");
+    const startConflictResolutionSession = mock(async () => sessionIdentity("build-new"));
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
         workspaceId: "workspace-repo",
@@ -122,7 +133,7 @@ describe("useGitConflictResolution", () => {
             selectedModel: null,
           }),
         ],
-        currentViewSessionId: null,
+        currentViewSession: null,
         onOpenSession: () => undefined,
       });
 
@@ -140,7 +151,7 @@ describe("useGitConflictResolution", () => {
   });
 
   test("passes the conflicted worktree when starting a fresh conflict-resolution session", async () => {
-    const startConflictResolutionSession = mock(async () => "build-new");
+    const startConflictResolutionSession = mock(async () => sessionIdentity("build-new"));
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
         workspaceId: "workspace-repo",
@@ -158,7 +169,7 @@ describe("useGitConflictResolution", () => {
         taskId: "task-1",
         task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
         builderSessions: [],
-        currentViewSessionId: null,
+        currentViewSession: null,
         onOpenSession: () => undefined,
       });
 
@@ -175,7 +186,7 @@ describe("useGitConflictResolution", () => {
   });
 
   test("loads prompt overrides with the workspace id", async () => {
-    const startConflictResolutionSession = mock(async () => "build-new");
+    const startConflictResolutionSession = mock(async () => sessionIdentity("build-new"));
     const loadPromptOverrides = mock(async () => ({}));
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
@@ -194,7 +205,7 @@ describe("useGitConflictResolution", () => {
         taskId: "task-1",
         task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
         builderSessions: [],
-        currentViewSessionId: null,
+        currentViewSession: null,
         onOpenSession: () => undefined,
       });
 
@@ -206,7 +217,7 @@ describe("useGitConflictResolution", () => {
   });
 
   test("fails fast when the conflicted working directory is missing", async () => {
-    const startConflictResolutionSession = mock(async () => "build-new");
+    const startConflictResolutionSession = mock(async () => sessionIdentity("build-new"));
     const harness = createHookHarness(useGitConflictResolution, {
       activeWorkspace: {
         workspaceId: "workspace-repo",
@@ -225,7 +236,7 @@ describe("useGitConflictResolution", () => {
           taskId: "task-1",
           task: createTaskCardFixture({ id: "task-1", title: "Resolve rebase conflict" }),
           builderSessions: [],
-          currentViewSessionId: null,
+          currentViewSession: null,
           onOpenSession: () => undefined,
         }),
       ).rejects.toThrow(

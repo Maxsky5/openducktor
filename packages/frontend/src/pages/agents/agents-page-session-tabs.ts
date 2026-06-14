@@ -472,17 +472,19 @@ export const buildSessionSelectorGroups = (params: {
       continue;
     }
     const roleSessionNumberByIdentity = buildRoleSessionSequenceByIdentity(roleSessions);
-    const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => ({
-      value: session.externalSessionId,
-      label: formatAgentSessionOptionLabel({
-        session,
-        sessionNumber:
-          roleSessionNumberByIdentity.get(agentSessionIdentityKey(session)) ?? index + 1,
-        roleLabelByRole: params.roleLabelByRole,
-      }),
-      description: formatAgentSessionOptionDescription(session),
-      searchKeywords: [role, session.externalSessionId],
-    }));
+    const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => {
+      const sessionIdentity = agentSessionIdentityKey(session);
+      return {
+        value: sessionIdentity,
+        label: formatAgentSessionOptionLabel({
+          session,
+          sessionNumber: roleSessionNumberByIdentity.get(sessionIdentity) ?? index + 1,
+          roleLabelByRole: params.roleLabelByRole,
+        }),
+        description: formatAgentSessionOptionDescription(session),
+        searchKeywords: [role, session.externalSessionId],
+      };
+    });
     groups.push({
       label: params.roleLabelByRole[role],
       options: roleOptions,

@@ -360,22 +360,24 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
       let firstSessionId = "";
       await harness.run(async () => {
-        firstSessionId = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         });
+        firstSessionId = session.externalSessionId;
       });
 
       let secondSessionId = "";
       await harness.run(async () => {
-        secondSessionId = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
           sourceExternalSessionId: "external-in-memory",
         });
+        secondSessionId = session.externalSessionId;
       });
 
       expect(firstSessionId).toBe("external-in-memory");
@@ -509,7 +511,9 @@ describe("use-agent-orchestrator-operations start and send", () => {
           status: "idle",
         });
 
-        [firstSessionId, secondSessionId] = await Promise.all([firstStart, secondStart]);
+        const [firstSession, secondSession] = await Promise.all([firstStart, secondStart]);
+        firstSessionId = firstSession.externalSessionId;
+        secondSessionId = secondSession.externalSessionId;
       });
 
       expect(firstSessionId).toBe("external-concurrent");
@@ -609,12 +613,13 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
       let externalSessionId = "";
       await harness.run(async () => {
-        externalSessionId = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
           sourceExternalSessionId: "external-1",
         });
+        externalSessionId = session.externalSessionId;
       });
 
       expect(externalSessionId).toBe("external-1");

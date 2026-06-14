@@ -8,7 +8,9 @@ import {
 import type {
   SessionStartExistingSessionOption,
   SessionStartLaunchRequest,
+  SessionStartWorkflowResult,
 } from "@/features/session-start";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { ActiveWorkspace } from "../../types/state-slices";
@@ -23,7 +25,7 @@ type AgentStudioRebaseConflictResolutionSelectionContext = {
   viewSelectedTask: TaskCard | null;
   viewActiveSession: AgentSessionSummary | null;
   activeSession: AgentSessionSummary | null;
-  selectedSessionById: AgentSessionSummary | null;
+  selectedSessionFromRoute: AgentSessionSummary | null;
   viewSessionsForTask: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
 };
@@ -43,7 +45,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
       existingSessionOptions?: SessionStartExistingSessionOption[];
       initialSourceExternalSessionId?: string | null;
     },
-  ) => Promise<string | undefined>;
+  ) => Promise<SessionStartWorkflowResult | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -89,7 +91,7 @@ export function useAgentStudioRebaseConflictResolution({
     viewSelectedTask,
     viewActiveSession,
     activeSession,
-    selectedSessionById,
+    selectedSessionFromRoute,
     viewSessionsForTask,
     sessionsForTask,
   } = selection;
@@ -104,7 +106,7 @@ export function useAgentStudioRebaseConflictResolution({
         taskId: viewTaskId,
         viewActiveSession,
         activeSession,
-        selectedSessionById,
+        selectedSessionById: selectedSessionFromRoute,
         viewSessionsForTask,
         sessionsForTask,
       });
@@ -112,7 +114,7 @@ export function useAgentStudioRebaseConflictResolution({
         taskId: viewTaskId,
         viewActiveSession,
         activeSession,
-        selectedSessionById,
+        selectedSessionById: selectedSessionFromRoute,
         viewSessionsForTask,
         sessionsForTask,
       });
@@ -121,22 +123,22 @@ export function useAgentStudioRebaseConflictResolution({
         taskId: viewTaskId,
         task: viewSelectedTask,
         builderSessions,
-        currentViewSessionId:
-          viewActiveSession?.role === "build" ? viewActiveSession.externalSessionId : null,
-        onOpenSession: (externalSessionId) => {
-          const session = builderSessions.find(
-            (entry) => entry.externalSessionId === externalSessionId,
-          );
+        currentViewSession: viewActiveSession?.role === "build" ? viewActiveSession : null,
+        onOpenSession: (session) => {
+          const builderSession =
+            builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
           if (
-            viewActiveSession?.externalSessionId !== externalSessionId ||
-            viewActiveSession?.role !== "build"
+            viewActiveSession?.role !== "build" ||
+            !matchesAgentSessionIdentity(viewActiveSession, session)
           ) {
             onContextSwitchIntent();
           }
           scheduleQueryUpdate({
             task: viewTaskId,
-            session: externalSessionId,
-            agent: session?.role ?? defaultBuilderSession?.role ?? "build",
+            session: session.externalSessionId,
+            runtimeKind: session.runtimeKind,
+            workingDirectory: session.workingDirectory,
+            agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },
       });
@@ -146,7 +148,7 @@ export function useAgentStudioRebaseConflictResolution({
       handleResolveGitConflict,
       onContextSwitchIntent,
       scheduleQueryUpdate,
-      selectedSessionById,
+      selectedSessionFromRoute,
       sessionsForTask,
       viewActiveSession,
       viewSelectedTask,

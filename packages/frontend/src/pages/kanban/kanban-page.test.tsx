@@ -27,7 +27,13 @@ enableReactActEnvironment();
 const actualHostClientModule = await import("@/lib/host-client");
 const originalConsoleError = console.error;
 
-const startAgentSessionMock = mock(async () => "session-1");
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
+const startAgentSessionMock = mock(async () => sessionIdentity("session-1"));
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
 const loadAgentSessionsMock = mock(

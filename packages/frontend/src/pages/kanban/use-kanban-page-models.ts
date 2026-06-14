@@ -251,11 +251,13 @@ export function useKanbanPageModels({
         taskId,
         task,
         builderSessions,
-        currentViewSessionId: null,
-        onOpenSession: (externalSessionId) => {
+        currentViewSession: null,
+        onOpenSession: (session) => {
           const search = new URLSearchParams({
             task: taskId,
-            session: externalSessionId,
+            session: session.externalSessionId,
+            runtimeKind: session.runtimeKind,
+            workingDirectory: session.workingDirectory,
             agent: "build",
           });
           navigate(`/agents?${search.toString()}`);

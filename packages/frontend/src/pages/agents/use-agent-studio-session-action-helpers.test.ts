@@ -10,15 +10,23 @@ import {
 
 describe("use-agent-studio-session-action-helpers", () => {
   test("buildAgentStudioSelectionQueryUpdate selects the requested session", () => {
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-1",
+    });
+
     expect(
       buildAgentStudioSelectionQueryUpdate({
         taskId: "task-1",
-        externalSessionId: "session-1",
+        session,
         role: "spec",
       }),
     ).toEqual({
       task: "task-1",
       session: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-1",
       agent: "spec",
     });
   });
@@ -32,7 +40,11 @@ describe("use-agent-studio-session-action-helpers", () => {
       },
       {
         taskId: "task-1",
-        externalSessionId: "session-1",
+        session: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktrees/session-1",
+        },
         role: "build",
       },
     );
@@ -41,6 +53,8 @@ describe("use-agent-studio-session-action-helpers", () => {
       {
         task: "task-1",
         session: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/session-1",
         agent: "build",
       },
     ]);
@@ -62,6 +76,8 @@ describe("use-agent-studio-session-action-helpers", () => {
     ).toEqual({
       task: "task-existing",
       session: "session-existing",
+      runtimeKind: "opencode",
+      workingDirectory: activeSession.workingDirectory,
       agent: "spec",
     });
   });
@@ -77,18 +93,34 @@ describe("use-agent-studio-session-action-helpers", () => {
 
     expect(
       shouldTriggerContextSwitchIntent({
-        currentExternalSessionId: "session-1",
+        currentSession: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
         currentRole: "spec",
-        nextSessionId: "session-1",
+        nextSession: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
         nextRole: "spec",
       }),
     ).toBe(false);
 
     expect(
       shouldTriggerContextSwitchIntent({
-        currentExternalSessionId: "session-1",
+        currentSession: {
+          externalSessionId: "session-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
         currentRole: "spec",
-        nextSessionId: "session-2",
+        nextSession: {
+          externalSessionId: "session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo",
+        },
         nextRole: "spec",
       }),
     ).toBe(true);

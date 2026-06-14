@@ -6,6 +6,7 @@ import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
 import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
 import {
@@ -27,6 +28,7 @@ import {
   type WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentStateContextValue,
@@ -57,14 +59,12 @@ type UseKanbanSessionStartFlowArgs = {
 type UseKanbanSessionStartFlowResult = {
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
   sessionStartModal: SessionStartModalModel | null;
-  startSessionIntent: (intent: KanbanSessionStartIntent) => Promise<string | undefined>;
+  startSessionIntent: (
+    intent: KanbanSessionStartIntent,
+  ) => Promise<AgentSessionRouteIdentity | undefined>;
   onPullRequestGenerate: (taskId: string) => Promise<string | undefined>;
   onDelegate: (taskId: string) => void;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -93,6 +93,8 @@ const findPreferredSessionByRoleForTask = (
   const preferredSession = resolvePreferredActiveSession(
     matchingSessions.map((session) => ({
       externalSessionId: session.externalSessionId,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
       role: session.role,
       status: session.status,
       startedAt: session.startedAt,
@@ -190,10 +192,12 @@ export function useKanbanSessionStartFlow({
   );
 
   const openSessionInAgentStudio = useCallback(
-    (intent: KanbanSessionStartIntent, externalSessionId: string): void => {
+    (intent: KanbanSessionStartIntent, session: AgentSessionRouteIdentity): void => {
       const params = new URLSearchParams({
         task: intent.taskId,
-        session: externalSessionId,
+        session: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
         agent: intent.role,
       });
       navigate(`/agents?${params.toString()}`);
@@ -202,7 +206,7 @@ export function useKanbanSessionStartFlow({
   );
 
   const startSessionIntent = useCallback(
-    async (intent: KanbanSessionStartIntent): Promise<string | undefined> => {
+    async (intent: KanbanSessionStartIntent): Promise<AgentSessionRouteIdentity | undefined> => {
       if (openAgentStudioTabOnBackgroundSessionStart === null) {
         throw new Error("Cannot start Kanban session because settings have not loaded.");
       }
@@ -220,7 +224,7 @@ export function useKanbanSessionStartFlow({
           selectedTask,
         }),
         async ({ decision, runInBackground }) => {
-          const externalSessionId = await startKanbanSessionFlow({
+          const session = await startKanbanSessionFlow({
             activeWorkspace,
             request: intent,
             decision,
@@ -236,7 +240,7 @@ export function useKanbanSessionStartFlow({
             openSessionInAgentStudio,
             sendAgentMessage,
           });
-          return externalSessionId;
+          return session;
         },
       );
     },
@@ -269,7 +273,7 @@ export function useKanbanSessionStartFlow({
         throw new Error(`No Builder session is available to fork or reuse for task "${taskId}".`);
       }
 
-      return startSessionIntent({
+      const session = await startSessionIntent({
         taskId,
         role: "build",
         launchActionId: "build_pull_request_generation",
@@ -280,6 +284,7 @@ export function useKanbanSessionStartFlow({
         }),
         postStartAction: "kickoff",
       });
+      return session?.externalSessionId;
     },
     [startSessionIntent],
   );
@@ -299,11 +304,11 @@ export function useKanbanSessionStartFlow({
   );
 
   const onOpenSession = useCallback(
-    (taskId: string, role: AgentRole, options?: { externalSessionId?: string | null }): void => {
-      if (options?.externalSessionId) {
+    (taskId: string, role: AgentRole, options?: SessionTargetOptions): void => {
+      if (options?.session) {
         openSessionInAgentStudio(
           { taskId, role, launchActionId: firstLaunchAction(role), postStartAction: "none" },
-          options.externalSessionId,
+          options.session,
         );
         return;
       }
@@ -322,7 +327,7 @@ export function useKanbanSessionStartFlow({
       if (sessionToOpen) {
         openSessionInAgentStudio(
           { taskId, role, launchActionId: firstLaunchAction(role), postStartAction: "none" },
-          sessionToOpen.externalSessionId,
+          sessionToOpen,
         );
         return;
       }

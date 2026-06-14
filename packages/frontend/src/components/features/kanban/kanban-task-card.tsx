@@ -20,6 +20,7 @@ import {
   resolveHistoricalSessionRoles,
   resolvePreferredActiveSession,
   resolveSessionTargetOptions,
+  type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
@@ -41,11 +42,7 @@ type KanbanTaskCardProps = {
   taskActivityState: KanbanTaskActivityState;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;
@@ -340,11 +337,7 @@ function TaskActions({
   onQaOpen?: (taskId: string) => void;
   onBuild: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onHumanApprove?: (taskId: string) => void;
   onHumanRequestChanges?: (taskId: string) => void;
   onResetImplementation?: (taskId: string) => void;

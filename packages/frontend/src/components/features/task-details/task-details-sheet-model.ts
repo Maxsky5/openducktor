@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskWorkflowAction } from "@/components/features/kanban/kanban-task-workflow";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 
 type TaskWorkflowCallbacks = {
@@ -9,7 +10,7 @@ type TaskWorkflowCallbacks = {
   onQaOpen: ((taskId: string) => void) | undefined;
   onBuild: ((taskId: string) => void) | undefined;
   onOpenSession?:
-    | ((taskId: string, role: AgentRole, options?: { externalSessionId?: string | null }) => void)
+    | ((taskId: string, role: AgentRole, options?: SessionTargetOptions) => void)
     | undefined;
   onDelegate: ((taskId: string) => void) | undefined;
   onHumanApprove: ((taskId: string) => void) | undefined;
@@ -20,9 +21,7 @@ type TaskWorkflowCallbacks = {
 };
 
 type TaskWorkflowActionContext = {
-  resolveSessionOptions?:
-    | ((role: AgentRole) => { externalSessionId?: string | null } | undefined)
-    | undefined;
+  resolveSessionOptions?: ((role: AgentRole) => SessionTargetOptions | undefined) | undefined;
 };
 
 type OpenSessionWorkflowAction = Extract<

@@ -58,6 +58,13 @@ const createAttachmentDraft = (): AgentChatComposerDraft => {
   };
 };
 
+const sessionWorkflowResult = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+  postStartActionError: null,
+});
+
 const createBaseArgs = (): HookArgs => ({
   activeWorkspace: {
     repoPath: "/repo",
@@ -78,7 +85,7 @@ const createBaseArgs = (): HookArgs => ({
   selectedTask: createTaskCardFixture(),
   selectedModelDescriptor,
   sendAgentMessage: async () => {},
-  startSession: async () => "session-new",
+  startSession: async () => sessionWorkflowResult("session-new"),
 });
 
 describe("useAgentStudioSendAction", () => {
@@ -93,7 +100,7 @@ describe("useAgentStudioSendAction", () => {
   });
 
   test("guard rejection does not start a session or send a message", async () => {
-    const startSession = mock(async () => "session-new");
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
@@ -115,7 +122,7 @@ describe("useAgentStudioSendAction", () => {
   });
 
   test("blocks unavailable roles only when a new session would be started", async () => {
-    const startSession = mock(async () => "session-new");
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => {});
     const unavailableQaTask = createTaskCardFixture({
       agentWorkflows: {
@@ -164,7 +171,7 @@ describe("useAgentStudioSendAction", () => {
 
   test("tracks a new-session send across draft and target session contexts", async () => {
     const sendDeferred = createDeferred<void>();
-    const startSession = mock(async () => "session-new");
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(() => sendDeferred.promise);
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
@@ -202,7 +209,7 @@ describe("useAgentStudioSendAction", () => {
   });
 
   test("tracks a new-session send before session start resolves", async () => {
-    const startDeferred = createDeferred<string>();
+    const startDeferred = createDeferred<ReturnType<typeof sessionWorkflowResult>>();
     const startSession = mock(() => startDeferred.promise);
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
@@ -221,7 +228,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.waitFor((state) => state.isSending);
 
     await harness.run(async () => {
-      startDeferred.resolve("session-new");
+      startDeferred.resolve(sessionWorkflowResult("session-new"));
       await expect(firstSend).resolves.toBe(true);
     });
     await harness.waitFor((state) => !state.isSending);
@@ -236,7 +243,7 @@ describe("useAgentStudioSendAction", () => {
   test("blocks concurrent sends in the same context before a render updates state", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const startSession = mock(async () => "session-new");
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       startSession,
@@ -277,7 +284,7 @@ describe("useAgentStudioSendAction", () => {
       }
       return Promise.resolve();
     });
-    const startSession = mock(async () => "session-new");
+    const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       startSession,

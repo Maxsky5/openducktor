@@ -11,6 +11,7 @@ import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import type { GitConflict, GitConflictAction } from "@/features/agent-studio-git";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import type { SessionStartFlowRequest } from "@/features/session-start";
@@ -97,11 +98,7 @@ export type KanbanPageContentModel = {
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;
@@ -124,11 +121,7 @@ export type KanbanPageTaskDetailsControllerModel = {
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;

@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -30,8 +31,7 @@ export type SessionStartWorkflowIntent = {
   beforeStartAction?: SessionStartBeforeAction;
 };
 
-export type SessionStartWorkflowResult = {
-  externalSessionId: string;
+export type SessionStartWorkflowResult = AgentSessionRouteIdentity & {
   postStartActionError: Error | null;
 };
 
@@ -83,7 +83,7 @@ const startSessionFromIntent = ({
 }: Pick<
   StartSessionWorkflowArgs,
   "intent" | "selection" | "startAgentSession"
->): Promise<string> => {
+>): Promise<AgentSessionRouteIdentity> => {
   if (intent.startMode === "reuse") {
     return executeSessionStart({
       taskId: intent.taskId,
@@ -273,16 +273,16 @@ export const startSessionWorkflow = async ({
   const postStartMessageSender =
     intent.postStartAction === "none" ? null : requirePostStartMessageSender(sendAgentMessage);
 
-  const externalSessionId = await startSessionFromIntent({
+  const session = await startSessionFromIntent({
     intent,
     selection,
     startAgentSession,
   });
 
   if (intent.postStartAction === "none") {
-    settleStartedAgentSession(externalSessionId);
+    settleStartedAgentSession(session.externalSessionId);
     return {
-      externalSessionId,
+      ...session,
       postStartActionError: null,
     };
   }
@@ -302,12 +302,12 @@ export const startSessionWorkflow = async ({
         task,
       });
     } catch (error) {
-      settleStartedAgentSession(externalSessionId);
+      settleStartedAgentSession(session.externalSessionId);
       return toError(error);
     }
 
     try {
-      await confirmedPostStartMessageSender(externalSessionId, [
+      await confirmedPostStartMessageSender(session.externalSessionId, [
         {
           kind: "text",
           text: postStartMessage,
@@ -326,13 +326,13 @@ export const startSessionWorkflow = async ({
       }
     });
     return {
-      externalSessionId,
+      ...session,
       postStartActionError: null,
     };
   }
 
   return {
-    externalSessionId,
+    ...session,
     postStartActionError: await runPostStartAction(),
   };
 };

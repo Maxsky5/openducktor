@@ -38,6 +38,7 @@ describe("KanbanTaskCard active sessions", () => {
           taskSessions: [
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/build",
               externalSessionId: "session-build",
               role: "build",
               status: "running",
@@ -45,6 +46,7 @@ describe("KanbanTaskCard active sessions", () => {
             },
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/qa",
               externalSessionId: "session-qa",
               role: "qa",
               status: "starting",
@@ -137,6 +139,7 @@ describe("KanbanTaskCard active sessions", () => {
           taskSessions: [
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/build",
               externalSessionId: "session-build",
               role: "build",
               status: "running",
@@ -144,6 +147,7 @@ describe("KanbanTaskCard active sessions", () => {
             },
             {
               runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/qa",
               externalSessionId: "session-qa",
               role: "qa",
               status: "running",

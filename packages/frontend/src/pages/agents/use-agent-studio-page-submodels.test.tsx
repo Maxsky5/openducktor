@@ -151,7 +151,7 @@ describe("useAgentStudioHeaderModel", () => {
     const model = harness.getLatest();
     expect(model.taskTitle).toBe("Task 1");
     expect(model.selectedRole).toBe("spec");
-    expect(model.workflowSteps[0]?.externalSessionId).toBe("session-1");
+    expect(model.workflowSteps[0]?.sessionValue).toBe("session-1");
     expect(model.sessionSelector.disabled).toBe(false);
     expect(model.sessionSelector.shouldAutofocusComposerForValue("session-1")).toBe(true);
     expect(model.sessionCreateOptions).toEqual([sessionCreateOption]);

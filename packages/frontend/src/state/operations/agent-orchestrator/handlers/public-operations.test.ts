@@ -15,7 +15,11 @@ type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["
 
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
-    startAgentSession: async () => "session-started",
+    startAgentSession: async () => ({
+      externalSessionId: "session-started",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-started",
+    }),
     settleStartedAgentSession: () => {},
     sendAgentMessage: async () => {},
     stopAgentSession: async () => {},

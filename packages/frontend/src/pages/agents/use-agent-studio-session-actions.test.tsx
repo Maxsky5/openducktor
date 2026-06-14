@@ -8,6 +8,7 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -81,6 +82,12 @@ const createAttachmentDraft = (input: {
 });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
 
 const QUEUED_RUNTIME_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
@@ -249,7 +256,7 @@ const createBaseArgs = (): HookArgs => {
     },
     reusablePrompts: [],
     repoSettings: null,
-    startAgentSession: async () => "session-new",
+    startAgentSession: async () => sessionIdentity("session-new"),
     settleStartedAgentSession: () => {},
     sendAgentMessage: async () => {},
     humanRequestChangesTask: async () => {},
@@ -283,7 +290,7 @@ describe("useAgentStudioSessionActions", () => {
     const updateQuery = mock(() => {});
     const scheduleSelectionIntent = mock(() => {});
     const onContextSwitchIntent = mock(() => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -380,7 +387,7 @@ describe("useAgentStudioSessionActions", () => {
     });
     const startAgentSession = mock(async () => {
       calls.push("start-session");
-      return "builder-rework-session";
+      return sessionIdentity("builder-rework-session");
     });
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
@@ -468,7 +475,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("onSend starts session and sends trimmed message", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const draft = createComposerDraft("  hello world  ");
@@ -514,7 +521,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend reuses active session when one exists", async () => {
     const sendAgentMessage = mock(async () => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
@@ -889,7 +896,7 @@ describe("useAgentStudioSessionActions", () => {
 
   test("onSend does not send while the active session is waiting for answers", async () => {
     const sendAgentMessage = mock(async () => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
 
     const harness = createHookHarness({
@@ -1256,7 +1263,7 @@ describe("useAgentStudioSessionActions", () => {
   test("blocks fresh session creation while an active session send is in flight", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const activeSession = createSession({
       externalSessionId: "session-existing",
       status: "stopped",
@@ -1299,7 +1306,7 @@ describe("useAgentStudioSessionActions", () => {
   test("keeps sending state while a newly created session becomes selected", async () => {
     const sendDeferred = createDeferred<void>();
     const sendAgentMessage = mock(() => sendDeferred.promise);
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
       taskId: "task-1",
@@ -1448,7 +1455,7 @@ describe("useAgentStudioSessionActions", () => {
   });
 
   test("handleCreateSession does not switch query before creating another session for the same role", async () => {
-    const deferredStart = createDeferred<string>();
+    const deferredStart = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(async () => deferredStart.promise);
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
@@ -1480,7 +1487,7 @@ describe("useAgentStudioSessionActions", () => {
 
       expect(updateCalls).toEqual([]);
     } finally {
-      deferredStart.resolve("session-spec-fresh");
+      deferredStart.resolve(sessionIdentity("session-spec-fresh"));
       await harness.unmount();
     }
   });
@@ -1543,7 +1550,7 @@ describe("useAgentStudioSessionActions", () => {
     const onContextSwitchIntent = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeExternalSessionId: null,
+      activeSessionRoute: null,
       activeSessionRole: "spec" as const,
       activeSessionExists: false,
       agentStudioReady: true,
@@ -1574,7 +1581,7 @@ describe("useAgentStudioSessionActions", () => {
     const session = createSession({ externalSessionId: "session-1", role: "spec" });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeExternalSessionId: "session-1",
+      activeSessionRoute: session,
       activeSessionRole: "spec" as const,
       activeSessionExists: true,
       agentStudioReady: true,
@@ -1589,7 +1596,7 @@ describe("useAgentStudioSessionActions", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSessionSelectionChange("session-1");
+      state.handleSessionSelectionChange(agentSessionIdentityKey(session));
     });
 
     expect(updateQuery).toHaveBeenCalledWith({

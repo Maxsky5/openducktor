@@ -39,6 +39,12 @@ afterEach(() => {
 
 type HookArgs = Parameters<typeof useAgentStudioSessionActions>[0];
 
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 const createHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -139,7 +145,7 @@ const createBaseArgs = (): HookArgs => ({
   },
   reusablePrompts: [],
   repoSettings: null,
-  startAgentSession: async () => "session-new",
+  startAgentSession: async () => sessionIdentity("session-new"),
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   humanRequestChangesTask: async () => {},

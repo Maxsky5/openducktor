@@ -4,7 +4,10 @@ import { useCallback } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
-import type { SessionStartLaunchRequest } from "@/features/session-start";
+import type {
+  SessionStartLaunchRequest,
+  SessionStartWorkflowResult,
+} from "@/features/session-start";
 import {
   getSessionLaunchAction,
   LAUNCH_ACTION_LABELS,
@@ -19,6 +22,7 @@ import type {
 } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
+import type { AgentStudioSessionRouteParam } from "./query-sync/agent-studio-navigation";
 import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
@@ -70,7 +74,7 @@ type UseAgentStudioSessionActionsArgs = {
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent?: (intent: {
     taskId: string;
-    externalSessionId: string | null;
+    session: AgentStudioSessionRouteParam | null;
     role: AgentRole;
   }) => void;
   onContextSwitchIntent?: () => void;
@@ -80,7 +84,9 @@ export type UseAgentStudioSessionActionsResult = {
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  startSessionRequest: (request: SessionStartLaunchRequest) => Promise<string | undefined>;
+  startSessionRequest: (
+    request: SessionStartLaunchRequest,
+  ) => Promise<SessionStartWorkflowResult | undefined>;
   isSending: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   isSessionWorking: boolean;
@@ -92,7 +98,7 @@ export type UseAgentStudioSessionActionsResult = {
   startLaunchKickoff: () => Promise<void>;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
-  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handleCreateSession: (option: SessionCreateOption) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
@@ -238,7 +244,7 @@ export function useAgentStudioSessionActions({
     handlePrepareMessageFirstSession,
   } = useAgentStudioSelectionActions({
     taskId,
-    activeExternalSessionId: sessionState.activeExternalSessionId,
+    activeSessionRoute: activeSession,
     activeSessionRole: sessionState.activeSessionRole,
     activeSessionExists: sessionState.hasActiveSession,
     agentStudioReady,

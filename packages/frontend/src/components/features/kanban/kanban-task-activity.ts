@@ -16,10 +16,9 @@ export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionCont
 
 export type KanbanTaskSession = Pick<
   WorkflowAgentSessionState,
-  "externalSessionId" | "role" | "status"
+  "externalSessionId" | "role" | "runtimeKind" | "status" | "workingDirectory"
 > & {
   startedAt?: AgentSessionState["startedAt"];
-  runtimeKind?: AgentSessionState["runtimeKind"];
   presentationState: KanbanSessionPresentationState;
 };
 

@@ -8,6 +8,7 @@ import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import type {
+  StartOrReuseResult,
   StartSessionContext,
   StartSessionCreationInput,
   StartSessionExecutionDependencies,
@@ -186,7 +187,7 @@ export const executeReuseStart = async ({
   ctx,
   input,
   deps,
-}: ReuseStrategyInput): Promise<{ kind: "reused"; externalSessionId: string }> => {
+}: ReuseStrategyInput): Promise<Extract<StartOrReuseResult, { kind: "reused" }>> => {
   if (ctx.role === "qa") {
     resolveStartTask({ ctx, task: deps.task });
   }
@@ -207,7 +208,7 @@ export const executeReuseStart = async ({
     if (!reuseError) {
       return {
         kind: "reused",
-        externalSessionId: existingSession.externalSessionId,
+        session: existingSession,
       };
     }
     throw new Error(
@@ -237,7 +238,7 @@ export const executeReuseStart = async ({
     );
   }
 
-  await loadSessionForReuse({
+  const loadedSession = await loadSessionForReuse({
     ctx,
     deps,
     externalSessionId: persistedSession.externalSessionId,
@@ -246,6 +247,6 @@ export const executeReuseStart = async ({
 
   return {
     kind: "reused",
-    externalSessionId: persistedSession.externalSessionId,
+    session: loadedSession,
   };
 };

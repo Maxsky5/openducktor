@@ -20,9 +20,18 @@ const CODEX_BUILD_SELECTION = {
   variant: "medium",
 };
 
+const sessionIdentity = (
+  externalSessionId: string,
+  runtimeKind: "opencode" | "codex" = "opencode",
+) => ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 describe("session-start-workflow", () => {
   test("aborts before session creation when the before-start action fails", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const humanRequestChangesTask = mock(async () => {
       throw new Error("cannot request changes");
     });
@@ -58,7 +67,7 @@ describe("session-start-workflow", () => {
   });
 
   test("forwards explicit target working directory for fresh starts", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const settleStartedAgentSession = mock(() => undefined);
 
     const result = await startSessionWorkflow({
@@ -83,7 +92,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "session-new",
+      ...sessionIdentity("session-new"),
       postStartActionError: null,
     });
     expect(startAgentSession).toHaveBeenCalledWith(
@@ -97,7 +106,7 @@ describe("session-start-workflow", () => {
 
   test("uses the just-selected target branch for pull request kickoff prompts", async () => {
     const sendAgentMessage = mock(async () => undefined);
-    const startAgentSession = mock(async () => "session-pr");
+    const startAgentSession = mock(async () => sessionIdentity("session-pr"));
 
     const result = await startSessionWorkflow({
       activeWorkspace: null,
@@ -132,7 +141,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "session-pr",
+      ...sessionIdentity("session-pr"),
       postStartActionError: null,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-pr", [
@@ -150,7 +159,7 @@ describe("session-start-workflow", () => {
 
   test("uses kickoff messaging with embedded human feedback for new builder sessions after review", async () => {
     const sendAgentMessage = mock(async () => undefined);
-    const startAgentSession = mock(async () => "session-build-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     const result = await startSessionWorkflow({
       activeWorkspace: null,
@@ -182,7 +191,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "session-build-new",
+      ...sessionIdentity("session-build-new"),
       postStartActionError: null,
     });
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
@@ -197,7 +206,7 @@ describe("session-start-workflow", () => {
   test("leaves fresh kickoff starts unsettled while the kickoff message path owns status", async () => {
     const settleStartedAgentSession = mock(() => undefined);
     const sendAgentMessage = mock(async () => undefined);
-    const startAgentSession = mock(async () => "session-build-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     await startSessionWorkflow({
       activeWorkspace: null,
@@ -233,7 +242,7 @@ describe("session-start-workflow", () => {
   test("settles started sessions when kickoff message construction fails", async () => {
     const settleStartedAgentSession = mock(() => undefined);
     const sendAgentMessage = mock(async () => undefined);
-    const startAgentSession = mock(async () => "session-build-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     const result = await startSessionWorkflow({
       activeWorkspace: null,
@@ -268,7 +277,7 @@ describe("session-start-workflow", () => {
 
   test("sends Codex fresh kickoff through the standard post-start message path", async () => {
     const sendAgentMessage = mock(async () => undefined);
-    const startAgentSession = mock(async () => "session-codex");
+    const startAgentSession = mock(async () => sessionIdentity("session-codex", "codex"));
 
     const result = await startSessionWorkflow({
       activeWorkspace: null,
@@ -294,7 +303,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "session-codex",
+      ...sessionIdentity("session-codex", "codex"),
       postStartActionError: null,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-codex", [
@@ -313,7 +322,7 @@ describe("session-start-workflow", () => {
 
   test("sends Codex reuse kickoff through the standard post-start message path", async () => {
     const sendAgentMessage = mock(async () => undefined);
-    const startAgentSession = mock(async () => "session-codex-reuse");
+    const startAgentSession = mock(async () => sessionIdentity("session-codex-reuse", "codex"));
 
     const result = await startSessionWorkflow({
       activeWorkspace: null,
@@ -340,7 +349,7 @@ describe("session-start-workflow", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "session-codex-reuse",
+      ...sessionIdentity("session-codex-reuse", "codex"),
       postStartActionError: null,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("session-codex-reuse", [

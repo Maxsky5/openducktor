@@ -14,7 +14,10 @@ import type {
   AgentSessionCollection,
   AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
-import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionLoadOptions,
+  AgentSessionRouteIdentity,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
@@ -42,10 +45,12 @@ export type StartAgentSessionInput =
       sourceExternalSessionId: string;
     };
 
+export type StartAgentSessionResult = AgentSessionRouteIdentity;
+
 export type SessionDependencies = {
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   sessionsRef: { current: AgentSessionCollection };
-  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
+  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<StartAgentSessionResult>> };
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   listenToAgentSession: ListenToAgentSession;
@@ -141,7 +146,7 @@ export type ResolvedRuntimeAndModel = {
 export type StartOrReuseResult =
   | {
       kind: "reused";
-      externalSessionId: string;
+      session: AgentSessionRouteIdentity;
     }
   | {
       kind: "started";

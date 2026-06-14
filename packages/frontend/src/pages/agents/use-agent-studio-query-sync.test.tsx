@@ -19,6 +19,11 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;
 
+const externalSessionParam = (externalSessionId: string) => ({
+  kind: "external" as const,
+  externalSessionId,
+});
+
 type LegacyHookArgs = {
   activeWorkspace?: ActiveWorkspace | null;
   workspaceRepoPath?: string | null;
@@ -194,7 +199,7 @@ describe("useAgentStudioQuerySync", () => {
 
     const latest = harness.getLatest();
     expect(latest.taskIdParam).toBe("task-2");
-    expect(latest.sessionParam).toBe("session-2");
+    expect(latest.sessionParam).toEqual(externalSessionParam("session-2"));
     expect(latest.roleFromQuery).toBe("planner");
 
     expect(calls).toHaveLength(0);
@@ -239,7 +244,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-from-context");
-      expect(latest.sessionParam).toBe("session-from-context");
+      expect(latest.sessionParam).toEqual(externalSessionParam("session-from-context"));
       expect(latest.roleFromQuery).toBe("planner");
 
       await harness.unmount();
@@ -337,7 +342,7 @@ describe("useAgentStudioQuerySync", () => {
       await harness.mount();
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-from-url");
-      expect(latest.sessionParam).toBe("session-from-url");
+      expect(latest.sessionParam).toEqual(externalSessionParam("session-from-url"));
       expect(latest.roleFromQuery).toBe("spec");
       expect(latest.hasExplicitRoleParam).toBe(true);
       await harness.unmount();
@@ -380,7 +385,7 @@ describe("useAgentStudioQuerySync", () => {
       const latest = harness.getLatest();
       expect(latest.isRepoNavigationBoundaryPending).toBeFalse();
       expect(latest.taskIdParam).toBe("task-from-repo-b");
-      expect(latest.sessionParam).toBe("session-from-repo-b");
+      expect(latest.sessionParam).toEqual(externalSessionParam("session-from-repo-b"));
       expect(latest.roleFromQuery).toBe("planner");
 
       await harness.unmount();
@@ -420,7 +425,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-a");
-      expect(latest.sessionParam).toBe("session-a");
+      expect(latest.sessionParam).toEqual(externalSessionParam("session-a"));
       expect(latest.roleFromQuery).toBe("spec");
 
       await harness.unmount();
@@ -458,7 +463,7 @@ describe("useAgentStudioQuerySync", () => {
 
       const latest = harness.getLatest();
       expect(latest.taskIdParam).toBe("task-a");
-      expect(latest.sessionParam).toBe("session-a");
+      expect(latest.sessionParam).toEqual(externalSessionParam("session-a"));
       expect(latest.roleFromQuery).toBe("spec");
 
       await harness.unmount();

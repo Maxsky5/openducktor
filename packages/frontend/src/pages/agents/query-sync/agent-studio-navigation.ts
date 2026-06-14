@@ -1,6 +1,8 @@
-import { agentRoleValues } from "@openducktor/contracts";
+import { agentRoleValues, type RuntimeKind, runtimeKindSchema } from "@openducktor/contracts";
 import { type AgentRole, isRecord } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 
 const AGENT_STUDIO_CONTEXT_STORAGE_PREFIX = "openducktor:agent-studio:context";
 const AGENT_STUDIO_TABS_STORAGE_PREFIX = "openducktor:agent-studio:tabs";
@@ -9,6 +11,8 @@ const AGENT_STUDIO_RIGHT_PANEL_STORAGE_KEY = "openducktor:agent-studio:right-pan
 export const AGENT_STUDIO_QUERY_KEYS = {
   task: "task",
   session: "session",
+  runtimeKind: "runtimeKind",
+  workingDirectory: "workingDirectory",
   agent: "agent",
 } as const;
 
@@ -17,6 +21,8 @@ const LEGACY_AGENT_STUDIO_QUERY_KEYS = ["autostart", "start"] as const;
 const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   AGENT_STUDIO_QUERY_KEYS.task,
   AGENT_STUDIO_QUERY_KEYS.session,
+  AGENT_STUDIO_QUERY_KEYS.runtimeKind,
+  AGENT_STUDIO_QUERY_KEYS.workingDirectory,
   AGENT_STUDIO_QUERY_KEYS.agent,
   ...LEGACY_AGENT_STUDIO_QUERY_KEYS,
 ] as const;
@@ -25,6 +31,8 @@ const AGENT_STUDIO_PERSISTED_CONTEXT_KEYS = {
   taskId: "taskId",
   role: "role",
   externalSessionId: "externalSessionId",
+  runtimeKind: "runtimeKind",
+  workingDirectory: "workingDirectory",
 } as const;
 
 export type AgentStudioQueryKey =
@@ -32,16 +40,26 @@ export type AgentStudioQueryKey =
 
 export type AgentStudioQueryUpdate = Partial<Record<AgentStudioQueryKey, string | undefined>>;
 
+export type AgentStudioSessionRouteParam =
+  | {
+      kind: "exact";
+      identity: AgentSessionRouteIdentity;
+    }
+  | {
+      kind: "external";
+      externalSessionId: string;
+    };
+
 export type AgentStudioNavigationState = {
   taskId: string;
-  externalSessionId: string | null;
+  session: AgentStudioSessionRouteParam | null;
   role: AgentRole | null;
 };
 
 export type PersistedAgentStudioContext = {
   taskId?: string;
   role?: AgentRole;
-  externalSessionId?: string;
+  session?: AgentStudioSessionRouteParam;
 };
 
 const AGENT_ROLE_SET = new Set<string>(agentRoleValues);
@@ -57,6 +75,88 @@ const readOptionalString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const readRuntimeKind = (value: unknown): RuntimeKind | null => {
+  const runtimeKind = readOptionalString(value);
+  if (!runtimeKind) {
+    return null;
+  }
+  const parsed = runtimeKindSchema.safeParse(runtimeKind);
+  return parsed.success ? parsed.data : null;
+};
+
+export const toAgentStudioSessionRouteParam = ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+}: {
+  externalSessionId: string | null | undefined;
+  runtimeKind?: RuntimeKind | null | undefined;
+  workingDirectory?: string | null | undefined;
+}): AgentStudioSessionRouteParam | null => {
+  const resolvedExternalSessionId = readOptionalString(externalSessionId) ?? null;
+  if (!resolvedExternalSessionId) {
+    return null;
+  }
+
+  const resolvedWorkingDirectory = readOptionalString(workingDirectory) ?? null;
+  if (runtimeKind && resolvedWorkingDirectory) {
+    return {
+      kind: "exact",
+      identity: {
+        externalSessionId: resolvedExternalSessionId,
+        runtimeKind,
+        workingDirectory: resolvedWorkingDirectory,
+      },
+    };
+  }
+
+  return {
+    kind: "external",
+    externalSessionId: resolvedExternalSessionId,
+  };
+};
+
+export const getAgentStudioSessionParamExternalSessionId = (
+  session: AgentStudioSessionRouteParam | null,
+): string | null => {
+  if (!session) {
+    return null;
+  }
+  return session.kind === "exact" ? session.identity.externalSessionId : session.externalSessionId;
+};
+
+export const getAgentStudioSessionParamIdentity = (
+  session: AgentStudioSessionRouteParam | null,
+): AgentSessionRouteIdentity | null => (session?.kind === "exact" ? session.identity : null);
+
+export const isSameAgentStudioSessionRouteParam = (
+  left: AgentStudioSessionRouteParam | null,
+  right: AgentStudioSessionRouteParam | null,
+): boolean => {
+  if (left === null || right === null) {
+    return left === right;
+  }
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "external" && right.kind === "external") {
+    return left.externalSessionId === right.externalSessionId;
+  }
+  if (left.kind === "exact" && right.kind === "exact") {
+    return agentSessionIdentityKey(left.identity) === agentSessionIdentityKey(right.identity);
+  }
+  return false;
+};
+
+const readSessionRouteParam = (
+  searchParams: URLSearchParams,
+): AgentStudioSessionRouteParam | null =>
+  toAgentStudioSessionRouteParam({
+    externalSessionId: searchParams.get(AGENT_STUDIO_QUERY_KEYS.session),
+    runtimeKind: readRuntimeKind(searchParams.get(AGENT_STUDIO_QUERY_KEYS.runtimeKind)),
+    workingDirectory: searchParams.get(AGENT_STUDIO_QUERY_KEYS.workingDirectory),
+  });
+
 export const parseNavigationStateFromSearchParams = (
   searchParams: URLSearchParams,
 ): AgentStudioNavigationState => {
@@ -64,8 +164,7 @@ export const parseNavigationStateFromSearchParams = (
 
   return {
     taskId: readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.task)) ?? "",
-    externalSessionId:
-      readOptionalString(searchParams.get(AGENT_STUDIO_QUERY_KEYS.session)) ?? null,
+    session: readSessionRouteParam(searchParams),
     role: isRole(roleValue) ? roleValue : null,
   };
 };
@@ -83,8 +182,18 @@ export const buildSearchParamsFromNavigationState = (
   if (navigation.taskId) {
     next.set(AGENT_STUDIO_QUERY_KEYS.task, navigation.taskId);
   }
-  if (navigation.externalSessionId) {
-    next.set(AGENT_STUDIO_QUERY_KEYS.session, navigation.externalSessionId);
+  if (navigation.session) {
+    next.set(
+      AGENT_STUDIO_QUERY_KEYS.session,
+      getAgentStudioSessionParamExternalSessionId(navigation.session) ?? "",
+    );
+    if (navigation.session.kind === "exact") {
+      next.set(AGENT_STUDIO_QUERY_KEYS.runtimeKind, navigation.session.identity.runtimeKind);
+      next.set(
+        AGENT_STUDIO_QUERY_KEYS.workingDirectory,
+        navigation.session.identity.workingDirectory,
+      );
+    }
   }
   if (navigation.role) {
     next.set(AGENT_STUDIO_QUERY_KEYS.agent, navigation.role);
@@ -109,9 +218,33 @@ export const applyQueryUpdateToNavigationState = (
   }
 
   if (AGENT_STUDIO_QUERY_KEYS.session in updates) {
-    const externalSessionId = readOptionalString(updates.session) ?? null;
-    if (externalSessionId !== next.externalSessionId) {
-      next.externalSessionId = externalSessionId;
+    const session = toAgentStudioSessionRouteParam({
+      externalSessionId: updates.session,
+      runtimeKind: readRuntimeKind(updates.runtimeKind),
+      workingDirectory: updates.workingDirectory,
+    });
+    if (!isSameAgentStudioSessionRouteParam(session, next.session)) {
+      next.session = session;
+      hasChanged = true;
+    }
+  } else if (
+    AGENT_STUDIO_QUERY_KEYS.runtimeKind in updates ||
+    AGENT_STUDIO_QUERY_KEYS.workingDirectory in updates
+  ) {
+    const currentIdentity = getAgentStudioSessionParamIdentity(next.session);
+    const session = toAgentStudioSessionRouteParam({
+      externalSessionId: getAgentStudioSessionParamExternalSessionId(next.session),
+      runtimeKind:
+        AGENT_STUDIO_QUERY_KEYS.runtimeKind in updates
+          ? readRuntimeKind(updates.runtimeKind)
+          : currentIdentity?.runtimeKind,
+      workingDirectory:
+        AGENT_STUDIO_QUERY_KEYS.workingDirectory in updates
+          ? updates.workingDirectory
+          : currentIdentity?.workingDirectory,
+    });
+    if (!isSameAgentStudioSessionRouteParam(session, next.session)) {
+      next.session = session;
       hasChanged = true;
     }
   }
@@ -134,7 +267,7 @@ export const isSameNavigationState = (
 ): boolean => {
   return (
     left.taskId === right.taskId &&
-    left.externalSessionId === right.externalSessionId &&
+    isSameAgentStudioSessionRouteParam(left.session, right.session) &&
     left.role === right.role
   );
 };
@@ -145,7 +278,7 @@ export const clearAgentStudioNavigationState = (
   return {
     ...current,
     taskId: "",
-    externalSessionId: null,
+    session: null,
     role: null,
   };
 };
@@ -153,7 +286,7 @@ export const clearAgentStudioNavigationState = (
 export const hasAgentStudioNavigationSelection = (
   navigation: AgentStudioNavigationState,
 ): boolean => {
-  return Boolean(navigation.taskId || navigation.externalSessionId || navigation.role);
+  return Boolean(navigation.taskId || navigation.session || navigation.role);
 };
 
 export const parsePersistedContext = (raw: string): PersistedAgentStudioContext => {
@@ -182,14 +315,23 @@ export const parsePersistedContext = (raw: string): PersistedAgentStudioContext 
         return roleValue;
       })()
     : undefined;
-  const externalSessionId = parsePersistedContextString(
-    parsed,
-    AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.externalSessionId,
-  );
+  const session = toAgentStudioSessionRouteParam({
+    externalSessionId: parsePersistedContextString(
+      parsed,
+      AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.externalSessionId,
+    ),
+    runtimeKind: readRuntimeKind(
+      parsePersistedContextString(parsed, AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.runtimeKind),
+    ),
+    workingDirectory: parsePersistedContextString(
+      parsed,
+      AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.workingDirectory,
+    ),
+  });
   return {
     ...(taskId ? { taskId } : {}),
     ...(role ? { role } : {}),
-    ...(externalSessionId ? { externalSessionId } : {}),
+    ...(session ? { session } : {}),
   };
 };
 
@@ -199,26 +341,27 @@ export const restoreNavigationFromPersistedContext = (
 ): AgentStudioNavigationState => {
   const role = current.role ?? persisted.role ?? null;
   const taskId = current.taskId || persisted.taskId || "";
-  const externalSessionId =
-    current.externalSessionId ??
-    (!current.taskId || persisted.taskId === current.taskId
-      ? (persisted.externalSessionId ?? null)
-      : null);
+  const session =
+    current.session ??
+    (!current.taskId || persisted.taskId === current.taskId ? (persisted.session ?? null) : null);
 
   return {
     ...current,
     taskId,
-    externalSessionId,
+    session,
     role,
   };
 };
 
 export const serializePersistedContext = (navigation: AgentStudioNavigationState): string => {
+  const sessionIdentity = getAgentStudioSessionParamIdentity(navigation.session);
   const payload = {
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.taskId]: navigation.taskId || undefined,
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.role]: navigation.role ?? undefined,
     [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.externalSessionId]:
-      navigation.externalSessionId || undefined,
+      getAgentStudioSessionParamExternalSessionId(navigation.session) || undefined,
+    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.runtimeKind]: sessionIdentity?.runtimeKind,
+    [AGENT_STUDIO_PERSISTED_CONTEXT_KEYS.workingDirectory]: sessionIdentity?.workingDirectory,
   };
 
   return JSON.stringify(payload);

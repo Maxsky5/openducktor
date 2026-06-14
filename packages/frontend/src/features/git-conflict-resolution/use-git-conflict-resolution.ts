@@ -5,9 +5,11 @@ import {
   buildGitConflictResolutionPrompt,
   buildReusableSessionOptions,
 } from "@/features/session-start";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { getGitConflictCopy } from "./conflict-copy";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION } from "./constants";
@@ -27,15 +29,15 @@ type GitConflictTaskContext = {
   taskId: string;
   task: TaskCard | null;
   builderSessions: AgentSessionSummary[];
-  currentViewSessionId: string | null;
-  onOpenSession: (externalSessionId: string) => void;
+  currentViewSession: AgentSessionRouteIdentity | null;
+  onOpenSession: (session: AgentSessionRouteIdentity) => void;
 };
 
 type UseGitConflictResolutionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   startConflictResolutionSession: (
     input: StartGitConflictResolutionSessionInput,
-  ) => Promise<string | undefined>;
+  ) => Promise<AgentSessionRouteIdentity | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -59,13 +61,13 @@ const filterConflictBuilderSessions = (
 
 const pickDefaultBuilderSession = ({
   builderSessions,
-  currentViewSessionId,
+  currentViewSession,
 }: {
   builderSessions: AgentSessionSummary[];
-  currentViewSessionId: string | null;
+  currentViewSession: AgentSessionRouteIdentity | null;
 }): AgentSessionSummary | null => {
   return (
-    builderSessions.find((session) => session.externalSessionId === currentViewSessionId) ??
+    builderSessions.find((session) => matchesAgentSessionIdentity(session, currentViewSession)) ??
     builderSessions[0] ??
     null
   );
@@ -96,7 +98,7 @@ export function useGitConflictResolution({
       );
       const defaultBuilderSession = pickDefaultBuilderSession({
         builderSessions: validBuilderSessions,
-        currentViewSessionId: taskContext.currentViewSessionId,
+        currentViewSession: taskContext.currentViewSession,
       });
 
       const promptOverrides = await loadPromptOverrides(activeWorkspaceId);
@@ -122,7 +124,7 @@ export function useGitConflictResolution({
         },
       });
 
-      const externalSessionId = await startConflictResolutionSession({
+      const session = await startConflictResolutionSession({
         taskId: taskContext.taskId,
         role: "build",
         launchActionId: BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION,
@@ -136,11 +138,11 @@ export function useGitConflictResolution({
         targetWorkingDirectory: conflictWorkingDirectory,
       });
 
-      if (!externalSessionId) {
+      if (!session) {
         return false;
       }
 
-      taskContext.onOpenSession(externalSessionId);
+      taskContext.onOpenSession(session);
       return true;
     },
     [activeWorkspace, loadPromptOverrides, startConflictResolutionSession],

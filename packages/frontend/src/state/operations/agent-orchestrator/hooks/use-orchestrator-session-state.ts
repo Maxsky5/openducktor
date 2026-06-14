@@ -7,7 +7,7 @@ import {
   emptyAgentSessionCollection,
 } from "@/state/agent-session-collection";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
 import type { AssistantTurnTimingState } from "../support/assistant-turn-duration";
@@ -22,7 +22,7 @@ type OrchestratorMutableState = {
   tasks: TaskCard[];
   currentWorkspaceRepoPath: string | null;
   repoEpoch: number;
-  inFlightStartsByWorkspaceTask: Map<string, Promise<string>>;
+  inFlightStartsByWorkspaceTask: Map<string, Promise<AgentSessionRouteIdentity>>;
   sessionListenerRegistry: SessionListenerRegistry;
   draftRawBySession: Record<string, DraftChannelValueMap<string>>;
   draftSourceBySession: Record<string, DraftChannelValueMap<DraftSource>>;
@@ -37,7 +37,9 @@ type OrchestratorRefBridges = {
   taskRef: MutableRefObject<TaskCard[]>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
-  inFlightStartsByWorkspaceTaskRef: MutableRefObject<Map<string, Promise<string>>>;
+  inFlightStartsByWorkspaceTaskRef: MutableRefObject<
+    Map<string, Promise<AgentSessionRouteIdentity>>
+  >;
   sessionListenerRegistryRef: MutableRefObject<SessionListenerRegistry>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
   draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
@@ -89,7 +91,7 @@ export const useOrchestratorSessionState = ({
     tasks,
     currentWorkspaceRepoPath: workspaceRepoPath,
     repoEpoch: 0,
-    inFlightStartsByWorkspaceTask: new Map<string, Promise<string>>(),
+    inFlightStartsByWorkspaceTask: new Map<string, Promise<AgentSessionRouteIdentity>>(),
     sessionListenerRegistry: createSessionListenerRegistry(),
     draftRawBySession: {},
     draftSourceBySession: {},

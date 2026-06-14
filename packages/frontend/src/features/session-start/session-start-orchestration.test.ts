@@ -26,6 +26,15 @@ const CODEX_BUILD_SELECTION = {
   variant: "medium",
 };
 
+const sessionIdentity = (
+  externalSessionId: string,
+  runtimeKind: "opencode" | "codex" = "opencode",
+) => ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 describe("session-start-orchestration", () => {
   test("prefers the active reusable session and task defaults when building a modal request", () => {
     const latestSession = createAgentSessionFixture({
@@ -196,7 +205,7 @@ describe("session-start-orchestration", () => {
   });
 
   test("maps reuse decisions to workflow execution without a selected model", async () => {
-    const startAgentSession = mock(async () => "builder-session-2");
+    const startAgentSession = mock(async () => sessionIdentity("builder-session-2"));
 
     const result = await executeSessionStartFromDecision({
       activeWorkspace: null,
@@ -217,7 +226,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "builder-session-2",
+      ...sessionIdentity("builder-session-2"),
       postStartActionError: null,
     });
     expect(startAgentSession).toHaveBeenCalledWith(
@@ -232,7 +241,7 @@ describe("session-start-orchestration", () => {
   });
 
   test("maps Codex reuse decisions to workflow execution with standard kickoff messaging", async () => {
-    const startAgentSession = mock(async () => "codex-session-1");
+    const startAgentSession = mock(async () => sessionIdentity("codex-session-1", "codex"));
     const sendAgentMessage = mock(async () => undefined);
 
     const result = await executeSessionStartFromDecision({
@@ -266,7 +275,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "codex-session-1",
+      ...sessionIdentity("codex-session-1", "codex"),
       postStartActionError: null,
     });
     expect(sendAgentMessage).toHaveBeenCalledWith("codex-session-1", [
@@ -284,7 +293,7 @@ describe("session-start-orchestration", () => {
   });
 
   test("maps fork decisions to workflow execution with the selected model and source session", async () => {
-    const startAgentSession = mock(async () => "builder-session-fork");
+    const startAgentSession = mock(async () => sessionIdentity("builder-session-fork"));
 
     await executeSessionStartFromDecision({
       activeWorkspace: null,
@@ -315,7 +324,7 @@ describe("session-start-orchestration", () => {
   });
 
   test("reports detached post-start failures without losing the started session", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {
       throw new Error("kickoff failed");
     });
@@ -342,7 +351,7 @@ describe("session-start-orchestration", () => {
     });
 
     expect(result).toEqual({
-      externalSessionId: "session-new",
+      ...sessionIdentity("session-new"),
       postStartActionError: null,
     });
     await Promise.resolve();

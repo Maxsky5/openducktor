@@ -1,7 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   AGENT_STUDIO_QUERY_KEYS,
@@ -12,7 +13,7 @@ export type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navig
 
 type AgentStudioSessionSelectionQueryParams = {
   taskId: string;
-  externalSessionId: string | undefined;
+  session: AgentSessionRouteIdentity | null;
   role: AgentRole;
 };
 
@@ -27,14 +28,14 @@ export const canStartSessionForRole = (task: TaskCard | null, role: AgentRole): 
   return !task || isRoleAvailableForTask(task, role);
 };
 
-const buildSessionSelectionQueryUpdate = (params: {
-  taskId: string;
-  externalSessionId: string | undefined;
-  role: AgentRole;
-}): QueryUpdate => {
+const buildSessionSelectionQueryUpdate = (
+  params: AgentStudioSessionSelectionQueryParams,
+): QueryUpdate => {
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
-    [AGENT_STUDIO_QUERY_KEYS.session]: params.externalSessionId,
+    [AGENT_STUDIO_QUERY_KEYS.session]: params.session?.externalSessionId,
+    [AGENT_STUDIO_QUERY_KEYS.runtimeKind]: params.session?.runtimeKind,
+    [AGENT_STUDIO_QUERY_KEYS.workingDirectory]: params.session?.workingDirectory,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
   };
 };
@@ -42,11 +43,7 @@ const buildSessionSelectionQueryUpdate = (params: {
 export const buildAgentStudioSelectionQueryUpdate = (
   params: AgentStudioSessionSelectionQueryParams,
 ): QueryUpdate => {
-  return buildSessionSelectionQueryUpdate({
-    taskId: params.taskId,
-    externalSessionId: params.externalSessionId,
-    role: params.role,
-  });
+  return buildSessionSelectionQueryUpdate(params);
 };
 
 export const applyAgentStudioSelectionQuery = (
@@ -64,20 +61,25 @@ export const buildPreviousSelectionQueryUpdate = (params: {
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.activeSession?.taskId ?? params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.externalSessionId,
+    [AGENT_STUDIO_QUERY_KEYS.runtimeKind]: params.activeSession?.runtimeKind,
+    [AGENT_STUDIO_QUERY_KEYS.workingDirectory]: params.activeSession?.workingDirectory,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
   };
 };
 
 export const shouldTriggerContextSwitchIntent = (params: {
-  currentExternalSessionId: string | null;
+  currentSession: AgentSessionRouteIdentity | null;
   currentRole: AgentRole;
-  nextSessionId: string | null;
+  nextSession: AgentSessionRouteIdentity | null;
   nextRole: AgentRole;
 }): boolean => {
-  return (
-    params.currentExternalSessionId !== params.nextSessionId ||
-    params.currentRole !== params.nextRole
-  );
+  if (params.currentRole !== params.nextRole) {
+    return true;
+  }
+  if (params.currentSession === null || params.nextSession === null) {
+    return params.currentSession !== params.nextSession;
+  }
+  return !matchesAgentSessionIdentity(params.currentSession, params.nextSession);
 };
 
 export const buildAgentStudioAsyncActivityContextKey = (

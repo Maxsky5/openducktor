@@ -89,7 +89,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         }),
       ).resolves.toEqual({
         kind: "reused",
-        externalSessionId: "ext-build",
+        session: {
+          externalSessionId: "ext-build",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+        },
       });
       expect(loadCalls).toBe(1);
     } finally {

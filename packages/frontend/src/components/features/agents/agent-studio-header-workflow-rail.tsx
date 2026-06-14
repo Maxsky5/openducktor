@@ -18,7 +18,7 @@ type WorkflowRailProps = {
   steps: AgentWorkflowStep[];
   selectedRole: AgentRole | null;
   agentStudioReady: boolean;
-  onStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onStepSelect: (role: AgentRole, sessionValue: string | null) => void;
 };
 
 type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";
@@ -118,7 +118,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
     return "Latest session failed";
   }
   if (entry.state.tone === "failed") {
-    if (entry.externalSessionId) {
+    if (entry.sessionValue) {
       return "Open latest failed session for this role";
     }
     return "Step failed before a session could start";
@@ -126,7 +126,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (entry.state.completion === "rejected") {
     return "Latest review rejected this task";
   }
-  if (entry.externalSessionId) {
+  if (entry.sessionValue) {
     return "Open latest relevant session for this role";
   }
   if (entry.state.tone === "available") {
@@ -147,7 +147,7 @@ function WorkflowStepButton({
   step: AgentWorkflowStep;
   isSelected: boolean;
   agentStudioReady: boolean;
-  onSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onSelect: (role: AgentRole, sessionValue: string | null) => void;
 }): ReactElement {
   const Icon = step.icon;
   const shouldSpinInProgress = step.state.liveSession === "running";
@@ -169,7 +169,7 @@ function WorkflowStepButton({
       aria-pressed={isSelected}
       title={workflowStepHint(step)}
       onClick={() => {
-        onSelect(step.role, step.externalSessionId);
+        onSelect(step.role, step.sessionValue);
       }}
     >
       <Icon className="size-4" />

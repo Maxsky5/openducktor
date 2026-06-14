@@ -9,6 +9,7 @@ import {
   resolveDraftToUserMessageParts,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
+import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
@@ -35,7 +36,7 @@ type UseAgentStudioSendActionArgs = {
   selectedTask: TaskCard | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
-  startSession: () => Promise<string | undefined>;
+  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
 };
 
 export function useAgentStudioSendAction({
@@ -129,7 +130,8 @@ export function useAgentStudioSendAction({
       try {
         let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
         if (!targetExternalSessionId) {
-          targetExternalSessionId = await startSession();
+          const startedSession = await startSession();
+          targetExternalSessionId = startedSession?.externalSessionId;
         }
 
         if (!targetExternalSessionId) {

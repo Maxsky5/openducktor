@@ -127,6 +127,12 @@ const QA_SELECTION: AgentModelSelection = {
   profileId: "qa",
 };
 
+const sessionIdentity = (externalSessionId: string, workingDirectory = "/tmp/repo") => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory,
+});
+
 describe("agent-orchestrator/handlers/start-session", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -169,8 +175,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("reuses an existing in-flight start promise", async () => {
-    const inFlight = Promise.resolve("session-in-flight");
-    const inFlightMap = new Map<string, Promise<string>>([
+    const inFlight = Promise.resolve(sessionIdentity("session-in-flight"));
+    const inFlightMap = new Map<string, Promise<ReturnType<typeof sessionIdentity>>>([
       ["/tmp/repo::task-1::build::reuse::session-in-flight::::", inFlight],
     ]);
     const sessionsRef = createSessionsRef();
@@ -206,7 +212,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "reuse",
         sourceExternalSessionId: "session-in-flight",
       }),
-    ).resolves.toBe("session-in-flight");
+    ).resolves.toEqual(sessionIdentity("session-in-flight"));
   });
 
   test("does not dedupe in-flight starts across different roles", async () => {
@@ -283,8 +289,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(plannerStartResult).toBeUndefined();
 
       startBuildDeferred.resolve();
-      await expect(buildPromise).resolves.toBe("build-external");
-      await expect(plannerPromise).resolves.toBe("planner-external");
+      await expect(buildPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "build-external" }),
+      );
+      await expect(plannerPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "planner-external" }),
+      );
     } finally {
       startBuildDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -293,15 +303,15 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("does not dedupe fresh starts with different models", async () => {
-    const modelSession = Promise.resolve("session-model");
-    const inFlightMap = new Map<string, Promise<string>>([
+    const modelSession = Promise.resolve(sessionIdentity("session-model"));
+    const inFlightMap = new Map<string, Promise<ReturnType<typeof sessionIdentity>>>([
       [
         "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build",
         modelSession,
       ],
       [
         "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner",
-        Promise.resolve("session-profile"),
+        Promise.resolve(sessionIdentity("session-profile")),
       ],
     ]);
 
@@ -338,7 +348,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       }),
-    ).resolves.toBe("session-model");
+    ).resolves.toEqual(expect.objectContaining({ externalSessionId: "session-model" }));
 
     await expect(
       start({
@@ -350,7 +360,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           profileId: "planner",
         },
       }),
-    ).resolves.toBe("session-profile");
+    ).resolves.toEqual(expect.objectContaining({ externalSessionId: "session-profile" }));
   });
 
   test("waits for the initial session snapshot to persist before resolving", async () => {
@@ -413,7 +423,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
       persistDeferred.resolve();
 
-      await expect(startPromise).resolves.toBe("planner-external");
+      await expect(startPromise).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "planner-external" }),
+      );
     } finally {
       persistDeferred.resolve();
       adapter.startSession = originalStartSession;
@@ -475,7 +487,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: PLANNER_SELECTION,
         }),
-      ).resolves.toBe("planner-external");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "planner-external" }));
 
       expect(getSession(sessionCollection, "planner-external")?.status).toBe("starting");
       expect(lifecycleEvents).toContain("listener:started");
@@ -683,7 +695,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-newer",
         }),
-      ).resolves.toBe("external-newer");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-newer" }));
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -769,7 +781,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-chosen",
         }),
-      ).resolves.toBe("external-chosen");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-chosen" }));
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -851,7 +863,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).resolves.toBe("external-fresh-build-session");
+      ).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "external-fresh-build-session" }),
+      );
       expect(startCalls).toBe(1);
       expect(persistedListCalls).toBe(0);
     } finally {
@@ -921,7 +935,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-chosen",
         }),
-      ).resolves.toBe("external-chosen");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-chosen" }));
       expect(persistedListCalls).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -1002,7 +1016,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-reused",
         }),
-      ).resolves.toBe("external-reused");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
       expect(getSession(sessionsRef.current, "external-reused")?.selectedModel).toEqual(
         existingSelectedModel,
       );
@@ -1096,7 +1110,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-reused",
         }),
-      ).resolves.toBe("external-reused");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1190,7 +1204,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-reused",
         }),
-      ).resolves.toBe("external-reused");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
       expect(startCalls).toBe(0);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1284,7 +1298,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: BUILD_SELECTION,
         }),
-      ).resolves.toBe("fresh-ext");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "fresh-ext" }));
       expect(startCalls).toBe(1);
       expect(persistedListCalls).toBe(0);
     } finally {
@@ -1366,7 +1380,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: PLANNER_SELECTION,
       });
-      expect(externalSessionId).toBe("planner-ext");
+      expect(externalSessionId).toEqual(
+        expect.objectContaining({ externalSessionId: "planner-ext" }),
+      );
       expect(startCalls).toBe(1);
     } finally {
       adapter.startSession = originalStartSession;
@@ -1465,7 +1481,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startMode: "reuse",
       sourceExternalSessionId: "external-build-newer",
     });
-    expect(externalSessionId).toBe("external-build-newer");
+    expect(externalSessionId).toEqual(
+      expect.objectContaining({ externalSessionId: "external-build-newer" }),
+    );
     expect(loadAgentSessionsCalls).toBe(1);
   });
 
@@ -1578,7 +1596,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sourceExternalSessionId: "external-source-build",
       });
 
-      expect(externalSessionId).toBe("external-forked-pr-session");
+      expect(externalSessionId).toEqual(
+        expect.objectContaining({ externalSessionId: "external-forked-pr-session" }),
+      );
       expect(getSession(sessionCollection, "external-forked-pr-session")?.workingDirectory).toBe(
         "/tmp/repo/worktree",
       );
@@ -1721,7 +1741,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sourceExternalSessionId: "external-source-build",
       });
 
-      expect(externalSessionId).toBe("external-forked-from-loaded-source");
+      expect(externalSessionId).toEqual(
+        expect.objectContaining({ externalSessionId: "external-forked-from-loaded-source" }),
+      );
       expect(loadAgentSessionsCalls).toEqual([
         {
           taskId: "task-1",
@@ -1835,7 +1857,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: BUILD_SELECTION,
           sourceExternalSessionId: "external-source-build",
         }),
-      ).resolves.toBe("external-forked-from-runtime-connection");
+      ).resolves.toEqual(
+        expect.objectContaining({ externalSessionId: "external-forked-from-runtime-connection" }),
+      );
       expect(forkCalls).toHaveLength(1);
     } finally {
       adapter.forkSession = originalForkSession;
@@ -2219,7 +2243,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "reuse",
           sourceExternalSessionId: "external-opencode",
         }),
-      ).resolves.toBe("external-opencode");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-opencode" }));
       expect(loadAgentSessionsCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
@@ -2321,7 +2345,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "reuse",
         sourceExternalSessionId: "external-claude",
       });
-      expect(externalSessionId).toBe("external-claude");
+      expect(externalSessionId).toEqual(
+        expect.objectContaining({ externalSessionId: "external-claude" }),
+      );
       expect(loadAgentSessionsCalls).toBe(1);
       expect(startCalls).toBe(0);
     } finally {
@@ -2569,7 +2595,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           startMode: "fresh",
           selectedModel: QA_SELECTION,
         }),
-      ).resolves.toBe("external-qa");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-qa" }));
       expect(qaTargetCalls).toBe(1);
       expect(ensuredWorkingDirectories).toEqual(["/tmp/repo/worktree"]);
     } finally {
@@ -2958,7 +2984,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         startMode: "fresh",
         selectedModel: BUILD_SELECTION,
       });
-      expect(externalSessionId).toBe("external-created");
+      expect(externalSessionId).toEqual(
+        expect.objectContaining({ externalSessionId: "external-created" }),
+      );
       expect(startCalls).toBe(1);
       expect(listenCalls).toBe(1);
       expect(persistCalls).toBe(1);
@@ -3176,7 +3204,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel,
           startMode: "fresh",
         }),
-      ).resolves.toBe("external-created");
+      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-created" }));
       if (observedStartInput === null) {
         throw new Error("Expected adapter.startSession to receive input.");
       }

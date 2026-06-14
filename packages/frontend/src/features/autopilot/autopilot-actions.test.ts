@@ -18,6 +18,8 @@ import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 
 const startSessionWorkflowMock = mock(async () => ({
   externalSessionId: "session-new",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/session-new",
   postStartActionError: null,
 }));
 
@@ -148,6 +150,8 @@ describe("autopilot feature helpers", () => {
     startSessionWorkflowMock.mockReset();
     startSessionWorkflowMock.mockImplementation(async () => ({
       externalSessionId: "session-new",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/session-new",
       postStartActionError: null,
     }));
   });

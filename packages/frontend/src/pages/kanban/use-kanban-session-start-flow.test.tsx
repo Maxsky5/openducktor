@@ -24,6 +24,12 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useKanbanSessionStartFlow>[0];
 
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 const createModalCatalog = (): AgentModelCatalog => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
   models: [
@@ -154,6 +160,7 @@ const createBaseArgs = (): HookArgs => ({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/builder-session-2",
       role: "build",
       selectedModel: {
         runtimeKind: "opencode",
@@ -168,6 +175,7 @@ const createBaseArgs = (): HookArgs => ({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/builder-session-1",
       role: "build",
       selectedModel: {
         runtimeKind: "opencode",
@@ -184,7 +192,7 @@ const createBaseArgs = (): HookArgs => ({
   loadAgentSessions: async () => {},
   humanRequestChangesTask: async () => {},
   setTaskTargetBranch: async () => {},
-  startAgentSession: async () => "session-new",
+  startAgentSession: async () => sessionIdentity("session-new"),
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
 });
@@ -370,7 +378,7 @@ describe("useKanbanSessionStartFlow", () => {
   });
 
   test("pull request generation resolves with the started builder session id using reuse by default", async () => {
-    const startAgentSession = mock(async () => "builder-session-pr");
+    const startAgentSession = mock(async () => sessionIdentity("builder-session-pr"));
     const args = createBaseArgs();
     args.repoSettings = {
       ...createDefaultRepoSettings(),
@@ -438,7 +446,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
     const startAgentSession = mock(async () => {
       callOrder.push("start-session");
-      return "builder-session-new";
+      return sessionIdentity("builder-session-new");
     });
     const args = createBaseArgs();
     args.repoSettings = {
@@ -655,7 +663,7 @@ describe("useKanbanSessionStartFlow", () => {
           },
         }) satisfies RepoSettingsInput,
     );
-    const startSessionDeferred = createDeferred<string>();
+    const startSessionDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startSessionDeferred.promise);
     const baseArgs = createBaseArgs();
     const harness = createHookHarness({
@@ -706,7 +714,7 @@ describe("useKanbanSessionStartFlow", () => {
         }),
       );
 
-      startSessionDeferred.resolve("session-new");
+      startSessionDeferred.resolve(sessionIdentity("session-new"));
     } finally {
       host.taskWorktreeGet = originalBuildContinuationTargetGet;
       await harness.unmount();
@@ -715,7 +723,7 @@ describe("useKanbanSessionStartFlow", () => {
 
   test("human review feedback opens the shared start modal with reuse selected by default when builder sessions exist", async () => {
     const humanRequestChangesTask = mock(async () => {});
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -870,37 +878,37 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("onOpenSession uses explicit session id when provided", async () => {
+  test("onOpenSession uses explicit session identity when provided", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);
 
     await harness.mount();
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
-        externalSessionId: "builder-session-1",
+        session: sessionIdentity("builder-session-1"),
       });
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-1&agent=build",
+      "/agents?task=TASK-1&session=builder-session-1&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-1&agent=build",
     );
 
     await harness.unmount();
   });
 
-  test("onOpenSession uses explicit session id even when it is not currently hydrated", async () => {
+  test("onOpenSession uses explicit session identity even when it is not currently hydrated", async () => {
     const args = createBaseArgs();
     const harness = createHookHarness(args);
 
     await harness.mount();
     await harness.run((state) => {
       state.onOpenSession("TASK-1", "build", {
-        externalSessionId: "builder-session-archived",
+        session: sessionIdentity("builder-session-archived"),
       });
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-archived&agent=build",
+      "/agents?task=TASK-1&session=builder-session-archived&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-archived&agent=build",
     );
 
     await harness.unmount();
@@ -912,11 +920,11 @@ describe("useKanbanSessionStartFlow", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.onOpenSession("TASK-1", "build", { externalSessionId: null });
+      state.onOpenSession("TASK-1", "build");
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-2&agent=build",
+      "/agents?task=TASK-1&session=builder-session-2&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-2&agent=build",
     );
 
     await harness.unmount();
@@ -944,6 +952,7 @@ describe("useKanbanSessionStartFlow", () => {
         externalSessionId: "builder-session-new-running",
         taskId: "TASK-1",
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/builder-session-new-running",
         role: "build",
         status: "running",
         pendingApprovals: [],
@@ -954,6 +963,7 @@ describe("useKanbanSessionStartFlow", () => {
         externalSessionId: "builder-session-old-waiting",
         taskId: "TASK-1",
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/builder-session-old-waiting",
         role: "build",
         status: "idle",
         pendingApprovals: [],
@@ -980,7 +990,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-old-waiting&agent=build",
+      "/agents?task=TASK-1&session=builder-session-old-waiting&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-old-waiting&agent=build",
     );
 
     await harness.unmount();

@@ -1,7 +1,10 @@
 import type { AgentRole } from "@openducktor/core";
 import type { SetURLSearchParams } from "react-router-dom";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
+import type {
+  AgentStudioQueryUpdate,
+  AgentStudioSessionRouteParam,
+} from "./agent-studio-navigation";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
 import { useRepoNavigationPersistence } from "./use-repo-navigation-persistence";
 
@@ -19,7 +22,7 @@ export function useAgentStudioQuerySync({
   setSearchParams,
 }: UseAgentStudioQuerySyncArgs): {
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionParam: AgentStudioSessionRouteParam | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   isRepoNavigationBoundaryPending: boolean;
@@ -45,7 +48,7 @@ export function useAgentStudioQuerySync({
 
   return {
     taskIdParam: navigation.taskId,
-    sessionParam: navigation.externalSessionId,
+    sessionParam: navigation.session,
     hasExplicitRoleParam,
     roleFromQuery,
     isRepoNavigationBoundaryPending,

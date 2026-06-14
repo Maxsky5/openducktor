@@ -22,6 +22,12 @@ let useAgentStudioSessionStartFlow: UseAgentStudioSessionStartFlowHook;
 
 type HookArgs = Parameters<UseAgentStudioSessionStartFlowHook>[0];
 
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 const createHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
     createElement(
@@ -118,7 +124,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     profileId: "spec",
   },
   repoSettings: null,
-  startAgentSession: async () => "session-new",
+  startAgentSession: async () => sessionIdentity("session-new"),
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   humanRequestChangesTask: async () => {},
@@ -148,7 +154,7 @@ beforeEach(() => {
 
 describe("useAgentStudioSessionStartFlow kickoff failures", () => {
   test("keeps the started session and shows a toast when kickoff send fails", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {
       throw new Error("kickoff failed");
     });

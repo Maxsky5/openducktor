@@ -3,6 +3,7 @@ import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openduckto
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import * as sonnerActual from "sonner";
+import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
@@ -37,6 +38,12 @@ const createPromptTask = (overrides = {}) =>
   });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
 
 const createModalCatalog = (): AgentModelCatalog => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -189,7 +196,7 @@ const createBaseArgs = (): HookArgs => ({
     ...MODEL_SELECTION,
   },
   repoSettings: REPO_SETTINGS,
-  startAgentSession: async () => "session-new",
+  startAgentSession: async () => sessionIdentity("session-new"),
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   humanRequestChangesTask: async () => {},
@@ -363,7 +370,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     });
 
     await harness.mount();
-    let startPromise: Promise<string | undefined> | undefined;
+    let startPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run(async (state) => {
       startPromise = state.startSession();
     });
@@ -374,8 +381,8 @@ describe("useAgentStudioSessionStartFlow", () => {
       variant: "default",
     });
     await harness.run(async () => {
-      const externalSessionId = await startPromise;
-      expect(externalSessionId).toBe("session-new");
+      const session = await startPromise;
+      expect(session?.externalSessionId).toBe("session-new");
     });
 
     expect(updateCalls).toContainEqual({
@@ -388,7 +395,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("startSession uses the internal modal flow when no external request hook is provided", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
@@ -402,7 +409,7 @@ describe("useAgentStudioSessionStartFlow", () => {
 
     await harness.mount();
 
-    let startPromise: Promise<string | undefined> | undefined;
+    let startPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run((state) => {
       startPromise = state.startSession();
     });
@@ -441,7 +448,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("startLaunchKickoff uses the internal modal flow when no external request hook is provided", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
@@ -481,7 +488,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("handleCreateSession uses the internal modal flow when no external request hook is provided", async () => {
-    const startAgentSession = mock(async () => "session-plan");
+    const startAgentSession = mock(async () => sessionIdentity("session-plan"));
     const updateCalls: Array<Record<string, string | undefined>> = [];
     const harness = createInternalModalHookHarness({
       ...createBaseArgs(),
@@ -590,7 +597,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("keeps starting state while fresh session creation switches to the draft role", async () => {
-    const startDeferred = createDeferred<string>();
+    const startDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startDeferred.promise);
     const sendAgentMessage = mock(async () => {});
 
@@ -631,7 +638,7 @@ describe("useAgentStudioSessionStartFlow", () => {
     expect(harness.getLatest().isStarting).toBe(true);
 
     await harness.run(async () => {
-      startDeferred.resolve("session-planner");
+      startDeferred.resolve(sessionIdentity("session-planner"));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -640,7 +647,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("handleCreateSession for qa rejection starts a fresh builder session in the existing worktree", async () => {
-    const startAgentSession = mock(async () => "session-build-rework");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-rework"));
     const sendAgentMessage = mock(async () => {});
     const updateCalls: Array<Record<string, string | undefined>> = [];
 
@@ -715,9 +722,11 @@ describe("useAgentStudioSessionStartFlow", () => {
   test("handleCreateSession for human changes opens the feedback modal before model selection", async () => {
     const startAgentSession = mock(
       async (input: { startMode: string; sourceExternalSessionId?: string }) =>
-        input.startMode === "reuse"
-          ? (input.sourceExternalSessionId ?? "session-build-latest")
-          : "session-build-human",
+        sessionIdentity(
+          input.startMode === "reuse"
+            ? (input.sourceExternalSessionId ?? "session-build-latest")
+            : "session-build-human",
+        ),
     );
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -757,7 +766,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("handleCreateSession for human changes waits for task hydration before opening feedback", async () => {
-    const startAgentSession = mock(async () => "session-build-human");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-human"));
 
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -796,7 +805,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("startLaunchKickoff for human changes opens the feedback modal instead of starting immediately", async () => {
-    const startAgentSession = mock(async () => "session-build-human");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-human"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
@@ -829,7 +838,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("startLaunchKickoff for human changes waits for task hydration", async () => {
-    const startAgentSession = mock(async () => "session-build-human");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-human"));
     const sendAgentMessage = mock(async () => {});
 
     const harness = createHookHarness({
@@ -863,7 +872,7 @@ describe("useAgentStudioSessionStartFlow", () => {
   });
 
   test("human changes feedback hands off to the shared session-start modal with reuse selected by default", async () => {
-    const startAgentSession = mock(async () => "session-build-human");
+    const startAgentSession = mock(async () => sessionIdentity("session-build-human"));
     const harness = createHookHarness({
       ...createBaseArgs(),
       role: "spec",

@@ -1,11 +1,14 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
+import type { AgentStudioSessionRouteParam } from "../query-sync/agent-studio-navigation";
 import {
   applyAgentStudioSelectionQuery,
   canStartSessionForRole,
@@ -15,13 +18,13 @@ import {
 
 type SelectionIntentScheduler = (intent: {
   taskId: string;
-  externalSessionId: string | null;
+  session: AgentStudioSessionRouteParam | null;
   role: AgentRole;
 }) => void;
 
 type UseAgentStudioSelectionActionsArgs = {
   taskId: string;
-  activeExternalSessionId: string | null;
+  activeSessionRoute: AgentSessionRouteIdentity | null;
   activeSessionRole: AgentRole;
   activeSessionExists: boolean;
   agentStudioReady: boolean;
@@ -35,10 +38,10 @@ type UseAgentStudioSelectionActionsArgs = {
 };
 
 type ApplySelectionIntentParams = {
-  currentExternalSessionId: string | null;
+  currentSessionRoute: AgentSessionRouteIdentity | null;
   currentRole: AgentRole;
   nextTaskId: string;
-  nextExternalSessionId: string | null;
+  nextSessionRoute: AgentSessionRouteIdentity | null;
   nextRole: AgentRole;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
@@ -46,10 +49,10 @@ type ApplySelectionIntentParams = {
 };
 
 const applySelectionIntent = ({
-  currentExternalSessionId,
+  currentSessionRoute,
   currentRole,
   nextTaskId,
-  nextExternalSessionId,
+  nextSessionRoute,
   nextRole,
   updateQuery,
   scheduleSelectionIntent,
@@ -57,9 +60,9 @@ const applySelectionIntent = ({
 }: ApplySelectionIntentParams): void => {
   if (
     shouldTriggerContextSwitchIntent({
-      currentExternalSessionId,
+      currentSession: currentSessionRoute,
       currentRole,
-      nextSessionId: nextExternalSessionId,
+      nextSession: nextSessionRoute,
       nextRole,
     })
   ) {
@@ -68,19 +71,19 @@ const applySelectionIntent = ({
 
   applyAgentStudioSelectionQuery(updateQuery, {
     taskId: nextTaskId,
-    externalSessionId: nextExternalSessionId ?? undefined,
+    session: nextSessionRoute,
     role: nextRole,
   });
   scheduleSelectionIntent?.({
     taskId: nextTaskId,
-    externalSessionId: nextExternalSessionId,
+    session: nextSessionRoute ? { kind: "exact", identity: nextSessionRoute } : null,
     role: nextRole,
   });
 };
 
 export function useAgentStudioSelectionActions({
   taskId,
-  activeExternalSessionId,
+  activeSessionRoute,
   activeSessionRole,
   activeSessionExists,
   agentStudioReady,
@@ -92,22 +95,28 @@ export function useAgentStudioSelectionActions({
   scheduleSelectionIntent,
   onContextSwitchIntent,
 }: UseAgentStudioSelectionActionsArgs): {
-  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
 } {
+  const findSessionByValue = useCallback(
+    (sessionValue: string): AgentSessionSummary | null =>
+      sessionsForTask.find((entry) => agentSessionIdentityKey(entry) === sessionValue) ?? null,
+    [sessionsForTask],
+  );
+
   const handleWorkflowStepSelect = useCallback(
-    (nextRole: AgentRole, externalSessionId: string | null): void => {
+    (nextRole: AgentRole, sessionValue: string | null): void => {
       if (!taskId) {
         return;
       }
 
-      if (!externalSessionId) {
+      if (!sessionValue) {
         applySelectionIntent({
-          currentExternalSessionId: activeExternalSessionId,
+          currentSessionRoute: activeSessionRoute,
           currentRole: activeSessionRole,
           nextTaskId: taskId,
-          nextExternalSessionId: null,
+          nextSessionRoute: null,
           nextRole,
           updateQuery,
           scheduleSelectionIntent,
@@ -116,18 +125,16 @@ export function useAgentStudioSelectionActions({
         return;
       }
 
-      const session = sessionsForTask.find(
-        (entry) => entry.externalSessionId === externalSessionId,
-      );
+      const session = findSessionByValue(sessionValue);
       if (!isWorkflowAgentSessionSummary(session)) {
         return;
       }
 
       applySelectionIntent({
-        currentExternalSessionId: activeExternalSessionId,
+        currentSessionRoute: activeSessionRoute,
         currentRole: activeSessionRole,
         nextTaskId: session.taskId,
-        nextExternalSessionId: session.externalSessionId,
+        nextSessionRoute: session,
         nextRole: session.role,
         updateQuery,
         scheduleSelectionIntent,
@@ -135,11 +142,11 @@ export function useAgentStudioSelectionActions({
       });
     },
     [
-      activeExternalSessionId,
+      activeSessionRoute,
       activeSessionRole,
+      findSessionByValue,
       onContextSwitchIntent,
       scheduleSelectionIntent,
-      sessionsForTask,
       taskId,
       updateQuery,
     ],
@@ -151,18 +158,16 @@ export function useAgentStudioSelectionActions({
         return;
       }
 
-      const selectedSession = sessionsForTask.find(
-        (entry) => entry.externalSessionId === nextValue,
-      );
+      const selectedSession = findSessionByValue(nextValue);
       if (!isWorkflowAgentSessionSummary(selectedSession)) {
         return;
       }
 
       applySelectionIntent({
-        currentExternalSessionId: activeExternalSessionId,
+        currentSessionRoute: activeSessionRoute,
         currentRole: activeSessionRole,
         nextTaskId: selectedSession.taskId,
-        nextExternalSessionId: selectedSession.externalSessionId,
+        nextSessionRoute: selectedSession,
         nextRole: selectedSession.role,
         updateQuery,
         scheduleSelectionIntent,
@@ -170,11 +175,11 @@ export function useAgentStudioSelectionActions({
       });
     },
     [
-      activeExternalSessionId,
+      activeSessionRoute,
       activeSessionRole,
+      findSessionByValue,
       onContextSwitchIntent,
       scheduleSelectionIntent,
-      sessionsForTask,
       taskId,
       updateQuery,
     ],
@@ -193,10 +198,10 @@ export function useAgentStudioSelectionActions({
       }
 
       applySelectionIntent({
-        currentExternalSessionId: activeExternalSessionId,
+        currentSessionRoute: activeSessionRoute,
         currentRole: activeSessionRole,
         nextTaskId: taskId,
-        nextExternalSessionId: null,
+        nextSessionRoute: null,
         nextRole: option.role,
         updateQuery,
         scheduleSelectionIntent,
@@ -204,7 +209,7 @@ export function useAgentStudioSelectionActions({
       });
     },
     [
-      activeExternalSessionId,
+      activeSessionRoute,
       activeSessionExists,
       activeSessionRole,
       agentStudioReady,

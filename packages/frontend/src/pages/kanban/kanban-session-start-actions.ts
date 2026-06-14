@@ -6,6 +6,7 @@ import {
   executeSessionStartFromDecision,
   type ResolvedSessionStartDecision,
 } from "@/features/session-start";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { addTaskToPersistedAgentStudioTabs } from "../agents/agents-page-session-tabs";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
@@ -24,7 +25,10 @@ type StartKanbanSessionFlowInput = {
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
-  openSessionInAgentStudio: (intent: KanbanSessionStartIntent, externalSessionId: string) => void;
+  openSessionInAgentStudio: (
+    intent: KanbanSessionStartIntent,
+    session: AgentSessionRouteIdentity,
+  ) => void;
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
 };
 
@@ -43,7 +47,7 @@ export const startKanbanSessionFlow = async ({
   setTaskTargetBranch,
   openSessionInAgentStudio,
   sendAgentMessage,
-}: StartKanbanSessionFlowInput): Promise<string> => {
+}: StartKanbanSessionFlowInput): Promise<AgentSessionRouteIdentity> => {
   const effectivePostStartAction =
     startInBackground && request.postStartAction === "none" ? "kickoff" : request.postStartAction;
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
@@ -97,15 +101,11 @@ export const startKanbanSessionFlow = async ({
     const roleLabel = roleLabels[request.role] ?? request.role.toUpperCase();
     toast.success(`Started ${roleLabel} session in background for ${request.taskId}.`, {
       duration: 10000,
-      description: renderSessionStartedToastAction(
-        request,
-        workflow.externalSessionId,
-        openSessionInAgentStudio,
-      ),
+      description: renderSessionStartedToastAction(request, workflow, openSessionInAgentStudio),
     });
   } else {
-    openSessionInAgentStudio(request, workflow.externalSessionId);
+    openSessionInAgentStudio(request, workflow);
   }
 
-  return workflow.externalSessionId;
+  return workflow;
 };

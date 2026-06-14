@@ -4,9 +4,10 @@ import type {
   KanbanSessionPresentationState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 
 export type SessionTargetOptions = {
-  externalSessionId?: string | null;
+  session: AgentSessionRouteIdentity;
 };
 
 type PrimarySessionOrderingCandidate = {
@@ -106,14 +107,13 @@ export const resolveSessionTargetOptions = (
 ): SessionTargetOptions | undefined => {
   const activeSession = resolvePreferredActiveSession(taskSessions, role);
   const historicalSession = resolveLatestHistoricalSessionByRole(historicalSessions, role);
-  const externalSessionId =
-    activeSession?.externalSessionId ?? historicalSession?.externalSessionId;
+  const session = activeSession ?? historicalSession;
 
-  if (!externalSessionId) {
+  if (!session) {
     return undefined;
   }
 
   return {
-    externalSessionId,
+    session,
   };
 };

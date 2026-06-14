@@ -41,6 +41,17 @@ const MODEL_SELECTION = {
   profileId: "spec",
 };
 
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
+const sessionWorkflowResult = (externalSessionId: string) => ({
+  ...sessionIdentity(externalSessionId),
+  postStartActionError: null,
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: {
     repoPath: "/repo",
@@ -54,12 +65,15 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   agentStudioReady: true,
   isActiveTaskReady: true,
   isSessionWorking: false,
-  startAgentSession: async () => "session-new",
+  startAgentSession: async () => sessionIdentity("session-new"),
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   updateQuery: () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
-  startingSessionByTask: new Map<string, Promise<string | undefined>>(),
+  startingSessionByTask: new Map<
+    string,
+    Promise<ReturnType<typeof sessionWorkflowResult> | undefined>
+  >(),
   executeRequestedSessionStart: async (_request, executeWithDecision) =>
     executeWithDecision({
       selectedModel: MODEL_SELECTION,
@@ -176,7 +190,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
   });
 
   test("uses host continuation target for fresh QA builder context", async () => {
-    const startAgentSession = mock(async () => "session-qa");
+    const startAgentSession = mock(async () => sessionIdentity("session-qa"));
     const harness = createHookHarness(
       createBaseArgs({
         selectedTask: createTaskCardFixture({
@@ -218,9 +232,11 @@ describe("useAgentStudioFreshSessionCreation", () => {
   test("reuses an existing session without starting a fresh one", async () => {
     const startAgentSession = mock(
       async (input: { startMode: string; sourceExternalSessionId?: string }) =>
-        input.startMode === "reuse"
-          ? (input.sourceExternalSessionId ?? "session-existing")
-          : "session-new",
+        sessionIdentity(
+          input.startMode === "reuse"
+            ? (input.sourceExternalSessionId ?? "session-existing")
+            : "session-new",
+        ),
     );
     const sendAgentMessage = mock(async () => {});
     const onContextSwitchIntent = mock(() => {});

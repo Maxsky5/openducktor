@@ -1,6 +1,7 @@
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { KanbanTaskSession } from "@/components/features/kanban/kanban-task-activity";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 export type TaskDetailsSheetProps = {
@@ -19,11 +20,7 @@ export type TaskDetailsSheetProps = {
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;
   onBuild?: (taskId: string) => void;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onDelegate?: (taskId: string) => void;
   onEdit?: (taskId: string) => void;
   onHumanApprove?: (taskId: string) => void;

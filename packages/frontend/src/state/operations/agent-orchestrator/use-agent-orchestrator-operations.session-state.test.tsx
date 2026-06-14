@@ -466,12 +466,13 @@ describe("use-agent-orchestrator-operations session state", () => {
 
       let reusedSessionId = "";
       await harness.run(async () => {
-        reusedSessionId = await harness.getLatest().startAgentSession({
+        const session = await harness.getLatest().startAgentSession({
           taskId: "task-1",
           role: "build",
           startMode: "reuse",
           sourceExternalSessionId: "external-1",
         });
+        reusedSessionId = session.externalSessionId;
       });
 
       expect(reusedSessionId).toBe("external-1");

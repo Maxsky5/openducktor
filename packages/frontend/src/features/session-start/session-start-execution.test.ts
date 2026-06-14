@@ -9,6 +9,12 @@ const BUILD_SELECTION = {
   profileId: "build-agent",
 };
 
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/session",
+});
+
 describe("session-start-execution", () => {
   test("prepareSessionStartInput keeps reuse starts free of selection-only fields", async () => {
     const result = await prepareSessionStartInput({
@@ -43,7 +49,7 @@ describe("session-start-execution", () => {
   });
 
   test("executeSessionStart syncs selected model only for non-reuse starts", async () => {
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
 
     await executeSessionStart({
       taskId: "TASK-1",

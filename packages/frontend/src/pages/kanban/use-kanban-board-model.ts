@@ -13,7 +13,10 @@ import {
   toKanbanSessionPresentationState,
   toKanbanTaskActivityState,
 } from "@/components/features/kanban/kanban-task-activity";
-import { compareActiveSessionForPrimary } from "@/components/features/kanban/session-target-resolution";
+import {
+  compareActiveSessionForPrimary,
+  type SessionTargetOptions,
+} from "@/components/features/kanban/session-target-resolution";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import {
@@ -198,6 +201,7 @@ export const buildTaskSessionsByTaskId = (
       taskId,
       taskSessions.map((session) => ({
         runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
         externalSessionId: session.externalSessionId,
         role: session.role,
         status: session.status,
@@ -217,11 +221,7 @@ type UseKanbanBoardModelArgs = {
   sessions: AgentSessionSummary[];
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart: (taskId: string) => void;
   onQaOpen: (taskId: string) => void;

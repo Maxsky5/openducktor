@@ -13,6 +13,7 @@ import type {
   SessionStartExistingSessionOption,
   SessionStartLaunchRequest,
   SessionStartPostAction,
+  SessionStartWorkflowResult,
 } from "@/features/session-start";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
@@ -29,7 +30,7 @@ type UseAgentStudioHumanReviewFeedbackFlowArgs = {
       initialSourceExternalSessionId?: string | null;
       postStartAction: SessionStartPostAction;
     },
-  ) => Promise<string | undefined>;
+  ) => Promise<SessionStartWorkflowResult | undefined>;
 };
 
 type UseAgentStudioHumanReviewFeedbackFlowResult = {

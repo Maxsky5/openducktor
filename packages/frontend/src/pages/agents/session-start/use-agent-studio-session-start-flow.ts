@@ -10,6 +10,7 @@ import type {
   SessionLaunchActionId,
   SessionStartFlowRequest,
   SessionStartLaunchRequest,
+  SessionStartWorkflowResult,
 } from "@/features/session-start";
 import {
   buildSessionStartModalRequest,
@@ -87,8 +88,10 @@ export function useAgentStudioSessionStartFlow({
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
   humanReviewFeedbackModal: HumanReviewFeedbackModalModel | null;
-  startSessionRequest: (request: AgentStudioSessionStartRequest) => Promise<string | undefined>;
-  startSession: () => Promise<string | undefined>;
+  startSessionRequest: (
+    request: AgentStudioSessionStartRequest,
+  ) => Promise<SessionStartWorkflowResult | undefined>;
+  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
   startLaunchKickoff: () => Promise<void>;
   handleCreateSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
@@ -109,9 +112,15 @@ export function useAgentStudioSessionStartFlow({
     ] ?? 0) > 0;
 
   const previousRepoForSessionRefs = useRef<string | null>(workspaceRepoPath);
-  const startingSessionByTaskRef = useRef<Map<string, Promise<string | undefined>> | null>(null);
+  const startingSessionByTaskRef = useRef<Map<
+    string,
+    Promise<SessionStartWorkflowResult | undefined>
+  > | null>(null);
   if (startingSessionByTaskRef.current === null) {
-    startingSessionByTaskRef.current = new Map<string, Promise<string | undefined>>();
+    startingSessionByTaskRef.current = new Map<
+      string,
+      Promise<SessionStartWorkflowResult | undefined>
+    >();
   }
   const startingSessionByTask = startingSessionByTaskRef.current;
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
@@ -190,7 +199,9 @@ export function useAgentStudioSessionStartFlow({
   });
 
   const startSessionRequest = useCallback(
-    async (request: AgentStudioSessionStartRequest): Promise<string | undefined> => {
+    async (
+      request: AgentStudioSessionStartRequest,
+    ): Promise<SessionStartWorkflowResult | undefined> => {
       return executeRequestedSessionStart(request, async (decision) => {
         const workflow = await executeSessionStartFromDecision({
           activeWorkspace,
@@ -216,10 +227,10 @@ export function useAgentStudioSessionStartFlow({
 
         applyAgentStudioSelectionQuery(updateQuery, {
           taskId: request.taskId,
-          externalSessionId: workflow.externalSessionId,
+          session: workflow,
           role: request.role,
         });
-        return workflow.externalSessionId;
+        return workflow;
       });
     },
     [

@@ -51,7 +51,7 @@ type AgentStudioTaskTabsContext = {
 };
 
 type AgentStudioSessionActionsContext = {
-  handleWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  handleWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   handleSessionSelectionChange: (nextValue: string) => void;
   handlePrepareMessageFirstSession: (option: SessionCreateOption) => void;
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;

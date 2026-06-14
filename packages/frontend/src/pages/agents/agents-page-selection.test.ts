@@ -21,7 +21,7 @@ import {
 
 const resolveAgentStudioActiveSession = (args: {
   sessionsForTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionsForTask"];
-  sessionParam: string | null;
+  sessionParam: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionParam"];
   hasExplicitRoleParam: boolean;
   roleFromQuery: Parameters<typeof resolveAgentStudioSessionSelection>[0]["roleFromQuery"];
   selectedTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["selectedTask"];
@@ -31,6 +31,11 @@ const resolveAgentStudioActiveSession = (args: {
     fallbackRole: args.roleFromQuery,
   }).activeSession;
 };
+
+const externalSessionParam = (externalSessionId: string) => ({
+  kind: "external" as const,
+  externalSessionId,
+});
 
 const catalogFixture: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -175,13 +180,13 @@ describe("agents-page-selection", () => {
     expect(
       resolveAgentStudioTaskId({
         taskIdParam: "task-from-url",
-        selectedSessionById: session,
+        selectedSessionFromRoute: session,
       }),
     ).toBe("task-from-url");
     expect(
       resolveAgentStudioTaskId({
         taskIdParam: "",
-        selectedSessionById: session,
+        selectedSessionFromRoute: session,
       }),
     ).toBe("task-from-session");
   });
@@ -217,7 +222,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [plannerSession, buildSession],
-      sessionParam: "session-from-other-task",
+      sessionParam: externalSessionParam("session-from-other-task"),
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -609,7 +614,7 @@ describe("agents-page-selection", () => {
 
     const selection = resolveAgentStudioSessionSelection({
       sessionsForTask: [qaSession],
-      sessionParam: "qa-1",
+      sessionParam: externalSessionParam("qa-1"),
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),

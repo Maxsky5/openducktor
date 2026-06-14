@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { isSelectionIntentResolved } from "./agent-studio-selection-intent";
 
+const externalSessionParam = (externalSessionId: string) => ({
+  kind: "external" as const,
+  externalSessionId,
+});
+
 describe("agent-studio-selection-intent", () => {
   test("resolves a sessionless role intent when the query has no concrete session", () => {
     expect(
       isSelectionIntentResolved({
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: null,
+          session: null,
           role: "build",
         },
         taskIdParam: "task-1",
@@ -20,11 +25,11 @@ describe("agent-studio-selection-intent", () => {
       isSelectionIntentResolved({
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: null,
+          session: null,
           role: "build",
         },
         taskIdParam: "task-1",
-        sessionParam: "session-1",
+        sessionParam: externalSessionParam("session-1"),
         roleFromQuery: "build",
       }),
     ).toBe(false);
@@ -33,7 +38,7 @@ describe("agent-studio-selection-intent", () => {
   test("resolves a session intent only when task, role, and session match", () => {
     const selectionIntent = {
       taskId: "task-1",
-      externalSessionId: "session-1",
+      session: externalSessionParam("session-1"),
       role: "planner" as const,
     };
 
@@ -41,7 +46,7 @@ describe("agent-studio-selection-intent", () => {
       isSelectionIntentResolved({
         selectionIntent,
         taskIdParam: "task-1",
-        sessionParam: "session-1",
+        sessionParam: externalSessionParam("session-1"),
         roleFromQuery: "planner",
       }),
     ).toBe(true);
@@ -57,7 +62,7 @@ describe("agent-studio-selection-intent", () => {
       isSelectionIntentResolved({
         selectionIntent,
         taskIdParam: "task-1",
-        sessionParam: "session-1",
+        sessionParam: externalSessionParam("session-1"),
         roleFromQuery: "build",
       }),
     ).toBe(false);

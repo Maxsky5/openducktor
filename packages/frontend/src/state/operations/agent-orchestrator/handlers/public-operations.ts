@@ -14,12 +14,16 @@ import type {
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionLoadOptions,
+  AgentSessionRouteIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
-  startAgentSession: (input: StartAgentSessionInput) => Promise<string>;
+  startAgentSession: (input: StartAgentSessionInput) => Promise<AgentSessionRouteIdentity>;
   settleStartedAgentSession: (externalSessionId: string) => void;
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (externalSessionId: string) => Promise<void>;
@@ -107,7 +111,7 @@ export const createOrchestratorPublicOperations = ({
   ...(readSessionSkills ? { readSessionSkills } : {}),
   removeAgentSession,
   removeAgentSessions: (input) => removeAgentSessions(input),
-  startAgentSession: (input: StartAgentSessionInput): Promise<string> =>
+  startAgentSession: (input: StartAgentSessionInput): Promise<AgentSessionRouteIdentity> =>
     sessionActions.startAgentSession(input),
   settleStartedAgentSession: sessionActions.settleStartedAgentSession,
   sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]): Promise<void> =>

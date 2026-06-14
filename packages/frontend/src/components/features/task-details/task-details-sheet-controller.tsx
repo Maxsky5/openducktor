@@ -5,6 +5,7 @@ import type {
   ActiveTaskSessionContextByTaskId,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { TaskDetailsSheet } from "./task-details-sheet";
 import type { TaskDetailsSheetProps } from "./task-details-sheet-types";
 
@@ -21,11 +22,7 @@ type TaskDetailsSheetControllerProps = Omit<
   taskSessionsByTaskId: Map<string, KanbanTaskSession[]>;
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
   activeTaskSessionContextByTaskId: ActiveTaskSessionContextByTaskId;
-  onOpenSession?: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession?: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   ref?: Ref<TaskDetailsSheetControllerHandle>;
 };
 

@@ -22,6 +22,7 @@ describe("KanbanColumn", () => {
         [
           {
             runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/waiting",
             externalSessionId: "session-waiting",
             role: "build",
             status: "running",
@@ -34,6 +35,7 @@ describe("KanbanColumn", () => {
         [
           {
             runtimeKind: "opencode",
+            workingDirectory: "/repo/worktrees/active",
             externalSessionId: "session-active",
             role: "build",
             status: "running",

@@ -7,6 +7,7 @@ import type {
   RuntimeDependencies,
   SessionDependencies,
   StartAgentSessionInput,
+  StartAgentSessionResult,
   StartOrReuseResult,
   StartSessionContext,
   StartSessionCreationInput,
@@ -155,7 +156,7 @@ export const createStartAgentSession = ({
   task,
   model,
 }: StartSessionDependencies) => {
-  return async (input: StartAgentSessionInput): Promise<string> => {
+  return async (input: StartAgentSessionInput): Promise<StartAgentSessionResult> => {
     const { taskId, role, startMode } = input;
     const repoPath = requireActiveRepo(repo.activeWorkspace?.repoPath ?? null);
     const workspaceId = repo.activeWorkspace?.workspaceId.trim();
@@ -210,7 +211,7 @@ export const createStartAgentSession = ({
       return existingInFlight;
     }
 
-    const startPromise = Promise.resolve().then(async (): Promise<string> => {
+    const startPromise = Promise.resolve().then(async (): Promise<StartAgentSessionResult> => {
       let creationInput = toSessionCreationInput({ input });
       const resolvedWorkingDirectory = freshStartTarget?.targetWorkingDirectory;
       if (typeof resolvedWorkingDirectory === "string" || resolvedWorkingDirectory === null) {
@@ -232,7 +233,7 @@ export const createStartAgentSession = ({
         },
       });
       if (startResult.kind === "reused") {
-        return startResult.externalSessionId;
+        return startResult.session;
       }
 
       if (creationInput.startMode === "reuse") {
@@ -245,7 +246,14 @@ export const createStartAgentSession = ({
         runtime,
       });
 
-      return startResult.ctx.summary.externalSessionId;
+      return {
+        externalSessionId: startResult.ctx.summary.externalSessionId,
+        runtimeKind: requireConfiguredRuntimeKind(
+          startResult.runtimeInfo.runtimeKind,
+          `Runtime kind is required for started ${role} session '${startResult.ctx.summary.externalSessionId}'.`,
+        ),
+        workingDirectory: startResult.runtimeInfo.workingDirectory,
+      };
     });
 
     session.inFlightStartsByWorkspaceTaskRef.current.set(inFlightKey, startPromise);

@@ -230,6 +230,8 @@ export const buildAgentStudioSelectedSessionContext = ({
   const workflowActiveSession = activeSession
     ? {
         externalSessionId: activeSession.externalSessionId,
+        runtimeKind: activeSession.runtimeKind,
+        workingDirectory: activeSession.workingDirectory,
         role: activeSession.role,
       }
     : null;

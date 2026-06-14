@@ -25,6 +25,7 @@ import {
 import type {
   AgentSessionIdentity,
   AgentSessionLoadOptions,
+  AgentSessionRouteIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -59,7 +60,7 @@ type SessionActionsDependencies = {
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
+  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<AgentSessionRouteIdentity>> };
   sessionListenerRegistryRef: { current: SessionListenerRegistry };
   turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
   recordTurnUserMessageTimestamp: (

@@ -36,7 +36,7 @@ type UseAgentStudioSessionStartSessionArgs = {
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
-  startingSessionByTask: Map<string, Promise<string | undefined>>;
+  startingSessionByTask: Map<string, Promise<SessionStartWorkflowResult | undefined>>;
   updateQuery: (updates: QueryUpdate) => void;
   onPostStartActionError?: (action: SessionStartPostAction, error: Error) => void;
   executeRequestedSessionStart: <T>(
@@ -63,7 +63,7 @@ export function useAgentStudioSessionStartSession({
   onPostStartActionError,
   executeRequestedSessionStart,
 }: UseAgentStudioSessionStartSessionArgs): {
-  startSession: () => Promise<string | undefined>;
+  startSession: () => Promise<SessionStartWorkflowResult | undefined>;
   runSessionStart: (params: {
     postStartAction: SessionStartPostAction;
   }) => Promise<SessionStartWorkflowResult | undefined>;
@@ -106,7 +106,7 @@ export function useAgentStudioSessionStartSession({
 
           applyAgentStudioSelectionQuery(updateQuery, {
             taskId,
-            externalSessionId: workflow.externalSessionId,
+            session: workflow,
             role,
           });
           return workflow;
@@ -165,27 +165,19 @@ export function useAgentStudioSessionStartSession({
       });
       const inFlightSessionStart = startingSessionByTask.get(startKey);
       if (inFlightSessionStart) {
-        return inFlightSessionStart.then((externalSessionId) =>
-          externalSessionId === undefined
-            ? undefined
-            : {
-                externalSessionId,
-                postStartActionError: null,
-              },
-        );
+        return inFlightSessionStart;
       }
 
       const startPromise = startRequestedSession(params);
-      const externalSessionIdPromise = startPromise.then((workflow) => workflow?.externalSessionId);
 
-      startingSessionByTask.set(startKey, externalSessionIdPromise);
+      startingSessionByTask.set(startKey, startPromise);
       void startPromise
         .finally(() => {
           const currentStartPromise = startingSessionByTask.get(startKey);
           if (currentStartPromise === undefined) {
             return;
           }
-          if (currentStartPromise === externalSessionIdPromise) {
+          if (currentStartPromise === startPromise) {
             startingSessionByTask.delete(startKey);
           }
         })
@@ -205,11 +197,10 @@ export function useAgentStudioSessionStartSession({
     ],
   );
 
-  const startSession = useCallback(async (): Promise<string | undefined> => {
-    const workflow = await runSessionStart({
+  const startSession = useCallback(async (): Promise<SessionStartWorkflowResult | undefined> => {
+    return runSessionStart({
       postStartAction: "none",
     });
-    return workflow?.externalSessionId;
   }, [runSessionStart]);
 
   return {

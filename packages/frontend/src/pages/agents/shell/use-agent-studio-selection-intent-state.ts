@@ -1,5 +1,6 @@
 import type { AgentRole } from "@openducktor/core";
 import { useCallback, useState } from "react";
+import type { AgentStudioSessionRouteParam } from "../query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectionIntent,
   isSelectionIntentResolved,
@@ -8,7 +9,7 @@ import {
 type UseAgentStudioSelectionIntentStateArgs = {
   isRepoNavigationBoundaryPending: boolean;
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionParam: AgentStudioSessionRouteParam | null;
   roleFromQuery: AgentRole;
 };
 
@@ -30,7 +31,7 @@ export function useAgentStudioSelectionIntentState({
 
   const scheduleSelectionIntent = useCallback((intent: AgentStudioSelectionIntent): void => {
     setSelectionIntent(intent);
-    setSessionlessSelection(intent.externalSessionId === null ? intent : null);
+    setSessionlessSelection(intent.session === null ? intent : null);
   }, []);
 
   const activeSessionlessSelection =

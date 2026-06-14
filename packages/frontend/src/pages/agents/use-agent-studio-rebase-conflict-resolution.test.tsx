@@ -14,6 +14,13 @@ type HookArgs = Parameters<typeof useAgentStudioRebaseConflictResolution>[0];
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRebaseConflictResolution, initialProps);
 
+const sessionWorkflowResult = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+  postStartActionError: null,
+});
+
 const buildSession = (overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {}) =>
   createAgentSessionFixture({
     runtimeKind: "opencode",
@@ -66,13 +73,13 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
       }),
       viewActiveSession: plannerSession,
       activeSession: plannerSession,
-      selectedSessionById: null,
+      selectedSessionFromRoute: null,
       viewSessionsForTask: [builderSession],
       sessionsForTask: [builderSession],
     },
     scheduleQueryUpdate: mock(() => {}),
     onContextSwitchIntent: mock(() => {}),
-    startSessionRequest: mock(async () => "build-new-1"),
+    startSessionRequest: mock(async () => sessionWorkflowResult("build-new-1")),
     loadPromptOverrides: mock(async () => ({})),
     ...overrides,
   };
@@ -81,7 +88,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
 describe("useAgentStudioRebaseConflictResolution", () => {
   test("routes conflict resolution through the shared session-start request", async () => {
     const args = createBaseArgs({
-      startSessionRequest: mock(async () => "build-1"),
+      startSessionRequest: mock(async () => sessionWorkflowResult("build-1")),
     });
     const harness = createHookHarness(args);
 
@@ -103,6 +110,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-1",
         agent: "build",
       });
       expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(1);
@@ -126,7 +135,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         viewSessionsForTask: [matchingBuilderSession, otherBuilderSession],
         sessionsForTask: [matchingBuilderSession, otherBuilderSession],
       },
-      startSessionRequest: mock(async () => "build-1"),
+      startSessionRequest: mock(async () => sessionWorkflowResult("build-1")),
     });
     const harness = createHookHarness(args);
 
@@ -166,7 +175,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           }),
         ],
       },
-      startSessionRequest: mock(async () => "build-new-9"),
+      startSessionRequest: mock(async () => sessionWorkflowResult("build-new-9")),
     });
     const harness = createHookHarness(args);
 
@@ -186,6 +195,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-new-9",
         agent: "build",
       });
     } finally {
@@ -200,7 +211,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         viewSessionsForTask: [],
         sessionsForTask: [],
       },
-      startSessionRequest: mock(async () => "build-new-9"),
+      startSessionRequest: mock(async () => sessionWorkflowResult("build-new-9")),
     });
     const harness = createHookHarness(args);
 
@@ -219,6 +230,8 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
         session: "build-new-9",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-new-9",
         agent: "build",
       });
     } finally {

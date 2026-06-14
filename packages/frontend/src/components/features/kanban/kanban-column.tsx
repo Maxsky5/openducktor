@@ -16,6 +16,7 @@ import type {
 } from "@/components/features/kanban/kanban-task-activity";
 import { KanbanTaskCard } from "@/components/features/kanban/kanban-task-card";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
+import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban-virtualization";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -33,11 +34,7 @@ type KanbanColumnProps = {
   taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>;
   onOpenDetails: (taskId: string) => void;
   onDelegate: (taskId: string) => void;
-  onOpenSession: (
-    taskId: string,
-    role: AgentRole,
-    options?: { externalSessionId?: string | null },
-  ) => void;
+  onOpenSession: (taskId: string, role: AgentRole, options?: SessionTargetOptions) => void;
   onPlan: (taskId: string, action: "set_spec" | "set_plan") => void;
   onQaStart?: (taskId: string) => void;
   onQaOpen?: (taskId: string) => void;

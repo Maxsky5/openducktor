@@ -73,6 +73,11 @@ const createSession = (
     ...overrides,
   });
 
+const externalSessionParam = (externalSessionId: string) => ({
+  kind: "external" as const,
+  externalSessionId,
+});
+
 const isFullSessionState = (entry: HookArgs["sessions"][number]): entry is AgentSessionState =>
   "messages" in entry;
 
@@ -192,7 +197,7 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         sessions: [session],
         taskIdParam: "",
-        sessionParam: "session-2",
+        sessionParam: externalSessionParam("session-2"),
       }),
     );
 
@@ -301,7 +306,7 @@ describe("useAgentStudioSelectionController", () => {
         },
         sessions: [],
         taskIdParam: "task-1",
-        sessionParam: "session-reloaded",
+        sessionParam: externalSessionParam("session-reloaded"),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
@@ -337,7 +342,7 @@ describe("useAgentStudioSelectionController", () => {
         sessions: [],
         sessionReadModelError: "Failed to load agent session read model",
         taskIdParam: "task-1",
-        sessionParam: "session-reloaded",
+        sessionParam: externalSessionParam("session-reloaded"),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
@@ -369,7 +374,7 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [session],
         taskIdParam: "task-1",
-        sessionParam: "session-live",
+        sessionParam: externalSessionParam("session-live"),
         loadAgentSessionHistory,
       }),
     );
@@ -398,12 +403,12 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         sessions: [specSession, plannerSession],
         taskIdParam: "task-1",
-        sessionParam: "session-spec",
+        sessionParam: externalSessionParam("session-spec"),
         hasExplicitRoleParam: true,
         roleFromQuery: "spec",
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: "session-planner",
+          session: externalSessionParam("session-planner"),
           role: "planner",
         },
       }),
@@ -437,7 +442,7 @@ describe("useAgentStudioSelectionController", () => {
         roleFromQuery: "spec",
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: null,
+          session: null,
           role: "build",
         },
       }),
@@ -467,12 +472,12 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [buildSession],
         taskIdParam: "task-1",
-        sessionParam: "session-build",
+        sessionParam: externalSessionParam("session-build"),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: null,
+          session: null,
           role: "build",
         },
       }),
@@ -482,7 +487,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.selectedSessionById?.externalSessionId).toBe("session-build");
+      expect(latest.selectedSessionFromRoute?.externalSessionId).toBe("session-build");
       expect(latest.activeSessionSummary?.externalSessionId).toBe("session-build");
       expect(latest.viewActiveSession?.externalSessionId).toBe("session-build");
       expect(latest.viewRole).toBe("build");
@@ -511,7 +516,7 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [buildSession],
         taskIdParam: "task-1",
-        sessionParam: "session-build",
+        sessionParam: externalSessionParam("session-build"),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         readSessionTodos,
@@ -555,7 +560,7 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [activeSession, viewSession],
         taskIdParam: "task-1",
-        sessionParam: "session-build",
+        sessionParam: externalSessionParam("session-build"),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         readSessionTodos,
@@ -609,7 +614,7 @@ describe("useAgentStudioSelectionController", () => {
         isRepoNavigationBoundaryPending: true,
         sessions: [staleSession],
         taskIdParam: "task-1",
-        sessionParam: "session-1",
+        sessionParam: externalSessionParam("session-1"),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         readSessionModelCatalog,
@@ -621,7 +626,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.selectedSessionById).toBeNull();
+      expect(latest.selectedSessionFromRoute).toBeNull();
       expect(latest.taskId).toBe("");
       expect(latest.selectedTask).toBeNull();
       expect(latest.activeSessionSummary).toBeNull();

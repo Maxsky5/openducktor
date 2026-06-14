@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Dispatch, SetStateAction } from "react";
+import type { SessionStartWorkflowResult } from "@/features/session-start";
 import {
   createDeferred,
   createHookHarness as createSharedHookHarness,
@@ -32,6 +33,12 @@ const MODEL_SELECTION = {
   profileId: "spec",
 };
 
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: {
     repoPath: "/repo",
@@ -45,11 +52,11 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
   isActiveTaskReady: true,
-  startAgentSession: async () => "session-new",
+  startAgentSession: async () => sessionIdentity("session-new"),
   settleStartedAgentSession: () => {},
   sendAgentMessage: async () => {},
   setStartingActivityCountByContext: createSetStartingActivityCountByContext(),
-  startingSessionByTask: new Map<string, Promise<string | undefined>>(),
+  startingSessionByTask: new Map<string, Promise<SessionStartWorkflowResult | undefined>>(),
   updateQuery: () => {},
   executeRequestedSessionStart: async () => undefined,
   ...overrides,
@@ -76,8 +83,13 @@ describe("useAgentStudioSessionStartSession", () => {
         return decision ? executeWithDecision(decision) : undefined;
       },
     );
-    const startAgentSession = mock(async (request: { role: string }) => `${request.role}-session`);
-    const startingSessionByTask = new Map<string, Promise<string | undefined>>();
+    const startAgentSession = mock(async (request: { role: string }) =>
+      sessionIdentity(`${request.role}-session`),
+    );
+    const startingSessionByTask = new Map<
+      string,
+      Promise<SessionStartWorkflowResult | undefined>
+    >();
 
     const harness = createHookHarness(
       createBaseArgs({
@@ -89,7 +101,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     await harness.mount();
 
-    let specStartPromise: Promise<string | undefined> | undefined;
+    let specStartPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run((state) => {
       specStartPromise = state.startSession();
     });
@@ -103,7 +115,7 @@ describe("useAgentStudioSessionStartSession", () => {
       }),
     );
 
-    let plannerStartPromise: Promise<string | undefined> | undefined;
+    let plannerStartPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
     await harness.run((state) => {
       plannerStartPromise = state.startSession();
     });
@@ -121,8 +133,10 @@ describe("useAgentStudioSessionStartSession", () => {
       startMode: "fresh",
     });
 
-    await expect(specStartPromise).resolves.toBe("spec-session");
-    await expect(plannerStartPromise).resolves.toBe("planner-session");
+    await expect(specStartPromise).resolves.toMatchObject({ externalSessionId: "spec-session" });
+    await expect(plannerStartPromise).resolves.toMatchObject({
+      externalSessionId: "planner-session",
+    });
     expect(startAgentSession).toHaveBeenCalledTimes(2);
 
     await harness.unmount();
@@ -136,7 +150,7 @@ describe("useAgentStudioSessionStartSession", () => {
           startMode: "fresh" as const,
         }),
     );
-    const startAgentSession = mock(async () => "session-new");
+    const startAgentSession = mock(async () => sessionIdentity("session-new"));
 
     const harness = createHookHarness(
       createBaseArgs({
@@ -159,7 +173,7 @@ describe("useAgentStudioSessionStartSession", () => {
 
     let externalSessionId: string | undefined;
     await harness.run(async (state) => {
-      externalSessionId = await state.startSession();
+      externalSessionId = (await state.startSession())?.externalSessionId;
     });
 
     expect(externalSessionId).toBe("session-new");
@@ -178,9 +192,11 @@ describe("useAgentStudioSessionStartSession", () => {
     const updateQuery = mock(() => {});
     const startAgentSession = mock(
       async (input: { startMode: string; sourceExternalSessionId?: string }) =>
-        input.startMode === "reuse"
-          ? (input.sourceExternalSessionId ?? "session-existing")
-          : "session-new",
+        sessionIdentity(
+          input.startMode === "reuse"
+            ? (input.sourceExternalSessionId ?? "session-existing")
+            : "session-new",
+        ),
     );
     const harness = createHookHarness(
       createBaseArgs({

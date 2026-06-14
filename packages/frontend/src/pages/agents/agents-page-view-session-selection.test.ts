@@ -7,6 +7,11 @@ import {
   resolveAgentStudioViewSessionSelection,
 } from "./agents-page-selection";
 
+const externalSessionParam = (externalSessionId: string) => ({
+  kind: "external" as const,
+  externalSessionId,
+});
+
 describe("Agent Studio view session selection", () => {
   test("groups sessions by task with newest sessions first", () => {
     const firstTaskOneOld = createAgentSessionFixture({
@@ -87,7 +92,7 @@ describe("Agent Studio view session selection", () => {
     const persistedSelection = resolveAgentStudioViewSessionSelection({
       sessionSummaries: [sessionSummary],
       persistedRecords: [persistedSession],
-      sessionParam: "session-persisted",
+      sessionParam: externalSessionParam("session-persisted"),
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
@@ -114,7 +119,7 @@ describe("Agent Studio view session selection", () => {
           workingDirectory: "/repo/stale-persisted",
         },
       ],
-      sessionParam: sessionSummary.externalSessionId,
+      sessionParam: externalSessionParam(sessionSummary.externalSessionId),
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -194,7 +199,7 @@ describe("Agent Studio view session selection", () => {
 
     expect(
       resolveAgentStudioViewSessionSelection({
-        sessionParam: "session-summary",
+        sessionParam: externalSessionParam("session-summary"),
         sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
         hasExplicitRoleParam: true,
@@ -205,7 +210,7 @@ describe("Agent Studio view session selection", () => {
     ).toBe("session-summary");
     expect(
       resolveAgentStudioViewSessionSelection({
-        sessionParam: "session-persisted",
+        sessionParam: externalSessionParam("session-persisted"),
         sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
         hasExplicitRoleParam: true,
@@ -216,7 +221,7 @@ describe("Agent Studio view session selection", () => {
     ).toBe("session-persisted");
     expect(
       resolveAgentStudioViewSessionSelection({
-        sessionParam: "session-other-task",
+        sessionParam: externalSessionParam("session-other-task"),
         sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
         hasExplicitRoleParam: false,

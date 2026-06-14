@@ -12,6 +12,7 @@ import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentStudioSessionRouteParam } from "./agent-studio-navigation";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export {
@@ -60,12 +61,12 @@ export const emptyDraftSelections = (): Record<AgentRole, AgentModelSelection | 
 
 export const resolveAgentStudioTaskId = ({
   taskIdParam,
-  selectedSessionById,
+  selectedSessionFromRoute,
 }: {
   taskIdParam: string;
-  selectedSessionById: AgentSessionSummary | null;
+  selectedSessionFromRoute: AgentSessionSummary | null;
 }): string => {
-  return taskIdParam || selectedSessionById?.taskId || "";
+  return taskIdParam || selectedSessionFromRoute?.taskId || "";
 };
 
 export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): AgentRole | null => {
@@ -105,8 +106,7 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
   return null;
 };
 
-export type AgentStudioSessionSelectionCandidate = {
-  externalSessionId: string;
+export type AgentStudioSessionSelectionCandidate = AgentSessionRouteIdentity & {
   role: AgentRole | null;
   startedAt: string;
   status?: AgentSessionSummary["status"];
@@ -114,7 +114,7 @@ export type AgentStudioSessionSelectionCandidate = {
 
 type AgentStudioSessionSelectionInput<TSession extends AgentStudioSessionSelectionCandidate> = {
   sessionsForTask: TSession[];
-  sessionParam: string | null;
+  sessionParam: AgentStudioSessionRouteParam | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
@@ -167,8 +167,7 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
   };
 
   if (sessionParam) {
-    const explicitSession =
-      sessionsForTask.find((entry) => entry.externalSessionId === sessionParam) ?? null;
+    const explicitSession = findAgentStudioSessionSelectionCandidate(sessionsForTask, sessionParam);
     if (explicitSession?.role) {
       return toSelection(explicitSession.role, explicitSession);
     }
@@ -222,6 +221,27 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
     default:
       return toSelection(defaultRole ?? fallbackRole, null);
   }
+};
+
+export const findAgentStudioSessionSelectionCandidate = <
+  TSession extends AgentStudioSessionSelectionCandidate,
+>(
+  sessions: TSession[],
+  sessionParam: AgentStudioSessionRouteParam | null,
+): TSession | null => {
+  if (!sessionParam) {
+    return null;
+  }
+
+  if (sessionParam.kind === "exact") {
+    const identity = agentSessionIdentityKey(sessionParam.identity);
+    return sessions.find((entry) => agentSessionIdentityKey(entry) === identity) ?? null;
+  }
+
+  const matches = sessions.filter(
+    (entry) => entry.externalSessionId === sessionParam.externalSessionId,
+  );
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 };
 
 export const resolveAgentStudioSessionSelection = (
@@ -302,15 +322,14 @@ const resolveViewSessionParam = ({
   sessionParam,
   candidates,
 }: {
-  sessionParam: string | null;
+  sessionParam: AgentStudioSessionRouteParam | null;
   candidates: ViewSessionSelectionCandidate[];
-}): string | null => {
+}): AgentStudioSessionRouteParam | null => {
   if (!sessionParam) {
     return null;
   }
-  const belongsToVisibleSession = candidates.some(
-    (session) => session.externalSessionId === sessionParam,
-  );
+  const belongsToVisibleSession =
+    findAgentStudioSessionSelectionCandidate(candidates, sessionParam) !== null;
   return belongsToVisibleSession ? sessionParam : null;
 };
 
@@ -326,7 +345,7 @@ export const resolveAgentStudioViewSessionSelection = ({
 }: {
   sessionSummaries: AgentSessionSummary[];
   persistedRecords: AgentSessionRecord[];
-  sessionParam: string | null;
+  sessionParam: AgentStudioSessionRouteParam | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;

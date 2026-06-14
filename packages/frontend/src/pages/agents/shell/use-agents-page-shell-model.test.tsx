@@ -155,6 +155,11 @@ let tasksState: TasksStateContextValue = {
 };
 let agentSessions = [createSession()];
 let agentSessionReadModelState = { sessionReadModelError: null as string | null };
+const sessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
 let agentOperations = {
   loadAgentSessionHistory: mock(async () => undefined),
   readSessionFileSearch: mock(async () => []),
@@ -167,7 +172,7 @@ let agentOperations = {
   })),
   readSessionSlashCommands: mock(async () => ({ commands: [] })),
   readSessionTodos: mock(async () => []),
-  startAgentSession: mock(async () => "session-1"),
+  startAgentSession: mock(async () => sessionIdentity("session-1")),
   sendAgentMessage: mock(async () => undefined),
   stopAgentSession: mock(async () => undefined),
   updateAgentSessionModel: mock(() => undefined),
@@ -442,7 +447,7 @@ beforeEach(async () => {
     })),
     readSessionSlashCommands: mock(async () => ({ commands: [] })),
     readSessionTodos: mock(async () => []),
-    startAgentSession: mock(async () => "session-1"),
+    startAgentSession: mock(async () => sessionIdentity("session-1")),
     sendAgentMessage: mock(async () => undefined),
     stopAgentSession: mock(async () => undefined),
     updateAgentSessionModel: mock(() => undefined),

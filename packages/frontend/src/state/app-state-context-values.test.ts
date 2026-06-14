@@ -130,7 +130,11 @@ describe("app-state-context-values", () => {
       readSessionHistory: async () => [],
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
-      startAgentSession: async () => "session",
+      startAgentSession: async () => ({
+        externalSessionId: "session",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/session",
+      }),
       settleStartedAgentSession: () => {},
       sendAgentMessage: async () => {},
       stopAgentSession: async () => {},

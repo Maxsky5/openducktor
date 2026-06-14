@@ -3,6 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import type { AgentChatModel, AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -37,7 +38,10 @@ export type AgentStudioSessionContextUsage = {
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  activeSession: Pick<AgentSessionState, "externalSessionId" | "role"> | null;
+  activeSession: Pick<
+    AgentSessionState,
+    "externalSessionId" | "runtimeKind" | "workingDirectory" | "role"
+  > | null;
   role: AgentRole;
   isSessionWorking: boolean;
   hasActiveGitConflict: boolean;
@@ -93,7 +97,7 @@ export const buildWorkflowModelContext = ({
   });
   const sessionSelectorAutofocusByValue = Object.fromEntries(
     sessionsForTask.map((session) => [
-      session.externalSessionId,
+      agentSessionIdentityKey(session),
       session.role !== null &&
         roleWorkflowsByTask[session.role].available &&
         session.pendingApprovals.length === 0 &&
@@ -101,8 +105,11 @@ export const buildWorkflowModelContext = ({
     ]),
   );
   const fallbackSessionForSelectedRole = latestSessionByRole[selectedInteractionRole];
-  const sessionSelectorValue =
-    activeSession?.externalSessionId ?? fallbackSessionForSelectedRole?.externalSessionId ?? "";
+  const sessionSelectorValue = activeSession
+    ? agentSessionIdentityKey(activeSession)
+    : fallbackSessionForSelectedRole
+      ? agentSessionIdentityKey(fallbackSessionForSelectedRole)
+      : "";
   const createSessionDisabled = Boolean(activeSession && isSessionWorking);
   const sessionCreateOptions = buildSessionCreateOptions({
     roleEnabledByTask,

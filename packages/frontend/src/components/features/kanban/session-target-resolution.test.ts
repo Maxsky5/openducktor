@@ -43,6 +43,7 @@ describe("session-target-resolution", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-older",
         externalSessionId: "build-older",
         role: "build",
         status: "running",
@@ -51,6 +52,7 @@ describe("session-target-resolution", () => {
       },
       {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-newer",
         externalSessionId: "build-newer",
         role: "build",
         status: "running",
@@ -66,6 +68,7 @@ describe("session-target-resolution", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-running",
         externalSessionId: "build-running",
         role: "build",
         status: "running",
@@ -74,6 +77,7 @@ describe("session-target-resolution", () => {
       },
       {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-waiting",
         externalSessionId: "build-waiting",
         role: "build",
         status: "idle",
@@ -101,6 +105,7 @@ describe("session-target-resolution", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/spec-active",
         externalSessionId: "spec-active",
         role: "spec",
         status: "running",
@@ -111,8 +116,10 @@ describe("session-target-resolution", () => {
 
     const options = resolveSessionTargetOptions(historicalSessions, sessions, "spec");
 
-    expect(options).toEqual({
+    expect(options?.session).toMatchObject({
       externalSessionId: "spec-active",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/spec-active",
     });
   });
 
@@ -128,8 +135,10 @@ describe("session-target-resolution", () => {
       },
     ];
 
-    expect(resolveSessionTargetOptions(historicalSessions, [], "qa")).toEqual({
+    expect(resolveSessionTargetOptions(historicalSessions, [], "qa")?.session).toMatchObject({
       externalSessionId: "external-qa-history",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/qa",
     });
   });
 });

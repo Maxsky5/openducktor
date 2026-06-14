@@ -16,6 +16,7 @@ import { agentSessionBulkQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
+import type { AgentStudioSessionRouteParam } from "../query-sync/agent-studio-navigation";
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
@@ -58,7 +59,7 @@ export type AgentsPageRouteSessionModel = {
   worktreeRecoverySignal: number;
   scheduleSelectionIntent: (intent: {
     taskId: string;
-    externalSessionId: string | null;
+    session: AgentStudioSessionRouteParam | null;
     role: AgentRole;
   }) => void;
 };
@@ -198,7 +199,7 @@ export function useAgentsPageRouteSessionModel({
     tasks,
     taskIdParam,
     sessionParam,
-    sessionFromQuery: selection.selectedSessionById,
+    sessionFromQuery: selection.selectedSessionFromRoute,
     resolvedTaskId: selection.taskId,
     resolvedSession: selection.activeSessionSummary,
     roleFromQuery,

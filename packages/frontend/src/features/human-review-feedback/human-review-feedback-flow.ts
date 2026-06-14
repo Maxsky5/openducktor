@@ -35,7 +35,7 @@ type SubmitHumanReviewFeedbackInput = {
   builderSessions: AgentSessionSummary[];
   startRequestChangesSession: (
     request: HumanReviewFeedbackStartRequest,
-  ) => Promise<string | undefined>;
+  ) => Promise<unknown | undefined>;
 };
 
 const buildRequestChangesSessionRequest = (
@@ -82,10 +82,10 @@ export const submitHumanReviewFeedback = async ({
     return { outcome: "cancelled" };
   }
 
-  const externalSessionId = await startRequestChangesSession(
+  const startResult = await startRequestChangesSession(
     buildRequestChangesSessionRequest(state, builderSessions, trimmedMessage),
   );
-  if (!externalSessionId) {
+  if (!startResult) {
     return { outcome: "cancelled" };
   }
 

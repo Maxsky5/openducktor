@@ -8,6 +8,7 @@ import type {
   AgentStudioWorkspaceSidebarModel,
 } from "@/components/features/agents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
@@ -52,7 +53,7 @@ export const buildAgentStudioHeaderModel = (args: {
   workflowStateByRole: Record<AgentRole, AgentWorkflowStepState>;
   selectedRole: AgentRole | null;
   workflowSessionByRole: Record<AgentRole, AgentSessionWorkflowSummary | null>;
-  onWorkflowStepSelect: (role: AgentRole, externalSessionId: string | null) => void;
+  onWorkflowStepSelect: (role: AgentRole, sessionValue: string | null) => void;
   onSessionSelectionChange: (value: string) => void;
   sessionSelectorAutofocusByValue: Record<string, boolean>;
   sessionSelectorValue: string;
@@ -79,7 +80,7 @@ export const buildAgentStudioHeaderModel = (args: {
       label: entry.label,
       icon: entry.icon,
       state: args.workflowStateByRole[entry.role],
-      externalSessionId: workflowSession?.externalSessionId ?? null,
+      sessionValue: workflowSession ? agentSessionIdentityKey(workflowSession) : null,
     };
   }),
   onWorkflowStepSelect: args.onWorkflowStepSelect,
