@@ -83,12 +83,6 @@ export const createEnsureSessionReady = ({
     const assertNotStale = (): void => {
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
-    const removeSessionUnsubscriber = (targetExternalSessionId: string): void => {
-      removeSessionListenersByExternalSessionId(
-        sessionListenerRegistryRef.current,
-        targetExternalSessionId,
-      );
-    };
 
     const readSessionPresenceSnapshot = async ({
       runtimeKind,
@@ -112,22 +106,22 @@ export const createEnsureSessionReady = ({
         externalSessionId,
       });
     };
-    const applyConfirmedSessionPresenceSnapshot = async (
+    const applyRuntimePresenceSnapshot = async (
       snapshot: ConfirmedAgentSessionPresenceSnapshot,
-      {
-        session,
-        shouldListen,
-      }: {
-        session: WorkflowAgentSessionState;
-        shouldListen: boolean;
-      },
+      session: WorkflowAgentSessionState,
     ): Promise<void> => {
       updateSession(session, (current) =>
         applyAgentSessionPresenceSnapshotToSession(current, snapshot),
       );
-      if (shouldListen) {
+      if (
+        !hasSessionListenerForExternalSessionId(
+          sessionListenerRegistryRef.current,
+          session.externalSessionId,
+        )
+      ) {
         const currentSession =
-          getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId) ?? session;
+          getAgentSessionByExternalSessionId(sessionsRef.current, session.externalSessionId) ??
+          session;
         await listenToAgentSession(toRuntimeSessionRef(repoPath, currentSession));
       }
       if (sessionPresenceHasPendingInput(snapshot)) {
@@ -193,13 +187,7 @@ export const createEnsureSessionReady = ({
       });
       assertNotStale();
       if (sessionPresence.presence === "runtime") {
-        await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
-          session,
-          shouldListen: !hasSessionListenerForExternalSessionId(
-            sessionListenerRegistryRef.current,
-            externalSessionId,
-          ),
-        });
+        await applyRuntimePresenceSnapshot(sessionPresence, session);
         return;
       }
       updateSession(
@@ -248,11 +236,11 @@ export const createEnsureSessionReady = ({
 
     assertNotStale();
 
-    removeSessionUnsubscriber(externalSessionId);
-    await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
-      session,
-      shouldListen: true,
-    });
+    removeSessionListenersByExternalSessionId(
+      sessionListenerRegistryRef.current,
+      externalSessionId,
+    );
+    await applyRuntimePresenceSnapshot(sessionPresence, session);
 
     if (isStaleRepoOperation()) {
       return;

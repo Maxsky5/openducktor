@@ -118,7 +118,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("restarts listener and skips resume for healthy runtime session", async () => {
+  test("starts listener and skips resume for healthy runtime session", async () => {
     let listenCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
@@ -206,6 +206,62 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
       adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
     }
+  });
+
+  test("keeps existing listener and skips resume for healthy runtime session", async () => {
+    let unsubscribeCalls = 0;
+
+    const adapter = createAdapter();
+    adapter.readSessionPresence = async (input) =>
+      createAgentSessionPresenceSnapshotFixture({ ref: input });
+    adapter.resumeSession = async () => {
+      throw new Error("Session resume should not run for a healthy runtime session.");
+    };
+
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "session-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
+
+    const ensureReady = createEnsureSessionReady({
+      activeWorkspace: {
+        repoPath: "/tmp/repo",
+        workspaceId: "workspace-1",
+        workspaceName: "Active Workspace",
+      },
+      adapter,
+      repoEpochRef: { current: 1 },
+      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+      sessionsRef,
+      taskRef: { current: [taskFixture] },
+      sessionListenerRegistryRef,
+      updateSession: (_externalSessionId, updater) => {
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
+        if (!current) {
+          return;
+        }
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+      },
+      listenToAgentSession: async () => {
+        throw new Error("Existing listener should be reused.");
+      },
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      }),
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await ensureReady("session-1");
+
+    expect(unsubscribeCalls).toBe(0);
+    expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
   });
 
   test("keeps the local listener while failing on a missing live runtime session", async () => {
