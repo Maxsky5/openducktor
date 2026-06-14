@@ -1,6 +1,5 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
-import { shouldHoldSessionOnIdleSignal } from "../lifecycle/session-idle-signal";
 import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
 import type {
@@ -119,8 +118,7 @@ export const hasMeaningfulToolInput = (input: Record<string, unknown> | undefine
 
 const shouldClearTurnFromCurrentState = (current: AgentSessionState): boolean => {
   return (
-    (current.draftAssistantText.trim().length > 0 ||
-      current.draftReasoningText.trim().length > 0) &&
+    current.status !== "error" &&
     current.pendingApprovals.length === 0 &&
     current.pendingQuestions.length === 0
   );
@@ -132,7 +130,7 @@ export const settleDraftToIdle = (
 ): boolean => {
   let shouldClear = false;
   context.store.updateSession(context.store.externalSessionId, (current) => {
-    if (shouldHoldSessionOnIdleSignal(current)) {
+    if (current.status === "starting") {
       return current;
     }
 
@@ -152,8 +150,13 @@ export const settleDraftToIdle = (
     shouldClear = shouldClearTurnFromCurrentState(current);
     const messages = settleDanglingTodoToolMessages(finalized, timestamp);
     const status = current.status === "error" ? "error" : "idle";
+    const shouldClearPendingUserMessage =
+      status === "idle" && current.pendingUserMessageStartedAt !== undefined;
     const didChange =
-      finalized !== current || messages !== finalized.messages || current.status !== status;
+      finalized !== current ||
+      messages !== finalized.messages ||
+      current.status !== status ||
+      shouldClearPendingUserMessage;
     if (!didChange) {
       return current;
     }
@@ -162,6 +165,7 @@ export const settleDraftToIdle = (
       ...finalized,
       messages,
       status,
+      pendingUserMessageStartedAt: undefined,
     };
   });
   return shouldClear;

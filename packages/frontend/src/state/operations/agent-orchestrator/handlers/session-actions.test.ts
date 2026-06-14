@@ -1364,7 +1364,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     }
   });
 
-  test("releases held starting sessions to idle when missing presence blocks send", async () => {
+  test("marks held starting sessions as failed when resume preparation fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
@@ -1408,7 +1408,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       ).rejects.toThrow("Task not found: task-1");
 
       expect(sendCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
+      expect(sessionsRef.current["session-1"]?.status).toBe("error");
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }

@@ -133,7 +133,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("does not add a duplicate session listener when the same live session is explicitly reconciled twice", async () => {
+  test("does not add a duplicate session listener when the same live session is loaded twice", async () => {
     let subscribeCalls = 0;
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;

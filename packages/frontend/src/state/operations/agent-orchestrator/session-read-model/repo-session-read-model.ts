@@ -60,9 +60,6 @@ const shouldKeepLocalSession = (
   return !persistedSessionIds.has(session.externalSessionId) && session.status === "starting";
 };
 
-const isEventOwnedSession = (session: AgentSessionState): boolean =>
-  session.status !== "stopped" && session.status !== "error";
-
 const selectLocalSessions = (
   currentSessionsById: Record<string, AgentSessionState>,
   taskSessionRecords: TaskSessionRecord[],
@@ -85,18 +82,17 @@ const toPersistedSessionView = ({
   current: AgentSessionState | undefined;
 }): AgentSessionState => {
   const persisted = fromPersistedSessionRecord(record, taskId);
-  const runtimeKind = readPersistedRuntimeKind(record);
   if (!current) {
     return persisted;
   }
   return {
     ...current,
-    taskId,
-    runtimeKind,
-    role: record.role,
-    startedAt: record.startedAt,
-    workingDirectory: record.workingDirectory,
-    selectedModel: persisted.selectedModel ?? current.selectedModel,
+    taskId: persisted.taskId,
+    runtimeKind: persisted.runtimeKind,
+    role: persisted.role,
+    startedAt: persisted.startedAt,
+    workingDirectory: persisted.workingDirectory,
+    selectedModel: persisted.selectedModel,
   };
 };
 
@@ -185,10 +181,7 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const session =
-      current && isEventOwnedSession(current)
-        ? persistedSessionView
-        : applyAgentSessionPresenceSnapshotToSession(persistedSessionView, snapshot);
+    const session = applyAgentSessionPresenceSnapshotToSession(persistedSessionView, snapshot);
     sessionsById[record.externalSessionId] = session;
 
     if (shouldListenToAgentSessionPresenceSnapshot(snapshot)) {

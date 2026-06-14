@@ -1,12 +1,39 @@
 import type { AgentSessionPresenceSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  settleLiveTurnFields,
-  shouldHoldSessionOnIdleSignal,
-  statusWithoutRuntimePresence,
-} from "./session-idle-signal";
 
 export type { AgentSessionPresence, AgentSessionPresenceSnapshot } from "@openducktor/core";
+
+const clearLiveTurnFields = (): Pick<
+  AgentSessionState,
+  | "pendingUserMessageStartedAt"
+  | "draftAssistantText"
+  | "draftAssistantMessageId"
+  | "draftReasoningText"
+  | "draftReasoningMessageId"
+> => ({
+  pendingUserMessageStartedAt: undefined,
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+});
+
+const statusFromRuntimePresence = (
+  current: AgentSessionState,
+  snapshot: Extract<AgentSessionPresenceSnapshot, { presence: "runtime" }>,
+): AgentSessionState["status"] => {
+  if (current.status === "starting" && !sessionPresenceHasPendingInput(snapshot)) {
+    return "starting";
+  }
+  return snapshot.agentSessionStatus;
+};
+
+const statusWithoutRuntimePresence = (current: AgentSessionState): AgentSessionState["status"] => {
+  if (current.status === "error" || current.status === "stopped" || current.status === "starting") {
+    return current.status;
+  }
+  return "idle";
+};
 
 export const shouldListenToAgentSessionPresenceSnapshot = (
   snapshot: AgentSessionPresenceSnapshot,
@@ -23,13 +50,8 @@ export const applyAgentSessionPresenceSnapshotToSession = (
   snapshot: AgentSessionPresenceSnapshot,
 ): AgentSessionState => {
   if (snapshot.presence === "runtime") {
-    const status =
-      snapshot.agentSessionStatus === "idle" &&
-      !sessionPresenceHasPendingInput(snapshot) &&
-      shouldHoldSessionOnIdleSignal(current)
-        ? current.status
-        : snapshot.agentSessionStatus;
-    const liveTurnFields = status === "idle" ? settleLiveTurnFields() : {};
+    const status = statusFromRuntimePresence(current, snapshot);
+    const liveTurnFields = status === "idle" ? clearLiveTurnFields() : {};
 
     return {
       ...current,
@@ -50,6 +72,6 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     status: statusWithoutRuntimePresence(current),
     pendingApprovals: [],
     pendingQuestions: [],
-    ...settleLiveTurnFields(),
+    ...clearLiveTurnFields(),
   };
 };

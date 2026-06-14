@@ -173,7 +173,7 @@ describe("repo session read model", () => {
     expect(idleRead.sessionsById[record.externalSessionId]?.status).toBe("idle");
   });
 
-  test("preserves a mounted active session when a repo runtime scan misses it", async () => {
+  test("demotes a mounted active session when a repo runtime scan misses it", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyPresence = await readRepoRuntimeSessionPresence({
@@ -205,10 +205,10 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("running");
+    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
   });
 
-  test("preserves an already mounted live session instead of rebuilding from its thin record", async () => {
+  test("applies missing runtime presence without dropping mounted transcript state", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -250,14 +250,49 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("running");
+    expect(session?.status).toBe("idle");
     expect(session?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
     ]);
   });
 
-  test("does not let a runtime presence snapshot rewrite an event-owned session", async () => {
+  test("uses the persisted selected model instead of stale mounted model state", async () => {
+    const record = createRecord({ selectedModel: null });
+    const tasks = [createTask([record])];
+    const currentSession = createAgentSessionFixture({
+      externalSessionId: record.externalSessionId,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "running",
+      startedAt: record.startedAt,
+      workingDirectory: record.workingDirectory,
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "stale-provider",
+        modelId: "stale-model",
+      },
+    });
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [record.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    expect(readModel.sessionsById[record.externalSessionId]?.selectedModel).toBeNull();
+  });
+
+  test("applies runtime status and pending input without dropping mounted transcript state", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -281,7 +316,7 @@ describe("repo session read model", () => {
         {
           id: "existing-message",
           role: "assistant",
-          content: "Event-owned transcript",
+          content: "Mounted transcript",
           timestamp: "2026-06-11T08:00:01.000Z",
         },
       ]),
@@ -312,14 +347,14 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("idle");
-    expect(session?.pendingQuestions).toEqual(currentSession.pendingQuestions);
+    expect(session?.status).toBe("running");
+    expect(session?.pendingQuestions).toEqual([]);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
-      "Event-owned transcript",
+      "Mounted transcript",
     ]);
   });
 
-  test("does not let an idle runtime presence snapshot demote an event-owned running session", async () => {
+  test("lets idle runtime presence demote a mounted running session", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = createAgentSessionFixture({
@@ -354,7 +389,7 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("running");
+    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
   });
 
   test("drops local task sessions that are no longer present in persisted task records", async () => {
