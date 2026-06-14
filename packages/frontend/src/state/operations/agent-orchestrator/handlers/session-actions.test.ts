@@ -417,8 +417,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     const unsubscribe = await listenToAgentSessionEvents({
       adapter,
-      repoPath: "/tmp/repo",
-      externalSessionId: "session-1",
       sessionRef: {
         externalSessionId: "session-1",
         repoPath: "/tmp/repo",

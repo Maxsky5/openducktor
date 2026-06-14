@@ -109,6 +109,7 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
 export const listenToAgentSessionEvents = async (
   context: ListenToAgentSessionParams,
 ): Promise<() => void> => {
+  const externalSessionId = context.sessionRef.externalSessionId;
   const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
     current: {} as Record<string, string>,
   };
@@ -151,13 +152,13 @@ export const listenToAgentSessionEvents = async (
     const batchedHandlerContext = createSessionEventHandlerContext({
       ...eventContext,
       sessionsRef: batchedSessionsRef,
-      updateSession: (externalSessionId, updater, options) => {
-        if (externalSessionId !== context.externalSessionId) {
-          context.updateSession(externalSessionId, updater, options);
+      updateSession: (targetExternalSessionId, updater, options) => {
+        if (targetExternalSessionId !== externalSessionId) {
+          context.updateSession(targetExternalSessionId, updater, options);
           return;
         }
 
-        const current = batchedSessionsRef.current[externalSessionId];
+        const current = batchedSessionsRef.current[targetExternalSessionId];
         if (!current) {
           return;
         }
@@ -173,7 +174,7 @@ export const listenToAgentSessionEvents = async (
         }
         batchedSessionsRef.current = {
           ...batchedSessionsRef.current,
-          [externalSessionId]: next,
+          [targetExternalSessionId]: next,
         };
       },
     });
@@ -189,7 +190,7 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    const nextSession = batchedSessionsRef.current[context.externalSessionId];
+    const nextSession = batchedSessionsRef.current[externalSessionId];
     if (!nextSession) {
       if (queuedEvents.length > 0) {
         scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
@@ -198,7 +199,7 @@ export const listenToAgentSessionEvents = async (
     }
 
     context.updateSession(
-      context.externalSessionId,
+      externalSessionId,
       () => nextSession,
       shouldPersistBufferedSession ? { persist: true } : undefined,
     );

@@ -151,8 +151,6 @@ export const useAgentSessionListeners = ({
 
       const unsubscribe = await listenToAgentSessionEvents({
         adapter: agentEngine,
-        repoPath: target.repoPath,
-        externalSessionId,
         sessionRef: target,
         sessionsRef: refBridges.sessionsRef,
         draftRawBySessionRef: refBridges.draftRawBySessionRef,

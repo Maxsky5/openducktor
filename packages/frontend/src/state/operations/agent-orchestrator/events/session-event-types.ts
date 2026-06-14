@@ -31,8 +31,6 @@ export type SessionPart = SessionPartEvent["part"];
 
 export type ListenToAgentSessionParams = {
   adapter: SessionEventAdapter;
-  repoPath: string;
-  externalSessionId: string;
   sessionRef: AgentSessionRef;
   eventBatchWindowMs?: number;
   sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
@@ -60,44 +58,46 @@ export type ListenToAgentSessionParams = {
   resolveRuntimeDefinition?: (runtimeKind: RuntimeKind) => RuntimeDescriptor | null;
 };
 
-export type SessionStoreContext = Pick<
-  ListenToAgentSessionParams,
-  "externalSessionId" | "sessionsRef" | "updateSession" | "isSessionListenerActive"
->;
+type SessionEventTargetContext = {
+  externalSessionId: string;
+};
+
+export type SessionStoreContext = SessionEventTargetContext &
+  Pick<ListenToAgentSessionParams, "sessionsRef" | "updateSession" | "isSessionListenerActive">;
 
 export type SessionRuntimeDataContext = Pick<
   ListenToAgentSessionParams,
   "sessionRef" | "runtimeDataWriter"
 >;
 
-export type SessionDraftContext = Pick<
-  ListenToAgentSessionParams,
-  | "externalSessionId"
-  | "draftRawBySessionRef"
-  | "draftSourceBySessionRef"
-  | "draftMessageIdBySessionRef"
-  | "draftFlushTimeoutBySessionRef"
->;
+export type SessionDraftContext = SessionEventTargetContext &
+  Pick<
+    ListenToAgentSessionParams,
+    | "draftRawBySessionRef"
+    | "draftSourceBySessionRef"
+    | "draftMessageIdBySessionRef"
+    | "draftFlushTimeoutBySessionRef"
+  >;
 
-export type SessionTurnContext = Pick<
-  ListenToAgentSessionParams,
-  | "externalSessionId"
-  | "turnModelBySessionRef"
-  | "contextUsageMessageIdBySessionRef"
-  | "recordTurnActivityTimestamp"
-  | "recordTurnUserMessageTimestamp"
-  | "resolveTurnDurationMs"
-  | "clearTurnDuration"
->;
+export type SessionTurnContext = SessionEventTargetContext &
+  Pick<
+    ListenToAgentSessionParams,
+    | "turnModelBySessionRef"
+    | "contextUsageMessageIdBySessionRef"
+    | "recordTurnActivityTimestamp"
+    | "recordTurnUserMessageTimestamp"
+    | "resolveTurnDurationMs"
+    | "clearTurnDuration"
+  >;
 
 export type SessionApprovalContext = Pick<
   ListenToAgentSessionParams,
   "adapter" | "resolveRuntimeDefinition" | "buildReadOnlyApprovalRejectionMessage"
 >;
 
-export type SessionRefreshContext = Pick<
+export type SessionRefreshContext = { repoPath: string } & Pick<
   ListenToAgentSessionParams,
-  "repoPath" | "refreshTaskData" | "resolveRuntimeDefinition"
+  "refreshTaskData" | "resolveRuntimeDefinition"
 >;
 
 export type SessionLifecycleEventContext = {
@@ -127,13 +127,13 @@ export type SessionEventHandlerContext = {
 };
 
 const createStoreContext = (context: ListenToAgentSessionParams): SessionStoreContext => ({
-  externalSessionId: context.externalSessionId,
+  externalSessionId: context.sessionRef.externalSessionId,
   sessionsRef: context.sessionsRef,
   updateSession: context.updateSession,
 });
 
 const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftContext => ({
-  externalSessionId: context.externalSessionId,
+  externalSessionId: context.sessionRef.externalSessionId,
   draftRawBySessionRef: context.draftRawBySessionRef,
   draftSourceBySessionRef: context.draftSourceBySessionRef,
   ...(context.draftMessageIdBySessionRef
@@ -145,7 +145,7 @@ const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftCo
 });
 
 const createTurnContext = (context: ListenToAgentSessionParams): SessionTurnContext => ({
-  externalSessionId: context.externalSessionId,
+  externalSessionId: context.sessionRef.externalSessionId,
   ...(context.turnModelBySessionRef
     ? { turnModelBySessionRef: context.turnModelBySessionRef }
     : {}),
@@ -166,7 +166,7 @@ const createRuntimeDataContext = (
 });
 
 const createRefreshContext = (context: ListenToAgentSessionParams): SessionRefreshContext => ({
-  repoPath: context.repoPath,
+  repoPath: context.sessionRef.repoPath,
   refreshTaskData: context.refreshTaskData,
   ...(context.resolveRuntimeDefinition
     ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }

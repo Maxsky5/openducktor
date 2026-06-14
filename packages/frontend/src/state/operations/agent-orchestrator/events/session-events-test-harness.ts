@@ -78,33 +78,57 @@ export const getSessionMessages = (
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
+type ListenToAgentSessionEventsTestParams = Omit<
+  ListenToAgentSessionParams,
+  | "sessionRef"
+  | "runtimeDataWriter"
+  | "recordTurnActivityTimestamp"
+  | "recordTurnUserMessageTimestamp"
+  | "buildReadOnlyApprovalRejectionMessage"
+> &
+  Partial<
+    Pick<
+      ListenToAgentSessionParams,
+      | "sessionRef"
+      | "runtimeDataWriter"
+      | "recordTurnActivityTimestamp"
+      | "recordTurnUserMessageTimestamp"
+      | "buildReadOnlyApprovalRejectionMessage"
+    >
+  > & {
+    externalSessionId?: string;
+    repoPath?: string;
+  };
+
 export const listenToAgentSessionEvents = (
-  params: Omit<
-    ListenToAgentSessionParams,
-    | "sessionRef"
-    | "runtimeDataWriter"
-    | "recordTurnActivityTimestamp"
-    | "recordTurnUserMessageTimestamp"
-    | "buildReadOnlyApprovalRejectionMessage"
-  > &
-    Partial<
-      Pick<
-        ListenToAgentSessionParams,
-        | "sessionRef"
-        | "runtimeDataWriter"
-        | "recordTurnActivityTimestamp"
-        | "recordTurnUserMessageTimestamp"
-        | "buildReadOnlyApprovalRejectionMessage"
-      >
-    >,
+  params: ListenToAgentSessionEventsTestParams,
 ): Promise<() => void> => {
-  const session = getSession(params.sessionsRef, params.externalSessionId);
+  const {
+    externalSessionId,
+    repoPath,
+    sessionRef: providedSessionRef,
+    runtimeDataWriter,
+    recordTurnActivityTimestamp,
+    recordTurnUserMessageTimestamp,
+    buildReadOnlyApprovalRejectionMessage,
+    ...eventParams
+  } = params;
+  const targetExternalSessionId =
+    providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
+  const session = getSession(params.sessionsRef, targetExternalSessionId);
+  const sessionRef = providedSessionRef ?? {
+    externalSessionId: targetExternalSessionId,
+    repoPath: repoPath ?? "/tmp/repo",
+    runtimeKind: session.runtimeKind,
+    workingDirectory: session.workingDirectory,
+  };
+
   return listenToAgentSessionEventsImpl({
-    ...params,
-    recordTurnActivityTimestamp: params.recordTurnActivityTimestamp ?? (() => {}),
-    recordTurnUserMessageTimestamp: params.recordTurnUserMessageTimestamp ?? (() => {}),
+    ...eventParams,
+    recordTurnActivityTimestamp: recordTurnActivityTimestamp ?? (() => {}),
+    recordTurnUserMessageTimestamp: recordTurnUserMessageTimestamp ?? (() => {}),
     buildReadOnlyApprovalRejectionMessage:
-      params.buildReadOnlyApprovalRejectionMessage ??
+      buildReadOnlyApprovalRejectionMessage ??
       ((role) =>
         Promise.resolve(
           buildReadOnlyPermissionRejectionMessage({
@@ -112,15 +136,10 @@ export const listenToAgentSessionEvents = (
             overrides: {},
           }),
         )),
-    runtimeDataWriter: params.runtimeDataWriter ?? {
+    runtimeDataWriter: runtimeDataWriter ?? {
       updateTodos: () => {},
     },
-    sessionRef: params.sessionRef ?? {
-      externalSessionId: params.externalSessionId,
-      repoPath: params.repoPath,
-      runtimeKind: session.runtimeKind,
-      workingDirectory: session.workingDirectory,
-    },
+    sessionRef,
   });
 };
 

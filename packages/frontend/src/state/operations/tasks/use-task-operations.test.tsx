@@ -1878,8 +1878,6 @@ describe("use-task-operations", () => {
 
       const unsubscribe = await listenToAgentSessionEvents({
         adapter,
-        repoPath: "/repo",
-        externalSessionId: "session-1",
         sessionRef: {
           externalSessionId: "session-1",
           repoPath: "/repo",
