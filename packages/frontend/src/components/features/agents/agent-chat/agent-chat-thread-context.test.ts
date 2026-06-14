@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
+import {
+  createAgentSessionFixture,
+  createSelectedSessionLifecycleFixture,
+} from "@/pages/agents/agent-studio-test-utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
@@ -18,11 +21,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentChatThr
 
 const createLifecycle = (
   overrides: Partial<AgentChatThreadLifecycle> = {},
-): AgentChatThreadLifecycle => ({
-  phase: "ready",
-  repoReadinessState: "ready",
-  ...overrides,
-});
+): AgentChatThreadLifecycle => createSelectedSessionLifecycleFixture(overrides);
 
 describe("resolveAgentChatThreadContext", () => {
   test("displays the active renderable session", () => {

@@ -142,7 +142,7 @@ type AgentChatComposerConfig = {
 
 export type AgentChatSurfaceSessionLifecycle = Pick<
   SelectedAgentSessionViewLifecycle,
-  "phase" | "repoReadinessState"
+  "phase" | "repoReadinessState" | "transcriptState"
 >;
 
 type UseAgentChatSurfaceModelArgs = {

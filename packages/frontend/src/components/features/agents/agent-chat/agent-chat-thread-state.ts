@@ -1,4 +1,3 @@
-import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 
 type BuildAgentChatThreadStateArgs = Pick<
@@ -30,7 +29,7 @@ export const getAgentChatThreadState = ({
   const isRenderLocallyLoading =
     isSessionContextSwitching || isTranscriptRenderDeferred || isTranscriptRowsMissing;
   const hideTranscriptRows = isTranscriptRenderDeferred;
-  const transcriptState = getAgentSessionTranscriptState(sessionLifecycle);
+  const transcriptState = sessionLifecycle.transcriptState;
   const shouldResetTranscriptWindow =
     isRenderLocallyLoading || transcriptState.kind === "session_loading";
   const transcriptNotice = (() => {

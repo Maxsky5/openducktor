@@ -20,10 +20,7 @@ import { useAgentSession } from "@/state/app-state-provider";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import {
-  deriveSelectedAgentSessionViewLifecycle,
-  shouldLoadAgentSessionHistory,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
@@ -360,7 +357,7 @@ export function useAgentStudioSelectionController({
   useEffect(() => {
     if (
       viewSelectedSessionRoute === null ||
-      !shouldLoadAgentSessionHistory(selectedSessionLifecycle) ||
+      !selectedSessionLifecycle.shouldLoadHistory ||
       !viewActiveSession
     ) {
       return;

@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat } from "./agent-chat";
-import { buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildThreadLifecycle,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   mode: "interactive" as const,
@@ -14,10 +18,7 @@ const buildModel = () => ({
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    sessionLifecycle: {
-      phase: "ready" as const,
-      repoReadinessState: "ready" as const,
-    },
+    sessionLifecycle: buildThreadLifecycle(),
     runtimeReadiness: {
       readinessState: "ready" as const,
       isReady: true,

@@ -3,7 +3,12 @@ import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChat, AgentChatSurface } from "./agent-chat";
-import { buildModelSelection, buildSession, buildTodoItem } from "./agent-chat-test-fixtures";
+import {
+  buildModelSelection,
+  buildSession,
+  buildThreadLifecycle,
+  buildTodoItem,
+} from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
   mode: "interactive" as const,
@@ -14,10 +19,7 @@ const buildModel = () => ({
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    sessionLifecycle: {
-      phase: "ready" as const,
-      repoReadinessState: "ready" as const,
-    },
+    sessionLifecycle: buildThreadLifecycle(),
     runtimeReadiness: {
       readinessState: "ready" as const,
       isReady: true,

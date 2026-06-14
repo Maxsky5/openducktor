@@ -1,12 +1,9 @@
-import {
-  type AgentSessionViewLifecycle,
-  getAgentSessionTranscriptState,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 
 export type AgentChatThreadLifecycle = Pick<
   AgentSessionViewLifecycle,
-  "phase" | "repoReadinessState"
+  "phase" | "repoReadinessState" | "transcriptState"
 >;
 
 type ResolveAgentChatThreadContextArgs = {
@@ -27,8 +24,7 @@ export const resolveAgentChatThreadContext = ({
   isContextSwitching,
 }: ResolveAgentChatThreadContextArgs): AgentChatThreadContext => {
   const activeExternalSessionId = activeSession?.externalSessionId ?? null;
-  const shouldClearThread =
-    isContextSwitching && getAgentSessionTranscriptState(lifecycle).kind !== "visible";
+  const shouldClearThread = isContextSwitching && lifecycle.transcriptState.kind !== "visible";
 
   return {
     threadSession: shouldClearThread ? null : activeSession,

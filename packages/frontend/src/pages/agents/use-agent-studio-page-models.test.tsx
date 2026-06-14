@@ -9,7 +9,6 @@ import { createComposerDraft } from "@/components/features/agents/agent-chat/age
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -500,7 +499,7 @@ describe("useAgentStudioPageModels", () => {
 
     const thread = harness.getLatest().agentChatModel.thread;
     expect(thread.sessionLifecycle.phase).toBe("needs_history");
-    expect(getAgentSessionTranscriptState(thread.sessionLifecycle)).toEqual({ kind: "visible" });
+    expect(thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(thread.runtimeReadiness.readinessState).toBe("checking");
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",

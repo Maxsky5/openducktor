@@ -3,6 +3,7 @@ import { OPENCODE_RUNTIME_DESCRIPTOR, type RuntimeDescriptor } from "@openduckto
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
+import { deriveAgentSessionTargetViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { useSessionRuntimeData } from "./use-session-runtime-data";
@@ -39,10 +40,13 @@ describe("useSessionRuntimeData", () => {
           workingDirectory: "/repo",
         }),
         runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: false }),
-        sessionLifecycle: {
-          phase: "ready",
+        sessionLifecycle: deriveAgentSessionTargetViewLifecycle({
+          target: {
+            historyLoadState: "loaded",
+            hasTranscript: true,
+          },
           repoReadinessState: "ready",
-        },
+        }),
         readSessionModelCatalog,
         readSessionTodos,
       },

@@ -13,7 +13,11 @@ import type {
   AgentQuestionRequest,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession, AgentRoleOption } from "./agent-chat.types";
+import type {
+  AgentChatThreadSession,
+  AgentChatThreadSessionLifecycle,
+  AgentRoleOption,
+} from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
 
 const baseTask: TaskCard = {
@@ -112,6 +116,42 @@ export const buildSession = (
     ...overrideSession,
     todos,
   };
+};
+
+export const buildThreadLifecycle = (
+  overrides: Partial<AgentChatThreadSessionLifecycle> = {},
+): AgentChatThreadSessionLifecycle => {
+  const phase = overrides.phase ?? "ready";
+  const repoReadinessState = overrides.repoReadinessState ?? "ready";
+
+  return {
+    phase,
+    repoReadinessState,
+    transcriptState: overrides.transcriptState ?? transcriptStateForPhase(phase),
+  };
+};
+
+const transcriptStateForPhase = (
+  phase: AgentChatThreadSessionLifecycle["phase"],
+): AgentChatThreadSessionLifecycle["transcriptState"] => {
+  switch (phase) {
+    case "inactive":
+      return { kind: "empty" };
+    case "resolving_session":
+      return { kind: "session_loading", reason: "preparing" };
+    case "resolving_runtime":
+    case "waiting_for_runtime":
+      return { kind: "runtime_waiting" };
+    case "needs_initial_history":
+    case "loading_history":
+      return { kind: "session_loading", reason: "history" };
+    case "history_failed":
+      return { kind: "failed" };
+    case "needs_history":
+    case "refreshing_history":
+    case "ready":
+      return { kind: "visible" };
+  }
 };
 
 export const buildMessage = (

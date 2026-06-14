@@ -1,9 +1,6 @@
 import { useMemo } from "react";
 import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/use-agent-studio-orchestration-controller";
-import {
-  isSelectedAgentSessionViewLoading,
-  type SelectedAgentSessionViewLifecycle,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 
 export type BuildToolsSessionDescriptor = {
   role: AgentStudioOrchestrationSelectionContext["viewActiveSession"] extends infer T
@@ -51,7 +48,7 @@ export function useAgentStudioBuildToolsBootstrap({
   const sessionRole = session.role;
   const sessionWorkingDirectory = session.workingDirectory;
   const hasActiveSession = session.hasActiveSession;
-  const isSessionViewLoading = isSelectedAgentSessionViewLoading(viewSessionLifecycle);
+  const isSessionViewLoading = viewSessionLifecycle.isLoading;
 
   return useMemo(() => {
     const isVisibleBuildToolsPanel =

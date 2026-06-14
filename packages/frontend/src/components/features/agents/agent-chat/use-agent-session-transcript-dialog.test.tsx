@@ -7,7 +7,7 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
-import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
+import { buildMessage, buildSession, buildThreadLifecycle } from "./agent-chat-test-fixtures";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
@@ -29,10 +29,7 @@ const createThreadModel = (
 ): AgentChatThreadModel => ({
   session: buildSession(),
   isSessionWorking: false,
-  sessionLifecycle: {
-    phase: "ready",
-    repoReadinessState: "ready",
-  },
+  sessionLifecycle: buildThreadLifecycle(),
   runtimeReadiness: {
     readinessState: "ready",
     isReady: true,

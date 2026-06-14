@@ -11,7 +11,6 @@ import { useNavigationType, useSearchParams } from "react-router-dom";
 import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { isSelectedAgentSessionResolving } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { agentSessionBulkQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -176,7 +175,7 @@ export function useAgentsPageRouteSessionModel({
     onContextSwitchIntent: signalContextSwitchIntent,
   });
   const isSessionSelectionResolving =
-    isSelectionIntentResolving || isSelectedAgentSessionResolving(selection.viewSessionLifecycle);
+    isSelectionIntentResolving || selection.viewSessionLifecycle.isResolving;
 
   const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
     workspaceRepoPath,

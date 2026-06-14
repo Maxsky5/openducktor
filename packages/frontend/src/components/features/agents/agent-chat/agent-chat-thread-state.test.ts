@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { buildThreadLifecycle } from "./agent-chat-test-fixtures";
 import { getAgentChatThreadState } from "./agent-chat-thread-state";
 
-const readyLifecycle = {
-  phase: "ready" as const,
-  repoReadinessState: "ready" as const,
-};
+const readyLifecycle = buildThreadLifecycle();
 
 const readyRuntimeReadiness = {
   readinessState: "ready" as const,
@@ -18,10 +16,10 @@ const readyRuntimeReadiness = {
 describe("getAgentChatThreadState", () => {
   test("keeps runtime waiting separate from conversation hiding", () => {
     const state = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "waiting_for_runtime",
         repoReadinessState: "checking",
-      },
+      }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
       },
@@ -36,10 +34,10 @@ describe("getAgentChatThreadState", () => {
 
   test("treats history load as conversation-loading state", () => {
     const state = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "loading_history",
         repoReadinessState: "ready",
-      },
+      }),
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,
       isTranscriptRenderDeferred: false,
@@ -79,10 +77,10 @@ describe("getAgentChatThreadState", () => {
 
   test("surfaces failed selected-session history as a transcript notice", () => {
     const state = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "history_failed",
         repoReadinessState: "ready",
-      },
+      }),
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,
       isTranscriptRenderDeferred: false,
@@ -97,10 +95,10 @@ describe("getAgentChatThreadState", () => {
 
   test("does not let blocked runtime readiness hide a renderable transcript", () => {
     const state = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "refreshing_history",
         repoReadinessState: "ready",
-      },
+      }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         readinessState: "blocked",
@@ -118,10 +116,10 @@ describe("getAgentChatThreadState", () => {
 
   test("keeps history failures distinct from runtime readiness failures", () => {
     const state = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "history_failed",
         repoReadinessState: "ready",
-      },
+      }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         readinessState: "blocked",
@@ -141,10 +139,10 @@ describe("getAgentChatThreadState", () => {
 
   test("shows blocked runtime notice only when no transcript can render", () => {
     const visible = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "waiting_for_runtime",
         repoReadinessState: "blocked",
-      },
+      }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         readinessState: "blocked",
@@ -155,10 +153,10 @@ describe("getAgentChatThreadState", () => {
       isTranscriptRenderDeferred: false,
     });
     const hidden = getAgentChatThreadState({
-      sessionLifecycle: {
+      sessionLifecycle: buildThreadLifecycle({
         phase: "waiting_for_runtime",
         repoReadinessState: "blocked",
-      },
+      }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
         readinessState: "blocked",

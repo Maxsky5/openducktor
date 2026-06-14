@@ -5,7 +5,6 @@ import {
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
-import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -77,7 +76,7 @@ export function useSessionTranscriptSurfaceModel({
     ? isAgentSessionWorkingStatus(transcriptInteractions.session.status)
     : false;
   const sessionLifecycle = sessionHistory.lifecycle;
-  const transcriptState = getAgentSessionTranscriptState(sessionLifecycle);
+  const transcriptState = sessionLifecycle.transcriptState;
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && target) &&
     transcriptInteractions.session === null &&

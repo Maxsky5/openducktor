@@ -76,7 +76,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.workingDirectory).toBe("/repo-a/worktree");
       expect(session?.status).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
-      expect(harness.getLatest().lifecycle).toEqual({
+      expect(harness.getLatest().lifecycle).toMatchObject({
         phase: "ready",
         repoReadinessState: "ready",
       });
@@ -116,7 +116,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         selectedModel: liveSession.selectedModel,
         todos: [],
       });
-      expect(harness.getLatest().lifecycle).toEqual({
+      expect(harness.getLatest().lifecycle).toMatchObject({
         phase: "ready",
         repoReadinessState: "ready",
       });
@@ -169,7 +169,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest()).toEqual({
+      expect(harness.getLatest()).toMatchObject({
         session: null,
         lifecycle: {
           phase: "waiting_for_runtime",
@@ -192,7 +192,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
       await harness.waitFor((state) => state.historyError !== null);
 
-      expect(harness.getLatest()).toEqual({
+      expect(harness.getLatest()).toMatchObject({
         session: null,
         lifecycle: {
           phase: "history_failed",

@@ -35,95 +35,47 @@ export type AgentSessionTranscriptState =
 export type AgentSessionViewLifecycle = {
   phase: AgentSessionViewLifecyclePhase;
   repoReadinessState: SessionRepoReadinessState;
+  transcriptState: AgentSessionTranscriptState;
+  canReadRuntimeData: boolean;
+  shouldLoadHistory: boolean;
+  isResolving: boolean;
+  isRuntimeWaiting: boolean;
+  isLoading: boolean;
 };
 
 export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
 
-const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
+const lifecycle = ({
+  phase,
+  repoReadinessState,
+  transcriptState,
+  canReadRuntimeDataWhenReady = false,
+  shouldLoadHistoryWhenReady = false,
+  isResolving = false,
+}: {
+  phase: AgentSessionViewLifecyclePhase;
+  repoReadinessState: SessionRepoReadinessState;
+  transcriptState: AgentSessionTranscriptState;
+  canReadRuntimeDataWhenReady?: boolean;
+  shouldLoadHistoryWhenReady?: boolean;
+  isResolving?: boolean;
+}): AgentSessionViewLifecycle => ({
+  phase,
+  repoReadinessState,
+  transcriptState,
+  canReadRuntimeData: repoReadinessState === "ready" && canReadRuntimeDataWhenReady,
+  shouldLoadHistory: repoReadinessState === "ready" && shouldLoadHistoryWhenReady,
+  isResolving,
+  isRuntimeWaiting: transcriptState.kind === "runtime_waiting",
+  isLoading:
+    transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading",
+});
+
+const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = lifecycle({
   phase: "inactive",
   repoReadinessState: "ready",
-};
-
-type AgentSessionViewLifecyclePhasePolicy = {
-  transcriptState: AgentSessionTranscriptState;
-  canReadRuntimeDataWhenRepoReady?: true;
-  shouldLoadHistoryWhenRepoReady?: true;
-  isResolving?: true;
-};
-
-const PHASE_POLICY: Record<AgentSessionViewLifecyclePhase, AgentSessionViewLifecyclePhasePolicy> = {
-  inactive: { transcriptState: { kind: "empty" } },
-  resolving_session: {
-    transcriptState: { kind: "session_loading", reason: "preparing" },
-    isResolving: true,
-  },
-  resolving_runtime: {
-    transcriptState: { kind: "runtime_waiting" },
-    isResolving: true,
-  },
-  waiting_for_runtime: { transcriptState: { kind: "runtime_waiting" } },
-  needs_initial_history: {
-    transcriptState: { kind: "session_loading", reason: "history" },
-    canReadRuntimeDataWhenRepoReady: true,
-    shouldLoadHistoryWhenRepoReady: true,
-  },
-  needs_history: {
-    transcriptState: { kind: "visible" },
-    canReadRuntimeDataWhenRepoReady: true,
-    shouldLoadHistoryWhenRepoReady: true,
-  },
-  loading_history: {
-    transcriptState: { kind: "session_loading", reason: "history" },
-    canReadRuntimeDataWhenRepoReady: true,
-  },
-  refreshing_history: {
-    transcriptState: { kind: "visible" },
-    canReadRuntimeDataWhenRepoReady: true,
-  },
-  history_failed: {
-    transcriptState: { kind: "failed" },
-    canReadRuntimeDataWhenRepoReady: true,
-  },
-  ready: {
-    transcriptState: { kind: "visible" },
-    canReadRuntimeDataWhenRepoReady: true,
-  },
-};
-
-export const getAgentSessionTranscriptState = ({
-  phase,
-}: Pick<AgentSessionViewLifecycle, "phase">): AgentSessionTranscriptState =>
-  PHASE_POLICY[phase].transcriptState;
-
-export const canReadAgentSessionRuntimeData = (
-  lifecycle: SelectedAgentSessionViewLifecycle,
-): boolean => {
-  if (lifecycle.repoReadinessState !== "ready") {
-    return false;
-  }
-  return PHASE_POLICY[lifecycle.phase].canReadRuntimeDataWhenRepoReady === true;
-};
-
-export const shouldLoadAgentSessionHistory = (
-  lifecycle: SelectedAgentSessionViewLifecycle,
-): boolean =>
-  lifecycle.repoReadinessState === "ready" &&
-  PHASE_POLICY[lifecycle.phase].shouldLoadHistoryWhenRepoReady === true;
-
-export const isSelectedAgentSessionResolving = (
-  lifecycle: Pick<SelectedAgentSessionViewLifecycle, "phase">,
-): boolean => PHASE_POLICY[lifecycle.phase].isResolving === true;
-
-export const isSelectedAgentSessionWaitingForRuntimeReadiness = (
-  lifecycle: Pick<SelectedAgentSessionViewLifecycle, "phase">,
-): boolean => PHASE_POLICY[lifecycle.phase].transcriptState.kind === "runtime_waiting";
-
-export const isSelectedAgentSessionViewLoading = (
-  lifecycle: Pick<SelectedAgentSessionViewLifecycle, "phase">,
-): boolean => {
-  const transcriptState = PHASE_POLICY[lifecycle.phase].transcriptState;
-  return transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading";
-};
+  transcriptState: { kind: "empty" },
+});
 
 const deriveLoadedSessionLifecycle = ({
   historyLoadState,
@@ -135,33 +87,48 @@ const deriveLoadedSessionLifecycle = ({
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
   if (repoReadinessState !== "ready" && historyLoadState !== "loaded" && !hasTranscript) {
-    return {
+    return lifecycle({
       phase: "waiting_for_runtime",
       repoReadinessState,
-    };
+      transcriptState: { kind: "runtime_waiting" },
+    });
   }
 
   switch (historyLoadState) {
     case "loaded":
-      return {
+      return lifecycle({
         phase: "ready",
         repoReadinessState,
-      };
+        transcriptState: { kind: "visible" },
+        canReadRuntimeDataWhenReady: true,
+      });
     case "loading":
-      return {
+      return lifecycle({
         phase: hasTranscript ? "refreshing_history" : "loading_history",
         repoReadinessState,
-      };
+        transcriptState: hasTranscript
+          ? { kind: "visible" }
+          : { kind: "session_loading", reason: "history" },
+        canReadRuntimeDataWhenReady: true,
+      });
     case "not_requested":
-      return {
+      return lifecycle({
         phase: hasTranscript ? "needs_history" : "needs_initial_history",
         repoReadinessState,
-      };
+        transcriptState: hasTranscript
+          ? { kind: "visible" }
+          : { kind: "session_loading", reason: "history" },
+        canReadRuntimeDataWhenReady: true,
+        shouldLoadHistoryWhenReady: true,
+      });
     case "failed":
-      return {
+      return lifecycle({
         phase: hasTranscript ? "needs_history" : "history_failed",
         repoReadinessState,
-      };
+        transcriptState: hasTranscript ? { kind: "visible" } : { kind: "failed" },
+        canReadRuntimeDataWhenReady: true,
+        shouldLoadHistoryWhenReady: hasTranscript,
+      });
   }
 };
 
@@ -173,10 +140,11 @@ export const deriveAgentSessionTargetViewLifecycle = ({
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
   if (!target) {
-    return {
+    return lifecycle({
       phase: "inactive",
       repoReadinessState,
-    };
+      transcriptState: { kind: "empty" },
+    });
   }
 
   return deriveLoadedSessionLifecycle({
@@ -220,38 +188,57 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
   isLoadingTaskSessionRecords?: boolean;
 }): SelectedAgentSessionViewLifecycle => {
   if (sessionLoadError && selectedSessionRoute === null && hasSelectedTask) {
-    return {
+    return lifecycle({
       phase: "history_failed",
       repoReadinessState,
-    };
+      transcriptState: { kind: "failed" },
+      canReadRuntimeDataWhenReady: true,
+    });
   }
 
   if (!selectedSessionRoute) {
     if (hasSelectedTask && repoReadinessState !== "ready") {
-      return {
+      return lifecycle({
         phase: "waiting_for_runtime",
         repoReadinessState,
-      };
+        transcriptState: { kind: "runtime_waiting" },
+      });
     }
     if (hasSelectedTask && isLoadingTaskSessionRecords) {
-      return {
+      return lifecycle({
         phase: "resolving_session",
         repoReadinessState,
-      };
+        transcriptState: { kind: "session_loading", reason: "preparing" },
+        isResolving: true,
+      });
     }
     return inactiveSelectedSessionViewLifecycle;
   }
 
   if (!session) {
     const hasLoadFailed = sessionLoadError !== null && sessionLoadError !== undefined;
-    return {
-      phase: hasLoadFailed
-        ? "history_failed"
-        : repoReadinessState !== "ready"
-          ? "resolving_runtime"
-          : "resolving_session",
+    if (hasLoadFailed) {
+      return lifecycle({
+        phase: "history_failed",
+        repoReadinessState,
+        transcriptState: { kind: "failed" },
+        canReadRuntimeDataWhenReady: true,
+      });
+    }
+    if (repoReadinessState !== "ready") {
+      return lifecycle({
+        phase: "resolving_runtime",
+        repoReadinessState,
+        transcriptState: { kind: "runtime_waiting" },
+        isResolving: true,
+      });
+    }
+    return lifecycle({
+      phase: "resolving_session",
       repoReadinessState,
-    };
+      transcriptState: { kind: "session_loading", reason: "preparing" },
+      isResolving: true,
+    });
   }
 
   return deriveAgentSessionViewLifecycle({ session, repoReadinessState });

@@ -49,7 +49,7 @@ export type AgentChatThreadSession = Pick<
 
 export type AgentChatThreadSessionLifecycle = Pick<
   SelectedAgentSessionViewLifecycle,
-  "phase" | "repoReadinessState"
+  "phase" | "repoReadinessState" | "transcriptState"
 >;
 
 export type AgentChatThreadRuntimeReadiness = {

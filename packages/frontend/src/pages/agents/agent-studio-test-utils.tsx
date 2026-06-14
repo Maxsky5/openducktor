@@ -14,7 +14,11 @@ import {
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type {
+  AgentSessionTranscriptState,
+  AgentSessionViewLifecyclePhase,
+  SelectedAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
@@ -55,11 +59,65 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
 
 export const createSelectedSessionLifecycleFixture = (
   overrides: Partial<SelectedAgentSessionViewLifecycle> = {},
-): SelectedAgentSessionViewLifecycle => ({
-  phase: "ready",
-  repoReadinessState: "ready",
-  ...overrides,
-});
+): SelectedAgentSessionViewLifecycle => {
+  const phase = overrides.phase ?? "ready";
+  const repoReadinessState = overrides.repoReadinessState ?? "ready";
+  const transcriptState = overrides.transcriptState ?? transcriptStateForLifecyclePhase(phase);
+
+  return {
+    phase,
+    repoReadinessState,
+    transcriptState,
+    canReadRuntimeData:
+      overrides.canReadRuntimeData ??
+      (repoReadinessState === "ready" && canReadRuntimeDataForLifecyclePhase(phase)),
+    shouldLoadHistory:
+      overrides.shouldLoadHistory ??
+      (repoReadinessState === "ready" && shouldLoadHistoryForLifecyclePhase(phase)),
+    isResolving: overrides.isResolving ?? isResolvingLifecyclePhase(phase),
+    isRuntimeWaiting: overrides.isRuntimeWaiting ?? transcriptState.kind === "runtime_waiting",
+    isLoading:
+      overrides.isLoading ??
+      (transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading"),
+  };
+};
+
+const transcriptStateForLifecyclePhase = (
+  phase: AgentSessionViewLifecyclePhase,
+): AgentSessionTranscriptState => {
+  switch (phase) {
+    case "inactive":
+      return { kind: "empty" };
+    case "resolving_session":
+      return { kind: "session_loading", reason: "preparing" };
+    case "resolving_runtime":
+    case "waiting_for_runtime":
+      return { kind: "runtime_waiting" };
+    case "needs_initial_history":
+    case "loading_history":
+      return { kind: "session_loading", reason: "history" };
+    case "history_failed":
+      return { kind: "failed" };
+    case "needs_history":
+    case "refreshing_history":
+    case "ready":
+      return { kind: "visible" };
+  }
+};
+
+const canReadRuntimeDataForLifecyclePhase = (phase: AgentSessionViewLifecyclePhase): boolean =>
+  phase === "needs_initial_history" ||
+  phase === "needs_history" ||
+  phase === "loading_history" ||
+  phase === "refreshing_history" ||
+  phase === "history_failed" ||
+  phase === "ready";
+
+const shouldLoadHistoryForLifecyclePhase = (phase: AgentSessionViewLifecyclePhase): boolean =>
+  phase === "needs_initial_history" || phase === "needs_history";
+
+const isResolvingLifecyclePhase = (phase: AgentSessionViewLifecyclePhase): boolean =>
+  phase === "resolving_session" || phase === "resolving_runtime";
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,

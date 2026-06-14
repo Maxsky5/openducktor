@@ -10,6 +10,7 @@ import {
   buildModelSelection,
   buildQuestionRequest,
   buildSession,
+  buildThreadLifecycle,
   buildTodoItem,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
@@ -22,10 +23,7 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 
 const buildBaseModel = () => ({
   isSessionWorking: false,
-  sessionLifecycle: {
-    phase: "ready" as const,
-    repoReadinessState: "ready" as const,
-  },
+  sessionLifecycle: buildThreadLifecycle(),
   runtimeReadiness: {
     readinessState: "ready" as const,
     isReady: true,
@@ -355,10 +353,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: {
+          sessionLifecycle: buildThreadLifecycle({
             phase: "waiting_for_runtime",
             repoReadinessState: "blocked",
-          },
+          }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
             readinessState: "blocked",
@@ -406,10 +404,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: {
+          sessionLifecycle: buildThreadLifecycle({
             phase: "history_failed",
             repoReadinessState: "ready",
-          },
+          }),
           isInteractionEnabled: false,
           session: null,
         },
@@ -426,10 +424,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: {
+          sessionLifecycle: buildThreadLifecycle({
             phase: "waiting_for_runtime",
             repoReadinessState: "checking",
-          },
+          }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
             readinessState: "checking",
@@ -454,10 +452,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: {
+          sessionLifecycle: buildThreadLifecycle({
             phase: "waiting_for_runtime",
             repoReadinessState: "checking",
-          },
+          }),
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
           }),
@@ -1091,10 +1089,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: {
+          sessionLifecycle: buildThreadLifecycle({
             phase: "resolving_session",
             repoReadinessState: "ready",
-          },
+          }),
           isContextSwitching: true,
           session: buildSession({
             externalSessionId: "session-loading",
@@ -1113,10 +1111,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: {
+          sessionLifecycle: buildThreadLifecycle({
             phase: "refreshing_history",
             repoReadinessState: "ready",
-          },
+          }),
           session: buildSession({
             externalSessionId: "session-hydrating",
             messages: [buildMessage("assistant", "Old cached message", { id: "assistant-old-1" })],
@@ -1152,10 +1150,10 @@ describe("AgentChatThread", () => {
     });
     const model = {
       ...buildBaseModel(),
-      sessionLifecycle: {
-        phase: "refreshing_history" as const,
-        repoReadinessState: "ready" as const,
-      },
+      sessionLifecycle: buildThreadLifecycle({
+        phase: "refreshing_history",
+        repoReadinessState: "ready",
+      }),
       session,
     };
 

@@ -3,10 +3,7 @@ import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import {
-  canReadAgentSessionRuntimeData,
-  type SelectedAgentSessionViewLifecycle,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { resolveRuntimeWorkingDirectoryRefState } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
   agentSessionRuntimeQueryKeys,
@@ -55,7 +52,7 @@ export const useSessionRuntimeData = ({
     [repoPath, session],
   );
   const canReadSessionRuntimeData =
-    canReadAgentSessionRuntimeData(sessionLifecycle) &&
+    sessionLifecycle.canReadRuntimeData &&
     runtimeRef !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";

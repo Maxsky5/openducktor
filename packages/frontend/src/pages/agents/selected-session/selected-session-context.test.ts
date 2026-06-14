@@ -3,7 +3,6 @@ import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import { isSelectedAgentSessionWaitingForRuntimeReadiness } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -248,7 +247,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.runtime.sessionRuntimeDataError).toBe("session todos unavailable");
-    expect(isSelectedAgentSessionWaitingForRuntimeReadiness(context.runtime.lifecycle)).toBe(true);
+    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(true);
     expect(context.runtime.runtimeReadiness).toMatchObject({
       readinessState: "blocked",
       isReady: false,
@@ -278,7 +277,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(isSelectedAgentSessionWaitingForRuntimeReadiness(context.runtime.lifecycle)).toBe(true);
+    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(true);
     expect(context.chat.emptyState).toBeNull();
   });
 
@@ -300,7 +299,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(isSelectedAgentSessionWaitingForRuntimeReadiness(context.runtime.lifecycle)).toBe(false);
+    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(false);
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {
