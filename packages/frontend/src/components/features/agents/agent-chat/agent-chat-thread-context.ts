@@ -6,7 +6,7 @@ import type { AgentChatThreadSession } from "./agent-chat.types";
 
 export type AgentChatThreadLifecycle = Pick<
   AgentSessionViewLifecycle,
-  "phase" | "canRenderHistory"
+  "phase" | "repoReadinessState"
 >;
 
 type ResolveAgentChatThreadContextArgs = {

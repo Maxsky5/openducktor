@@ -57,9 +57,7 @@ export const createSelectedSessionLifecycleFixture = (
   overrides: Partial<SelectedAgentSessionViewLifecycle> = {},
 ): SelectedAgentSessionViewLifecycle => ({
   phase: "ready",
-  canReadRuntimeData: true,
-  canRenderHistory: true,
-  shouldLoadHistory: false,
+  repoReadinessState: "ready",
   ...overrides,
 });
 

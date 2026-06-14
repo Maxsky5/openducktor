@@ -2,17 +2,17 @@ import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { coerceVisibleSelectionToCatalog } from "@/features/session-start";
 
 export const resolveRoleDefaultSelectionForComposer = ({
-  hasActiveSession,
+  hasSessionTarget,
   composerCatalog,
   isAwaitingRepoSettingsForWorkspaceRepoPath,
   roleDefaultSelection,
 }: {
-  hasActiveSession: boolean;
+  hasSessionTarget: boolean;
   composerCatalog: AgentModelCatalog | null;
   isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
   roleDefaultSelection: AgentModelSelection | null;
 }): AgentModelSelection | null => {
-  if (hasActiveSession) {
+  if (hasSessionTarget) {
     return roleDefaultSelection;
   }
   if (!composerCatalog) {
@@ -22,19 +22,19 @@ export const resolveRoleDefaultSelectionForComposer = ({
 };
 
 export const resolveSelectionCatalogLoading = ({
-  hasActiveSession,
+  hasSessionTarget,
   activeSessionIsLoadingModelCatalog,
   activeSessionModelCatalog,
   composerCatalog,
   isLoadingComposerCatalog,
 }: {
-  hasActiveSession: boolean;
+  hasSessionTarget: boolean;
   activeSessionIsLoadingModelCatalog: boolean;
   activeSessionModelCatalog: AgentModelCatalog | null;
   composerCatalog: AgentModelCatalog | null;
   isLoadingComposerCatalog: boolean;
 }): boolean => {
-  if (hasActiveSession) {
+  if (hasSessionTarget) {
     return (
       !activeSessionModelCatalog &&
       !composerCatalog &&

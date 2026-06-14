@@ -21,7 +21,7 @@ describe("useChatComposerSkills", () => {
     const harness = createHookHarness(
       useChatComposerSkills,
       {
-        hasActiveSession: true,
+        hasSessionTarget: true,
         activeSessionStatus: "idle",
         activeSessionRuntimeRef: null,
         activeSessionRuntimeRefError:
@@ -64,7 +64,7 @@ describe("useChatComposerSkills", () => {
     const harness = createHookHarness(
       useChatComposerSkills,
       {
-        hasActiveSession: true,
+        hasSessionTarget: true,
         activeSessionStatus: "idle",
         activeSessionRuntimeRef: {
           repoPath: "/repo",

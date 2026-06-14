@@ -8,7 +8,7 @@ import { repoRuntimeSkillsQueryOptions } from "@/state/queries/runtime-catalog";
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
 type UseChatComposerSkillsArgs = {
-  hasActiveSession: boolean;
+  hasSessionTarget: boolean;
   activeSessionStatus: string | null;
   activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
   activeSessionRuntimeRefError: string | null;
@@ -28,7 +28,7 @@ type UseChatComposerSkillsArgs = {
 };
 
 export const useChatComposerSkills = ({
-  hasActiveSession,
+  hasSessionTarget,
   activeSessionStatus,
   activeSessionRuntimeRef,
   activeSessionRuntimeRefError,
@@ -59,7 +59,7 @@ export const useChatComposerSkills = ({
         }),
     enabled:
       supportsSkillReferences &&
-      hasActiveSession &&
+      hasSessionTarget &&
       activeSessionStatus !== "starting" &&
       activeSessionRuntimeRef !== null &&
       activeSessionRuntimeRefError === null &&
@@ -75,7 +75,7 @@ export const useChatComposerSkills = ({
     ),
     enabled:
       supportsSkillReferences &&
-      !hasActiveSession &&
+      !hasSessionTarget &&
       workspaceRepoPath !== null &&
       selectedRuntimeKind !== null,
   });
@@ -83,7 +83,7 @@ export const useChatComposerSkills = ({
   let catalog = EMPTY_SKILL_CATALOG;
   let error: string | null = null;
   let isLoading = false;
-  if (supportsSkillReferences && hasActiveSession) {
+  if (supportsSkillReferences && hasSessionTarget) {
     catalog = activeSessionSkillsQuery.data ?? EMPTY_SKILL_CATALOG;
     error =
       activeSessionRuntimeRefError ??

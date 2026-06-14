@@ -9,6 +9,7 @@ import { createComposerDraft } from "@/components/features/agents/agent-chat/age
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
+import { getAgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -483,7 +484,8 @@ describe("useAgentStudioPageModels", () => {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
-            phase: "waiting_for_runtime",
+            phase: "needs_history",
+            repoReadinessState: "checking",
           }),
         },
         readiness: {
@@ -497,8 +499,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.sessionLifecycle.phase).toBe("waiting_for_runtime");
-    expect(thread.sessionLifecycle.canRenderHistory).toBe(true);
+    expect(thread.sessionLifecycle.phase).toBe("needs_history");
+    expect(getAgentSessionTranscriptState(thread.sessionLifecycle)).toEqual({ kind: "visible" });
     expect(thread.runtimeReadiness.readinessState).toBe("checking");
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",
@@ -517,7 +519,6 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [selectedSummary],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_runtime",
-            canRenderHistory: false,
           }),
         },
         readiness: {
@@ -552,7 +553,6 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_runtime",
-            canRenderHistory: false,
           }),
         },
         readiness: {
@@ -587,7 +587,6 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_session",
-            canRenderHistory: false,
           }),
           isChatContextSwitching: true,
         },
@@ -626,8 +625,7 @@ describe("useAgentStudioPageModels", () => {
           activeSession: cachedSession,
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
-            canRenderHistory: true,
-            phase: "loading_history",
+            phase: "refreshing_history",
           }),
         },
       }),
@@ -637,8 +635,7 @@ describe("useAgentStudioPageModels", () => {
 
     const thread = harness.getLatest().agentChatModel.thread;
     expect(thread.sessionLifecycle).toMatchObject({
-      phase: "loading_history",
-      canRenderHistory: true,
+      phase: "refreshing_history",
     });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
@@ -713,7 +710,6 @@ describe("useAgentStudioPageModels", () => {
           activeSession: pendingSession,
           sessionsForTask: [pendingSession],
           lifecycle: createSelectedSessionLifecycleFixture({
-            canRenderHistory: false,
             phase: "loading_history",
           }),
         },
@@ -724,7 +720,6 @@ describe("useAgentStudioPageModels", () => {
 
     expect(harness.getLatest().agentChatModel.thread.sessionLifecycle).toMatchObject({
       phase: "loading_history",
-      canRenderHistory: false,
     });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),

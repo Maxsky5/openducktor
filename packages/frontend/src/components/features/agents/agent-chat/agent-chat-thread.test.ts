@@ -24,8 +24,7 @@ const buildBaseModel = () => ({
   isSessionWorking: false,
   sessionLifecycle: {
     phase: "ready" as const,
-    canRenderHistory: true,
-    shouldLoadHistory: false as const,
+    repoReadinessState: "ready" as const,
   },
   runtimeReadiness: {
     readinessState: "ready" as const,
@@ -358,8 +357,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           sessionLifecycle: {
             phase: "waiting_for_runtime",
-            canRenderHistory: false,
-            shouldLoadHistory: false,
+            repoReadinessState: "blocked",
           },
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
@@ -410,8 +408,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           sessionLifecycle: {
             phase: "history_failed",
-            canRenderHistory: false,
-            shouldLoadHistory: false,
+            repoReadinessState: "ready",
           },
           isInteractionEnabled: false,
           session: null,
@@ -431,8 +428,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           sessionLifecycle: {
             phase: "waiting_for_runtime",
-            canRenderHistory: true,
-            shouldLoadHistory: false,
+            repoReadinessState: "checking",
           },
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
@@ -460,8 +456,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           sessionLifecycle: {
             phase: "waiting_for_runtime",
-            canRenderHistory: true,
-            shouldLoadHistory: false,
+            repoReadinessState: "checking",
           },
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
@@ -1098,8 +1093,7 @@ describe("AgentChatThread", () => {
           ...buildBaseModel(),
           sessionLifecycle: {
             phase: "resolving_session",
-            canRenderHistory: false,
-            shouldLoadHistory: false,
+            repoReadinessState: "ready",
           },
           isContextSwitching: true,
           session: buildSession({
@@ -1120,9 +1114,8 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: {
-            phase: "loading_history",
-            canRenderHistory: false,
-            shouldLoadHistory: false,
+            phase: "refreshing_history",
+            repoReadinessState: "ready",
           },
           session: buildSession({
             externalSessionId: "session-hydrating",
@@ -1132,8 +1125,8 @@ describe("AgentChatThread", () => {
       }),
     );
 
-    expect(html).toContain("Loading session");
-    expect(html).toContain("Loading the selected conversation.");
+    expect(html).not.toContain("Loading session");
+    expect(html).not.toContain("Loading the selected conversation.");
     expect(html).toContain("Old cached message");
   });
 
@@ -1160,9 +1153,8 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       sessionLifecycle: {
-        phase: "loading_history" as const,
-        canRenderHistory: false,
-        shouldLoadHistory: false as const,
+        phase: "refreshing_history" as const,
+        repoReadinessState: "ready" as const,
       },
       session,
     };

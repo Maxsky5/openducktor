@@ -19,6 +19,7 @@ export type ActiveSessionChatComposerSummary = Pick<
 >;
 
 export type ActiveSessionChatComposerContext = {
+  source: "none" | "summary" | "loaded";
   externalSessionId: string | null;
   status: AgentSessionState["status"] | null;
   selectedModel: AgentModelSelection | null;
@@ -26,8 +27,6 @@ export type ActiveSessionChatComposerContext = {
   workingDirectory: string;
   liveContextUsage: AgentSessionState["contextUsage"] | null;
   messages: AgentSessionState["messages"] | null;
-  hasActiveSession: boolean;
-  hasLoadedActiveSession: boolean;
 };
 
 export const resolveActiveSessionChatComposerContext = (
@@ -39,6 +38,7 @@ export const resolveActiveSessionChatComposerContext = (
   const selectedModel = activeSession?.selectedModel ?? activeSessionSummary?.selectedModel ?? null;
 
   return {
+    source: activeSession ? "loaded" : activeSessionSummary ? "summary" : "none",
     externalSessionId,
     status: activeSession?.status ?? activeSessionSummary?.status ?? null,
     selectedModel,
@@ -49,7 +49,5 @@ export const resolveActiveSessionChatComposerContext = (
       "",
     liveContextUsage: activeSession?.contextUsage ?? null,
     messages: activeSession?.messages ?? null,
-    hasActiveSession: externalSessionId !== null,
-    hasLoadedActiveSession: activeSession !== null,
   };
 };

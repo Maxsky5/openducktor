@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
+  getAgentSessionTranscriptState,
   isSelectedAgentSessionViewLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
@@ -164,8 +165,10 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
-    expect(mapped.selectedSession.runtime.lifecycle.canRenderHistory).toBe(true);
     expect(mapped.selectedSession.runtime.lifecycle.phase).toBe("ready");
+    expect(getAgentSessionTranscriptState(mapped.selectedSession.runtime.lifecycle)).toEqual({
+      kind: "visible",
+    });
     expect(
       isSelectedAgentSessionWaitingForRuntimeReadiness(mapped.selectedSession.runtime.lifecycle),
     ).toBe(false);
@@ -237,7 +240,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       isSessionSelectionResolving: true,
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
         phase: "resolving_runtime",
-        canRenderHistory: false,
       }),
       activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
       documents: baseDocuments,

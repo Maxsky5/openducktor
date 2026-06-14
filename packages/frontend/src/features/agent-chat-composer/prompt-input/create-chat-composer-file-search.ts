@@ -5,7 +5,7 @@ import { sessionFileSearchQueryOptions } from "@/state/queries/agent-session-run
 import { repoRuntimeFileSearchQueryOptions } from "@/state/queries/runtime-catalog";
 
 export const createChatComposerFileSearch = ({
-  hasActiveSession,
+  hasSessionTarget,
   activeSessionRuntimeRef,
   activeSessionRuntimeRefError,
   workspaceRepoPath,
@@ -15,7 +15,7 @@ export const createChatComposerFileSearch = ({
   loadFileSearchForRepo,
   readSessionFileSearch,
 }: {
-  hasActiveSession: boolean;
+  hasSessionTarget: boolean;
   activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
   activeSessionRuntimeRefError: string | null;
   workspaceRepoPath: string | null;
@@ -35,7 +35,7 @@ export const createChatComposerFileSearch = ({
   ) => Promise<AgentFileSearchResult[]>;
 }): ((query: string) => Promise<AgentFileSearchResult[]>) => {
   return async (query: string): Promise<AgentFileSearchResult[]> => {
-    if (hasActiveSession) {
+    if (hasSessionTarget) {
       if (activeSessionRuntimeRefError) {
         throw new Error(activeSessionRuntimeRefError);
       }

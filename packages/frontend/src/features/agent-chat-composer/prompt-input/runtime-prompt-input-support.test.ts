@@ -11,7 +11,7 @@ describe("runtime-prompt-input-support", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        hasActiveSession: false,
+        hasSessionTarget: false,
         activeSessionRuntimeKind: null,
         selectedRuntimeKind: "opencode",
       }),
@@ -26,7 +26,7 @@ describe("runtime-prompt-input-support", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [CODEX_RUNTIME_DESCRIPTOR],
-        hasActiveSession: false,
+        hasSessionTarget: false,
         activeSessionRuntimeKind: null,
         selectedRuntimeKind: "codex",
       }),
@@ -41,7 +41,7 @@ describe("runtime-prompt-input-support", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        hasActiveSession: false,
+        hasSessionTarget: false,
         activeSessionRuntimeKind: null,
         selectedRuntimeKind: null,
       }),
@@ -56,7 +56,7 @@ describe("runtime-prompt-input-support", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        hasActiveSession: true,
+        hasSessionTarget: true,
         activeSessionRuntimeKind: "opencode",
         selectedRuntimeKind: "unregistered-runtime" as RuntimeKind,
       }),
@@ -71,7 +71,7 @@ describe("runtime-prompt-input-support", () => {
     expect(
       resolveRuntimePromptInputSupport({
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-        hasActiveSession: true,
+        hasSessionTarget: true,
         activeSessionRuntimeKind: null,
         selectedRuntimeKind: "opencode",
       }),

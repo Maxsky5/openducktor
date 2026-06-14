@@ -31,8 +31,7 @@ const createThreadModel = (
   isSessionWorking: false,
   sessionLifecycle: {
     phase: "ready",
-    canRenderHistory: true,
-    shouldLoadHistory: false,
+    repoReadinessState: "ready",
   },
   runtimeReadiness: {
     readinessState: "ready",

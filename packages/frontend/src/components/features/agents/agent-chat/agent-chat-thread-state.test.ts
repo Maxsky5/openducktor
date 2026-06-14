@@ -3,8 +3,7 @@ import { getAgentChatThreadState } from "./agent-chat-thread-state";
 
 const readyLifecycle = {
   phase: "ready" as const,
-  canRenderHistory: true,
-  shouldLoadHistory: false as const,
+  repoReadinessState: "ready" as const,
 };
 
 const readyRuntimeReadiness = {
@@ -21,8 +20,7 @@ describe("getAgentChatThreadState", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: {
         phase: "waiting_for_runtime",
-        canRenderHistory: false,
-        shouldLoadHistory: false,
+        repoReadinessState: "checking",
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -40,8 +38,7 @@ describe("getAgentChatThreadState", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: {
         phase: "loading_history",
-        canRenderHistory: false,
-        shouldLoadHistory: false,
+        repoReadinessState: "ready",
       },
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,
@@ -86,8 +83,7 @@ describe("getAgentChatThreadState", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: {
         phase: "history_failed",
-        canRenderHistory: false,
-        shouldLoadHistory: false,
+        repoReadinessState: "ready",
       },
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,
@@ -104,9 +100,8 @@ describe("getAgentChatThreadState", () => {
   test("does not let blocked runtime readiness hide a renderable transcript", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: {
-        phase: "loading_history",
-        canRenderHistory: true,
-        shouldLoadHistory: false,
+        phase: "refreshing_history",
+        repoReadinessState: "ready",
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -127,8 +122,7 @@ describe("getAgentChatThreadState", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: {
         phase: "history_failed",
-        canRenderHistory: false,
-        shouldLoadHistory: false,
+        repoReadinessState: "ready",
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -151,8 +145,7 @@ describe("getAgentChatThreadState", () => {
     const visible = getAgentChatThreadState({
       sessionLifecycle: {
         phase: "waiting_for_runtime",
-        canRenderHistory: false,
-        shouldLoadHistory: false,
+        repoReadinessState: "blocked",
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -166,8 +159,7 @@ describe("getAgentChatThreadState", () => {
     const hidden = getAgentChatThreadState({
       sessionLifecycle: {
         phase: "waiting_for_runtime",
-        canRenderHistory: false,
-        shouldLoadHistory: false,
+        repoReadinessState: "blocked",
       },
       runtimeReadiness: {
         ...readyRuntimeReadiness,

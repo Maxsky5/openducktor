@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  canReadAgentSessionRuntimeData,
   deriveAgentSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
   getAgentSessionTranscriptState,
   isSelectedAgentSessionViewLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
+  shouldLoadAgentSessionHistory,
 } from "./session-view-lifecycle";
 
 const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -47,8 +49,9 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.phase).toBe("needs_history");
-    expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(true);
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(true);
   });
 
   test("requests background history load after a prior history failure when transcript exists", () => {
@@ -68,8 +71,8 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.phase).toBe("needs_history");
-    expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(true);
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(true);
   });
 
   test("renders running sessions immediately without view readiness loading", () => {
@@ -92,8 +95,9 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.phase).toBe("ready");
-    expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
   });
 
   test("renders running planner sessions immediately when durable runtime context is available", () => {
@@ -116,9 +120,9 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.phase).toBe("ready");
-    expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.canReadRuntimeData).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+    expect(canReadAgentSessionRuntimeData(lifecycle)).toBe(true);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
   });
 
   test("loads a cold running session transcript before rendering it", () => {
@@ -133,9 +137,12 @@ describe("deriveAgentSessionViewLifecycle", () => {
       repoReadinessState: "ready",
     });
 
-    expect(lifecycle.phase).toBe("loading_history");
-    expect(lifecycle.canRenderHistory).toBe(false);
-    expect(lifecycle.shouldLoadHistory).toBe(true);
+    expect(lifecycle.phase).toBe("needs_initial_history");
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(true);
   });
 
   test("keeps a cold running session in loading state while history is in flight", () => {
@@ -151,8 +158,36 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.phase).toBe("loading_history");
-    expect(lifecycle.canRenderHistory).toBe(false);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
+      kind: "session_loading",
+      reason: "history",
+    });
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
+  });
+
+  test("keeps a renderable transcript stable while history is refreshing", () => {
+    const lifecycle = deriveAgentSessionViewLifecycle({
+      session: createSession({
+        status: "running",
+        historyLoadState: "loading",
+        runtimeKind: "codex",
+        workingDirectory: "/tmp/repo/worktree",
+        messages: [
+          {
+            id: "message-1",
+            role: "assistant",
+            content: "already visible",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.phase).toBe("refreshing_history");
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
   });
 
   test("does not request view readiness while a local outbound send is pending", () => {
@@ -176,8 +211,8 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.phase).toBe("ready");
-    expect(lifecycle.canRenderHistory).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
   });
 });
 
@@ -199,16 +234,13 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
     expect(lifecycle).toMatchObject({
       phase: "resolving_runtime",
-      canReadRuntimeData: false,
-      canRenderHistory: false,
-      shouldLoadHistory: false,
     });
     expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
       kind: "runtime_waiting",
     });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
   });
 
   test("surfaces selected session load failures without a second local state machine", () => {
@@ -222,14 +254,11 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
     expect(lifecycle).toMatchObject({
       phase: "history_failed",
-      canReadRuntimeData: false,
-      canRenderHistory: false,
-      shouldLoadHistory: false,
     });
     expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "failed" });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
   });
 
   test("delegates selected active session readiness to the session lifecycle", () => {
@@ -242,10 +271,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle).toMatchObject({
-      phase: "loading_history",
-      canReadRuntimeData: true,
-      canRenderHistory: false,
-      shouldLoadHistory: true,
+      phase: "needs_initial_history",
     });
     expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
       kind: "session_loading",
@@ -253,7 +279,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
-    expect(lifecycle.shouldLoadHistory).toBe(true);
+    expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(true);
   });
 
   test("keeps a selected task in runtime loading instead of inactive while repo runtime is checking", () => {
@@ -267,9 +293,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
     expect(lifecycle).toMatchObject({
       phase: "waiting_for_runtime",
-      canReadRuntimeData: false,
-      canRenderHistory: false,
-      shouldLoadHistory: false,
     });
     expect(getAgentSessionTranscriptState(lifecycle)).toEqual({
       kind: "runtime_waiting",
@@ -289,9 +312,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
     expect(lifecycle).toMatchObject({
       phase: "inactive",
-      canReadRuntimeData: false,
-      canRenderHistory: false,
-      shouldLoadHistory: false,
     });
     expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "empty" });
     expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);

@@ -198,8 +198,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         lifecycle: createSelectedSessionLifecycleFixture({
           phase: "inactive",
-          canReadRuntimeData: false,
-          canRenderHistory: false,
         }),
         sessionActions: {
           ...createInput().sessionActions,
@@ -218,8 +216,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         lifecycle: createSelectedSessionLifecycleFixture({
           phase: "inactive",
-          canReadRuntimeData: false,
-          canRenderHistory: false,
         }),
         sessionActions: {
           ...createInput().sessionActions,

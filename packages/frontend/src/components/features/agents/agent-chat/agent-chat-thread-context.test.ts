@@ -20,7 +20,7 @@ const createLifecycle = (
   overrides: Partial<AgentChatThreadLifecycle> = {},
 ): AgentChatThreadLifecycle => ({
   phase: "ready",
-  canRenderHistory: true,
+  repoReadinessState: "ready",
   ...overrides,
 });
 
@@ -50,7 +50,7 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: null,
         lifecycle: createLifecycle({
           phase: "resolving_session",
-          canRenderHistory: false,
+          repoReadinessState: "ready",
         }),
         isContextSwitching: true,
       }),
@@ -72,7 +72,7 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: staleSession,
         lifecycle: createLifecycle({
           phase: "resolving_session",
-          canRenderHistory: false,
+          repoReadinessState: "ready",
         }),
         isContextSwitching: true,
       }),
@@ -94,7 +94,7 @@ describe("resolveAgentChatThreadContext", () => {
         activeSession: session,
         lifecycle: createLifecycle({
           phase: "waiting_for_runtime",
-          canRenderHistory: false,
+          repoReadinessState: "checking",
         }),
         isContextSwitching: true,
       }),
@@ -115,8 +115,8 @@ describe("resolveAgentChatThreadContext", () => {
       resolveAgentChatThreadContext({
         activeSession: session,
         lifecycle: createLifecycle({
-          phase: "loading_history",
-          canRenderHistory: true,
+          phase: "refreshing_history",
+          repoReadinessState: "ready",
         }),
         isContextSwitching: true,
       }),

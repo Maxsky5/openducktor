@@ -16,8 +16,7 @@ const buildModel = () => ({
     isSessionWorking: true,
     sessionLifecycle: {
       phase: "ready" as const,
-      canRenderHistory: true,
-      shouldLoadHistory: false as const,
+      repoReadinessState: "ready" as const,
     },
     runtimeReadiness: {
       readinessState: "ready" as const,

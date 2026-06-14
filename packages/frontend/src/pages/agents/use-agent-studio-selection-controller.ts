@@ -23,6 +23,7 @@ import {
   createFailedSelectedSessionViewLifecycle,
   createResolvingSelectedSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
+  shouldLoadAgentSessionHistory,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -372,14 +373,14 @@ export function useAgentStudioSelectionController({
     repoPath: activeWorkspace?.repoPath ?? null,
     session: viewActiveSession,
     runtimeDefinitions,
-    canReadRuntimeData: selectedSessionLifecycle.canReadRuntimeData,
+    sessionLifecycle: selectedSessionLifecycle,
     readSessionModelCatalog,
     readSessionTodos,
   });
   useEffect(() => {
     if (
       viewSelectedSessionRoute === null ||
-      !selectedSessionLifecycle.shouldLoadHistory ||
+      !shouldLoadAgentSessionHistory(selectedSessionLifecycle) ||
       !viewActiveSession
     ) {
       return;

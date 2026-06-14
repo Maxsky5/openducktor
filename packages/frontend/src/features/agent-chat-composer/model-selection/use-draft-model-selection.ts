@@ -46,7 +46,7 @@ type DraftModelSelectionAction =
       type: "draftSelectionRepaired";
       composerCatalog: AgentModelCatalog | null;
       context: DraftModelSelectionContext;
-      hasActiveSession: boolean;
+      hasSessionTarget: boolean;
       repoSettingsReady: boolean;
       role: AgentRole;
       roleDefaultSelection: AgentModelSelection | null;
@@ -106,7 +106,7 @@ const draftModelSelectionReducer = (
         },
       };
     case "draftSelectionRepaired": {
-      if (action.hasActiveSession || !action.composerCatalog) {
+      if (action.hasSessionTarget || !action.composerCatalog) {
         return currentState;
       }
 
@@ -142,7 +142,7 @@ export const useAgentStudioDraftModelSelectionState = ({
   isAwaitingRepoSettingsForWorkspaceRepoPath: boolean;
   applyDraftSelection: (selection: AgentModelSelection | null) => void;
   repairDraftSelection: (input: {
-    hasActiveSession: boolean;
+    hasSessionTarget: boolean;
     composerCatalog: AgentModelCatalog | null;
     roleDefaultSelection: AgentModelSelection | null;
   }) => void;
@@ -178,11 +178,11 @@ export const useAgentStudioDraftModelSelectionState = ({
 
   const repairDraftSelection = useCallback(
     ({
-      hasActiveSession,
+      hasSessionTarget,
       composerCatalog,
       roleDefaultSelection,
     }: {
-      hasActiveSession: boolean;
+      hasSessionTarget: boolean;
       composerCatalog: AgentModelCatalog | null;
       roleDefaultSelection: AgentModelSelection | null;
     }): void => {
@@ -190,7 +190,7 @@ export const useAgentStudioDraftModelSelectionState = ({
         type: "draftSelectionRepaired",
         composerCatalog,
         context: draftContext,
-        hasActiveSession,
+        hasSessionTarget,
         repoSettingsReady,
         role,
         roleDefaultSelection,

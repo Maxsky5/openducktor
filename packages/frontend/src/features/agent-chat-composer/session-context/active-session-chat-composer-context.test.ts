@@ -42,8 +42,7 @@ describe("active-session-chat-composer-context", () => {
     expect(state.selectedModel).toEqual(loadedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo/session-worktree");
-    expect(state.hasActiveSession).toBe(true);
-    expect(state.hasLoadedActiveSession).toBe(true);
+    expect(state.source).toBe("loaded");
   });
 
   test("keeps summary selection available while the loaded session is missing", () => {
@@ -54,7 +53,21 @@ describe("active-session-chat-composer-context", () => {
     expect(state.selectedModel).toEqual(summary.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
-    expect(state.hasActiveSession).toBe(true);
-    expect(state.hasLoadedActiveSession).toBe(false);
+    expect(state.source).toBe("summary");
+  });
+
+  test("keeps the no-session composer context explicit", () => {
+    const state = resolveActiveSessionChatComposerContext(null, null);
+
+    expect(state).toMatchObject({
+      source: "none",
+      externalSessionId: null,
+      status: null,
+      selectedModel: null,
+      runtimeKind: null,
+      workingDirectory: "",
+      liveContextUsage: null,
+      messages: null,
+    });
   });
 });

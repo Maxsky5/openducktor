@@ -405,7 +405,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
       expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
         phase: "loading_history",
-        canRenderHistory: false,
       });
       expect(harness.getLatest().model.thread.emptyState).toBe(null);
 
@@ -510,7 +509,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
       });
       expect(model.thread.sessionLifecycle).toMatchObject({
         phase: "ready",
-        canRenderHistory: true,
       });
       expect(model.thread.canReplyToApprovals).toBe(true);
       expect(readSessionHistory).not.toHaveBeenCalled();

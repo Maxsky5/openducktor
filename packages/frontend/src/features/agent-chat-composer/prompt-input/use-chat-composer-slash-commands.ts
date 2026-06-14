@@ -28,8 +28,7 @@ export const mergeSlashCommands = (
 };
 
 export const useChatComposerSlashCommands = ({
-  hasActiveSession,
-  activeExternalSessionId,
+  hasSessionTarget,
   activeSessionStatus,
   activeSessionRuntimeRef,
   activeSessionRuntimeRefError,
@@ -40,8 +39,7 @@ export const useChatComposerSlashCommands = ({
   loadSlashCommandsForRepo,
   readSessionSlashCommands,
 }: {
-  hasActiveSession: boolean;
-  activeExternalSessionId: string | null;
+  hasSessionTarget: boolean;
   activeSessionStatus: AgentSessionState["status"] | null;
   activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
   activeSessionRuntimeRefError: string | null;
@@ -79,7 +77,7 @@ export const useChatComposerSlashCommands = ({
         }),
     enabled:
       runtimeSupportsSlashCommands &&
-      hasActiveSession &&
+      hasSessionTarget &&
       activeSessionStatus !== "starting" &&
       activeSessionRuntimeRef !== null &&
       activeSessionRuntimeRefError === null &&
@@ -94,10 +92,10 @@ export const useChatComposerSlashCommands = ({
     enabled:
       runtimeSupportsSlashCommands &&
       workspaceRepoPath !== null &&
-      activeExternalSessionId === null &&
+      !hasSessionTarget &&
       selectedRuntimeKind !== null,
   });
-  const runtimeSlashCommandCatalog = hasActiveSession
+  const runtimeSlashCommandCatalog = hasSessionTarget
     ? (activeSessionSlashCommandsQuery.data ?? null)
     : (repoSlashCommandsQuery.data ?? null);
   const reusablePromptSlashCommands = useMemo(
@@ -117,7 +115,7 @@ export const useChatComposerSlashCommands = ({
     [slashCommands],
   );
   const slashCommandsError = runtimeSupportsSlashCommands
-    ? hasActiveSession
+    ? hasSessionTarget
       ? activeSessionSlashCommandsQuery.error instanceof Error
         ? activeSessionSlashCommandsQuery.error.message
         : null
@@ -126,7 +124,7 @@ export const useChatComposerSlashCommands = ({
         : null
     : null;
   const isSlashCommandsLoading = runtimeSupportsSlashCommands
-    ? hasActiveSession
+    ? hasSessionTarget
       ? activeSessionSlashCommandsQuery.isLoading
       : repoSlashCommandsQuery.isLoading
     : false;
