@@ -10,7 +10,6 @@ import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
   listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
@@ -37,8 +36,7 @@ export type RepoRuntimeSessionPresenceRead = {
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
-  liveSessions: AgentSessionRef[];
-  initialHistorySessions: AgentSessionState[];
+  sessionObserverRefs: AgentSessionRef[];
 };
 
 const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionRecord[] => {
@@ -172,8 +170,7 @@ export const buildRepoSessionReadModel = ({
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   let sessionCollection = selectLocalSessions(currentSessions, taskSessionRecords);
-  const liveSessions: AgentSessionRef[] = [];
-  const initialHistorySessions: AgentSessionState[] = [];
+  const sessionObserverRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
     const ref = toPersistedSessionRef({ repoPath, record });
@@ -192,34 +189,9 @@ export const buildRepoSessionReadModel = ({
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
     if (presenceProjection.shouldListen) {
-      liveSessions.push(toRuntimeSessionRef(repoPath, session));
-      if (session.historyLoadState === "not_requested") {
-        initialHistorySessions.push(session);
-      }
+      sessionObserverRefs.push(toRuntimeSessionRef(repoPath, session));
     }
   }
 
-  return { sessionCollection, liveSessions, initialHistorySessions };
-};
-
-export const selectRepoSessionHistoryTargets = ({
-  readModel,
-  targetExternalSessionId,
-}: {
-  readModel: RepoSessionReadModel;
-  targetExternalSessionId?: string | null | undefined;
-}): AgentSessionState[] => {
-  const requestedSessionId = targetExternalSessionId?.trim();
-  if (!requestedSessionId) {
-    return readModel.initialHistorySessions;
-  }
-
-  const session = getAgentSessionByExternalSessionId(
-    readModel.sessionCollection,
-    requestedSessionId,
-  );
-  if (!session) {
-    throw new Error(`Cannot load history for unknown session '${requestedSessionId}'.`);
-  }
-  return [session];
+  return { sessionCollection, sessionObserverRefs };
 };

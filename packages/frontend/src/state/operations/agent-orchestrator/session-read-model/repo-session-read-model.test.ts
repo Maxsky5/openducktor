@@ -16,7 +16,6 @@ import { createSessionMessagesState } from "../support/messages";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionPresence,
-  selectRepoSessionHistoryTargets,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
 
@@ -108,7 +107,7 @@ describe("repo session read model", () => {
     expect(session?.status).toBe("idle");
     expect(session?.runtimeKind).toBe(runtimeKind);
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
-    expect(readModel.liveSessions).toEqual([
+    expect(readModel.sessionObserverRefs).toEqual([
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
@@ -186,7 +185,7 @@ describe("repo session read model", () => {
     });
 
     expect(getReadModelSession(secondRead, record.externalSessionId)?.status).toBe("running");
-    expect(secondRead.liveSessions).toEqual([
+    expect(secondRead.sessionObserverRefs).toEqual([
       {
         repoPath: "/repo",
         externalSessionId: record.externalSessionId,
@@ -196,7 +195,7 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("owns initial history targets for live sessions with unloaded history", async () => {
+  test("preserves mounted transcript state while projecting observer refs", async () => {
     const firstRecord = createRecord({ externalSessionId: "external-1" });
     const secondRecord = createRecord({
       externalSessionId: "external-2",
@@ -260,44 +259,18 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.initialHistorySessions.map((session) => session.externalSessionId)).toEqual([
+    expect(readModel.sessionObserverRefs.map((session) => session.externalSessionId)).toEqual([
       firstRecord.externalSessionId,
+      secondRecord.externalSessionId,
     ]);
-    const [historyTarget] = readModel.initialHistorySessions;
-    if (!historyTarget) {
-      throw new Error(`Expected ${firstRecord.externalSessionId} to need initial history.`);
+    const session = getReadModelSession(readModel, firstRecord.externalSessionId);
+    if (!session) {
+      throw new Error(`Expected ${firstRecord.externalSessionId} to be present.`);
     }
-    expect(sessionMessagesToArray(historyTarget).map((message) => message.content)).toEqual([
+    expect(session.historyLoadState).toBe("not_requested");
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Resume after QA rejection",
     ]);
-  });
-
-  test("selects explicit history targets from the repo read model", async () => {
-    const record = createRecord();
-    const tasks = [createTask([record])];
-    const presence = await readRepoRuntimeSessionPresence({
-      repoPath: "/repo",
-      tasks,
-      listSessionPresence: async () => [],
-    });
-    const readModel = buildRepoSessionReadModel({
-      repoPath: "/repo",
-      tasks,
-      runtimePresence: presence,
-    });
-
-    expect(
-      selectRepoSessionHistoryTargets({
-        readModel,
-        targetExternalSessionId: ` ${record.externalSessionId} `,
-      }).map((session) => session.externalSessionId),
-    ).toEqual([record.externalSessionId]);
-    expect(() =>
-      selectRepoSessionHistoryTargets({
-        readModel,
-        targetExternalSessionId: "missing-session",
-      }),
-    ).toThrow("Cannot load history for unknown session 'missing-session'.");
   });
 
   test("surfaces idle status from initial runtime presence", async () => {
@@ -357,7 +330,7 @@ describe("repo session read model", () => {
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
-    expect(readModel.liveSessions).toEqual([]);
+    expect(readModel.sessionObserverRefs).toEqual([]);
   });
 
   test("keeps mounted transcript but clears runtime-owned state when runtime presence is missing", async () => {
@@ -405,7 +378,7 @@ describe("repo session read model", () => {
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
     ]);
-    expect(readModel.liveSessions).toEqual([]);
+    expect(readModel.sessionObserverRefs).toEqual([]);
   });
 
   test("does not reuse mounted state from a different runtime identity", async () => {
@@ -453,7 +426,7 @@ describe("repo session read model", () => {
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(session.historyLoadState).toBe("not_requested");
     expect(sessionMessagesToArray(session)).toEqual([]);
-    expect(readModel.liveSessions).toEqual([]);
+    expect(readModel.sessionObserverRefs).toEqual([]);
   });
 
   test("preserves mounted transcript for an equivalent normalized working directory", async () => {
@@ -659,7 +632,7 @@ describe("repo session read model", () => {
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
-    expect(readModel.liveSessions).toEqual([]);
+    expect(readModel.sessionObserverRefs).toEqual([]);
   });
 
   test("drops local task sessions that are no longer present in persisted task records", async () => {
@@ -698,7 +671,7 @@ describe("repo session read model", () => {
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
-    expect(readModel.liveSessions).toEqual([]);
+    expect(readModel.sessionObserverRefs).toEqual([]);
   });
 
   test("keeps local starting sessions while their persisted record is not visible yet", async () => {

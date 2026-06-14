@@ -165,12 +165,28 @@ describe("createLoadAgentSessions", () => {
     });
 
     await harness.loadAgentSessions("task-1", {
-      targetExternalSessionId: "external-1",
+      targetExternalSessionId: " external-1 ",
       persistedRecords: [record],
     });
 
     expect(historyLoads).toBe(1);
     expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
+  });
+
+  test("fails explicit history loading for an unknown session", async () => {
+    const harness = createLoaderHarness({
+      listSessionPresence: async () => [],
+      loadSessionHistory: async () => {
+        throw new Error("History must not load for an unknown session.");
+      },
+    });
+
+    await expect(
+      harness.loadAgentSessions("task-1", {
+        targetExternalSessionId: "missing-session",
+        persistedRecords: [record],
+      }),
+    ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });
 
   test("waits for runtime presence before committing persisted session state", async () => {

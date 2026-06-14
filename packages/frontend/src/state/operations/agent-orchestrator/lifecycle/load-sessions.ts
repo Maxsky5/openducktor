@@ -1,10 +1,12 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import type {
-  AgentSessionCollection,
-  AgentSessionCollectionUpdater,
+import {
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  getAgentSession,
+  getAgentSessionByExternalSessionId,
 } from "@/state/agent-session-collection";
 import type {
   AgentSessionIdentity,
@@ -15,7 +17,6 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionPresence,
-  selectRepoSessionHistoryTargets,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
 import { loadTaskSessionRecordsForTask } from "../session-read-model/task-session-records";
@@ -83,6 +84,39 @@ const isRepoOperationStale = ({
   );
 };
 
+const selectSessionHistoryTargets = ({
+  sessionCollection,
+  sessionObserverRefs,
+  targetExternalSessionId,
+}: {
+  sessionCollection: AgentSessionCollection;
+  sessionObserverRefs: AgentSessionRef[];
+  targetExternalSessionId?: string | null | undefined;
+}): AgentSessionState[] => {
+  const requestedSessionId = targetExternalSessionId?.trim();
+  if (requestedSessionId) {
+    const session = getAgentSessionByExternalSessionId(sessionCollection, requestedSessionId);
+    if (!session) {
+      throw new Error(`Cannot load history for unknown session '${requestedSessionId}'.`);
+    }
+    return [session];
+  }
+
+  const targets: AgentSessionState[] = [];
+  for (const ref of sessionObserverRefs) {
+    const session = getAgentSession(sessionCollection, ref);
+    if (!session) {
+      throw new Error(
+        `Cannot load history for observed session '${ref.externalSessionId}': session is missing from the repo read model.`,
+      );
+    }
+    if (session.historyLoadState === "not_requested") {
+      targets.push(session);
+    }
+  }
+  return targets;
+};
+
 export const loadRepoAgentSessions = async ({
   repoPath,
   tasks,
@@ -131,7 +165,7 @@ export const loadRepoAgentSessions = async ({
     return;
   }
   await Promise.all(
-    readModel.liveSessions.map(async (session) => {
+    readModel.sessionObserverRefs.map(async (session) => {
       if (!isStaleRepoOperation()) {
         await listenToAgentSession?.(session);
       }
@@ -142,8 +176,9 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const historySessions = selectRepoSessionHistoryTargets({
-    readModel,
+  const historySessions = selectSessionHistoryTargets({
+    sessionCollection: readModel.sessionCollection,
+    sessionObserverRefs: readModel.sessionObserverRefs,
     targetExternalSessionId: options?.targetExternalSessionId,
   });
 
