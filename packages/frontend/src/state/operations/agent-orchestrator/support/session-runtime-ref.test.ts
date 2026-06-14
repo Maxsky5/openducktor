@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "./messages";
 import {
   resolveRuntimeWorkingDirectoryRefState,
   toPersistedRuntimeSessionRef,
@@ -15,7 +16,7 @@ const sessionFixture = (overrides: Partial<AgentSessionState> = {}): AgentSessio
   status: "idle",
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/repo/worktree",
-  messages: [],
+  messages: createSessionMessagesState(overrides.externalSessionId ?? "session-1"),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

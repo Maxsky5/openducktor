@@ -23,6 +23,7 @@ import {
   listenToAgentSessionEvents,
   type SessionEventAdapter,
 } from "../agent-orchestrator/events/session-events";
+import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
 import {
   createAgentSessionCollectionRefFixture,
   updateAgentSessionFixture,
@@ -111,7 +112,7 @@ const buildAgentSession = (overrides: Partial<AgentSessionState> = {}): AgentSes
   status: "running",
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/repo",
-  messages: [],
+  messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

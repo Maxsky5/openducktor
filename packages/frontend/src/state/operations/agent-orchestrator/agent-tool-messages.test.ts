@@ -3,11 +3,10 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "./agent-tool-messages";
-import { createSessionMessagesState } from "./support/messages";
+import { createSessionMessagesState, type SessionMessagesInput } from "./support/messages";
 
-const createSession = (messages: AgentSessionState["messages"]) => ({
+const createSession = (messages: SessionMessagesInput) => ({
   externalSessionId: "session-1",
   messages,
 });

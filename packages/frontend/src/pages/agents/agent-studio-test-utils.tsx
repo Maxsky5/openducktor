@@ -22,7 +22,11 @@ import {
   createTaskCardFixture as createSharedTaskCardFixture,
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 
 type ReactActEnvironment = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -48,7 +52,12 @@ const PAGE_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   createdAt: "2026-02-22T12:00:00.000Z",
 };
 
-const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
+type PageAgentSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+  runId?: string | null;
+};
+
+const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
   startedAt: "2026-02-22T10:00:00.000Z",
   workingDirectory: "/repo",
 };
@@ -177,7 +186,7 @@ export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCa
   createSharedTaskCardFixture(PAGE_TASK_CARD_DEFAULTS, overrides);
 
 export const createAgentSessionFixture = (
-  overrides: Partial<AgentSessionState> & { runId?: string | null } = {},
+  overrides: PageAgentSessionOverrides = {},
 ): AgentSessionState => createSharedAgentSessionFixture(PAGE_SESSION_DEFAULTS, overrides);
 
 export const createHookHarness = <Props, State>(

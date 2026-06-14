@@ -1,6 +1,11 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 
 export const createTaskFixture = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   id: "task-1",
@@ -34,25 +39,34 @@ export const createTaskWithSession = (overrides: Partial<TaskCard> = {}): TaskCa
   ...overrides,
 });
 
-export const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  runtimeKind: "opencode",
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "build",
-  status: "idle",
-  startedAt: "2026-03-01T09:00:00.000Z",
-  workingDirectory: "/tmp/repo/worktree",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-  historyLoadState: overrides.historyLoadState ?? "not_requested",
-});
+type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+export const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
+  const { messages, ...sessionOverrides } = overrides;
+  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
+
+  return {
+    runtimeKind: "opencode",
+    externalSessionId,
+    taskId: "task-1",
+    role: "build",
+    status: "idle",
+    startedAt: "2026-03-01T09:00:00.000Z",
+    workingDirectory: "/tmp/repo/worktree",
+    messages: createSessionMessagesFixture(externalSessionId, messages),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...sessionOverrides,
+    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
+  };
+};
 
 export const createNoopEngine = (overrides: Partial<AgentEnginePort> = {}): AgentEnginePort =>
   ({

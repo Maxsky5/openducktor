@@ -4,36 +4,50 @@ import {
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
   toMissingAgentSessionPresenceSnapshot,
 } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import {
   applyAgentSessionPresenceSnapshotToSession,
   shouldObserveAgentSessionPresenceSnapshot,
 } from "./session-presence";
 
-const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "build",
-  status: "running",
-  startedAt: "2026-03-01T09:00:00.000Z",
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-  historyLoadState: overrides.historyLoadState ?? "not_requested",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  contextUsage: null,
-  pendingApprovals: [
-    { requestId: "persisted-approval" } as AgentSessionState["pendingApprovals"][number],
-  ],
-  pendingQuestions: [
-    { requestId: "persisted-question" } as AgentSessionState["pendingQuestions"][number],
-  ],
-  selectedModel: null,
-  ...overrides,
-});
+type CreateSessionStateOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+const createSessionState = (overrides: CreateSessionStateOverrides = {}): AgentSessionState => {
+  const { messages, ...sessionOverrides } = overrides;
+  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
+
+  return {
+    externalSessionId,
+    taskId: "task-1",
+    role: "build",
+    status: "running",
+    startedAt: "2026-03-01T09:00:00.000Z",
+    runtimeKind: "opencode",
+    workingDirectory: "/tmp/repo/worktree",
+    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
+    messages: createSessionMessagesFixture(externalSessionId, messages),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
+    pendingApprovals: [
+      { requestId: "persisted-approval" } as AgentSessionState["pendingApprovals"][number],
+    ],
+    pendingQuestions: [
+      { requestId: "persisted-question" } as AgentSessionState["pendingQuestions"][number],
+    ],
+    selectedModel: null,
+    ...sessionOverrides,
+  };
+};
 
 const sessionRefFixture = {
   repoPath: "/tmp/repo",

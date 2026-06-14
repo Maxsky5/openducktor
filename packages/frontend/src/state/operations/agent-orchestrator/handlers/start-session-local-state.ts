@@ -1,6 +1,7 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorTask } from "../support/async-side-effects";
+import { createSessionMessagesState } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
@@ -31,11 +32,14 @@ export const buildInitialSession = ({
   historyLoadState: "loaded",
   messages:
     initialMessages ??
-    buildSessionHeaderMessages({
-      externalSessionId: startedCtx.summary.externalSessionId,
-      systemPrompt,
-      startedAt: startedCtx.summary.startedAt,
-    }),
+    createSessionMessagesState(
+      startedCtx.summary.externalSessionId,
+      buildSessionHeaderMessages({
+        externalSessionId: startedCtx.summary.externalSessionId,
+        systemPrompt,
+        startedAt: startedCtx.summary.startedAt,
+      }),
+    ),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

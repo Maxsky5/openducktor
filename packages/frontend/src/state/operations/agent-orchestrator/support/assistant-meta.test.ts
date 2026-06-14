@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createSessionMessagesState,
+  getSessionMessageCount,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { finalizeDraftAssistantMessage, toAssistantMessageMeta } from "./assistant-meta";
@@ -13,7 +16,7 @@ const sessionFixture: AgentSessionState = {
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   historyLoadState: "not_requested",
-  messages: [],
+  messages: createSessionMessagesState("external-1"),
   draftAssistantText: "Draft answer",
   draftAssistantMessageId: "assistant-msg-1",
   draftReasoningText: "",

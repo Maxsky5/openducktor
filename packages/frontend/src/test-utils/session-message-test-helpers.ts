@@ -10,15 +10,26 @@ import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orche
 import { TEST_EXTERNAL_SESSION_IDS } from "./shared-test-fixtures";
 
 type SessionMessageFixtureInput = SessionMessagesState | AgentChatMessage[];
+export type SessionMessagesFixtureInput = SessionMessageFixtureInput | undefined;
+
+export const createSessionMessagesFixture = (
+  externalSessionId: string,
+  messages?: SessionMessagesFixtureInput,
+): SessionMessagesState => {
+  if (!messages) {
+    return createSessionMessagesState(externalSessionId);
+  }
+  return Array.isArray(messages)
+    ? createSessionMessagesState(externalSessionId, messages)
+    : messages;
+};
 
 export const createSessionMessageOwner = (
   messages: SessionMessageFixtureInput,
   externalSessionId = TEST_EXTERNAL_SESSION_IDS.default,
 ): SessionMessageOwner => ({
   externalSessionId,
-  messages: Array.isArray(messages)
-    ? createSessionMessagesState(externalSessionId, messages)
-    : messages,
+  messages: createSessionMessagesFixture(externalSessionId, messages),
 });
 
 export const sessionMessagesToArray = (owner: SessionMessageOwner): AgentChatMessage[] => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   buildActiveTaskSessionContextByTaskId,
@@ -45,7 +46,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
   status: "running",
   startedAt: "2026-03-17T10:00:00.000Z",
   workingDirectory: "/repo",
-  messages: [],
+  messages: createSessionMessagesState(overrides.externalSessionId ?? "external-1"),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

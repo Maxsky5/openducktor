@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -47,7 +48,7 @@ const createSessionFixture = (): AgentSessionState => ({
   startedAt: "2026-03-01T09:00:00.000Z",
   workingDirectory: "/tmp/repo-a",
   historyLoadState: "not_requested",
-  messages: [],
+  messages: createSessionMessagesState("external-1"),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

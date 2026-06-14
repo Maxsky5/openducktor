@@ -6,7 +6,12 @@ import {
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
 import { replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import {
   createAgentSessionCollectionRefFixture,
   createAgentSessionPresenceSnapshotFixture,
@@ -59,25 +64,34 @@ const taskFixture: TaskCard = {
   createdAt: "2026-02-22T08:00:00.000Z",
 };
 
-const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  runtimeKind: "opencode",
-  externalSessionId: "session-1",
-  taskId: "task-1",
-  role: "build",
-  status: "idle",
-  startedAt: "2026-02-22T08:00:00.000Z",
-  workingDirectory: "/tmp/repo/worktree",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-  historyLoadState: overrides.historyLoadState ?? "not_requested",
-});
+type BuildSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessionState => {
+  const { messages, ...sessionOverrides } = overrides;
+  const externalSessionId = sessionOverrides.externalSessionId ?? "session-1";
+
+  return {
+    runtimeKind: "opencode",
+    externalSessionId,
+    taskId: "task-1",
+    role: "build",
+    status: "idle",
+    startedAt: "2026-02-22T08:00:00.000Z",
+    workingDirectory: "/tmp/repo/worktree",
+    messages: createSessionMessagesFixture(externalSessionId, messages),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...sessionOverrides,
+    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
+  };
+};
 
 const resumedSummary = (input: AgentSessionRuntimeRef, externalSessionId = "external-1") => ({
   runtimeKind: input.runtimeKind,

@@ -1,31 +1,45 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import {
   deriveAgentSessionTargetViewLifecycle,
   deriveAgentSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
 } from "./session-view-lifecycle";
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "build",
-  status: "idle",
-  startedAt: "2026-02-22T08:00:00.000Z",
-  runtimeKind: "opencode",
-  workingDirectory: "/tmp/repo/worktree",
-  historyLoadState: "not_requested",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-});
+type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
+  const { messages, ...sessionOverrides } = overrides;
+  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
+
+  return {
+    externalSessionId,
+    taskId: "task-1",
+    role: "build",
+    status: "idle",
+    startedAt: "2026-02-22T08:00:00.000Z",
+    runtimeKind: "opencode",
+    workingDirectory: "/tmp/repo/worktree",
+    historyLoadState: "not_requested",
+    messages: createSessionMessagesFixture(externalSessionId, messages),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...sessionOverrides,
+  };
+};
 
 describe("deriveAgentSessionViewLifecycle", () => {
   test("keeps a partial transcript visible while history has not loaded", () => {

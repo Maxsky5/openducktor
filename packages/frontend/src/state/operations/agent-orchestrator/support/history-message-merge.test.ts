@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 import { mergeHistoryMessages } from "./history-message-merge";
+import { createSessionMessagesState } from "./messages";
 
 const EXTERNAL_SESSION_ID = "session-1";
 
-const createSession = (messages: AgentSessionState["messages"]) => ({
+const createSession = (messages: SessionMessagesState) => ({
   externalSessionId: EXTERNAL_SESSION_ID,
   messages,
 });
@@ -15,7 +16,13 @@ const mergedMessages = (
   currentMessages: AgentChatMessage[],
 ): AgentChatMessage[] => {
   return sessionMessagesToArray(
-    createSession(mergeHistoryMessages(EXTERNAL_SESSION_ID, historyMessages, currentMessages)),
+    createSession(
+      mergeHistoryMessages(
+        EXTERNAL_SESSION_ID,
+        createSessionMessagesState(EXTERNAL_SESSION_ID, historyMessages),
+        createSessionMessagesState(EXTERNAL_SESSION_ID, currentMessages),
+      ),
+    ),
   );
 };
 

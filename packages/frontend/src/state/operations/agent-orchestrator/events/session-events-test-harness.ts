@@ -12,11 +12,17 @@ import {
 } from "@/state/agent-session-collection";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
+  createSessionMessagesFixture,
   lastSessionMessageForTest,
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import {
   createAgentSessionCollectionRefFixture,
   findAgentSessionFixture,
@@ -54,26 +60,35 @@ export const createRecordingRuntimeDataWriter = () => {
   };
 };
 
-export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  runtimeKind: "opencode",
-  externalSessionId: "session-1",
-  taskId: "task-1",
-  role: "spec",
-  status: "running",
-  startedAt: "2026-02-22T08:00:00.000Z",
-  workingDirectory: "/tmp/repo",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  contextUsage: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-  historyLoadState: overrides.historyLoadState ?? "not_requested",
-});
+type BuildSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+export const buildSession = (overrides: BuildSessionOverrides = {}): AgentSessionState => {
+  const { messages, ...sessionOverrides } = overrides;
+  const externalSessionId = sessionOverrides.externalSessionId ?? "session-1";
+
+  return {
+    runtimeKind: "opencode",
+    externalSessionId,
+    taskId: "task-1",
+    role: "spec",
+    status: "running",
+    startedAt: "2026-02-22T08:00:00.000Z",
+    workingDirectory: "/tmp/repo",
+    messages: createSessionMessagesFixture(externalSessionId, messages),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    contextUsage: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...sessionOverrides,
+    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
+  };
+};
 
 export const getSession = (
   sessionsRef: { current: AgentSessionCollection },

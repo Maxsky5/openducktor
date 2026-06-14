@@ -11,7 +11,7 @@ import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
-  createAgentSessionCollection,
+  createAgentSessionCollection as createStrictAgentSessionCollection,
   emptyAgentSessionCollection,
   listAgentSessions,
   replaceAgentSession,
@@ -23,10 +23,13 @@ import {
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type {
+  AgentChatMessage,
   AgentSessionIdentity,
   AgentSessionState as BaseAgentSessionState,
+  SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
+import { createSessionMessagesState } from "../support/messages";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
 import { createStartAgentSession } from "./start-session";
 import {
@@ -35,6 +38,19 @@ import {
 } from "./start-session.test-helpers";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
+type TestAgentSessionState = Omit<AgentSessionState, "messages"> & {
+  messages: AgentChatMessage[] | SessionMessagesState;
+};
+
+const toAgentSessionStateFixture = (session: TestAgentSessionState): AgentSessionState => ({
+  ...session,
+  messages: Array.isArray(session.messages)
+    ? createSessionMessagesState(session.externalSessionId, session.messages)
+    : session.messages,
+});
+
+const createAgentSessionCollection = (sessions: Iterable<TestAgentSessionState>) =>
+  createStrictAgentSessionCollection(Array.from(sessions, toAgentSessionStateFixture));
 
 const getSession = (
   sessionCollection: AgentSessionCollection,
@@ -44,7 +60,7 @@ const getSession = (
     (session): session is AgentSessionState => session.externalSessionId === externalSessionId,
   );
 
-const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
+const createSessionsRef = (sessions: TestAgentSessionState[] = []) => ({
   current: createAgentSessionCollection(sessions),
 });
 
@@ -1787,7 +1803,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         sessionCollection = replaceAgentSession(sessionCollection, {
           ...sourceBuild,
           status: "idle",
-          messages: [],
+          messages: createSessionMessagesState(sourceBuild.externalSessionId),
         });
         sessionsRef.current = sessionCollection;
       },

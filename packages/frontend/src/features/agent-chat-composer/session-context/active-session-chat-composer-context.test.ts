@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   type ActiveSessionChatComposerSession,
   type ActiveSessionChatComposerSummary,
@@ -30,7 +31,7 @@ const makeLoadedSession = (): ActiveSessionChatComposerSession => ({
   runtimeKind: "opencode",
   workingDirectory: "/repo/session-worktree",
   contextUsage: null,
-  messages: [],
+  messages: createSessionMessagesState("external-1"),
 });
 
 describe("active-session-chat-composer-context", () => {

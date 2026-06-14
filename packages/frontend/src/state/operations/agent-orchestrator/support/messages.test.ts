@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
-import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
   everySessionMessage,
@@ -8,12 +8,13 @@ import {
   findLastUserSessionMessage,
   getSessionMessageCount,
   isFinalAssistantChatMessage,
+  type SessionMessagesInput,
   updateLastSessionMessage,
   updateLastToolSessionMessage,
   upsertSessionMessage,
 } from "./messages";
 
-const createSession = (messages: AgentSessionState["messages"]) => ({
+const createSession = (messages: SessionMessagesInput) => ({
   externalSessionId: "session-1",
   messages,
 });

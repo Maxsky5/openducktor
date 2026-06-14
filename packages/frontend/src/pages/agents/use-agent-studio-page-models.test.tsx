@@ -11,7 +11,11 @@ import type { TaskDocumentState } from "@/components/features/task-details/use-t
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createSelectedSessionLifecycleFixture,
@@ -75,10 +79,14 @@ const createTask = () =>
     },
   });
 
+type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
 const createSession = (
   externalSessionId = "external-1",
-  legacyExternalSessionIdOrOverrides: string | Partial<AgentSessionState> = {},
-  maybeOverrides: Partial<AgentSessionState> = {},
+  legacyExternalSessionIdOrOverrides: string | CreateSessionOverrides = {},
+  maybeOverrides: CreateSessionOverrides = {},
 ): AgentSessionState => {
   const overrides =
     typeof legacyExternalSessionIdOrOverrides === "string"

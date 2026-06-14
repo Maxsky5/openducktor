@@ -2,7 +2,12 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import {
   buildAgentStudioHeaderModel,
   buildAgentStudioTaskTabsModel,
@@ -37,25 +42,34 @@ const createTaskCard = (id: string): TaskCard => ({
   createdAt: "2026-02-22T12:00:00.000Z",
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  runtimeKind: "opencode",
-  externalSessionId: "external-1",
-  taskId: "task-1",
-  role: "spec",
-  status: "running",
-  startedAt: "2026-02-22T12:00:00.000Z",
-  workingDirectory: "/repo",
-  messages: [],
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-  historyLoadState: overrides.historyLoadState ?? "not_requested",
-});
+type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionState => {
+  const { messages, ...sessionOverrides } = overrides;
+  const externalSessionId = sessionOverrides.externalSessionId ?? "external-1";
+
+  return {
+    runtimeKind: "opencode",
+    externalSessionId,
+    taskId: "task-1",
+    role: "spec",
+    status: "running",
+    startedAt: "2026-02-22T12:00:00.000Z",
+    workingDirectory: "/repo",
+    messages: createSessionMessagesFixture(externalSessionId, messages),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...sessionOverrides,
+    historyLoadState: sessionOverrides.historyLoadState ?? "not_requested",
+  };
+};
 
 const createDocumentState = (markdown = ""): TaskDocumentState => ({
   markdown,

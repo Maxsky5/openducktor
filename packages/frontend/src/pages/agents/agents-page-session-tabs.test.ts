@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -32,7 +33,7 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   status: "idle",
   startedAt: "2026-02-20T10:00:00.000Z",
   workingDirectory: "/tmp/work",
-  messages: [],
+  messages: createSessionMessagesState(overrides.externalSessionId ?? "ext-session-1"),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",

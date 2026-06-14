@@ -116,7 +116,9 @@ describe("createAgentSessionsStore activity snapshots", () => {
     const initialSnapshot = store.getActivitySessionsSnapshot();
     const updatedSession = {
       ...baseSession,
-      messages: [{ id: "m-1", role: "assistant" as const, content: "Working", timestamp: "now" }],
+      messages: createSessionMessagesState(baseSession.externalSessionId, [
+        { id: "m-1", role: "assistant" as const, content: "Working", timestamp: "now" },
+      ]),
       draftAssistantText: "draft update",
       todos: [
         {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createSessionMessagesState,
   getSessionMessageAt,
   getSessionMessagesSlice,
 } from "@/state/operations/agent-orchestrator/support/messages";
@@ -37,7 +38,7 @@ describe("findFirstChangedMessageIndex", () => {
     };
     const nextSession = {
       ...previousSession,
-      messages: nextMessages,
+      messages: createSessionMessagesState(previousSession.externalSessionId, nextMessages),
     };
 
     expect(findFirstChangedMessageIndex(previousMessages, nextSession)).toBe(399);
@@ -62,7 +63,7 @@ describe("findFirstChangedMessageIndex", () => {
     ];
     const nextSession = {
       ...previousSession,
-      messages: nextMessages,
+      messages: createSessionMessagesState(previousSession.externalSessionId, nextMessages),
     };
 
     expect(findFirstChangedMessageIndex(previousMessages, nextSession)).toBe(4);

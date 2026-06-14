@@ -10,9 +10,16 @@ import { createElement, type PropsWithChildren, type ReactElement } from "react"
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import { getSessionMessagesSlice } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createSessionMessagesState,
+  getSessionMessagesSlice,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
@@ -183,7 +190,11 @@ const createRepoSettings = (
   },
 });
 
-const createActiveSession = (overrides = {}) =>
+type CreateActiveSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentChatMessage[] | SessionMessagesState;
+};
+
+const createActiveSession = (overrides: CreateActiveSessionOverrides = {}) =>
   createAgentSessionFixture({
     selectedModel: {
       runtimeKind: "opencode",
@@ -431,23 +442,13 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("does not query session slash commands until the active session exposes its runtime kind", async () => {
+  test("does not query session slash commands before a session target exists", async () => {
     const readSessionSlashCommands = mock(async () => ({
       commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
     }));
 
     const harness = createHookHarness(
       createBaseProps({
-        activeSession: createActiveSession({
-          runtimeKind: null,
-          selectedModel: {
-            runtimeKind: "queued-runtime",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "default",
-            profileId: "spec-agent",
-          },
-        }),
         readSessionSlashCommands,
       }),
     );
@@ -522,7 +523,6 @@ describe("useAgentStudioChatComposer", () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const activeSession = createActiveSession({
       runtimeKind: "opencode",
-      runtimeRoute: { type: "local_http", endpoint: "http://127.0.0.1:4444" },
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
@@ -567,7 +567,6 @@ describe("useAgentStudioChatComposer", () => {
         modelId: "gpt-5",
         variant: "default",
       },
-      runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
       workingDirectory: "/repo/codex-worktree",
     });
     const harness = createHookHarness(
@@ -609,7 +608,6 @@ describe("useAgentStudioChatComposer", () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const activeSession = createActiveSession({
       runtimeKind: "opencode",
-      runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
       workingDirectory: "/repo/session-worktree",
     });
     const harness = createHookHarness(
@@ -652,7 +650,6 @@ describe("useAgentStudioChatComposer", () => {
       createBaseProps({
         activeSession: createActiveSession({
           runtimeKind: "opencode",
-          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
           workingDirectory: "/repo/session-worktree",
         }),
         readSessionSlashCommands,
@@ -788,12 +785,13 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("fails fast when active session file search is requested before runtime connection is ready", async () => {
+  test("fails fast when active session file search is requested without a working directory", async () => {
     const readSessionFileSearch = mock(async () => FILE_SEARCH_RESULTS);
     const harness = createHookHarness(
       createBaseProps({
         activeSession: createActiveSession({
-          runtimeKind: null,
+          runtimeKind: "opencode",
+          workingDirectory: "   ",
           selectedModel: {
             runtimeKind: "opencode",
             providerId: "openai",
@@ -812,7 +810,7 @@ describe("useAgentStudioChatComposer", () => {
     try {
       await harness.mount();
       await expect(harness.getLatest().searchFiles("src")).rejects.toThrow(
-        "Runtime kind is required to read active session runtime data.",
+        "Session workingDirectory is required to read active session runtime data.",
       );
       expect(readSessionFileSearch).not.toHaveBeenCalled();
     } finally {
@@ -828,7 +826,6 @@ describe("useAgentStudioChatComposer", () => {
       createBaseProps({
         activeSession: createActiveSession({
           runtimeKind: "opencode",
-          runtimeRoute: { type: "stdio", identity: "runtime-stdio" },
           workingDirectory: "/repo/session-worktree",
         }),
         readSessionFileSearch,
@@ -1621,7 +1618,7 @@ describe("useAgentStudioChatComposer", () => {
         createBaseProps({
           activeSession: {
             ...activeSession,
-            messages: [
+            messages: createSessionMessagesState(activeSession.externalSessionId, [
               ...getSessionMessagesSlice(activeSession, 0),
               {
                 id: "tool-1",
@@ -1637,7 +1634,7 @@ describe("useAgentStudioChatComposer", () => {
                   status: "running",
                 },
               },
-            ],
+            ]),
             contextUsage,
           },
         }),
@@ -1669,7 +1666,7 @@ describe("useAgentStudioChatComposer", () => {
         createBaseProps({
           activeSession: {
             ...activeSession,
-            messages: [
+            messages: createSessionMessagesState(activeSession.externalSessionId, [
               ...getSessionMessagesSlice(activeSession, 0),
               {
                 id: "tool-tail-1",
@@ -1685,7 +1682,7 @@ describe("useAgentStudioChatComposer", () => {
                   status: "completed",
                 },
               },
-            ],
+            ]),
             contextUsage: null,
           },
         }),

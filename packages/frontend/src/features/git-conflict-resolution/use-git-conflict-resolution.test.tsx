@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createTaskCardFixture } from "../../pages/agents/agent-studio-test-utils";
@@ -19,7 +20,7 @@ const buildSession = (
     startedAt: "2026-03-18T10:00:00.000Z",
     workingDirectory,
     historyLoadState: rest.historyLoadState ?? "not_requested",
-    messages: [],
+    messages: createSessionMessagesState(`external-${externalSessionId}`),
     draftAssistantText: "",
     draftAssistantMessageId: null,
     draftReasoningText: "",

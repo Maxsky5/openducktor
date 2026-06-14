@@ -4,6 +4,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
@@ -98,7 +99,7 @@ function makeLiveTranscriptSession(): AgentSessionState {
     startedAt: "2026-02-22T12:00:00.000Z",
     workingDirectory: "/repo-a",
     historyLoadState: "not_requested",
-    messages: [],
+    messages: createSessionMessagesState("session-subagent-1"),
     draftAssistantText: "",
     draftAssistantMessageId: null,
     draftReasoningText: "",
