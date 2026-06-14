@@ -23,8 +23,6 @@ export type AgentSessionTranscriptState =
 export type AgentSessionViewLifecycle = {
   repoReadinessState: SessionRepoReadinessState;
   transcriptState: AgentSessionTranscriptState;
-  canReadRuntimeData: boolean;
-  shouldLoadHistory: boolean;
   isResolving: boolean;
 };
 
@@ -33,20 +31,14 @@ export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
 const lifecycle = ({
   repoReadinessState,
   transcriptState,
-  canReadRuntimeDataWhenReady = false,
-  shouldLoadHistoryWhenReady = false,
   isResolving = false,
 }: {
   repoReadinessState: SessionRepoReadinessState;
   transcriptState: AgentSessionTranscriptState;
-  canReadRuntimeDataWhenReady?: boolean;
-  shouldLoadHistoryWhenReady?: boolean;
   isResolving?: boolean;
 }): AgentSessionViewLifecycle => ({
   repoReadinessState,
   transcriptState,
-  canReadRuntimeData: repoReadinessState === "ready" && canReadRuntimeDataWhenReady,
-  shouldLoadHistory: repoReadinessState === "ready" && shouldLoadHistoryWhenReady,
   isResolving,
 });
 
@@ -81,7 +73,6 @@ const deriveLoadedSessionLifecycle = ({
       return lifecycle({
         repoReadinessState,
         transcriptState: { kind: "visible" },
-        canReadRuntimeDataWhenReady: true,
       });
     case "loading":
       return lifecycle({
@@ -89,7 +80,6 @@ const deriveLoadedSessionLifecycle = ({
         transcriptState: hasTranscript
           ? { kind: "visible" }
           : { kind: "session_loading", reason: "history" },
-        canReadRuntimeDataWhenReady: true,
       });
     case "not_requested":
       return lifecycle({
@@ -97,15 +87,11 @@ const deriveLoadedSessionLifecycle = ({
         transcriptState: hasTranscript
           ? { kind: "visible" }
           : { kind: "session_loading", reason: "history" },
-        canReadRuntimeDataWhenReady: true,
-        shouldLoadHistoryWhenReady: true,
       });
     case "failed":
       return lifecycle({
         repoReadinessState,
         transcriptState: hasTranscript ? { kind: "visible" } : { kind: "failed" },
-        canReadRuntimeDataWhenReady: true,
-        shouldLoadHistoryWhenReady: hasTranscript,
       });
   }
 };
@@ -168,7 +154,6 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
     return lifecycle({
       repoReadinessState,
       transcriptState: { kind: "failed" },
-      canReadRuntimeDataWhenReady: true,
     });
   }
 
@@ -195,7 +180,6 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
       return lifecycle({
         repoReadinessState,
         transcriptState: { kind: "failed" },
-        canReadRuntimeDataWhenReady: true,
       });
     }
     if (repoReadinessState !== "ready") {

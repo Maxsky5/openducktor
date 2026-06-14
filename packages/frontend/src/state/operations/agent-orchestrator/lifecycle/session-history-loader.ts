@@ -1,8 +1,9 @@
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHistoryMessages } from "../support/history-message-merge";
-import { createSessionMessagesState } from "../support/messages";
+import { createSessionMessagesState, getSessionMessageCount } from "../support/messages";
 import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
+import type { SessionRepoReadinessState } from "./session-view-lifecycle";
 
 type UpdateSession = (
   identity: AgentSessionIdentity,
@@ -31,6 +32,22 @@ export type AgentSessionHistoryTarget = Pick<
 };
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
+
+export const shouldLoadSelectedSessionHistory = ({
+  repoReadinessState,
+  session,
+}: {
+  repoReadinessState: SessionRepoReadinessState;
+  session: AgentSessionState | null;
+}): boolean => {
+  if (repoReadinessState !== "ready" || !session) {
+    return false;
+  }
+  if (session.historyLoadState === "not_requested") {
+    return true;
+  }
+  return session.historyLoadState === "failed" && getSessionMessageCount(session) > 0;
+};
 
 export const loadSessionHistorySnapshot = async ({
   repoPath,

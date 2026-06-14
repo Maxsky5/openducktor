@@ -485,7 +485,6 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             repoReadinessState: "checking",
             transcriptState: { kind: "visible" },
-            canReadRuntimeData: false,
           }),
         },
         readiness: {

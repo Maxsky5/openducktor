@@ -19,6 +19,7 @@ import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentSession } from "@/state/app-state-provider";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
+import { shouldLoadSelectedSessionHistory } from "@/state/operations/agent-orchestrator/lifecycle/session-history-loader";
 import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -350,23 +351,23 @@ export function useAgentStudioSelectionController({
     repoPath: activeWorkspace?.repoPath ?? null,
     session: viewActiveSession,
     runtimeDefinitions,
-    sessionLifecycle: selectedSessionLifecycle,
+    repoReadinessState: viewSessionReadinessState,
     readSessionModelCatalog,
     readSessionTodos,
   });
+  const shouldLoadViewSessionHistory = shouldLoadSelectedSessionHistory({
+    repoReadinessState: viewSessionReadinessState,
+    session: viewActiveSession,
+  });
   useEffect(() => {
-    if (
-      viewSelectedSessionRoute === null ||
-      !selectedSessionLifecycle.shouldLoadHistory ||
-      !viewActiveSession
-    ) {
+    if (viewSelectedSessionRoute === null || !shouldLoadViewSessionHistory || !viewActiveSession) {
       return;
     }
 
     void loadAgentSessionHistory({ session: viewActiveSession });
   }, [
     loadAgentSessionHistory,
-    selectedSessionLifecycle,
+    shouldLoadViewSessionHistory,
     viewActiveSession,
     viewSelectedSessionRoute,
   ]);

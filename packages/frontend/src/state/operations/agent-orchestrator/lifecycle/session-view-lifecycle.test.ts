@@ -28,7 +28,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSession
 });
 
 describe("deriveAgentSessionViewLifecycle", () => {
-  test("requests background history load when a partial transcript exists", () => {
+  test("keeps a partial transcript visible while history has not loaded", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         historyLoadState: "not_requested",
@@ -45,10 +45,9 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.shouldLoadHistory).toBe(true);
   });
 
-  test("requests background history load after a prior history failure when transcript exists", () => {
+  test("keeps a transcript visible after a prior history failure", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         historyLoadState: "failed",
@@ -65,7 +64,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.shouldLoadHistory).toBe(true);
   });
 
   test("renders running sessions immediately without view readiness loading", () => {
@@ -88,7 +86,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
   test("renders running planner sessions immediately when durable runtime context is available", () => {
@@ -111,8 +108,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.canReadRuntimeData).toBe(true);
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
   test("loads a cold running session transcript before rendering it", () => {
@@ -131,7 +126,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       kind: "session_loading",
       reason: "history",
     });
-    expect(lifecycle.shouldLoadHistory).toBe(true);
   });
 
   test("keeps a cold running session in loading state while history is in flight", () => {
@@ -150,7 +144,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
       kind: "session_loading",
       reason: "history",
     });
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
   test("keeps a renderable transcript stable while history is refreshing", () => {
@@ -173,10 +166,9 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
-  test("does not request view readiness while a local outbound send is pending", () => {
+  test("keeps a local outbound send visible while pending", () => {
     const lifecycle = deriveAgentSessionViewLifecycle({
       session: createSession({
         status: "running",
@@ -197,7 +189,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 });
 
@@ -257,7 +248,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     expect(lifecycle.transcriptState).toEqual({
       kind: "runtime_waiting",
     });
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
   test("surfaces selected session load failures without a second local state machine", () => {
@@ -270,7 +260,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "failed" });
-    expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
   test("delegates selected active session readiness to the session lifecycle", () => {
@@ -286,7 +275,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       kind: "session_loading",
       reason: "history",
     });
-    expect(lifecycle.shouldLoadHistory).toBe(true);
   });
 
   test("keeps a selected task in runtime loading instead of inactive while repo runtime is checking", () => {

@@ -50,6 +50,7 @@ Owns:
 - observing projected runtime session refs
 - selecting history loads for requested sessions or observed sessions whose
   history has not been requested
+- deciding when a selected session should retry or start its history load
 - passing transient runtime prompt context to history loads without storing it in
   session state
 - merging runtime history into transcript messages without erasing live messages
@@ -135,9 +136,11 @@ Owns:
 Invariant: live summaries and persisted records must be combined before selection.
 Do not resolve live and persisted selections in separate branches.
 
-Invariant: selected-session lifecycle owns only the selected session's runtime
-and history state. Page route/task switching is orchestration state and must not
-be stored in the lifecycle model.
+Invariant: selected-session lifecycle owns transcript rendering state derived
+from runtime readiness and history load state. History loading policy and
+runtime-data query gating live in their owner modules, not in the lifecycle
+model. Page route/task switching is orchestration state and must not be stored
+in the lifecycle model.
 
 Invariant: subagent waiting badges are derived from child session summaries.
 Selected-session state must not maintain parent-owned pending-input projections.

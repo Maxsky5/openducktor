@@ -2,7 +2,11 @@ import { describe, expect, mock, test } from "bun:test";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
-import { loadSessionHistorySnapshot } from "./session-history-loader";
+import { createSessionMessagesState } from "../support/messages";
+import {
+  loadSessionHistorySnapshot,
+  shouldLoadSelectedSessionHistory,
+} from "./session-history-loader";
 
 const sessionTarget = {
   externalSessionId: "external-1",
@@ -27,6 +31,46 @@ const createSession = (): AgentSessionState =>
   });
 
 describe("session history loader", () => {
+  test("owns selected-session history loading policy", () => {
+    const partialFailedSession = {
+      ...createSession(),
+      historyLoadState: "failed" as const,
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "existing-message",
+          role: "assistant",
+          content: "Keep visible while retrying history",
+          timestamp: "2026-06-12T08:00:01.000Z",
+        },
+      ]),
+    };
+
+    expect(
+      shouldLoadSelectedSessionHistory({
+        repoReadinessState: "ready",
+        session: createSession(),
+      }),
+    ).toBe(true);
+    expect(
+      shouldLoadSelectedSessionHistory({
+        repoReadinessState: "ready",
+        session: partialFailedSession,
+      }),
+    ).toBe(true);
+    expect(
+      shouldLoadSelectedSessionHistory({
+        repoReadinessState: "checking",
+        session: createSession(),
+      }),
+    ).toBe(false);
+    expect(
+      shouldLoadSelectedSessionHistory({
+        repoReadinessState: "ready",
+        session: { ...createSession(), historyLoadState: "loading" },
+      }),
+    ).toBe(false);
+  });
+
   test("treats a stale operation as neither applied nor failed", async () => {
     const loadSessionHistory = mock(async () => []);
     const updateSession = mock(() => undefined);

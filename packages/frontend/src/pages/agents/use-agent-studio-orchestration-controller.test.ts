@@ -272,7 +272,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
           ...baseArgs.selectedSession.runtime,
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "failed" },
-            canReadRuntimeData: true,
           }),
         },
         chat: {

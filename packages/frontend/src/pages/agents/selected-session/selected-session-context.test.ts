@@ -197,7 +197,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "empty" },
-          canReadRuntimeData: false,
         }),
         sessionActions: {
           ...createInput().sessionActions,
@@ -216,7 +215,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       createInput({
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "empty" },
-          canReadRuntimeData: false,
         }),
         sessionActions: {
           ...createInput().sessionActions,
@@ -236,7 +234,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         sessionRuntimeDataError: "session todos unavailable",
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "runtime_waiting" },
-          canReadRuntimeData: false,
         }),
         readiness: {
           agentStudioReadinessState: "blocked",
@@ -268,7 +265,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         allSessionSummaries: [],
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "runtime_waiting" },
-          canReadRuntimeData: false,
           isResolving: true,
         }),
         readiness: {

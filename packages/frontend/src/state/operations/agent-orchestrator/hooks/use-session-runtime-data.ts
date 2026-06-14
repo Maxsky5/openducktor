@@ -3,7 +3,7 @@ import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { resolveRuntimeWorkingDirectoryRefState } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
 import {
   agentSessionRuntimeQueryKeys,
@@ -16,7 +16,7 @@ type UseSessionRuntimeDataArgs = {
   repoPath: string | null;
   session: AgentSessionState | null;
   runtimeDefinitions: RuntimeDescriptor[];
-  sessionLifecycle: SelectedAgentSessionViewLifecycle;
+  repoReadinessState: SessionRepoReadinessState;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -43,7 +43,7 @@ export const useSessionRuntimeData = ({
   repoPath,
   session,
   runtimeDefinitions,
-  sessionLifecycle,
+  repoReadinessState,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
@@ -52,7 +52,7 @@ export const useSessionRuntimeData = ({
     [repoPath, session],
   );
   const canReadSessionRuntimeData =
-    sessionLifecycle.canReadRuntimeData &&
+    repoReadinessState === "ready" &&
     runtimeRef !== null &&
     runtimeDataSupportError === null &&
     session?.status !== "starting";
