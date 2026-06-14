@@ -9,6 +9,7 @@ import {
   type TaskStoreCheck,
 } from "@openducktor/contracts";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type {
   AgentChatMessage,
   AgentSessionState,
@@ -276,12 +277,7 @@ const toAgentSessionFixtureMessages = (
   externalSessionId: string,
   messages: AgentSessionFixtureMessages | undefined,
 ): SessionMessagesState => {
-  if (!messages) {
-    return createSessionMessagesState(externalSessionId);
-  }
-  return Array.isArray(messages)
-    ? createSessionMessagesState(externalSessionId, messages)
-    : messages;
+  return createSessionMessagesFixture(externalSessionId, messages);
 };
 
 export const createAgentSessionFixture = (

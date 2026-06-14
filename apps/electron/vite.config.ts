@@ -55,6 +55,7 @@ export default defineConfig({
     "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(resolveAppVersion()),
   },
   resolve: {
+    dedupe: ["@tanstack/react-query", "react", "react-dom", "react-router", "react-router-dom"],
     alias: [
       {
         find: "@openducktor/frontend/styles.css",

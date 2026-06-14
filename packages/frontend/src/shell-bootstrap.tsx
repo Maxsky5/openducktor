@@ -34,11 +34,11 @@ const renderOpenDucktorShellApp = (rootElement: HTMLElement, routerMode: ShellRo
 
   createRoot(rootElement).render(
     <StrictMode>
-      <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
-        <Router>
+      <Router>
+        <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
           <App />
-        </Router>
-      </AppCrashShell>
+        </AppCrashShell>
+      </Router>
     </StrictMode>,
   );
 };

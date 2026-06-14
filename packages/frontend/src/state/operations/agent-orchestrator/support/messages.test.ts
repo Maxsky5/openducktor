@@ -7,6 +7,7 @@ import {
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
+  createSessionMessagesState,
   everySessionMessage,
   findLastToolSessionMessage,
   findLastUserSessionMessage,
@@ -138,6 +139,14 @@ describe("agent-orchestrator/support/messages", () => {
 
   test("matches Array.every semantics for empty collections", () => {
     expect(everySessionMessage(createSession([]), () => false)).toBe(true);
+  });
+
+  test("rejects messages owned by another session", () => {
+    const messages = createSessionMessagesState("session-2");
+
+    expect(() => getSessionMessageCount({ externalSessionId: "session-1", messages })).toThrow(
+      "belong to 'session-2'",
+    );
   });
 
   test("detects final assistant chat messages", () => {

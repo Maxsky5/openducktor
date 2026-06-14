@@ -6,6 +6,7 @@ import type {
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
@@ -118,9 +119,8 @@ export const buildSession = (
     ...baseSession,
     ...overrideSessionFields,
   };
-  const messages = Array.isArray(overrideMessages)
-    ? createSessionMessagesState(session.externalSessionId, overrideMessages)
-    : (overrideMessages ?? baseSession.messages);
+  const sourceMessages = overrideMessages ?? baseSession.messages;
+  const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 
   return {
     ...session,

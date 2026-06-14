@@ -294,6 +294,7 @@ describe("shell entrypoints", () => {
     const source = readRepoFile("packages/frontend/src/shell-bootstrap.tsx");
 
     expect(source).toContain("kanbanLocationForRouter");
+    expect(source).toContain("<Router>");
     expect(source).toContain(
       "<AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>",
     );

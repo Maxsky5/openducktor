@@ -1,156 +1,16 @@
 import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 
 type MessageRole = AgentChatMessage["role"];
-type MessageRoleIndexCache = Partial<Record<MessageRole, number[]>>;
-type MessageLastIndexCache = Partial<Record<MessageRole, number>>;
 
 export type SessionMessageOwner = {
   externalSessionId: string;
   messages: SessionMessagesState;
 };
-export type SessionMessagesRevision = Pick<
-  SessionMessagesState,
-  "externalSessionId" | "count" | "version"
->;
 
-const SESSION_MESSAGES_DATA = Symbol("sessionMessagesData");
-const SESSION_MESSAGES_BY_ID = Symbol("sessionMessagesById");
-const SESSION_MESSAGES_INDEXES_BY_ROLE = Symbol("sessionMessagesIndexesByRole");
-const SESSION_MESSAGES_LAST_INDEX_BY_ROLE = Symbol("sessionMessagesLastIndexByRole");
-
-type InternalSessionMessagesState = SessionMessagesState & {
-  [SESSION_MESSAGES_DATA]: AgentChatMessage[];
-  [SESSION_MESSAGES_BY_ID]?: Map<string, number>;
-  [SESSION_MESSAGES_INDEXES_BY_ROLE]?: MessageRoleIndexCache;
-  [SESSION_MESSAGES_LAST_INDEX_BY_ROLE]?: MessageLastIndexCache;
-};
-
-const hasCachedRole = (
-  cache: MessageRoleIndexCache | MessageLastIndexCache | undefined,
-  role: MessageRole,
-): boolean => {
-  return cache !== undefined && Object.hasOwn(cache, role);
-};
-
-const hasInternalSessionMessagesData = (
-  messages: SessionMessagesState,
-): messages is InternalSessionMessagesState => {
-  return SESSION_MESSAGES_DATA in messages;
-};
-
-const toInternalState = (state: SessionMessagesState): InternalSessionMessagesState => {
-  return state as InternalSessionMessagesState;
-};
-
-const createInternalState = (
-  externalSessionId: string,
-  messages: AgentChatMessage[],
-  version: number,
-  byId?: Map<string, number>,
-  indexesByRole?: MessageRoleIndexCache,
-  lastIndexByRole?: MessageLastIndexCache,
-): SessionMessagesState => {
-  const state = {
-    externalSessionId,
-    count: messages.length,
-    version,
-    [SESSION_MESSAGES_DATA]: messages,
-    ...(byId ? { [SESSION_MESSAGES_BY_ID]: byId } : {}),
-    ...(indexesByRole ? { [SESSION_MESSAGES_INDEXES_BY_ROLE]: indexesByRole } : {}),
-    ...(lastIndexByRole ? { [SESSION_MESSAGES_LAST_INDEX_BY_ROLE]: lastIndexByRole } : {}),
-  } satisfies InternalSessionMessagesState;
-
-  return state;
-};
-
-const getSessionState = (owner: SessionMessageOwner): InternalSessionMessagesState => {
-  if (!hasInternalSessionMessagesData(owner.messages)) {
-    throw new Error(
-      `Session messages for '${owner.externalSessionId}' are missing canonical message data.`,
-    );
-  }
-
-  const state = toInternalState(owner.messages);
-  if (state.externalSessionId === owner.externalSessionId) {
-    return state;
-  }
-
-  return toInternalState(
-    createSessionMessagesState(owner.externalSessionId, state[SESSION_MESSAGES_DATA]),
-  );
-};
-
-const buildIdIndex = (messages: AgentChatMessage[]): Map<string, number> => {
-  const byId = new Map<string, number>();
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index];
-    if (message) {
-      byId.set(message.id, index);
-    }
-  }
-  return byId;
-};
-
-const buildRoleIndexes = (messages: AgentChatMessage[], role: MessageRole): number[] => {
-  const indexes: number[] = [];
-  for (let index = 0; index < messages.length; index += 1) {
-    if (messages[index]?.role === role) {
-      indexes.push(index);
-    }
-  }
-  return indexes;
-};
-
-const buildLastRoleIndex = (messages: AgentChatMessage[], role: MessageRole): number => {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === role) {
-      return index;
-    }
-  }
-  return -1;
-};
-
-const getMessageData = (owner: SessionMessageOwner): AgentChatMessage[] => {
-  return getSessionState(owner)[SESSION_MESSAGES_DATA];
-};
-
-const getMessageIndexById = (owner: SessionMessageOwner): Map<string, number> => {
-  const state = getSessionState(owner);
-  if (state[SESSION_MESSAGES_BY_ID]) {
-    return state[SESSION_MESSAGES_BY_ID];
-  }
-
-  const built = buildIdIndex(state[SESSION_MESSAGES_DATA]);
-  state[SESSION_MESSAGES_BY_ID] = built;
-  return built;
-};
-
-const getMessageIndexesByRole = (owner: SessionMessageOwner, role: MessageRole): number[] => {
-  const state = getSessionState(owner);
-  if (hasCachedRole(state[SESSION_MESSAGES_INDEXES_BY_ROLE], role)) {
-    return state[SESSION_MESSAGES_INDEXES_BY_ROLE]?.[role] ?? [];
-  }
-
-  const built = buildRoleIndexes(state[SESSION_MESSAGES_DATA], role);
-  if (!state[SESSION_MESSAGES_INDEXES_BY_ROLE]) {
-    state[SESSION_MESSAGES_INDEXES_BY_ROLE] = {};
-  }
-  state[SESSION_MESSAGES_INDEXES_BY_ROLE][role] = built;
-  return built;
-};
-
-const getLastMessageIndexByRole = (owner: SessionMessageOwner, role: MessageRole): number => {
-  const state = getSessionState(owner);
-  if (hasCachedRole(state[SESSION_MESSAGES_LAST_INDEX_BY_ROLE], role)) {
-    return state[SESSION_MESSAGES_LAST_INDEX_BY_ROLE]?.[role] ?? -1;
-  }
-
-  const built = buildLastRoleIndex(state[SESSION_MESSAGES_DATA], role);
-  if (!state[SESSION_MESSAGES_LAST_INDEX_BY_ROLE]) {
-    state[SESSION_MESSAGES_LAST_INDEX_BY_ROLE] = {};
-  }
-  state[SESSION_MESSAGES_LAST_INDEX_BY_ROLE][role] = built;
-  return built;
+export type SessionMessagesRevision = {
+  externalSessionId: string;
+  count: number;
+  version: number;
 };
 
 const areMessagesShallowEqual = (left: AgentChatMessage, right: AgentChatMessage): boolean => {
@@ -163,105 +23,36 @@ const areMessagesShallowEqual = (left: AgentChatMessage, right: AgentChatMessage
   );
 };
 
+const getSessionState = (owner: SessionMessageOwner): SessionMessagesState => {
+  if (owner.messages.externalSessionId === owner.externalSessionId) {
+    return owner.messages;
+  }
+
+  throw new Error(
+    `Session messages for '${owner.externalSessionId}' belong to '${owner.messages.externalSessionId}'.`,
+  );
+};
+
+const getMessageData = (owner: SessionMessageOwner): readonly AgentChatMessage[] => {
+  return getSessionState(owner).items;
+};
+
 const createDerivedState = (
-  previous: InternalSessionMessagesState,
-  messages: AgentChatMessage[],
-  byId?: Map<string, number>,
-  indexesByRole?: MessageRoleIndexCache,
-  lastIndexByRole?: MessageLastIndexCache,
+  previous: SessionMessagesState,
+  messages: readonly AgentChatMessage[],
 ): SessionMessagesState => {
-  return createInternalState(
-    previous.externalSessionId,
-    messages,
-    previous.version + 1,
-    byId,
-    indexesByRole,
-    lastIndexByRole,
-  );
-};
-
-const deriveStateForAppend = (
-  previous: InternalSessionMessagesState,
-  message: AgentChatMessage,
-  nextMessages: AgentChatMessage[],
-): SessionMessagesState => {
-  const nextIndex = nextMessages.length - 1;
-  const byId = previous[SESSION_MESSAGES_BY_ID]
-    ? new Map(previous[SESSION_MESSAGES_BY_ID]).set(message.id, nextIndex)
-    : undefined;
-  const indexesByRole = previous[SESSION_MESSAGES_INDEXES_BY_ROLE]
-    ? {
-        ...previous[SESSION_MESSAGES_INDEXES_BY_ROLE],
-        ...(hasCachedRole(previous[SESSION_MESSAGES_INDEXES_BY_ROLE], message.role)
-          ? {
-              [message.role]: [
-                ...(previous[SESSION_MESSAGES_INDEXES_BY_ROLE]?.[message.role] ?? []),
-                nextIndex,
-              ],
-            }
-          : {}),
-      }
-    : undefined;
-  const lastIndexByRole = previous[SESSION_MESSAGES_LAST_INDEX_BY_ROLE]
-    ? {
-        ...previous[SESSION_MESSAGES_LAST_INDEX_BY_ROLE],
-        [message.role]: nextIndex,
-      }
-    : undefined;
-
-  return createDerivedState(previous, nextMessages, byId, indexesByRole, lastIndexByRole);
-};
-
-const deriveStateForSingleUpdate = (
-  previous: InternalSessionMessagesState,
-  index: number,
-  existing: AgentChatMessage,
-  updated: AgentChatMessage,
-  nextMessages: AgentChatMessage[],
-): SessionMessagesState => {
-  const roleChanged = updated.role !== existing.role;
-  const idChanged = updated.id !== existing.id;
-  const previousById = previous[SESSION_MESSAGES_BY_ID];
-  const byId = previousById
-    ? (() => {
-        if (!idChanged) {
-          return previousById;
-        }
-        const nextById = new Map(previousById);
-        nextById.delete(existing.id);
-        nextById.set(updated.id, index);
-        return nextById;
-      })()
-    : undefined;
-
-  return createDerivedState(
-    previous,
-    nextMessages,
-    byId,
-    roleChanged ? undefined : previous[SESSION_MESSAGES_INDEXES_BY_ROLE],
-    roleChanged ? undefined : previous[SESSION_MESSAGES_LAST_INDEX_BY_ROLE],
-  );
-};
-
-const deriveStateForRoleBatchUpdate = (
-  previous: InternalSessionMessagesState,
-  nextMessages: AgentChatMessage[],
-  nextIndexById: Map<string, number> | null,
-  changedRole: boolean,
-): SessionMessagesState => {
-  return createDerivedState(
-    previous,
-    nextMessages,
-    previous[SESSION_MESSAGES_BY_ID]
-      ? (nextIndexById ?? previous[SESSION_MESSAGES_BY_ID])
-      : undefined,
-    changedRole ? undefined : previous[SESSION_MESSAGES_INDEXES_BY_ROLE],
-    changedRole ? undefined : previous[SESSION_MESSAGES_LAST_INDEX_BY_ROLE],
-  );
+  return createSessionMessagesState(previous.externalSessionId, messages, previous.version + 1);
 };
 
 const findMessageIndexById = (owner: SessionMessageOwner, messageId: string): number => {
-  return getMessageIndexById(owner).get(messageId) ?? -1;
+  const messages = getMessageData(owner);
+  for (let index = 0; index < messages.length; index += 1) {
+    if (messages[index]?.id === messageId) {
+      return index;
+    }
+  }
+
+  return -1;
 };
 
 const findLastMessageIndexByRole = (
@@ -269,19 +60,13 @@ const findLastMessageIndexByRole = (
   role: MessageRole,
   predicate?: (message: AgentChatMessage, index: number) => boolean,
 ): number => {
-  if (!predicate) {
-    return getLastMessageIndexByRole(owner, role);
-  }
-
-  const indexes = getMessageIndexesByRole(owner, role);
   const messages = getMessageData(owner);
-  for (let offset = indexes.length - 1; offset >= 0; offset -= 1) {
-    const index = indexes[offset];
-    if (typeof index !== "number") {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== role) {
       continue;
     }
-    const message = messages[index];
-    if (message && predicate(message, index)) {
+    if (!predicate || predicate(message, index)) {
       return index;
     }
   }
@@ -295,7 +80,7 @@ const updateMessageAtIndex = (
   updater: (message: AgentChatMessage) => AgentChatMessage,
 ): SessionMessagesState => {
   const previous = getSessionState(owner);
-  const existing = previous[SESSION_MESSAGES_DATA][index];
+  const existing = previous.items[index];
   if (!existing) {
     return previous;
   }
@@ -305,9 +90,9 @@ const updateMessageAtIndex = (
     return previous;
   }
 
-  const nextMessages = previous[SESSION_MESSAGES_DATA].slice();
+  const nextMessages = previous.items.slice();
   nextMessages[index] = updated;
-  return deriveStateForSingleUpdate(previous, index, existing, updated, nextMessages);
+  return createDerivedState(previous, nextMessages);
 };
 
 export const createSessionMessagesState = (
@@ -315,7 +100,11 @@ export const createSessionMessagesState = (
   messages: readonly AgentChatMessage[] = [],
   version = 0,
 ): SessionMessagesState => {
-  return createInternalState(externalSessionId, [...messages], version);
+  return {
+    externalSessionId,
+    items: [...messages],
+    version,
+  };
 };
 
 export const toSessionMessagesState = (owner: SessionMessageOwner): SessionMessagesState => {
@@ -326,13 +115,13 @@ export const getSessionMessagesRevision = (owner: SessionMessageOwner): SessionM
   const state = getSessionState(owner);
   return {
     externalSessionId: state.externalSessionId,
-    count: state.count,
+    count: state.items.length,
     version: state.version,
   };
 };
 
 export const getSessionMessageCount = (owner: SessionMessageOwner): number => {
-  return getSessionState(owner).count;
+  return getSessionState(owner).items.length;
 };
 
 export const getSessionMessageAt = (
@@ -462,8 +251,7 @@ export const appendSessionMessage = (
   message: AgentChatMessage,
 ): SessionMessagesState => {
   const previous = getSessionState(owner);
-  const nextMessages = [...previous[SESSION_MESSAGES_DATA], message];
-  return deriveStateForAppend(previous, message, nextMessages);
+  return createDerivedState(previous, [...previous.items, message]);
 };
 
 export const removeSessionMessageById = (
@@ -476,7 +264,7 @@ export const removeSessionMessageById = (
     return previous;
   }
 
-  const nextMessages = previous[SESSION_MESSAGES_DATA].slice();
+  const nextMessages = previous.items.slice();
   nextMessages.splice(index, 1);
   return createDerivedState(previous, nextMessages);
 };
@@ -485,7 +273,7 @@ export const updateLastSessionMessage = (
   owner: SessionMessageOwner,
   updater: (message: AgentChatMessage) => AgentChatMessage,
 ): SessionMessagesState => {
-  const lastIndex = getSessionState(owner).count - 1;
+  const lastIndex = getSessionMessageCount(owner) - 1;
   return lastIndex >= 0 ? updateMessageAtIndex(owner, lastIndex, updater) : getSessionState(owner);
 };
 
@@ -513,16 +301,11 @@ export const updateSessionMessagesByRole = (
   updater: (message: AgentChatMessage, index: number) => AgentChatMessage,
 ): SessionMessagesState => {
   const previous = getSessionState(owner);
-  const indexes = getMessageIndexesByRole(owner, role);
   let nextMessages: AgentChatMessage[] | null = null;
-  let changedRole = false;
-  let nextIndexById: Map<string, number> | null = null;
-  const currentIndexById = previous[SESSION_MESSAGES_BY_ID];
 
-  for (const index of indexes) {
-    const source = nextMessages ?? previous[SESSION_MESSAGES_DATA];
-    const existing = source[index];
-    if (!existing) {
+  for (let index = 0; index < previous.items.length; index += 1) {
+    const existing = previous.items[index];
+    if (!existing || existing.role !== role) {
       continue;
     }
 
@@ -532,25 +315,12 @@ export const updateSessionMessagesByRole = (
     }
 
     if (!nextMessages) {
-      nextMessages = previous[SESSION_MESSAGES_DATA].slice();
+      nextMessages = previous.items.slice();
     }
     nextMessages[index] = updated;
-    changedRole ||= updated.role !== existing.role;
-
-    if (currentIndexById && updated.id !== existing.id) {
-      if (!nextIndexById) {
-        nextIndexById = new Map(currentIndexById);
-      }
-      nextIndexById.delete(existing.id);
-      nextIndexById.set(updated.id, index);
-    }
   }
 
-  if (!nextMessages) {
-    return previous;
-  }
-
-  return deriveStateForRoleBatchUpdate(previous, nextMessages, nextIndexById, changedRole);
+  return nextMessages ? createDerivedState(previous, nextMessages) : previous;
 };
 
 export const upsertSessionMessage = (
@@ -558,16 +328,14 @@ export const upsertSessionMessage = (
   message: AgentChatMessage,
 ): SessionMessagesState => {
   const previous = getSessionState(owner);
-  const lastIndex = previous.count - 1;
-  if (lastIndex >= 0 && previous[SESSION_MESSAGES_DATA][lastIndex]?.id === message.id) {
+  const lastIndex = previous.items.length - 1;
+  if (lastIndex >= 0 && previous.items[lastIndex]?.id === message.id) {
     return mergeAtIndex(previous, lastIndex, message);
   }
 
-  const index =
-    previous[SESSION_MESSAGES_BY_ID]?.get(message.id) ?? findMessageIndexById(owner, message.id);
+  const index = findMessageIndexById(owner, message.id);
   if (index < 0) {
-    const nextMessages = [...previous[SESSION_MESSAGES_DATA], message];
-    return deriveStateForAppend(previous, message, nextMessages);
+    return createDerivedState(previous, [...previous.items, message]);
   }
 
   return mergeAtIndex(previous, index, message);
@@ -581,14 +349,16 @@ export const findFirstChangedSessionMessageIndex = (
     return 0;
   }
 
-  const previous = toInternalState(previousMessages);
   const next = getSessionState(nextOwner);
-  if (previous === next) {
+  if (previousMessages.externalSessionId !== next.externalSessionId) {
+    return 0;
+  }
+  if (previousMessages === next) {
     return -1;
   }
 
-  const previousData = previous[SESSION_MESSAGES_DATA];
-  const nextData = next[SESSION_MESSAGES_DATA];
+  const previousData = previousMessages.items;
+  const nextData = next.items;
   if (nextData.length < previousData.length) {
     return 0;
   }
@@ -616,11 +386,11 @@ export const findFirstChangedSessionMessageIndex = (
 };
 
 function mergeAtIndex(
-  previous: InternalSessionMessagesState,
+  previous: SessionMessagesState,
   index: number,
   incoming: AgentChatMessage,
 ): SessionMessagesState {
-  const existing = previous[SESSION_MESSAGES_DATA][index];
+  const existing = previous.items[index];
   if (!existing) {
     return previous;
   }
@@ -630,7 +400,7 @@ function mergeAtIndex(
     return previous;
   }
 
-  const nextMessages = previous[SESSION_MESSAGES_DATA].slice();
+  const nextMessages = previous.items.slice();
   nextMessages[index] = merged;
-  return deriveStateForSingleUpdate(previous, index, existing, merged, nextMessages);
+  return createDerivedState(previous, nextMessages);
 }

@@ -25,6 +25,7 @@ export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
+    dedupe: ["@tanstack/react-query", "react", "react-dom", "react-router", "react-router-dom"],
     alias: [
       { find: "@", replacement: frontendSrc },
       {

@@ -113,7 +113,7 @@ export type AgentChatMessage = {
 
 export type SessionMessagesState = {
   readonly externalSessionId: string;
-  readonly count: number;
+  readonly items: readonly AgentChatMessage[];
   readonly version: number;
 };
 

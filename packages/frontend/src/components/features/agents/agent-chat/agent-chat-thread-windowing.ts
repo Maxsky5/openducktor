@@ -104,7 +104,8 @@ const areSessionMessageContainersEquivalent = (
     previousMessages.externalSessionId === externalSessionId &&
     nextMessages.externalSessionId === externalSessionId &&
     previousMessages.version === nextMessages.version &&
-    previousMessages.count === nextMessages.count
+    getSessionMessageCount({ externalSessionId, messages: previousMessages }) ===
+      getSessionMessageCount({ externalSessionId, messages: nextMessages })
   );
 };
 
