@@ -22,6 +22,7 @@ const buildModel = () => ({
     blockedReason: "",
     isLoadingChecks: false,
     onRefreshChecks: () => {},
+    emptyState: null,
     isStarting: false,
     isSending: false,
     sessionAgentColors: {},

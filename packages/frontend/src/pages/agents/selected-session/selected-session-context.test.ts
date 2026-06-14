@@ -196,6 +196,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const startLaunchKickoff = mock(async () => {});
     const readyContext = buildAgentStudioSelectedSessionContext(
       createInput({
+        lifecycle: createSelectedSessionLifecycleFixture({
+          externalSessionId: null,
+          phase: "inactive",
+          canReadRuntimeData: false,
+          canRenderHistory: false,
+        }),
         sessionActions: {
           ...createInput().sessionActions,
           startLaunchKickoff,
@@ -211,6 +217,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
     const startingContext = buildAgentStudioSelectedSessionContext(
       createInput({
+        lifecycle: createSelectedSessionLifecycleFixture({
+          externalSessionId: null,
+          phase: "inactive",
+          canReadRuntimeData: false,
+          canRenderHistory: false,
+        }),
         sessionActions: {
           ...createInput().sessionActions,
           isStarting: true,
@@ -273,6 +285,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(context.runtime.lifecycle)).toBe(true);
+    expect(context.chat.emptyState).toBeNull();
   });
 
   test("does not treat generic readiness checking as runtime startup", () => {

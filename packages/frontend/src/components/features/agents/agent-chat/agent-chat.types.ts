@@ -57,7 +57,7 @@ export type AgentChatThreadModel = {
   blockedReason: string | null;
   isLoadingChecks: boolean;
   onRefreshChecks: () => void;
-  emptyState?: AgentChatEmptyStateModel | null;
+  emptyState: AgentChatEmptyStateModel | null;
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;

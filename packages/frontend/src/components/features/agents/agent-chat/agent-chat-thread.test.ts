@@ -359,6 +359,8 @@ describe("AgentChatThread", () => {
 
     expect(html).toContain("OpenCode runtime is unavailable");
     expect(html).toContain("Recheck");
+    expect(html).not.toContain("Send a message to start a new session automatically.");
+    expect(html).not.toContain("No conversation available.");
   });
 
   test("renders the runtime-starting overlay without unmounting transcript content", () => {

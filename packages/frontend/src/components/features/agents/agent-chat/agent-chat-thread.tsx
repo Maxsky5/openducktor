@@ -314,10 +314,10 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
       ) : null}
 
       <div ref={messagesContentRef} className="space-y-1">
-        {!hasSession && !visibleStatusOverlay ? (
+        {!hasSession && !visibleStatusOverlay && !showRuntimeBlockedCard && emptyState ? (
           <div className="space-y-3 rounded-lg border border-dashed border-input bg-card p-4 text-sm text-muted-foreground">
-            <p>{emptyState?.title ?? "No conversation available."}</p>
-            {emptyState?.actionLabel && emptyState.onAction ? (
+            <p>{emptyState.title}</p>
+            {emptyState.actionLabel && emptyState.onAction ? (
               <Button
                 type="button"
                 size="sm"

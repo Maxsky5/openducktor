@@ -37,6 +37,7 @@ const createThreadModel = (
   blockedReason: null,
   isLoadingChecks: false,
   onRefreshChecks: () => {},
+  emptyState: null,
   isStarting: false,
   isSending: false,
   sessionAgentColors: {},

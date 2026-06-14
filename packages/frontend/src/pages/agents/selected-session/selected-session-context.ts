@@ -7,6 +7,7 @@ import type {
 import type { AgentRole } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import type {
+  AgentChatEmptyStateModel,
   AgentChatModel,
   AgentChatThreadSession,
 } from "@/components/features/agents/agent-chat/agent-chat.types";
@@ -75,7 +76,7 @@ export type SelectedSessionRightPanelContext = {
 };
 
 export type SelectedSessionChatContext = {
-  emptyState: NonNullable<AgentChatModel["thread"]["emptyState"]> | null;
+  emptyState: AgentChatEmptyStateModel | null;
   contextUsage: AgentChatModel["composer"]["contextUsage"];
   activeComposerSession: SelectedSessionComposerActiveSession;
   isViewSwitching: boolean;
@@ -252,6 +253,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   const composerReadOnly = !activeSession && !workflow.selectedRoleAvailable;
   const emptyState = buildSelectedSessionChatEmptyState({
     taskId,
+    lifecycle,
     isStarting: sessionActions.isStarting,
     canKickoff,
     kickoffLabel: sessionActions.kickoffLabel,
@@ -345,21 +347,27 @@ export const buildAgentStudioSelectedSessionContext = ({
 
 const buildSelectedSessionChatEmptyState = ({
   taskId,
+  lifecycle,
   isStarting,
   canKickoff,
   kickoffLabel,
   startLaunchKickoff,
 }: {
   taskId: string;
+  lifecycle: SelectedAgentSessionViewLifecycle;
   isStarting: boolean;
   canKickoff: boolean;
   kickoffLabel: string;
   startLaunchKickoff: () => Promise<void>;
-}): NonNullable<AgentChatModel["thread"]["emptyState"]> | null => {
+}): AgentChatEmptyStateModel | null => {
   if (!taskId) {
     return {
       title: "Select a task to begin.",
     };
+  }
+
+  if (lifecycle.phase !== "inactive") {
+    return null;
   }
 
   if (isStarting) {
