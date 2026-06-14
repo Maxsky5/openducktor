@@ -9,6 +9,12 @@ import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
+import {
+  createSessionListenerRegistry,
+  hasSessionListenerForExternalSessionId,
+  type SessionListenerRegistry,
+  setSessionListener,
+} from "./support/session-listener-registry";
 
 const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   title: "Task",
@@ -17,6 +23,58 @@ const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 };
 
 export const createDeferred = createSharedDeferred;
+
+type SessionListenerRegistryFixture = {
+  externalSessionId?: string;
+  repoPath?: string;
+  runtimeKind?: AgentSessionRef["runtimeKind"];
+  workingDirectory?: string;
+  unsubscribe?: () => void;
+};
+
+const toSessionListenerFixtureRef = ({
+  externalSessionId = "external-1",
+  repoPath = "/tmp/repo",
+  runtimeKind = "opencode",
+  workingDirectory = "/tmp/repo/worktree",
+}: SessionListenerRegistryFixture): AgentSessionRef => ({
+  externalSessionId,
+  repoPath,
+  runtimeKind,
+  workingDirectory,
+});
+
+export const createSessionListenerRegistryFixture = (
+  listeners: SessionListenerRegistryFixture[] = [],
+): SessionListenerRegistry => {
+  const registry = createSessionListenerRegistry();
+  for (const listener of listeners) {
+    setSessionListenerFixture(registry, listener);
+  }
+  return registry;
+};
+
+export const setSessionListenerFixture = (
+  registry: SessionListenerRegistry,
+  listener: SessionListenerRegistryFixture,
+): void => {
+  setSessionListener(
+    registry,
+    toSessionListenerFixtureRef(listener),
+    listener.unsubscribe ?? (() => {}),
+  );
+};
+
+export const createSessionListenerRegistryRefFixture = (
+  listeners: SessionListenerRegistryFixture[] = [],
+): { current: SessionListenerRegistry } => ({
+  current: createSessionListenerRegistryFixture(listeners),
+});
+
+export const hasSessionListenerFixture = (
+  registry: SessionListenerRegistry,
+  externalSessionId: string,
+): boolean => hasSessionListenerForExternalSessionId(registry, externalSessionId);
 
 export const withTimeout = async <T>(
   promise: Promise<T>,

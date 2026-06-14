@@ -3,7 +3,13 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
 import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createAgentSessionPresenceSnapshotFixture, createDeferred } from "../test-utils";
+import {
+  createAgentSessionPresenceSnapshotFixture,
+  createDeferred,
+  createSessionListenerRegistryRefFixture,
+  hasSessionListenerFixture,
+  setSessionListenerFixture,
+} from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
 const withCapturedConsoleError = async (
@@ -92,7 +98,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -146,7 +152,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "idle" }),
       },
     };
-    const unsubscribersRef = { current: new Map<string, () => void>() };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture();
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -159,7 +165,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -169,7 +175,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
-        unsubscribersRef.current.set("session-1", () => {});
+        setSessionListenerFixture(sessionListenerRegistryRef.current, {
+          externalSessionId: "session-1",
+        });
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -182,7 +190,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady("session-1");
       expect(listenCalls).toBe(1);
-      expect(unsubscribersRef.current.has("session-1")).toBe(true);
+      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
       expect(readSnapshotCalls).toEqual([
@@ -241,16 +249,14 @@ describe("agent-orchestrator-ensure-ready", () => {
         "external-1": buildSession({ status: "idle" }),
       },
     };
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "external-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "external-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -263,7 +269,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["external-1"];
         if (!current) {
@@ -289,7 +295,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(stopCalls).toBe(1);
       expect(listenerStarted).toBe(true);
       expect(unsubscribeCalls).toBe(0);
-      expect(unsubscribersRef.current.has("external-1")).toBe(true);
+      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "external-1")).toBe(
+        true,
+      );
       expect(sessionsRef.current["external-1"]?.runtimeKind).toBe("opencode");
     } finally {
       adapter.stopSession = originalStopSession;
@@ -356,16 +364,14 @@ describe("agent-orchestrator-ensure-ready", () => {
         }),
       },
     };
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "external-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "external-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -378,7 +384,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         updateCalls += 1;
         const current = sessionsRef.current["external-1"];
@@ -405,7 +411,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(resumeCalls).toBe(1);
       expect(stopCalls).toBe(1);
       expect(unsubscribeCalls).toBe(0);
-      expect(unsubscribersRef.current.has("external-1")).toBe(true);
+      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "external-1")).toBe(
+        true,
+      );
       expect(sessionsRef.current["external-1"]?.runtimeKind).toBe("opencode");
       expect(sessionsRef.current["external-1"]?.pendingApprovals).toHaveLength(0);
     } finally {
@@ -448,7 +456,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -516,7 +524,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
       listenToAgentSession: async () => {},
       ensureRuntime: async () => {
@@ -570,7 +578,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         },
       },
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
       listenToAgentSession: async () => {},
       ensureRuntime: async () => {
@@ -684,7 +692,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -792,7 +800,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         }),
       },
     };
-    const unsubscribersRef = { current: new Map<string, () => void>() };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture();
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -805,7 +813,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -815,7 +823,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
-        unsubscribersRef.current.set("session-1", () => {});
+        setSessionListenerFixture(sessionListenerRegistryRef.current, {
+          externalSessionId: "session-1",
+        });
       },
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
@@ -834,7 +844,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       );
 
       expect(listenCalls).toBe(0);
-      expect(unsubscribersRef.current.has("session-1")).toBe(false);
+      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(
+        false,
+      );
       expect(ensureRuntimeCalls).toBe(1);
       expect(resumeCalls).toBe(1);
       expect(stopCalls).toBe(1);
@@ -907,16 +919,14 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
     };
 
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "session-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "session-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -929,7 +939,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1006,16 +1016,14 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "idle" }),
       },
     };
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "session-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "session-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1028,7 +1036,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1038,7 +1046,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
-        unsubscribersRef.current.set("session-1", () => {});
+        setSessionListenerFixture(sessionListenerRegistryRef.current, {
+          externalSessionId: "session-1",
+        });
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1054,7 +1064,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(resumeCalls).toBe(1);
       expect(unsubscribeCalls).toBe(1);
       expect(listenCalls).toBe(1);
-      expect(unsubscribersRef.current.has("session-1")).toBe(true);
+      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
     } finally {
       adapter.resumeSession = originalResumeSession;
     }
@@ -1086,16 +1096,14 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "error" }),
       },
     };
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "session-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "session-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1108,7 +1116,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1132,7 +1140,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       });
       expect(resumeCalls).toBe(1);
       expect(unsubscribeCalls).toBe(0);
-      expect(unsubscribersRef.current.has("session-1")).toBe(true);
+      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
@@ -1181,16 +1189,14 @@ describe("agent-orchestrator-ensure-ready", () => {
         "session-1": buildSession({ status: "error" }),
       },
     };
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "session-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "session-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1203,7 +1209,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1274,7 +1280,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1339,7 +1345,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef,
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1438,7 +1444,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1537,7 +1543,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
         const current = sessionsRef.current["session-1"];
         if (!current) {
@@ -1595,7 +1601,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         },
       },
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
       listenToAgentSession: async () => {},
       ensureRuntime: async () => {
@@ -1641,7 +1647,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         },
       },
       taskRef: { current: [taskFixture] },
-      unsubscribersRef: { current: new Map() },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
       listenToAgentSession: async () => {},
       ensureRuntime: async () => {

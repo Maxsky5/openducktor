@@ -12,6 +12,7 @@ import { listenToAgentSessionEvents } from "../events/session-events";
 import {
   createAgentSessionPresenceSnapshotFixture,
   createDeferred,
+  createSessionListenerRegistryRefFixture,
   createTaskCardFixture,
 } from "../test-utils";
 import { createAgentSessionActions } from "./session-actions";
@@ -79,7 +80,7 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
     repoEpochRef: { current: 1 },
     currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
     inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-    unsubscribersRef: { current: new Map() },
+    sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
     recordTurnUserMessageTimestamp: (externalSessionId, timestamp) => {
       const timestampMs = typeof timestamp === "number" ? timestamp : Date.parse(timestamp);
       if (!Number.isFinite(timestampMs)) {
@@ -284,16 +285,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: {
-        current: new Map([
-          [
-            "session-1",
-            () => {
-              unsubscribeCalls += 1;
-            },
-          ],
-        ]),
-      },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        {
+          externalSessionId: "session-1",
+          unsubscribe: () => {
+            unsubscribeCalls += 1;
+          },
+        },
+      ]),
       clearTurnDuration: () => {
         clearCalls += 1;
       },
@@ -449,7 +448,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", unsubscribe]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1", unsubscribe },
+      ]),
       updateSession,
       listenToAgentSession: async () => undefined,
     });
@@ -564,16 +565,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     let clearCalls = 0;
     let unsubscribeCalls = 0;
 
-    const unsubscribersRef = {
-      current: new Map<string, () => void>([
-        [
-          "session-1",
-          () => {
-            unsubscribeCalls += 1;
-          },
-        ],
-      ]),
-    };
+    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+      {
+        externalSessionId: "session-1",
+        unsubscribe: () => {
+          unsubscribeCalls += 1;
+        },
+      },
+    ]);
 
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
@@ -585,7 +584,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       clearTurnDuration: () => {
         clearCalls += 1;
       },
@@ -992,7 +991,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
     });
 
     try {
@@ -1254,7 +1255,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1299,7 +1302,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       updateSession: (externalSessionId, updater) => {
         const current = sessionsRef.current[externalSessionId];
         if (!current) {
@@ -1357,7 +1362,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1405,7 +1412,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1449,7 +1458,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1515,7 +1526,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1563,7 +1576,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1612,7 +1627,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           }),
         ],
       },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1656,7 +1673,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           }),
         ],
       },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1695,7 +1714,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1773,7 +1794,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       turnModelBySessionRef,
       recordTurnUserMessageTimestamp: () => {
         recordUserAnchorCalls += 1;
@@ -1847,7 +1870,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       taskRef: { current: [] },
-      unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
+      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
+        { externalSessionId: "session-1" },
+      ]),
       turnModelBySessionRef,
       recordTurnUserMessageTimestamp: () => {
         recordUserAnchorCalls += 1;

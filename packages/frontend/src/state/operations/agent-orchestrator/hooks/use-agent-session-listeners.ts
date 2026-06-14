@@ -9,6 +9,12 @@ import { useCallback, useMemo } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { listenToAgentSessionEvents } from "../events/session-events";
+import {
+  hasSessionListener,
+  hasSessionListenerForExternalSessionId,
+  removeSessionListenersByExternalSessionId,
+  setSessionListener,
+} from "../support/session-listener-registry";
 import { createSessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
@@ -62,7 +68,7 @@ export const useAgentSessionListeners = ({
   clearTurnDuration,
   refreshTaskData,
 }: UseAgentSessionListenersArgs) => {
-  const { unsubscribersRef } = refBridges;
+  const { sessionListenerRegistryRef } = refBridges;
   const runtimeDataWriter = useMemo(
     () => createSessionRuntimeDataWriter(queryClient),
     [queryClient],
@@ -88,9 +94,10 @@ export const useAgentSessionListeners = ({
       }
 
       for (const externalSessionId of externalSessionIds) {
-        const unsubscribe = unsubscribersRef.current.get(externalSessionId);
-        unsubscribe?.();
-        unsubscribersRef.current.delete(externalSessionId);
+        removeSessionListenersByExternalSessionId(
+          sessionListenerRegistryRef.current,
+          externalSessionId,
+        );
 
         const flushTimeout = refBridges.draftFlushTimeoutBySessionRef.current[externalSessionId];
         if (flushTimeout !== undefined) {
@@ -116,7 +123,7 @@ export const useAgentSessionListeners = ({
         return hasChanges ? next : current;
       });
     },
-    [commitSessions, refBridges, unsubscribersRef],
+    [commitSessions, refBridges, sessionListenerRegistryRef],
   );
 
   const removeAgentSession = useCallback(
@@ -145,9 +152,13 @@ export const useAgentSessionListeners = ({
   const listenToAgentSession = useCallback<ListenToAgentSession>(
     async (target): Promise<void> => {
       const externalSessionId = target.externalSessionId;
-      if (unsubscribersRef.current.has(externalSessionId)) {
+      if (hasSessionListener(sessionListenerRegistryRef.current, target)) {
         return;
       }
+      removeSessionListenersByExternalSessionId(
+        sessionListenerRegistryRef.current,
+        externalSessionId,
+      );
 
       const unsubscribe = await listenToAgentSessionEvents({
         adapter: agentEngine,
@@ -162,7 +173,10 @@ export const useAgentSessionListeners = ({
         runtimeDataWriter,
         isSessionListenerActive: (candidateSessionId) =>
           candidateSessionId === externalSessionId ||
-          unsubscribersRef.current.has(candidateSessionId),
+          hasSessionListenerForExternalSessionId(
+            sessionListenerRegistryRef.current,
+            candidateSessionId,
+          ),
         recordTurnActivityTimestamp,
         recordTurnUserMessageTimestamp,
         resolveTurnDurationMs,
@@ -173,11 +187,11 @@ export const useAgentSessionListeners = ({
           findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind),
       });
 
-      if (unsubscribersRef.current.has(externalSessionId)) {
+      if (hasSessionListener(sessionListenerRegistryRef.current, target)) {
         unsubscribe();
         return;
       }
-      unsubscribersRef.current.set(externalSessionId, unsubscribe);
+      setSessionListener(sessionListenerRegistryRef.current, target, unsubscribe);
     },
     [
       agentEngine,
@@ -189,7 +203,7 @@ export const useAgentSessionListeners = ({
       recordTurnUserMessageTimestamp,
       resolveTurnDurationMs,
       runtimeDataWriter,
-      unsubscribersRef,
+      sessionListenerRegistryRef,
       updateSession,
     ],
   );

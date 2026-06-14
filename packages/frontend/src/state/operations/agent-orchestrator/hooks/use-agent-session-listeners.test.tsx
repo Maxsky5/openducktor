@@ -2,6 +2,10 @@ import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import {
+  hasSessionListenerForExternalSessionId,
+  setSessionListener,
+} from "../support/session-listener-registry";
+import {
   createNoopEngine,
   createSession,
   createTaskFixture,
@@ -64,6 +68,72 @@ describe("useAgentSessionListeners", () => {
     await harness.unmount();
   });
 
+  test("replaces stale listener when the same external id points to another session identity", async () => {
+    const firstUnsubscribe = mock(() => undefined);
+    const secondUnsubscribe = mock(() => undefined);
+    const subscribeEvents = mock(async () =>
+      subscribeEvents.mock.calls.length === 1 ? firstUnsubscribe : secondUnsubscribe,
+    );
+    const queryClient = new QueryClient();
+    const Harness = () => {
+      const state = useOrchestratorSessionState({
+        activeWorkspace: {
+          workspaceId: "workspace",
+          workspaceName: "Workspace",
+          repoPath: "/tmp/repo",
+        },
+        tasks: [createTaskFixture()],
+      });
+      const listeners = useAgentSessionListeners({
+        agentEngine: createNoopEngine({
+          subscribeEvents,
+          listRuntimeDefinitions: () => [],
+        }),
+        refBridges: state.refBridges,
+        sessionsRef: state.refBridges.sessionsRef,
+        commitSessions: state.commitSessions,
+        updateSession: () => undefined,
+        queryClient,
+        workspaceId: "workspace",
+        loadRepoPromptOverrides: async () => ({}),
+        recordTurnActivityTimestamp: () => undefined,
+        recordTurnUserMessageTimestamp: () => undefined,
+        resolveTurnDurationMs: () => undefined,
+        clearTurnDuration: () => undefined,
+        refreshTaskData: async () => undefined,
+      });
+      return { state, listeners };
+    };
+
+    const harness = createHookHarness(Harness, undefined);
+    await harness.mount();
+
+    const firstSessionRef = {
+      externalSessionId: "external-1",
+      repoPath: "/tmp/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/tmp/repo/old-worktree",
+    } as const;
+    const secondSessionRef = {
+      ...firstSessionRef,
+      workingDirectory: "/tmp/repo/new-worktree",
+    };
+
+    await harness.run(async ({ listeners }) => {
+      await listeners.listenToAgentSession(firstSessionRef);
+      await listeners.listenToAgentSession(secondSessionRef);
+    });
+
+    const registry = harness.getLatest().state.refBridges.sessionListenerRegistryRef.current;
+    expect(firstUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(secondUnsubscribe).not.toHaveBeenCalled();
+    expect(subscribeEvents).toHaveBeenCalledTimes(2);
+    expect(registry.size).toBe(1);
+    expect(hasSessionListenerForExternalSessionId(registry, "external-1")).toBe(true);
+
+    await harness.unmount();
+  });
+
   test("removal clears subscriptions, draft refs, timing refs, and session state", async () => {
     const unsubscribe = mock(() => undefined);
     const queryClient = new QueryClient();
@@ -97,7 +167,16 @@ describe("useAgentSessionListeners", () => {
     await harness.mount();
     await harness.run(({ state }) => {
       state.commitSessions({ "external-1": createSession() });
-      state.refBridges.unsubscribersRef.current.set("external-1", unsubscribe);
+      setSessionListener(
+        state.refBridges.sessionListenerRegistryRef.current,
+        {
+          externalSessionId: "external-1",
+          repoPath: "/tmp/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+        },
+        unsubscribe,
+      );
       state.refBridges.draftRawBySessionRef.current["external-1"] = { reasoning: "draft" };
       state.refBridges.draftSourceBySessionRef.current["external-1"] = { reasoning: "delta" };
       state.refBridges.draftMessageIdBySessionRef.current["external-1"] = {
@@ -112,7 +191,12 @@ describe("useAgentSessionListeners", () => {
     const { state } = harness.getLatest();
 
     expect(unsubscribe).toHaveBeenCalledTimes(1);
-    expect(state.refBridges.unsubscribersRef.current.has("external-1")).toBe(false);
+    expect(
+      hasSessionListenerForExternalSessionId(
+        state.refBridges.sessionListenerRegistryRef.current,
+        "external-1",
+      ),
+    ).toBe(false);
     expect(state.refBridges.draftRawBySessionRef.current["external-1"]).toBeUndefined();
     expect(state.refBridges.assistantTurnTimingBySessionRef.current["external-1"]).toBeUndefined();
     expect(state.sessionStore.getSessionsByIdSnapshot()["external-1"]).toBeUndefined();

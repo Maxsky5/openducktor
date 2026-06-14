@@ -3,6 +3,10 @@ import type { TaskCard } from "@openducktor/contracts";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import {
+  removeSessionListenersByExternalSessionId,
+  setSessionListener,
+} from "../support/session-listener-registry";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -124,14 +128,32 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
           "session-1": createSessionFixture(),
         });
 
-        const unsubscribers = hook.refBridges.unsubscribersRef.current;
-        unsubscribers.set("first", () => {
-          unsubscribeCalls.push("first");
-          unsubscribers.delete("second");
-        });
-        unsubscribers.set("second", () => {
-          unsubscribeCalls.push("second");
-        });
+        const registry = hook.refBridges.sessionListenerRegistryRef.current;
+        setSessionListener(
+          registry,
+          {
+            externalSessionId: "first",
+            repoPath: "/tmp/repo-a",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo-a",
+          },
+          () => {
+            unsubscribeCalls.push("first");
+            removeSessionListenersByExternalSessionId(registry, "second");
+          },
+        );
+        setSessionListener(
+          registry,
+          {
+            externalSessionId: "second",
+            repoPath: "/tmp/repo-a",
+            runtimeKind: "opencode",
+            workingDirectory: "/tmp/repo-a",
+          },
+          () => {
+            unsubscribeCalls.push("second");
+          },
+        );
       });
 
       await harness.update({
@@ -141,7 +163,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
 
       expect(unsubscribeCalls).toEqual(["first", "second"]);
       expect(harness.getLatest().sessionsById).toEqual({});
-      expect(harness.getLatest().refBridges.unsubscribersRef.current.size).toBe(0);
+      expect(harness.getLatest().refBridges.sessionListenerRegistryRef.current.size).toBe(0);
     } finally {
       await harness.unmount();
     }

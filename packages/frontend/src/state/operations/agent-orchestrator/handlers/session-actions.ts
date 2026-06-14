@@ -27,6 +27,10 @@ import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import {
+  removeSessionListenersByExternalSessionId,
+  type SessionListenerRegistry,
+} from "../support/session-listener-registry";
+import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
@@ -51,7 +55,7 @@ type SessionActionsDependencies = {
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
-  unsubscribersRef: { current: Map<string, () => void> };
+  sessionListenerRegistryRef: { current: SessionListenerRegistry };
   turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
   recordTurnUserMessageTimestamp: (
     externalSessionId: string,
@@ -203,7 +207,7 @@ export const createAgentSessionActions = ({
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   inFlightStartsByWorkspaceTaskRef,
-  unsubscribersRef,
+  sessionListenerRegistryRef,
   turnModelBySessionRef,
   recordTurnUserMessageTimestamp,
   readTurnUserMessageStartedAtMs,
@@ -228,7 +232,7 @@ export const createAgentSessionActions = ({
     currentWorkspaceRepoPathRef,
     sessionsRef,
     taskRef,
-    unsubscribersRef,
+    sessionListenerRegistryRef,
     updateSession,
     listenToAgentSession,
     ensureRuntime,
@@ -436,9 +440,10 @@ export const createAgentSessionActions = ({
       );
     }
 
-    const unsubscribe = unsubscribersRef.current.get(externalSessionId);
-    unsubscribe?.();
-    unsubscribersRef.current.delete(externalSessionId);
+    removeSessionListenersByExternalSessionId(
+      sessionListenerRegistryRef.current,
+      externalSessionId,
+    );
     clearTurnDuration(externalSessionId);
     if (turnModelBySessionRef) {
       delete turnModelBySessionRef.current[externalSessionId];

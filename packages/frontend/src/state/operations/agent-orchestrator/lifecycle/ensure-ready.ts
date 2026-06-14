@@ -5,6 +5,11 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
+import {
+  hasSessionListenerForExternalSessionId,
+  removeSessionListenersByExternalSessionId,
+  type SessionListenerRegistry,
+} from "../support/session-listener-registry";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
 import { type ListenToAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
@@ -22,7 +27,7 @@ type EnsureSessionReadyDependencies = {
   currentWorkspaceRepoPathRef: { current: string | null };
   sessionsRef: { current: Record<string, AgentSessionState> };
   taskRef: { current: TaskCard[] };
-  unsubscribersRef: { current: Map<string, () => void> };
+  sessionListenerRegistryRef: { current: SessionListenerRegistry };
   updateSession: (
     externalSessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
@@ -48,7 +53,7 @@ export const createEnsureSessionReady = ({
   currentWorkspaceRepoPathRef,
   sessionsRef,
   taskRef,
-  unsubscribersRef,
+  sessionListenerRegistryRef,
   updateSession,
   listenToAgentSession,
   ensureRuntime,
@@ -71,12 +76,10 @@ export const createEnsureSessionReady = ({
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
     const removeSessionUnsubscriber = (targetExternalSessionId: string): void => {
-      const existingUnsubscriber = unsubscribersRef.current.get(targetExternalSessionId);
-      if (!existingUnsubscriber) {
-        return;
-      }
-      existingUnsubscriber();
-      unsubscribersRef.current.delete(targetExternalSessionId);
+      removeSessionListenersByExternalSessionId(
+        sessionListenerRegistryRef.current,
+        targetExternalSessionId,
+      );
     };
 
     const readSessionPresenceSnapshot = async ({
@@ -184,7 +187,10 @@ export const createEnsureSessionReady = ({
       if (sessionPresence.presence === "runtime") {
         await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
           session,
-          shouldListen: !unsubscribersRef.current.has(externalSessionId),
+          shouldListen: !hasSessionListenerForExternalSessionId(
+            sessionListenerRegistryRef.current,
+            externalSessionId,
+          ),
         });
         return;
       }

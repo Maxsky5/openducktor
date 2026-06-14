@@ -10,6 +10,11 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
 import type { AssistantTurnTimingState } from "../support/assistant-turn-duration";
+import {
+  clearSessionListenerRegistry,
+  createSessionListenerRegistry,
+  type SessionListenerRegistry,
+} from "../support/session-listener-registry";
 
 type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => AgentSessionsById);
 
@@ -19,7 +24,7 @@ type OrchestratorMutableState = {
   currentWorkspaceRepoPath: string | null;
   repoEpoch: number;
   inFlightStartsByWorkspaceTask: Map<string, Promise<string>>;
-  unsubscribersBySession: Map<string, () => void>;
+  sessionListenerRegistry: SessionListenerRegistry;
   draftRawBySession: Record<string, DraftChannelValueMap<string>>;
   draftSourceBySession: Record<string, DraftChannelValueMap<DraftSource>>;
   draftMessageIdBySession: Record<string, DraftChannelValueMap<string>>;
@@ -34,7 +39,7 @@ type OrchestratorRefBridges = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
   inFlightStartsByWorkspaceTaskRef: MutableRefObject<Map<string, Promise<string>>>;
-  unsubscribersRef: MutableRefObject<Map<string, () => void>>;
+  sessionListenerRegistryRef: MutableRefObject<SessionListenerRegistry>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
   draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
   draftMessageIdBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
@@ -70,14 +75,6 @@ const createMutableBridge = <K extends keyof OrchestratorMutableState>(
     },
   }) as MutableRefObject<OrchestratorMutableState[K]>;
 
-const clearUnsubscribers = (unsubscribers: Map<string, () => void>): void => {
-  const unsubscribeCallbacks = [...unsubscribers.values()];
-  for (const unsubscribe of unsubscribeCallbacks) {
-    unsubscribe();
-  }
-  unsubscribers.clear();
-};
-
 export const useOrchestratorSessionState = ({
   activeWorkspace,
   tasks,
@@ -94,7 +91,7 @@ export const useOrchestratorSessionState = ({
     currentWorkspaceRepoPath: workspaceRepoPath,
     repoEpoch: 0,
     inFlightStartsByWorkspaceTask: new Map<string, Promise<string>>(),
-    unsubscribersBySession: new Map<string, () => void>(),
+    sessionListenerRegistry: createSessionListenerRegistry(),
     draftRawBySession: {},
     draftSourceBySession: {},
     draftMessageIdBySession: {},
@@ -112,7 +109,7 @@ export const useOrchestratorSessionState = ({
         mutableStateRef,
         "inFlightStartsByWorkspaceTask",
       ),
-      unsubscribersRef: createMutableBridge(mutableStateRef, "unsubscribersBySession"),
+      sessionListenerRegistryRef: createMutableBridge(mutableStateRef, "sessionListenerRegistry"),
       draftRawBySessionRef: createMutableBridge(mutableStateRef, "draftRawBySession"),
       draftSourceBySessionRef: createMutableBridge(mutableStateRef, "draftSourceBySession"),
       draftMessageIdBySessionRef: createMutableBridge(mutableStateRef, "draftMessageIdBySession"),
@@ -151,7 +148,7 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.repoEpoch += 1;
     mutableStateRef.current.currentWorkspaceRepoPath = workspaceRepoPath;
 
-    clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
+    clearSessionListenerRegistry(mutableStateRef.current.sessionListenerRegistry);
     for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);
@@ -169,7 +166,7 @@ export const useOrchestratorSessionState = ({
   }, [workspaceRepoPath, sessionStore]);
 
   const clearMutableSessionState = useCallback(() => {
-    clearUnsubscribers(mutableStateRef.current.unsubscribersBySession);
+    clearSessionListenerRegistry(mutableStateRef.current.sessionListenerRegistry);
     for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);

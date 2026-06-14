@@ -177,7 +177,7 @@ export function useAgentOrchestratorOperations({
         repoEpochRef: refBridges.repoEpochRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
-        unsubscribersRef: refBridges.unsubscribersRef,
+        sessionListenerRegistryRef: refBridges.sessionListenerRegistryRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         recordTurnUserMessageTimestamp: turnTiming.recordTurnUserMessageTimestamp,
         readTurnUserMessageStartedAtMs: turnTiming.readTurnUserMessageStartedAtMs,
