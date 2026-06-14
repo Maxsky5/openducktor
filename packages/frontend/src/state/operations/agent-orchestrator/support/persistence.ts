@@ -85,8 +85,9 @@ export const fromPersistedSessionRecord = (
     taskId: fallbackTaskId,
     role: session.role,
     // Persisted task-store records are durable session metadata only.
-    // Live state must always be derived from the runtime, not from persisted records.
-    status: "stopped",
+    // Absence from the live runtime means idle unless local state already knows
+    // the user stopped the session.
+    status: "idle",
     startedAt: session.startedAt,
     runtimeKind,
     workingDirectory: session.workingDirectory,

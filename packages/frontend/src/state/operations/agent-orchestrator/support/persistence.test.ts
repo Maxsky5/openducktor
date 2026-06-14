@@ -27,9 +27,9 @@ const recordFixture: AgentSessionRecord = {
 };
 
 describe("agent-orchestrator/support/persistence", () => {
-  test("loads persisted sessions as stopped until runtime state is read", () => {
+  test("loads persisted sessions as idle until runtime state is read", () => {
     const hydrated = fromPersistedSessionRecord(recordFixture, "task-1");
-    expect(hydrated.status).toBe("stopped");
+    expect(hydrated.status).toBe("idle");
     expect(hydrated.title).toBe("BUILD task-1");
     expect(hydrated.runtimeKind).toBe("opencode");
     expect(hydrated.pendingApprovals).toEqual([]);

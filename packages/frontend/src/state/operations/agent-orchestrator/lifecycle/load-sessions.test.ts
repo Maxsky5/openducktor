@@ -183,7 +183,7 @@ describe("createLoadAgentSessions", () => {
     ).toEqual(
       expect.objectContaining({
         externalSessionId: record.externalSessionId,
-        status: "stopped",
+        status: "idle",
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktree",
       }),
@@ -360,7 +360,7 @@ describe("createLoadAgentSessions", () => {
     await loading;
 
     const session = harness.getSession(record.externalSessionId);
-    expect(session?.status).toBe("stopped");
+    expect(session?.status).toBe("idle");
     expect(session?.runtimeKind).toBe("opencode");
     expect(session?.workingDirectory).toBe(record.workingDirectory);
     expect(session?.historyLoadState).toBe("not_requested");

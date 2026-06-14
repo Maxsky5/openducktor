@@ -522,7 +522,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
     expect(runtimeData.getTodos()).toHaveLength(1);
     expect(findSession(sessionsRef, "session-1")?.pendingQuestions).toHaveLength(0);
-    expect(findSession(sessionsRef, "session-1")?.status).toBe("stopped");
+    expect(findSession(sessionsRef, "session-1")?.status).toBe("idle");
     expect(updateSessionOptions).toContainEqual({ persist: false });
   });
 

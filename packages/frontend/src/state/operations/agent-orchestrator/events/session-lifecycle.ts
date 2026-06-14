@@ -413,6 +413,9 @@ export const handleSessionFinished = (
         context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ?? undefined,
       );
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
+      const terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
+        ? "stopped"
+        : "idle";
       return {
         ...finalized,
         pendingUserMessageStartedAt: undefined,
@@ -427,7 +430,7 @@ export const handleSessionFinished = (
         }),
         pendingApprovals: [],
         pendingQuestions: [],
-        status: "stopped",
+        status: terminalStatus,
         stopRequestedAt: null,
       };
     },

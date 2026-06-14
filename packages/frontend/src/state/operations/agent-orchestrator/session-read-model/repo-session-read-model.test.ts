@@ -162,7 +162,7 @@ describe("repo session read model", () => {
       tasks,
       runtimePresence: firstPresence,
     });
-    expect(getReadModelSession(firstRead, record.externalSessionId)?.status).toBe("stopped");
+    expect(getReadModelSession(firstRead, record.externalSessionId)?.status).toBe("idle");
 
     const secondPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
@@ -419,7 +419,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session.status).toBe("stopped");
+    expect(session.status).toBe("idle");
     expect(session.runtimeKind).toBe(record.runtimeKind);
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(session.historyLoadState).toBe("not_requested");
@@ -793,7 +793,7 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("propagates runtime scan failures instead of committing a stale stopped model", async () => {
+  test("propagates runtime scan failures instead of committing a stale session model", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     await expect(
