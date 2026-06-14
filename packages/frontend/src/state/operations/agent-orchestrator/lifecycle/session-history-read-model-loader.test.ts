@@ -70,7 +70,7 @@ const promptContext = {
 };
 
 describe("loadSessionHistoryForReadModel", () => {
-  test("loads history for observed sessions that have not requested history yet", async () => {
+  test("loads history for live sessions that have not requested history yet", async () => {
     let sessionCollection = createAgentSessionCollection([
       createSession("external-1"),
       createSession("external-2", "loaded"),
@@ -94,7 +94,7 @@ describe("loadSessionHistoryForReadModel", () => {
         sessionCollection = replaceAgentSession(sessionCollection, updater(current));
       },
       sessionCollection,
-      sessionObserverRefs: [sessionRef("external-1"), sessionRef("external-2")],
+      liveSessionRefs: [sessionRef("external-1"), sessionRef("external-2")],
       historyRuntimeContext: promptContext,
       isStaleRepoOperation: () => false,
     });
@@ -113,7 +113,7 @@ describe("loadSessionHistoryForReadModel", () => {
         adapter: { loadSessionHistory: async () => [] },
         updateSession: () => undefined,
         sessionCollection: createAgentSessionCollection([createSession("external-1")]),
-        sessionObserverRefs: [],
+        liveSessionRefs: [],
         historyRuntimeContext: promptContext,
         isStaleRepoOperation: () => false,
         requestedExternalSessionId: "missing-session",

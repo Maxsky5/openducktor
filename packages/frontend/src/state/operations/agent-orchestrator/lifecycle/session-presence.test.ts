@@ -7,8 +7,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   applyAgentSessionPresenceSnapshotToSession,
-  projectRepoSessionPresenceSnapshot,
-  shouldListenToAgentSessionPresenceSnapshot,
+  shouldObserveAgentSessionPresenceSnapshot,
 } from "./session-presence";
 
 const createSessionState = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
@@ -356,9 +355,9 @@ describe("session-presence", () => {
       ] as never,
     });
 
-    expect(shouldListenToAgentSessionPresenceSnapshot(idlePresence)).toBe(false);
-    expect(shouldListenToAgentSessionPresenceSnapshot(busyPresence)).toBe(true);
-    expect(shouldListenToAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
+    expect(shouldObserveAgentSessionPresenceSnapshot(idlePresence)).toBe(false);
+    expect(shouldObserveAgentSessionPresenceSnapshot(busyPresence)).toBe(true);
+    expect(shouldObserveAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
   });
 
   test("demotes mounted runtime-owned state when runtime presence is missing", () => {
@@ -372,13 +371,13 @@ describe("session-presence", () => {
     });
     const snapshot = toMissingAgentSessionPresenceSnapshot(sessionRefFixture);
 
-    const projection = projectRepoSessionPresenceSnapshot(session, snapshot);
+    const applied = applyAgentSessionPresenceSnapshotToSession(session, snapshot);
 
-    expect(projection.session.status).toBe("idle");
-    expect(projection.session.pendingUserMessageStartedAt).toBeUndefined();
-    expect(projection.session.draftAssistantText).toBe("");
-    expect(projection.session.draftAssistantMessageId).toBeNull();
-    expect(projection.shouldListen).toBe(false);
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingUserMessageStartedAt).toBeUndefined();
+    expect(applied.draftAssistantText).toBe("");
+    expect(applied.draftAssistantMessageId).toBeNull();
+    expect(shouldObserveAgentSessionPresenceSnapshot(snapshot)).toBe(false);
   });
 
   test("settles mounted idle state when runtime presence is missing", () => {
@@ -389,11 +388,11 @@ describe("session-presence", () => {
     });
     const snapshot = toMissingAgentSessionPresenceSnapshot(sessionRefFixture);
 
-    const projection = projectRepoSessionPresenceSnapshot(session, snapshot);
+    const applied = applyAgentSessionPresenceSnapshotToSession(session, snapshot);
 
-    expect(projection.session.status).toBe("idle");
-    expect(projection.session.pendingApprovals).toEqual([]);
-    expect(projection.session.pendingQuestions).toEqual([]);
-    expect(projection.shouldListen).toBe(false);
+    expect(applied.status).toBe("idle");
+    expect(applied.pendingApprovals).toEqual([]);
+    expect(applied.pendingQuestions).toEqual([]);
+    expect(shouldObserveAgentSessionPresenceSnapshot(snapshot)).toBe(false);
   });
 });

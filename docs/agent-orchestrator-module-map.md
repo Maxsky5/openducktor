@@ -21,7 +21,7 @@ Owns:
 - reading persisted task session records supplied by the task-session-record query
 - scanning runtime presence by repo path, runtime kind, and working directory
 - merging persisted records plus runtime presence into `AgentSessionState`
-- returning runtime session refs that should be observed
+- returning live runtime session refs
 
 Invariant: missing runtime presence means the runtime did not report the session
 as live. The projection keeps durable session identity plus already loaded
@@ -48,8 +48,8 @@ Files:
 
 Owns:
 
-- observing projected runtime session refs
-- selecting history loads for requested sessions or observed sessions whose
+- observing projected live session refs
+- selecting history loads for requested sessions or live sessions whose
   history has not been requested
 - deciding when a selected session should retry or start its history load
 - passing transient runtime prompt context to history loads without storing it in

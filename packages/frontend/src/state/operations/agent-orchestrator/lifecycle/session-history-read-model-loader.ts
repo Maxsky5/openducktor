@@ -19,11 +19,11 @@ type UpdateSession = Parameters<typeof loadSessionHistorySnapshots>[0]["updateSe
 
 const selectSessionHistoryTargets = ({
   sessionCollection,
-  sessionObserverRefs,
+  liveSessionRefs,
   requestedExternalSessionId,
 }: {
   sessionCollection: AgentSessionCollection;
-  sessionObserverRefs: AgentSessionRef[];
+  liveSessionRefs: AgentSessionRef[];
   requestedExternalSessionId?: string | null | undefined;
 }): AgentSessionState[] => {
   const requestedSessionId = requestedExternalSessionId?.trim();
@@ -36,11 +36,11 @@ const selectSessionHistoryTargets = ({
   }
 
   const targets: AgentSessionState[] = [];
-  for (const ref of sessionObserverRefs) {
+  for (const ref of liveSessionRefs) {
     const session = getAgentSession(sessionCollection, ref);
     if (!session) {
       throw new Error(
-        `Cannot load history for observed session '${ref.externalSessionId}': session is missing from the repo read model.`,
+        `Cannot load history for live session '${ref.externalSessionId}': session is missing from the repo read model.`,
       );
     }
     if (session.historyLoadState === "not_requested") {
@@ -55,7 +55,7 @@ export const loadSessionHistoryForReadModel = async ({
   adapter,
   updateSession,
   sessionCollection,
-  sessionObserverRefs,
+  liveSessionRefs,
   historyRuntimeContext,
   isStaleRepoOperation,
   requestedExternalSessionId,
@@ -64,14 +64,14 @@ export const loadSessionHistoryForReadModel = async ({
   adapter: SessionHistoryLoaderAdapter;
   updateSession: UpdateSession;
   sessionCollection: AgentSessionCollection;
-  sessionObserverRefs: AgentSessionRef[];
+  liveSessionRefs: AgentSessionRef[];
   historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
   requestedExternalSessionId?: string | null | undefined;
 }): Promise<SessionHistoryLoadResult[]> => {
   const historySessions = selectSessionHistoryTargets({
     sessionCollection,
-    sessionObserverRefs,
+    liveSessionRefs,
     requestedExternalSessionId,
   });
 

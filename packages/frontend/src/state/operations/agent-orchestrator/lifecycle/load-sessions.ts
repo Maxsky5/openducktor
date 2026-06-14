@@ -114,7 +114,7 @@ export const loadRepoAgentSessions = async ({
     return;
   }
   await Promise.all(
-    readModel.sessionObserverRefs.map(async (session) => {
+    readModel.liveSessionRefs.map(async (session) => {
       if (!isStaleRepoOperation()) {
         await listenToAgentSession(session);
       }
@@ -130,7 +130,7 @@ export const loadRepoAgentSessions = async ({
     adapter,
     updateSession,
     sessionCollection: readModel.sessionCollection,
-    sessionObserverRefs: readModel.sessionObserverRefs,
+    liveSessionRefs: readModel.liveSessionRefs,
     historyRuntimeContext,
     isStaleRepoOperation,
     requestedExternalSessionId: options?.historyTargetExternalSessionId,

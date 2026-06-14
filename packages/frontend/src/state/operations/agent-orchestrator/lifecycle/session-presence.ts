@@ -35,7 +35,7 @@ const statusWithoutRuntimePresence = (current: AgentSessionState): AgentSessionS
   return "idle";
 };
 
-export const shouldListenToAgentSessionPresenceSnapshot = (
+export const shouldObserveAgentSessionPresenceSnapshot = (
   snapshot: AgentSessionPresenceSnapshot,
 ): boolean => {
   return snapshot.presence === "runtime" && snapshot.classification !== "idle";
@@ -73,20 +73,5 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     pendingApprovals: [],
     pendingQuestions: [],
     ...clearLiveTurnFields(),
-  };
-};
-
-export type RepoSessionPresenceProjection = {
-  session: AgentSessionState;
-  shouldListen: boolean;
-};
-
-export const projectRepoSessionPresenceSnapshot = (
-  current: AgentSessionState,
-  snapshot: AgentSessionPresenceSnapshot,
-): RepoSessionPresenceProjection => {
-  return {
-    session: applyAgentSessionPresenceSnapshotToSession(current, snapshot),
-    shouldListen: shouldListenToAgentSessionPresenceSnapshot(snapshot),
   };
 };

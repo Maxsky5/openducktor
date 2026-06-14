@@ -14,7 +14,10 @@ import {
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { projectRepoSessionPresenceSnapshot } from "../lifecycle/session-presence";
+import {
+  applyAgentSessionPresenceSnapshotToSession,
+  shouldObserveAgentSessionPresenceSnapshot,
+} from "../lifecycle/session-presence";
 import { normalizeWorkingDirectory } from "../support/core";
 import { fromPersistedSessionRecord } from "../support/persistence";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
@@ -36,7 +39,7 @@ export type RepoRuntimeSessionPresenceRead = {
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
-  sessionObserverRefs: AgentSessionRef[];
+  liveSessionRefs: AgentSessionRef[];
 };
 
 const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionRecord[] => {
@@ -170,7 +173,7 @@ export const buildRepoSessionReadModel = ({
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
   let sessionCollection = selectLocalSessions(currentSessions, taskSessionRecords);
-  const sessionObserverRefs: AgentSessionRef[] = [];
+  const liveSessionRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
     const ref = toPersistedSessionRef({ repoPath, record });
@@ -184,14 +187,13 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const presenceProjection = projectRepoSessionPresenceSnapshot(persistedSessionView, snapshot);
-    const { session } = presenceProjection;
+    const session = applyAgentSessionPresenceSnapshotToSession(persistedSessionView, snapshot);
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
-    if (presenceProjection.shouldListen) {
-      sessionObserverRefs.push(toRuntimeSessionRef(repoPath, session));
+    if (shouldObserveAgentSessionPresenceSnapshot(snapshot)) {
+      liveSessionRefs.push(toRuntimeSessionRef(repoPath, session));
     }
   }
 
-  return { sessionCollection, sessionObserverRefs };
+  return { sessionCollection, liveSessionRefs };
 };
