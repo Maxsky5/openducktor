@@ -17,7 +17,6 @@ export const registerStartedSession = async ({
   startedCtx,
   runtimeInfo,
   systemPrompt,
-  promptOverrides,
   selectedModel,
   initialMessages,
   deps,
@@ -27,7 +26,6 @@ export const registerStartedSession = async ({
   startedCtx: StartedSessionContext;
   runtimeInfo: ResolvedRuntimeAndModel["runtime"];
   systemPrompt: string;
-  promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
   selectedModel: AgentModelSelection;
   initialMessages?: import("@/types/agent-orchestrator").AgentSessionState["messages"];
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
@@ -38,7 +36,6 @@ export const registerStartedSession = async ({
     selectedModel,
     runtime: runtimeInfo,
     systemPrompt,
-    promptOverrides,
     ...(initialMessages ? { initialMessages } : {}),
   });
 
@@ -73,6 +70,5 @@ export const registerStartedSession = async ({
     runtimeInfo,
     taskCard,
     ctx: startedCtx,
-    promptOverrides,
   };
 };

@@ -68,6 +68,7 @@ const createDefaultActiveWorkspace = () => ({
 const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}) => {
   const adapter = overrides.adapter ?? new OpencodeSdkAdapter();
   const sessionsRef = overrides.sessionsRef ?? { current: {} };
+  const userMessageStartedAtBySession: Record<string, number> = {};
 
   const dependencies: SessionActionDependencies = {
     activeWorkspace: createDefaultActiveWorkspace(),
@@ -79,7 +80,18 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
     currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
     inFlightStartsByWorkspaceTaskRef: { current: new Map() },
     unsubscribersRef: { current: new Map() },
-    turnStartedAtBySessionRef: { current: {} },
+    recordTurnUserMessageTimestamp: (externalSessionId, timestamp) => {
+      const timestampMs = typeof timestamp === "number" ? timestamp : Date.parse(timestamp);
+      if (!Number.isFinite(timestampMs)) {
+        return userMessageStartedAtBySession[externalSessionId];
+      }
+      const current = userMessageStartedAtBySession[externalSessionId];
+      const next = typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
+      userMessageStartedAtBySession[externalSessionId] = next;
+      return next;
+    },
+    readTurnUserMessageStartedAtMs: (externalSessionId) =>
+      userMessageStartedAtBySession[externalSessionId],
     updateSession: (externalSessionId, updater) => {
       const current = sessionsRef.current[externalSessionId];
       if (!current) {
@@ -416,9 +428,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       runtimeDataWriter: { updateTodos: () => {} },
+      buildReadOnlyApprovalRejectionMessage: async () => "Rejected by read-only policy.",
+      recordTurnActivityTimestamp: () => {},
+      recordTurnUserMessageTimestamp: () => {},
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1746,7 +1760,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
-    const turnStartedAtBySessionRef = { current: { "session-1": 1234 } };
+    let recordUserAnchorCalls = 0;
     const turnModelBySessionRef = {
       current: {
         "session-1": {
@@ -1762,8 +1776,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef,
       turnModelBySessionRef,
+      recordTurnUserMessageTimestamp: () => {
+        recordUserAnchorCalls += 1;
+        return 1234;
+      },
+      readTurnUserMessageStartedAtMs: () => 1234,
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1784,7 +1802,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sessionsRef.current["session-1"]?.draftAssistantMessageId).toBe("assistant-live-1");
       expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
       expect(sessionsRef.current["session-1"]?.draftReasoningMessageId).toBe("reasoning-live-1");
-      expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
+      expect(recordUserAnchorCalls).toBe(0);
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
@@ -1816,7 +1834,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         }),
       },
     };
-    const turnStartedAtBySessionRef = { current: { "session-1": 1234 } };
+    let recordUserAnchorCalls = 0;
     const turnModelBySessionRef = {
       current: {
         "session-1": {
@@ -1832,8 +1850,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionsRef,
       taskRef: { current: [] },
       unsubscribersRef: { current: new Map([["session-1", () => {}]]) },
-      turnStartedAtBySessionRef,
       turnModelBySessionRef,
+      recordTurnUserMessageTimestamp: () => {
+        recordUserAnchorCalls += 1;
+        return 1234;
+      },
+      readTurnUserMessageStartedAtMs: () => 1234,
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1861,7 +1883,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         title: "Error",
       });
       expect(clearCalls).toBe(0);
-      expect(turnStartedAtBySessionRef.current["session-1"]).toBe(1234);
+      expect(recordUserAnchorCalls).toBe(0);
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;

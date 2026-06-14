@@ -166,7 +166,6 @@ export const executeForkStart = async ({
     startedCtx,
     runtimeInfo: forkedRuntime,
     systemPrompt: promptContext.systemPrompt,
-    promptOverrides: promptContext.promptOverrides,
     selectedModel,
     initialMessages,
     deps,

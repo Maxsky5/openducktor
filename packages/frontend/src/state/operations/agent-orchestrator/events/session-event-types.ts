@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentEvent, AgentSessionRef } from "@openducktor/core";
+import type { AgentEnginePort, AgentEvent, AgentRole, AgentSessionRef } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { SessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
@@ -21,6 +21,7 @@ export type ResolveTurnDuration = (
 ) => number | undefined;
 
 export type RecordTurnTimestamp = (externalSessionId: string, timestamp: string | number) => void;
+export type BuildReadOnlyApprovalRejectionMessage = (role: AgentRole) => Promise<string>;
 
 export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval">;
 
@@ -41,16 +42,16 @@ export type ListenToAgentSessionParams = {
   draftFlushTimeoutBySessionRef?: MutableRefObject<
     Record<string, ReturnType<typeof setTimeout> | undefined>
   >;
-  turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
   turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
   contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
   updateSession: UpdateSession;
   runtimeDataWriter: SessionRuntimeDataWriter;
   isSessionListenerActive?: (externalSessionId: string) => boolean;
-  recordTurnActivityTimestamp?: RecordTurnTimestamp;
-  recordTurnUserMessageTimestamp?: RecordTurnTimestamp;
+  recordTurnActivityTimestamp: RecordTurnTimestamp;
+  recordTurnUserMessageTimestamp: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
+  buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -81,7 +82,6 @@ export type SessionDraftContext = Pick<
 export type SessionTurnContext = Pick<
   ListenToAgentSessionParams,
   | "externalSessionId"
-  | "turnStartedAtBySessionRef"
   | "turnModelBySessionRef"
   | "contextUsageMessageIdBySessionRef"
   | "recordTurnActivityTimestamp"
@@ -92,7 +92,7 @@ export type SessionTurnContext = Pick<
 
 export type SessionApprovalContext = Pick<
   ListenToAgentSessionParams,
-  "adapter" | "resolveRuntimeDefinition"
+  "adapter" | "resolveRuntimeDefinition" | "buildReadOnlyApprovalRejectionMessage"
 >;
 
 export type SessionRefreshContext = Pick<
@@ -146,19 +146,14 @@ const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftCo
 
 const createTurnContext = (context: ListenToAgentSessionParams): SessionTurnContext => ({
   externalSessionId: context.externalSessionId,
-  turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
   ...(context.turnModelBySessionRef
     ? { turnModelBySessionRef: context.turnModelBySessionRef }
     : {}),
   ...(context.contextUsageMessageIdBySessionRef
     ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
     : {}),
-  ...(context.recordTurnActivityTimestamp
-    ? { recordTurnActivityTimestamp: context.recordTurnActivityTimestamp }
-    : {}),
-  ...(context.recordTurnUserMessageTimestamp
-    ? { recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp }
-    : {}),
+  recordTurnActivityTimestamp: context.recordTurnActivityTimestamp,
+  recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp,
   resolveTurnDurationMs: context.resolveTurnDurationMs,
   clearTurnDuration: context.clearTurnDuration,
 });
@@ -196,6 +191,7 @@ export const createSessionEventHandlerContext = (
       turn,
       approvals: {
         adapter: context.adapter,
+        buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
         ...(context.resolveRuntimeDefinition
           ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
           : {}),

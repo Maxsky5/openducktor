@@ -41,9 +41,6 @@ type OrchestratorRefBridges = {
   draftFlushTimeoutBySessionRef: MutableRefObject<
     Record<string, ReturnType<typeof setTimeout> | undefined>
   >;
-  turnStartedAtBySessionRef: MutableRefObject<Record<string, number>>;
-  turnUserAnchorAtBySessionRef: MutableRefObject<Record<string, number>>;
-  previousAssistantCompletedAtBySessionRef: MutableRefObject<Record<string, number>>;
   assistantTurnTimingBySessionRef: MutableRefObject<Record<string, AssistantTurnTimingState>>;
   turnModelBySessionRef: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
 };
@@ -72,112 +69,6 @@ const createMutableBridge = <K extends keyof OrchestratorMutableState>(
       stateRef.current[key] = value;
     },
   }) as MutableRefObject<OrchestratorMutableState[K]>;
-
-const createAssistantTurnTimingFieldBridge = <K extends keyof AssistantTurnTimingState>(
-  stateRef: MutableRefObject<OrchestratorMutableState>,
-  field: K,
-): MutableRefObject<Record<string, NonNullable<AssistantTurnTimingState[K]>>> =>
-  ({
-    get current() {
-      return new Proxy({} as Record<string, NonNullable<AssistantTurnTimingState[K]>>, {
-        get: (_target, property) => {
-          if (typeof property !== "string") {
-            return undefined;
-          }
-
-          const value = stateRef.current.assistantTurnTimingBySession[property]?.[field];
-          return value === undefined
-            ? undefined
-            : (value as NonNullable<AssistantTurnTimingState[K]>);
-        },
-        set: (_target, property, value) => {
-          if (typeof property !== "string") {
-            return true;
-          }
-
-          stateRef.current.assistantTurnTimingBySession = {
-            ...stateRef.current.assistantTurnTimingBySession,
-            [property]: {
-              ...(stateRef.current.assistantTurnTimingBySession[property] ?? {}),
-              [field]: value,
-            },
-          };
-          return true;
-        },
-        deleteProperty: (_target, property) => {
-          if (typeof property !== "string") {
-            return true;
-          }
-
-          const currentTiming = stateRef.current.assistantTurnTimingBySession[property];
-          if (!currentTiming || currentTiming[field] === undefined) {
-            return true;
-          }
-
-          const nextTiming = { ...currentTiming };
-          delete nextTiming[field];
-          const nextTimingBySession = { ...stateRef.current.assistantTurnTimingBySession };
-          if (Object.keys(nextTiming).length === 0) {
-            delete nextTimingBySession[property];
-          } else {
-            nextTimingBySession[property] = nextTiming;
-          }
-          stateRef.current.assistantTurnTimingBySession = nextTimingBySession;
-          return true;
-        },
-        ownKeys: () =>
-          Object.entries(stateRef.current.assistantTurnTimingBySession).reduce<string[]>(
-            (externalSessionIds, [externalSessionId, timing]) => {
-              if (timing[field] !== undefined) {
-                externalSessionIds.push(externalSessionId);
-              }
-              return externalSessionIds;
-            },
-            [],
-          ),
-        getOwnPropertyDescriptor: (_target, property) => {
-          if (typeof property !== "string") {
-            return undefined;
-          }
-
-          const value = stateRef.current.assistantTurnTimingBySession[property]?.[field];
-          if (value === undefined) {
-            return undefined;
-          }
-
-          return {
-            configurable: true,
-            enumerable: true,
-            writable: true,
-            value,
-          };
-        },
-      });
-    },
-    set current(value) {
-      const nextTimingBySession: Record<string, AssistantTurnTimingState> = {};
-      for (const [externalSessionId, timing] of Object.entries(
-        stateRef.current.assistantTurnTimingBySession,
-      )) {
-        nextTimingBySession[externalSessionId] = { ...timing };
-      }
-      for (const timing of Object.values(nextTimingBySession)) {
-        delete timing[field];
-      }
-      for (const externalSessionId of Object.keys(nextTimingBySession)) {
-        if (Object.keys(nextTimingBySession[externalSessionId] ?? {}).length === 0) {
-          delete nextTimingBySession[externalSessionId];
-        }
-      }
-      for (const [externalSessionId, fieldValue] of Object.entries(value)) {
-        nextTimingBySession[externalSessionId] = {
-          ...(nextTimingBySession[externalSessionId] ?? {}),
-          [field]: fieldValue,
-        };
-      }
-      stateRef.current.assistantTurnTimingBySession = nextTimingBySession;
-    },
-  }) as MutableRefObject<Record<string, NonNullable<AssistantTurnTimingState[K]>>>;
 
 const clearUnsubscribers = (unsubscribers: Map<string, () => void>): void => {
   const unsubscribeCallbacks = [...unsubscribers.values()];
@@ -228,18 +119,6 @@ export const useOrchestratorSessionState = ({
       draftFlushTimeoutBySessionRef: createMutableBridge(
         mutableStateRef,
         "draftFlushTimeoutBySession",
-      ),
-      turnStartedAtBySessionRef: createAssistantTurnTimingFieldBridge(
-        mutableStateRef,
-        "activityStartedAtMs",
-      ),
-      turnUserAnchorAtBySessionRef: createAssistantTurnTimingFieldBridge(
-        mutableStateRef,
-        "userAnchorAtMs",
-      ),
-      previousAssistantCompletedAtBySessionRef: createAssistantTurnTimingFieldBridge(
-        mutableStateRef,
-        "previousAssistantCompletedAtMs",
       ),
       assistantTurnTimingBySessionRef: createMutableBridge(
         mutableStateRef,

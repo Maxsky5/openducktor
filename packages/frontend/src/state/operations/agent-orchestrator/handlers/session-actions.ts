@@ -52,9 +52,12 @@ type SessionActionsDependencies = {
   currentWorkspaceRepoPathRef: { current: string | null };
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   unsubscribersRef: { current: Map<string, () => void> };
-  turnStartedAtBySessionRef: { current: Record<string, number> };
-  turnUserAnchorAtBySessionRef?: { current: Record<string, number> };
   turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
+  recordTurnUserMessageTimestamp: (
+    externalSessionId: string,
+    timestamp: string | number,
+  ) => number | undefined;
+  readTurnUserMessageStartedAtMs: (externalSessionId: string) => number | undefined;
   updateSession: (
     externalSessionId: string,
     updater: (current: AgentSessionState) => AgentSessionState,
@@ -82,15 +85,16 @@ type SessionActionsDependencies = {
 };
 
 const markTurnUserAnchorIfMissing = (
-  turnUserAnchorAtBySessionRef: { current: Record<string, number> },
+  recordTurnUserMessageTimestamp: SessionActionsDependencies["recordTurnUserMessageTimestamp"],
+  readTurnUserMessageStartedAtMs: SessionActionsDependencies["readTurnUserMessageStartedAtMs"],
   turnModelBySessionRef:
     | { current: Record<string, AgentSessionState["selectedModel"]> }
     | undefined,
   sessionsRef: { current: Record<string, AgentSessionState> },
   externalSessionId: string,
 ): void => {
-  if (turnUserAnchorAtBySessionRef.current[externalSessionId] === undefined) {
-    turnUserAnchorAtBySessionRef.current[externalSessionId] = Date.now();
+  if (readTurnUserMessageStartedAtMs(externalSessionId) === undefined) {
+    recordTurnUserMessageTimestamp(externalSessionId, Date.now());
   }
   if (turnModelBySessionRef) {
     turnModelBySessionRef.current[externalSessionId] =
@@ -200,8 +204,9 @@ export const createAgentSessionActions = ({
   currentWorkspaceRepoPathRef,
   inFlightStartsByWorkspaceTaskRef,
   unsubscribersRef,
-  turnUserAnchorAtBySessionRef = { current: {} },
   turnModelBySessionRef,
+  recordTurnUserMessageTimestamp,
+  readTurnUserMessageStartedAtMs,
   updateSession,
   listenToAgentSession,
   resolveTaskWorktree,
@@ -269,8 +274,9 @@ export const createAgentSessionActions = ({
 
     const selectedModel = readySession.selectedModel ?? undefined;
     const isBusyQueuedSend = readySession.status === "running";
+    let pendingUserMessageStartedAt: number | undefined;
     if (!isBusyQueuedSend) {
-      turnUserAnchorAtBySessionRef.current[externalSessionId] = Date.now();
+      pendingUserMessageStartedAt = recordTurnUserMessageTimestamp(externalSessionId, Date.now());
       if (turnModelBySessionRef) {
         turnModelBySessionRef.current[externalSessionId] = selectedModel ?? null;
       }
@@ -282,7 +288,7 @@ export const createAgentSessionActions = ({
         (current) => ({
           ...current,
           status: "running",
-          pendingUserMessageStartedAt: turnUserAnchorAtBySessionRef.current[externalSessionId],
+          pendingUserMessageStartedAt,
           draftAssistantText: "",
           draftAssistantMessageId: null,
           draftReasoningText: "",
@@ -515,7 +521,8 @@ export const createAgentSessionActions = ({
       throw new Error(`Session '${externalSessionId}' is not loaded.`);
     }
     markTurnUserAnchorIfMissing(
-      turnUserAnchorAtBySessionRef,
+      recordTurnUserMessageTimestamp,
+      readTurnUserMessageStartedAtMs,
       turnModelBySessionRef,
       sessionsRef,
       externalSessionId,
@@ -548,7 +555,8 @@ export const createAgentSessionActions = ({
       throw new Error(`Session '${externalSessionId}' is not loaded.`);
     }
     markTurnUserAnchorIfMissing(
-      turnUserAnchorAtBySessionRef,
+      recordTurnUserMessageTimestamp,
+      readTurnUserMessageStartedAtMs,
       turnModelBySessionRef,
       sessionsRef,
       externalSessionId,

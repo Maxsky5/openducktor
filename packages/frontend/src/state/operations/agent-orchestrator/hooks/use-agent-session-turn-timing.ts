@@ -42,18 +42,27 @@ export const useAgentSessionTurnTiming = ({
   );
 
   const recordTurnUserMessageTimestamp = useCallback(
-    (externalSessionId: string, timestamp: string | number): void => {
+    (externalSessionId: string, timestamp: string | number): number | undefined => {
       const timestampMs = toTimestampMs(timestamp);
       if (timestampMs === undefined) {
-        return;
+        return assistantTurnTimingBySessionRef.current[externalSessionId]?.userAnchorAtMs;
       }
       const current = assistantTurnTimingBySessionRef.current[externalSessionId]?.userAnchorAtMs;
+      const userAnchorAtMs =
+        typeof current === "number" ? Math.min(current, timestampMs) : timestampMs;
       assistantTurnTimingBySessionRef.current[externalSessionId] = {
         ...(assistantTurnTimingBySessionRef.current[externalSessionId] ?? {}),
-        userAnchorAtMs: typeof current === "number" ? Math.min(current, timestampMs) : timestampMs,
+        userAnchorAtMs,
       };
+      return userAnchorAtMs;
     },
     [assistantTurnTimingBySessionRef, toTimestampMs],
+  );
+
+  const readTurnUserMessageStartedAtMs = useCallback(
+    (externalSessionId: string): number | undefined =>
+      assistantTurnTimingBySessionRef.current[externalSessionId]?.userAnchorAtMs,
+    [assistantTurnTimingBySessionRef],
   );
 
   const resolveTurnDurationMs = useCallback(
@@ -107,6 +116,7 @@ export const useAgentSessionTurnTiming = ({
   return {
     recordTurnActivityTimestamp,
     recordTurnUserMessageTimestamp,
+    readTurnUserMessageStartedAtMs,
     resolveTurnDurationMs,
     clearTurnDuration,
   };

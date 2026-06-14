@@ -68,7 +68,6 @@ export const createBuildSessionFixture = (overrides = {}) =>
       runtimeKind: "opencode",
       workingDirectory: "/tmp/repo/worktree",
       selectedModel: null,
-      promptOverrides: {},
     },
     overrides,
   );

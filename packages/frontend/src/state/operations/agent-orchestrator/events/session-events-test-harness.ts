@@ -1,5 +1,8 @@
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import type { AgentSessionTodoItem } from "@openducktor/core";
+import {
+  type AgentSessionTodoItem,
+  buildReadOnlyPermissionRejectionMessage,
+} from "@openducktor/core";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   lastSessionMessageForTest,
@@ -76,12 +79,39 @@ export const getSessionMessages = (
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
 export const listenToAgentSessionEvents = (
-  params: Omit<ListenToAgentSessionParams, "sessionRef" | "runtimeDataWriter"> &
-    Partial<Pick<ListenToAgentSessionParams, "sessionRef" | "runtimeDataWriter">>,
+  params: Omit<
+    ListenToAgentSessionParams,
+    | "sessionRef"
+    | "runtimeDataWriter"
+    | "recordTurnActivityTimestamp"
+    | "recordTurnUserMessageTimestamp"
+    | "buildReadOnlyApprovalRejectionMessage"
+  > &
+    Partial<
+      Pick<
+        ListenToAgentSessionParams,
+        | "sessionRef"
+        | "runtimeDataWriter"
+        | "recordTurnActivityTimestamp"
+        | "recordTurnUserMessageTimestamp"
+        | "buildReadOnlyApprovalRejectionMessage"
+      >
+    >,
 ): Promise<() => void> => {
   const session = getSession(params.sessionsRef, params.externalSessionId);
   return listenToAgentSessionEventsImpl({
     ...params,
+    recordTurnActivityTimestamp: params.recordTurnActivityTimestamp ?? (() => {}),
+    recordTurnUserMessageTimestamp: params.recordTurnUserMessageTimestamp ?? (() => {}),
+    buildReadOnlyApprovalRejectionMessage:
+      params.buildReadOnlyApprovalRejectionMessage ??
+      ((role) =>
+        Promise.resolve(
+          buildReadOnlyPermissionRejectionMessage({
+            role,
+            overrides: {},
+          }),
+        )),
     runtimeDataWriter: params.runtimeDataWriter ?? {
       updateTodos: () => {},
     },

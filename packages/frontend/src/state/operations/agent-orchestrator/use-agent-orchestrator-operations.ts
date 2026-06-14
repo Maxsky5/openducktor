@@ -84,9 +84,15 @@ export function useAgentOrchestratorOperations({
     commitSessions,
     persistSessionRecord,
   });
+  const queryBackedPromptOverrides = useCallback(
+    (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
+    [queryClient],
+  );
   const { listenToAgentSession, removeAgentSession, removeAgentSessions } =
     useAgentSessionListeners({
       agentEngine,
+      workspaceId: activeWorkspace?.workspaceId ?? null,
+      loadRepoPromptOverrides: queryBackedPromptOverrides,
       refBridges,
       sessionsRef,
       commitSessions,
@@ -95,10 +101,6 @@ export function useAgentOrchestratorOperations({
       ...turnTiming,
       refreshTaskData,
     });
-  const queryBackedPromptOverrides = useCallback(
-    (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
-    [queryClient],
-  );
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
@@ -172,9 +174,9 @@ export function useAgentOrchestratorOperations({
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
         unsubscribersRef: refBridges.unsubscribersRef,
-        turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
-        turnUserAnchorAtBySessionRef: refBridges.turnUserAnchorAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
+        recordTurnUserMessageTimestamp: turnTiming.recordTurnUserMessageTimestamp,
+        readTurnUserMessageStartedAtMs: turnTiming.readTurnUserMessageStartedAtMs,
         updateSession,
         listenToAgentSession,
         resolveTaskWorktree: hostPort.taskWorktreeGet,
@@ -202,6 +204,8 @@ export function useAgentOrchestratorOperations({
       refBridges,
       refreshTaskData,
       turnTiming.clearTurnDuration,
+      turnTiming.recordTurnUserMessageTimestamp,
+      turnTiming.readTurnUserMessageStartedAtMs,
       updateSession,
     ],
   );

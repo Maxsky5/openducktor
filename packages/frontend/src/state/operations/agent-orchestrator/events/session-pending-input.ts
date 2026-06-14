@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { buildReadOnlyPermissionRejectionMessage, isReadOnlyAgentRole } from "@openducktor/core";
+import { isReadOnlyAgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
 import type { AgentApprovalRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -235,9 +235,6 @@ const autoRejectMutatingApproval = (
   replySessionId = context.store.externalSessionId,
 ): void => {
   const pendingApproval = toPendingApproval(event);
-  const promptOverrides =
-    context.store.sessionsRef.current[event.parentExternalSessionId ?? replySessionId]
-      ?.promptOverrides;
   const markManualResponseRequired = (error: unknown): void => {
     context.store.updateSession(
       replySessionId,
@@ -259,30 +256,30 @@ const autoRejectMutatingApproval = (
     patchParentSubagentSessionLink(context, event);
   };
 
-  let rejectionMessage: string;
-  try {
-    rejectionMessage = buildReadOnlyPermissionRejectionMessage({
-      role,
-      overrides: promptOverrides ?? {},
-    });
-  } catch (error) {
-    markManualResponseRequired(error);
-    return;
-  }
-
   const replySession = context.store.sessionsRef.current[replySessionId];
   if (!replySession) {
     markManualResponseRequired(new Error(`Session '${replySessionId}' is not loaded.`));
     return;
   }
 
-  void context.approvals.adapter
-    .replyApproval({
-      ...toRuntimeSessionContextRef(context.runtimeData.sessionRef.repoPath, replySession),
-      requestId: event.requestId,
-      outcome: "reject",
-      message: rejectionMessage,
-    })
+  let replyTarget: ReturnType<typeof toRuntimeSessionContextRef>;
+  try {
+    replyTarget = toRuntimeSessionContextRef(context.runtimeData.sessionRef.repoPath, replySession);
+  } catch (error) {
+    markManualResponseRequired(error);
+    return;
+  }
+
+  void context.approvals
+    .buildReadOnlyApprovalRejectionMessage(role)
+    .then((rejectionMessage) =>
+      context.approvals.adapter.replyApproval({
+        ...replyTarget,
+        requestId: event.requestId,
+        outcome: "reject",
+        message: rejectionMessage,
+      }),
+    )
     .then(() => {
       context.store.updateSession(
         replySessionId,

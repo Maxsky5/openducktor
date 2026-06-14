@@ -193,7 +193,7 @@ export const handleAssistantDelta = (
   context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
-  context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, event.timestamp);
+  context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, event.timestamp);
   if (event.channel === "text") {
     if (!event.messageId || event.delta.length === 0) {
       return;
@@ -497,7 +497,7 @@ export const handleAssistantPart = (
       (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
         : event.timestamp;
-    context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, activityTimestamp);
+    context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, activityTimestamp);
   }
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 

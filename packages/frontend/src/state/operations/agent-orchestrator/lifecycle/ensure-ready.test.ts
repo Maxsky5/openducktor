@@ -1467,7 +1467,9 @@ describe("agent-orchestrator-ensure-ready", () => {
         },
       });
       expect(sessionsRef.current["session-1"]?.title).toBe("Builder Session");
-      expect(sessionsRef.current["session-1"]?.promptOverrides).toEqual(promptOverrides);
+      expect(resumedInput).toMatchObject({
+        systemPrompt: expect.stringContaining("Build override for Builder Session"),
+      });
     } finally {
       adapter.resumeSession = originalResumeSession;
       adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;

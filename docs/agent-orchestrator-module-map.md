@@ -56,6 +56,25 @@ Invariant: a pending permission or question belongs to exactly one `AgentSession
 Parent subagent rows may link to child session ids in message metadata, but they must
 not copy child pending input.
 
+### Assistant Turn Timing
+
+Files:
+
+- `hooks/use-agent-session-turn-timing.ts`
+- `hooks/use-orchestrator-session-state.ts`
+- `support/assistant-turn-duration.ts`
+
+Owns:
+
+- user-message anchor timestamps for pending sends and permission/question replies
+- assistant activity start timestamps from runtime status and part events
+- previous assistant completion timestamps used to bound duration calculations
+- duration resolution for assistant transcript metadata
+
+Invariant: timing state is one workspace-scoped map keyed by external session id.
+Do not reintroduce per-field timing refs, proxy bridges, or duplicate timestamp
+stores in event handlers.
+
 ### Runtime Session References
 
 File:

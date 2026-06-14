@@ -25,7 +25,8 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       replyApproval: async () => {},
     };
 
-    const turnStartedAtBySessionRef = { current: {} as Record<string, number> };
+    const recordedActivityTimestamps: Array<string | number> = [];
+    let clearTurnDurationCalls = 0;
     const sessionsRef: { current: Record<string, AgentSessionState> } = {
       current: {
         "session-1": buildSession({ role: "build" }),
@@ -53,11 +54,13 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef,
       updateSession,
+      recordTurnActivityTimestamp: (_externalSessionId, timestamp) => {
+        recordedActivityTimestamps.push(timestamp);
+      },
       resolveTurnDurationMs: () => 250,
       clearTurnDuration: () => {
-        turnStartedAtBySessionRef.current["session-1"] = 0;
+        clearTurnDurationCalls += 1;
       },
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
@@ -107,6 +110,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         (message) => message.role === "system" && message.content.includes("Retrying"),
       ),
     ).toBe(true);
+    expect(recordedActivityTimestamps).toEqual([
+      "2026-02-22T08:00:01.000Z",
+      "2026-02-22T08:00:02.000Z",
+    ]);
+    expect(clearTurnDurationCalls).toBe(1);
   });
 
   test("handles session start and assistant parts matrix", async () => {
@@ -151,7 +159,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => 300,
       clearTurnDuration: () => {
@@ -442,7 +449,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -522,8 +528,8 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       },
       turn: {
         externalSessionId: "session-1",
-        turnStartedAtBySessionRef: { current: {} },
         recordTurnActivityTimestamp,
+        recordTurnUserMessageTimestamp: () => {},
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
       },
@@ -604,7 +610,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       recordTurnActivityTimestamp,
       resolveTurnDurationMs: () => undefined,
@@ -680,7 +685,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -783,7 +787,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -871,7 +874,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1000,7 +1002,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1105,7 +1106,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1212,7 +1212,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1342,7 +1341,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       draftSourceBySessionRef: { current: {} },
       draftMessageIdBySessionRef: { current: {} },
       draftFlushTimeoutBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},

@@ -106,23 +106,14 @@ export const createEnsureSessionReady = ({
       {
         session,
         shouldListen,
-        promptOverrides,
       }: {
         session: WorkflowAgentSessionState;
         shouldListen: boolean;
-        promptOverrides?: RepoPromptOverrides;
       },
     ): Promise<void> => {
-      updateSession(externalSessionId, (current) => {
-        const sessionWithPresence = applyAgentSessionPresenceSnapshotToSession(current, snapshot);
-        if (!promptOverrides) {
-          return sessionWithPresence;
-        }
-        return {
-          ...sessionWithPresence,
-          promptOverrides,
-        };
-      });
+      updateSession(externalSessionId, (current) =>
+        applyAgentSessionPresenceSnapshotToSession(current, snapshot),
+      );
       if (shouldListen) {
         await listenToAgentSession(
           toRuntimeSessionRef(repoPath, sessionsRef.current[externalSessionId] ?? session),
@@ -247,7 +238,6 @@ export const createEnsureSessionReady = ({
     await applyConfirmedSessionPresenceSnapshot(sessionPresence, {
       session,
       shouldListen: true,
-      promptOverrides: promptContext.promptOverrides,
     });
 
     if (isStaleRepoOperation()) {

@@ -73,7 +73,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -146,12 +145,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       current: {
         "session-1": buildSession({
           role: "spec",
-          promptOverrides: {
-            "permission.read_only.reject": {
-              template: "Rejected by policy {{unsupported.token}}",
-              baseVersion: 1,
-            },
-          },
         }),
       },
     };
@@ -177,8 +170,10 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
+      buildReadOnlyApprovalRejectionMessage: async () => {
+        throw new Error("Unsupported prompt token {{unsupported.token}}");
+      },
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -294,7 +289,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -368,7 +362,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -474,7 +467,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -561,7 +553,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       runtimeDataWriter: runtimeData.writer,
       resolveTurnDurationMs: () => undefined,
@@ -696,7 +687,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -781,7 +771,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       sessionsRef,
       draftRawBySessionRef: { current: {} },
       draftSourceBySessionRef: { current: {} },
-      turnStartedAtBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},

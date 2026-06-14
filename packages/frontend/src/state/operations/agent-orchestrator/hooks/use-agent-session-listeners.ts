@@ -1,5 +1,9 @@
-import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentRole } from "@openducktor/core";
+import type { RepoPromptOverrides, RuntimeKind } from "@openducktor/contracts";
+import {
+  type AgentEnginePort,
+  type AgentRole,
+  buildReadOnlyPermissionRejectionMessage,
+} from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
@@ -14,6 +18,8 @@ type RefBridges = ReturnType<typeof useOrchestratorSessionState>["refBridges"];
 
 type UseAgentSessionListenersArgs = {
   agentEngine: AgentEnginePort;
+  workspaceId: string | null;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   refBridges: RefBridges;
   sessionsRef: { current: Record<string, AgentSessionState> };
   commitSessions: (
@@ -24,7 +30,10 @@ type UseAgentSessionListenersArgs = {
   updateSession: UpdateAgentSession;
   queryClient: QueryClient;
   recordTurnActivityTimestamp: (externalSessionId: string, timestamp: string | number) => void;
-  recordTurnUserMessageTimestamp: (externalSessionId: string, timestamp: string | number) => void;
+  recordTurnUserMessageTimestamp: (
+    externalSessionId: string,
+    timestamp: string | number,
+  ) => number | undefined;
   resolveTurnDurationMs: (
     externalSessionId: string,
     timestamp: string,
@@ -40,6 +49,8 @@ type UseAgentSessionListenersArgs = {
 
 export const useAgentSessionListeners = ({
   agentEngine,
+  workspaceId,
+  loadRepoPromptOverrides,
   refBridges,
   sessionsRef,
   commitSessions,
@@ -55,6 +66,19 @@ export const useAgentSessionListeners = ({
   const runtimeDataWriter = useMemo(
     () => createSessionRuntimeDataWriter(queryClient),
     [queryClient],
+  );
+  const buildReadOnlyApprovalRejectionMessage = useCallback(
+    async (role: AgentRole): Promise<string> => {
+      if (!workspaceId) {
+        throw new Error("Active workspace is required to build approval rejection text.");
+      }
+      const promptOverrides = await loadRepoPromptOverrides(workspaceId);
+      return buildReadOnlyPermissionRejectionMessage({
+        role,
+        overrides: promptOverrides,
+      });
+    },
+    [loadRepoPromptOverrides, workspaceId],
   );
 
   const removeSessionIds = useCallback(
@@ -135,7 +159,6 @@ export const useAgentSessionListeners = ({
         draftSourceBySessionRef: refBridges.draftSourceBySessionRef,
         draftMessageIdBySessionRef: refBridges.draftMessageIdBySessionRef,
         draftFlushTimeoutBySessionRef: refBridges.draftFlushTimeoutBySessionRef,
-        turnStartedAtBySessionRef: refBridges.turnStartedAtBySessionRef,
         turnModelBySessionRef: refBridges.turnModelBySessionRef,
         updateSession,
         runtimeDataWriter,
@@ -146,6 +169,7 @@ export const useAgentSessionListeners = ({
         recordTurnUserMessageTimestamp,
         resolveTurnDurationMs,
         clearTurnDuration,
+        buildReadOnlyApprovalRejectionMessage,
         refreshTaskData,
         resolveRuntimeDefinition: (runtimeKind: RuntimeKind) =>
           findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind),
@@ -159,6 +183,7 @@ export const useAgentSessionListeners = ({
     },
     [
       agentEngine,
+      buildReadOnlyApprovalRejectionMessage,
       clearTurnDuration,
       refBridges,
       refreshTaskData,

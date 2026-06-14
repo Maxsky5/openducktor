@@ -149,5 +149,4 @@ export type StartOrReuseResult =
       runtimeInfo: RuntimeInfo;
       taskCard: TaskCard;
       ctx: StartedSessionContext;
-      promptOverrides: RepoPromptOverrides;
     };

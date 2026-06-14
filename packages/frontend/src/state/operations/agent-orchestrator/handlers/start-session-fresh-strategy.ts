@@ -76,7 +76,6 @@ export const executeFreshStart = async ({
     startedCtx,
     runtimeInfo: resolved.runtime,
     systemPrompt: resolved.systemPrompt,
-    promptOverrides: resolved.promptOverrides,
     selectedModel: selectedModelWithRuntime,
     deps,
     taskCard: resolved.taskCard,

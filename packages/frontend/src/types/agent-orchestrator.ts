@@ -2,7 +2,6 @@ import type {
   AgentSessionRecord,
   FileContent,
   FileDiff,
-  RepoPromptOverrides,
   RuntimeKind,
 } from "@openducktor/contracts";
 import type {
@@ -169,7 +168,6 @@ export type AgentSessionState = {
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
   selectedModel: AgentModelSelection | null;
-  promptOverrides?: RepoPromptOverrides;
   pendingUserMessageStartedAt?: number | undefined;
   stopRequestedAt?: string | null;
 };

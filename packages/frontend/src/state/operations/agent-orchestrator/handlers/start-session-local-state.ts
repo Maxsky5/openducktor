@@ -16,14 +16,12 @@ export const buildInitialSession = ({
   selectedModel,
   runtime,
   systemPrompt,
-  promptOverrides,
   initialMessages,
 }: {
   startedCtx: StartedSessionContext;
   selectedModel: AgentModelSelection;
   runtime: ResolvedRuntimeAndModel["runtime"];
   systemPrompt: string;
-  promptOverrides: ResolvedRuntimeAndModel["promptOverrides"];
   initialMessages?: AgentSessionState["messages"];
 }): AgentSessionState => ({
   externalSessionId: startedCtx.summary.externalSessionId,
@@ -53,7 +51,6 @@ export const buildInitialSession = ({
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel,
-  promptOverrides,
 });
 
 export const persistInitialSession = async ({

@@ -20,12 +20,7 @@ import {
   normalizeSessionErrorMessage,
 } from "../support/tool-messages";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
-import {
-  clearDraftBuffers,
-  eventTimestampMs,
-  flushDraftBuffers,
-  settleDraftToIdle,
-} from "./session-helpers";
+import { clearDraftBuffers, flushDraftBuffers, settleDraftToIdle } from "./session-helpers";
 
 const clearTurnTracking = (context: Pick<SessionLifecycleEventContext, "turn" | "store">): void => {
   if (context.turn.turnModelBySessionRef) {
@@ -179,7 +174,7 @@ export const handleUserMessage = (
   context: Pick<SessionLifecycleEventContext, "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,
 ): void => {
-  context.turn.recordTurnUserMessageTimestamp?.(context.store.externalSessionId, event.timestamp);
+  context.turn.recordTurnUserMessageTimestamp(context.store.externalSessionId, event.timestamp);
   context.store.updateSession(
     context.store.externalSessionId,
     (current) => {
@@ -205,14 +200,7 @@ export const handleSessionStatus = (
   const status = event.status;
 
   if (status.type === "busy") {
-    context.turn.recordTurnActivityTimestamp?.(context.store.externalSessionId, event.timestamp);
-    if (
-      context.turn.recordTurnActivityTimestamp === undefined &&
-      context.turn.turnStartedAtBySessionRef.current[context.store.externalSessionId] === undefined
-    ) {
-      context.turn.turnStartedAtBySessionRef.current[context.store.externalSessionId] =
-        eventTimestampMs(event.timestamp);
-    }
+    context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, event.timestamp);
     context.store.updateSession(
       context.store.externalSessionId,
       (current) =>
