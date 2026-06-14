@@ -278,7 +278,7 @@ describe("repo session read model", () => {
     expect(idleRead.sessionsById[record.externalSessionId]?.status).toBe("idle");
   });
 
-  test("demotes a mounted active session when a repo runtime scan misses it", async () => {
+  test("keeps a mounted active session when a repo runtime scan misses it", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyPresence = await readRepoRuntimeSessionPresence({
@@ -310,10 +310,18 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
+    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("running");
+    expect(readModel.liveSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
+        runtimeKind: "opencode",
+        workingDirectory: record.workingDirectory,
+      },
+    ]);
   });
 
-  test("applies missing runtime presence without dropping mounted transcript state", async () => {
+  test("keeps runtime-owned state when missing runtime presence sees a mounted session", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -355,10 +363,18 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("idle");
+    expect(session?.status).toBe("running");
     expect(session?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
+    ]);
+    expect(readModel.liveSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
+        runtimeKind: "opencode",
+        workingDirectory: record.workingDirectory,
+      },
     ]);
   });
 
@@ -495,6 +511,38 @@ describe("repo session read model", () => {
     });
 
     expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
+  });
+
+  test("lets missing runtime presence demote mounted idle session state", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const currentSession = createAgentSessionFixture({
+      externalSessionId: record.externalSessionId,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "idle",
+      startedAt: record.startedAt,
+      workingDirectory: record.workingDirectory,
+      historyLoadState: "loaded",
+    });
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [record.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
+    expect(readModel.liveSessions).toEqual([]);
   });
 
   test("drops local task sessions that are no longer present in persisted task records", async () => {

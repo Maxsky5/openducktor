@@ -495,7 +495,7 @@ describe("createLoadAgentSessions", () => {
     expect(harness.getSession("external-1")?.contextUsage).toEqual(liveContextUsage);
   });
 
-  test("applies missing runtime presence during repo reloads without dropping mounted transcript state", async () => {
+  test("keeps mounted runtime state when missing presence appears during repo reloads", async () => {
     let historyLoads = 0;
     const mountedSession = {
       ...createAgentSessionFixture({
@@ -534,10 +534,18 @@ describe("createLoadAgentSessions", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to stay mounted.`);
     }
-    expect(session.status).toBe("idle");
+    expect(session.status).toBe("running");
     expect(session.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Already visible",
+    ]);
+    expect(harness.listenedSessions).toEqual([
+      {
+        repoPath: "/repo",
+        externalSessionId: record.externalSessionId,
+        runtimeKind: "opencode",
+        workingDirectory: record.workingDirectory,
+      },
     ]);
     expect(historyLoads).toBe(0);
   });

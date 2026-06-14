@@ -6,10 +6,7 @@ import type {
 } from "@openducktor/core";
 import { toMissingAgentSessionPresenceSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  applyAgentSessionPresenceSnapshotToSession,
-  shouldListenToAgentSessionPresenceSnapshot,
-} from "../lifecycle/session-presence";
+import { projectRepoSessionPresenceSnapshot } from "../lifecycle/session-presence";
 import { normalizeWorkingDirectory } from "../support/core";
 import { fromPersistedSessionRecord } from "../support/persistence";
 import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
@@ -183,10 +180,11 @@ export const buildRepoSessionReadModel = ({
       record,
       current,
     });
-    const session = applyAgentSessionPresenceSnapshotToSession(persistedSessionView, snapshot);
+    const presenceProjection = projectRepoSessionPresenceSnapshot(persistedSessionView, snapshot);
+    const { session } = presenceProjection;
     sessionsById[record.externalSessionId] = session;
 
-    if (shouldListenToAgentSessionPresenceSnapshot(snapshot)) {
+    if (presenceProjection.shouldListen) {
       liveSessions.push(toRuntimeSessionRef(repoPath, session));
       if (session.historyLoadState === "not_requested") {
         initialHistorySessions.push(session);

@@ -27,6 +27,11 @@ Owns:
 - passing the same transient runtime prompt context to every initial history load,
   whether it came from repo startup or an explicit selected-session load
 
+Invariant: missing runtime presence initializes cold persisted records, but it must
+not erase runtime-owned state already mounted in `AgentSessionState`. Once a
+session has live status, pending input, or in-flight transcript state, runtime
+events own that state until they settle it.
+
 Must not own:
 
 - model catalog, slash commands, file search, diffs, or other active-session reads

@@ -7,6 +7,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   applyAgentSessionPresenceSnapshotToSession,
+  projectRepoSessionPresenceSnapshot,
   shouldListenToAgentSessionPresenceSnapshot,
 } from "./session-presence";
 
@@ -358,5 +359,38 @@ describe("session-presence", () => {
     expect(shouldListenToAgentSessionPresenceSnapshot(idlePresence)).toBe(false);
     expect(shouldListenToAgentSessionPresenceSnapshot(busyPresence)).toBe(true);
     expect(shouldListenToAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
+  });
+
+  test("keeps mounted runtime-owned state observed when a repo presence scan misses it", () => {
+    const session = createSessionState({
+      status: "running",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      pendingUserMessageStartedAt: 123,
+      draftAssistantText: "partial assistant",
+      draftAssistantMessageId: "assistant-draft",
+    });
+    const snapshot = toMissingAgentSessionPresenceSnapshot(sessionRefFixture);
+
+    const projection = projectRepoSessionPresenceSnapshot(session, snapshot);
+
+    expect(projection.session).toBe(session);
+    expect(projection.shouldListen).toBe(true);
+  });
+
+  test("settles mounted idle state when a repo presence scan misses it", () => {
+    const session = createSessionState({
+      status: "idle",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+    const snapshot = toMissingAgentSessionPresenceSnapshot(sessionRefFixture);
+
+    const projection = projectRepoSessionPresenceSnapshot(session, snapshot);
+
+    expect(projection.session.status).toBe("idle");
+    expect(projection.session.pendingApprovals).toEqual([]);
+    expect(projection.session.pendingQuestions).toEqual([]);
+    expect(projection.shouldListen).toBe(false);
   });
 });

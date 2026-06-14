@@ -9,7 +9,7 @@ export type AgentSessionLifecycleSource = Pick<
 >;
 export type AgentSessionHistoryLoadState = AgentSessionLifecycleSource["historyLoadState"];
 export type AgentSessionTranscriptSource = Pick<
-  AgentSessionLifecycleSource,
+  AgentSessionState,
   "externalSessionId" | "messages"
 >;
 
@@ -123,23 +123,15 @@ export const isSelectedAgentSessionViewLoading = (
   lifecycle.phase === "needs_initial_history" ||
   lifecycle.phase === "loading_history";
 
-export const deriveAgentSessionViewLifecycle = ({
-  session,
+const deriveLoadedSessionLifecycle = ({
+  historyLoadState,
+  hasTranscript,
   repoReadinessState,
 }: {
-  session: AgentSessionLifecycleSource | null;
+  historyLoadState: AgentSessionHistoryLoadState;
+  hasTranscript: boolean;
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
-  if (!session) {
-    return {
-      phase: "inactive",
-      repoReadinessState,
-    };
-  }
-
-  const historyLoadState = session.historyLoadState;
-  const hasTranscript = getSessionMessageCount(session) > 0;
-
   if (repoReadinessState !== "ready" && historyLoadState !== "loaded" && !hasTranscript) {
     return {
       phase: "waiting_for_runtime",
@@ -171,6 +163,27 @@ export const deriveAgentSessionViewLifecycle = ({
   }
 };
 
+export const deriveAgentSessionViewLifecycle = ({
+  session,
+  repoReadinessState,
+}: {
+  session: AgentSessionLifecycleSource | null;
+  repoReadinessState: SessionRepoReadinessState;
+}): AgentSessionViewLifecycle => {
+  if (!session) {
+    return {
+      phase: "inactive",
+      repoReadinessState,
+    };
+  }
+
+  return deriveLoadedSessionLifecycle({
+    historyLoadState: session.historyLoadState,
+    hasTranscript: getSessionMessageCount(session) > 0,
+    repoReadinessState,
+  });
+};
+
 export const deriveAgentSessionHistoryViewLifecycle = ({
   session,
   externalSessionId,
@@ -182,24 +195,19 @@ export const deriveAgentSessionHistoryViewLifecycle = ({
   historyLoadState: AgentSessionHistoryLoadState | null;
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
-  if (session && historyLoadState) {
-    return deriveAgentSessionViewLifecycle({
-      session: { ...session, historyLoadState },
+  const targetExternalSessionId = session?.externalSessionId ?? externalSessionId;
+  if (!targetExternalSessionId || !historyLoadState) {
+    return {
+      phase: "inactive",
       repoReadinessState,
-    });
+    };
   }
 
-  if (externalSessionId && historyLoadState) {
-    return deriveAgentSessionViewLifecycle({
-      session: { externalSessionId, historyLoadState, messages: [] },
-      repoReadinessState,
-    });
-  }
-
-  return {
-    phase: "inactive",
+  return deriveLoadedSessionLifecycle({
+    historyLoadState,
+    hasTranscript: session ? getSessionMessageCount(session) > 0 : false,
     repoReadinessState,
-  };
+  });
 };
 
 export const deriveSelectedAgentSessionViewLifecycle = ({
