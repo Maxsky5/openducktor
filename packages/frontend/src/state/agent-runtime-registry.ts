@@ -8,7 +8,6 @@ import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts
 import type {
   AgentCatalogPort,
   AgentEnginePort,
-  AgentModelSelection,
   AgentRuntimeDefinition,
   AgentSessionPort,
   AgentWorkspaceInspectionPort,
@@ -191,19 +190,6 @@ const requireInputRuntimeKind = (
   throw new Error(`Runtime kind is required for ${operation} requests.`);
 };
 
-const resolveRuntimeKind = (
-  runtimeKind: RuntimeKind | undefined,
-  model: AgentModelSelection | undefined,
-): RuntimeKind => {
-  if (runtimeKind) {
-    return runtimeKind;
-  }
-  if (model?.runtimeKind) {
-    return model.runtimeKind;
-  }
-  throw new Error("Runtime kind is required to select an agent runtime adapter.");
-};
-
 const createRuntimeRegistryAgentEngine = (
   getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter,
   registeredRuntimeKinds: RuntimeKind[],
@@ -212,28 +198,21 @@ const createRuntimeRegistryAgentEngine = (
     runtimeKind: RuntimeKind | undefined,
     operation: string,
   ): RegisteredRuntimeAdapter => getAdapter(requireInputRuntimeKind(runtimeKind, operation));
-  const adapterForStart = (
-    runtimeKind: RuntimeKind | undefined,
-    model: AgentModelSelection | undefined,
-  ) => {
-    const resolvedRuntimeKind = resolveRuntimeKind(runtimeKind, model);
-    return { adapter: getAdapter(resolvedRuntimeKind), runtimeKind: resolvedRuntimeKind };
-  };
 
   return {
     async startSession(input) {
-      const { adapter, runtimeKind } = adapterForStart(input.runtimeKind, input.model);
-      return { ...(await adapter.startSession(input)), runtimeKind };
+      const runtimeKind = requireInputRuntimeKind(input.runtimeKind, "session start");
+      return { ...(await getAdapter(runtimeKind).startSession(input)), runtimeKind };
     },
     async resumeSession(input) {
-      const { adapter, runtimeKind } = adapterForStart(input.runtimeKind, input.model);
-      return { ...(await adapter.resumeSession(input)), runtimeKind };
+      const runtimeKind = requireInputRuntimeKind(input.runtimeKind, "session resume");
+      return { ...(await getAdapter(runtimeKind).resumeSession(input)), runtimeKind };
     },
     releaseSession: (input) =>
       adapterFor(input.runtimeKind, "session release").releaseSession(input),
     async forkSession(input) {
-      const { adapter, runtimeKind } = adapterForStart(input.runtimeKind, input.model);
-      return { ...(await adapter.forkSession(input)), runtimeKind };
+      const runtimeKind = requireInputRuntimeKind(input.runtimeKind, "session fork");
+      return { ...(await getAdapter(runtimeKind).forkSession(input)), runtimeKind };
     },
     listRuntimeDefinitions: () =>
       registeredRuntimeKinds.map((runtimeKind) => getAdapter(runtimeKind).getRuntimeDefinition()),

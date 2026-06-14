@@ -325,7 +325,7 @@ describe("agent-runtime-registry", () => {
     } as unknown as Parameters<typeof engine.startSession>[0];
 
     await expect(engine.startSession(missingRuntimeInput)).rejects.toThrow(
-      "Runtime kind is required to select an agent runtime adapter.",
+      "Runtime kind is required for session start requests.",
     );
   });
 
