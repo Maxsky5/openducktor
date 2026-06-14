@@ -10,6 +10,7 @@ import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orch
 import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
+  type RepoSessionReadModel,
   readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
@@ -19,15 +20,11 @@ import {
 } from "../session-read-model/task-session-records";
 import { createRepoStaleGuard } from "../support/core";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
-import {
-  loadSessionHistorySnapshot,
-  type SessionHistoryLoaderAdapter,
-} from "./session-history-loader";
+import type { SessionHistoryLoaderAdapter } from "./session-history-loader";
 import { loadSessionHistoryForReadModel } from "./session-history-read-model-loader";
 import {
   buildHistoryRuntimeContext,
   type SessionHistoryRuntimeContext,
-  withSessionHistoryRuntimeContext,
 } from "./session-history-runtime-context";
 
 type UpdateSession = (
@@ -52,16 +49,6 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   listenToAgentSession: ListenToAgentSession;
   queryClient: QueryClient;
-  taskRef: MutableRefObject<TaskCard[]>;
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-};
-
-type CreateLoadAgentSessionHistoryArgs = {
-  adapter: SessionHistoryLoaderAdapter;
-  repoEpochRef: MutableRefObject<number>;
-  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  updateSession: UpdateSession;
-  activeWorkspace: ActiveWorkspace | null;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
@@ -102,17 +89,26 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const readModel = buildRepoSessionReadModel({
-    repoPath,
-    tasks,
-    currentSessionCollection: sessionsRef.current,
-    runtimePresence,
+  const readModelRef: { current: RepoSessionReadModel | null } = { current: null };
+  commitSessions((currentSessionCollection) => {
+    const nextReadModel = buildRepoSessionReadModel({
+      repoPath,
+      tasks,
+      currentSessionCollection,
+      runtimePresence,
+    });
+    readModelRef.current = nextReadModel;
+    return nextReadModel.sessionCollection;
   });
-  commitSessions(readModel.sessionCollection);
 
   if (isStaleRepoOperation()) {
     return;
   }
+  const readModel = readModelRef.current;
+  if (!readModel) {
+    return;
+  }
+
   await Promise.all(
     readModel.liveSessionRefs.map(async (session) => {
       if (!isStaleRepoOperation()) {
@@ -128,6 +124,7 @@ export const loadRepoAgentSessions = async ({
   await loadSessionHistoryForReadModel({
     repoPath,
     adapter,
+    sessionsRef,
     updateSession,
     sessionCollection: readModel.sessionCollection,
     liveSessionRefs: readModel.liveSessionRefs,
@@ -252,57 +249,5 @@ export const createLoadAgentSessions = ({
       isStaleRepoOperation,
       ...(options ? { options } : {}),
     });
-  };
-};
-
-export const createLoadAgentSessionHistory = ({
-  activeWorkspace,
-  adapter,
-  repoEpochRef,
-  currentWorkspaceRepoPathRef,
-  updateSession,
-  taskRef,
-  loadRepoPromptOverrides,
-}: CreateLoadAgentSessionHistoryArgs): ((input: {
-  session: AgentSessionState;
-}) => Promise<void>) => {
-  return async ({ session }): Promise<void> => {
-    const repoPath = currentWorkspaceRepoPathRef.current;
-    if (!repoPath || !activeWorkspace) {
-      return;
-    }
-
-    const isStaleRepoOperation = createRepoStaleGuard({
-      repoPath,
-      repoEpochRef,
-      currentWorkspaceRepoPathRef,
-    });
-
-    if (isStaleRepoOperation()) {
-      return;
-    }
-
-    const [sessionWithRuntimeContext] = await withSessionHistoryRuntimeContext({
-      sessions: [session],
-      context: buildHistoryRuntimeContext({
-        activeWorkspace,
-        tasks: taskRef.current,
-        loadRepoPromptOverrides,
-      }),
-    });
-    if (isStaleRepoOperation()) {
-      return;
-    }
-
-    const result = await loadSessionHistorySnapshot({
-      repoPath,
-      adapter,
-      updateSession,
-      session: sessionWithRuntimeContext ?? session,
-      isStaleRepoOperation,
-    });
-    if (result.status === "failed") {
-      throw result.error;
-    }
   };
 };

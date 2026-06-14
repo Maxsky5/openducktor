@@ -75,6 +75,11 @@ describe("loadSessionHistoryForReadModel", () => {
       createSession("external-1"),
       createSession("external-2", "loaded"),
     ]);
+    const sessionsRef = {
+      get current() {
+        return sessionCollection;
+      },
+    };
     const historyInputs: string[] = [];
 
     const results = await loadSessionHistoryForReadModel({
@@ -93,6 +98,7 @@ describe("loadSessionHistoryForReadModel", () => {
         }
         sessionCollection = replaceAgentSession(sessionCollection, updater(current));
       },
+      sessionsRef,
       sessionCollection,
       liveSessionRefs: [sessionRef("external-1"), sessionRef("external-2")],
       historyRuntimeContext: promptContext,
@@ -112,6 +118,11 @@ describe("loadSessionHistoryForReadModel", () => {
         repoPath: "/repo",
         adapter: { loadSessionHistory: async () => [] },
         updateSession: () => undefined,
+        sessionsRef: {
+          get current() {
+            return createAgentSessionCollection([createSession("external-1")]);
+          },
+        },
         sessionCollection: createAgentSessionCollection([createSession("external-1")]),
         liveSessionRefs: [],
         historyRuntimeContext: promptContext,

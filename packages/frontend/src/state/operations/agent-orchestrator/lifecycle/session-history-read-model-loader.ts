@@ -12,6 +12,7 @@ import {
 } from "./session-history-runtime-context";
 
 type UpdateSession = Parameters<typeof loadSessionHistorySnapshots>[0]["updateSession"];
+type SessionsSnapshotRef = Parameters<typeof loadSessionHistorySnapshots>[0]["sessionsRef"];
 
 const selectSessionHistoryTargets = ({
   sessionCollection,
@@ -50,6 +51,7 @@ const selectSessionHistoryTargets = ({
 export const loadSessionHistoryForReadModel = async ({
   repoPath,
   adapter,
+  sessionsRef,
   updateSession,
   sessionCollection,
   liveSessionRefs,
@@ -59,6 +61,7 @@ export const loadSessionHistoryForReadModel = async ({
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
+  sessionsRef: SessionsSnapshotRef;
   updateSession: UpdateSession;
   sessionCollection: AgentSessionCollection;
   liveSessionRefs: AgentSessionRef[];
@@ -90,6 +93,7 @@ export const loadSessionHistoryForReadModel = async ({
   return loadSessionHistorySnapshots({
     repoPath,
     adapter,
+    sessionsRef,
     updateSession,
     sessions: historySessionsWithRuntimeContext,
     isStaleRepoOperation,

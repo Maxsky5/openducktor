@@ -11,7 +11,7 @@ import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import {
   findAgentStudioSessionSelectionCandidate,
@@ -43,7 +43,7 @@ type UseAgentStudioSelectionControllerArgs = {
     role: AgentRole;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
-  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: ReturnType<
     typeof useRuntimeDefinitionsContext
@@ -106,7 +106,7 @@ export function useAgentStudioSelectionController({
   roleFromQuery,
   selectionIntent,
   updateQuery,
-  loadAgentSessionHistory,
+  loadAgentSessions,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -269,7 +269,7 @@ export function useAgentStudioSelectionController({
     runtimeDefinitionsError,
     runtimeHealthByRuntime,
     isLoadingChecks,
-    loadAgentSessionHistory,
+    loadAgentSessions,
     readSessionModelCatalog,
     readSessionTodos,
   });

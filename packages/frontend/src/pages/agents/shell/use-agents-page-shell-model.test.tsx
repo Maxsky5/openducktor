@@ -164,7 +164,7 @@ const sessionIdentity = (externalSessionId: string) => ({
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
 let agentOperations = {
-  loadAgentSessionHistory: mock(async () => undefined),
+  loadAgentSessions: mock(async () => undefined),
   readSessionFileSearch: mock(async () => []),
   readSessionModelCatalog: mock(async () => ({
     providers: [],
@@ -442,7 +442,7 @@ beforeEach(async () => {
     sessionReadModelError: null,
   };
   agentOperations = {
-    loadAgentSessionHistory: mock(async () => undefined),
+    loadAgentSessions: mock(async () => undefined),
     readSessionFileSearch: mock(async () => []),
     readSessionModelCatalog: mock(async () => ({
       providers: [],

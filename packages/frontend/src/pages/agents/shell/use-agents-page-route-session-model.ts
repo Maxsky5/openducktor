@@ -9,7 +9,7 @@ import { useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
 import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
@@ -32,7 +32,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   sessions: AgentSessionSummary[];
   isLoadingSessionReadModel: boolean;
   sessionReadModelError: string | null;
-  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -69,7 +69,7 @@ export function useAgentsPageRouteSessionModel({
   sessions,
   isLoadingSessionReadModel,
   sessionReadModelError,
-  loadAgentSessionHistory,
+  loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
@@ -131,7 +131,7 @@ export function useAgentsPageRouteSessionModel({
     roleFromQuery,
     selectionIntent: selectionIntentForController,
     updateQuery: scheduleQueryUpdate,
-    loadAgentSessionHistory,
+    loadAgentSessions,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,

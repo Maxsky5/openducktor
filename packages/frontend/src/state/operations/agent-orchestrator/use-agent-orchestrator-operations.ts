@@ -17,7 +17,7 @@ import { useAgentSessionReaders } from "./hooks/use-agent-session-readers";
 import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
-import { createLoadAgentSessionHistory, createLoadAgentSessions } from "./lifecycle/load-sessions";
+import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -125,19 +125,6 @@ export function useAgentOrchestratorOperations({
       queryBackedPromptOverrides,
     ],
   );
-  const loadAgentSessionHistory = useMemo(
-    () =>
-      createLoadAgentSessionHistory({
-        activeWorkspace,
-        adapter: agentEngine,
-        repoEpochRef: refBridges.repoEpochRef,
-        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-        updateSession,
-        taskRef: refBridges.taskRef,
-        loadRepoPromptOverrides: queryBackedPromptOverrides,
-      }),
-    [activeWorkspace, agentEngine, refBridges, updateSession, queryBackedPromptOverrides],
-  );
   useRepoSessionReadModelEffects({
     activeWorkspace,
     tasks,
@@ -217,7 +204,6 @@ export function useAgentOrchestratorOperations({
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
     const readModelState = { isLoadingSessionReadModel, sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
-      loadAgentSessionHistory,
       loadAgentSessions,
       ...readers,
       removeAgentSession,
@@ -243,7 +229,6 @@ export function useAgentOrchestratorOperations({
     commitSessions,
     loadAgentSessions,
     readers,
-    loadAgentSessionHistory,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

@@ -9,6 +9,7 @@ import {
 
 type SessionRuntimeDataPlanSession = RuntimeWorkingDirectoryAccessState & {
   externalSessionId: string;
+  historyLoadState: "not_requested" | "loading" | "loaded" | "failed";
   status: "starting" | "running" | "idle" | "error" | "stopped";
 };
 
@@ -59,6 +60,10 @@ export const deriveSessionRuntimeDataPlan = ({
     sessionRef,
     runtimeDataSupportError: runtimeRefError,
     canReadModelCatalog,
-    canReadTodos: canReadModelCatalog && sessionRef !== null && supportsTodos,
+    canReadTodos:
+      canReadModelCatalog &&
+      sessionRef !== null &&
+      supportsTodos &&
+      session?.historyLoadState === "loaded",
   };
 };

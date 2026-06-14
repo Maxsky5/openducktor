@@ -172,7 +172,6 @@ export type LoadAgentSessionsOptions = {
 };
 
 export type AgentOperationsContextValue = {
-  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,

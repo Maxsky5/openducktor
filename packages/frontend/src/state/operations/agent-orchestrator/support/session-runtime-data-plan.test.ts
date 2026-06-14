@@ -16,12 +16,14 @@ const createSession = (
     externalSessionId: string;
     runtimeKind: "opencode";
     workingDirectory: string;
+    historyLoadState: "not_requested" | "loading" | "loaded" | "failed";
     status: "starting" | "running" | "idle" | "error" | "stopped";
   }> = {},
 ) => ({
   externalSessionId: "external-1",
   runtimeKind: "opencode" as const,
   workingDirectory: "/repo",
+  historyLoadState: "loaded" as const,
   status: "running" as const,
   ...overrides,
 });
@@ -64,7 +66,7 @@ describe("deriveSessionRuntimeDataPlan", () => {
     expect(plan.canReadTodos).toBe(false);
   });
 
-  test("reads todos only when the selected runtime supports todos", () => {
+  test("reads todos only when the selected runtime supports todos and history is loaded", () => {
     const plan = deriveSessionRuntimeDataPlan({
       repoPath: "/repo",
       session: createSession(),
@@ -75,6 +77,19 @@ describe("deriveSessionRuntimeDataPlan", () => {
     expect(plan.runtimeDataSupportError).toBeNull();
     expect(plan.canReadModelCatalog).toBe(true);
     expect(plan.canReadTodos).toBe(true);
+  });
+
+  test("waits for selected session history before reading todos", () => {
+    const plan = deriveSessionRuntimeDataPlan({
+      repoPath: "/repo",
+      session: createSession({ historyLoadState: "loading" }),
+      runtimeDefinitions: createRuntimeDefinitions({ supportsTodos: true }),
+      repoReadinessState: "ready",
+    });
+
+    expect(plan.runtimeDataSupportError).toBeNull();
+    expect(plan.canReadModelCatalog).toBe(true);
+    expect(plan.canReadTodos).toBe(false);
   });
 
   test("reports invalid session runtime context instead of enabling reads", () => {

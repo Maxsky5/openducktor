@@ -92,7 +92,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   roleFromQuery: "spec",
   selectionIntent: null,
   updateQuery: () => {},
-  loadAgentSessionHistory: async () => undefined,
+  loadAgentSessions: async () => undefined,
   runtimeDefinitions: createDefaultRuntimeDefinitions(),
   isLoadingRuntimeDefinitions: false,
   runtimeDefinitionsError: null,
@@ -327,8 +327,8 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("loads selected session history without opting into live resume", async () => {
-    const loadAgentSessionHistory = mock(async () => undefined);
+  test("loads selected session history through the session read model", async () => {
+    const loadAgentSessions = mock(async () => undefined);
     const session = createSession("task-1", "session-live", {
       historyLoadState: "not_requested",
     });
@@ -338,14 +338,20 @@ describe("useAgentStudioSelectionController", () => {
         sessions: [session],
         taskIdParam: "task-1",
         sessionParam: externalSessionParam("session-live"),
-        loadAgentSessionHistory,
+        loadAgentSessions,
       }),
     );
 
     try {
       await harness.mount();
 
-      expect(loadAgentSessionHistory).toHaveBeenCalledWith({ session });
+      expect(loadAgentSessions).toHaveBeenCalledWith("task-1", {
+        historyTargetSession: {
+          externalSessionId: session.externalSessionId,
+          runtimeKind: session.runtimeKind,
+          workingDirectory: session.workingDirectory,
+        },
+      });
     } finally {
       await harness.unmount();
     }

@@ -1037,6 +1037,178 @@ describe("CodexAppServerAdapter history loading", () => {
     ]);
   });
 
+  test("reuses todos discovered while loading Codex session history", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: ["thread-history-todos"], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [
+              {
+                id: "thread-history-todos",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "idle" },
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/resume") {
+          return {
+            thread: {
+              id: "thread-history-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+              turns: [],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method !== "thread/read") {
+          throw new Error(`Unexpected method '${request.method}'.`);
+        }
+        return {
+          thread: {
+            id: "thread-history-todos",
+            cwd: "/repo",
+            turns: [
+              {
+                id: "turn-1",
+                status: "completed",
+                items: [
+                  {
+                    id: "todo-call-1",
+                    type: "dynamicToolCall",
+                    namespace: "functions",
+                    tool: "update_plan",
+                    arguments: {
+                      plan: [
+                        { step: "Load transcript once", status: "completed" },
+                        { step: "Reuse todos", status: "inProgress" },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        } as Response;
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-history-todos",
+    });
+
+    expect(
+      calls.filter(
+        (call) =>
+          call.method === "thread/read" &&
+          (call.params as { includeTurns?: boolean }).includeTurns === true,
+      ),
+    ).toHaveLength(1);
+    calls.length = 0;
+
+    await expect(
+      adapter.loadSessionTodos({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-history-todos",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({ content: "Load transcript once", status: "completed" }),
+      expect.objectContaining({ content: "Reuse todos", status: "in_progress" }),
+    ]);
+    expect(calls).toEqual([]);
+  });
+
+  test("reuses empty todos discovered while loading Codex session history", async () => {
+    const calls: CodexJsonRpcRequest[] = [];
+    const transport: CodexJsonRpcTransport = {
+      async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+        calls.push(request);
+        if (request.method === "thread/loaded/list") {
+          return { data: ["thread-empty-todos"], nextCursor: null } as Response;
+        }
+        if (request.method === "thread/list") {
+          return {
+            data: [
+              {
+                id: "thread-empty-todos",
+                cwd: "/repo",
+                createdAt: 1,
+                status: { type: "idle" },
+              },
+            ],
+            nextCursor: null,
+          } as Response;
+        }
+        if (request.method === "thread/resume") {
+          return {
+            thread: {
+              id: "thread-empty-todos",
+              cwd: "/repo",
+              createdAt: 1,
+              status: { type: "idle" },
+              turns: [],
+            },
+          } as Response;
+        }
+        if (request.method === "thread/turns/list") {
+          return { data: [], nextCursor: null } as Response;
+        }
+        if (request.method !== "thread/read") {
+          throw new Error(`Unexpected method '${request.method}'.`);
+        }
+        return {
+          thread: {
+            id: "thread-empty-todos",
+            cwd: "/repo",
+            turns: [
+              {
+                id: "turn-1",
+                status: "completed",
+                items: [],
+              },
+            ],
+          },
+        } as Response;
+      },
+    };
+    const adapter = createAdapterWithTransport(transport);
+
+    await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-empty-todos",
+    });
+    calls.length = 0;
+
+    await expect(
+      adapter.loadSessionTodos({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-empty-todos",
+      }),
+    ).resolves.toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
   test("loads only the selected final Codex agent message as finished", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {

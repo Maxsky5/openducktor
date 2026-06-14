@@ -280,6 +280,8 @@ export class CodexAppServerAdapter
       session,
       runtime,
       threadInventory: this.threadInventory,
+      rememberTodos: (externalSessionId, todos) =>
+        this.runtimeEvents.rememberTodos(externalSessionId, todos),
       ...this.runtimeEvents.historyLoadContext(),
     });
   }

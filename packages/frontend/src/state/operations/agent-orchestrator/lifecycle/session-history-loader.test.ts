@@ -1,7 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
+import {
+  createAgentSessionCollection,
+  getAgentSession,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentQuestionRequest,
+  AgentSessionIdentity,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import {
   loadSessionHistorySnapshot,
@@ -29,6 +38,35 @@ const createSession = (): AgentSessionState =>
     workingDirectory: sessionTarget.workingDirectory,
     historyLoadState: "not_requested",
   });
+
+const createHistoryLoadHarness = (initialSession: AgentSessionState = createSession()) => {
+  let sessionCollection = createAgentSessionCollection([initialSession]);
+  const sessionsRef = {
+    get current() {
+      return sessionCollection;
+    },
+  };
+  return {
+    sessionsRef,
+    updateSession: (
+      identity: AgentSessionIdentity,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = getAgentSession(sessionCollection, identity);
+      if (!current) {
+        return;
+      }
+      sessionCollection = replaceAgentSession(sessionCollection, updater(current));
+    },
+    get session() {
+      const session = getAgentSession(sessionCollection, initialSession);
+      if (!session) {
+        throw new Error(`Expected session '${initialSession.externalSessionId}' to exist.`);
+      }
+      return session;
+    },
+  };
+};
 
 describe("session history loader", () => {
   test("owns selected-session history loading policy", () => {
@@ -74,10 +112,12 @@ describe("session history loader", () => {
   test("treats a stale operation as neither applied nor failed", async () => {
     const loadSessionHistory = mock(async () => []);
     const updateSession = mock(() => undefined);
+    const harness = createHistoryLoadHarness();
 
     const result = await loadSessionHistorySnapshot({
       repoPath: "/repo",
       adapter: { loadSessionHistory },
+      sessionsRef: harness.sessionsRef,
       updateSession,
       session: sessionTarget,
       isStaleRepoOperation: () => true,
@@ -92,7 +132,7 @@ describe("session history loader", () => {
   });
 
   test("marks the session failed when history loading fails for the current repo operation", async () => {
-    let session = createSession();
+    const harness = createHistoryLoadHarness();
 
     const result = await loadSessionHistorySnapshot({
       repoPath: "/repo",
@@ -101,15 +141,62 @@ describe("session history loader", () => {
           throw new Error("history unavailable");
         },
       },
-      updateSession: (_externalSessionId, updater) => {
-        session = updater(session);
-      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
       session: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
     expect(result.status).toBe("failed");
-    expect(session.historyLoadState).toBe("failed");
+    expect(harness.session.historyLoadState).toBe("failed");
+  });
+
+  test("skips duplicate history loads when the current session is already loading", async () => {
+    const loadSessionHistory = mock(async () => []);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loading",
+    });
+
+    const result = await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      session: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(result).toEqual({
+      externalSessionId: sessionTarget.externalSessionId,
+      status: "skipped",
+    });
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("loading");
+  });
+
+  test("does not reset a loaded session when a stale caller asks for history again", async () => {
+    const loadSessionHistory = mock(async () => []);
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      historyLoadState: "loaded",
+    });
+
+    const result = await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: { loadSessionHistory },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      session: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(result).toEqual({
+      externalSessionId: sessionTarget.externalSessionId,
+      status: "skipped",
+    });
+    expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(harness.session.historyLoadState).toBe("loaded");
   });
 
   test("loads transcript history without owning live input state", async () => {
@@ -125,30 +212,29 @@ describe("session history loader", () => {
         ],
       },
     ];
-    let session = {
+    const harness = createHistoryLoadHarness({
       ...createSession(),
       pendingQuestions,
-    };
+    });
 
     const result = await loadSessionHistorySnapshot({
       repoPath: "/repo",
       adapter: {
         loadSessionHistory: async () => [],
       },
-      updateSession: (_externalSessionId, updater) => {
-        session = updater(session);
-      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
       session: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
     expect(result.status).toBe("applied");
-    expect(session.historyLoadState).toBe("loaded");
-    expect(session.pendingQuestions).toBe(pendingQuestions);
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.pendingQuestions).toBe(pendingQuestions);
   });
 
   test("passes transient prompt context to the history adapter without rendering it locally", async () => {
-    let session = createSession();
+    const harness = createHistoryLoadHarness();
     let historyInput:
       | Parameters<
           Parameters<typeof loadSessionHistorySnapshot>[0]["adapter"]["loadSessionHistory"]
@@ -171,9 +257,8 @@ describe("session history loader", () => {
           ];
         },
       },
-      updateSession: (_externalSessionId, updater) => {
-        session = updater(session);
-      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
       session: {
         ...sessionTarget,
         systemPromptContext: {
@@ -192,13 +277,13 @@ describe("session history loader", () => {
         systemPrompt: "Build from current task context.",
       },
     });
-    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "Loaded from Codex history",
     ]);
   });
 
   test("keeps the runtime-owned system prompt when history provides one", async () => {
-    let session = createSession();
+    const harness = createHistoryLoadHarness();
 
     await loadSessionHistorySnapshot({
       repoPath: "/repo",
@@ -213,9 +298,8 @@ describe("session history loader", () => {
           },
         ],
       },
-      updateSession: (_externalSessionId, updater) => {
-        session = updater(session);
-      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
       session: {
         ...sessionTarget,
         systemPromptContext: {
@@ -226,7 +310,7 @@ describe("session history loader", () => {
       isStaleRepoOperation: () => false,
     });
 
-    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
       "System prompt:\n\nRuntime provided prompt.",
     ]);
   });

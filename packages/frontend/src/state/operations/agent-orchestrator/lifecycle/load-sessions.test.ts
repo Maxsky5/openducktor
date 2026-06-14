@@ -249,6 +249,78 @@ describe("createLoadAgentSessions", () => {
     expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
   });
 
+  test("deduplicates overlapping explicit history requests through current session state", async () => {
+    const historyStarted = createDeferred<void>();
+    const historyReady = createDeferred<void>();
+    let historyLoads = 0;
+    const harness = createLoaderHarness({
+      listSessionPresence: async () => [],
+      loadSessionHistory: async () => {
+        historyLoads += 1;
+        historyStarted.resolve(undefined);
+        await historyReady.promise;
+        return [];
+      },
+    });
+
+    const historyTargetSession = {
+      externalSessionId: "external-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+    };
+    const firstLoad = harness.loadAgentSessions("task-1", { historyTargetSession });
+    await historyStarted.promise;
+
+    await harness.loadAgentSessions("task-1", { historyTargetSession });
+    expect(historyLoads).toBe(1);
+    expect(harness.getSession("external-1")?.historyLoadState).toBe("loading");
+
+    historyReady.resolve(undefined);
+    await firstLoad;
+
+    expect(historyLoads).toBe(1);
+    expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
+  });
+
+  test("deduplicates overlapping selected loads that both wait for runtime presence", async () => {
+    const presenceReady = createDeferred<void>();
+    const historyStarted = createDeferred<void>();
+    const historyReady = createDeferred<void>();
+    let historyLoads = 0;
+    const harness = createLoaderHarness({
+      listSessionPresence: async () => {
+        await presenceReady.promise;
+        return [];
+      },
+      loadSessionHistory: async () => {
+        historyLoads += 1;
+        historyStarted.resolve(undefined);
+        await historyReady.promise;
+        return [];
+      },
+    });
+
+    const historyTargetSession = {
+      externalSessionId: "external-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/worktree",
+    };
+    const firstLoad = harness.loadAgentSessions("task-1", { historyTargetSession });
+    const secondLoad = harness.loadAgentSessions("task-1", { historyTargetSession });
+
+    presenceReady.resolve(undefined);
+    await historyStarted.promise;
+
+    expect(historyLoads).toBe(1);
+    expect(harness.getSession("external-1")?.historyLoadState).toBe("loading");
+
+    historyReady.resolve(undefined);
+    await Promise.all([firstLoad, secondLoad]);
+
+    expect(historyLoads).toBe(1);
+    expect(harness.getSession("external-1")?.historyLoadState).toBe("loaded");
+  });
+
   test("fails explicit history loading for an unknown session", async () => {
     const harness = createLoaderHarness({
       listSessionPresence: async () => [],

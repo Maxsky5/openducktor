@@ -1,4 +1,5 @@
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHistoryMessages } from "../support/history-message-merge";
 import { createSessionMessagesState, getSessionMessageCount } from "../support/messages";
@@ -11,11 +12,14 @@ type UpdateSession = (
   options?: { persist?: boolean },
 ) => void;
 
+type SessionsSnapshotRef = { readonly current: AgentSessionCollection };
+
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 
 export type SessionHistoryLoadResult =
   | { externalSessionId: string; status: "applied" }
   | { externalSessionId: string; status: "stale" }
+  | { externalSessionId: string; status: "skipped" }
   | { externalSessionId: string; status: "failed"; error: unknown };
 
 export type AgentSessionHistoryTarget = Pick<
@@ -33,6 +37,13 @@ export type AgentSessionHistoryTarget = Pick<
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
+const shouldLoadSessionHistory = (session: AgentSessionState): boolean => {
+  if (session.historyLoadState === "not_requested") {
+    return true;
+  }
+  return session.historyLoadState === "failed" && getSessionMessageCount(session) > 0;
+};
+
 export const shouldLoadSelectedSessionHistory = ({
   repoReadinessState,
   session,
@@ -43,21 +54,20 @@ export const shouldLoadSelectedSessionHistory = ({
   if (repoReadinessState !== "ready" || !session) {
     return false;
   }
-  if (session.historyLoadState === "not_requested") {
-    return true;
-  }
-  return session.historyLoadState === "failed" && getSessionMessageCount(session) > 0;
+  return shouldLoadSessionHistory(session);
 };
 
 export const loadSessionHistorySnapshot = async ({
   repoPath,
   adapter,
+  sessionsRef,
   updateSession,
   session,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
+  sessionsRef: SessionsSnapshotRef;
   updateSession: UpdateSession;
   session: AgentSessionHistoryTarget;
   isStaleRepoOperation: () => boolean;
@@ -66,16 +76,35 @@ export const loadSessionHistorySnapshot = async ({
     return { externalSessionId: session.externalSessionId, status: "stale" };
   }
 
-  updateSession(session, (current) => ({ ...current, historyLoadState: "loading" }), {
-    persist: false,
-  });
+  const currentSession = getAgentSession(sessionsRef.current, session);
+  if (!currentSession || !shouldLoadSessionHistory(currentSession)) {
+    return { externalSessionId: session.externalSessionId, status: "skipped" };
+  }
+
+  updateSession(
+    currentSession,
+    (current) => {
+      if (!shouldLoadSessionHistory(current)) {
+        return current;
+      }
+      return { ...current, historyLoadState: "loading" };
+    },
+    {
+      persist: false,
+    },
+  );
+
+  const claimedSession = getAgentSession(sessionsRef.current, currentSession);
+  if (claimedSession?.historyLoadState !== "loading") {
+    return { externalSessionId: session.externalSessionId, status: "skipped" };
+  }
 
   try {
     const history = await adapter.loadSessionHistory({
       repoPath,
-      runtimeKind: session.runtimeKind,
-      workingDirectory: session.workingDirectory,
-      externalSessionId: session.externalSessionId,
+      runtimeKind: claimedSession.runtimeKind,
+      workingDirectory: claimedSession.workingDirectory,
+      externalSessionId: claimedSession.externalSessionId,
       ...(session.systemPromptContext ? { systemPromptContext: session.systemPromptContext } : {}),
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
@@ -85,31 +114,41 @@ export const loadSessionHistorySnapshot = async ({
     }
 
     const historyMessages = historyToChatMessages(history, {
-      role: session.role,
-      selectedModel: session.selectedModel,
+      role: claimedSession.role,
+      selectedModel: claimedSession.selectedModel,
     });
-    const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
+    const loadedMessages = createSessionMessagesState(
+      claimedSession.externalSessionId,
+      historyMessages,
+    );
     const historyContextUsage = historyToSessionContextUsage(history);
     updateSession(
-      session,
+      claimedSession,
       (current) => ({
         ...current,
-        runtimeKind: session.runtimeKind,
-        workingDirectory: session.workingDirectory,
+        runtimeKind: claimedSession.runtimeKind,
+        workingDirectory: claimedSession.workingDirectory,
         historyLoadState: "loaded",
         contextUsage: current.contextUsage ?? historyContextUsage,
         messages: mergeHistoryMessages(current.externalSessionId, loadedMessages, current.messages),
       }),
       { persist: false },
     );
-    return { externalSessionId: session.externalSessionId, status: "applied" };
+    return { externalSessionId: claimedSession.externalSessionId, status: "applied" };
   } catch (error) {
     if (isStaleRepoOperation()) {
       return { externalSessionId: session.externalSessionId, status: "stale" };
     }
-    updateSession(session, (current) => ({ ...current, historyLoadState: "failed" }), {
-      persist: false,
-    });
+    updateSession(
+      claimedSession,
+      (current) =>
+        current.historyLoadState === "loading"
+          ? { ...current, historyLoadState: "failed" }
+          : current,
+      {
+        persist: false,
+      },
+    );
     return { externalSessionId: session.externalSessionId, status: "failed", error };
   }
 };
@@ -117,12 +156,14 @@ export const loadSessionHistorySnapshot = async ({
 export const loadSessionHistorySnapshots = async ({
   repoPath,
   adapter,
+  sessionsRef,
   updateSession,
   sessions,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
+  sessionsRef: SessionsSnapshotRef;
   updateSession: UpdateSession;
   sessions: AgentSessionHistoryTarget[];
   isStaleRepoOperation: () => boolean;
@@ -132,6 +173,7 @@ export const loadSessionHistorySnapshots = async ({
       return loadSessionHistorySnapshot({
         repoPath,
         adapter,
+        sessionsRef,
         updateSession,
         session,
         isStaleRepoOperation,

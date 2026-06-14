@@ -14,11 +14,7 @@ import type {
 } from "@openducktor/core";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
-import type {
-  AgentSessionIdentity,
-  AgentSessionRouteIdentity,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { AgentOperationsContextValue, LoadAgentSessionsOptions } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
@@ -45,7 +41,6 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
   loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -87,7 +82,6 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 };
 
 export const createOrchestratorPublicOperations = ({
-  loadAgentSessionHistory,
   loadAgentSessions,
   readSessionModelCatalog,
   readSessionTodos,
@@ -99,8 +93,6 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
-  loadAgentSessionHistory: (input) =>
-    withErrorToast("Failed to load agent session history", () => loadAgentSessionHistory(input)),
   loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions): Promise<void> =>
     withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
   readSessionModelCatalog,

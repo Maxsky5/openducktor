@@ -119,9 +119,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   rememberTodos(externalSessionId: string, todos: AgentSessionTodoItem[]): void {
-    if (todos.length > 0) {
-      this.latestTodosBySessionId.set(externalSessionId, todos);
-    }
+    this.latestTodosBySessionId.set(externalSessionId, todos);
   }
 
   clearSession(externalSessionId: string): void {

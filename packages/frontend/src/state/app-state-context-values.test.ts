@@ -116,7 +116,6 @@ describe("app-state-context-values", () => {
       sessions: [],
       isLoadingSessionReadModel: false,
       sessionReadModelError: null,
-      loadAgentSessionHistory: async () => {},
       loadAgentSessions: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
