@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   codexSessionRuntimeRef,
+  createDeferred,
   createHarness,
   flushCodexAdapterWork,
   RecordingTransport,
@@ -15,6 +16,23 @@ class ThreadIdOnlyResumeTransport extends RecordingTransport {
         threadId: (request.params as { threadId: string }).threadId,
         startedAt: "2026-05-07T00:00:00.000Z",
       } as Response;
+    }
+    return super.request<Response>(request);
+  }
+}
+
+class DeferredInventoryTransport extends RecordingTransport {
+  readonly loadedList = createDeferred<unknown>();
+  readonly threadList = createDeferred<unknown>();
+
+  async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {
+    if (request.method === "thread/loaded/list") {
+      this.calls.push(request);
+      return this.loadedList.promise as Promise<Response>;
+    }
+    if (request.method === "thread/list") {
+      this.calls.push(request);
+      return this.threadList.promise as Promise<Response>;
     }
     return super.request<Response>(request);
   }
@@ -142,6 +160,58 @@ const observeSessionState = async (
 };
 
 describe("CodexAppServerAdapter presence", () => {
+  test("coalesces concurrent Codex presence inventory scans", async () => {
+    const transport = new DeferredInventoryTransport("runtime-live", false);
+    const { adapter } = createHarness({
+      transportFactory: mock(() => transport),
+    });
+
+    const firstPresenceRead = adapter.listSessionPresence({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      directories: ["/repo"],
+    });
+    const secondPresenceRead = adapter.listSessionPresence({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      directories: ["/repo"],
+    });
+    await flushCodexAdapterWork();
+
+    expect(transport.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(1);
+    expect(transport.calls.filter((call) => call.method === "thread/list")).toHaveLength(1);
+
+    transport.loadedList.resolve({ data: ["thread-saved"], nextCursor: null });
+    transport.threadList.resolve({
+      data: [
+        {
+          id: "thread-saved",
+          cwd: "/repo",
+          createdAt: 1_778_112_000,
+          preview: "Saved running session",
+          status: { type: "active", activeFlags: [] },
+        },
+      ],
+      nextCursor: null,
+      backwardsCursor: null,
+    });
+
+    await expect(Promise.all([firstPresenceRead, secondPresenceRead])).resolves.toEqual([
+      [
+        expect.objectContaining({
+          ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
+        }),
+      ],
+      [
+        expect.objectContaining({
+          ref: expect.objectContaining({ externalSessionId: "thread-saved" }),
+        }),
+      ],
+    ]);
+    expect(transport.calls.filter((call) => call.method === "thread/loaded/list")).toHaveLength(1);
+    expect(transport.calls.filter((call) => call.method === "thread/list")).toHaveLength(1);
+  });
+
   test("refreshes Codex thread inventory during presence checks", async () => {
     const { adapter, transports } = createHarness();
 

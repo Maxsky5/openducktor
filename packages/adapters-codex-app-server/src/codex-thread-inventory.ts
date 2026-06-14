@@ -19,9 +19,14 @@ type ReadOnlyIdleHistoryLoad = {
   status: CodexThreadSnapshot["status"];
 };
 
+type PendingInventoryRead = {
+  mode: "read" | "refresh";
+  promise: Promise<CodexThreadInventory>;
+};
+
 export class CodexThreadInventoryReader {
   private readonly inventoryByRuntimeId = new Map<string, CodexThreadInventory>();
-  private readonly pendingInventoryByRuntimeId = new Map<string, Promise<CodexThreadInventory>>();
+  private readonly pendingInventoryByRuntimeId = new Map<string, PendingInventoryRead>();
   private readonly readOnlyIdleHistoryLoadsByThreadId = new Map<string, ReadOnlyIdleHistoryLoad>();
 
   clear(runtimeId: string): void {
@@ -59,30 +64,45 @@ export class CodexThreadInventoryReader {
     }
     const pending = this.pendingInventoryByRuntimeId.get(runtimeId);
     if (pending) {
-      return pending;
+      return pending.promise;
     }
-    const nextPending = this.fetch(client, runtimeId).then(
-      (inventory) => {
-        if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
-          this.inventoryByRuntimeId.set(runtimeId, inventory);
-          this.pendingInventoryByRuntimeId.delete(runtimeId);
-        }
-        return inventory;
-      },
-      (error) => {
-        if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
-          this.pendingInventoryByRuntimeId.delete(runtimeId);
-        }
-        throw error;
-      },
-    );
-    this.pendingInventoryByRuntimeId.set(runtimeId, nextPending);
-    return nextPending;
+    return this.startInventoryRead(client, runtimeId, "read");
   }
 
   async refresh(client: CodexAppServerClient, runtimeId: string): Promise<CodexThreadInventory> {
-    this.clear(runtimeId);
-    return this.read(client, runtimeId);
+    this.inventoryByRuntimeId.delete(runtimeId);
+    const pending = this.pendingInventoryByRuntimeId.get(runtimeId);
+    if (pending?.mode === "refresh") {
+      return pending.promise;
+    }
+    return this.startInventoryRead(client, runtimeId, "refresh");
+  }
+
+  private startInventoryRead(
+    client: CodexAppServerClient,
+    runtimeId: string,
+    mode: PendingInventoryRead["mode"],
+  ): Promise<CodexThreadInventory> {
+    const nextPending: PendingInventoryRead = {
+      mode,
+      promise: this.fetch(client, runtimeId).then(
+        (inventory) => {
+          if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
+            this.inventoryByRuntimeId.set(runtimeId, inventory);
+            this.pendingInventoryByRuntimeId.delete(runtimeId);
+          }
+          return inventory;
+        },
+        (error) => {
+          if (this.pendingInventoryByRuntimeId.get(runtimeId) === nextPending) {
+            this.pendingInventoryByRuntimeId.delete(runtimeId);
+          }
+          throw error;
+        },
+      ),
+    };
+    this.pendingInventoryByRuntimeId.set(runtimeId, nextPending);
+    return nextPending.promise;
   }
 
   async findThread(

@@ -62,6 +62,35 @@ describe("CodexThreadInventoryReader", () => {
     expect(cached.threadsById.has("thread-stale")).toBe(false);
   });
 
+  test("coalesces concurrent refreshes for the same runtime", async () => {
+    const reader = new CodexThreadInventoryReader();
+    const loaded = createDeferred<unknown>();
+    const threads = createDeferred<unknown>();
+    const calls: string[] = [];
+    const client = {
+      threadLoadedList: () => {
+        calls.push("thread/loaded/list");
+        return loaded.promise;
+      },
+      threadList: () => {
+        calls.push("thread/list");
+        return threads.promise;
+      },
+    } as unknown as CodexAppServerClient;
+
+    const firstRefresh = reader.refresh(client, "runtime-1");
+    const secondRefresh = reader.refresh(client, "runtime-1");
+    expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
+
+    loaded.resolve({ data: ["thread-1"], nextCursor: null });
+    threads.resolve(threadListResponse("thread-1", "Shared inventory"));
+
+    const [firstInventory, secondInventory] = await Promise.all([firstRefresh, secondRefresh]);
+    expect(firstInventory).toBe(secondInventory);
+    expect(firstInventory.threadsById.has("thread-1")).toBe(true);
+    expect(calls).toEqual(["thread/loaded/list", "thread/list"]);
+  });
+
   test("resumes listed threads for history so Codex can replay restored token usage", async () => {
     const reader = new CodexThreadInventoryReader();
     const calls: string[] = [];
