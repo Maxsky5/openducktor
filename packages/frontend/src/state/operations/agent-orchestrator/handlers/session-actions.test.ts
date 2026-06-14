@@ -130,6 +130,7 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
     loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
     loadRepoPromptOverrides: async () => ({}),
     loadAgentSessions: async () => {},
+    loadAgentSessionHistory: async () => {},
     clearTurnDuration: () => {},
     refreshTaskData: async () => {},
     persistSessionRecord: async () => {},

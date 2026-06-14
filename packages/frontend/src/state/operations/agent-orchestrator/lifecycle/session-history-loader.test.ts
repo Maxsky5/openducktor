@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -13,9 +14,36 @@ import type {
 } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import {
+  createLoadAgentSessionHistory,
   loadSessionHistorySnapshot,
   shouldLoadSelectedSessionHistory,
 } from "./session-history-loader";
+
+const taskFixture: TaskCard = {
+  id: "task-1",
+  title: "Implement feature",
+  description: "Build the task from the repository rules.",
+  status: "in_progress",
+  priority: 1,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-06-12T08:00:00.000Z",
+  createdAt: "2026-06-12T08:00:00.000Z",
+};
 
 const sessionTarget = {
   externalSessionId: "external-1",
@@ -131,6 +159,31 @@ describe("session history loader", () => {
     expect(updateSession).not.toHaveBeenCalled();
   });
 
+  test("releases a loading history claim when the operation becomes stale", async () => {
+    const harness = createHistoryLoadHarness();
+    let stale = false;
+
+    const result = await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => {
+          stale = true;
+          return [];
+        },
+      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      session: sessionTarget,
+      isStaleRepoOperation: () => stale,
+    });
+
+    expect(result).toEqual({
+      externalSessionId: sessionTarget.externalSessionId,
+      status: "stale",
+    });
+    expect(harness.session.historyLoadState).toBe("not_requested");
+  });
+
   test("marks the session failed when history loading fails for the current repo operation", async () => {
     const harness = createHistoryLoadHarness();
 
@@ -149,6 +202,77 @@ describe("session history loader", () => {
 
     expect(result.status).toBe("failed");
     expect(harness.session.historyLoadState).toBe("failed");
+  });
+
+  test("loads selected session history directly from the current session identity", async () => {
+    const harness = createHistoryLoadHarness();
+    let receivedSystemPrompt: string | undefined;
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      activeWorkspace: {
+        workspaceId: "workspace-1",
+        workspaceName: "Workspace",
+        repoPath: "/repo",
+      },
+      adapter: {
+        loadSessionHistory: async (input) => {
+          receivedSystemPrompt = input.systemPromptContext?.systemPrompt;
+          return [
+            {
+              messageId: "history-1",
+              role: "assistant",
+              timestamp: "2026-06-12T08:00:01.000Z",
+              text: "Loaded selected transcript",
+              parts: [],
+            },
+          ];
+        },
+      },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      taskRef: { current: [taskFixture] },
+      loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+    });
+
+    const result = await loadAgentSessionHistory(sessionTarget);
+
+    expect(result).toEqual({ externalSessionId: "external-1", status: "applied" });
+    expect(receivedSystemPrompt).toContain("Task context");
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Loaded selected transcript",
+    ]);
+  });
+
+  test("fails selected history loading for an unknown session", async () => {
+    const harness = createHistoryLoadHarness();
+    const loadAgentSessionHistory = createLoadAgentSessionHistory({
+      activeWorkspace: {
+        workspaceId: "workspace-1",
+        workspaceName: "Workspace",
+        repoPath: "/repo",
+      },
+      adapter: {
+        loadSessionHistory: async () => {
+          throw new Error("History must not load for an unknown session.");
+        },
+      },
+      repoEpochRef: { current: 0 },
+      currentWorkspaceRepoPathRef: { current: "/repo" },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      taskRef: { current: [taskFixture] },
+      loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+    });
+
+    await expect(
+      loadAgentSessionHistory({
+        externalSessionId: "missing-session",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+      }),
+    ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });
 
   test("skips duplicate history loads when the current session is already loading", async () => {
@@ -231,6 +355,94 @@ describe("session history loader", () => {
     expect(result.status).toBe("applied");
     expect(harness.session.historyLoadState).toBe("loaded");
     expect(harness.session.pendingQuestions).toBe(pendingQuestions);
+  });
+
+  test("does not erase a live user message when applying a history baseline", async () => {
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      messages: createSessionMessagesState(sessionTarget.externalSessionId, [
+        {
+          id: "runtime-user-new",
+          role: "user",
+          content: "Resume after QA rejection",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [{ kind: "text", text: "Resume after QA rejection" }],
+          },
+        },
+      ]),
+    });
+
+    await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:00.500Z",
+            text: "Previous transcript",
+            parts: [],
+          },
+        ],
+      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      session: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(sessionMessagesToArray(harness.session).map((message) => message.content)).toEqual([
+      "Previous transcript",
+      "Resume after QA rejection",
+    ]);
+  });
+
+  test("does not replace live context stats with an older history baseline", async () => {
+    const liveContextUsage = {
+      totalTokens: 777,
+      contextWindow: 4_000,
+      providerId: "live-provider",
+      modelId: "live-model",
+    };
+    const harness = createHistoryLoadHarness({
+      ...createSession(),
+      contextUsage: liveContextUsage,
+    });
+
+    await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Previous transcript",
+            totalTokens: 123,
+            contextWindow: 1_000,
+            parts: [
+              {
+                kind: "step",
+                messageId: "history-1",
+                partId: "finish-1",
+                phase: "finish",
+                reason: "stop",
+              },
+            ],
+          },
+        ],
+      },
+      sessionsRef: harness.sessionsRef,
+      updateSession: harness.updateSession,
+      session: sessionTarget,
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(harness.session.historyLoadState).toBe("loaded");
+    expect(harness.session.contextUsage).toEqual(liveContextUsage);
   });
 
   test("passes transient prompt context to the history adapter without rendering it locally", async () => {

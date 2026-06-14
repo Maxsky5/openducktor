@@ -27,7 +27,7 @@ import type {
   AgentSessionRouteIdentity,
   AgentSessionState,
 } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
@@ -77,7 +77,8 @@ type SessionActionsDependencies = {
   ensureRuntime: EnsureRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
+  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<unknown>;
   clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
   refreshTaskData: (
     repoPath: string,
@@ -234,6 +235,7 @@ export const createAgentSessionActions = ({
   loadTaskDocuments,
   loadRepoPromptOverrides,
   loadAgentSessions,
+  loadAgentSessionHistory,
   clearTurnDuration,
   refreshTaskData,
   persistSessionRecord,
@@ -386,6 +388,7 @@ export const createAgentSessionActions = ({
       sessionsRef,
       inFlightStartsByWorkspaceTaskRef,
       loadAgentSessions,
+      loadAgentSessionHistory,
       persistSessionRecord,
       listenToAgentSession,
     },

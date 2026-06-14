@@ -44,9 +44,7 @@ const loadSessionForReuse = async ({
 }): Promise<AgentSessionState> => {
   const currentSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
   if (forceReload || !currentSession) {
-    await deps.session.loadAgentSessions(ctx.taskId, {
-      historyTargetSession: sourceSession,
-    });
+    await deps.session.loadAgentSessions(ctx.taskId);
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
@@ -57,7 +55,19 @@ const loadSessionForReuse = async ({
     );
   }
 
-  return loadedSession;
+  if (loadedSession.historyLoadState !== "loaded") {
+    await deps.session.loadAgentSessionHistory(sourceSession);
+    throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
+  }
+
+  const historyLoadedSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
+  if (!historyLoadedSession) {
+    throw new Error(
+      `Failed to load session "${sourceSession.externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
+    );
+  }
+
+  return historyLoadedSession;
 };
 
 const createWorkingDirectoryMatchers = ({

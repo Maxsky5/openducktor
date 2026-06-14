@@ -68,7 +68,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   } = useTasksState();
   const { isLoadingSessionReadModel, sessionReadModelError } = useAgentSessionReadModelState();
   const {
-    loadAgentSessions,
+    loadAgentSessionHistory,
     readSessionFileSearch,
     readSessionModelCatalog,
     readSessionSlashCommands,
@@ -103,7 +103,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     sessions,
     isLoadingSessionReadModel,
     sessionReadModelError,
-    loadAgentSessions,
+    loadAgentSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
   });

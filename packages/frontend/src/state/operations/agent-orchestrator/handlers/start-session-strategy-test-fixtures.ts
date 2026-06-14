@@ -32,6 +32,7 @@ export const createSessionDependenciesFixture = (
   sessionsRef: { current: emptyAgentSessionCollection() },
   inFlightStartsByWorkspaceTaskRef: { current: new Map() },
   loadAgentSessions: async () => {},
+  loadAgentSessionHistory: async () => {},
   persistSessionRecord: async () => {},
   listenToAgentSession: async () => {},
   ...overrides,

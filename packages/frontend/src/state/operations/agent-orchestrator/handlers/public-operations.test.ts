@@ -45,6 +45,7 @@ describe("agent-orchestrator-public-operations", () => {
       loadAgentSessions: async () => {
         throw new Error("load failed");
       },
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],
@@ -78,6 +79,7 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],
@@ -120,6 +122,7 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],
@@ -159,6 +162,7 @@ describe("agent-orchestrator-public-operations", () => {
 
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],
@@ -193,6 +197,7 @@ describe("agent-orchestrator-public-operations", () => {
     const removeAgentSession = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],
@@ -218,6 +223,7 @@ describe("agent-orchestrator-public-operations", () => {
     const removeAgentSessions = mock(async () => {});
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],
@@ -246,6 +252,7 @@ describe("agent-orchestrator-public-operations", () => {
     const readSessionHistory = mock(async () => []);
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
       readSessionModelCatalog: async () => ({
         providers: [],
         models: [],

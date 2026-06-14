@@ -15,7 +15,7 @@ import type {
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
-import type { AgentOperationsContextValue, LoadAgentSessionsOptions } from "@/types/state-slices";
+import type { AgentOperationsContextValue } from "@/types/state-slices";
 import type { StartAgentSessionInput } from "./start-session";
 
 type SessionActions = {
@@ -41,7 +41,8 @@ type SessionActions = {
 };
 
 type CreatePublicOperationsArgs = {
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
+  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -83,6 +84,7 @@ const withErrorToast = async <T>(title: string, operation: () => Promise<T>): Pr
 
 export const createOrchestratorPublicOperations = ({
   loadAgentSessions,
+  loadAgentSessionHistory,
   readSessionModelCatalog,
   readSessionTodos,
   readSessionHistory,
@@ -93,8 +95,12 @@ export const createOrchestratorPublicOperations = ({
   removeAgentSessions,
   sessionActions,
 }: CreatePublicOperationsArgs): AgentOperationsContextValue => ({
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions): Promise<void> =>
-    withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId, options)),
+  loadAgentSessions: (taskId: string): Promise<void> =>
+    withErrorToast("Failed to load agent sessions", () => loadAgentSessions(taskId)),
+  loadAgentSessionHistory: (session: AgentSessionIdentity): Promise<void> =>
+    withErrorToast("Failed to load agent session history", async () => {
+      await loadAgentSessionHistory(session);
+    }),
   readSessionModelCatalog,
   readSessionTodos,
   readSessionHistory,

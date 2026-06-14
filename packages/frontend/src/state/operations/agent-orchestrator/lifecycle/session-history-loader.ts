@@ -1,9 +1,17 @@
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import type { MutableRefObject } from "react";
 import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
+import { createRepoStaleGuard } from "../support/core";
 import { mergeHistoryMessages } from "../support/history-message-merge";
 import { createSessionMessagesState, getSessionMessageCount } from "../support/messages";
 import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
+import {
+  buildHistoryRuntimeContext,
+  withSessionHistoryRuntimeContext,
+} from "./session-history-runtime-context";
 import type { SessionRepoReadinessState } from "./session-view-lifecycle";
 
 type UpdateSession = (
@@ -35,6 +43,17 @@ export type AgentSessionHistoryTarget = Pick<
   systemPromptContext?: AgentSessionHistorySystemPromptContext;
 };
 
+type CreateLoadAgentSessionHistoryArgs = {
+  activeWorkspace: ActiveWorkspace | null;
+  adapter: SessionHistoryLoaderAdapter;
+  repoEpochRef: MutableRefObject<number>;
+  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
+  sessionsRef: SessionsSnapshotRef;
+  updateSession: UpdateSession;
+  taskRef: MutableRefObject<TaskCard[]>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+};
+
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
 const shouldLoadSessionHistory = (session: AgentSessionState): boolean => {
@@ -42,6 +61,23 @@ const shouldLoadSessionHistory = (session: AgentSessionState): boolean => {
     return true;
   }
   return session.historyLoadState === "failed" && getSessionMessageCount(session) > 0;
+};
+
+const releaseStaleHistoryLoad = ({
+  session,
+  updateSession,
+}: {
+  session: AgentSessionState;
+  updateSession: UpdateSession;
+}): void => {
+  updateSession(
+    session,
+    (current) =>
+      current.historyLoadState === "loading"
+        ? { ...current, historyLoadState: "not_requested" }
+        : current,
+    { persist: false },
+  );
 };
 
 export const shouldLoadSelectedSessionHistory = ({
@@ -110,6 +146,7 @@ export const loadSessionHistorySnapshot = async ({
     });
 
     if (isStaleRepoOperation()) {
+      releaseStaleHistoryLoad({ session: claimedSession, updateSession });
       return { externalSessionId: session.externalSessionId, status: "stale" };
     }
 
@@ -137,6 +174,7 @@ export const loadSessionHistorySnapshot = async ({
     return { externalSessionId: claimedSession.externalSessionId, status: "applied" };
   } catch (error) {
     if (isStaleRepoOperation()) {
+      releaseStaleHistoryLoad({ session: claimedSession, updateSession });
       return { externalSessionId: session.externalSessionId, status: "stale" };
     }
     updateSession(
@@ -180,3 +218,62 @@ export const loadSessionHistorySnapshots = async ({
       });
     }),
   );
+
+export const createLoadAgentSessionHistory = ({
+  activeWorkspace,
+  adapter,
+  repoEpochRef,
+  currentWorkspaceRepoPathRef,
+  sessionsRef,
+  updateSession,
+  taskRef,
+  loadRepoPromptOverrides,
+}: CreateLoadAgentSessionHistoryArgs): ((
+  sessionIdentity: AgentSessionIdentity,
+) => Promise<SessionHistoryLoadResult>) => {
+  return async (sessionIdentity: AgentSessionIdentity): Promise<SessionHistoryLoadResult> => {
+    if (!activeWorkspace?.repoPath) {
+      throw new Error("Cannot load agent session history without an active workspace.");
+    }
+
+    const repoPath = activeWorkspace.repoPath;
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+    });
+    if (isStaleRepoOperation()) {
+      return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
+    }
+
+    const session = getAgentSession(sessionsRef.current, sessionIdentity);
+    if (!session) {
+      throw new Error(
+        `Cannot load history for unknown session '${sessionIdentity.externalSessionId}'.`,
+      );
+    }
+
+    const [historySession] = await withSessionHistoryRuntimeContext({
+      sessions: [session],
+      context: buildHistoryRuntimeContext({
+        activeWorkspace,
+        tasks: taskRef.current,
+        loadRepoPromptOverrides,
+      }),
+    });
+    if (!historySession || isStaleRepoOperation()) {
+      return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
+    }
+
+    const [result] = await loadSessionHistorySnapshots({
+      repoPath,
+      adapter,
+      sessionsRef,
+      updateSession,
+      sessions: [historySession],
+      isStaleRepoOperation,
+    });
+
+    return result ?? { externalSessionId: sessionIdentity.externalSessionId, status: "skipped" };
+  };
+};

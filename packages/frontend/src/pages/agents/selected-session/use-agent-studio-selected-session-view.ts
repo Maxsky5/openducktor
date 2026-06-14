@@ -19,12 +19,8 @@ import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hoo
 import { shouldLoadSelectedSessionHistory } from "@/state/operations/agent-orchestrator/lifecycle/session-history-loader";
 import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type {
-  ActiveWorkspace,
-  ChecksStateContextValue,
-  LoadAgentSessionsOptions,
-} from "@/types/state-slices";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace, ChecksStateContextValue } from "@/types/state-slices";
 import { resolveAgentStudioViewSessionSelection } from "../agents-page-selection";
 
 type UseAgentStudioSelectedSessionViewArgs = {
@@ -43,7 +39,7 @@ type UseAgentStudioSelectedSessionViewArgs = {
   runtimeDefinitionsError: string | null;
   runtimeHealthByRuntime: ChecksStateContextValue["runtimeHealthByRuntime"];
   isLoadingChecks: boolean;
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -77,7 +73,7 @@ export function useAgentStudioSelectedSessionView({
   runtimeDefinitionsError,
   runtimeHealthByRuntime,
   isLoadingChecks,
-  loadAgentSessions,
+  loadAgentSessionHistory,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseAgentStudioSelectedSessionViewArgs): AgentStudioSelectedSessionView {
@@ -167,15 +163,14 @@ export function useAgentStudioSelectedSessionView({
     repoReadinessState,
     session,
   });
-  const selectedTaskId = selectedTask?.id ?? null;
   const hasSession = session !== null;
   useEffect(() => {
-    if (selectedTaskId === null || sessionRoute === null || !shouldLoadHistory || !hasSession) {
+    if (sessionRoute === null || !shouldLoadHistory || !hasSession) {
       return;
     }
 
-    void loadAgentSessions(selectedTaskId, { historyTargetSession: sessionRoute });
-  }, [hasSession, loadAgentSessions, selectedTaskId, sessionRoute, shouldLoadHistory]);
+    void loadAgentSessionHistory(sessionRoute);
+  }, [hasSession, loadAgentSessionHistory, sessionRoute, shouldLoadHistory]);
 
   return useMemo<AgentStudioSelectedSessionView>(
     () => ({

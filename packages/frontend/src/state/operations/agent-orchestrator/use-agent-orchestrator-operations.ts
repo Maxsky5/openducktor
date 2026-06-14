@@ -18,6 +18,7 @@ import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
+import { createLoadAgentSessionHistory } from "./lifecycle/session-history-loader";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
@@ -105,24 +106,31 @@ export function useAgentOrchestratorOperations({
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-        sessionsRef,
         setSessionCollection: commitSessions,
-        updateSession,
         listenToAgentSession,
         queryClient,
+      }),
+    [activeWorkspace, agentEngine, listenToAgentSession, commitSessions, queryClient, refBridges],
+  );
+  const loadAgentSessionHistory = useMemo(
+    () =>
+      createLoadAgentSessionHistory({
+        activeWorkspace,
+        adapter: agentEngine,
+        repoEpochRef: refBridges.repoEpochRef,
+        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
+        sessionsRef,
+        updateSession,
         taskRef: refBridges.taskRef,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
     [
       activeWorkspace,
       agentEngine,
-      listenToAgentSession,
-      commitSessions,
-      queryClient,
+      queryBackedPromptOverrides,
       refBridges,
       sessionsRef,
       updateSession,
-      queryBackedPromptOverrides,
     ],
   );
   useRepoSessionReadModelEffects({
@@ -130,15 +138,12 @@ export function useAgentOrchestratorOperations({
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
     repoEpochRef: refBridges.repoEpochRef,
-    sessionsRef,
     commitSessions,
-    updateSession,
     agentEngine,
     listenToAgentSession,
     setIsLoadingSessionReadModel,
     setSessionReadModelError,
     queryClient,
-    loadRepoPromptOverrides: queryBackedPromptOverrides,
   });
   const ensureRuntime = useMemo(
     () =>
@@ -174,6 +179,7 @@ export function useAgentOrchestratorOperations({
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadAgentSessions,
+        loadAgentSessionHistory,
         clearTurnDuration: turnTiming.clearTurnDuration,
         refreshTaskData,
         persistSessionRecord,
@@ -188,6 +194,7 @@ export function useAgentOrchestratorOperations({
       ensureRuntime,
       hostPort,
       invalidateSessionStopQueries,
+      loadAgentSessionHistory,
       loadAgentSessions,
       persistSessionRecord,
       queryBackedPromptOverrides,
@@ -205,6 +212,9 @@ export function useAgentOrchestratorOperations({
     const readModelState = { isLoadingSessionReadModel, sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions,
+      loadAgentSessionHistory: async (session) => {
+        await loadAgentSessionHistory(session);
+      },
       ...readers,
       removeAgentSession,
       removeAgentSessions,
@@ -228,6 +238,7 @@ export function useAgentOrchestratorOperations({
     sessionStore,
     commitSessions,
     loadAgentSessions,
+    loadAgentSessionHistory,
     readers,
     removeAgentSessions,
     removeAgentSession,

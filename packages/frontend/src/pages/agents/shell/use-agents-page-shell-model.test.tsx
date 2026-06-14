@@ -165,6 +165,7 @@ const sessionIdentity = (externalSessionId: string) => ({
 });
 let agentOperations = {
   loadAgentSessions: mock(async () => undefined),
+  loadAgentSessionHistory: mock(async () => undefined),
   readSessionFileSearch: mock(async () => []),
   readSessionModelCatalog: mock(async () => ({
     providers: [],
@@ -443,6 +444,7 @@ beforeEach(async () => {
   };
   agentOperations = {
     loadAgentSessions: mock(async () => undefined),
+    loadAgentSessionHistory: mock(async () => undefined),
     readSessionFileSearch: mock(async () => []),
     readSessionModelCatalog: mock(async () => ({
       providers: [],

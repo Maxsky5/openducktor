@@ -167,12 +167,9 @@ export type AgentSessionReadModelStateContextValue = {
   sessionReadModelError: string | null;
 };
 
-export type LoadAgentSessionsOptions = {
-  historyTargetSession?: AgentSessionIdentity | null;
-};
-
 export type AgentOperationsContextValue = {
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
+  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,

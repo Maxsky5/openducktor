@@ -14,7 +14,7 @@ import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
-import type { LoadAgentSessionsOptions, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -35,9 +35,7 @@ const sessionIdentity = (externalSessionId: string) => ({
 const startAgentSessionMock = mock(async () => sessionIdentity("session-1"));
 const sendAgentMessageMock = mock(async () => {});
 const updateAgentSessionModelMock = mock(() => {});
-const loadAgentSessionsMock = mock(
-  async (_taskId: string, _options?: LoadAgentSessionsOptions) => {},
-);
+const loadAgentSessionsMock = mock(async (_taskId: string) => {});
 const removeAgentSessionsMock = mock(
   (_input: { taskId: string; roles?: Array<"spec" | "planner" | "build" | "qa"> }) => {},
 );

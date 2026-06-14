@@ -30,7 +30,8 @@ export type FlatStartSessionDependencies = Omit<
   activeRepo?: string | null;
   activeWorkspaceId?: string | null;
   loadRepoDefaultModel?: unknown;
-} & StartSessionDependencies["session"] &
+} & Omit<StartSessionDependencies["session"], "loadAgentSessionHistory"> &
+  Partial<Pick<StartSessionDependencies["session"], "loadAgentSessionHistory">> &
   Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree"> &
   Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree">> &
   StartSessionDependencies["task"] &
@@ -57,6 +58,7 @@ export const toStartSessionDependencies = (
       sessionsRef: deps.sessionsRef,
       inFlightStartsByWorkspaceTaskRef: deps.inFlightStartsByWorkspaceTaskRef,
       loadAgentSessions: deps.loadAgentSessions,
+      loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => undefined),
       persistSessionRecord: deps.persistSessionRecord,
       listenToAgentSession: deps.listenToAgentSession,
     },

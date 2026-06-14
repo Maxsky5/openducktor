@@ -10,8 +10,8 @@ import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import {
   findAgentStudioSessionSelectionCandidate,
@@ -43,7 +43,7 @@ type UseAgentStudioSelectionControllerArgs = {
     role: AgentRole;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: ReturnType<
     typeof useRuntimeDefinitionsContext
@@ -106,7 +106,7 @@ export function useAgentStudioSelectionController({
   roleFromQuery,
   selectionIntent,
   updateQuery,
-  loadAgentSessions,
+  loadAgentSessionHistory,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -269,7 +269,7 @@ export function useAgentStudioSelectionController({
     runtimeDefinitionsError,
     runtimeHealthByRuntime,
     isLoadingChecks,
-    loadAgentSessions,
+    loadAgentSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
   });

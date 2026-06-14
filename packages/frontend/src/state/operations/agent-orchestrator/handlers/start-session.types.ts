@@ -15,7 +15,7 @@ import type {
   AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 
@@ -48,7 +48,8 @@ export type SessionDependencies = {
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   sessionsRef: { current: AgentSessionCollection };
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<StartAgentSessionResult>> };
-  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
+  loadAgentSessions: (taskId: string) => Promise<void>;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<unknown>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
   listenToAgentSession: ListenToAgentSession;
 };
