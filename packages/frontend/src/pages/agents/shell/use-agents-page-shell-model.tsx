@@ -1,8 +1,5 @@
 import { useMemo } from "react";
-import {
-  useChecksOperationsContext,
-  useRuntimeAvailabilityContext,
-} from "@/state/app-state-contexts";
+import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import {
   useAgentOperations,
   useAgentSessionReadModelState,
@@ -54,8 +51,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
   } = useRuntimeAvailabilityContext();
-  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
-    useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const {
     isForegroundLoadingTasks,
@@ -103,8 +98,6 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     runtimeHealthByRuntime,
     isLoadingChecks,
     refreshChecks,
-    refreshRepoRuntimeHealthForRepo,
-    hasCachedRepoRuntimeHealth,
     tasks,
     isForegroundLoadingTasks,
     sessions,

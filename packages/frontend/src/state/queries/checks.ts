@@ -7,7 +7,6 @@ import type {
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { errorMessage } from "@/lib/errors";
 import { ODT_MCP_SERVER_NAME } from "@/lib/openducktor-mcp";
-import { isRepoRuntimeHealthTransient } from "@/lib/repo-runtime-health";
 import type {
   RepoRuntimeFailureKind,
   RepoRuntimeHealthCheck,
@@ -23,7 +22,6 @@ export type ChecksQueryDependencies = {
 const RUNTIME_CHECK_STALE_TIME_MS = 5 * 60_000;
 const TASK_STORE_CHECK_STALE_TIME_MS = 60_000;
 const RUNTIME_HEALTH_STALE_TIME_MS = 60_000;
-const RUNTIME_HEALTH_TRANSIENT_REFETCH_INTERVAL_MS = 1_000;
 const DIAGNOSTICS_QUERY_TIMEOUT_MS = 15_000;
 
 const DEFAULT_CHECKS_QUERY_DEPENDENCIES: ChecksQueryDependencies = {
@@ -63,19 +61,6 @@ const buildRuntimeHealthErrorCheck = (
 
 const sortRuntimeKindsForQueryKey = (runtimeKinds: RuntimeKind[]): RuntimeKind[] =>
   runtimeKinds.toSorted();
-
-const hasTransientRepoRuntimeHealth = (
-  runtimeDefinitions: RuntimeDescriptor[],
-  runtimeHealthByRuntime: RepoRuntimeHealthMap | undefined,
-): boolean => {
-  if (!runtimeHealthByRuntime) {
-    return false;
-  }
-
-  return runtimeDefinitions.some((definition) =>
-    isRepoRuntimeHealthTransient(runtimeHealthByRuntime[definition.kind] ?? null),
-  );
-};
 
 export class DiagnosticsQueryTimeoutError extends Error {
   readonly failureKind = "timeout" as const;
@@ -185,11 +170,6 @@ export const repoRuntimeHealthQueryOptions = (
       return Object.fromEntries(checks) as RepoRuntimeHealthMap;
     },
     staleTime: RUNTIME_HEALTH_STALE_TIME_MS,
-    refetchInterval: (query) => {
-      return hasTransientRepoRuntimeHealth(runtimeDefinitions, query.state.data)
-        ? RUNTIME_HEALTH_TRANSIENT_REFETCH_INTERVAL_MS
-        : false;
-    },
   });
 
 export const loadRuntimeCheckFromQuery = (

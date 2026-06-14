@@ -273,7 +273,7 @@ describe("use-checks", () => {
     }
   }, 5000);
 
-  test("automatically refreshes runtime health while MCP connectivity is still checking", async () => {
+  test("keeps runtime health snapshots stable until an explicit refresh", async () => {
     const runtimeCheck = mock(
       async (_force?: boolean): Promise<RuntimeCheck> => makeRuntimeCheck(),
     );
@@ -317,10 +317,13 @@ describe("use-checks", () => {
       expect(harness.getLatest().activeRepoRuntimeHealthByRuntime.opencode?.status).toBe(
         "checking",
       );
+      expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(1);
 
+      await harness.run(async (value) => {
+        await value.refreshRepoRuntimeHealthForRepo("/repo-a", true);
+      });
       await harness.waitFor(
         (value) => value.activeRepoRuntimeHealthByRuntime.opencode?.status === "ready",
-        5000,
       );
 
       expect(checkRepoRuntimeHealthMock).toHaveBeenCalledTimes(2);

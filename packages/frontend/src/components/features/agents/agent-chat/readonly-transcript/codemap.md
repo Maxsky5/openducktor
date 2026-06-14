@@ -28,4 +28,5 @@ working directory comparisons in the hooks.
 ## Integration Points
 
 Parent `agent-chat/` components open transcript dialogs with a complete
-transcript target. Runtime health warmup remains shared at the `agents/` level.
+transcript target. Runtime startup and health publication are owned by the app
+lifecycle/checks providers; readonly transcript surfaces only consume readiness.

@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentRole,
@@ -7,7 +7,6 @@ import type {
 } from "@openducktor/core";
 import { useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
-import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -28,8 +27,6 @@ type UseAgentsPageRouteSessionModelArgs = {
   runtimeHealthByRuntime: Parameters<typeof useAgentStudioReadiness>[0]["runtimeHealthByRuntime"];
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
-  refreshRepoRuntimeHealthForRepo: (repoPath: string, force?: boolean) => Promise<unknown>;
-  hasCachedRepoRuntimeHealth: (repoPath: string, runtimeKinds: RuntimeKind[]) => boolean;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
@@ -67,8 +64,6 @@ export function useAgentsPageRouteSessionModel({
   runtimeHealthByRuntime,
   isLoadingChecks,
   refreshChecks,
-  refreshRepoRuntimeHealthForRepo,
-  hasCachedRepoRuntimeHealth,
   tasks,
   isForegroundLoadingTasks,
   sessions,
@@ -149,14 +144,6 @@ export function useAgentsPageRouteSessionModel({
     workspaceRepoPath,
     selection,
     isForegroundLoadingTasks,
-  });
-
-  useRepoRuntimeHealthWarmup({
-    workspaceRepoPath,
-    runtimeDefinitions,
-    isLoadingChecks,
-    hasCachedRepoRuntimeHealth,
-    refreshRepoRuntimeHealthForRepo,
   });
 
   useAgentStudioQuerySessionSync({

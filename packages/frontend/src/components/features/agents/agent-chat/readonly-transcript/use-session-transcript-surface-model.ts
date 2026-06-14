@@ -1,15 +1,11 @@
 import { useMemo } from "react";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
-import {
-  useChecksOperationsContext,
-  useRuntimeDefinitionsContext,
-} from "@/state/app-state-contexts";
+import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
 import { isAgentSessionTranscriptLoading } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
 import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
@@ -27,24 +23,13 @@ export function useSessionTranscriptSurfaceModel({
   activeWorkspace,
   target,
 }: UseSessionTranscriptSurfaceModelArgs) {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { runtimeDefinitions, isLoadingRuntimeDefinitions, runtimeDefinitionsError } =
     useRuntimeDefinitionsContext();
-  const { refreshRepoRuntimeHealthForRepo, hasCachedRepoRuntimeHealth } =
-    useChecksOperationsContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
   const { readSessionHistory, replyAgentApproval, answerAgentQuestion } = useAgentOperations();
   const liveSession = useAgentSession(isOpen ? target : null);
   const { chatSettings, chatSettingsError } = useWorkspaceChatSettings({
     activeWorkspace,
-  });
-
-  useRepoRuntimeHealthWarmup({
-    workspaceRepoPath,
-    runtimeDefinitions,
-    isLoadingChecks,
-    hasCachedRepoRuntimeHealth,
-    refreshRepoRuntimeHealthForRepo,
   });
 
   const runtimeReadiness = useRepoRuntimeReadiness({
