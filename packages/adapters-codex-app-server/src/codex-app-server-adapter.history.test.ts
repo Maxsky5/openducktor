@@ -261,6 +261,38 @@ describe("CodexAppServerAdapter history loading", () => {
     unsubscribe();
   });
 
+  test("projects supplied prompt context for cold persisted history reads", async () => {
+    const { adapter } = createHarness();
+
+    const history = await adapter.loadSessionHistory({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo",
+      externalSessionId: "thread-saved",
+      systemPromptContext: {
+        startedAt: "2026-05-07T00:00:00.000Z",
+        systemPrompt: "Use the hydrated task context.",
+      },
+    });
+
+    expect(history[0]).toEqual({
+      messageId: "codex-system-prompt:thread-saved",
+      role: "system",
+      timestamp: "2026-05-07T00:00:00.000Z",
+      text: "System prompt:\n\nUse the hydrated task context.",
+      parts: [],
+    });
+    expect(history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          messageId: "user-history-1",
+          role: "user",
+          text: "Hello Codex",
+        }),
+      ]),
+    );
+  });
+
   test("loads search command metadata and hides contextual user fragments from thread reads", async () => {
     const transport: CodexJsonRpcTransport = {
       async request<Response>(request: CodexJsonRpcRequest): Promise<Response> {

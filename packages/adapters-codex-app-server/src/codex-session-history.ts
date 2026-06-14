@@ -38,21 +38,48 @@ type CodexSessionHistoryInput = {
   ) => Promise<Map<string, CodexTokenUsageTotals>>;
 };
 
-const codexSystemPromptHistoryMessage = (
-  session: CodexSessionState,
-): AgentSessionHistoryMessage | null => {
-  const systemPrompt = session.systemPrompt.trim();
-  if (systemPrompt.length === 0) {
+const codexSystemPromptHistoryMessage = ({
+  threadId,
+  startedAt,
+  systemPrompt,
+}: {
+  threadId: string;
+  startedAt: string;
+  systemPrompt: string;
+}): AgentSessionHistoryMessage | null => {
+  const trimmedSystemPrompt = systemPrompt.trim();
+  if (trimmedSystemPrompt.length === 0) {
     return null;
   }
 
   return {
-    messageId: `codex-system-prompt:${session.threadId}`,
+    messageId: `codex-system-prompt:${threadId}`,
     role: "system",
-    timestamp: session.summary.startedAt,
-    text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
+    timestamp: startedAt,
+    text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${trimmedSystemPrompt}`,
     parts: [],
   };
+};
+
+const codexHistorySystemPrompt = (
+  input: LoadAgentSessionHistoryInput,
+  session: CodexSessionState | undefined,
+): AgentSessionHistoryMessage | null => {
+  if (session) {
+    return codexSystemPromptHistoryMessage({
+      threadId: session.threadId,
+      startedAt: session.summary.startedAt,
+      systemPrompt: session.systemPrompt,
+    });
+  }
+  if (!input.systemPromptContext) {
+    return null;
+  }
+  return codexSystemPromptHistoryMessage({
+    threadId: input.externalSessionId,
+    startedAt: input.systemPromptContext.startedAt,
+    systemPrompt: input.systemPromptContext.systemPrompt,
+  });
 };
 
 const projectCodexThreadReadToHistory = ({
@@ -118,7 +145,7 @@ const projectCodexThreadReadToHistory = ({
       return message ? [message] : [];
     })
     .filter((message): message is AgentSessionHistoryMessage => Boolean(message));
-  const systemPromptHistoryMessage = session ? codexSystemPromptHistoryMessage(session) : null;
+  const systemPromptHistoryMessage = codexHistorySystemPrompt(input, session);
   return systemPromptHistoryMessage
     ? [systemPromptHistoryMessage, ...projectedHistory]
     : projectedHistory;

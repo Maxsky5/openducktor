@@ -60,8 +60,14 @@ export type UpdateAgentSessionModelInput = AgentSessionRef & {
   model: AgentModelSelection | null;
 };
 
+export type AgentSessionHistorySystemPromptContext = {
+  systemPrompt: string;
+  startedAt: string;
+};
+
 export type LoadAgentSessionHistoryInput = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
+  systemPromptContext?: AgentSessionHistorySystemPromptContext;
   limit?: number;
 };
 
@@ -127,8 +133,9 @@ export type AgentSessionHistoryMessage =
       text: string;
       /**
        * Runtime adapters use system messages only for system/developer context
-       * that is exposed by the runtime-owned history source. Adapters must not
-       * synthesize missing prompt text from OpenDucktor persistence.
+       * exposed by the runtime-owned history source or supplied as transient
+       * history-read context. Adapters must not read OpenDucktor persistence to
+       * synthesize missing prompt text.
        */
       notice?: {
         tone: "info";

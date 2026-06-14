@@ -350,11 +350,12 @@ describe("createLoadAgentSessions", () => {
     ]);
   });
 
-  test("recomputes the workflow header for hydrated Codex history without persisting it", async () => {
+  test("passes recomputed prompt context to hydrated Codex history without persisting it", async () => {
     const codexRecord: AgentSessionRecord = {
       ...record,
       runtimeKind: "codex",
     };
+    let receivedSystemPrompt: string | undefined;
     const harness = createLoaderHarness({
       listSessionPresence: async () => [
         toAgentSessionPresenceSnapshotFromLiveSnapshot({
@@ -375,15 +376,25 @@ describe("createLoadAgentSessions", () => {
           },
         }),
       ],
-      loadSessionHistory: async () => [
-        {
-          messageId: "history-1",
-          role: "assistant",
-          timestamp: "2026-06-12T08:00:01.000Z",
-          text: "Loaded from runtime history",
-          parts: [],
-        },
-      ],
+      loadSessionHistory: async (input) => {
+        receivedSystemPrompt = input.systemPromptContext?.systemPrompt;
+        return [
+          {
+            messageId: "runtime-system-1",
+            role: "system",
+            timestamp: input.systemPromptContext?.startedAt ?? "2026-06-12T08:00:00.000Z",
+            text: `System prompt:\n\n${input.systemPromptContext?.systemPrompt ?? ""}`,
+            parts: [],
+          },
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Loaded from runtime history",
+            parts: [],
+          },
+        ];
+      },
       loadRepoPromptOverrides: async () => ({}),
     });
 
@@ -393,6 +404,7 @@ describe("createLoadAgentSessions", () => {
     if (!session) {
       throw new Error("Expected external-1 to be loaded");
     }
+    expect(receivedSystemPrompt).toContain("Task context");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       expect.stringContaining("System prompt:\n\n"),
       "Loaded from runtime history",

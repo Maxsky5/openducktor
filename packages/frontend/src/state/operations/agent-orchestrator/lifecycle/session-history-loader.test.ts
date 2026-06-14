@@ -103,40 +103,52 @@ describe("session history loader", () => {
     expect(session.pendingQuestions).toBe(pendingQuestions);
   });
 
-  test("prepends the workflow header when runtime history has no system prompt", async () => {
+  test("passes transient prompt context to the history adapter without rendering it locally", async () => {
     let session = createSession();
+    let historyInput:
+      | Parameters<
+          Parameters<typeof loadSessionHistorySnapshot>[0]["adapter"]["loadSessionHistory"]
+        >[0]
+      | null = null;
 
     const result = await loadSessionHistorySnapshot({
       repoPath: "/repo",
       adapter: {
-        loadSessionHistory: async () => [
-          {
-            messageId: "history-1",
-            role: "assistant",
-            timestamp: "2026-06-12T08:00:01.000Z",
-            text: "Loaded from Codex history",
-            parts: [],
-          },
-        ],
+        loadSessionHistory: async (input) => {
+          historyInput = input;
+          return [
+            {
+              messageId: "history-1",
+              role: "assistant",
+              timestamp: "2026-06-12T08:00:01.000Z",
+              text: "Loaded from Codex history",
+              parts: [],
+            },
+          ];
+        },
       },
       updateSession: (_externalSessionId, updater) => {
         session = updater(session);
       },
-      session: sessionTarget,
-      headerMessages: [
-        {
-          id: "history:system-prompt:external-1",
-          role: "system",
-          content: "System prompt:\n\nBuild from current task context.",
-          timestamp: "2026-06-12T08:00:00.000Z",
+      session: {
+        ...sessionTarget,
+        systemPromptContext: {
+          systemPrompt: "Build from current task context.",
+          startedAt: "2026-06-12T08:00:00.000Z",
         },
-      ],
+      },
       isStaleRepoOperation: () => false,
     });
 
     expect(result.status).toBe("applied");
+    expect(historyInput).toMatchObject({
+      externalSessionId: "external-1",
+      systemPromptContext: {
+        startedAt: "2026-06-12T08:00:00.000Z",
+        systemPrompt: "Build from current task context.",
+      },
+    });
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
-      "System prompt:\n\nBuild from current task context.",
       "Loaded from Codex history",
     ]);
   });
@@ -160,15 +172,13 @@ describe("session history loader", () => {
       updateSession: (_externalSessionId, updater) => {
         session = updater(session);
       },
-      session: sessionTarget,
-      headerMessages: [
-        {
-          id: "history:system-prompt:external-1",
-          role: "system",
-          content: "System prompt:\n\nComputed display prompt.",
-          timestamp: "2026-06-12T08:00:00.000Z",
+      session: {
+        ...sessionTarget,
+        systemPromptContext: {
+          systemPrompt: "Computed display prompt.",
+          startedAt: "2026-06-12T08:00:00.000Z",
         },
-      ],
+      },
       isStaleRepoOperation: () => false,
     });
 

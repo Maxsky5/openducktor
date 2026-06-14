@@ -14,16 +14,16 @@ import {
 import { loadTaskSessionRecordsForTask } from "../session-read-model/task-session-records";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import {
-  buildHistoryHeaderContext,
-  buildSessionHistoryHeaders,
-  type SessionHistoryHeaderContext,
-} from "./session-history-headers";
-import {
   loadSessionHistorySnapshot,
   loadSessionHistorySnapshots,
   type SessionHistoryLoaderAdapter,
   selectSessionHistoryTargets,
 } from "./session-history-loader";
+import {
+  buildHistoryRuntimeContext,
+  type SessionHistoryRuntimeContext,
+  withSessionHistoryRuntimeContext,
+} from "./session-history-runtime-context";
 
 type UpdateSession = (
   externalSessionId: string,
@@ -114,7 +114,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions,
   updateSession,
   listenToAgentSession,
-  historyHeaderContext,
+  historyRuntimeContext,
   isStaleRepoOperation,
   options,
 }: {
@@ -124,7 +124,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions: CommitSessions;
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
-  historyHeaderContext?: SessionHistoryHeaderContext;
+  historyRuntimeContext?: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
   options?: AgentSessionLoadOptions;
 }): Promise<void> => {
@@ -173,9 +173,9 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const headerMessagesBySessionId = await buildSessionHistoryHeaders({
+  const historySessionsWithRuntimeContext = await withSessionHistoryRuntimeContext({
     sessions: historySessions,
-    context: historyHeaderContext,
+    context: historyRuntimeContext,
   });
   if (isStaleRepoOperation()) {
     return;
@@ -185,8 +185,7 @@ export const loadRepoAgentSessions = async ({
     repoPath,
     adapter,
     updateSession,
-    sessions: historySessions,
-    ...(headerMessagesBySessionId ? { headerMessagesBySessionId } : {}),
+    sessions: historySessionsWithRuntimeContext,
     isStaleRepoOperation,
   });
 };
@@ -235,7 +234,7 @@ export const createLoadAgentSessions = ({
       return;
     }
 
-    const historyHeaderContext = buildHistoryHeaderContext({
+    const historyRuntimeContext = buildHistoryRuntimeContext({
       activeWorkspace,
       taskRef,
       loadRepoPromptOverrides,
@@ -248,7 +247,7 @@ export const createLoadAgentSessions = ({
       commitSessions: setSessionsById,
       updateSession,
       ...(listenToAgentSession ? { listenToAgentSession } : {}),
-      ...(historyHeaderContext ? { historyHeaderContext } : {}),
+      ...(historyRuntimeContext ? { historyRuntimeContext } : {}),
       isStaleRepoOperation,
       ...(options ? { options } : {}),
     });
@@ -285,9 +284,9 @@ export const createLoadAgentSessionHistory = ({
       return;
     }
 
-    const headerMessagesBySessionId = await buildSessionHistoryHeaders({
+    const [sessionWithRuntimeContext] = await withSessionHistoryRuntimeContext({
       sessions: [session],
-      context: buildHistoryHeaderContext({
+      context: buildHistoryRuntimeContext({
         activeWorkspace,
         taskRef,
         loadRepoPromptOverrides,
@@ -297,13 +296,11 @@ export const createLoadAgentSessionHistory = ({
       return;
     }
 
-    const headerMessages = headerMessagesBySessionId?.get(session.externalSessionId);
     const result = await loadSessionHistorySnapshot({
       repoPath,
       adapter,
       updateSession,
-      session,
-      ...(headerMessages ? { headerMessages } : {}),
+      session: sessionWithRuntimeContext ?? session,
       isStaleRepoOperation,
     });
     if (result.status === "failed") {

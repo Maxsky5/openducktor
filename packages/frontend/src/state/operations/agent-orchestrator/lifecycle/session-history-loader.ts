@@ -1,6 +1,9 @@
-import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type {
-  AgentChatMessage,
+  AgentEnginePort,
+  AgentSessionHistorySystemPromptContext,
+  AgentSessionRef,
+} from "@openducktor/core";
+import type {
   AgentSessionHistoryLoadPolicy,
   AgentSessionLoadOptions,
   AgentSessionState,
@@ -33,7 +36,9 @@ export type AgentSessionHistoryTarget = Pick<
   | "selectedModel"
   | "taskId"
   | "startedAt"
->;
+> & {
+  systemPromptContext?: AgentSessionHistorySystemPromptContext;
+};
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 const DEFAULT_SESSION_HISTORY_POLICY: AgentSessionHistoryLoadPolicy = "live_if_empty";
@@ -101,14 +106,12 @@ export const loadSessionHistorySnapshot = async ({
   adapter,
   updateSession,
   session,
-  headerMessages = [],
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   updateSession: UpdateSession;
   session: AgentSessionHistoryTarget;
-  headerMessages?: AgentChatMessage[];
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult> => {
   if (isStaleRepoOperation()) {
@@ -127,6 +130,7 @@ export const loadSessionHistorySnapshot = async ({
       runtimeKind: session.runtimeKind,
       workingDirectory: session.workingDirectory,
       externalSessionId: session.externalSessionId,
+      ...(session.systemPromptContext ? { systemPromptContext: session.systemPromptContext } : {}),
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
 
@@ -138,12 +142,7 @@ export const loadSessionHistorySnapshot = async ({
       role: session.role,
       selectedModel: session.selectedModel,
     });
-    const loadedMessages = createSessionMessagesState(
-      session.externalSessionId,
-      historyMessages.some(isSessionSystemPromptMessage)
-        ? historyMessages
-        : [...headerMessages, ...historyMessages],
-    );
+    const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
     const historyContextUsage = historyToSessionContextUsage(history);
     updateSession(
       session.externalSessionId,
@@ -176,25 +175,21 @@ export const loadSessionHistorySnapshots = async ({
   adapter,
   updateSession,
   sessions,
-  headerMessagesBySessionId,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   updateSession: UpdateSession;
   sessions: AgentSessionHistoryTarget[];
-  headerMessagesBySessionId?: ReadonlyMap<string, AgentChatMessage[]>;
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult[]> =>
   Promise.all(
     sessions.map((session) => {
-      const headerMessages = headerMessagesBySessionId?.get(session.externalSessionId);
       return loadSessionHistorySnapshot({
         repoPath,
         adapter,
         updateSession,
         session,
-        ...(headerMessages ? { headerMessages } : {}),
         isStaleRepoOperation,
       });
     }),
