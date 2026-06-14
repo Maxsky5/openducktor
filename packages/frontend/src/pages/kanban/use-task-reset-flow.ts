@@ -3,6 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -23,7 +24,7 @@ type UseTaskResetFlowArgs = {
 
 const isActiveImplementationSession = (session: AgentSessionSummary): boolean =>
   (session.role === "build" || session.role === "qa") &&
-  (session.status === "starting" || session.status === "running");
+  isAgentSessionWorkingStatus(session.status);
 
 const deriveRollbackLabel = (task: TaskCard): string => {
   if (task.documentSummary.plan.has) {

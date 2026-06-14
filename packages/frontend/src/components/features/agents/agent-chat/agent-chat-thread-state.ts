@@ -73,17 +73,6 @@ export const getAgentChatThreadState = ({
       };
     }
 
-    if (isRenderLocallyLoading) {
-      return {
-        kind: "session_loading" as const,
-        title: "Loading session",
-        description:
-          isTranscriptRowsMissing || isTranscriptRenderDeferred
-            ? "Loading the selected conversation."
-            : "Preparing the selected session view.",
-      };
-    }
-
     return null;
   })();
 

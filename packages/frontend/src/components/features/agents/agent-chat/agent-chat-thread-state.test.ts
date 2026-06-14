@@ -51,7 +51,7 @@ describe("getAgentChatThreadState", () => {
     expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
 
-  test("treats session context switching as view preparation", () => {
+  test("does not present local context switching as session loading", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: readyRuntimeReadiness,
@@ -60,11 +60,10 @@ describe("getAgentChatThreadState", () => {
     });
 
     expect(state.shouldResetTranscriptWindow).toBe(true);
-    expect(state.transcriptNotice?.kind).toBe("session_loading");
-    expect(state.transcriptNotice?.description).toBe("Preparing the selected session view.");
+    expect(state.transcriptNotice).toBeNull();
   });
 
-  test("treats missing transcript rows as conversation-loading state", () => {
+  test("does not present missing transcript rows as session loading", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: readyRuntimeReadiness,
@@ -75,8 +74,7 @@ describe("getAgentChatThreadState", () => {
 
     expect(state.hideTranscriptRows).toBe(false);
     expect(state.shouldResetTranscriptWindow).toBe(true);
-    expect(state.transcriptNotice?.kind).toBe("session_loading");
-    expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
+    expect(state.transcriptNotice).toBeNull();
   });
 
   test("surfaces failed selected-session history as a transcript notice", () => {

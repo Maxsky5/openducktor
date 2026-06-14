@@ -9,6 +9,7 @@ import {
   type RepoRuntimeSessionPresenceRead,
   type RepoSessionReadModel,
   readRepoRuntimeSessionPresence,
+  selectRepoSessionHistoryTargets,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
 import { loadTaskSessionRecordsForTask } from "../session-read-model/task-session-records";
@@ -17,7 +18,6 @@ import {
   loadSessionHistorySnapshot,
   loadSessionHistorySnapshots,
   type SessionHistoryLoaderAdapter,
-  selectSessionHistoryTargets,
 } from "./session-history-loader";
 import {
   buildHistoryRuntimeContext,
@@ -163,10 +163,9 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const historySessions = selectSessionHistoryTargets({
-    sessionsById: readModel.sessionsById,
-    liveSessions: readModel.liveSessions,
-    ...(options ? { options } : {}),
+  const historySessions = selectRepoSessionHistoryTargets({
+    readModel,
+    targetExternalSessionId: options?.targetExternalSessionId,
   });
 
   if (historySessions.length === 0) {

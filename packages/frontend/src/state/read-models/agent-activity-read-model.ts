@@ -1,3 +1,4 @@
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 
 export type AgentActivitySessionItem = {
@@ -17,11 +18,6 @@ export type AgentActivitySummary = {
 };
 
 export type AgentActivityTaskTitleLookup = Readonly<Record<string, string>>;
-
-const ACTIVE_SESSION_STATUS: ReadonlySet<AgentActivitySessionSummary["status"]> = new Set([
-  "starting",
-  "running",
-]);
 
 const byNewestSession = (
   left: AgentActivitySessionItem,
@@ -60,7 +56,7 @@ export const summarizeAgentActivity = ({
 
     if (isWaiting) {
       waitingForInputSessions.push(sessionItem);
-    } else if (ACTIVE_SESSION_STATUS.has(session.status)) {
+    } else if (isAgentSessionWorkingStatus(session.status)) {
       activeSessions.push(sessionItem);
     }
   }

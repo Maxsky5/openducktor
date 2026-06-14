@@ -1,4 +1,5 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -43,8 +44,7 @@ export function useAgentStudioSessionActionState({
   const activeSessionPendingQuestions = activeSession?.pendingQuestions ?? [];
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
   const hasActiveSession = activeSession != null;
-  const isSessionBusy =
-    hasActiveSession && (activeSessionStatus === "running" || activeSessionStatus === "starting");
+  const isSessionBusy = hasActiveSession && isAgentSessionWorkingStatus(activeSessionStatus);
   const isWaitingInput =
     hasActiveSession &&
     isAgentSessionWaitingInput({

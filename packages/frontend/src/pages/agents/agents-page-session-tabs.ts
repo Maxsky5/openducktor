@@ -10,6 +10,7 @@ import {
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@/lib/agent-session-options";
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { errorMessage } from "@/lib/errors";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
@@ -71,7 +72,7 @@ const toLiveSessionState = (session: AgentSessionWorkflowSummary): AgentWorkflow
   if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
     return "waiting_input";
   }
-  if (session.status === "starting" || session.status === "running") {
+  if (isAgentSessionWorkingStatus(session.status)) {
     return "running";
   }
   if (session.status === "error") {
@@ -573,7 +574,7 @@ const getTabStatusFromSession = (
   if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
     return "waiting_input";
   }
-  if (session.status === "starting" || session.status === "running") {
+  if (isAgentSessionWorkingStatus(session.status)) {
     return "working";
   }
   return "idle";

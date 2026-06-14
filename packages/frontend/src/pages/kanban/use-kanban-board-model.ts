@@ -14,6 +14,7 @@ import {
   toKanbanTaskActivityState,
 } from "@/components/features/kanban/kanban-task-activity";
 import { compareActiveSessionForPrimary } from "@/components/features/kanban/session-target-resolution";
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import {
   type AgentSessionSummary,
@@ -21,8 +22,6 @@ import {
   type WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
-
-const ACTIVE_SESSION_STATUS = new Set<AgentSessionSummary["status"]>(["starting", "running"]);
 
 const shouldDisplayKanbanTaskSession = (
   session: AgentSessionSummary,
@@ -35,7 +34,7 @@ const shouldDisplayKanbanTaskSession = (
     return true;
   }
 
-  return ACTIVE_SESSION_STATUS.has(session.status);
+  return isAgentSessionWorkingStatus(session.status);
 };
 
 const compareTaskSessionOrder = (

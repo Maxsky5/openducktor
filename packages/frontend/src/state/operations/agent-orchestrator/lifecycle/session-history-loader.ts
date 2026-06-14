@@ -1,9 +1,5 @@
-import type {
-  AgentEnginePort,
-  AgentSessionHistorySystemPromptContext,
-  AgentSessionRef,
-} from "@openducktor/core";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHistoryMessages } from "../support/history-message-merge";
 import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
@@ -35,31 +31,6 @@ export type AgentSessionHistoryTarget = Pick<
 };
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
-
-export const selectSessionHistoryTargets = ({
-  sessionsById,
-  liveSessions,
-  options,
-}: {
-  sessionsById: Record<string, AgentSessionState>;
-  liveSessions: AgentSessionRef[];
-  options?: AgentSessionLoadOptions;
-}): AgentSessionHistoryTarget[] => {
-  const targetExternalSessionId = options?.targetExternalSessionId?.trim();
-  if (targetExternalSessionId) {
-    const session = sessionsById[targetExternalSessionId];
-    if (!session) {
-      throw new Error(`Cannot load history for unknown session '${targetExternalSessionId}'.`);
-    }
-    return [session];
-  }
-
-  const liveSessionIds = new Set(liveSessions.map((session) => session.externalSessionId));
-  return Object.values(sessionsById).filter(
-    (session) =>
-      liveSessionIds.has(session.externalSessionId) && session.historyLoadState === "not_requested",
-  );
-};
 
 export const loadSessionHistorySnapshot = async ({
   repoPath,

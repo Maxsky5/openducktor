@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import {
   useChecksOperationsContext,
   useRuntimeDefinitionsContext,
@@ -74,9 +75,9 @@ export function useSessionTranscriptSurfaceModel({
     answerAgentQuestion,
   });
 
-  const isSessionWorking =
-    transcriptInteractions.session?.status === "running" ||
-    transcriptInteractions.session?.status === "starting";
+  const isSessionWorking = transcriptInteractions.session
+    ? isAgentSessionWorkingStatus(transcriptInteractions.session.status)
+    : false;
   const isTranscriptLoading = sessionHistory.isHistoryLoading;
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && externalSessionId && source) &&

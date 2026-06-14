@@ -11,6 +11,7 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { deriveRepoRuntimeReadiness } from "@/lib/repo-runtime-health";
 import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -32,7 +33,6 @@ import {
   groupSessionsByTaskId,
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
-  resolveAgentStudioViewSessionParam,
   resolveAgentStudioViewSessionSelection,
 } from "./agents-page-selection";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
@@ -107,7 +107,6 @@ export type AgentStudioSelectionControllerResult = {
   viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
 };
 
-const ACTIVE_SESSION_STATUS = new Set<AgentSessionState["status"]>(["starting", "running"]);
 const EMPTY_PERSISTED_SESSION_RECORDS: AgentSessionRecord[] = [];
 
 export function useAgentStudioSelectionController({
@@ -220,7 +219,7 @@ export function useAgentStudioSelectionController({
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
       let activeSession: AgentSessionSummary | null = null;
       for (const session of taskSessions) {
-        if (ACTIVE_SESSION_STATUS.has(session.status)) {
+        if (isAgentSessionWorkingStatus(session.status)) {
           activeSession = session;
           break;
         }
@@ -271,14 +270,6 @@ export function useAgentStudioSelectionController({
     ? (taskSessionRecordsByTaskId[viewTaskId] ?? EMPTY_PERSISTED_SESSION_RECORDS)
     : EMPTY_PERSISTED_SESSION_RECORDS;
 
-  const viewSessionParam = useMemo(() => {
-    return resolveAgentStudioViewSessionParam({
-      sessionParam: effectiveSessionParam,
-      sessionSummaries: viewSessionsForTask,
-      persistedRecords: viewPersistedSessionRecords,
-    });
-  }, [effectiveSessionParam, viewPersistedSessionRecords, viewSessionsForTask]);
-
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
   const hasViewRoleSelection = effectiveHasExplicitRoleParam && !isViewTaskDetachedFromQuery;
   const viewSelectionIntent =
@@ -287,9 +278,8 @@ export function useAgentStudioSelectionController({
       : null;
   const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
   const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const viewSessionParamFromSelection = viewSelectionIntent?.externalSessionId ?? viewSessionParam;
-  const keepViewExplicitRoleSessionless =
-    viewSelectionIntent?.externalSessionId === null && viewSessionParam === null;
+  const viewSessionParamFromSelection =
+    viewSelectionIntent?.externalSessionId ?? effectiveSessionParam;
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
@@ -300,15 +290,15 @@ export function useAgentStudioSelectionController({
       roleFromQuery: viewRoleFromSelection,
       selectedTask: viewSelectedTask,
       fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
-      keepExplicitRoleSessionless: keepViewExplicitRoleSessionless,
+      keepExplicitRoleSessionless: viewSelectionIntent?.externalSessionId === null,
     });
   }, [
     viewHasExplicitRoleSelection,
     isViewTaskDetachedFromQuery,
-    keepViewExplicitRoleSessionless,
     viewRoleFromSelection,
     viewSelectedTask,
     viewSessionParamFromSelection,
+    viewSelectionIntent?.externalSessionId,
     viewPersistedSessionRecords,
     viewSessionsForTask,
   ]);

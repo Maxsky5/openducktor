@@ -32,6 +32,7 @@ export type RepoRuntimeSessionPresenceRead = {
 export type RepoSessionReadModel = {
   sessionsById: Record<string, AgentSessionState>;
   liveSessions: AgentSessionRef[];
+  initialHistorySessions: AgentSessionState[];
 };
 
 const toSessionKey = (
@@ -168,6 +169,7 @@ export const buildRepoSessionReadModel = ({
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const sessionsById = { ...selectLocalSessions(currentSessionsById, taskSessionRecords) };
   const liveSessions: AgentSessionRef[] = [];
+  const initialHistorySessions: AgentSessionState[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
     const ref = toPersistedSessionRef({ repoPath, record });
@@ -186,8 +188,30 @@ export const buildRepoSessionReadModel = ({
 
     if (shouldListenToAgentSessionPresenceSnapshot(snapshot)) {
       liveSessions.push(toRuntimeSessionRef(repoPath, session));
+      if (session.historyLoadState === "not_requested") {
+        initialHistorySessions.push(session);
+      }
     }
   }
 
-  return { sessionsById, liveSessions };
+  return { sessionsById, liveSessions, initialHistorySessions };
+};
+
+export const selectRepoSessionHistoryTargets = ({
+  readModel,
+  targetExternalSessionId,
+}: {
+  readModel: RepoSessionReadModel;
+  targetExternalSessionId?: string | null | undefined;
+}): AgentSessionState[] => {
+  const requestedSessionId = targetExternalSessionId?.trim();
+  if (!requestedSessionId) {
+    return readModel.initialHistorySessions;
+  }
+
+  const session = readModel.sessionsById[requestedSessionId];
+  if (!session) {
+    throw new Error(`Cannot load history for unknown session '${requestedSessionId}'.`);
+  }
+  return [session];
 };

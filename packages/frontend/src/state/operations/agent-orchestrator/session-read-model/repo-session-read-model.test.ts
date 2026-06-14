@@ -11,6 +11,7 @@ import { createSessionMessagesState } from "../support/messages";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionPresence,
+  selectRepoSessionHistoryTargets,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
 
@@ -147,6 +148,110 @@ describe("repo session read model", () => {
         workingDirectory: record.workingDirectory,
       },
     ]);
+  });
+
+  test("owns initial history targets for live sessions with unloaded history", async () => {
+    const firstRecord = createRecord({ externalSessionId: "external-1" });
+    const secondRecord = createRecord({
+      externalSessionId: "external-2",
+      startedAt: "2026-06-11T08:01:00.000Z",
+    });
+    const tasks = [createTask([firstRecord, secondRecord])];
+    const firstCurrentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: firstRecord.externalSessionId,
+        taskId: "task-1",
+        runtimeKind: "opencode",
+        role: "build",
+        status: "running",
+        startedAt: firstRecord.startedAt,
+        workingDirectory: firstRecord.workingDirectory,
+        historyLoadState: "not_requested",
+      }),
+      messages: createSessionMessagesState(firstRecord.externalSessionId, [
+        {
+          id: "runtime-user-new",
+          role: "user",
+          content: "Resume after QA rejection",
+          timestamp: "2026-06-12T08:00:01.000Z",
+        },
+      ]),
+    };
+    const secondCurrentSession = createAgentSessionFixture({
+      externalSessionId: secondRecord.externalSessionId,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "running",
+      startedAt: secondRecord.startedAt,
+      workingDirectory: secondRecord.workingDirectory,
+      historyLoadState: "loaded",
+    });
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [
+        createPresence({
+          runtimeKind: "opencode",
+          externalSessionId: firstRecord.externalSessionId,
+          status: { type: "busy" },
+        }),
+        createPresence({
+          runtimeKind: "opencode",
+          externalSessionId: secondRecord.externalSessionId,
+          status: { type: "busy" },
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [firstRecord.externalSessionId]: firstCurrentSession,
+        [secondRecord.externalSessionId]: secondCurrentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    expect(readModel.initialHistorySessions.map((session) => session.externalSessionId)).toEqual([
+      firstRecord.externalSessionId,
+    ]);
+    const [historyTarget] = readModel.initialHistorySessions;
+    if (!historyTarget) {
+      throw new Error(`Expected ${firstRecord.externalSessionId} to need initial history.`);
+    }
+    expect(sessionMessagesToArray(historyTarget).map((message) => message.content)).toEqual([
+      "Resume after QA rejection",
+    ]);
+  });
+
+  test("selects explicit history targets from the repo read model", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      runtimePresence: presence,
+    });
+
+    expect(
+      selectRepoSessionHistoryTargets({
+        readModel,
+        targetExternalSessionId: ` ${record.externalSessionId} `,
+      }).map((session) => session.externalSessionId),
+    ).toEqual([record.externalSessionId]);
+    expect(() =>
+      selectRepoSessionHistoryTargets({
+        readModel,
+        targetExternalSessionId: "missing-session",
+      }),
+    ).toThrow("Cannot load history for unknown session 'missing-session'.");
   });
 
   test("surfaces idle status from initial runtime presence", async () => {

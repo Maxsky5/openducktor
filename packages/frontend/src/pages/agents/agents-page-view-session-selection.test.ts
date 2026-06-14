@@ -4,7 +4,6 @@ import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   groupSessionsByTaskId,
-  resolveAgentStudioViewSessionParam,
   resolveAgentStudioViewSessionSelection,
 } from "./agents-page-selection";
 
@@ -130,12 +129,16 @@ describe("Agent Studio view session selection", () => {
     });
   });
 
-  test("keeps only summarized or persisted session params for the visible task", () => {
+  test("sanitizes the route session before resolving view selection", () => {
     const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-summary",
         taskId: "task-1",
+        role: "build",
+        status: "idle",
+        startedAt: "2026-02-22T12:00:00.000Z",
+        workingDirectory: "/repo/live",
       }),
     );
     const persistedSession: AgentSessionRecord = {
@@ -148,25 +151,37 @@ describe("Agent Studio view session selection", () => {
     };
 
     expect(
-      resolveAgentStudioViewSessionParam({
+      resolveAgentStudioViewSessionSelection({
         sessionParam: "session-summary",
         sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
-      }),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+        selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+        fallbackRole: "build",
+      }).sessionRoute?.externalSessionId,
     ).toBe("session-summary");
     expect(
-      resolveAgentStudioViewSessionParam({
+      resolveAgentStudioViewSessionSelection({
         sessionParam: "session-persisted",
         sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
-      }),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "planner",
+        selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
+        fallbackRole: "planner",
+      }).sessionRoute?.externalSessionId,
     ).toBe("session-persisted");
     expect(
-      resolveAgentStudioViewSessionParam({
+      resolveAgentStudioViewSessionSelection({
         sessionParam: "session-other-task",
         sessionSummaries: [sessionSummary],
         persistedRecords: [persistedSession],
-      }),
-    ).toBeNull();
+        hasExplicitRoleParam: false,
+        roleFromQuery: "build",
+        selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+        fallbackRole: "build",
+      }).sessionRoute?.externalSessionId,
+    ).toBe("session-summary");
   });
 });
