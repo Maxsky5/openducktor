@@ -27,6 +27,7 @@ export type ActiveSessionChatComposerContext = {
   liveContextUsage: AgentSessionState["contextUsage"] | null;
   messages: AgentSessionState["messages"] | null;
   hasActiveSession: boolean;
+  hasLoadedActiveSession: boolean;
 };
 
 export const resolveActiveSessionChatComposerContext = (
@@ -49,5 +50,6 @@ export const resolveActiveSessionChatComposerContext = (
     liveContextUsage: activeSession?.contextUsage ?? null,
     messages: activeSession?.messages ?? null,
     hasActiveSession: externalSessionId !== null,
+    hasLoadedActiveSession: activeSession !== null,
   };
 };

@@ -16,6 +16,17 @@ type ApprovalRequiredEvent = Extract<SessionEvent, { type: "approval_required" }
 type ApprovalResolvedEvent = Extract<SessionEvent, { type: "approval_resolved" }>;
 type QuestionRequiredEvent = Extract<SessionEvent, { type: "question_required" }>;
 type QuestionResolvedEvent = Extract<SessionEvent, { type: "question_resolved" }>;
+type PendingInputRequiredEvent = ApprovalRequiredEvent | QuestionRequiredEvent;
+type PendingInputRoute =
+  | {
+      kind: "active_child_listener";
+      shouldPatchParentLink: boolean;
+    }
+  | {
+      kind: "session";
+      shouldPatchParentLink: boolean;
+      targetSessionId: string;
+    };
 
 const toPendingApproval = (event: ApprovalRequiredEvent): AgentApprovalRequest => {
   const {
@@ -40,19 +51,6 @@ const normalizeSessionId = (externalSessionId: string | undefined): string | nul
   return trimmed ? trimmed : null;
 };
 
-const resolveLocalSessionIdByExternalId = (
-  sessions: Record<string, AgentSessionState>,
-  externalSessionId: string,
-): string | null => {
-  for (const session of Object.values(sessions)) {
-    if (session.externalSessionId === externalSessionId) {
-      return session.externalSessionId;
-    }
-  }
-
-  return null;
-};
-
 const resolvePermissionPolicyRole = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: ApprovalRequiredEvent,
@@ -69,7 +67,7 @@ const resolvePermissionPolicyRole = (
 
 const resolveSubagentMessageForSessionLink = (
   current: AgentSessionState,
-  event: ApprovalRequiredEvent | QuestionRequiredEvent,
+  event: PendingInputRequiredEvent,
 ) => {
   if (event.subagentCorrelationKey) {
     return findLastSessionMessageByRole(
@@ -86,7 +84,7 @@ const resolveSubagentMessageForSessionLink = (
 
 const patchParentSubagentSessionLink = (
   context: SessionLifecycleEventContext,
-  event: ApprovalRequiredEvent | QuestionRequiredEvent,
+  event: PendingInputRequiredEvent,
 ): void => {
   if (!event.parentExternalSessionId) {
     return;
@@ -126,7 +124,7 @@ const patchParentSubagentSessionLink = (
 
 const isLinkedChildObservedByParent = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: ApprovalRequiredEvent | QuestionRequiredEvent,
+  event: PendingInputRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   return Boolean(
@@ -191,18 +189,43 @@ const shouldAutoRejectApproval = (
 
 const isLinkedChildOwnedByActiveListener = (
   context: Pick<SessionLifecycleEventContext, "store">,
-  event: ApprovalRequiredEvent | QuestionRequiredEvent,
+  event: PendingInputRequiredEvent,
 ): boolean => {
   const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
   if (!childExternalSessionId || !context.store.isSessionListenerActive) {
     return false;
   }
 
-  const localChildSessionId = resolveLocalSessionIdByExternalId(
-    context.store.sessionsRef.current,
-    childExternalSessionId,
-  );
-  return localChildSessionId ? context.store.isSessionListenerActive(localChildSessionId) : false;
+  return context.store.isSessionListenerActive(childExternalSessionId);
+};
+
+const resolvePendingInputRoute = (
+  context: Pick<SessionLifecycleEventContext, "store">,
+  event: PendingInputRequiredEvent,
+): PendingInputRoute => {
+  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
+  const shouldPatchParentLink = Boolean(event.parentExternalSessionId && childExternalSessionId);
+
+  if (!isLinkedChildObservedByParent(context, event)) {
+    return {
+      kind: "session",
+      shouldPatchParentLink,
+      targetSessionId: context.store.externalSessionId,
+    };
+  }
+
+  if (isLinkedChildOwnedByActiveListener(context, event)) {
+    return {
+      kind: "active_child_listener",
+      shouldPatchParentLink,
+    };
+  }
+
+  return {
+    kind: "session",
+    shouldPatchParentLink,
+    targetSessionId: childExternalSessionId ?? context.store.externalSessionId,
+  };
 };
 
 const autoRejectMutatingApproval = (
@@ -289,34 +312,21 @@ export const handlePermissionRequired = (
 ): void => {
   flushDraftBuffers(context);
   const role = resolvePermissionPolicyRole(context, event);
+  const route = resolvePendingInputRoute(context, event);
 
-  if (isLinkedChildObservedByParent(context, event)) {
+  if (route.shouldPatchParentLink) {
     patchParentSubagentSessionLink(context, event);
-    const isOwnedByActiveListener = isLinkedChildOwnedByActiveListener(context, event);
-    if (isOwnedByActiveListener) {
-      return;
-    }
-
-    if (role && shouldAutoRejectApproval(context, role, event)) {
-      autoRejectMutatingApproval(context, event, role);
-      return;
-    }
-
-    const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-    if (childExternalSessionId) {
-      recordSessionPendingApproval(context, childExternalSessionId, event);
-    }
+  }
+  if (route.kind === "active_child_listener") {
     return;
   }
 
   if (role && shouldAutoRejectApproval(context, role, event)) {
-    patchParentSubagentSessionLink(context, event);
     autoRejectMutatingApproval(context, event, role);
     return;
   }
 
-  recordSessionPendingApproval(context, context.store.externalSessionId, event);
-  patchParentSubagentSessionLink(context, event);
+  recordSessionPendingApproval(context, route.targetSessionId, event);
 };
 
 export const handlePermissionResolved = (
@@ -346,21 +356,16 @@ export const handleQuestionRequired = (
   event: QuestionRequiredEvent,
 ): void => {
   flushDraftBuffers(context);
+  const route = resolvePendingInputRoute(context, event);
 
-  if (isLinkedChildObservedByParent(context, event)) {
+  if (route.shouldPatchParentLink) {
     patchParentSubagentSessionLink(context, event);
-    if (isLinkedChildOwnedByActiveListener(context, event)) {
-      return;
-    }
-    const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-    if (childExternalSessionId) {
-      recordSessionPendingQuestion(context, childExternalSessionId, event);
-    }
+  }
+  if (route.kind === "active_child_listener") {
     return;
   }
 
-  recordSessionPendingQuestion(context, context.store.externalSessionId, event);
-  patchParentSubagentSessionLink(context, event);
+  recordSessionPendingQuestion(context, route.targetSessionId, event);
 };
 
 export const handleQuestionResolved = (

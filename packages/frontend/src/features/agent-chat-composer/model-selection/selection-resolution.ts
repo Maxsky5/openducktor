@@ -35,7 +35,11 @@ export const resolveSelectionCatalogLoading = ({
   isLoadingComposerCatalog: boolean;
 }): boolean => {
   if (hasActiveSession) {
-    return activeSessionIsLoadingModelCatalog && !activeSessionModelCatalog && !composerCatalog;
+    return (
+      !activeSessionModelCatalog &&
+      !composerCatalog &&
+      (activeSessionIsLoadingModelCatalog || isLoadingComposerCatalog)
+    );
   }
   return isLoadingComposerCatalog;
 };

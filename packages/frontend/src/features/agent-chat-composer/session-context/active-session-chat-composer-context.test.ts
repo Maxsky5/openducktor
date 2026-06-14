@@ -18,7 +18,7 @@ const makeSummary = (): ActiveSessionChatComposerSummary => ({
   },
 });
 
-const makeHydratedSession = (): ActiveSessionChatComposerSession => ({
+const makeLoadedSession = (): ActiveSessionChatComposerSession => ({
   externalSessionId: "external-1",
   status: "idle",
   selectedModel: {
@@ -34,18 +34,19 @@ const makeHydratedSession = (): ActiveSessionChatComposerSession => ({
 });
 
 describe("active-session-chat-composer-context", () => {
-  test("prefers hydrated session runtime fields while preserving summary selection fallback", () => {
-    const hydratedSession = makeHydratedSession();
-    const state = resolveActiveSessionChatComposerContext(hydratedSession, makeSummary());
+  test("prefers loaded session runtime fields while preserving summary selection fallback", () => {
+    const loadedSession = makeLoadedSession();
+    const state = resolveActiveSessionChatComposerContext(loadedSession, makeSummary());
 
     expect(state.externalSessionId).toBe("external-1");
-    expect(state.selectedModel).toEqual(hydratedSession.selectedModel);
+    expect(state.selectedModel).toEqual(loadedSession.selectedModel);
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo/session-worktree");
     expect(state.hasActiveSession).toBe(true);
+    expect(state.hasLoadedActiveSession).toBe(true);
   });
 
-  test("keeps summary selection available while the hydrated session is missing", () => {
+  test("keeps summary selection available while the loaded session is missing", () => {
     const summary = makeSummary();
     const state = resolveActiveSessionChatComposerContext(null, summary);
 
@@ -54,5 +55,6 @@ describe("active-session-chat-composer-context", () => {
     expect(state.runtimeKind).toBe("opencode");
     expect(state.workingDirectory).toBe("/repo");
     expect(state.hasActiveSession).toBe(true);
+    expect(state.hasLoadedActiveSession).toBe(false);
   });
 });

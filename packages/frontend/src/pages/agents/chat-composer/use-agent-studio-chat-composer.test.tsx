@@ -382,7 +382,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps the selected session model while the full session object is still hydrating", async () => {
+  test("keeps the selected session model while the full session object is still loading", async () => {
     const catalogLoad = createDeferred<AgentModelCatalog>();
     const harness = createHookHarness(
       createBaseProps({
@@ -1012,6 +1012,7 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionModelCatalog: CATALOG,
         updateAgentSessionModel: firstUpdateAgentSessionModel,
       }),
     );
@@ -1023,6 +1024,7 @@ describe("useAgentStudioChatComposer", () => {
       await harness.update(
         createBaseProps({
           activeSession,
+          activeSessionModelCatalog: CATALOG,
           updateAgentSessionModel: secondUpdateAgentSessionModel,
         }),
       );
@@ -1324,6 +1326,7 @@ describe("useAgentStudioChatComposer", () => {
     const harness = createHookHarness(
       createBaseProps({
         activeSession,
+        activeSessionModelCatalog: CATALOG,
       }),
     );
 

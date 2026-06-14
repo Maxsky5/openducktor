@@ -126,103 +126,88 @@ export type SessionEventHandlerContext = {
   parts: SessionPartEventContext;
 };
 
+const createStoreContext = (context: ListenToAgentSessionParams): SessionStoreContext => ({
+  externalSessionId: context.externalSessionId,
+  sessionsRef: context.sessionsRef,
+  updateSession: context.updateSession,
+});
+
+const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftContext => ({
+  externalSessionId: context.externalSessionId,
+  draftRawBySessionRef: context.draftRawBySessionRef,
+  draftSourceBySessionRef: context.draftSourceBySessionRef,
+  ...(context.draftMessageIdBySessionRef
+    ? { draftMessageIdBySessionRef: context.draftMessageIdBySessionRef }
+    : {}),
+  ...(context.draftFlushTimeoutBySessionRef
+    ? { draftFlushTimeoutBySessionRef: context.draftFlushTimeoutBySessionRef }
+    : {}),
+});
+
+const createTurnContext = (context: ListenToAgentSessionParams): SessionTurnContext => ({
+  externalSessionId: context.externalSessionId,
+  turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
+  ...(context.turnModelBySessionRef
+    ? { turnModelBySessionRef: context.turnModelBySessionRef }
+    : {}),
+  ...(context.contextUsageMessageIdBySessionRef
+    ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
+    : {}),
+  ...(context.recordTurnActivityTimestamp
+    ? { recordTurnActivityTimestamp: context.recordTurnActivityTimestamp }
+    : {}),
+  ...(context.recordTurnUserMessageTimestamp
+    ? { recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp }
+    : {}),
+  resolveTurnDurationMs: context.resolveTurnDurationMs,
+  clearTurnDuration: context.clearTurnDuration,
+});
+
+const createRuntimeDataContext = (
+  context: ListenToAgentSessionParams,
+): SessionRuntimeDataContext => ({
+  sessionRef: context.sessionRef,
+  runtimeDataWriter: context.runtimeDataWriter,
+});
+
+const createRefreshContext = (context: ListenToAgentSessionParams): SessionRefreshContext => ({
+  repoPath: context.repoPath,
+  refreshTaskData: context.refreshTaskData,
+  ...(context.resolveRuntimeDefinition
+    ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
+    : {}),
+});
+
 export const createSessionEventHandlerContext = (
   context: ListenToAgentSessionParams,
-): SessionEventHandlerContext => ({
-  lifecycle: {
-    store: {
-      externalSessionId: context.externalSessionId,
-      sessionsRef: context.sessionsRef,
-      updateSession: context.updateSession,
-      ...(context.isSessionListenerActive
-        ? { isSessionListenerActive: context.isSessionListenerActive }
-        : {}),
+): SessionEventHandlerContext => {
+  const store = createStoreContext(context);
+  const lifecycleStore = context.isSessionListenerActive
+    ? { ...store, isSessionListenerActive: context.isSessionListenerActive }
+    : store;
+  const drafts = createDraftContext(context);
+  const turn = createTurnContext(context);
+  const runtimeData = createRuntimeDataContext(context);
+
+  return {
+    lifecycle: {
+      store: lifecycleStore,
+      drafts,
+      turn,
+      approvals: {
+        adapter: context.adapter,
+        ...(context.resolveRuntimeDefinition
+          ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
+          : {}),
+      },
+      runtimeData,
     },
-    drafts: {
-      externalSessionId: context.externalSessionId,
-      draftRawBySessionRef: context.draftRawBySessionRef,
-      draftSourceBySessionRef: context.draftSourceBySessionRef,
-      ...(context.draftMessageIdBySessionRef
-        ? { draftMessageIdBySessionRef: context.draftMessageIdBySessionRef }
-        : {}),
-      ...(context.draftFlushTimeoutBySessionRef
-        ? { draftFlushTimeoutBySessionRef: context.draftFlushTimeoutBySessionRef }
-        : {}),
+    parts: {
+      store,
+      drafts,
+      turn,
+      refresh: createRefreshContext(context),
+      runtimeData,
     },
-    turn: {
-      externalSessionId: context.externalSessionId,
-      turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
-      ...(context.turnModelBySessionRef
-        ? { turnModelBySessionRef: context.turnModelBySessionRef }
-        : {}),
-      ...(context.contextUsageMessageIdBySessionRef
-        ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
-        : {}),
-      ...(context.recordTurnActivityTimestamp
-        ? { recordTurnActivityTimestamp: context.recordTurnActivityTimestamp }
-        : {}),
-      ...(context.recordTurnUserMessageTimestamp
-        ? { recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp }
-        : {}),
-      resolveTurnDurationMs: context.resolveTurnDurationMs,
-      clearTurnDuration: context.clearTurnDuration,
-    },
-    approvals: {
-      adapter: context.adapter,
-      ...(context.resolveRuntimeDefinition
-        ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
-        : {}),
-    },
-    runtimeData: {
-      sessionRef: context.sessionRef,
-      runtimeDataWriter: context.runtimeDataWriter,
-    },
-  },
-  parts: {
-    store: {
-      externalSessionId: context.externalSessionId,
-      sessionsRef: context.sessionsRef,
-      updateSession: context.updateSession,
-    },
-    drafts: {
-      externalSessionId: context.externalSessionId,
-      draftRawBySessionRef: context.draftRawBySessionRef,
-      draftSourceBySessionRef: context.draftSourceBySessionRef,
-      ...(context.draftMessageIdBySessionRef
-        ? { draftMessageIdBySessionRef: context.draftMessageIdBySessionRef }
-        : {}),
-      ...(context.draftFlushTimeoutBySessionRef
-        ? { draftFlushTimeoutBySessionRef: context.draftFlushTimeoutBySessionRef }
-        : {}),
-    },
-    turn: {
-      externalSessionId: context.externalSessionId,
-      turnStartedAtBySessionRef: context.turnStartedAtBySessionRef,
-      ...(context.turnModelBySessionRef
-        ? { turnModelBySessionRef: context.turnModelBySessionRef }
-        : {}),
-      ...(context.contextUsageMessageIdBySessionRef
-        ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
-        : {}),
-      ...(context.recordTurnActivityTimestamp
-        ? { recordTurnActivityTimestamp: context.recordTurnActivityTimestamp }
-        : {}),
-      ...(context.recordTurnUserMessageTimestamp
-        ? { recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp }
-        : {}),
-      resolveTurnDurationMs: context.resolveTurnDurationMs,
-      clearTurnDuration: context.clearTurnDuration,
-    },
-    refresh: {
-      repoPath: context.repoPath,
-      refreshTaskData: context.refreshTaskData,
-      ...(context.resolveRuntimeDefinition
-        ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
-        : {}),
-    },
-    runtimeData: {
-      sessionRef: context.sessionRef,
-      runtimeDataWriter: context.runtimeDataWriter,
-    },
-  },
-});
+  };
+};

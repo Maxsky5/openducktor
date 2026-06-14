@@ -161,6 +161,7 @@ export function useAgentStudioChatComposer({
   const activeSessionLiveContextUsage = activeSessionChatComposerContext.liveContextUsage ?? null;
   const activeSessionMessages = activeSessionChatComposerContext.messages;
   const hasActiveSession = activeSessionChatComposerContext.hasActiveSession;
+  const hasLoadedActiveSession = activeSessionChatComposerContext.hasLoadedActiveSession;
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     const selection = toRoleDefaultModelSelection(
       repoSettings?.agentDefaults[role],
@@ -259,14 +260,12 @@ export function useAgentStudioChatComposer({
       selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
       loadCatalogForRepo,
     ),
-    enabled:
-      workspaceRepoPath !== null &&
-      activeExternalSessionId === null &&
-      selectedRuntimeKind !== null,
+    enabled: workspaceRepoPath !== null && !hasLoadedActiveSession && selectedRuntimeKind !== null,
   });
   const composerCatalog = composerCatalogQuery.data ?? null;
   const isLoadingComposerCatalog =
-    composerCatalogQuery.isLoading || (hasActiveSession && activeSessionIsLoadingModelCatalog);
+    composerCatalogQuery.isLoading ||
+    (hasLoadedActiveSession && activeSessionIsLoadingModelCatalog);
   const {
     supportsSlashCommands,
     slashCommandCatalog,

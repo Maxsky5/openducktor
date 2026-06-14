@@ -89,8 +89,6 @@ type UseRuntimeTranscriptInteractionsArgs = {
 
 type RuntimeTranscriptInteractions = {
   session: AgentChatThreadSession | null;
-  visiblePendingApprovals: readonly AgentApprovalRequest[];
-  visiblePendingQuestions: readonly AgentQuestionRequest[];
   pendingQuestions: {
     canSubmit: boolean;
     isSubmittingByRequestId: Record<string, boolean>;
@@ -122,8 +120,6 @@ export function useRuntimeTranscriptInteractions({
     sessionKey,
   );
   const { isSubmittingQuestionByRequestId } = currentInteractionState;
-  const visiblePendingApprovals = session?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
-  const visiblePendingQuestions = session?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const activeSessionId = session?.externalSessionId ?? null;
   const sessionMatchesTranscript =
     activeSessionId !== null && activeSessionId === externalSessionId;
@@ -178,8 +174,6 @@ export function useRuntimeTranscriptInteractions({
 
   return {
     session,
-    visiblePendingApprovals,
-    visiblePendingQuestions,
     pendingQuestions: {
       canSubmit: canReplyToRuntimeRequest && pendingQuestionRequests.length > 0,
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,

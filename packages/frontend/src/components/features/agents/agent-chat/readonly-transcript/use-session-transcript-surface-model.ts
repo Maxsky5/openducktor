@@ -124,14 +124,8 @@ export function useSessionTranscriptSurfaceModel({
     sessionRuntimeDataError: loadError,
     runtimeReadiness,
     emptyState,
-    pendingQuestions: {
-      ...transcriptInteractions.pendingQuestions,
-      canSubmit: transcriptInteractions.pendingQuestions.canSubmit,
-    },
-    approvals: {
-      ...transcriptInteractions.approvals,
-      canReply: transcriptInteractions.approvals.canReply,
-    },
+    pendingQuestions: transcriptInteractions.pendingQuestions,
+    approvals: transcriptInteractions.approvals,
   });
 
   return {
