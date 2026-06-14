@@ -36,13 +36,13 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      externalSessionId: "session-child-1",
-      title: "Subagent activity",
-      description: "View what this subagent did.",
-      source: {
+      target: {
+        externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
       },
+      title: "Subagent activity",
+      description: "View what this subagent did.",
     });
   });
 
@@ -61,13 +61,13 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      externalSessionId: "session-child-1",
-      title: "Subagent activity",
-      description: "View what this subagent did.",
-      source: {
+      target: {
+        externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
       },
+      title: "Subagent activity",
+      description: "View what this subagent did.",
     });
   });
 
@@ -86,13 +86,13 @@ describe("SubagentTranscriptButton", () => {
     fireEvent.click(screen.getByRole("button", { name: "View subagent session" }));
 
     expect(onOpenTranscript).toHaveBeenCalledWith({
-      externalSessionId: "session-child-1",
-      title: "Subagent activity",
-      description: "View what this subagent did.",
-      source: {
+      target: {
+        externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
       },
+      title: "Subagent activity",
+      description: "View what this subagent did.",
     });
   });
 

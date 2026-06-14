@@ -1,9 +1,8 @@
 import { createContext, use } from "react";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptTarget } from "./readonly-transcript/runtime-session-transcript-target";
 
 export type OpenAgentSessionTranscriptRequest = {
-  externalSessionId: string;
-  source: RuntimeSessionTranscriptSource;
+  target: RuntimeSessionTranscriptTarget;
   title?: string;
   description?: string;
 };

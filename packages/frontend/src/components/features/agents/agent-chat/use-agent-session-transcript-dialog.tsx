@@ -12,7 +12,6 @@ const DEFAULT_DESCRIPTION = "Read-only conversation.";
 function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
   const activeWorkspace = useActiveWorkspace();
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
-  const externalSessionId = request?.externalSessionId ?? null;
   const open = request !== null;
 
   const openSessionTranscript = useCallback((nextRequest: OpenAgentSessionTranscriptRequest) => {
@@ -36,8 +35,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
       {children}
       <AgentSessionTranscriptDialog
         activeWorkspace={activeWorkspace}
-        externalSessionId={externalSessionId}
-        source={request?.source ?? null}
+        target={request?.target ?? null}
         open={open}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {

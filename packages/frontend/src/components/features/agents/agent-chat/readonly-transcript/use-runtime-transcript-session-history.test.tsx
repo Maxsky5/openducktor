@@ -6,7 +6,7 @@ import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/su
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 (
@@ -28,9 +28,10 @@ const activeWorkspace: ActiveWorkspace = {
   repoPath: "/repo-a",
 };
 
-const createSource = (
-  overrides: Partial<RuntimeSessionTranscriptSource> = {},
-): RuntimeSessionTranscriptSource => ({
+const createTarget = (
+  overrides: Partial<RuntimeSessionTranscriptTarget> = {},
+): RuntimeSessionTranscriptTarget => ({
+  externalSessionId: "session-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a/worktree",
   ...overrides,
@@ -49,8 +50,8 @@ const createHistoryMessage = (): AgentSessionHistoryMessage => ({
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
   activeWorkspace,
-  externalSessionId: "session-1",
-  source: createSource(),
+  target: createTarget(),
+  repoReadinessState: "ready",
   liveSession: null,
   readSessionHistory: mock(async () => [createHistoryMessage()]),
   ...overrides,
@@ -77,7 +78,10 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.workingDirectory).toBe("/repo-a/worktree");
       expect(session?.status).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
-      expect(harness.getLatest().historyLoadState).toBe("loaded");
+      expect(harness.getLatest().lifecycle).toEqual({
+        phase: "ready",
+        repoReadinessState: "ready",
+      });
       expect(harness.getLatest().historyError).toBeNull();
     } finally {
       await harness.unmount();
@@ -114,8 +118,10 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         selectedModel: liveSession.selectedModel,
         todos: [],
       });
-      expect(harness.getLatest().historyLoadState).toBe("loaded");
-      expect(harness.getLatest().isHistoryLoading).toBe(false);
+      expect(harness.getLatest().lifecycle).toEqual({
+        phase: "ready",
+        repoReadinessState: "ready",
+      });
     } finally {
       await harness.unmount();
     }
@@ -164,8 +170,10 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(harness.getLatest()).toEqual({
         session: null,
-        historyLoadState: "failed",
-        isHistoryLoading: false,
+        lifecycle: {
+          phase: "history_failed",
+          repoReadinessState: "ready",
+        },
         historyError: "history unavailable",
       });
     } finally {

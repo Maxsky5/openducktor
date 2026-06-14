@@ -8,7 +8,7 @@ import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptTarget } from "./readonly-transcript/runtime-session-transcript-target";
 
 type SubagentTranscriptButtonProps = {
   sessionRuntimeKind?: RuntimeKind | null;
@@ -18,34 +18,36 @@ type SubagentTranscriptButtonProps = {
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
 };
 
-type TranscriptSourceInput = {
+type TranscriptTargetInput = {
+  externalSessionId: string | null | undefined;
   sessionRuntimeKind: RuntimeKind | null | undefined;
   sessionWorkingDirectory: string | null | undefined;
 };
 
 const buildTranscriptRequest = (
-  externalSessionId: string,
-  source: RuntimeSessionTranscriptSource,
+  target: RuntimeSessionTranscriptTarget,
 ): OpenAgentSessionTranscriptRequest => {
   return {
-    externalSessionId,
+    target,
     title: "Subagent activity",
     description: "View what this subagent did.",
-    source,
   };
 };
 
-const buildTranscriptSource = ({
+const buildTranscriptTarget = ({
+  externalSessionId,
   sessionRuntimeKind,
   sessionWorkingDirectory,
-}: TranscriptSourceInput): RuntimeSessionTranscriptSource | null => {
+}: TranscriptTargetInput): RuntimeSessionTranscriptTarget | null => {
+  const resolvedExternalSessionId = externalSessionId?.trim() || null;
   const workingDirectory = sessionWorkingDirectory?.trim() || null;
 
-  if (!sessionRuntimeKind || !workingDirectory) {
+  if (!resolvedExternalSessionId || !sessionRuntimeKind || !workingDirectory) {
     return null;
   }
 
   return {
+    externalSessionId: resolvedExternalSessionId,
     runtimeKind: sessionRuntimeKind,
     workingDirectory,
   };
@@ -59,21 +61,21 @@ export function SubagentTranscriptButton({
   onOpenTranscript,
 }: SubagentTranscriptButtonProps): ReactElement | null {
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
-  const externalSessionId = meta.externalSessionId?.trim() || null;
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
-  const transcriptSource = buildTranscriptSource({
+  const transcriptTarget = buildTranscriptTarget({
+    externalSessionId: meta.externalSessionId,
     sessionRuntimeKind,
     sessionWorkingDirectory,
   });
 
-  if (!externalSessionId || !openTranscript || !transcriptSource) {
+  if (!openTranscript || !transcriptTarget) {
     return null;
   }
 
   const handleOpen = (event: MouseEvent<HTMLButtonElement>): void => {
     event.preventDefault();
     event.stopPropagation();
-    openTranscript(buildTranscriptRequest(externalSessionId, transcriptSource));
+    openTranscript(buildTranscriptRequest(transcriptTarget));
   };
 
   return (

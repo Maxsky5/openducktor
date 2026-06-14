@@ -7,19 +7,19 @@ import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage, buildSession } from "./agent-chat-test-fixtures";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptTarget } from "./readonly-transcript/runtime-session-transcript-target";
 
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualTranscriptDialog: Awaited<typeof import("./agent-session-transcript-dialog")>;
 
 let latestDialogProps: {
-  externalSessionId: string | null;
-  source: RuntimeSessionTranscriptSource | null;
+  target: RuntimeSessionTranscriptTarget | null;
   title: string;
   description: string;
 } | null = null;
 
-const transcriptSource: RuntimeSessionTranscriptSource = {
+const transcriptTarget: RuntimeSessionTranscriptTarget = {
+  externalSessionId: "session-child-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo-a",
 };
@@ -85,13 +85,12 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     mock.module("./agent-session-transcript-dialog", () => ({
       AgentSessionTranscriptDialog: (props: {
-        externalSessionId: string | null;
-        source: RuntimeSessionTranscriptSource | null;
+        target: RuntimeSessionTranscriptTarget | null;
         title: string;
         description: string;
       }): ReactElement => {
         latestDialogProps = props;
-        return <div data-testid="session-dialog-props">{props.externalSessionId}</div>;
+        return <div data-testid="session-dialog-props">{props.target?.externalSessionId}</div>;
       },
     }));
   });
@@ -118,8 +117,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
           type="button"
           onClick={() => {
             openSessionTranscript({
-              externalSessionId: "session-child-1",
-              source: transcriptSource,
+              target: transcriptTarget,
               title: "Subagent activity",
               description: "View what this subagent did.",
             });
@@ -141,8 +139,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        externalSessionId: "session-child-1",
-        source: transcriptSource,
+        target: transcriptTarget,
         title: "Subagent activity",
         description: "View what this subagent did.",
       });
@@ -165,8 +162,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
             type="button"
             onClick={() => {
               openSessionTranscript({
-                externalSessionId: "session-child-1",
-                source: transcriptSource,
+                target: transcriptTarget,
               });
             }}
           >
@@ -187,11 +183,13 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     render(<DialogControls />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBe("session-child-1"));
+    await waitFor(() =>
+      expect(latestDialogProps?.target?.externalSessionId).toBe("session-child-1"),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    await waitFor(() => expect(latestDialogProps?.externalSessionId).toBeNull());
+    await waitFor(() => expect(latestDialogProps?.target).toBeNull());
   });
 
   test("opens a linked subagent transcript from the visible subagent card", async () => {
@@ -236,8 +234,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        externalSessionId: "session-child-1",
-        source: {
+        target: {
+          externalSessionId: "session-child-1",
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
         },
@@ -296,8 +294,8 @@ describe("AgentSessionTranscriptDialogHost", () => {
 
     await waitFor(() => {
       expect(latestDialogProps).toMatchObject({
-        externalSessionId: "session-child-planner-1",
-        source: {
+        target: {
+          externalSessionId: "session-child-planner-1",
           runtimeKind: "opencode",
           workingDirectory: "/repo-a",
         },

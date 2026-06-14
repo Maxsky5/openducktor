@@ -9,13 +9,12 @@ import {
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
-import type { RuntimeSessionTranscriptSource } from "./readonly-transcript/runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptTarget } from "./readonly-transcript/runtime-session-transcript-target";
 import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
 
 type AgentSessionTranscriptDialogProps = {
   activeWorkspace: ActiveWorkspace | null;
-  externalSessionId: string | null;
-  source: RuntimeSessionTranscriptSource | null;
+  target: RuntimeSessionTranscriptTarget | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -24,8 +23,7 @@ type AgentSessionTranscriptDialogProps = {
 
 export function AgentSessionTranscriptDialog({
   activeWorkspace,
-  externalSessionId,
-  source,
+  target,
   open,
   onOpenChange,
   title,
@@ -34,8 +32,7 @@ export function AgentSessionTranscriptDialog({
   const { model } = useSessionTranscriptSurfaceModel({
     isOpen: open,
     activeWorkspace,
-    externalSessionId,
-    source,
+    target,
   });
   const resolvedTitle = resolveAgentSessionDialogTitle(title, model.thread.session?.title);
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   canReadAgentSessionRuntimeData,
-  deriveAgentSessionHistoryViewLifecycle,
+  deriveAgentSessionTargetViewLifecycle,
   deriveAgentSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
   getAgentSessionTranscriptState,
@@ -217,12 +217,13 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 });
 
-describe("deriveAgentSessionHistoryViewLifecycle", () => {
+describe("deriveAgentSessionTargetViewLifecycle", () => {
   test("uses history load state for a transcript target before a session exists", () => {
-    const lifecycle = deriveAgentSessionHistoryViewLifecycle({
-      session: null,
-      externalSessionId: "external-1",
-      historyLoadState: "loading",
+    const lifecycle = deriveAgentSessionTargetViewLifecycle({
+      target: {
+        historyLoadState: "loading",
+        hasTranscript: false,
+      },
       repoReadinessState: "checking",
     });
 
@@ -234,20 +235,11 @@ describe("deriveAgentSessionHistoryViewLifecycle", () => {
   });
 
   test("uses visible transcript messages when history is loaded", () => {
-    const lifecycle = deriveAgentSessionHistoryViewLifecycle({
-      session: {
-        externalSessionId: "external-1",
-        messages: [
-          {
-            id: "message-1",
-            role: "user",
-            content: "existing transcript",
-            timestamp: "2026-02-22T08:00:03.000Z",
-          },
-        ],
+    const lifecycle = deriveAgentSessionTargetViewLifecycle({
+      target: {
+        historyLoadState: "loaded",
+        hasTranscript: true,
       },
-      externalSessionId: "external-1",
-      historyLoadState: "loaded",
       repoReadinessState: "ready",
     });
 
@@ -259,10 +251,8 @@ describe("deriveAgentSessionHistoryViewLifecycle", () => {
   });
 
   test("stays inactive when there is no transcript target", () => {
-    const lifecycle = deriveAgentSessionHistoryViewLifecycle({
-      session: null,
-      externalSessionId: null,
-      historyLoadState: null,
+    const lifecycle = deriveAgentSessionTargetViewLifecycle({
+      target: null,
       repoReadinessState: "ready",
     });
 

@@ -3,10 +3,14 @@ import { useCallback, useReducer } from "react";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { useAgentSessionApprovalActions } from "../use-agent-session-approval-actions";
+import {
+  matchesRuntimeSessionTranscriptTarget,
+  type RuntimeSessionTranscriptTarget,
+  runtimeSessionTranscriptTargetKey,
+} from "./runtime-session-transcript-target";
 
 const EMPTY_PENDING_APPROVALS: readonly AgentApprovalRequest[] = Object.freeze([]);
 const EMPTY_PENDING_QUESTIONS: readonly AgentQuestionRequest[] = Object.freeze([]);
-const TRANSCRIPT_INTERACTION_KEY_SEPARATOR = "\u0000";
 
 type RuntimeTranscriptInteractionState = {
   sessionKey: string | null;
@@ -60,20 +64,22 @@ const runtimeTranscriptInteractionReducer = (
 
 const getRuntimeTranscriptInteractionSessionKey = (
   session: AgentChatThreadSession | null,
-  externalSessionId: string | null,
+  target: RuntimeSessionTranscriptTarget | null,
 ): string | null => {
-  if (!session) {
-    return externalSessionId;
+  if (session) {
+    return runtimeSessionTranscriptTargetKey(session);
   }
 
-  return [session.externalSessionId, session.runtimeKind, session.workingDirectory].join(
-    TRANSCRIPT_INTERACTION_KEY_SEPARATOR,
-  );
+  if (!target) {
+    return null;
+  }
+
+  return runtimeSessionTranscriptTargetKey(target);
 };
 
 type UseRuntimeTranscriptInteractionsArgs = {
   session: AgentChatThreadSession | null;
-  externalSessionId: string | null;
+  target: RuntimeSessionTranscriptTarget | null;
   isRuntimeReady: boolean;
   replyAgentApproval: (
     externalSessionId: string,
@@ -104,12 +110,12 @@ type RuntimeTranscriptInteractions = {
 
 export function useRuntimeTranscriptInteractions({
   session,
-  externalSessionId,
+  target,
   isRuntimeReady,
   replyAgentApproval,
   answerAgentQuestion,
 }: UseRuntimeTranscriptInteractionsArgs): RuntimeTranscriptInteractions {
-  const sessionKey = getRuntimeTranscriptInteractionSessionKey(session, externalSessionId);
+  const sessionKey = getRuntimeTranscriptInteractionSessionKey(session, target);
   const [interactionState, dispatchInteractionState] = useReducer(
     runtimeTranscriptInteractionReducer,
     sessionKey,
@@ -120,38 +126,25 @@ export function useRuntimeTranscriptInteractions({
     sessionKey,
   );
   const { isSubmittingQuestionByRequestId } = currentInteractionState;
-  const activeSessionId = session?.externalSessionId ?? null;
-  const sessionMatchesTranscript =
-    activeSessionId !== null && activeSessionId === externalSessionId;
-  const canReplyToRuntimeRequest = isRuntimeReady && sessionMatchesTranscript;
+  const matchedExternalSessionId = matchesRuntimeSessionTranscriptTarget(session, target)
+    ? session.externalSessionId
+    : null;
+  const canReplyToRuntimeRequest = isRuntimeReady && matchedExternalSessionId !== null;
   const pendingApprovalRequests: readonly AgentApprovalRequest[] =
     session?.pendingApprovals ?? EMPTY_PENDING_APPROVALS;
-  const replyTranscriptApproval = useCallback(
-    async (
-      targetExternalSessionId: string,
-      requestId: string,
-      outcome: RuntimeApprovalReplyOutcome,
-    ): Promise<void> => {
-      if (!targetExternalSessionId) {
-        throw new Error("Runtime transcript approval target is unavailable.");
-      }
-      await replyAgentApproval(targetExternalSessionId, requestId, outcome);
-    },
-    [replyAgentApproval],
-  );
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeExternalSessionId: sessionMatchesTranscript ? activeSessionId : null,
+      activeExternalSessionId: matchedExternalSessionId,
       pendingApprovals: pendingApprovalRequests,
       agentStudioReady: isRuntimeReady,
-      replyAgentApproval: replyTranscriptApproval,
+      replyAgentApproval,
     });
 
   const pendingQuestionRequests: readonly AgentQuestionRequest[] =
     session?.pendingQuestions ?? EMPTY_PENDING_QUESTIONS;
   const replyTranscriptQuestion = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeSessionId || !sessionMatchesTranscript) {
+      if (!matchedExternalSessionId) {
         throw new Error("Runtime transcript question target is unavailable.");
       }
       dispatchInteractionState({
@@ -160,7 +153,7 @@ export function useRuntimeTranscriptInteractions({
         sessionKey,
       });
       try {
-        await answerAgentQuestion(activeSessionId, requestId, answers);
+        await answerAgentQuestion(matchedExternalSessionId, requestId, answers);
       } finally {
         dispatchInteractionState({
           type: "questionSubmitFinished",
@@ -169,7 +162,7 @@ export function useRuntimeTranscriptInteractions({
         });
       }
     },
-    [activeSessionId, answerAgentQuestion, sessionMatchesTranscript, sessionKey],
+    [answerAgentQuestion, matchedExternalSessionId, sessionKey],
   );
 
   return {

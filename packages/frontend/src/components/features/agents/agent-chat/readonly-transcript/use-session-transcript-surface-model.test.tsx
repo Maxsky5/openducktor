@@ -12,7 +12,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadRuntimeReadiness, AgentChatThreadSession } from "../agent-chat.types";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 
 const readSessionHistory = mock(
   async (): Promise<AgentSessionHistoryMessage[]> => [
@@ -48,10 +48,14 @@ let runtimeReadiness: AgentChatThreadRuntimeReadiness = {
   refreshChecks: async () => {},
 };
 
-function makeTranscriptSource(): RuntimeSessionTranscriptSource {
+function makeTranscriptTarget(
+  overrides: Partial<RuntimeSessionTranscriptTarget> = {},
+): RuntimeSessionTranscriptTarget {
   return {
+    externalSessionId: "session-subagent-1",
     runtimeKind: "opencode",
     workingDirectory: "/repo-a",
+    ...overrides,
   };
 }
 
@@ -215,10 +219,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("loads a runtime transcript without task-owned session records", async () => {
-    const transcriptSource = {
-      ...makeTranscriptSource(),
+    const transcriptTarget = makeTranscriptTarget({
       workingDirectory: "/repo-a/worktree",
-    };
+    });
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -231,8 +234,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
+        target: transcriptTarget,
       },
       { wrapper },
     );
@@ -273,8 +275,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -292,7 +293,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("uses the requested dialog session id as the transcript target", async () => {
-    const transcriptSource = makeTranscriptSource();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -305,8 +305,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-requested",
-        source: transcriptSource,
+        target: makeTranscriptTarget({ externalSessionId: "session-requested" }),
       },
       { wrapper },
     );
@@ -328,7 +327,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("does not load history while the dialog is closed", async () => {
-    const transcriptSource = makeTranscriptSource();
+    const transcriptTarget = makeTranscriptTarget();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -341,8 +340,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: false,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
+        target: transcriptTarget,
       },
       { wrapper },
     );
@@ -356,7 +354,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("shows the default empty state when opened without a transcript source", async () => {
+  test("shows the default empty state when opened without a transcript target", async () => {
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -369,8 +367,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: null,
-        source: null,
+        target: null,
       },
       { wrapper },
     );
@@ -402,8 +399,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -461,8 +457,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -482,8 +477,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
-  test("loads existing history as an idle transcript without source-level pending inputs", async () => {
-    const transcriptSource = makeTranscriptSource();
+  test("loads existing history as an idle transcript without parent-observed pending inputs", async () => {
+    const transcriptTarget = makeTranscriptTarget();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -496,8 +491,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
+        target: transcriptTarget,
       },
       { wrapper },
     );
@@ -539,8 +533,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -587,8 +580,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -621,8 +613,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -662,8 +653,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );
@@ -701,8 +691,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-requested",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget({ externalSessionId: "session-requested" }),
       },
       { wrapper },
     );
@@ -718,7 +707,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("surfaces a failed empty state when transcript history cannot load", async () => {
-    const transcriptSource = makeTranscriptSource();
+    const transcriptTarget = makeTranscriptTarget();
     readSessionHistory.mockImplementationOnce(async () => {
       throw new Error("history unavailable");
     });
@@ -734,8 +723,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: transcriptSource,
+        target: transcriptTarget,
       },
       { wrapper },
     );
@@ -770,8 +758,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
           repoPath: "/repo-a",
         },
         isOpen: true,
-        externalSessionId: "session-subagent-1",
-        source: makeTranscriptSource(),
+        target: makeTranscriptTarget(),
       },
       { wrapper },
     );

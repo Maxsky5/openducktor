@@ -4,6 +4,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentQuestionRequest } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
+import type { RuntimeSessionTranscriptTarget } from "./runtime-session-transcript-target";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 (
@@ -44,17 +45,32 @@ const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
 const createThreadSession = (
   overrides: Parameters<typeof createAgentSessionFixture>[0] = {},
 ): AgentChatThreadSession => ({
-  ...createAgentSessionFixture(overrides),
+  ...createAgentSessionFixture({
+    runtimeKind: "opencode",
+    workingDirectory: "/repo-a",
+    ...overrides,
+  }),
   todos: [],
+});
+
+const createTarget = (
+  overrides: Partial<RuntimeSessionTranscriptTarget> = {},
+): RuntimeSessionTranscriptTarget => ({
+  externalSessionId: "session-1",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo-a",
+  ...overrides,
 });
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   session: createThreadSession({
     externalSessionId: "session-1",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo-a",
     pendingApprovals: [],
     pendingQuestions: [],
   }),
-  externalSessionId: "session-1",
+  target: createTarget(),
   isRuntimeReady: true,
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
@@ -130,7 +146,7 @@ describe("useRuntimeTranscriptInteractions", () => {
     const pendingApproval = createApprovalRequest("approval-1");
     const harness = createHookHarness(
       createBaseArgs({
-        externalSessionId: "session-requested",
+        target: createTarget({ externalSessionId: "session-requested" }),
         session: createThreadSession({
           externalSessionId: "session-other",
           pendingApprovals: [pendingApproval],
@@ -221,9 +237,11 @@ describe("useRuntimeTranscriptInteractions", () => {
 
       await harness.update({
         ...baseArgs,
-        externalSessionId: "session-2",
+        target: createTarget({ externalSessionId: "session-2" }),
         session: createThreadSession({
           externalSessionId: "session-2",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
           pendingApprovals: [],
           pendingQuestions: [],
         }),

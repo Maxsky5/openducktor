@@ -1,7 +1,13 @@
 import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { AgentSessionHistoryLoadState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  type AgentSessionHistoryLoadState,
+  type AgentSessionViewLifecycle,
+  deriveAgentSessionTargetViewLifecycle,
+  type SessionRepoReadinessState,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_HISTORY_STALE_TIME_MS,
@@ -11,7 +17,10 @@ import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
-import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
+import {
+  matchesRuntimeSessionTranscriptTarget,
+  type RuntimeSessionTranscriptTarget,
+} from "./runtime-session-transcript-target";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
 type ReadSessionHistory = (
@@ -21,45 +30,39 @@ type ReadSessionHistory = (
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;
   activeWorkspace: ActiveWorkspace | null;
-  externalSessionId: string | null;
-  source: RuntimeSessionTranscriptSource | null;
+  target: RuntimeSessionTranscriptTarget | null;
+  repoReadinessState: SessionRepoReadinessState;
   liveSession: AgentSessionState | null;
   readSessionHistory: ReadSessionHistory;
 };
 
 type RuntimeTranscriptSessionHistory = {
   session: AgentChatThreadSession | null;
-  historyLoadState: AgentSessionHistoryLoadState | null;
-  isHistoryLoading: boolean;
+  lifecycle: AgentSessionViewLifecycle;
   historyError: string | null;
 };
 
 export function useRuntimeTranscriptSessionHistory({
   isOpen,
   activeWorkspace,
-  externalSessionId,
-  source,
+  target,
+  repoReadinessState,
   liveSession,
   readSessionHistory,
 }: UseRuntimeTranscriptSessionHistoryArgs): RuntimeTranscriptSessionHistory {
-  const sourceLiveSession =
-    liveSession &&
-    source &&
-    liveSession.externalSessionId === externalSessionId &&
-    liveSession.runtimeKind === source.runtimeKind &&
-    liveSession.workingDirectory === source.workingDirectory
-      ? liveSession
-      : null;
+  const targetLiveSession = matchesRuntimeSessionTranscriptTarget(liveSession, target)
+    ? liveSession
+    : null;
   const historyQueryEnabled = Boolean(
-    isOpen && activeWorkspace && externalSessionId && source && sourceLiveSession === null,
+    isOpen && activeWorkspace && target && targetLiveSession === null,
   );
   const historyQueryInput =
-    source && activeWorkspace && externalSessionId
+    target && activeWorkspace
       ? {
           repoPath: activeWorkspace.repoPath,
-          runtimeKind: source.runtimeKind,
-          workingDirectory: source.workingDirectory,
-          externalSessionId,
+          runtimeKind: target.runtimeKind,
+          workingDirectory: target.workingDirectory,
+          externalSessionId: target.externalSessionId,
         }
       : null;
 
@@ -76,25 +79,25 @@ export function useRuntimeTranscriptSessionHistory({
   });
 
   const session = useMemo(() => {
-    if (sourceLiveSession) {
-      return toAgentChatThreadSession(sourceLiveSession, []);
+    if (targetLiveSession) {
+      return toAgentChatThreadSession(targetLiveSession, []);
     }
-    if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
+    if (!activeWorkspace || !target || !historyQuery.data) {
       return null;
     }
 
     return createReadonlyTranscriptSession({
-      externalSessionId,
-      runtimeKind: source.runtimeKind,
-      workingDirectory: source.workingDirectory,
+      externalSessionId: target.externalSessionId,
+      runtimeKind: target.runtimeKind,
+      workingDirectory: target.workingDirectory,
       history: historyQuery.data,
     });
-  }, [activeWorkspace, externalSessionId, historyQuery.data, sourceLiveSession, source]);
+  }, [activeWorkspace, historyQuery.data, targetLiveSession, target]);
   const historyLoadState: AgentSessionHistoryLoadState | null = (() => {
-    if (sourceLiveSession || session) {
+    if (targetLiveSession || session) {
       return "loaded";
     }
-    if (!isOpen || !activeWorkspace || !externalSessionId || !source) {
+    if (!isOpen || !activeWorkspace || !target) {
       return null;
     }
     if (historyQuery.error) {
@@ -105,11 +108,24 @@ export function useRuntimeTranscriptSessionHistory({
     }
     return "not_requested";
   })();
+  const lifecycle = useMemo(
+    () =>
+      deriveAgentSessionTargetViewLifecycle({
+        target:
+          target && historyLoadState
+            ? {
+                historyLoadState,
+                hasTranscript: session ? getSessionMessageCount(session) > 0 : false,
+              }
+            : null,
+        repoReadinessState,
+      }),
+    [historyLoadState, repoReadinessState, session, target],
+  );
 
   return {
     session,
-    historyLoadState,
-    isHistoryLoading: historyQueryEnabled && historyQuery.isPending,
+    lifecycle,
     historyError: historyQuery.error
       ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")
       : null,
