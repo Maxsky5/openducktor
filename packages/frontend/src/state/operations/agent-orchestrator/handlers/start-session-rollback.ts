@@ -1,5 +1,5 @@
 import { errorMessage } from "@/lib/errors";
-import { removeAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
+import { removeAgentSession } from "@/state/agent-session-collection";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import type {
   RuntimeDependencies,
@@ -9,13 +9,18 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { createSessionStartTags } from "./start-session-support";
 
-const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
+const readStartedSessionRuntimeKind = (startedCtx: StartedSessionContext) => {
   const runtimeKind = startedCtx.summary.runtimeKind;
   if (!runtimeKind) {
     throw new Error(
       `Runtime kind is required to stop started session '${startedCtx.summary.externalSessionId}'.`,
     );
   }
+  return runtimeKind;
+};
+
+const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
+  const runtimeKind = readStartedSessionRuntimeKind(startedCtx);
   return {
     repoPath: startedCtx.repoPath,
     externalSessionId: startedCtx.summary.externalSessionId,
@@ -64,7 +69,11 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
 }): Promise<never> => {
   const externalSessionId = startedCtx.summary.externalSessionId;
   session.setSessionCollection((current) =>
-    removeAgentSessionByExternalSessionId(current, externalSessionId),
+    removeAgentSession(current, {
+      externalSessionId,
+      runtimeKind: readStartedSessionRuntimeKind(startedCtx),
+      workingDirectory: startedCtx.workingDirectory,
+    }),
   );
 
   try {

@@ -55,35 +55,25 @@ export const replaceAgentSession = (
   session: AgentSessionState,
 ): AgentSessionCollection => {
   const key = agentSessionCollectionKey(session);
-  const next = new Map<string, AgentSessionState>();
-  let changed = collection.get(key) !== session;
-
-  for (const current of listAgentSessions(collection)) {
-    if (current.externalSessionId === session.externalSessionId) {
-      changed = changed || current !== session;
-      continue;
-    }
-    next.set(agentSessionCollectionKey(current), current);
+  if (collection.get(key) === session) {
+    return collection;
   }
-
+  const next = new Map(collection);
   next.set(key, session);
-  return changed ? next : collection;
+  return next;
 };
 
-export const removeAgentSessionByExternalSessionId = (
+export const removeAgentSession = (
   collection: AgentSessionCollection,
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
 ): AgentSessionCollection => {
-  let changed = false;
-  const next = new Map<string, AgentSessionState>();
-  for (const session of listAgentSessions(collection)) {
-    if (session.externalSessionId === externalSessionId) {
-      changed = true;
-      continue;
-    }
-    next.set(agentSessionCollectionKey(session), session);
+  const key = agentSessionCollectionKey(identity);
+  if (!collection.has(key)) {
+    return collection;
   }
-  return changed ? next : collection;
+  const next = new Map(collection);
+  next.delete(key);
+  return next;
 };
 
 export const removeAgentSessionsByExternalSessionIds = (

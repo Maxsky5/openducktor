@@ -144,6 +144,12 @@ export const readRepoRuntimeSessionPresence = async ({
       const directories = Array.from(directorySet).sort();
       const snapshots = await listSessionPresence({ repoPath, runtimeKind, directories });
       for (const snapshot of snapshots) {
+        if (
+          snapshot.ref.runtimeKind !== runtimeKind ||
+          !directorySet.has(normalizeWorkingDirectory(snapshot.ref.workingDirectory))
+        ) {
+          continue;
+        }
         snapshotsBySessionKey.set(agentSessionIdentityKey(snapshot.ref), snapshot);
       }
     }),

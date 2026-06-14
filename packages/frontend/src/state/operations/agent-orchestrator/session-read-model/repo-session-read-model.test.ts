@@ -8,6 +8,7 @@ import {
 import {
   createAgentSessionCollection,
   getAgentSessionByExternalSessionId,
+  listAgentSessions,
 } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
@@ -49,18 +50,20 @@ const createPresence = ({
   pendingApprovals = [],
   pendingQuestions = [],
   status = { type: "busy" as const },
+  workingDirectory = "/repo/worktree",
 }: {
   runtimeKind: RuntimeKind;
   externalSessionId: string;
   pendingApprovals?: AgentPendingApprovalRequest[];
   pendingQuestions?: AgentPendingQuestionRequest[];
   status?: { type: "busy" } | { type: "idle" };
+  workingDirectory?: string;
 }) =>
   toAgentSessionPresenceSnapshotFromLiveSnapshot({
     ref: {
       repoPath: "/repo",
       runtimeKind,
-      workingDirectory: "/repo/worktree",
+      workingDirectory,
       externalSessionId,
     },
     snapshot: {
@@ -68,7 +71,7 @@ const createPresence = ({
       title: `${runtimeKind} session`,
       startedAt: "2026-06-11T08:00:00.000Z",
       status,
-      workingDirectory: "/repo/worktree",
+      workingDirectory,
       pendingApprovals,
       pendingQuestions,
     },
@@ -113,6 +116,40 @@ describe("repo session read model", () => {
         workingDirectory: record.workingDirectory,
       },
     ]);
+  });
+
+  test("ignores runtime presence snapshots outside the requested working directories", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [
+        createPresence({
+          runtimeKind: "opencode",
+          externalSessionId: record.externalSessionId,
+          workingDirectory: record.workingDirectory,
+          status: { type: "busy" },
+        }),
+        createPresence({
+          runtimeKind: "opencode",
+          externalSessionId: record.externalSessionId,
+          workingDirectory: "/repo/other-worktree",
+          status: { type: "idle" },
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      runtimePresence: presence,
+    });
+
+    expect(listAgentSessions(readModel.sessionCollection)).toHaveLength(1);
+    expect(getReadModelSession(readModel, record.externalSessionId)?.workingDirectory).toBe(
+      record.workingDirectory,
+    );
   });
 
   test("a later read can restore an active session after an earlier scan missed it", async () => {
