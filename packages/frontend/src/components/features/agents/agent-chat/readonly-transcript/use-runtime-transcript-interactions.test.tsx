@@ -107,7 +107,7 @@ describe("useRuntimeTranscriptInteractions", () => {
   test("routes approval replies to the transcript session", async () => {
     const replyAgentApproval = mock(
       async (
-        _externalSessionId: string,
+        _session: AgentSessionIdentity,
         _requestId: string,
         _outcome: RuntimeApprovalReplyOutcome,
       ) => {},
@@ -130,7 +130,11 @@ describe("useRuntimeTranscriptInteractions", () => {
         await state.approvals.onReply("approval-1", "approve_once");
       });
 
-      expect(replyAgentApproval).toHaveBeenCalledWith("session-1", "approval-1", "approve_once");
+      expect(replyAgentApproval).toHaveBeenCalledWith(
+        expect.objectContaining(createTarget()),
+        "approval-1",
+        "approve_once",
+      );
     } finally {
       await harness.unmount();
     }
@@ -139,7 +143,7 @@ describe("useRuntimeTranscriptInteractions", () => {
   test("blocks approval replies when the active session id does not match the transcript target", async () => {
     const replyAgentApproval = mock(
       async (
-        _externalSessionId: string,
+        _session: AgentSessionIdentity,
         _requestId: string,
         _outcome: RuntimeApprovalReplyOutcome,
       ) => {},
@@ -194,7 +198,11 @@ describe("useRuntimeTranscriptInteractions", () => {
         (state) => state.pendingQuestions.isSubmittingByRequestId["question-1"] === true,
       );
 
-      expect(answerAgentQuestion).toHaveBeenCalledWith("session-1", "question-1", [["A"]]);
+      expect(answerAgentQuestion).toHaveBeenCalledWith(
+        expect.objectContaining(createTarget()),
+        "question-1",
+        [["A"]],
+      );
 
       await harness.run(async () => {
         deferredAnswer.resolve(undefined);

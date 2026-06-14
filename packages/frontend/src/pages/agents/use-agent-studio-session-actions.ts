@@ -191,7 +191,7 @@ export function useAgentStudioSessionActions({
     activeWorkspace,
     taskId,
     role,
-    activeExternalSessionId: sessionState.activeExternalSessionId,
+    activeSession,
     activeSessionIsLoadingModelCatalog: sessionState.activeSessionIsLoadingModelCatalog,
     activeSessionSelectedModel: sessionState.activeSessionSelectedModel,
     agentStudioReady,
@@ -231,7 +231,7 @@ export function useAgentStudioSessionActions({
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentStudioQuestionActions({
-      activeExternalSessionId: sessionState.activeExternalSessionId,
+      activeSession,
       agentStudioReady,
       pendingQuestions: sessionState.activeSessionPendingQuestions,
       answerAgentQuestion,

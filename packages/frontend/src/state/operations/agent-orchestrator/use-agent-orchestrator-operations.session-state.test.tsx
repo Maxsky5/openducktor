@@ -136,9 +136,14 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1");
       });
+      const loadedState = await harness.waitFor((state) => state.sessions.length === 1);
+      const session = loadedState.sessions[0];
+      if (!session) {
+        throw new Error("Expected loaded session");
+      }
 
       await harness.run(async () => {
-        await harness.getLatest().sendAgentMessage("external-1", [{ kind: "text", text: "prime" }]);
+        await harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "prime" }]);
       });
 
       expect(eventHandlerRef.current).not.toBeNull();
@@ -374,11 +379,16 @@ describe("use-agent-orchestrator-operations session state", () => {
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1");
       });
+      const loadedState = await harness.waitFor((state) => state.sessions.length === 1);
+      const session = loadedState.sessions[0];
+      if (!session) {
+        throw new Error("Expected loaded session");
+      }
       await harness.updateArgs({ tasks: [unavailableTask] });
 
       await harness.run(async () => {
         await expect(
-          harness.getLatest().sendAgentMessage("external-1", [{ kind: "text", text: "hello" }]),
+          harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
         ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       });
 

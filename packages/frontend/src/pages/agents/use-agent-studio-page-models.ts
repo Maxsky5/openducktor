@@ -7,6 +7,7 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents/agent-studio-task-tabs";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentStateContextValue } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import {
@@ -63,7 +64,7 @@ type AgentStudioSessionActionsContext = {
   busySendBlockedReason: string | null;
   canStopSession: boolean;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
-  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  stopAgentSession: AgentStateContextValue["stopAgentSession"];
 };
 
 type AgentStudioModelSelectionContext = {
@@ -202,7 +203,8 @@ export function useAgentStudioPageModels({
 
   const selectedActiveComposerSession = selectedSession.chat.activeComposerSession;
   const activeComposerExternalSessionId = selectedActiveComposerSession?.externalSessionId ?? null;
-  const activeComposerRuntimeKind = selectedActiveComposerSession?.runtimeKind ?? null;
+  const activeComposerRuntimeKind = selectedActiveComposerSession?.runtimeKind;
+  const activeComposerWorkingDirectory = selectedActiveComposerSession?.workingDirectory;
   const activeComposerSelectedModel = selectedActiveComposerSession?.selectedModel ?? null;
   const activeComposerIsLoadingModelCatalog =
     selectedActiveComposerSession?.isLoadingModelCatalog ?? false;
@@ -210,27 +212,33 @@ export function useAgentStudioPageModels({
     selectedActiveComposerSession?.pendingApprovals ?? EMPTY_ACTIVE_COMPOSER_PENDING_APPROVALS;
   const activeComposerPendingQuestions =
     selectedActiveComposerSession?.pendingQuestions ?? EMPTY_ACTIVE_COMPOSER_PENDING_QUESTIONS;
-  const activeComposerSession = useMemo(
-    () =>
-      activeComposerExternalSessionId
-        ? {
-            externalSessionId: activeComposerExternalSessionId,
-            runtimeKind: activeComposerRuntimeKind,
-            selectedModel: activeComposerSelectedModel,
-            isLoadingModelCatalog: activeComposerIsLoadingModelCatalog,
-            pendingApprovals: activeComposerPendingApprovals,
-            pendingQuestions: activeComposerPendingQuestions,
-          }
-        : null,
-    [
-      activeComposerExternalSessionId,
-      activeComposerIsLoadingModelCatalog,
-      activeComposerPendingApprovals,
-      activeComposerPendingQuestions,
-      activeComposerRuntimeKind,
-      activeComposerSelectedModel,
-    ],
-  );
+  const activeComposerSession = useMemo(() => {
+    if (
+      !activeComposerExternalSessionId ||
+      !activeComposerRuntimeKind ||
+      activeComposerWorkingDirectory === undefined
+    ) {
+      return null;
+    }
+
+    return {
+      externalSessionId: activeComposerExternalSessionId,
+      runtimeKind: activeComposerRuntimeKind,
+      workingDirectory: activeComposerWorkingDirectory,
+      selectedModel: activeComposerSelectedModel,
+      isLoadingModelCatalog: activeComposerIsLoadingModelCatalog,
+      pendingApprovals: activeComposerPendingApprovals,
+      pendingQuestions: activeComposerPendingQuestions,
+    };
+  }, [
+    activeComposerExternalSessionId,
+    activeComposerIsLoadingModelCatalog,
+    activeComposerPendingApprovals,
+    activeComposerPendingQuestions,
+    activeComposerRuntimeKind,
+    activeComposerSelectedModel,
+    activeComposerWorkingDirectory,
+  ]);
   const selectedChatContextUsage = selectedSession.chat.contextUsage;
   const contextUsageTotalTokens = selectedChatContextUsage?.totalTokens ?? null;
   const contextUsageContextWindow = selectedChatContextUsage?.contextWindow ?? null;

@@ -1,34 +1,37 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { isSameSelection } from "@/features/session-start";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { resolveActiveSessionModelSelection } from "./model-selection-preferences";
 
 export const useActiveSessionModelSelectionRepair = ({
-  activeExternalSessionId,
+  activeSession,
   activeSessionModelCatalog,
   activeSessionSelectedModel,
   roleDefaultSelection,
   updateAgentSessionModel,
 }: {
-  activeExternalSessionId: string | null;
+  activeSession: AgentSessionIdentity | null;
   activeSessionModelCatalog: AgentModelCatalog | null;
   activeSessionSelectedModel: AgentModelSelection | null;
   roleDefaultSelection: AgentModelSelection | null;
   updateAgentSessionModel: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => void;
 }): void => {
   const lastRepairRef = useRef<{
-    externalSessionId: string;
+    sessionKey: string;
     selection: AgentModelSelection;
   } | null>(null);
 
   useEffect(() => {
-    if (!activeExternalSessionId) {
+    if (!activeSession) {
       lastRepairRef.current = null;
       return;
     }
+    const activeSessionKey = agentSessionIdentityKey(activeSession);
     const preferredSelection = resolveActiveSessionModelSelection({
       catalog: activeSessionModelCatalog,
       selectedModel: activeSessionSelectedModel,
@@ -40,18 +43,18 @@ export const useActiveSessionModelSelectionRepair = ({
     }
     if (
       lastRepairRef.current &&
-      lastRepairRef.current.externalSessionId === activeExternalSessionId &&
+      lastRepairRef.current.sessionKey === activeSessionKey &&
       isSameSelection(lastRepairRef.current.selection, preferredSelection)
     ) {
       return;
     }
     lastRepairRef.current = {
-      externalSessionId: activeExternalSessionId,
+      sessionKey: activeSessionKey,
       selection: preferredSelection,
     };
-    updateAgentSessionModel(activeExternalSessionId, preferredSelection);
+    updateAgentSessionModel(activeSession, preferredSelection);
   }, [
-    activeExternalSessionId,
+    activeSession,
     activeSessionModelCatalog,
     activeSessionSelectedModel,
     roleDefaultSelection,

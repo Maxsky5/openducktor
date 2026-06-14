@@ -101,7 +101,7 @@ describe("session-start-workflow", () => {
         targetWorkingDirectory: "/repo/worktrees/conflict-task-1",
       }),
     );
-    expect(settleStartedAgentSession).toHaveBeenCalledWith("session-new");
+    expect(settleStartedAgentSession).toHaveBeenCalledWith(sessionIdentity("session-new"));
   });
 
   test("uses the just-selected target branch for pull request kickoff prompts", async () => {
@@ -144,14 +144,14 @@ describe("session-start-workflow", () => {
       ...sessionIdentity("session-pr"),
       postStartActionError: null,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-pr", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-pr"), [
       expect.objectContaining({
         kind: "text",
         text: expect.stringContaining("targetBranch: origin/release/2026.04"),
       }),
     ]);
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
-      [string, Array<{ text?: string }>]
+      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
     expect(sentText).not.toContain("targetBranch: origin/main");
@@ -195,7 +195,7 @@ describe("session-start-workflow", () => {
       postStartActionError: null,
     });
     const sentCalls = sendAgentMessage.mock.calls as unknown as Array<
-      [string, Array<{ text?: string }>]
+      [ReturnType<typeof sessionIdentity>, Array<{ text?: string }>]
     >;
     const sentText = sentCalls[0]?.[1]?.[0]?.text ?? "";
     expect(sentText).toContain("Requested changes from human review:");
@@ -233,7 +233,7 @@ describe("session-start-workflow", () => {
 
     expect(startAgentSession).toHaveBeenCalledWith(expect.objectContaining({ startMode: "fresh" }));
     expect(sendAgentMessage).toHaveBeenCalledWith(
-      "session-build-new",
+      sessionIdentity("session-build-new"),
       expect.arrayContaining([expect.objectContaining({ kind: "text" })]),
     );
     expect(settleStartedAgentSession).not.toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe("session-start-workflow", () => {
     expect(result.postStartActionError?.message).toBe(
       "Feedback message is required before sending.",
     );
-    expect(settleStartedAgentSession).toHaveBeenCalledWith("session-build-new");
+    expect(settleStartedAgentSession).toHaveBeenCalledWith(sessionIdentity("session-build-new"));
     expect(sendAgentMessage).not.toHaveBeenCalled();
   });
 
@@ -306,7 +306,7 @@ describe("session-start-workflow", () => {
       ...sessionIdentity("session-codex", "codex"),
       postStartActionError: null,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-codex", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-codex", "codex"), [
       expect.objectContaining({
         kind: "text",
         text: expect.stringContaining("taskId TASK-4"),
@@ -352,7 +352,7 @@ describe("session-start-workflow", () => {
       ...sessionIdentity("session-codex-reuse", "codex"),
       postStartActionError: null,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-codex-reuse", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-codex-reuse", "codex"), [
       expect.objectContaining({
         kind: "text",
         text: expect.stringContaining("taskId TASK-5"),

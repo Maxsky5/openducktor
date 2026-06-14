@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
-import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
+import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 
 (
@@ -24,8 +24,16 @@ const createApprovalRequest = (requestId: string): AgentApprovalRequest => ({
   supportedReplyOutcomes: ["approve_once", "approve_session", "reject"],
 });
 
+const sessionIdentity = (
+  externalSessionId: string = TEST_EXTERNAL_SESSION_IDS.default,
+): AgentSessionIdentity => ({
+  externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeExternalSessionId: TEST_EXTERNAL_SESSION_IDS.default,
+  activeSession: sessionIdentity(),
   pendingApprovals: [createApprovalRequest("req-1")],
   agentStudioReady: true,
   replyAgentApproval: async () => {},
@@ -36,7 +44,7 @@ describe("useAgentSessionApprovalActions", () => {
   test("does nothing when session is missing or studio is not ready", async () => {
     const replyAgentApproval = mock(async () => {});
     const base = createBaseArgs({ replyAgentApproval });
-    const harness = createHookHarness({ ...base, activeExternalSessionId: null });
+    const harness = createHookHarness({ ...base, activeSession: null });
 
     try {
       await harness.mount();
@@ -70,11 +78,7 @@ describe("useAgentSessionApprovalActions", () => {
       });
 
       await harness.waitFor((state) => state.isSubmittingApprovalByRequestId["req-1"] === true);
-      expect(replyAgentApproval).toHaveBeenCalledWith(
-        TEST_EXTERNAL_SESSION_IDS.default,
-        "req-1",
-        "approve_once",
-      );
+      expect(replyAgentApproval).toHaveBeenCalledWith(sessionIdentity(), "req-1", "approve_once");
 
       await harness.run(async () => {
         deferredReply.resolve(undefined);
@@ -101,11 +105,7 @@ describe("useAgentSessionApprovalActions", () => {
         await state.onReplyApproval("req-1", "reject");
       });
 
-      expect(replyAgentApproval).toHaveBeenCalledWith(
-        TEST_EXTERNAL_SESSION_IDS.default,
-        "req-1",
-        "reject",
-      );
+      expect(replyAgentApproval).toHaveBeenCalledWith(sessionIdentity(), "req-1", "reject");
       expect(harness.getLatest().approvalReplyErrorByRequestId["req-1"]).toBe("approval denied");
       expect(harness.getLatest().isSubmittingApprovalByRequestId["req-1"]).toBeUndefined();
     } finally {
@@ -180,7 +180,7 @@ describe("useAgentSessionApprovalActions", () => {
 
       await harness.update({
         ...baseArgs,
-        activeExternalSessionId: TEST_EXTERNAL_SESSION_IDS.secondary,
+        activeSession: sessionIdentity(TEST_EXTERNAL_SESSION_IDS.secondary),
       });
 
       await harness.waitFor(

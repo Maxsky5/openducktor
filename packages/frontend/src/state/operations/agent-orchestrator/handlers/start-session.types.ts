@@ -14,7 +14,7 @@ import type {
   AgentSessionCollection,
   AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
-import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
@@ -67,7 +67,7 @@ export type TaskDependencies = {
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
+  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
 };
 
 export type ModelDependencies = {

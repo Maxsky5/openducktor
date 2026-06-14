@@ -229,7 +229,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.stopAgentSession("session-1");
+      await actions.stopAgentSession(getSession(sessionsRef));
       expect(stopTargets).toEqual([
         {
           repoPath: "/tmp/repo",
@@ -314,7 +314,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await expect(actions.stopAgentSession("session-1")).rejects.toThrow(
+      await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
         "Failed to stop build session 'session-1': build stop failed",
       );
       expect(clearCalls).toBe(0);
@@ -347,7 +347,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      const stopPromise = actions.stopAgentSession("session-1");
+      const stopPromise = actions.stopAgentSession(getSession(sessionsRef));
       await Promise.resolve();
 
       expect(getSession(sessionsRef)?.stopRequestedAt).toBeString();
@@ -466,7 +466,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.stopAgentSession("session-1");
+      await actions.stopAgentSession(getSession(sessionsRef));
 
       const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
       expect(lastMessage?.content).toBe("Session stopped at your request.");
@@ -533,7 +533,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.stopAgentSession("session-1");
+      await actions.stopAgentSession(getSession(sessionsRef));
 
       expect(localStopCalls).toBe(0);
       const lastMessage = lastSessionMessageForTest(getSession(sessionsRef));
@@ -601,7 +601,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     console.warn = () => {};
 
     try {
-      await expect(actions.stopAgentSession("session-1")).resolves.toBeUndefined();
+      await expect(actions.stopAgentSession(getSession(sessionsRef))).resolves.toBeUndefined();
       expect(callOrder).toEqual(["host-stop", "local-release"]);
       expect(clearCalls).toBe(1);
       expect(unsubscribeCalls).toBe(1);
@@ -644,7 +644,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.stopAgentSession("session-1");
+      await actions.stopAgentSession(getSession(sessionsRef));
       expect(buildStopCalls).toBe(1);
       expect(localReleaseCalls).toBe(1);
       expect(getSession(sessionsRef)?.status).toBe("stopped");
@@ -718,7 +718,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      const stopPromise = actions.stopAgentSession("session-1");
+      const stopPromise = actions.stopAgentSession(getSession(sessionsRef));
       await Promise.resolve();
 
       expect(callOrder).toContain("stop-authoritative-session");
@@ -773,7 +773,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.stopAgentSession("session-1");
+      await actions.stopAgentSession(getSession(sessionsRef));
       expect(localReleaseCalls).toBe(1);
       expect(refreshTaskDataCalls).toBe(1);
       expect(loadAgentSessionsCalls).toBe(1);
@@ -822,7 +822,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     });
 
-    await expect(actions.stopAgentSession("session-1")).rejects.toThrow(
+    await expect(actions.stopAgentSession(getSession(sessionsRef))).rejects.toThrow(
       "Active workspace repo path is unavailable.",
     );
 
@@ -883,7 +883,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      actions.updateAgentSessionModel("session-1", {
+      actions.updateAgentSessionModel(getSession(sessionsRef), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -891,7 +891,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
       expect(updateSessionOptions).toEqual([{ persist: true }]);
 
-      await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
+      await actions.replyAgentApproval(getSession(sessionsRef), "perm-1", "approve_once");
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
       expect(updateSessionOptions).toEqual([{ persist: true }, { persist: false }]);
@@ -987,7 +987,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
+      await actions.replyAgentApproval(getSession(sessionsRef), "perm-1", "approve_once");
       expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingApprovals).toEqual([]);
@@ -1017,7 +1017,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(
-        actions.replyAgentApproval("session-transcript-1", "perm-1", "approve_once"),
+        actions.replyAgentApproval(
+          buildSession({ externalSessionId: "session-transcript-1" }),
+          "perm-1",
+          "approve_once",
+        ),
       ).rejects.toThrow("Session 'session-transcript-1' is not loaded.");
 
       expect(replyCalls).toBe(0);
@@ -1086,7 +1090,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
+      await actions.answerAgentQuestion(getSession(sessionsRef), "question-1", [["yes"]]);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
       expect(updateSessionOptions).toEqual([{ persist: false }]);
@@ -1120,7 +1124,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(
-        actions.answerAgentQuestion("session-transcript-1", "question-1", [["yes"]]),
+        actions.answerAgentQuestion(
+          buildSession({ externalSessionId: "session-transcript-1" }),
+          "question-1",
+          [["yes"]],
+        ),
       ).rejects.toThrow("Session 'session-transcript-1' is not loaded.");
 
       expect(replyCalls).toBe(0);
@@ -1201,7 +1209,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
+      await actions.answerAgentQuestion(getSession(sessionsRef), "question-1", [["yes"]]);
       expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
       expect(getSession(sessionsRef)?.pendingQuestions).toEqual([]);
@@ -1250,7 +1258,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
       expect(sendCalls).toBe(1);
       expect(getSession(sessionsRef)?.status).toBe("running");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
@@ -1306,7 +1314,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
 
       expect(sendCalls).toBe(1);
       expect(committedStatuses).not.toContain("idle");
@@ -1352,7 +1360,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
 
       expect(sendCalls).toBe(0);
       expect(getSession(sessionsRef)?.status).toBe("idle");
@@ -1399,7 +1407,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(
-        actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
       ).rejects.toThrow("Task not found: task-1");
 
       expect(sendCalls).toBe(0);
@@ -1445,7 +1453,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
 
       expect(callOrder).toEqual(["send"]);
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
@@ -1509,7 +1517,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(
-        actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
       ).rejects.toThrow("Session is waiting for pending runtime input.");
 
       expect(sendCalls).toBe(0);
@@ -1556,7 +1564,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: " hello " }]);
       expect(sendCalls).toBe(0);
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
       expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
@@ -1606,7 +1614,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await expect(
-        actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
       ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       expect(sendCalls).toBe(0);
     } finally {
@@ -1652,7 +1660,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.stopAgentSession("session-1");
+      await actions.stopAgentSession(getSession(sessionsRef));
       expect(stopCalls).toBe(1);
       expect(getSession(sessionsRef)?.status).toBe("stopped");
     } finally {
@@ -1689,7 +1697,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]);
       expect(getSession(sessionsRef)?.status).toBe("error");
       const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
         message.content.includes("Failed to send message:"),
@@ -1776,7 +1784,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "queued follow-up" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "queued follow-up" },
+      ]);
 
       expect(sendCalls).toEqual([
         { externalSessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
@@ -1853,7 +1863,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     });
 
     try {
-      await actions.sendAgentMessage("session-1", [{ kind: "text", text: "queued follow-up" }]);
+      await actions.sendAgentMessage(getSession(sessionsRef), [
+        { kind: "text", text: "queued follow-up" },
+      ]);
 
       expect(getSession(sessionsRef)?.status).toBe("running");
       expect(getSession(sessionsRef)?.draftAssistantText).toBe("Still working");

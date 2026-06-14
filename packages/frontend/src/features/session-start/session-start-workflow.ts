@@ -280,7 +280,7 @@ export const startSessionWorkflow = async ({
   });
 
   if (intent.postStartAction === "none") {
-    settleStartedAgentSession(session.externalSessionId);
+    settleStartedAgentSession(session);
     return {
       ...session,
       postStartActionError: null,
@@ -302,12 +302,12 @@ export const startSessionWorkflow = async ({
         task,
       });
     } catch (error) {
-      settleStartedAgentSession(session.externalSessionId);
+      settleStartedAgentSession(session);
       return toError(error);
     }
 
     try {
-      await confirmedPostStartMessageSender(session.externalSessionId, [
+      await confirmedPostStartMessageSender(session, [
         {
           kind: "text",
           text: postStartMessage,

@@ -278,7 +278,7 @@ describe("session-start-orchestration", () => {
       ...sessionIdentity("codex-session-1", "codex"),
       postStartActionError: null,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("codex-session-1", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("codex-session-1", "codex"), [
       expect.objectContaining({
         kind: "text",
         text: expect.stringContaining("taskId TASK-1"),

@@ -103,15 +103,13 @@ describe("use-agent-orchestrator-operations start and send", () => {
       });
 
       const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
-      const externalSessionId = sessionState.sessions[0]?.externalSessionId;
-      if (!externalSessionId) {
-        throw new Error("Expected loaded session id");
+      const session = sessionState.sessions[0];
+      if (!session) {
+        throw new Error("Expected loaded session");
       }
 
       await harness.run(async () => {
-        await harness
-          .getLatest()
-          .sendAgentMessage(externalSessionId, [{ kind: "text", text: "hello" }]);
+        await harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "hello" }]);
       });
 
       expect(subscribeCalls).toBeGreaterThan(0);
@@ -244,10 +242,15 @@ describe("use-agent-orchestrator-operations start and send", () => {
       await harness.run(async () => {
         await harness.getLatest().loadAgentSessions("task-1");
       });
+      const sessionState = await harness.waitFor((state) => state.sessions.length === 1);
+      const session = sessionState.sessions[0];
+      if (!session) {
+        throw new Error("Expected loaded session");
+      }
 
       await harness.run(async () => {
         await expect(
-          harness.getLatest().sendAgentMessage("external-1", [{ kind: "text", text: "hello" }]),
+          harness.getLatest().sendAgentMessage(session, [{ kind: "text", text: "hello" }]),
         ).rejects.toThrow("Role 'build' is unavailable for task 'task-1' in status 'open'.");
       });
 

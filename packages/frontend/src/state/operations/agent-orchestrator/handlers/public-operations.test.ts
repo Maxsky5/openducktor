@@ -11,6 +11,12 @@ const BUILD_SELECTION = {
   profileId: "build",
 };
 
+const SESSION_IDENTITY = {
+  externalSessionId: "session-1",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktrees/session-1",
+};
+
 type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["sessionActions"];
 
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
@@ -142,7 +148,7 @@ describe("agent-orchestrator-public-operations", () => {
 
     try {
       await expect(
-        operations.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]),
+        operations.sendAgentMessage(SESSION_IDENTITY, [{ kind: "text", text: "hello" }]),
       ).rejects.toThrow("send failed");
       expect(toastError).toHaveBeenCalledWith("Failed to send message", {
         description: "send failed",
@@ -181,7 +187,7 @@ describe("agent-orchestrator-public-operations", () => {
     });
 
     try {
-      await expect(operations.stopAgentSession("session-1")).rejects.toThrow("stop failed");
+      await expect(operations.stopAgentSession(SESSION_IDENTITY)).rejects.toThrow("stop failed");
       expect(toastError).toHaveBeenCalledWith("Failed to stop agent session", {
         description: "stop failed",
       });

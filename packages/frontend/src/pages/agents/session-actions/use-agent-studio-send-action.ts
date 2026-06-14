@@ -1,6 +1,6 @@
 import type { ReusablePrompt, TaskCard } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentUserMessagePart } from "@openducktor/core";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
@@ -10,8 +10,9 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { resolveReusablePromptDraftToUserMessageParts } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import type { SessionStartWorkflowResult } from "@/features/session-start";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import {
   buildAgentStudioAsyncActivityContextKey,
@@ -24,7 +25,7 @@ type UseAgentStudioSendActionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskId: string;
   role: AgentRole;
-  activeExternalSessionId: string | null;
+  activeSession: AgentSessionIdentity | null;
   activeSessionIsLoadingModelCatalog: boolean;
   activeSessionSelectedModel: AgentSessionState["selectedModel"] | null;
   agentStudioReady: boolean;
@@ -43,7 +44,7 @@ export function useAgentStudioSendAction({
   activeWorkspace,
   taskId,
   role,
-  activeExternalSessionId,
+  activeSession,
   activeSessionIsLoadingModelCatalog,
   activeSessionSelectedModel,
   agentStudioReady,
@@ -68,6 +69,11 @@ export function useAgentStudioSendAction({
     inFlightContextsRef.current = new Set<string>();
   }
   const inFlightContexts = inFlightContextsRef.current;
+  const activeSessionIdentity = useMemo(
+    () => (activeSession ? toAgentSessionIdentity(activeSession) : null),
+    [activeSession],
+  );
+  const activeExternalSessionId = activeSessionIdentity?.externalSessionId ?? null;
   const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
     activeWorkspace,
     taskId,
@@ -87,7 +93,7 @@ export function useAgentStudioSendAction({
       ) {
         return false;
       }
-      if (!activeExternalSessionId && !canStartSessionForRole(selectedTask, role)) {
+      if (!activeSessionIdentity && !canStartSessionForRole(selectedTask, role)) {
         return false;
       }
       if (activeSessionIsLoadingModelCatalog && !activeSessionSelectedModel) {
@@ -128,13 +134,13 @@ export function useAgentStudioSendAction({
       );
 
       try {
-        let targetExternalSessionId: string | null | undefined = activeExternalSessionId;
-        if (!targetExternalSessionId) {
+        let targetSession: AgentSessionIdentity | null | undefined = activeSessionIdentity;
+        if (!targetSession) {
           const startedSession = await startSession();
-          targetExternalSessionId = startedSession?.externalSessionId;
+          targetSession = startedSession ? toAgentSessionIdentity(startedSession) : null;
         }
 
-        if (!targetExternalSessionId) {
+        if (!targetSession) {
           return false;
         }
 
@@ -142,7 +148,7 @@ export function useAgentStudioSendAction({
           activeWorkspace,
           taskId,
           role,
-          externalSessionId: targetExternalSessionId,
+          externalSessionId: targetSession.externalSessionId,
         });
         if (!sendContextKeys.has(targetComposerContextKey)) {
           sendContextKeys.add(targetComposerContextKey);
@@ -152,7 +158,7 @@ export function useAgentStudioSendAction({
           );
         }
         await sendAgentMessage(
-          targetExternalSessionId,
+          targetSession,
           reusablePromptMessageParts ??
             (await resolveDraftToUserMessageParts(draft, async (attachment) => {
               if (attachment.file) {
@@ -181,7 +187,7 @@ export function useAgentStudioSendAction({
     [
       activeWorkspace,
       activeComposerContextKey,
-      activeExternalSessionId,
+      activeSessionIdentity,
       activeSessionIsLoadingModelCatalog,
       activeSessionSelectedModel,
       agentStudioReady,

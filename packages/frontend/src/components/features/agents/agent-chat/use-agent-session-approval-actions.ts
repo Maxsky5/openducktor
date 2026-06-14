@@ -1,13 +1,14 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useCallback, useMemo, useState } from "react";
-import type { AgentApprovalRequest } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 type UseAgentSessionApprovalActionsParams = {
-  activeExternalSessionId: string | null;
+  activeSession: AgentSessionIdentity | null;
   pendingApprovals: readonly AgentApprovalRequest[];
   agentStudioReady: boolean;
   replyAgentApproval: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     requestId: string,
     outcome: RuntimeApprovalReplyOutcome,
   ) => Promise<void>;
@@ -46,7 +47,7 @@ const filterStringMapByPendingRequestIds = (
 };
 
 export function useAgentSessionApprovalActions({
-  activeExternalSessionId,
+  activeSession,
   pendingApprovals,
   agentStudioReady,
   replyAgentApproval,
@@ -65,17 +66,18 @@ export function useAgentSessionApprovalActions({
     () => JSON.stringify(pendingApprovals.map((request) => request.requestId)),
     [pendingApprovals],
   );
+  const activeSessionKey = activeSession ? agentSessionIdentityKey(activeSession) : null;
   const [resetInputs, setResetInputs] = useState({
-    activeExternalSessionId,
+    activeSessionKey,
     pendingApprovalRequestIdsKey,
   });
 
   if (
-    resetInputs.activeExternalSessionId !== activeExternalSessionId ||
+    resetInputs.activeSessionKey !== activeSessionKey ||
     resetInputs.pendingApprovalRequestIdsKey !== pendingApprovalRequestIdsKey
   ) {
-    const sessionChanged = resetInputs.activeExternalSessionId !== activeExternalSessionId;
-    setResetInputs({ activeExternalSessionId, pendingApprovalRequestIdsKey });
+    const sessionChanged = resetInputs.activeSessionKey !== activeSessionKey;
+    setResetInputs({ activeSessionKey, pendingApprovalRequestIdsKey });
 
     if (sessionChanged) {
       setIsSubmittingApprovalByRequestId({});
@@ -93,7 +95,7 @@ export function useAgentSessionApprovalActions({
 
   const onReplyApproval = useCallback(
     async (requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> => {
-      if (!activeExternalSessionId || !agentStudioReady) {
+      if (!activeSession || !agentStudioReady) {
         return;
       }
 
@@ -111,7 +113,7 @@ export function useAgentSessionApprovalActions({
       });
 
       try {
-        await replyAgentApproval(activeExternalSessionId, requestId, outcome);
+        await replyAgentApproval(activeSession, requestId, outcome);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim().length > 0
@@ -132,7 +134,7 @@ export function useAgentSessionApprovalActions({
         });
       }
     },
-    [activeExternalSessionId, agentStudioReady, replyAgentApproval],
+    [activeSession, agentStudioReady, replyAgentApproval],
   );
 
   return {

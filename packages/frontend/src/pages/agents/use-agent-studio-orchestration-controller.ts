@@ -394,7 +394,7 @@ export function useAgentStudioOrchestrationController({
 
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeExternalSessionId: viewActiveSession?.externalSessionId ?? null,
+      activeSession: viewActiveSession,
       pendingApprovals: viewActiveSession?.pendingApprovals ?? [],
       agentStudioReady,
       replyAgentApproval,

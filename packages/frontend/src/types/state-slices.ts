@@ -30,7 +30,11 @@ import type {
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type { AgentSessionRouteIdentity, AgentSessionState } from "./agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionRouteIdentity,
+  AgentSessionState,
+} from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -221,21 +225,21 @@ export type AgentOperationsContextValue = {
           sourceExternalSessionId: string;
         },
   ) => Promise<AgentSessionRouteIdentity>;
-  settleStartedAgentSession: (externalSessionId: string) => void;
-  sendAgentMessage: (externalSessionId: string, parts: AgentUserMessagePart[]) => Promise<void>;
-  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  settleStartedAgentSession: (session: AgentSessionIdentity) => void;
+  sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
+  stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   updateAgentSessionModel: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ) => void;
   replyAgentApproval: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     requestId: string,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ) => Promise<void>;
   answerAgentQuestion: (
-    externalSessionId: string,
+    session: AgentSessionIdentity,
     requestId: string,
     answers: string[][],
   ) => Promise<void>;

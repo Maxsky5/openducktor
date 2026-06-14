@@ -8,7 +8,7 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
@@ -88,6 +88,9 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const localSessionIdentity = (externalSessionId: string) =>
+  toAgentSessionIdentity(createSession({ externalSessionId }));
 
 const QUEUED_RUNTIME_DESCRIPTOR = {
   ...OPENCODE_RUNTIME_DESCRIPTOR,
@@ -511,7 +514,7 @@ describe("useAgentStudioSessionActions", () => {
       },
       startMode: "fresh" as const,
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "  hello world  " },
     ]);
     expect(updateCalls.some((entry) => entry.session === "session-new")).toBe(true);
@@ -537,7 +540,7 @@ describe("useAgentStudioSessionActions", () => {
     });
 
     expect(startAgentSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "  hello world  " },
     ]);
 
@@ -566,7 +569,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "slash_command", command: COMMAND },
     ]);
 
@@ -603,7 +606,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "Review this file:\nsrc/foo.ts" },
     ]);
 
@@ -640,7 +643,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "Review this carefully.\nsrc/foo.ts" },
     ]);
 
@@ -697,7 +700,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "file_reference", file: FILE_REFERENCE },
     ]);
 
@@ -733,7 +736,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "hello world" },
     ]);
 
@@ -795,7 +798,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "hello world" },
     ]);
 
@@ -844,7 +847,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(createComposerDraft("hello world"))).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "hello world" },
     ]);
 
@@ -951,7 +954,7 @@ describe("useAgentStudioSessionActions", () => {
       sendPromise = state.onSend(draft);
     });
     await harness.waitFor(() => sendAgentMessage.mock.calls.length === 1, 1_000);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "  hello world  " },
     ]);
     expect(harness.getLatest().isSending).toBe(true);
@@ -1029,7 +1032,7 @@ describe("useAgentStudioSessionActions", () => {
       ).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "please review" },
       {
         kind: "attachment",
@@ -1374,7 +1377,7 @@ describe("useAgentStudioSessionActions", () => {
       await expect(state.onSend(draft)).resolves.toBe(true);
     });
 
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "  hello world  " },
     ]);
 
@@ -1450,7 +1453,9 @@ describe("useAgentStudioSessionActions", () => {
       await state.onSubmitQuestionAnswers("req-1", [["yes"]]);
     });
 
-    expect(answerAgentQuestion).toHaveBeenCalledWith("session-9", "req-1", [["yes"]]);
+    expect(answerAgentQuestion).toHaveBeenCalledWith(localSessionIdentity("session-9"), "req-1", [
+      ["yes"],
+    ]);
 
     await harness.unmount();
   });
@@ -1613,7 +1618,7 @@ describe("useAgentStudioSessionActions", () => {
   test("question actions no-op when there is no active session", async () => {
     const answerAgentQuestion = mock(async () => {});
     const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
-      activeExternalSessionId: null,
+      activeSession: null,
       agentStudioReady: true,
       pendingQuestions: [],
       answerAgentQuestion,

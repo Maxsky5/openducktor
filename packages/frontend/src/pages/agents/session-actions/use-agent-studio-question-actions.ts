@@ -1,16 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
 type UseAgentStudioQuestionActionsArgs = {
-  activeExternalSessionId: string | null;
+  activeSession: AgentSessionIdentity | null;
   agentStudioReady: boolean;
   pendingQuestions: AgentSessionState["pendingQuestions"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 
 export function useAgentStudioQuestionActions({
-  activeExternalSessionId,
+  activeSession,
   agentStudioReady,
   pendingQuestions,
   answerAgentQuestion,
@@ -24,10 +24,10 @@ export function useAgentStudioQuestionActions({
 
   const onSubmitQuestionAnswers = useCallback(
     async (requestId: string, answers: string[][]): Promise<void> => {
-      if (!activeExternalSessionId || !agentStudioReady) {
+      if (!activeSession || !agentStudioReady) {
         return;
       }
-      const sessionId = activeExternalSessionId;
+      const sessionId = activeSession.externalSessionId;
 
       setSubmittingQuestionBySessionId((current) => ({
         ...current,
@@ -37,7 +37,7 @@ export function useAgentStudioQuestionActions({
         },
       }));
       try {
-        await answerAgentQuestion(sessionId, requestId, answers);
+        await answerAgentQuestion(activeSession, requestId, answers);
       } finally {
         setSubmittingQuestionBySessionId((current) => {
           const sessionRequests = current[sessionId];
@@ -56,20 +56,20 @@ export function useAgentStudioQuestionActions({
         });
       }
     },
-    [activeExternalSessionId, agentStudioReady, answerAgentQuestion],
+    [activeSession, agentStudioReady, answerAgentQuestion],
   );
 
   const isSubmittingQuestionByRequestId = useMemo(() => {
-    if (!activeExternalSessionId) {
+    if (!activeSession) {
       return {};
     }
 
-    const sessionRequests = submittingQuestionBySessionId[activeExternalSessionId] ?? {};
+    const sessionRequests = submittingQuestionBySessionId[activeSession.externalSessionId] ?? {};
     const activeRequestIds = new Set(pendingQuestions.map((entry) => entry.requestId));
     return Object.fromEntries(
       Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
     );
-  }, [activeExternalSessionId, pendingQuestions, submittingQuestionBySessionId]);
+  }, [activeSession, pendingQuestions, submittingQuestionBySessionId]);
 
   return {
     isSubmittingQuestionByRequestId,

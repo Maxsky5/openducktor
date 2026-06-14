@@ -26,3 +26,13 @@ export const matchesAgentSessionIdentity = (
   target !== null &&
   target !== undefined &&
   agentSessionIdentityKey(session) === agentSessionIdentityKey(target);
+
+export const toAgentSessionIdentity = ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+}: AgentSessionIdentityLike): AgentSessionIdentity => ({
+  externalSessionId,
+  runtimeKind,
+  workingDirectory,
+});

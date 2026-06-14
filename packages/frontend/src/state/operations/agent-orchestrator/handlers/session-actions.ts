@@ -21,7 +21,6 @@ import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
   getAgentSession,
-  getAgentSessionByExternalSessionId,
 } from "@/state/agent-session-collection";
 import type {
   AgentSessionIdentity,
@@ -100,26 +99,24 @@ const markTurnUserAnchorIfMissing = (
   turnModelBySessionRef:
     | { current: Record<string, AgentSessionState["selectedModel"]> }
     | undefined,
-  sessionsRef: { current: AgentSessionCollection },
-  externalSessionId: string,
+  session: AgentSessionState,
 ): void => {
+  const { externalSessionId } = session;
   if (readTurnUserMessageStartedAtMs(externalSessionId) === undefined) {
     recordTurnUserMessageTimestamp(externalSessionId, Date.now());
   }
   if (turnModelBySessionRef) {
-    turnModelBySessionRef.current[externalSessionId] =
-      getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId)?.selectedModel ??
-      null;
+    turnModelBySessionRef.current[externalSessionId] = session.selectedModel ?? null;
   }
 };
 
 const settleStartingSession = (
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
   status: Extract<AgentSessionState["status"], "idle" | "error">,
   sessionsRef: { current: AgentSessionCollection },
   updateSession: SessionActionsDependencies["updateSession"],
 ): void => {
-  const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+  const session = getAgentSession(sessionsRef.current, identity);
   if (session?.status !== "starting") {
     return;
   }
@@ -141,6 +138,17 @@ const requireWorkspaceRepoPath = (workspaceRepoPath: string | null): string => {
   return workspaceRepoPath;
 };
 
+const requireLoadedSession = (
+  sessionsRef: { current: AgentSessionCollection },
+  identity: AgentSessionIdentity,
+): AgentSessionState => {
+  const session = getAgentSession(sessionsRef.current, identity);
+  if (!session) {
+    throw new Error(`Session '${identity.externalSessionId}' is not loaded.`);
+  }
+  return session;
+};
+
 const ensureSessionReadyForSend = async ({
   session,
   ensureSessionReady,
@@ -155,7 +163,7 @@ const ensureSessionReadyForSend = async ({
   try {
     return await ensureSessionReady(session);
   } catch (error) {
-    settleStartingSession(session.externalSessionId, "error", sessionsRef, updateSession);
+    settleStartingSession(session, "error", sessionsRef, updateSession);
     throw error;
   }
 };
@@ -248,21 +256,16 @@ export const createAgentSessionActions = ({
   });
 
   const sendAgentMessage = async (
-    externalSessionId: string,
+    identity: AgentSessionIdentity,
     parts: AgentUserMessagePart[],
-  ): Promise<void> => {
+  ) => {
     const normalizedParts = normalizeAgentUserMessageParts(parts);
     if (!hasMeaningfulAgentUserMessageParts(normalizedParts)) {
       return;
     }
 
-    const currentSession = getAgentSessionByExternalSessionId(
-      sessionsRef.current,
-      externalSessionId,
-    );
-    if (!currentSession) {
-      throw new Error(`Session not found: ${externalSessionId}`);
-    }
+    const currentSession = requireLoadedSession(sessionsRef, identity);
+    const externalSessionId = currentSession.externalSessionId;
     if (!isWorkflowAgentSession(currentSession)) {
       throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
     }
@@ -271,7 +274,7 @@ export const createAgentSessionActions = ({
       throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
     }
     if (isAgentSessionWaitingInput(currentSession)) {
-      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
+      settleStartingSession(currentSession, "idle", sessionsRef, updateSession);
       return;
     }
 
@@ -284,17 +287,21 @@ export const createAgentSessionActions = ({
 
     const readySession = getAgentSession(sessionsRef.current, readySessionIdentity);
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
-      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
+      settleStartingSession(readySessionIdentity, "idle", sessionsRef, updateSession);
       return;
     }
 
+    const readyExternalSessionId = readySession.externalSessionId;
     const selectedModel = readySession.selectedModel ?? undefined;
     const isBusyQueuedSend = readySession.status === "running";
     let pendingUserMessageStartedAt: number | undefined;
     if (!isBusyQueuedSend) {
-      pendingUserMessageStartedAt = recordTurnUserMessageTimestamp(externalSessionId, Date.now());
+      pendingUserMessageStartedAt = recordTurnUserMessageTimestamp(
+        readyExternalSessionId,
+        Date.now(),
+      );
       if (turnModelBySessionRef) {
-        turnModelBySessionRef.current[externalSessionId] = selectedModel ?? null;
+        turnModelBySessionRef.current[readyExternalSessionId] = selectedModel ?? null;
       }
     }
 
@@ -318,7 +325,7 @@ export const createAgentSessionActions = ({
       const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
       await adapter.sendUserMessage({
         ...toRuntimeSessionContextRef(repoPath, readySession),
-        externalSessionId,
+        externalSessionId: readyExternalSessionId,
         parts: normalizedParts,
         ...(selectedModel ? { model: selectedModel } : {}),
       });
@@ -360,9 +367,9 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       if (!isBusyQueuedSend) {
-        clearTurnDuration(externalSessionId);
+        clearTurnDuration(readyExternalSessionId);
         if (turnModelBySessionRef) {
-          delete turnModelBySessionRef.current[externalSessionId];
+          delete turnModelBySessionRef.current[readyExternalSessionId];
         }
       }
     }
@@ -398,11 +405,12 @@ export const createAgentSessionActions = ({
     },
   });
 
-  const stopAgentSession = async (externalSessionId: string): Promise<void> => {
-    const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+  const stopAgentSession = async (identity: AgentSessionIdentity): Promise<void> => {
+    const session = getAgentSession(sessionsRef.current, identity);
     if (!session) {
       return;
     }
+    const externalSessionId = session.externalSessionId;
     let stopRepoPath: string | null = null;
 
     updateSession(
@@ -504,13 +512,14 @@ export const createAgentSessionActions = ({
   };
 
   const updateAgentSessionModel = (
-    externalSessionId: string,
+    identity: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ): void => {
-    const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+    const session = getAgentSession(sessionsRef.current, identity);
     if (!session) {
       return;
     }
+    const externalSessionId = session.externalSessionId;
 
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     adapter.updateSessionModel({
@@ -530,21 +539,17 @@ export const createAgentSessionActions = ({
   };
 
   const replyAgentApproval = async (
-    externalSessionId: string,
+    identity: AgentSessionIdentity,
     requestId: string,
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
-    if (!session) {
-      throw new Error(`Session '${externalSessionId}' is not loaded.`);
-    }
+    const session = requireLoadedSession(sessionsRef, identity);
     markTurnUserAnchorIfMissing(
       recordTurnUserMessageTimestamp,
       readTurnUserMessageStartedAtMs,
       turnModelBySessionRef,
-      sessionsRef,
-      externalSessionId,
+      session,
     );
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await adapter.replyApproval({
@@ -565,20 +570,16 @@ export const createAgentSessionActions = ({
   };
 
   const answerAgentQuestion = async (
-    externalSessionId: string,
+    identity: AgentSessionIdentity,
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
-    const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
-    if (!session) {
-      throw new Error(`Session '${externalSessionId}' is not loaded.`);
-    }
+    const session = requireLoadedSession(sessionsRef, identity);
     markTurnUserAnchorIfMissing(
       recordTurnUserMessageTimestamp,
       readTurnUserMessageStartedAtMs,
       turnModelBySessionRef,
-      sessionsRef,
-      externalSessionId,
+      session,
     );
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
     await adapter.replyQuestion({
@@ -609,8 +610,8 @@ export const createAgentSessionActions = ({
     ensureSessionReady,
     sendAgentMessage,
     startAgentSession,
-    settleStartedAgentSession: (externalSessionId: string): void => {
-      settleStartingSession(externalSessionId, "idle", sessionsRef, updateSession);
+    settleStartedAgentSession: (session: AgentSessionIdentity): void => {
+      settleStartingSession(session, "idle", sessionsRef, updateSession);
     },
     stopAgentSession,
     updateAgentSessionModel,

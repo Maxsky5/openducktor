@@ -7,6 +7,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentFileSearchResult, AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { getSessionMessagesSlice } from "@/state/operations/agent-orchestrator/support/messages";
@@ -918,7 +919,7 @@ describe("useAgentStudioChatComposer", () => {
         harness.getLatest().handleSelectModel("anthropic/claude-sonnet");
       });
 
-      expect(updateAgentSessionModel).toHaveBeenCalledWith(activeSession.externalSessionId, {
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(activeSession), {
         runtimeKind: "opencode",
         providerId: "anthropic",
         modelId: "claude-sonnet",
@@ -948,7 +949,7 @@ describe("useAgentStudioChatComposer", () => {
         harness.getLatest().handleSelectVariant("high");
       });
 
-      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(activeSession), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
@@ -1030,7 +1031,7 @@ describe("useAgentStudioChatComposer", () => {
       );
 
       expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
-      expect(updateAgentSessionModel).toHaveBeenCalledWith("external-1", {
+      expect(updateAgentSessionModel).toHaveBeenCalledWith(toAgentSessionIdentity(activeSession), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",

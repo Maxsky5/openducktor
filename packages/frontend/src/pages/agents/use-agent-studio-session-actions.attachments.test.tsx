@@ -7,6 +7,7 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
+import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { hostClient } from "@/lib/host-client";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
@@ -44,6 +45,9 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const localSessionIdentity = (externalSessionId: string) =>
+  toAgentSessionIdentity(createAgentSessionFixture({ externalSessionId }));
 
 const createHookHarness = (initialProps: HookArgs) => {
   const wrapper = ({ children }: PropsWithChildren): ReactElement =>
@@ -196,7 +200,7 @@ describe("useAgentStudioSessionActions attachments", () => {
       mime: "application/pdf",
       base64Data: "cGRm",
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "please review" },
       {
         kind: "attachment",
@@ -274,7 +278,7 @@ describe("useAgentStudioSessionActions attachments", () => {
       mime: "application/pdf",
       base64Data: "cGRm",
     });
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
       { kind: "text", text: "please review" },
       {
         kind: "attachment",

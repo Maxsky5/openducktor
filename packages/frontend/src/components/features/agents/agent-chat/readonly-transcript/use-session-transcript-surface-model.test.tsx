@@ -626,7 +626,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       });
 
       expect(replyAgentApproval).toHaveBeenCalledWith(
-        "session-subagent-1",
+        makeTranscriptTarget(),
         "permission-1",
         "approve_once",
       );
@@ -665,7 +665,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
         await harness.getLatest().model.thread.onSubmitQuestionAnswers("question-1", [["A"]]);
       });
 
-      expect(answerAgentQuestion).toHaveBeenCalledWith("session-subagent-1", "question-1", [["A"]]);
+      expect(answerAgentQuestion).toHaveBeenCalledWith(makeTranscriptTarget(), "question-1", [
+        ["A"],
+      ]);
     } finally {
       await harness.unmount();
     }

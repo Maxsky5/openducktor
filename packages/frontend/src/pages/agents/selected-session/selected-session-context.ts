@@ -1,7 +1,6 @@
 import type {
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
-  RuntimeKind,
   TaskCard,
 } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
@@ -43,9 +42,13 @@ type SelectedSessionRuntimeReadinessContext = {
 type SelectedSessionComposerActiveSession =
   | (Pick<
       AgentSessionState,
-      "externalSessionId" | "selectedModel" | "pendingApprovals" | "pendingQuestions"
+      | "externalSessionId"
+      | "runtimeKind"
+      | "workingDirectory"
+      | "selectedModel"
+      | "pendingApprovals"
+      | "pendingQuestions"
     > & {
-      runtimeKind: RuntimeKind | null;
       isLoadingModelCatalog: boolean;
     })
   | null;
@@ -293,7 +296,8 @@ export const buildAgentStudioSelectedSessionContext = ({
       activeComposerSession: activeSession
         ? {
             externalSessionId: activeSession.externalSessionId,
-            runtimeKind: activeSession.runtimeKind ?? null,
+            runtimeKind: activeSession.runtimeKind,
+            workingDirectory: activeSession.workingDirectory,
             selectedModel: activeSession.selectedModel,
             isLoadingModelCatalog: activeSessionRuntimeData.isLoadingModelCatalog,
             pendingApprovals: activeSession.pendingApprovals,

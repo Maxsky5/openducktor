@@ -2,7 +2,6 @@ import type {
   ChatSettings,
   RuntimeApprovalReplyOutcome,
   RuntimeDescriptor,
-  RuntimeKind,
 } from "@openducktor/contracts";
 import type {
   AgentFileSearchResult,
@@ -15,7 +14,7 @@ import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type {
   AgentChatComposerModel,
@@ -63,16 +62,16 @@ const missingInteractiveComposerFileSearch = async (): Promise<AgentFileSearchRe
   throw new Error("Interactive composer file search is unavailable.");
 };
 
-type StopAgentSession = (externalSessionId: string) => Promise<void>;
+type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 
 export const invokeStopAgentSession = (
-  externalSessionId: string | null,
+  session: AgentSessionIdentity | null,
   stopAgentSession: StopAgentSession | undefined,
 ): void => {
-  if (!externalSessionId || !stopAgentSession) {
+  if (!session || !stopAgentSession) {
     return;
   }
-  void stopAgentSession(externalSessionId).catch(() => undefined);
+  void stopAgentSession(session).catch(() => undefined);
 };
 
 type AgentChatPendingQuestionActions = {
@@ -93,9 +92,13 @@ type AgentChatComposerConfig = {
   activeSession:
     | (Pick<
         AgentSessionState,
-        "externalSessionId" | "selectedModel" | "pendingApprovals" | "pendingQuestions"
+        | "externalSessionId"
+        | "runtimeKind"
+        | "workingDirectory"
+        | "selectedModel"
+        | "pendingApprovals"
+        | "pendingQuestions"
       > & {
-        runtimeKind: RuntimeKind | null;
         isLoadingModelCatalog: boolean;
       })
     | null;
@@ -103,7 +106,7 @@ type AgentChatComposerConfig = {
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
   canStopSession: boolean;
-  stopAgentSession: (externalSessionId: string) => Promise<void>;
+  stopAgentSession: StopAgentSession;
   isReadOnly: boolean;
   readOnlyReason: string | null;
   draftStateKey: string;
@@ -417,10 +420,11 @@ export function useAgentChatSurfaceModel({
   );
 
   const composerExternalSessionId = composer?.activeSession?.externalSessionId ?? null;
+  const composerActiveSessionIdentity = composer?.activeSession ?? null;
   const stopAgentSession = composer?.stopAgentSession;
   const handleStopSession = useCallback((): void => {
-    invokeStopAgentSession(composerExternalSessionId, stopAgentSession);
-  }, [composerExternalSessionId, stopAgentSession]);
+    invokeStopAgentSession(composerActiveSessionIdentity, stopAgentSession);
+  }, [composerActiveSessionIdentity, stopAgentSession]);
 
   const composerModel = useMemo(() => {
     if (mode !== "interactive" || !hasComposer) {

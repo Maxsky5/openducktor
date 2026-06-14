@@ -280,7 +280,7 @@ describe("useAgentStudioFreshSessionCreation", () => {
         sourceExternalSessionId: "session-existing",
       }),
     );
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
       expect.objectContaining({ kind: "text", text: expect.stringContaining("task-1") }),
     ]);
     expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);

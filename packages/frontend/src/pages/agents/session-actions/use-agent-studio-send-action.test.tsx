@@ -7,6 +7,7 @@ import {
 } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { hostClient } from "@/lib/host-client";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   createDeferred,
   createTaskCardFixture,
@@ -58,10 +59,14 @@ const createAttachmentDraft = (): AgentChatComposerDraft => {
   };
 };
 
-const sessionWorkflowResult = (externalSessionId: string) => ({
+const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
+});
+
+const sessionWorkflowResult = (externalSessionId: string) => ({
+  ...sessionIdentity(externalSessionId),
   postStartActionError: null,
 });
 
@@ -73,7 +78,7 @@ const createBaseArgs = (): HookArgs => ({
   },
   taskId: "task-1",
   role: "spec",
-  activeExternalSessionId: "session-existing",
+  activeSession: sessionIdentity("session-existing"),
   activeSessionIsLoadingModelCatalog: false,
   activeSessionSelectedModel: null,
   agentStudioReady: true,
@@ -104,7 +109,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
-      activeExternalSessionId: null,
+      activeSession: null,
       agentStudioReady: false,
       startSession,
       sendAgentMessage,
@@ -135,7 +140,7 @@ describe("useAgentStudioSendAction", () => {
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
       role: "qa",
-      activeExternalSessionId: null,
+      activeSession: null,
       selectedTask: unavailableQaTask,
       startSession,
       sendAgentMessage,
@@ -152,7 +157,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.update({
       ...createBaseArgs(),
       role: "qa",
-      activeExternalSessionId: "session-existing",
+      activeSession: sessionIdentity("session-existing"),
       selectedTask: unavailableQaTask,
       startSession,
       sendAgentMessage,
@@ -162,7 +167,7 @@ describe("useAgentStudioSendAction", () => {
     });
 
     expect(startSession).not.toHaveBeenCalled();
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
       { kind: "text", text: "follow up" },
     ]);
 
@@ -175,7 +180,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(() => sendDeferred.promise);
     const initialArgs: HookArgs = {
       ...createBaseArgs(),
-      activeExternalSessionId: null,
+      activeSession: null,
       startSession,
       sendAgentMessage,
     };
@@ -190,7 +195,7 @@ describe("useAgentStudioSendAction", () => {
     await harness.waitFor((state) => state.isSending);
     await harness.update({
       ...createBaseArgs(),
-      activeExternalSessionId: "session-new",
+      activeSession: sessionIdentity("session-new"),
       startSession,
       sendAgentMessage,
     });
@@ -203,7 +208,9 @@ describe("useAgentStudioSendAction", () => {
     await harness.waitFor((state) => !state.isSending);
 
     expect(startSession).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [{ kind: "text", text: "hello" }]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
+      { kind: "text", text: "hello" },
+    ]);
 
     await harness.unmount();
   });
@@ -214,7 +221,7 @@ describe("useAgentStudioSendAction", () => {
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness(useAgentStudioSendAction, {
       ...createBaseArgs(),
-      activeExternalSessionId: null,
+      activeSession: null,
       startSession,
       sendAgentMessage,
     });
@@ -235,7 +242,9 @@ describe("useAgentStudioSendAction", () => {
 
     expect(startSession).toHaveBeenCalledTimes(1);
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-new", [{ kind: "text", text: "first" }]);
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
+      { kind: "text", text: "first" },
+    ]);
 
     await harness.unmount();
   });
@@ -269,7 +278,7 @@ describe("useAgentStudioSendAction", () => {
 
     expect(startSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
       { kind: "text", text: "first" },
     ]);
 
@@ -278,8 +287,8 @@ describe("useAgentStudioSendAction", () => {
 
   test("allows sending in a different active context while another context is unresolved", async () => {
     const firstSendDeferred = createDeferred<void>();
-    const sendAgentMessage = mock((sessionId: string) => {
-      if (sessionId === "session-existing") {
+    const sendAgentMessage = mock((session: AgentSessionIdentity) => {
+      if (session.externalSessionId === "session-existing") {
         return firstSendDeferred.promise;
       }
       return Promise.resolve();
@@ -300,7 +309,7 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      activeExternalSessionId: "session-other",
+      activeSession: sessionIdentity("session-other"),
       startSession,
       sendAgentMessage,
     });
@@ -327,10 +336,10 @@ describe("useAgentStudioSendAction", () => {
 
     expect(startSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).toHaveBeenCalledTimes(2);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-existing", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
       { kind: "text", text: "first" },
     ]);
-    expect(sendAgentMessage).toHaveBeenCalledWith("session-other", [
+    expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-other"), [
       { kind: "text", text: "second" },
     ]);
 
