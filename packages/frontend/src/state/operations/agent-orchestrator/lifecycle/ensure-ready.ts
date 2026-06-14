@@ -16,11 +16,7 @@ import {
   type SessionListenerRegistry,
 } from "../support/session-listener-registry";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import {
-  type ListenToAgentSession,
-  toRuntimeSessionContextRef,
-  toRuntimeSessionRef,
-} from "../support/session-runtime-ref";
+import { type ListenToAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import {
   type AgentSessionPresenceSnapshot,
@@ -128,13 +124,11 @@ export const createEnsureSessionReady = ({
       resumedSessionRef: AgentSessionRef;
       systemPrompt: string;
     }): Promise<AgentSessionPresenceSnapshot> => {
-      const resumedSession = {
-        ...session,
-        runtimeKind: resumedSessionRef.runtimeKind,
-        workingDirectory: resumedSessionRef.workingDirectory,
-      };
       await adapter.resumeSession({
-        ...toRuntimeSessionContextRef(repoPath, resumedSession),
+        ...resumedSessionRef,
+        taskId: session.taskId,
+        role: session.role,
+        ...(session.selectedModel ? { model: session.selectedModel } : {}),
         systemPrompt,
       });
       await cleanupStaleResumedSessionIfNeeded(resumedSessionRef);
@@ -169,25 +163,20 @@ export const createEnsureSessionReady = ({
       loadRepoPromptOverrides,
     });
     assertNotStale();
-    const runtime = await ensureRuntime(repoPath, session.taskId, session.role, {
+    await ensureRuntime(repoPath, session.taskId, session.role, {
       workspaceId,
       targetWorkingDirectory: session.workingDirectory,
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    const resumedSessionRef = toRuntimeSessionRef(repoPath, {
-      ...session,
-      runtimeKind: requestedRuntimeKind,
-      workingDirectory: runtime.workingDirectory,
-    });
     const sessionPresence = await resumeSessionAndReadPresence({
-      resumedSessionRef,
+      resumedSessionRef: sessionRef,
       systemPrompt: promptContext.systemPrompt,
     });
     assertNotStale();
 
     if (sessionPresence.presence !== "runtime") {
-      await adapter.stopSession(resumedSessionRef);
+      await adapter.stopSession(sessionRef);
       throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
 
