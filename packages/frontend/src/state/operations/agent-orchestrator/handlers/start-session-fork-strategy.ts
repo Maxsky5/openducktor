@@ -95,7 +95,6 @@ export const executeForkStart = async ({
   const startedCtx = {
     ...ctx,
     summary,
-    workingDirectory,
   };
 
   if (ctx.isStaleRepoOperation()) {
@@ -154,8 +153,8 @@ export const executeForkStart = async ({
   );
 
   const forkedRuntime = {
-    runtimeKind,
-    workingDirectory,
+    runtimeKind: summary.runtimeKind,
+    workingDirectory: summary.workingDirectory,
   };
 
   return registerStartedSession({

@@ -68,10 +68,11 @@ describe("use-agent-orchestrator-operations session state", () => {
     OpencodeSdkAdapter.prototype.stopSession = async () => {
       stopCalls += 1;
     };
-    OpencodeSdkAdapter.prototype.resumeSession = async () => {
+    OpencodeSdkAdapter.prototype.resumeSession = async (input) => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -281,6 +282,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       startWorkingDirectory = input.workingDirectory;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-updated-runs",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -440,10 +442,11 @@ describe("use-agent-orchestrator-operations session state", () => {
       source: "active_build_run",
     });
 
-    OpencodeSdkAdapter.prototype.startSession = async () => {
+    OpencodeSdkAdapter.prototype.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-unexpected",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -812,6 +815,7 @@ describe("use-agent-orchestrator-operations session state", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: input.externalSessionId,
         startedAt: "2026-02-22T08:00:00.000Z",
         role: input.role,

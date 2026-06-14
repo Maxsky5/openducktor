@@ -64,9 +64,9 @@ describe("agent-orchestrator/handlers/start-session-support", () => {
       taskId: "task-1",
       role: "build",
       isStaleRepoOperation: () => false,
-      workingDirectory: "/tmp/repo/worktree",
       summary: {
         runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
         externalSessionId: "external-1",
         role: "build",
         startedAt: "2026-02-22T08:00:10.000Z",

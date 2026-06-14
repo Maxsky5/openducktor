@@ -314,6 +314,8 @@ export const registerSession = (input: {
 }): AgentSessionSummary => {
   const summary: AgentSessionSummary = {
     externalSessionId: input.externalSessionId,
+    runtimeKind: input.sessionInput.runtimeKind,
+    workingDirectory: input.sessionInput.workingDirectory,
     ...(input.sessionInput.role
       ? {
           title: formatWorkflowAgentSessionTitle(

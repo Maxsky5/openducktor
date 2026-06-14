@@ -52,6 +52,8 @@ describe("codex session lifecycle", () => {
       model,
       summary: {
         externalSessionId: "thread-1",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
         role: "planner",
         status: "running",
       },
@@ -71,6 +73,8 @@ describe("codex session lifecycle", () => {
       model,
       summary: {
         externalSessionId: "thread-1",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
         role: "planner",
         status: "running",
       },

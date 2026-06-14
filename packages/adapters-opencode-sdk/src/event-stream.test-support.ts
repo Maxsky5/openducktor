@@ -57,6 +57,8 @@ export const makeSessionInput = (): SessionInput => ({
 export const makeSessionRecord = (client: OpencodeClient): SessionRecord => ({
   summary: {
     externalSessionId: "external-session-1",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
     role: "spec",
     startedAt: "2026-02-22T12:00:00.000Z",
     status: "running",

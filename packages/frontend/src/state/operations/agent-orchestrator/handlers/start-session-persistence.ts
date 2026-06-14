@@ -35,7 +35,6 @@ export const registerStartedSession = async ({
   const initialSession = buildInitialSession({
     startedCtx,
     selectedModel,
-    runtime: runtimeInfo,
     systemPrompt,
     ...(initialMessages ? { initialMessages } : {}),
   });

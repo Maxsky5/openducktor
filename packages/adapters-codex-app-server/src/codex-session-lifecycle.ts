@@ -77,6 +77,7 @@ export const sessionStateFromThreadStart = (
   const { externalSessionId, startedAt } = extractThreadId(response, "thread/start");
   const summary = toSessionSummary({
     externalSessionId,
+    workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
     role: input.role,
@@ -102,6 +103,7 @@ export const sessionStateFromThreadFork = (
   const { externalSessionId, startedAt } = extractThreadId(response, "thread/fork");
   const summary = toSessionSummary({
     externalSessionId,
+    workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? new Date().toISOString(),
     title,
     role: input.role,
@@ -152,6 +154,7 @@ const sessionStateFromThreadResumeResponse = (
   );
   const summary = toSessionSummary({
     externalSessionId,
+    workingDirectory: input.workingDirectory,
     startedAt: startedAt ?? threadSnapshot.startedAt,
     title: threadSnapshot.title,
     role: "role" in input ? input.role : null,

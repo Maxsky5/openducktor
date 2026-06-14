@@ -60,7 +60,6 @@ export const executeFreshStart = async ({
   const startedCtx = {
     ...ctx,
     summary,
-    workingDirectory: resolved.runtime.workingDirectory,
   };
 
   if (ctx.isStaleRepoOperation()) {

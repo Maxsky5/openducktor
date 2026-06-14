@@ -27,6 +27,7 @@ export const extractThreadId = (
 
 export const toSessionSummary = (input: {
   externalSessionId: string;
+  workingDirectory: string;
   startedAt: string;
   title?: string;
   role: AgentRole | null;
@@ -34,6 +35,7 @@ export const toSessionSummary = (input: {
 }): AgentSessionSummary => ({
   externalSessionId: input.externalSessionId,
   runtimeKind: "codex",
+  workingDirectory: input.workingDirectory,
   ...(input.title ? { title: input.title } : {}),
   role: input.role,
   startedAt: input.startedAt,

@@ -1,11 +1,9 @@
 import type { AgentModelSelection } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { requireConfiguredRuntimeKind } from "../runtime/runtime";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
-  ResolvedRuntimeAndModel,
   SessionDependencies,
   SessionStartTags,
   StartedSessionContext,
@@ -14,27 +12,22 @@ import type {
 export const buildInitialSession = ({
   startedCtx,
   selectedModel,
-  runtime,
   systemPrompt,
   initialMessages,
 }: {
   startedCtx: StartedSessionContext;
   selectedModel: AgentModelSelection;
-  runtime: ResolvedRuntimeAndModel["runtime"];
   systemPrompt: string;
   initialMessages?: AgentSessionState["messages"];
 }): AgentSessionState => ({
   externalSessionId: startedCtx.summary.externalSessionId,
   ...(startedCtx.summary.title ? { title: startedCtx.summary.title } : {}),
   taskId: startedCtx.taskId,
-  runtimeKind: requireConfiguredRuntimeKind(
-    runtime.runtimeKind,
-    `Runtime kind is required to initialize ${startedCtx.role} sessions.`,
-  ),
+  runtimeKind: startedCtx.summary.runtimeKind,
   role: startedCtx.role,
   status: "starting",
   startedAt: startedCtx.summary.startedAt,
-  workingDirectory: runtime.workingDirectory,
+  workingDirectory: startedCtx.summary.workingDirectory,
   historyLoadState: "loaded",
   messages:
     initialMessages ??

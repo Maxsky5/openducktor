@@ -177,17 +177,17 @@ const createRuntimeRegistryAgentEngine = (
   return {
     async startSession(input) {
       const runtimeKind = requireInputRuntimeKind(input.runtimeKind, "session start");
-      return { ...(await getAdapter(runtimeKind).startSession(input)), runtimeKind };
+      return getAdapter(runtimeKind).startSession(input);
     },
     async resumeSession(input) {
       const runtimeKind = requireInputRuntimeKind(input.runtimeKind, "session resume");
-      return { ...(await getAdapter(runtimeKind).resumeSession(input)), runtimeKind };
+      return getAdapter(runtimeKind).resumeSession(input);
     },
     releaseSession: (input) =>
       adapterFor(input.runtimeKind, "session release").releaseSession(input),
     async forkSession(input) {
       const runtimeKind = requireInputRuntimeKind(input.runtimeKind, "session fork");
-      return { ...(await getAdapter(runtimeKind).forkSession(input)), runtimeKind };
+      return getAdapter(runtimeKind).forkSession(input);
     },
     listRuntimeDefinitions: () =>
       registeredRuntimeKinds.map((runtimeKind) => getAdapter(runtimeKind).getRuntimeDefinition()),

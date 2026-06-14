@@ -108,7 +108,6 @@ export type StartSessionContext = {
 
 export type StartedSessionContext = StartSessionContext & {
   summary: SessionStartSummary;
-  workingDirectory: string;
 };
 
 export type StartSessionExecutionDependencies = Pick<

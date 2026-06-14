@@ -51,6 +51,8 @@ describe("CodexAppServerAdapter lifecycle", () => {
     });
 
     expect(summary.externalSessionId).toBe("thread/start-runtime-ensure");
+    expect(summary.runtimeKind).toBe("codex");
+    expect(summary.workingDirectory).toBe("/repo");
     expect(summary.title).toBe("BUILD task-1");
     expect(ensureRepoRuntime).toHaveBeenCalledTimes(1);
     expect(requireRepoRuntime).not.toHaveBeenCalled();

@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
+import {
+  type AgentSessionRuntimeRef,
+  toAgentSessionPresenceSnapshotFromLiveSnapshot,
+} from "@openducktor/core";
 import { replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
@@ -76,6 +79,15 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
   historyLoadState: overrides.historyLoadState ?? "not_requested",
 });
 
+const resumedSummary = (input: AgentSessionRuntimeRef, externalSessionId = "external-1") => ({
+  runtimeKind: input.runtimeKind,
+  workingDirectory: input.workingDirectory,
+  externalSessionId,
+  startedAt: "2026-02-22T08:00:00.000Z",
+  role: input.role,
+  status: "idle" as const,
+});
+
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
   adapter.listSessionPresence = async () => [];
@@ -139,15 +151,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
@@ -283,15 +289,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
     const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "session-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input, "session-1");
     };
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -381,15 +381,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
     const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -695,15 +689,9 @@ describe("agent-orchestrator-ensure-ready", () => {
           ],
         },
       });
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "session-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input, "session-1");
     };
     adapter.listSessionPresence = async () => [
       createAgentSessionPresenceSnapshotFixture({
@@ -815,15 +803,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -938,15 +920,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([
@@ -1052,15 +1028,9 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     const adapter = createAdapter();
     const originalResumeSession = adapter.resumeSession;
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
     adapter.readSessionPresence = async (input) => {
       readPresenceCalls += 1;
@@ -1150,15 +1120,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       throw new Error("stop boom");
     };
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "error" })]);
@@ -1230,15 +1194,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       resumeCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
     adapter.readSessionPresence = async (input) =>
       toAgentSessionPresenceSnapshotFromLiveSnapshot({
@@ -1322,15 +1280,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
@@ -1387,15 +1339,9 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       throw new Error("stop boom");
     };
-    adapter.resumeSession = async () => {
+    adapter.resumeSession = async (input) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
@@ -1472,13 +1418,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
     adapter.resumeSession = async (input) => {
       resumedInput = input;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
     adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
@@ -1584,13 +1524,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
     adapter.resumeSession = async (input) => {
       resumedInput = input;
-      return {
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        startedAt: "2026-02-22T08:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
+      return resumedSummary(input);
     };
     adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 

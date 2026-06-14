@@ -329,10 +329,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       workingDirectory: "/tmp/repo/worktree",
     });
 
-    OpencodeSdkAdapter.prototype.startSession = async () => {
+    OpencodeSdkAdapter.prototype.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-in-memory",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
@@ -412,6 +413,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     let persistedListCalls = 0;
     const startDeferred = createDeferred<{
       runtimeKind: "opencode";
+      workingDirectory: string;
       externalSessionId: string;
       startedAt: string;
       role: "build";
@@ -508,6 +510,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
 
         startDeferred.resolve({
           runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
           externalSessionId: "external-concurrent",
           startedAt: "2026-02-22T08:00:00.000Z",
           role: "build",
@@ -587,10 +590,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       source: "active_build_run",
     });
 
-    OpencodeSdkAdapter.prototype.startSession = async () => {
+    OpencodeSdkAdapter.prototype.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-unexpected",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "spec",
@@ -670,10 +674,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
     });
     host.workspaceGetRepoConfig = async () => repoConfigDeferred.promise;
 
-    OpencodeSdkAdapter.prototype.startSession = async () => {
+    OpencodeSdkAdapter.prototype.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-should-not-start",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",

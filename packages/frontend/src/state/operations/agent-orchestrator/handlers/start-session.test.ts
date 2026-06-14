@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentModelSelection,
+  StartAgentSessionInput,
+} from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
@@ -250,6 +254,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: `${input.role}-external`,
         startedAt: "2026-02-22T08:00:10.000Z",
         role: input.role,
@@ -386,8 +391,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const sessionsRef = { current: sessionCollection };
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => ({
+    adapter.startSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "planner-external",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "planner",
@@ -455,8 +461,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const sessionsRef = { current: sessionCollection };
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => ({
+    adapter.startSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "planner-external",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "planner",
@@ -531,8 +538,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskRef: { current: [createTaskCardFixture({ id: "task-1", status: "open" })] },
         adapter: {
           ...new OpencodeSdkAdapter(),
-          startSession: async () => ({
+          startSession: async (input: StartAgentSessionInput) => ({
             externalSessionId: "external-1",
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
             role: "planner",
             startedAt: "2026-03-21T10:00:00.000Z",
             status: "running",
@@ -585,8 +594,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const listenedSessionIds: string[] = [];
     const sessionsRef = { current: emptyAgentSessionCollection() };
     const adapter = new OpencodeSdkAdapter();
-    adapter.startSession = async () => ({
+    adapter.startSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "external-session-persist-fail",
       role: "planner",
       status: "running",
@@ -828,6 +838,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-fresh-build-session",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: input.role,
@@ -1075,6 +1086,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.model).toEqual(selectedModel);
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:30:00.000Z",
         role: "build",
@@ -1172,6 +1184,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.model).toEqual(selectedModel);
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-profile-external",
         startedAt: "2026-02-22T08:35:00.000Z",
         role: "build",
@@ -1259,10 +1272,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-ext",
         startedAt: "2026-02-22T09:00:00.000Z",
         role: "build",
@@ -1353,10 +1367,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "planner-ext",
         startedAt: "2026-02-22T08:30:00.000Z",
         role: "planner",
@@ -1572,6 +1587,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.workingDirectory).toBe("/tmp/repo/worktree");
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-forked-pr-session",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
@@ -1721,8 +1737,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ]);
 
-    adapter.forkSession = async () => ({
+    adapter.forkSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "external-forked-from-loaded-source",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
@@ -1866,6 +1883,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       forkCalls.push(input);
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-forked-from-runtime-connection",
         startedAt: "2026-02-22T08:20:00.000Z",
         role: "build",
@@ -1958,8 +1976,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ]);
 
-    adapter.forkSession = async () => ({
+    adapter.forkSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "external-fork-history-failure",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
@@ -2056,8 +2075,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     ]);
     const sessionsRef = { current: sessionCollection };
 
-    adapter.forkSession = async () => ({
+    adapter.forkSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "external-forked-stale-after-history",
       startedAt: "2026-02-22T08:20:00.000Z",
       role: "build",
@@ -2151,6 +2171,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(input.model).toEqual(selectedModel);
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
         role: "build",
@@ -2256,10 +2277,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "fresh-runtime-external",
         startedAt: "2026-02-22T08:40:00.000Z",
         role: "build",
@@ -2540,6 +2562,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalStartSession = adapter.startSession;
     adapter.startSession = async (input) => ({
       externalSessionId: "external-qa",
+      workingDirectory: input.workingDirectory,
       role: input.role,
       startedAt: "2026-02-22T08:00:00.000Z",
       status: "idle",
@@ -2667,8 +2690,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => ({
+    adapter.startSession = async (input) => ({
       runtimeKind: "opencode",
+      workingDirectory: input.workingDirectory,
       externalSessionId: "external-created",
       startedAt: "2026-02-22T08:00:10.000Z",
       role: "build",
@@ -2726,10 +2750,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -2791,9 +2816,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -2856,10 +2882,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     const originalStopSession = adapter.stopSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -2933,10 +2960,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
-    adapter.startSession = async () => {
+    adapter.startSession = async (input) => {
       startCalls += 1;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",
@@ -3165,6 +3193,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       observedStartInput = input;
       return {
         runtimeKind: "opencode",
+        workingDirectory: input.workingDirectory,
         externalSessionId: "external-created",
         startedAt: "2026-02-22T08:00:10.000Z",
         role: "build",

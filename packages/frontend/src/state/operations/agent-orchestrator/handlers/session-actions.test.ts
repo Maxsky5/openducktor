@@ -947,6 +947,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       resumeCalls += 1;
       return {
         externalSessionId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
         role: input.role,
         startedAt: "2026-02-22T08:00:00.000Z",
         status: "idle",
@@ -1174,6 +1175,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       resumeCalls += 1;
       return {
         externalSessionId: input.externalSessionId,
+        workingDirectory: input.workingDirectory,
         role: input.role,
         startedAt: "2026-02-22T08:00:00.000Z",
         status: "idle",

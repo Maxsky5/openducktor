@@ -10,13 +10,7 @@ import { STALE_START_ERROR } from "./start-session-constants";
 import { createSessionStartTags } from "./start-session-support";
 
 const readStartedSessionRuntimeKind = (startedCtx: StartedSessionContext) => {
-  const runtimeKind = startedCtx.summary.runtimeKind;
-  if (!runtimeKind) {
-    throw new Error(
-      `Runtime kind is required to stop started session '${startedCtx.summary.externalSessionId}'.`,
-    );
-  }
-  return runtimeKind;
+  return startedCtx.summary.runtimeKind;
 };
 
 const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
@@ -25,7 +19,7 @@ const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
     repoPath: startedCtx.repoPath,
     externalSessionId: startedCtx.summary.externalSessionId,
     runtimeKind,
-    workingDirectory: startedCtx.workingDirectory,
+    workingDirectory: startedCtx.summary.workingDirectory,
   };
 };
 
@@ -72,7 +66,7 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
     removeAgentSession(current, {
       externalSessionId,
       runtimeKind: readStartedSessionRuntimeKind(startedCtx),
-      workingDirectory: startedCtx.workingDirectory,
+      workingDirectory: startedCtx.summary.workingDirectory,
     }),
   );
 

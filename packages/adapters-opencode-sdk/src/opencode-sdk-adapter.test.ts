@@ -520,6 +520,8 @@ describe("opencode-sdk-adapter", () => {
     });
 
     expect(summary.externalSessionId).toBe("external-session-1");
+    expect(summary.runtimeKind).toBe("opencode");
+    expect(summary.workingDirectory).toBe("/repo");
     expect(adapterInternals.sessions.has("external-session-1")).toBe(true);
     expect(mock.createCalls).toHaveLength(1);
 

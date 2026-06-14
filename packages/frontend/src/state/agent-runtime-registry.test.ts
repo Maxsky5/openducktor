@@ -5,6 +5,7 @@ import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeKind,
 } from "@openducktor/contracts";
+import type { AgentSessionSummary } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
@@ -323,6 +324,37 @@ describe("agent-runtime-registry", () => {
     await expect(engine.startSession(missingRuntimeInput)).rejects.toThrow(
       "Runtime kind is required for session start requests.",
     );
+  });
+
+  test("returns adapter session summaries without repairing runtime identity", async () => {
+    const originalStartSession = OpencodeSdkAdapter.prototype.startSession;
+    const adapterSummary: AgentSessionSummary = {
+      externalSessionId: "external-started",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+      role: "build",
+      startedAt: "2026-02-22T09:00:00.000Z",
+      status: "running" as const,
+    };
+
+    OpencodeSdkAdapter.prototype.startSession = mock(async () => adapterSummary);
+
+    try {
+      const engine = createAgentRuntimeRegistry().createAgentEngine();
+
+      await expect(
+        engine.startSession({
+          repoPath: "/repo",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktree",
+          taskId: "task-1",
+          role: "build",
+          systemPrompt: "Prompt",
+        }),
+      ).resolves.toBe(adapterSummary);
+    } finally {
+      OpencodeSdkAdapter.prototype.startSession = originalStartSession;
+    }
   });
 
   test("requires live repo runtimes through the host runtimeRequire boundary", async () => {
