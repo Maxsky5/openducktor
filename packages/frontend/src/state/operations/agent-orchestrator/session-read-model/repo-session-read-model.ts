@@ -20,8 +20,7 @@ import {
 } from "../lifecycle/session-presence";
 import { normalizeWorkingDirectory } from "../support/core";
 import { fromPersistedSessionRecord } from "../support/persistence";
-import { readPersistedRuntimeKind } from "../support/session-runtime-metadata";
-import { toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
 
 type TaskSessionRecord = {
   taskId: string;
@@ -102,19 +101,6 @@ const toPersistedSessionView = ({
   };
 };
 
-const toPersistedSessionRef = ({
-  repoPath,
-  record,
-}: {
-  repoPath: string;
-  record: AgentSessionRecord;
-}): AgentSessionRef => ({
-  repoPath,
-  runtimeKind: readPersistedRuntimeKind(record),
-  workingDirectory: record.workingDirectory,
-  externalSessionId: record.externalSessionId,
-});
-
 export const readRepoRuntimeSessionPresence = async ({
   repoPath,
   tasks,
@@ -127,13 +113,9 @@ export const readRepoRuntimeSessionPresence = async ({
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
   for (const { record } of taskSessionRecords) {
-    const runtimeKind = readPersistedRuntimeKind(record);
-    const directory = normalizeWorkingDirectory(record.workingDirectory);
-    if (directory.length === 0) {
-      throw new Error(
-        `Session '${record.externalSessionId}' is missing a working directory for runtime '${runtimeKind}'.`,
-      );
-    }
+    const ref = toPersistedRuntimeSessionRef({ repoPath, record });
+    const runtimeKind = ref.runtimeKind;
+    const directory = normalizeWorkingDirectory(ref.workingDirectory);
     const directories = directoriesByRuntimeKind.get(runtimeKind) ?? new Set<string>();
     directories.add(directory);
     directoriesByRuntimeKind.set(runtimeKind, directories);
@@ -176,7 +158,7 @@ export const buildRepoSessionReadModel = ({
   const liveSessionRefs: AgentSessionRef[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
-    const ref = toPersistedSessionRef({ repoPath, record });
+    const ref = toPersistedRuntimeSessionRef({ repoPath, record });
     const sessionKey = agentSessionIdentityKey(ref);
     const current = getAgentSession(currentSessions, record) ?? undefined;
     const snapshot =

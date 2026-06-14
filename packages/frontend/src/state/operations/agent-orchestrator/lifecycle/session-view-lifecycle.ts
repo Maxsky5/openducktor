@@ -137,14 +137,14 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
   hasSelectedTask,
   repoReadinessState,
   sessionLoadError,
-  isLoadingTaskSessionRecords = false,
+  isLoadingSessionReadModel = false,
 }: {
   selectedSessionRoute: AgentSessionRouteIdentity | null;
   session: AgentSessionState | null;
   hasSelectedTask: boolean;
   repoReadinessState: SessionRepoReadinessState;
   sessionLoadError?: string | null;
-  isLoadingTaskSessionRecords?: boolean;
+  isLoadingSessionReadModel?: boolean;
 }): SelectedAgentSessionViewLifecycle => {
   if (sessionLoadError && selectedSessionRoute === null && hasSelectedTask) {
     return lifecycle({
@@ -160,7 +160,7 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
         transcriptState: { kind: "runtime_waiting" },
       });
     }
-    if (hasSelectedTask && isLoadingTaskSessionRecords) {
+    if (hasSelectedTask && isLoadingSessionReadModel) {
       return lifecycle({
         repoReadinessState,
         transcriptState: { kind: "session_loading", reason: "preparing" },

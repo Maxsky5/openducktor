@@ -159,6 +159,7 @@ export type SpecStateContextValue = {
 };
 
 export type AgentSessionReadModelStateContextValue = {
+  isLoadingSessionReadModel: boolean;
   sessionReadModelError: string | null;
 };
 

@@ -154,7 +154,10 @@ let tasksState: TasksStateContextValue = {
   pendingMergedPullRequest: null,
 };
 let agentSessions = [createSession()];
-let agentSessionReadModelState = { sessionReadModelError: null as string | null };
+let agentSessionReadModelState = {
+  isLoadingSessionReadModel: false,
+  sessionReadModelError: null as string | null,
+};
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
   runtimeKind: "opencode" as const,
@@ -434,7 +437,10 @@ beforeEach(async () => {
   };
   const session = createSession();
   agentSessions = [session];
-  agentSessionReadModelState = { sessionReadModelError: null };
+  agentSessionReadModelState = {
+    isLoadingSessionReadModel: false,
+    sessionReadModelError: null,
+  };
   agentOperations = {
     loadAgentSessionHistory: mock(async () => undefined),
     readSessionFileSearch: mock(async () => []),

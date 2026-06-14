@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
+import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentRole,
@@ -27,14 +27,13 @@ type UseAgentStudioSelectedSessionViewArgs = {
   activeWorkspace: ActiveWorkspace | null;
   selectedTask: TaskCard | null;
   sessionSummaries: AgentSessionSummary[];
-  persistedRecords: AgentSessionRecord[];
   externalSessionId: string | null;
   hasExplicitRoleSelection: boolean;
   roleSelection: AgentRole;
   fallbackRole: AgentRole;
   keepExplicitRoleSessionless: boolean;
   sessionReadModelError: string | null;
-  isLoadingTaskSessionRecords: boolean;
+  isLoadingSessionReadModel: boolean;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
@@ -63,14 +62,13 @@ export function useAgentStudioSelectedSessionView({
   activeWorkspace,
   selectedTask,
   sessionSummaries,
-  persistedRecords,
   externalSessionId,
   hasExplicitRoleSelection,
   roleSelection,
   fallbackRole,
   keepExplicitRoleSessionless,
   sessionReadModelError,
-  isLoadingTaskSessionRecords,
+  isLoadingSessionReadModel,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -83,7 +81,6 @@ export function useAgentStudioSelectedSessionView({
   const selection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
       sessionSummaries,
-      persistedRecords,
       externalSessionId,
       hasExplicitRoleParam: hasExplicitRoleSelection,
       roleFromQuery: roleSelection,
@@ -96,7 +93,6 @@ export function useAgentStudioSelectedSessionView({
     fallbackRole,
     hasExplicitRoleSelection,
     keepExplicitRoleSessionless,
-    persistedRecords,
     roleSelection,
     selectedTask,
     sessionSummaries,
@@ -131,8 +127,8 @@ export function useAgentStudioSelectedSessionView({
       ? resolveBuildContinuationLaunchAction(selectedTask)
       : firstLaunchAction(selection.role);
 
-  const isWaitingForTaskSessionRecords =
-    isLoadingTaskSessionRecords &&
+  const isWaitingForSessionReadModel =
+    isLoadingSessionReadModel &&
     sessionRoute === null &&
     sessionSummaries.length === 0 &&
     selectedTask !== null;
@@ -144,10 +140,10 @@ export function useAgentStudioSelectedSessionView({
       hasSelectedTask: selectedTask !== null,
       repoReadinessState,
       sessionLoadError: sessionReadModelError,
-      isLoadingTaskSessionRecords: isWaitingForTaskSessionRecords,
+      isLoadingSessionReadModel: isWaitingForSessionReadModel,
     });
   }, [
-    isWaitingForTaskSessionRecords,
+    isWaitingForSessionReadModel,
     repoReadinessState,
     selectedTask,
     session,
@@ -158,7 +154,7 @@ export function useAgentStudioSelectedSessionView({
   const isResolving =
     sessionRoute !== null
       ? session === null && !sessionReadModelError
-      : isWaitingForTaskSessionRecords && repoReadinessState === "ready";
+      : isWaitingForSessionReadModel && repoReadinessState === "ready";
 
   const runtimeData = useSessionRuntimeData({
     repoPath: activeWorkspace?.repoPath ?? null,

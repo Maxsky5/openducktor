@@ -55,6 +55,7 @@ export function useAgentOrchestratorOperations({
   dependencies,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const [isLoadingSessionReadModel, setIsLoadingSessionReadModel] = useState(false);
   const [sessionReadModelError, setSessionReadModelError] = useState<string | null>(null);
   const resolvedDependencies = useMemo(
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
@@ -147,6 +148,7 @@ export function useAgentOrchestratorOperations({
     updateSession,
     agentEngine,
     listenToAgentSession,
+    setIsLoadingSessionReadModel,
     setSessionReadModelError,
     queryClient,
     loadRepoPromptOverrides: queryBackedPromptOverrides,
@@ -213,7 +215,7 @@ export function useAgentOrchestratorOperations({
   const readers = useAgentSessionReaders(agentEngine);
 
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
-    const readModelState = { sessionReadModelError };
+    const readModelState = { isLoadingSessionReadModel, sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
       loadAgentSessionHistory,
       loadAgentSessions,
@@ -235,6 +237,7 @@ export function useAgentOrchestratorOperations({
       readModelState,
     };
   }, [
+    isLoadingSessionReadModel,
     sessionReadModelError,
     sessionStore,
     commitSessions,

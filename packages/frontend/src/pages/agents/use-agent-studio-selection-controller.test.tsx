@@ -39,24 +39,6 @@ const activeWorkspace = {
   workspaceName: "Workspace",
 };
 
-const persistedReloadedSessionRecord = {
-  runtimeKind: "opencode" as const,
-  externalSessionId: "session-reloaded",
-  role: "build" as const,
-  startedAt: "2026-02-22T10:00:00.000Z",
-  workingDirectory: "/repo/worktree",
-  selectedModel: null,
-};
-
-const createTaskWithPersistedReloadedSession = (
-  overrides: Partial<NonNullable<Parameters<typeof createTaskCardFixture>[0]>> = {},
-) =>
-  createTaskCardFixture({
-    id: "task-1",
-    title: "task-1",
-    ...overrides,
-  });
-
 const createSession = (
   taskId: string,
   externalSessionId: string,
@@ -101,9 +83,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isRepoNavigationBoundaryPending: false,
   tasks: [createTask("task-1"), createTask("task-2")],
   isLoadingTasks: false,
-  taskSessionRecordsByTaskId: {},
-  isLoadingTaskSessionRecords: false,
   sessions: [],
+  isLoadingSessionReadModel: false,
   sessionReadModelError: null,
   taskIdParam: "task-1",
   sessionParam: null,
@@ -207,14 +188,12 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("marks selected task session read model loading until persisted records are summarized", async () => {
+  test("marks selected task session read model loading until a session summary is available", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         activeWorkspace,
         tasks: [createTask("task-1"), createTask("task-2")],
-        taskSessionRecordsByTaskId: {
-          "task-1": [persistedReloadedSessionRecord],
-        },
+        isLoadingSessionReadModel: true,
         sessions: [],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -236,9 +215,6 @@ describe("useAgentStudioSelectionController", () => {
         createBaseArgs({
           activeWorkspace,
           tasks: [createTask("task-1"), createTask("task-2")],
-          taskSessionRecordsByTaskId: {
-            "task-1": [persistedReloadedSessionRecord],
-          },
           sessions: [loadedSession],
           taskIdParam: "task-1",
           hasExplicitRoleParam: false,
@@ -252,13 +228,12 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("keeps the selected task resolving while task session records are loading", async () => {
+  test("keeps the selected task resolving while the session read model is loading", async () => {
     const harness = createHookHarness(
       createBaseArgs({
         activeWorkspace,
         tasks: [createTask("task-1")],
-        taskSessionRecordsByTaskId: {},
-        isLoadingTaskSessionRecords: true,
+        isLoadingSessionReadModel: true,
         sessions: [],
         taskIdParam: "task-1",
         sessionParam: null,
@@ -281,8 +256,10 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("keeps a persisted selected session loading while runtime readiness is checking", async () => {
-    const taskWithPersistedSession = createTaskWithPersistedReloadedSession({
+  test("keeps the selected task in runtime waiting while runtime readiness is checking", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
       status: "in_progress",
     });
     const harness = createHookHarness(
@@ -294,10 +271,8 @@ describe("useAgentStudioSelectionController", () => {
             runtime: { status: "checking", stage: "waiting_for_runtime" },
           }),
         },
-        tasks: [taskWithPersistedSession],
-        taskSessionRecordsByTaskId: {
-          "task-1": [persistedReloadedSessionRecord],
-        },
+        tasks: [task],
+        isLoadingSessionReadModel: true,
         sessions: [],
         taskIdParam: "task-1",
         sessionParam: externalSessionParam("session-reloaded"),
@@ -310,7 +285,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.isViewSessionResolving).toBe(true);
+      expect(latest.isViewSessionResolving).toBe(false);
       expect(latest.viewSessionLifecycle.transcriptState).toEqual({
         kind: "runtime_waiting",
       });
@@ -320,17 +295,16 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
-  test("marks persisted selected session failed when startup read model fails", async () => {
-    const taskWithPersistedSession = createTaskWithPersistedReloadedSession({
+  test("marks selected task failed when startup read model fails", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
       status: "in_progress",
     });
     const harness = createHookHarness(
       createBaseArgs({
         activeWorkspace,
-        tasks: [taskWithPersistedSession],
-        taskSessionRecordsByTaskId: {
-          "task-1": [persistedReloadedSessionRecord],
-        },
+        tasks: [task],
         sessions: [],
         sessionReadModelError: "Failed to load agent session read model",
         taskIdParam: "task-1",

@@ -24,6 +24,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   updateSession: UpdateAgentSession;
   agentEngine: Pick<AgentEnginePort, "listSessionPresence" | "loadSessionHistory">;
   listenToAgentSession: ListenToAgentSession;
+  setIsLoadingSessionReadModel: Dispatch<SetStateAction<boolean>>;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
   queryClient: QueryClient;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -39,6 +40,7 @@ export const useRepoSessionReadModelEffects = ({
   updateSession,
   agentEngine,
   listenToAgentSession,
+  setIsLoadingSessionReadModel,
   setSessionReadModelError,
   queryClient,
   loadRepoPromptOverrides,
@@ -47,6 +49,7 @@ export const useRepoSessionReadModelEffects = ({
 
   useEffect(() => {
     if (!workspaceRepoPath || !activeWorkspace) {
+      setIsLoadingSessionReadModel(false);
       setSessionReadModelError(null);
       return;
     }
@@ -64,6 +67,7 @@ export const useRepoSessionReadModelEffects = ({
       if (isStaleRepoOperation()) {
         return;
       }
+      setIsLoadingSessionReadModel(true);
       setSessionReadModelError(null);
       try {
         await loadRepoAgentSessionsForTasks({
@@ -87,6 +91,10 @@ export const useRepoSessionReadModelEffects = ({
             )}`,
           );
         }
+      } finally {
+        if (!isStaleRepoOperation()) {
+          setIsLoadingSessionReadModel(false);
+        }
       }
     };
 
@@ -104,6 +112,7 @@ export const useRepoSessionReadModelEffects = ({
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     sessionsRef,
+    setIsLoadingSessionReadModel,
     setSessionReadModelError,
     tasks,
     workspaceRepoPath,

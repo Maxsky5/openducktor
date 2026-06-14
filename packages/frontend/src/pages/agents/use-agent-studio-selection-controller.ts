@@ -1,4 +1,4 @@
-import type { AgentSessionRecord, RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
+import type { RuntimeDescriptor, TaskCard } from "@openducktor/contracts";
 import type {
   AgentModelCatalog,
   AgentRole,
@@ -30,9 +30,8 @@ type UseAgentStudioSelectionControllerArgs = {
   isRepoNavigationBoundaryPending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
-  taskSessionRecordsByTaskId: Record<string, AgentSessionRecord[]>;
-  isLoadingTaskSessionRecords: boolean;
   sessions: AgentSessionSummary[];
+  isLoadingSessionReadModel: boolean;
   sessionReadModelError: string | null;
   taskIdParam: string;
   sessionParam: string | null;
@@ -96,16 +95,13 @@ export type AgentStudioSelectionControllerResult = {
   viewSessionLifecycle: AgentStudioSelectedSessionView["lifecycle"];
 };
 
-const EMPTY_PERSISTED_SESSION_RECORDS: AgentSessionRecord[] = [];
-
 export function useAgentStudioSelectionController({
   activeWorkspace,
   isRepoNavigationBoundaryPending,
   tasks,
   isLoadingTasks,
-  taskSessionRecordsByTaskId,
-  isLoadingTaskSessionRecords,
   sessions,
+  isLoadingSessionReadModel,
   sessionReadModelError,
   taskIdParam,
   sessionParam,
@@ -251,9 +247,6 @@ export function useAgentStudioSelectionController({
     }
     return sessionsByTaskId.get(viewTaskId) ?? [];
   }, [sessionsByTaskId, viewTaskId]);
-  const viewPersistedSessionRecords = viewTaskId
-    ? (taskSessionRecordsByTaskId[viewTaskId] ?? EMPTY_PERSISTED_SESSION_RECORDS)
-    : EMPTY_PERSISTED_SESSION_RECORDS;
 
   const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
   const hasViewRoleSelection = effectiveHasExplicitRoleParam && !isViewTaskDetachedFromQuery;
@@ -270,7 +263,6 @@ export function useAgentStudioSelectionController({
     activeWorkspace,
     selectedTask: viewSelectedTask,
     sessionSummaries: viewSessionsForTask,
-    persistedRecords: viewPersistedSessionRecords,
     externalSessionId: viewSessionParamFromSelection,
     hasExplicitRoleSelection: viewHasExplicitRoleSelection,
     roleSelection: viewRoleFromSelection,
@@ -278,7 +270,7 @@ export function useAgentStudioSelectionController({
     keepExplicitRoleSessionless:
       viewSelectionIntent?.externalSessionId === null && effectiveSessionParam === null,
     sessionReadModelError,
-    isLoadingTaskSessionRecords,
+    isLoadingSessionReadModel,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,

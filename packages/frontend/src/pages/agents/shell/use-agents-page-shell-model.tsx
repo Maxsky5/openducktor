@@ -71,7 +71,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unlinkingPullRequestTaskId,
     setTaskTargetBranch,
   } = useTasksState();
-  const { sessionReadModelError } = useAgentSessionReadModelState();
+  const { isLoadingSessionReadModel, sessionReadModelError } = useAgentSessionReadModelState();
   const {
     loadAgentSessionHistory,
     readSessionFileSearch,
@@ -108,6 +108,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     tasks,
     isForegroundLoadingTasks,
     sessions,
+    isLoadingSessionReadModel,
     sessionReadModelError,
     loadAgentSessionHistory,
     readSessionModelCatalog,

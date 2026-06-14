@@ -4,7 +4,7 @@ export {
   pickDefaultVisibleSelectionForCatalog,
 } from "@/features/session-start";
 
-import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
@@ -268,7 +268,7 @@ type ViewSessionSelectionCandidate = AgentSessionRouteIdentity & {
   role: AgentRole | null;
   startedAt: string;
   status?: AgentSessionSummary["status"];
-  summary: AgentSessionSummary | null;
+  summary: AgentSessionSummary;
 };
 
 const toSelectedSessionRoute = (session: AgentSessionRouteIdentity): AgentSessionRouteIdentity => ({
@@ -289,29 +289,9 @@ const toSummaryViewSessionCandidate = (
   summary: session,
 });
 
-const toPersistedViewSessionCandidate = (
-  record: AgentSessionRecord,
-): ViewSessionSelectionCandidate => ({
-  externalSessionId: record.externalSessionId,
-  runtimeKind: record.runtimeKind,
-  workingDirectory: record.workingDirectory,
-  role: record.role,
-  startedAt: record.startedAt,
-  summary: null,
-});
-
 const buildViewSessionSelectionCandidates = (
   sessionSummaries: AgentSessionSummary[],
-  persistedRecords: AgentSessionRecord[],
-): ViewSessionSelectionCandidate[] => {
-  const summarySessionKeys = new Set(sessionSummaries.map(agentSessionIdentityKey));
-  return [
-    ...sessionSummaries.map(toSummaryViewSessionCandidate),
-    ...persistedRecords
-      .filter((record) => !summarySessionKeys.has(agentSessionIdentityKey(record)))
-      .map(toPersistedViewSessionCandidate),
-  ];
-};
+): ViewSessionSelectionCandidate[] => sessionSummaries.map(toSummaryViewSessionCandidate);
 
 const resolveViewSessionParam = ({
   externalSessionId,
@@ -330,7 +310,6 @@ const resolveViewSessionParam = ({
 
 export const resolveAgentStudioViewSessionSelection = ({
   sessionSummaries,
-  persistedRecords,
   externalSessionId,
   hasExplicitRoleParam,
   roleFromQuery,
@@ -339,7 +318,6 @@ export const resolveAgentStudioViewSessionSelection = ({
   keepExplicitRoleSessionless = false,
 }: {
   sessionSummaries: AgentSessionSummary[];
-  persistedRecords: AgentSessionRecord[];
   externalSessionId: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
@@ -351,7 +329,7 @@ export const resolveAgentStudioViewSessionSelection = ({
   sessionRoute: AgentSessionRouteIdentity | null;
   sessionSummary: AgentSessionSummary | null;
 } => {
-  const candidates = buildViewSessionSelectionCandidates(sessionSummaries, persistedRecords);
+  const candidates = buildViewSessionSelectionCandidates(sessionSummaries);
   const resolvedSessionParam = resolveViewSessionParam({
     externalSessionId,
     candidates,

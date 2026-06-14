@@ -1,5 +1,5 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort } from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import {
   type AgentSessionCollection,
   getAgentSessionByExternalSessionId,
@@ -19,8 +19,11 @@ import {
   type SessionListenerRegistry,
 } from "../support/session-listener-registry";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { requireSessionRuntimeKindForPersistence } from "../support/session-runtime-metadata";
-import { type ListenToAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import {
+  type ListenToAgentSession,
+  toRuntimeSessionContextRef,
+  toRuntimeSessionRef,
+} from "../support/session-runtime-ref";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import {
   type AgentSessionPresenceSnapshot,
@@ -84,28 +87,6 @@ export const createEnsureSessionReady = ({
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
 
-    const readSessionPresenceSnapshot = async ({
-      runtimeKind,
-      workingDirectory,
-      externalSessionId,
-    }: {
-      runtimeKind: AgentSessionState["runtimeKind"];
-      workingDirectory: string;
-      externalSessionId: string;
-    }) => {
-      if (!runtimeKind) {
-        throw new Error(`Session '${externalSessionId}' has no runtime kind.`);
-      }
-      if (workingDirectory.trim().length === 0) {
-        throw new Error(`Session '${externalSessionId}' has no working directory.`);
-      }
-      return adapter.readSessionPresence({
-        repoPath,
-        runtimeKind,
-        workingDirectory,
-        externalSessionId,
-      });
-    };
     const applyRuntimePresenceSnapshot = async (
       snapshot: ConfirmedAgentSessionPresenceSnapshot,
       session: WorkflowAgentSessionState,
@@ -137,54 +118,40 @@ export const createEnsureSessionReady = ({
     if (!isWorkflowAgentSession(session)) {
       throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
     }
-    const cleanupStaleResumedSessionIfNeeded = async (): Promise<void> => {
+    const sessionRef = toRuntimeSessionRef(repoPath, session);
+    const cleanupStaleResumedSessionIfNeeded = async (
+      resumedSessionRef: AgentSessionRef,
+    ): Promise<void> => {
       if (!isStaleRepoOperation()) {
         return;
       }
 
-      await adapter.stopSession({
-        repoPath,
-        externalSessionId,
-        runtimeKind: requireSessionRuntimeKindForPersistence(session),
-        workingDirectory: session.workingDirectory,
-      });
+      await adapter.stopSession(resumedSessionRef);
       throw new Error(STALE_PREPARE_ERROR);
     };
     const resumeSessionAndReadPresence = async ({
-      requestedRuntimeKind,
-      runtime,
+      resumedSessionRef,
       systemPrompt,
     }: {
-      requestedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
-      runtime: Awaited<ReturnType<typeof ensureRuntime>>;
+      resumedSessionRef: AgentSessionRef;
       systemPrompt: string;
-    }): Promise<Awaited<ReturnType<typeof readSessionPresenceSnapshot>>> => {
+    }): Promise<AgentSessionPresenceSnapshot> => {
+      const resumedSession = {
+        ...session,
+        runtimeKind: resumedSessionRef.runtimeKind,
+        workingDirectory: resumedSessionRef.workingDirectory,
+      };
       await adapter.resumeSession({
-        externalSessionId: session.externalSessionId,
-        repoPath,
-        runtimeKind: requestedRuntimeKind,
-        workingDirectory: runtime.workingDirectory,
-        taskId: session.taskId,
-        role: session.role,
+        ...toRuntimeSessionContextRef(repoPath, resumedSession),
         systemPrompt,
-        ...(session.selectedModel ? { model: session.selectedModel } : {}),
       });
-      await cleanupStaleResumedSessionIfNeeded();
+      await cleanupStaleResumedSessionIfNeeded(resumedSessionRef);
 
-      return readSessionPresenceSnapshot({
-        runtimeKind: requestedRuntimeKind,
-        workingDirectory: runtime.workingDirectory,
-        externalSessionId: session.externalSessionId,
-      });
+      return adapter.readSessionPresence(resumedSessionRef);
     };
 
     if (session.status !== "error") {
-      const storedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
-      const sessionPresence = await readSessionPresenceSnapshot({
-        runtimeKind: storedRuntimeKind,
-        workingDirectory: session.workingDirectory,
-        externalSessionId: session.externalSessionId,
-      });
+      const sessionPresence = await adapter.readSessionPresence(sessionRef);
       assertNotStale();
       if (sessionPresence.presence === "runtime") {
         await applyRuntimePresenceSnapshot(sessionPresence, session);
@@ -203,7 +170,7 @@ export const createEnsureSessionReady = ({
       throw new Error(`Task not found: ${session.taskId}`);
     }
 
-    const requestedRuntimeKind = requireSessionRuntimeKindForPersistence(session);
+    const requestedRuntimeKind = sessionRef.runtimeKind;
     const promptContext = await loadSessionPromptContext({
       workspaceId,
       role: session.role,
@@ -217,20 +184,19 @@ export const createEnsureSessionReady = ({
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
+    const resumedSessionRef = toRuntimeSessionRef(repoPath, {
+      ...session,
+      runtimeKind: requestedRuntimeKind,
+      workingDirectory: runtime.workingDirectory,
+    });
     const sessionPresence = await resumeSessionAndReadPresence({
-      requestedRuntimeKind,
-      runtime,
+      resumedSessionRef,
       systemPrompt: promptContext.systemPrompt,
     });
     assertNotStale();
 
     if (sessionPresence.presence !== "runtime") {
-      await adapter.stopSession({
-        repoPath,
-        externalSessionId,
-        runtimeKind: requestedRuntimeKind,
-        workingDirectory: runtime.workingDirectory,
-      });
+      await adapter.stopSession(resumedSessionRef);
       throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
 

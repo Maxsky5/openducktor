@@ -291,14 +291,14 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
   });
 
-  test("waits for runtime readiness before resolving loading task session records", () => {
+  test("waits for runtime readiness before resolving the loading session read model", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
       sessionLoadError: null,
-      isLoadingTaskSessionRecords: true,
+      isLoadingSessionReadModel: true,
     });
 
     expect(lifecycle.transcriptState).toEqual({
@@ -306,14 +306,14 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
   });
 
-  test("resolves selected session records through the lifecycle owner once runtime is ready", () => {
+  test("resolves selected sessions through the lifecycle owner once runtime is ready", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
       selectedSessionRoute: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",
       sessionLoadError: null,
-      isLoadingTaskSessionRecords: true,
+      isLoadingSessionReadModel: true,
     });
 
     expect(lifecycle.transcriptState).toEqual({

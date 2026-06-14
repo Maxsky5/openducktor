@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
@@ -65,11 +64,11 @@ describe("Agent Studio view session selection", () => {
     ]);
   });
 
-  test("resolves selected route from persisted records until a session summary exists", () => {
+  test("waits for the read model to materialize a selected route as a session summary", () => {
     const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
-        externalSessionId: "session-summary",
+        externalSessionId: "session-reloaded",
         taskId: "task-1",
         role: "build",
         status: "idle",
@@ -77,45 +76,24 @@ describe("Agent Studio view session selection", () => {
         workingDirectory: "/repo/live",
       }),
     );
-    const persistedSession: AgentSessionRecord = {
-      runtimeKind: "codex",
-      externalSessionId: "session-persisted",
-      role: "planner",
-      startedAt: "2026-02-22T11:00:00.000Z",
-      workingDirectory: "/repo/persisted",
-      selectedModel: null,
-    };
 
-    const persistedSelection = resolveAgentStudioViewSessionSelection({
-      sessionSummaries: [sessionSummary],
-      persistedRecords: [persistedSession],
-      externalSessionId: externalSessionParam("session-persisted"),
+    const loadingSelection = resolveAgentStudioViewSessionSelection({
+      sessionSummaries: [],
+      externalSessionId: externalSessionParam("session-reloaded"),
       hasExplicitRoleParam: true,
-      roleFromQuery: "planner",
-      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
-      fallbackRole: "planner",
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+      fallbackRole: "build",
     });
 
-    expect(persistedSelection).toEqual({
-      role: "planner",
+    expect(loadingSelection).toEqual({
+      role: "build",
       sessionSummary: null,
-      sessionRoute: {
-        externalSessionId: "session-persisted",
-        runtimeKind: "codex",
-        workingDirectory: "/repo/persisted",
-      },
+      sessionRoute: null,
     });
 
-    const liveSelection = resolveAgentStudioViewSessionSelection({
+    const materializedSelection = resolveAgentStudioViewSessionSelection({
       sessionSummaries: [sessionSummary],
-      persistedRecords: [
-        {
-          ...persistedSession,
-          externalSessionId: sessionSummary.externalSessionId,
-          runtimeKind: "codex",
-          workingDirectory: "/repo/stale-persisted",
-        },
-      ],
       externalSessionId: externalSessionParam(sessionSummary.externalSessionId),
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
@@ -123,15 +101,15 @@ describe("Agent Studio view session selection", () => {
       fallbackRole: "build",
     });
 
-    expect(liveSelection.sessionSummary).toBe(sessionSummary);
-    expect(liveSelection.sessionRoute).toEqual({
+    expect(materializedSelection.sessionSummary).toBe(sessionSummary);
+    expect(materializedSelection.sessionRoute).toEqual({
       externalSessionId: sessionSummary.externalSessionId,
       runtimeKind: "opencode",
       workingDirectory: "/repo/live",
     });
   });
 
-  test("does not collapse persisted and live sessions that only share external id", () => {
+  test("does not resolve an ambiguous external id across visible session summaries", () => {
     const liveBuildSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
@@ -143,33 +121,31 @@ describe("Agent Studio view session selection", () => {
         workingDirectory: "/repo/live",
       }),
     );
-    const persistedPlannerSession: AgentSessionRecord = {
-      runtimeKind: "codex",
-      externalSessionId: "shared-session-id",
-      role: "planner",
-      startedAt: "2026-02-22T11:00:00.000Z",
-      workingDirectory: "/repo/persisted",
-      selectedModel: null,
-    };
+    const livePlannerSummary = toAgentSessionSummary(
+      createAgentSessionFixture({
+        runtimeKind: "codex",
+        externalSessionId: "shared-session-id",
+        taskId: "task-1",
+        role: "planner",
+        status: "idle",
+        startedAt: "2026-02-22T11:00:00.000Z",
+        workingDirectory: "/repo/other",
+      }),
+    );
 
     const selection = resolveAgentStudioViewSessionSelection({
-      sessionSummaries: [liveBuildSummary],
-      persistedRecords: [persistedPlannerSession],
-      externalSessionId: null,
-      hasExplicitRoleParam: false,
-      roleFromQuery: "spec",
-      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
-      fallbackRole: "spec",
+      sessionSummaries: [liveBuildSummary, livePlannerSummary],
+      externalSessionId: externalSessionParam("shared-session-id"),
+      hasExplicitRoleParam: true,
+      roleFromQuery: "qa",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+      fallbackRole: "qa",
     });
 
     expect(selection).toEqual({
-      role: "planner",
+      role: "qa",
       sessionSummary: null,
-      sessionRoute: {
-        externalSessionId: "shared-session-id",
-        runtimeKind: "codex",
-        workingDirectory: "/repo/persisted",
-      },
+      sessionRoute: null,
     });
   });
 
@@ -185,20 +161,11 @@ describe("Agent Studio view session selection", () => {
         workingDirectory: "/repo/live",
       }),
     );
-    const persistedSession: AgentSessionRecord = {
-      runtimeKind: "codex",
-      externalSessionId: "session-persisted",
-      role: "planner",
-      startedAt: "2026-02-22T11:00:00.000Z",
-      workingDirectory: "/repo/persisted",
-      selectedModel: null,
-    };
 
     expect(
       resolveAgentStudioViewSessionSelection({
         externalSessionId: externalSessionParam("session-summary"),
         sessionSummaries: [sessionSummary],
-        persistedRecords: [persistedSession],
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -207,20 +174,18 @@ describe("Agent Studio view session selection", () => {
     ).toBe("session-summary");
     expect(
       resolveAgentStudioViewSessionSelection({
-        externalSessionId: externalSessionParam("session-persisted"),
+        externalSessionId: externalSessionParam("session-unknown"),
         sessionSummaries: [sessionSummary],
-        persistedRecords: [persistedSession],
         hasExplicitRoleParam: true,
         roleFromQuery: "planner",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
         fallbackRole: "planner",
       }).sessionRoute?.externalSessionId,
-    ).toBe("session-persisted");
+    ).toBeUndefined();
     expect(
       resolveAgentStudioViewSessionSelection({
         externalSessionId: externalSessionParam("session-other-task"),
         sessionSummaries: [sessionSummary],
-        persistedRecords: [persistedSession],
         hasExplicitRoleParam: false,
         roleFromQuery: "build",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),

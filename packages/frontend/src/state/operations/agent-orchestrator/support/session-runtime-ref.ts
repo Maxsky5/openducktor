@@ -1,10 +1,16 @@
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import type {
   AgentSessionRef,
   AgentSessionRuntimeRef,
   RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
+import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
+import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { requireSessionRuntimeKindForPersistence } from "./session-runtime-metadata";
+import {
+  readPersistedRuntimeKind,
+  requireSessionRuntimeKindForPersistence,
+} from "./session-runtime-metadata";
 
 export type ListenToAgentSession = (session: AgentSessionRef) => Promise<void>;
 
@@ -17,6 +23,46 @@ export type RuntimeWorkingDirectoryRefState = {
   runtimeRef: RuntimeWorkingDirectoryRef | null;
   runtimeRefError: string | null;
 };
+
+const toRuntimeWorkingDirectoryRefFromMetadata = ({
+  repoPath,
+  runtimeKind,
+  workingDirectory,
+  action,
+}: {
+  repoPath: string | null | undefined;
+  runtimeKind: AgentSessionState["runtimeKind"] | null | undefined;
+  workingDirectory: string | null | undefined;
+  action: string;
+}): RuntimeWorkingDirectoryRef => {
+  const runtimeRef = requireRepoRuntimeRef(
+    {
+      ...(repoPath !== null && repoPath !== undefined ? { repoPath } : {}),
+      ...(runtimeKind ? { runtimeKind } : {}),
+    },
+    action,
+  );
+  return {
+    ...runtimeRef,
+    workingDirectory: requireSessionWorkingDirectory(workingDirectory, action),
+  };
+};
+
+export const toRuntimeWorkingDirectoryRef = ({
+  repoPath,
+  session,
+  action,
+}: {
+  repoPath: string | null | undefined;
+  session: RuntimeWorkingDirectoryAccessState;
+  action: string;
+}): RuntimeWorkingDirectoryRef =>
+  toRuntimeWorkingDirectoryRefFromMetadata({
+    repoPath,
+    runtimeKind: session.runtimeKind ?? null,
+    workingDirectory: session.workingDirectory,
+    action,
+  });
 
 export const resolveRuntimeWorkingDirectoryRefState = ({
   repoPath,
@@ -32,49 +78,53 @@ export const resolveRuntimeWorkingDirectoryRefState = ({
     };
   }
 
-  const runtimeKind = session.runtimeKind ?? null;
-  const workspaceRepoPath = repoPath?.trim() ?? "";
-  const workingDirectory = session.workingDirectory.trim();
-
-  if (!workspaceRepoPath) {
+  try {
+    return {
+      runtimeRef: toRuntimeWorkingDirectoryRef({
+        repoPath,
+        session,
+        action: "read active session runtime data",
+      }),
+      runtimeRefError: null,
+    };
+  } catch (error) {
     return {
       runtimeRef: null,
-      runtimeRefError: "Active session runtime context is missing workspace repo path.",
+      runtimeRefError: errorMessage(error),
     };
   }
-
-  if (!runtimeKind) {
-    return {
-      runtimeRef: null,
-      runtimeRefError: "Active session runtime context is missing runtime kind.",
-    };
-  }
-
-  if (!workingDirectory) {
-    return {
-      runtimeRef: null,
-      runtimeRefError: "Active session runtime context is missing working directory.",
-    };
-  }
-
-  return {
-    runtimeRef: {
-      repoPath: workspaceRepoPath,
-      runtimeKind,
-      workingDirectory,
-    },
-    runtimeRefError: null,
-  };
 };
 
 export const toRuntimeSessionRef = (
   repoPath: string,
   session: AgentSessionState,
-): AgentSessionRef => ({
-  externalSessionId: session.externalSessionId,
+): AgentSessionRef => {
+  const runtimeKind = requireSessionRuntimeKindForPersistence(session);
+  return {
+    ...toRuntimeWorkingDirectoryRefFromMetadata({
+      repoPath,
+      runtimeKind,
+      workingDirectory: session.workingDirectory,
+      action: `reach session '${session.externalSessionId}'`,
+    }),
+    externalSessionId: session.externalSessionId,
+  };
+};
+
+export const toPersistedRuntimeSessionRef = ({
   repoPath,
-  runtimeKind: requireSessionRuntimeKindForPersistence(session),
-  workingDirectory: session.workingDirectory,
+  record,
+}: {
+  repoPath: string;
+  record: AgentSessionRecord;
+}): AgentSessionRef => ({
+  ...toRuntimeWorkingDirectoryRefFromMetadata({
+    repoPath,
+    runtimeKind: readPersistedRuntimeKind(record),
+    workingDirectory: record.workingDirectory,
+    action: `reach persisted session '${record.externalSessionId}'`,
+  }),
+  externalSessionId: record.externalSessionId,
 });
 
 export const toRuntimeSessionContextRef = (
