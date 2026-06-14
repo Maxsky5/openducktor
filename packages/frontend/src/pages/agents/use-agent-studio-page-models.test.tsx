@@ -485,6 +485,8 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "needs_history",
             repoReadinessState: "checking",
+            transcriptState: { kind: "visible" },
+            canReadRuntimeData: false,
           }),
         },
         readiness: {
@@ -517,6 +519,10 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [selectedSummary],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_runtime",
+            transcriptState: { kind: "runtime_waiting" },
+            isResolving: true,
+            isRuntimeWaiting: true,
+            isLoading: true,
           }),
         },
         readiness: {
@@ -551,6 +557,10 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_runtime",
+            transcriptState: { kind: "runtime_waiting" },
+            isResolving: true,
+            isRuntimeWaiting: true,
+            isLoading: true,
           }),
         },
         readiness: {
@@ -585,6 +595,9 @@ describe("useAgentStudioPageModels", () => {
           allSessionSummaries: [],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_session",
+            transcriptState: { kind: "session_loading", reason: "preparing" },
+            isResolving: true,
+            isLoading: true,
           }),
           isChatContextSwitching: true,
         },
@@ -624,6 +637,7 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [cachedSession],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "refreshing_history",
+            transcriptState: { kind: "visible" },
           }),
         },
       }),
@@ -709,6 +723,8 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [pendingSession],
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "loading_history",
+            transcriptState: { kind: "session_loading", reason: "history" },
+            isLoading: true,
           }),
         },
       }),
