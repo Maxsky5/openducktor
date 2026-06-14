@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
@@ -140,10 +140,9 @@ type AgentChatComposerConfig = {
   onSelectVariant: (variant: string) => void;
 };
 
-export type AgentChatSurfaceSessionLifecycle = Pick<
-  SelectedAgentSessionViewLifecycle,
-  "phase" | "repoReadinessState" | "transcriptState"
->;
+export type AgentChatSurfaceSessionLifecycle = {
+  transcriptState: AgentSessionTranscriptState;
+};
 
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;

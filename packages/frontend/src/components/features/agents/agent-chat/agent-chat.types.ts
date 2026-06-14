@@ -13,7 +13,7 @@ import type {
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 export type AgentRoleOption = {
   role: AgentRole;
@@ -47,10 +47,9 @@ export type AgentChatThreadSession = Pick<
   todos: AgentSessionTodoItem[];
 };
 
-export type AgentChatThreadSessionLifecycle = Pick<
-  SelectedAgentSessionViewLifecycle,
-  "phase" | "repoReadinessState" | "transcriptState"
->;
+export type AgentChatThreadSessionLifecycle = {
+  transcriptState: AgentSessionTranscriptState;
+};
 
 export type AgentChatThreadRuntimeReadiness = {
   readinessState: "ready" | "checking" | "blocked";

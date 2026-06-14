@@ -27,10 +27,11 @@ Owns:
 - passing the same transient runtime prompt context to every initial history load,
   whether it came from repo startup or an explicit selected-session load
 
-Invariant: missing runtime presence initializes cold persisted records, but it must
-not erase runtime-owned state already mounted in `AgentSessionState`. Once a
-session has live status, pending input, or in-flight transcript state, runtime
-events own that state until they settle it.
+Invariant: missing runtime presence means the runtime did not report the session
+as live. The read model keeps durable session identity plus already loaded
+transcript history, but it must not preserve live-only status, pending input, or
+streaming state without runtime presence. Runtime events own live state only
+after presence proves the session is live and a listener is running.
 
 Must not own:
 

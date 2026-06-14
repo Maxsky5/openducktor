@@ -354,8 +354,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: buildThreadLifecycle({
-            phase: "waiting_for_runtime",
-            repoReadinessState: "blocked",
+            transcriptState: { kind: "runtime_waiting" },
           }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
@@ -405,8 +404,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: buildThreadLifecycle({
-            phase: "history_failed",
-            repoReadinessState: "ready",
+            transcriptState: { kind: "failed" },
           }),
           isInteractionEnabled: false,
           session: null,
@@ -425,8 +423,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: buildThreadLifecycle({
-            phase: "waiting_for_runtime",
-            repoReadinessState: "checking",
+            transcriptState: { kind: "runtime_waiting" },
           }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
@@ -453,8 +450,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: buildThreadLifecycle({
-            phase: "waiting_for_runtime",
-            repoReadinessState: "checking",
+            transcriptState: { kind: "runtime_waiting" },
           }),
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
@@ -1090,8 +1086,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: buildThreadLifecycle({
-            phase: "resolving_session",
-            repoReadinessState: "ready",
+            transcriptState: { kind: "session_loading", reason: "preparing" },
           }),
           isContextSwitching: true,
           session: buildSession({
@@ -1112,8 +1107,7 @@ describe("AgentChatThread", () => {
         model: {
           ...buildBaseModel(),
           sessionLifecycle: buildThreadLifecycle({
-            phase: "refreshing_history",
-            repoReadinessState: "ready",
+            transcriptState: { kind: "visible" },
           }),
           session: buildSession({
             externalSessionId: "session-hydrating",
@@ -1151,8 +1145,7 @@ describe("AgentChatThread", () => {
     const model = {
       ...buildBaseModel(),
       sessionLifecycle: buildThreadLifecycle({
-        phase: "refreshing_history",
-        repoReadinessState: "ready",
+        transcriptState: { kind: "visible" },
       }),
       session,
     };

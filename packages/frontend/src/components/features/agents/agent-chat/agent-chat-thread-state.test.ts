@@ -17,8 +17,7 @@ describe("getAgentChatThreadState", () => {
   test("keeps runtime waiting separate from conversation hiding", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "waiting_for_runtime",
-        repoReadinessState: "checking",
+        transcriptState: { kind: "runtime_waiting" },
       }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -35,8 +34,7 @@ describe("getAgentChatThreadState", () => {
   test("treats history load as conversation-loading state", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "loading_history",
-        repoReadinessState: "ready",
+        transcriptState: { kind: "session_loading", reason: "history" },
       }),
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,
@@ -78,8 +76,7 @@ describe("getAgentChatThreadState", () => {
   test("surfaces failed selected-session history as a transcript notice", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "history_failed",
-        repoReadinessState: "ready",
+        transcriptState: { kind: "failed" },
       }),
       runtimeReadiness: readyRuntimeReadiness,
       isSessionContextSwitching: false,
@@ -96,8 +93,7 @@ describe("getAgentChatThreadState", () => {
   test("does not let blocked runtime readiness hide a renderable transcript", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "refreshing_history",
-        repoReadinessState: "ready",
+        transcriptState: { kind: "visible" },
       }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -117,8 +113,7 @@ describe("getAgentChatThreadState", () => {
   test("keeps history failures distinct from runtime readiness failures", () => {
     const state = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "history_failed",
-        repoReadinessState: "ready",
+        transcriptState: { kind: "failed" },
       }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -140,8 +135,7 @@ describe("getAgentChatThreadState", () => {
   test("shows blocked runtime notice only when no transcript can render", () => {
     const visible = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "waiting_for_runtime",
-        repoReadinessState: "blocked",
+        transcriptState: { kind: "runtime_waiting" },
       }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,
@@ -154,8 +148,7 @@ describe("getAgentChatThreadState", () => {
     });
     const hidden = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
-        phase: "waiting_for_runtime",
-        repoReadinessState: "blocked",
+        transcriptState: { kind: "runtime_waiting" },
       }),
       runtimeReadiness: {
         ...readyRuntimeReadiness,

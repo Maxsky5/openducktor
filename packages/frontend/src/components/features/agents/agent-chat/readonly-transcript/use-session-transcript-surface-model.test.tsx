@@ -435,7 +435,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
         ]);
         await deferredHistory.promise;
       });
-      await harness.waitFor((state) => state.model.thread.sessionLifecycle.phase === "ready");
+      await harness.waitFor(
+        (state) => state.model.thread.sessionLifecycle.transcriptState.kind === "visible",
+      );
     } finally {
       deferredHistory.resolve([]);
       await harness.unmount();

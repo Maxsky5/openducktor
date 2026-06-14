@@ -498,7 +498,6 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.sessionLifecycle.phase).toBe("needs_history");
     expect(thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
     expect(thread.runtimeReadiness.readinessState).toBe("checking");
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(

@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
-} from "@/pages/agents/agent-studio-test-utils";
+import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "./agent-chat.types";
+import { buildThreadLifecycle } from "./agent-chat-test-fixtures";
 import {
   type AgentChatThreadLifecycle,
   resolveAgentChatThreadContext,
@@ -21,7 +19,7 @@ const createSession = (overrides: Partial<AgentSessionState> = {}): AgentChatThr
 
 const createLifecycle = (
   overrides: Partial<AgentChatThreadLifecycle> = {},
-): AgentChatThreadLifecycle => createSelectedSessionLifecycleFixture(overrides);
+): AgentChatThreadLifecycle => buildThreadLifecycle(overrides);
 
 describe("resolveAgentChatThreadContext", () => {
   test("displays the active renderable session", () => {
@@ -48,8 +46,7 @@ describe("resolveAgentChatThreadContext", () => {
       resolveAgentChatThreadContext({
         activeSession: null,
         lifecycle: createLifecycle({
-          phase: "resolving_session",
-          repoReadinessState: "ready",
+          transcriptState: { kind: "session_loading", reason: "preparing" },
         }),
         isContextSwitching: true,
       }),
@@ -70,8 +67,7 @@ describe("resolveAgentChatThreadContext", () => {
       resolveAgentChatThreadContext({
         activeSession: staleSession,
         lifecycle: createLifecycle({
-          phase: "resolving_session",
-          repoReadinessState: "ready",
+          transcriptState: { kind: "session_loading", reason: "preparing" },
         }),
         isContextSwitching: true,
       }),
@@ -92,8 +88,7 @@ describe("resolveAgentChatThreadContext", () => {
       resolveAgentChatThreadContext({
         activeSession: session,
         lifecycle: createLifecycle({
-          phase: "waiting_for_runtime",
-          repoReadinessState: "checking",
+          transcriptState: { kind: "runtime_waiting" },
         }),
         isContextSwitching: true,
       }),
@@ -114,8 +109,7 @@ describe("resolveAgentChatThreadContext", () => {
       resolveAgentChatThreadContext({
         activeSession: session,
         lifecycle: createLifecycle({
-          phase: "refreshing_history",
-          repoReadinessState: "ready",
+          transcriptState: { kind: "visible" },
         }),
         isContextSwitching: true,
       }),

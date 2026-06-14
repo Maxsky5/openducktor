@@ -1,10 +1,7 @@
 import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 
-export type AgentChatThreadLifecycle = Pick<
-  AgentSessionViewLifecycle,
-  "phase" | "repoReadinessState" | "transcriptState"
->;
+export type AgentChatThreadLifecycle = Pick<AgentSessionViewLifecycle, "transcriptState">;
 
 type ResolveAgentChatThreadContextArgs = {
   activeSession: AgentChatThreadSession | null;
