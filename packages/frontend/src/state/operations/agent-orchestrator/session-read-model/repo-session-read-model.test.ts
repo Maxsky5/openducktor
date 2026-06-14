@@ -152,7 +152,7 @@ describe("repo session read model", () => {
     );
   });
 
-  test("a later read can restore an active session after an earlier scan missed it", async () => {
+  test("applies a later live runtime snapshot to a previously missing persisted session", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const firstPresence = await readRepoRuntimeSessionPresence({
@@ -324,7 +324,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("keeps a mounted active session when a repo runtime scan misses it", async () => {
+  test("demotes a mounted active session when runtime presence is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyPresence = await readRepoRuntimeSessionPresence({
@@ -356,18 +356,11 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
-    expect(readModel.liveSessions).toEqual([
-      {
-        repoPath: "/repo",
-        externalSessionId: record.externalSessionId,
-        runtimeKind: "opencode",
-        workingDirectory: record.workingDirectory,
-      },
-    ]);
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
+    expect(readModel.liveSessions).toEqual([]);
   });
 
-  test("keeps runtime-owned state when missing runtime presence sees a mounted session", async () => {
+  test("keeps mounted transcript but clears runtime-owned state when runtime presence is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -407,19 +400,12 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("running");
+    expect(session?.status).toBe("idle");
     expect(session?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
     ]);
-    expect(readModel.liveSessions).toEqual([
-      {
-        repoPath: "/repo",
-        externalSessionId: record.externalSessionId,
-        runtimeKind: "opencode",
-        workingDirectory: record.workingDirectory,
-      },
-    ]);
+    expect(readModel.liveSessions).toEqual([]);
   });
 
   test("does not reuse mounted state from a different runtime identity", async () => {
@@ -470,7 +456,7 @@ describe("repo session read model", () => {
     expect(readModel.liveSessions).toEqual([]);
   });
 
-  test("matches mounted state with an equivalent normalized working directory", async () => {
+  test("preserves mounted transcript for an equivalent normalized working directory", async () => {
     const record = createRecord({ workingDirectory: "/repo/worktree" });
     const tasks = [createTask([record])];
     const currentSession = {
@@ -510,7 +496,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session.status).toBe("running");
+    expect(session.status).toBe("idle");
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Mounted transcript",

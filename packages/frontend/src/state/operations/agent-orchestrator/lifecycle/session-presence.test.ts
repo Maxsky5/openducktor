@@ -361,7 +361,7 @@ describe("session-presence", () => {
     expect(shouldListenToAgentSessionPresenceSnapshot(questionPresence)).toBe(true);
   });
 
-  test("keeps mounted runtime-owned state observed when a repo presence scan misses it", () => {
+  test("demotes mounted runtime-owned state when runtime presence is missing", () => {
     const session = createSessionState({
       status: "running",
       pendingApprovals: [],
@@ -374,11 +374,14 @@ describe("session-presence", () => {
 
     const projection = projectRepoSessionPresenceSnapshot(session, snapshot);
 
-    expect(projection.session).toBe(session);
-    expect(projection.shouldListen).toBe(true);
+    expect(projection.session.status).toBe("idle");
+    expect(projection.session.pendingUserMessageStartedAt).toBeUndefined();
+    expect(projection.session.draftAssistantText).toBe("");
+    expect(projection.session.draftAssistantMessageId).toBeNull();
+    expect(projection.shouldListen).toBe(false);
   });
 
-  test("settles mounted idle state when a repo presence scan misses it", () => {
+  test("settles mounted idle state when runtime presence is missing", () => {
     const session = createSessionState({
       status: "idle",
       pendingApprovals: [],

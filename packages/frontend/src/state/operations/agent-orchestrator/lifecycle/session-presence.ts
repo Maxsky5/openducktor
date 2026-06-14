@@ -45,19 +45,6 @@ export const sessionPresenceHasPendingInput = (snapshot: AgentSessionPresenceSna
   return snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
 };
 
-const hasRuntimeOwnedState = (session: AgentSessionState): boolean => {
-  return (
-    session.status === "running" ||
-    session.pendingApprovals.length > 0 ||
-    session.pendingQuestions.length > 0 ||
-    session.pendingUserMessageStartedAt !== undefined ||
-    session.draftAssistantText.length > 0 ||
-    session.draftAssistantMessageId !== null ||
-    session.draftReasoningText.length > 0 ||
-    session.draftReasoningMessageId !== null
-  );
-};
-
 export const applyAgentSessionPresenceSnapshotToSession = (
   current: AgentSessionState,
   snapshot: AgentSessionPresenceSnapshot,
@@ -98,13 +85,6 @@ export const projectRepoSessionPresenceSnapshot = (
   current: AgentSessionState,
   snapshot: AgentSessionPresenceSnapshot,
 ): RepoSessionPresenceProjection => {
-  if (snapshot.presence === "missing" && hasRuntimeOwnedState(current)) {
-    return {
-      session: current,
-      shouldListen: true,
-    };
-  }
-
   return {
     session: applyAgentSessionPresenceSnapshotToSession(current, snapshot),
     shouldListen: shouldListenToAgentSessionPresenceSnapshot(snapshot),
