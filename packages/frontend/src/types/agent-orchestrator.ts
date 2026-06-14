@@ -177,7 +177,3 @@ export type AgentSessionIdentity = Pick<
 >;
 
 export type AgentSessionRouteIdentity = AgentSessionIdentity;
-
-export type AgentSessionLoadOptions = {
-  targetExternalSessionId?: string | null;
-};

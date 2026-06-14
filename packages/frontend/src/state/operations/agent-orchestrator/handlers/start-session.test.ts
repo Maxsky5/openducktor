@@ -1646,7 +1646,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const loadAgentSessionsCalls: Array<{ taskId: string; targetExternalSessionId?: string }> = [];
+    const loadAgentSessionsCalls: Array<{
+      taskId: string;
+      historyTargetExternalSessionId?: string;
+    }> = [];
     let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
       {
         runtimeKind: "opencode",
@@ -1712,9 +1715,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async (taskId, options) => {
-        const targetExternalSessionId = options?.targetExternalSessionId ?? undefined;
+        const historyTargetExternalSessionId = options?.historyTargetExternalSessionId ?? undefined;
         loadAgentSessionsCalls.push(
-          targetExternalSessionId ? { taskId, targetExternalSessionId } : { taskId },
+          historyTargetExternalSessionId ? { taskId, historyTargetExternalSessionId } : { taskId },
         );
         const sourceBuild = getSession(sessionCollection, "external-source-build");
         if (!sourceBuild) {
@@ -1747,7 +1750,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(loadAgentSessionsCalls).toEqual([
         {
           taskId: "task-1",
-          targetExternalSessionId: "external-source-build",
+          historyTargetExternalSessionId: "external-source-build",
         },
       ]);
       const forkedSession = getSession(sessionCollection, "external-forked-from-loaded-source");

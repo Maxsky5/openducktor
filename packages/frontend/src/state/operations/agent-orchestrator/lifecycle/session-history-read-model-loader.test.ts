@@ -116,7 +116,7 @@ describe("loadSessionHistoryForReadModel", () => {
         sessionObserverRefs: [],
         historyRuntimeContext: promptContext,
         isStaleRepoOperation: () => false,
-        targetExternalSessionId: "missing-session",
+        requestedExternalSessionId: "missing-session",
       }),
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });

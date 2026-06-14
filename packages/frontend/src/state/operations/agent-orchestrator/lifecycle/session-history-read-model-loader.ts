@@ -20,13 +20,13 @@ type UpdateSession = Parameters<typeof loadSessionHistorySnapshots>[0]["updateSe
 const selectSessionHistoryTargets = ({
   sessionCollection,
   sessionObserverRefs,
-  targetExternalSessionId,
+  requestedExternalSessionId,
 }: {
   sessionCollection: AgentSessionCollection;
   sessionObserverRefs: AgentSessionRef[];
-  targetExternalSessionId?: string | null | undefined;
+  requestedExternalSessionId?: string | null | undefined;
 }): AgentSessionState[] => {
-  const requestedSessionId = targetExternalSessionId?.trim();
+  const requestedSessionId = requestedExternalSessionId?.trim();
   if (requestedSessionId) {
     const session = getAgentSessionByExternalSessionId(sessionCollection, requestedSessionId);
     if (!session) {
@@ -58,7 +58,7 @@ export const loadSessionHistoryForReadModel = async ({
   sessionObserverRefs,
   historyRuntimeContext,
   isStaleRepoOperation,
-  targetExternalSessionId,
+  requestedExternalSessionId,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
@@ -67,12 +67,12 @@ export const loadSessionHistoryForReadModel = async ({
   sessionObserverRefs: AgentSessionRef[];
   historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
-  targetExternalSessionId?: string | null | undefined;
+  requestedExternalSessionId?: string | null | undefined;
 }): Promise<SessionHistoryLoadResult[]> => {
   const historySessions = selectSessionHistoryTargets({
     sessionCollection,
     sessionObserverRefs,
-    targetExternalSessionId,
+    requestedExternalSessionId,
   });
 
   if (historySessions.length === 0) {

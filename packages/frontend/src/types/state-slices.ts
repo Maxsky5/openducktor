@@ -30,11 +30,7 @@ import type {
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type {
-  AgentSessionLoadOptions,
-  AgentSessionRouteIdentity,
-  AgentSessionState,
-} from "./agent-orchestrator";
+import type { AgentSessionRouteIdentity, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -166,9 +162,13 @@ export type AgentSessionReadModelStateContextValue = {
   sessionReadModelError: string | null;
 };
 
+export type LoadAgentSessionsOptions = {
+  historyTargetExternalSessionId?: string | null;
+};
+
 export type AgentOperationsContextValue = {
   loadAgentSessionHistory: (input: { session: AgentSessionState }) => Promise<void>;
-  loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
+  loadAgentSessions: (taskId: string, options?: LoadAgentSessionsOptions) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,

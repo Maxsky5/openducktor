@@ -229,7 +229,7 @@ describe("createLoadAgentSessions", () => {
     });
 
     await harness.loadAgentSessions("task-1", {
-      targetExternalSessionId: " external-1 ",
+      historyTargetExternalSessionId: " external-1 ",
     });
 
     expect(historyLoads).toBe(1);
@@ -246,7 +246,7 @@ describe("createLoadAgentSessions", () => {
 
     await expect(
       harness.loadAgentSessions("task-1", {
-        targetExternalSessionId: "missing-session",
+        historyTargetExternalSessionId: "missing-session",
       }),
     ).rejects.toThrow("Cannot load history for unknown session 'missing-session'.");
   });

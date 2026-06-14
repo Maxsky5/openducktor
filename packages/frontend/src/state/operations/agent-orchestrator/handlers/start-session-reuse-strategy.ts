@@ -50,7 +50,7 @@ const loadSessionForReuse = async ({
   );
   if (forceReload || !currentSession) {
     await deps.session.loadAgentSessions(ctx.taskId, {
-      targetExternalSessionId: externalSessionId,
+      historyTargetExternalSessionId: externalSessionId,
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }

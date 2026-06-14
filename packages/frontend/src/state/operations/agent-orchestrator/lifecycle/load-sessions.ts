@@ -6,12 +6,8 @@ import type {
   AgentSessionCollection,
   AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
-import type {
-  AgentSessionIdentity,
-  AgentSessionLoadOptions,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace, LoadAgentSessionsOptions } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionPresence,
@@ -91,7 +87,7 @@ export const loadRepoAgentSessions = async ({
   sessionsRef: SessionsSnapshotRef;
   historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
-  options?: AgentSessionLoadOptions;
+  options?: LoadAgentSessionsOptions;
 }): Promise<void> => {
   if (isStaleRepoOperation()) {
     return;
@@ -137,7 +133,7 @@ export const loadRepoAgentSessions = async ({
     sessionObserverRefs: readModel.sessionObserverRefs,
     historyRuntimeContext,
     isStaleRepoOperation,
-    targetExternalSessionId: options?.targetExternalSessionId,
+    requestedExternalSessionId: options?.historyTargetExternalSessionId,
   });
 };
 
@@ -210,9 +206,9 @@ export const createLoadAgentSessions = ({
   loadRepoPromptOverrides,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
-  options?: AgentSessionLoadOptions,
+  options?: LoadAgentSessionsOptions,
 ) => Promise<void>) => {
-  return async (taskId: string, options?: AgentSessionLoadOptions): Promise<void> => {
+  return async (taskId: string, options?: LoadAgentSessionsOptions): Promise<void> => {
     if (!activeWorkspace?.repoPath || taskId.trim().length === 0) {
       return;
     }
