@@ -160,6 +160,9 @@ describe("createLoadAgentSessions", () => {
         }
         sessionCollection = replaceAgentSession(sessionCollection, updater(current));
       },
+      listenToAgentSession: async () => {
+        throw new Error("No runtime sessions should be observed for missing presence.");
+      },
       sessionsRef: {
         get current() {
           return sessionCollection;

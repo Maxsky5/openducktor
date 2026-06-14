@@ -23,7 +23,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   updateSession: UpdateAgentSession;
   agentEngine: Pick<AgentEnginePort, "listSessionPresence" | "loadSessionHistory">;
-  listenToAgentSession?: ListenToAgentSession;
+  listenToAgentSession: ListenToAgentSession;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
   queryClient: QueryClient;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -73,7 +73,7 @@ export const useRepoSessionReadModelEffects = ({
           adapter: agentEngine,
           commitSessions,
           updateSession,
-          ...(listenToAgentSession ? { listenToAgentSession } : {}),
+          listenToAgentSession,
           sessionsRef,
           queryClient,
           loadRepoPromptOverrides,

@@ -50,7 +50,7 @@ type CreateLoadAgentSessionsArgs = {
   sessionsRef: SessionsSnapshotRef;
   setSessionCollection: CommitSessions;
   updateSession: UpdateSession;
-  listenToAgentSession?: ListenToAgentSession;
+  listenToAgentSession: ListenToAgentSession;
   queryClient: QueryClient;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -83,7 +83,7 @@ export const loadRepoAgentSessions = async ({
   adapter: SessionLoaderAdapter;
   commitSessions: CommitSessions;
   updateSession: UpdateSession;
-  listenToAgentSession?: ListenToAgentSession;
+  listenToAgentSession: ListenToAgentSession;
   sessionsRef: SessionsSnapshotRef;
   historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
@@ -116,7 +116,7 @@ export const loadRepoAgentSessions = async ({
   await Promise.all(
     readModel.sessionObserverRefs.map(async (session) => {
       if (!isStaleRepoOperation()) {
-        await listenToAgentSession?.(session);
+        await listenToAgentSession(session);
       }
     }),
   );
@@ -156,7 +156,7 @@ export const loadRepoAgentSessionsForTasks = async ({
   adapter: SessionLoaderAdapter;
   commitSessions: CommitSessions;
   updateSession: UpdateSession;
-  listenToAgentSession?: ListenToAgentSession;
+  listenToAgentSession: ListenToAgentSession;
   sessionsRef: SessionsSnapshotRef;
   queryClient: QueryClient;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -181,7 +181,7 @@ export const loadRepoAgentSessionsForTasks = async ({
     adapter,
     commitSessions,
     updateSession,
-    ...(listenToAgentSession ? { listenToAgentSession } : {}),
+    listenToAgentSession,
     sessionsRef,
     historyRuntimeContext: buildHistoryRuntimeContext({
       activeWorkspace,
@@ -246,7 +246,7 @@ export const createLoadAgentSessions = ({
       adapter,
       commitSessions: setSessionCollection,
       updateSession,
-      ...(listenToAgentSession ? { listenToAgentSession } : {}),
+      listenToAgentSession,
       sessionsRef,
       historyRuntimeContext,
       isStaleRepoOperation,

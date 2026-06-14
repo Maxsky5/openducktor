@@ -208,7 +208,7 @@ Owns:
 
 Must not own:
 
-- opening or attaching sessions in the global orchestrator store
+- creating global sessions or session observers
 - runtime route resolution
 - workflow session status
 - parent-observed copies of pending permissions/questions
