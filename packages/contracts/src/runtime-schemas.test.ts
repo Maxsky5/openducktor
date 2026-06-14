@@ -8,6 +8,7 @@ import {
   agentSessionStopTargetSchema,
   buildSessionBootstrapSchema,
   CODEX_RUNTIME_DESCRIPTOR,
+  formatRuntimeDescriptorSchemaIssue,
   gitBranchSchema,
   gitCommitAllRequestSchema,
   gitCommitAllResultSchema,
@@ -110,6 +111,27 @@ const invalidRuntimeDescriptorCases =
   runtimeDescriptorInvalidCasesFixture as RuntimeDescriptorInvalidCase[];
 
 describe("runtime schemas", () => {
+  test("formats runtime descriptor schema issues with capability ownership", () => {
+    expect(
+      formatRuntimeDescriptorSchemaIssue({
+        path: ["capabilities", "history", "stableItemIds"],
+        message:
+          "Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+      }),
+    ).toBe(
+      "[launch_scoped] runtime descriptor schema violation at capabilities.history.stableItemIds: Runtime descriptors with item-level history fidelity must expose stable item IDs.",
+    );
+
+    expect(
+      formatRuntimeDescriptorSchemaIssue({
+        path: ["capabilities", "supportsAttachLiveSessions"],
+        message: 'Unrecognized key: "supportsAttachLiveSessions"',
+      }),
+    ).toBe(
+      '[baseline] runtime descriptor schema violation at capabilities.supportsAttachLiveSessions: Unrecognized key: "supportsAttachLiveSessions"',
+    );
+  });
+
   test("OpenCode descriptor fixture stays aligned with the TypeScript built-in", () => {
     const parsed = runtimeDescriptorSchema.parse(opencodeRuntimeDescriptorFixture);
 
