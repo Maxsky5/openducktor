@@ -1,8 +1,8 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
+import type { AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { buildSessionSystemPrompt } from "../support/session-prompt";
-import type { AgentSessionHistoryTarget } from "./session-history-loader";
 
 export type SessionHistoryRuntimeContext = {
   workspaceId: string;
@@ -13,7 +13,9 @@ export type SessionHistoryRuntimeContext = {
 type SessionHistoryRuntimeContextTarget = Pick<
   AgentSessionState,
   "externalSessionId" | "taskId" | "role" | "startedAt"
->;
+> & {
+  systemPromptContext?: AgentSessionHistorySystemPromptContext;
+};
 
 const taskCardsById = (tasks: readonly TaskCard[]): ReadonlyMap<string, TaskCard> =>
   new Map(tasks.map((task) => [task.id, task]));
@@ -35,7 +37,7 @@ export const buildHistoryRuntimeContext = ({
 };
 
 export const withSessionHistoryRuntimeContext = async <
-  Session extends AgentSessionHistoryTarget & SessionHistoryRuntimeContextTarget,
+  Session extends SessionHistoryRuntimeContextTarget,
 >({
   sessions,
   context,

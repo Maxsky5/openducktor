@@ -1,12 +1,10 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
+import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import {
-  type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
-  getAgentSession,
-  getAgentSessionByExternalSessionId,
+import type {
+  AgentSessionCollection,
+  AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
 import type {
   AgentSessionIdentity,
@@ -27,9 +25,9 @@ import { createRepoStaleGuard } from "../support/core";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import {
   loadSessionHistorySnapshot,
-  loadSessionHistorySnapshots,
   type SessionHistoryLoaderAdapter,
 } from "./session-history-loader";
+import { loadSessionHistoryForReadModel } from "./session-history-read-model-loader";
 import {
   buildHistoryRuntimeContext,
   type SessionHistoryRuntimeContext,
@@ -70,39 +68,6 @@ type CreateLoadAgentSessionHistoryArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-};
-
-const selectSessionHistoryTargets = ({
-  sessionCollection,
-  sessionObserverRefs,
-  targetExternalSessionId,
-}: {
-  sessionCollection: AgentSessionCollection;
-  sessionObserverRefs: AgentSessionRef[];
-  targetExternalSessionId?: string | null | undefined;
-}): AgentSessionState[] => {
-  const requestedSessionId = targetExternalSessionId?.trim();
-  if (requestedSessionId) {
-    const session = getAgentSessionByExternalSessionId(sessionCollection, requestedSessionId);
-    if (!session) {
-      throw new Error(`Cannot load history for unknown session '${requestedSessionId}'.`);
-    }
-    return [session];
-  }
-
-  const targets: AgentSessionState[] = [];
-  for (const ref of sessionObserverRefs) {
-    const session = getAgentSession(sessionCollection, ref);
-    if (!session) {
-      throw new Error(
-        `Cannot load history for observed session '${ref.externalSessionId}': session is missing from the repo read model.`,
-      );
-    }
-    if (session.historyLoadState === "not_requested") {
-      targets.push(session);
-    }
-  }
-  return targets;
 };
 
 export const loadRepoAgentSessions = async ({
@@ -164,30 +129,15 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const historySessions = selectSessionHistoryTargets({
-    sessionCollection: readModel.sessionCollection,
-    sessionObserverRefs: readModel.sessionObserverRefs,
-    targetExternalSessionId: options?.targetExternalSessionId,
-  });
-
-  if (historySessions.length === 0) {
-    return;
-  }
-
-  const historySessionsWithRuntimeContext = await withSessionHistoryRuntimeContext({
-    sessions: historySessions,
-    context: historyRuntimeContext,
-  });
-  if (isStaleRepoOperation()) {
-    return;
-  }
-
-  await loadSessionHistorySnapshots({
+  await loadSessionHistoryForReadModel({
     repoPath,
     adapter,
     updateSession,
-    sessions: historySessionsWithRuntimeContext,
+    sessionCollection: readModel.sessionCollection,
+    sessionObserverRefs: readModel.sessionObserverRefs,
+    historyRuntimeContext,
     isStaleRepoOperation,
+    targetExternalSessionId: options?.targetExternalSessionId,
   });
 };
 

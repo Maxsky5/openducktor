@@ -43,6 +43,7 @@ Files:
 
 - `lifecycle/load-sessions.ts`
 - `lifecycle/session-history-loader.ts`
+- `lifecycle/session-history-read-model-loader.ts`
 - `lifecycle/session-history-runtime-context.ts`
 
 Owns:
