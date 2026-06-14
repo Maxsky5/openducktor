@@ -1556,6 +1556,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
+        systemPrompt: expect.stringContaining("Task context"),
       });
       expect(resumedInput).not.toHaveProperty("runtimeConnection");
       expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");

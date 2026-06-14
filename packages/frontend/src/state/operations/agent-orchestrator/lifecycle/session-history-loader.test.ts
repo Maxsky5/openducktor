@@ -1,13 +1,16 @@
 import { describe, expect, mock, test } from "bun:test";
+import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentQuestionRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import { loadSessionHistorySnapshot } from "./session-history-loader";
 
 const sessionTarget = {
   externalSessionId: "external-1",
+  taskId: "task-1",
   role: "build",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
+  startedAt: "2026-06-12T08:00:00.000Z",
   selectedModel: null,
 } satisfies Parameters<typeof loadSessionHistorySnapshot>[0]["session"];
 
@@ -98,5 +101,79 @@ describe("session history loader", () => {
     expect(result.status).toBe("applied");
     expect(session.historyLoadState).toBe("loaded");
     expect(session.pendingQuestions).toBe(pendingQuestions);
+  });
+
+  test("prepends the workflow header when runtime history has no system prompt", async () => {
+    let session = createSession();
+
+    const result = await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "history-1",
+            role: "assistant",
+            timestamp: "2026-06-12T08:00:01.000Z",
+            text: "Loaded from Codex history",
+            parts: [],
+          },
+        ],
+      },
+      updateSession: (_externalSessionId, updater) => {
+        session = updater(session);
+      },
+      session: sessionTarget,
+      headerMessages: [
+        {
+          id: "history:system-prompt:external-1",
+          role: "system",
+          content: "System prompt:\n\nBuild from current task context.",
+          timestamp: "2026-06-12T08:00:00.000Z",
+        },
+      ],
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(result.status).toBe("applied");
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+      "System prompt:\n\nBuild from current task context.",
+      "Loaded from Codex history",
+    ]);
+  });
+
+  test("keeps the runtime-owned system prompt when history provides one", async () => {
+    let session = createSession();
+
+    await loadSessionHistorySnapshot({
+      repoPath: "/repo",
+      adapter: {
+        loadSessionHistory: async () => [
+          {
+            messageId: "runtime-system-1",
+            role: "system",
+            timestamp: "2026-06-12T08:00:00.000Z",
+            text: "System prompt:\n\nRuntime provided prompt.",
+            parts: [],
+          },
+        ],
+      },
+      updateSession: (_externalSessionId, updater) => {
+        session = updater(session);
+      },
+      session: sessionTarget,
+      headerMessages: [
+        {
+          id: "history:system-prompt:external-1",
+          role: "system",
+          content: "System prompt:\n\nComputed display prompt.",
+          timestamp: "2026-06-12T08:00:00.000Z",
+        },
+      ],
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+      "System prompt:\n\nRuntime provided prompt.",
+    ]);
   });
 });

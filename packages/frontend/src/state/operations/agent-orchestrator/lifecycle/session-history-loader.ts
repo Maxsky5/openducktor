@@ -1,5 +1,6 @@
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type {
+  AgentChatMessage,
   AgentSessionHistoryLoadPolicy,
   AgentSessionLoadOptions,
   AgentSessionState,
@@ -25,7 +26,13 @@ export type SessionHistoryLoadResult =
 
 export type AgentSessionHistoryTarget = Pick<
   AgentSessionState,
-  "externalSessionId" | "runtimeKind" | "workingDirectory" | "role" | "selectedModel"
+  | "externalSessionId"
+  | "runtimeKind"
+  | "workingDirectory"
+  | "role"
+  | "selectedModel"
+  | "taskId"
+  | "startedAt"
 >;
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
@@ -94,12 +101,14 @@ export const loadSessionHistorySnapshot = async ({
   adapter,
   updateSession,
   session,
+  headerMessages = [],
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   updateSession: UpdateSession;
   session: AgentSessionHistoryTarget;
+  headerMessages?: AgentChatMessage[];
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult> => {
   if (isStaleRepoOperation()) {
@@ -125,12 +134,16 @@ export const loadSessionHistorySnapshot = async ({
       return { externalSessionId: session.externalSessionId, status: "stale" };
     }
 
-    const loadedMessages = createSessionMessagesState(session.externalSessionId, [
-      ...historyToChatMessages(history, {
-        role: session.role,
-        selectedModel: session.selectedModel,
-      }),
-    ]);
+    const historyMessages = historyToChatMessages(history, {
+      role: session.role,
+      selectedModel: session.selectedModel,
+    });
+    const loadedMessages = createSessionMessagesState(
+      session.externalSessionId,
+      historyMessages.some(isSessionSystemPromptMessage)
+        ? historyMessages
+        : [...headerMessages, ...historyMessages],
+    );
     const historyContextUsage = historyToSessionContextUsage(history);
     updateSession(
       session.externalSessionId,
@@ -163,22 +176,26 @@ export const loadSessionHistorySnapshots = async ({
   adapter,
   updateSession,
   sessions,
+  headerMessagesBySessionId,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   updateSession: UpdateSession;
   sessions: AgentSessionHistoryTarget[];
+  headerMessagesBySessionId?: ReadonlyMap<string, AgentChatMessage[]>;
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult[]> =>
   Promise.all(
-    sessions.map((session) =>
-      loadSessionHistorySnapshot({
+    sessions.map((session) => {
+      const headerMessages = headerMessagesBySessionId?.get(session.externalSessionId);
+      return loadSessionHistorySnapshot({
         repoPath,
         adapter,
         updateSession,
         session,
+        ...(headerMessages ? { headerMessages } : {}),
         isStaleRepoOperation,
-      }),
-    ),
+      });
+    }),
   );

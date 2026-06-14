@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
 import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
@@ -18,10 +18,38 @@ const record: AgentSessionRecord = {
   selectedModel: null,
 };
 
+const taskFixture: TaskCard = {
+  id: "task-1",
+  title: "Implement feature",
+  description: "Build the task from the repository rules.",
+  status: "in_progress",
+  priority: 1,
+  issueType: "task",
+  aiReviewEnabled: true,
+  availableActions: [],
+  labels: [],
+  subtaskIds: [],
+  documentSummary: {
+    spec: { has: false },
+    plan: { has: false },
+    qaReport: { has: false, verdict: "not_reviewed" },
+  },
+  agentWorkflows: {
+    spec: { required: false, canSkip: true, available: true, completed: false },
+    planner: { required: false, canSkip: true, available: true, completed: false },
+    builder: { required: true, canSkip: false, available: true, completed: false },
+    qa: { required: false, canSkip: true, available: false, completed: false },
+  },
+  updatedAt: "2026-06-12T08:00:00.000Z",
+  createdAt: "2026-06-12T08:00:00.000Z",
+};
+
 const createLoaderHarness = ({
   initialSessionsById = {},
   listSessionPresence,
   loadSessionHistory = async () => [],
+  tasks = [taskFixture],
+  loadRepoPromptOverrides,
 }: {
   initialSessionsById?: Record<string, AgentSessionState>;
   listSessionPresence: Parameters<
@@ -30,6 +58,8 @@ const createLoaderHarness = ({
   loadSessionHistory?: Parameters<
     typeof createLoadAgentSessions
   >[0]["adapter"]["loadSessionHistory"];
+  tasks?: TaskCard[];
+  loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 }) => {
   let sessionsById: Record<string, AgentSessionState> = initialSessionsById;
   const listenedSessions: AgentSessionRef[] = [];
@@ -59,6 +89,8 @@ const createLoaderHarness = ({
       listenedSessions.push(session);
     },
     queryClient: new QueryClient(),
+    taskRef: { current: tasks },
+    ...(loadRepoPromptOverrides ? { loadRepoPromptOverrides } : {}),
   });
 
   return {
@@ -315,6 +347,55 @@ describe("createLoadAgentSessions", () => {
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "System prompt:\n\nBuild the task from the repository rules.",
       "Resume after QA rejection",
+    ]);
+  });
+
+  test("recomputes the workflow header for hydrated Codex history without persisting it", async () => {
+    const codexRecord: AgentSessionRecord = {
+      ...record,
+      runtimeKind: "codex",
+    };
+    const harness = createLoaderHarness({
+      listSessionPresence: async () => [
+        toAgentSessionPresenceSnapshotFromLiveSnapshot({
+          ref: {
+            repoPath: "/repo",
+            runtimeKind: "codex",
+            workingDirectory: "/repo/worktree",
+            externalSessionId: "external-1",
+          },
+          snapshot: {
+            externalSessionId: "external-1",
+            title: "Builder",
+            startedAt: "2026-06-12T08:00:00.000Z",
+            status: { type: "busy" },
+            workingDirectory: "/repo/worktree",
+            pendingApprovals: [],
+            pendingQuestions: [],
+          },
+        }),
+      ],
+      loadSessionHistory: async () => [
+        {
+          messageId: "history-1",
+          role: "assistant",
+          timestamp: "2026-06-12T08:00:01.000Z",
+          text: "Loaded from runtime history",
+          parts: [],
+        },
+      ],
+      loadRepoPromptOverrides: async () => ({}),
+    });
+
+    await harness.loadAgentSessions("task-1", { persistedRecords: [codexRecord] });
+
+    const session = harness.getSession("external-1");
+    if (!session) {
+      throw new Error("Expected external-1 to be loaded");
+    }
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+      expect.stringContaining("System prompt:\n\n"),
+      "Loaded from runtime history",
     ]);
   });
 

@@ -174,9 +174,11 @@ export const createEnsureSessionReady = ({
     const resumeSessionAndReadPresence = async ({
       requestedRuntimeKind,
       runtime,
+      systemPrompt,
     }: {
       requestedRuntimeKind: NonNullable<AgentSessionState["runtimeKind"]>;
       runtime: Awaited<ReturnType<typeof ensureRuntime>>;
+      systemPrompt: string;
     }): Promise<Awaited<ReturnType<typeof readSessionPresenceSnapshot>>> => {
       await adapter.resumeSession({
         externalSessionId: session.externalSessionId,
@@ -185,6 +187,7 @@ export const createEnsureSessionReady = ({
         workingDirectory: runtime.workingDirectory,
         taskId: session.taskId,
         role: session.role,
+        systemPrompt,
         ...(session.selectedModel ? { model: session.selectedModel } : {}),
       });
       await cleanupStaleResumedSessionIfNeeded();
@@ -242,6 +245,7 @@ export const createEnsureSessionReady = ({
     const sessionPresence = await resumeSessionAndReadPresence({
       requestedRuntimeKind,
       runtime,
+      systemPrompt: promptContext.systemPrompt,
     });
     assertNotStale();
 

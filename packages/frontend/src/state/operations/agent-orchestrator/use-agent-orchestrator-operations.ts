@@ -110,6 +110,8 @@ export function useAgentOrchestratorOperations({
         updateSession,
         listenToAgentSession,
         queryClient,
+        taskRef: refBridges.taskRef,
+        loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
     [
       activeWorkspace,
@@ -119,17 +121,21 @@ export function useAgentOrchestratorOperations({
       queryClient,
       refBridges,
       updateSession,
+      queryBackedPromptOverrides,
     ],
   );
   const loadAgentSessionHistory = useMemo(
     () =>
       createLoadAgentSessionHistory({
+        activeWorkspace,
         adapter: agentEngine,
         repoEpochRef: refBridges.repoEpochRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         updateSession,
+        taskRef: refBridges.taskRef,
+        loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
-    [agentEngine, refBridges, updateSession],
+    [activeWorkspace, agentEngine, refBridges, updateSession, queryBackedPromptOverrides],
   );
   useRepoSessionReadModelEffects({
     workspaceRepoPath,

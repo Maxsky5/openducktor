@@ -1,3 +1,4 @@
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
@@ -12,6 +13,11 @@ import {
 } from "../session-read-model/repo-session-read-model";
 import { loadTaskSessionRecordsForTask } from "../session-read-model/task-session-records";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
+import {
+  buildHistoryHeaderContext,
+  buildSessionHistoryHeaders,
+  type SessionHistoryHeaderContext,
+} from "./session-history-headers";
 import {
   loadSessionHistorySnapshot,
   loadSessionHistorySnapshots,
@@ -71,6 +77,8 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
   queryClient: QueryClient;
+  taskRef?: MutableRefObject<TaskCard[]>;
+  loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 type CreateLoadAgentSessionHistoryArgs = {
@@ -78,6 +86,9 @@ type CreateLoadAgentSessionHistoryArgs = {
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   updateSession: UpdateSession;
+  activeWorkspace: ActiveWorkspace | null;
+  taskRef?: MutableRefObject<TaskCard[]>;
+  loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 const isRepoOperationStale = ({
@@ -103,6 +114,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions,
   updateSession,
   listenToAgentSession,
+  historyHeaderContext,
   isStaleRepoOperation,
   options,
 }: {
@@ -112,6 +124,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions: CommitSessions;
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
+  historyHeaderContext?: SessionHistoryHeaderContext;
   isStaleRepoOperation: () => boolean;
   options?: AgentSessionLoadOptions;
 }): Promise<void> => {
@@ -160,11 +173,20 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
+  const headerMessagesBySessionId = await buildSessionHistoryHeaders({
+    sessions: historySessions,
+    context: historyHeaderContext,
+  });
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
   await loadSessionHistorySnapshots({
     repoPath,
     adapter,
     updateSession,
     sessions: historySessions,
+    ...(headerMessagesBySessionId ? { headerMessagesBySessionId } : {}),
     isStaleRepoOperation,
   });
 };
@@ -178,6 +200,8 @@ export const createLoadAgentSessions = ({
   updateSession,
   listenToAgentSession,
   queryClient,
+  taskRef,
+  loadRepoPromptOverrides,
 }: CreateLoadAgentSessionsArgs): ((
   taskId: string,
   options?: AgentSessionLoadOptions,
@@ -211,6 +235,12 @@ export const createLoadAgentSessions = ({
       return;
     }
 
+    const historyHeaderContext = buildHistoryHeaderContext({
+      activeWorkspace,
+      taskRef,
+      loadRepoPromptOverrides,
+    });
+
     await loadRepoAgentSessions({
       repoPath,
       tasks: [task],
@@ -218,6 +248,7 @@ export const createLoadAgentSessions = ({
       commitSessions: setSessionsById,
       updateSession,
       ...(listenToAgentSession ? { listenToAgentSession } : {}),
+      ...(historyHeaderContext ? { historyHeaderContext } : {}),
       isStaleRepoOperation,
       ...(options ? { options } : {}),
     });
@@ -225,10 +256,13 @@ export const createLoadAgentSessions = ({
 };
 
 export const createLoadAgentSessionHistory = ({
+  activeWorkspace,
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
   updateSession,
+  taskRef,
+  loadRepoPromptOverrides,
 }: CreateLoadAgentSessionHistoryArgs): ((input: {
   session: AgentSessionState;
 }) => Promise<void>) => {
@@ -251,11 +285,25 @@ export const createLoadAgentSessionHistory = ({
       return;
     }
 
+    const headerMessagesBySessionId = await buildSessionHistoryHeaders({
+      sessions: [session],
+      context: buildHistoryHeaderContext({
+        activeWorkspace,
+        taskRef,
+        loadRepoPromptOverrides,
+      }),
+    });
+    if (isStaleRepoOperation()) {
+      return;
+    }
+
+    const headerMessages = headerMessagesBySessionId?.get(session.externalSessionId);
     const result = await loadSessionHistorySnapshot({
       repoPath,
       adapter,
       updateSession,
       session,
+      ...(headerMessages ? { headerMessages } : {}),
       isStaleRepoOperation,
     });
     if (result.status === "failed") {
