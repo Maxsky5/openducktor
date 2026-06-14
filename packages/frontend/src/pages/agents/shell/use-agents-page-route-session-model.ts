@@ -5,7 +5,7 @@ import type {
   AgentSessionRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
 import { useRepoRuntimeHealthWarmup } from "@/components/features/agents/use-repo-runtime-health-warmup";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -47,8 +47,6 @@ export type AgentsPageRouteSessionModel = {
   navigationPersistenceError: Error | null;
   retryNavigationPersistence: () => void;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
-  signalContextSwitchIntent: () => void;
-  contextSwitchVersion: number;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
   readiness: ReturnType<typeof useAgentStudioReadiness>;
   isSessionSelectionResolving: boolean;
@@ -82,7 +80,6 @@ export function useAgentsPageRouteSessionModel({
 }: UseAgentsPageRouteSessionModelArgs): AgentsPageRouteSessionModel {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigationType = useNavigationType();
-  const [contextSwitchVersion, setContextSwitchVersion] = useState(0);
 
   const {
     taskIdParam,
@@ -106,10 +103,6 @@ export function useAgentsPageRouteSessionModel({
     },
     [updateQuery],
   );
-
-  const signalContextSwitchIntent = useCallback((): void => {
-    setContextSwitchVersion((current) => current + 1);
-  }, []);
 
   const { selectionIntentForController, isSessionSelectionResolving, scheduleSelectionIntent } =
     useAgentStudioSelectionIntentState({
@@ -151,8 +144,6 @@ export function useAgentsPageRouteSessionModel({
     isLoadingChecks,
     readSessionModelCatalog,
     readSessionTodos,
-    clearComposerInput: signalContextSwitchIntent,
-    onContextSwitchIntent: signalContextSwitchIntent,
   });
   const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
     workspaceRepoPath,
@@ -185,8 +176,6 @@ export function useAgentsPageRouteSessionModel({
     navigationPersistenceError,
     retryNavigationPersistence,
     scheduleQueryUpdate,
-    signalContextSwitchIntent,
-    contextSwitchVersion,
     selection,
     readiness,
     isSessionSelectionResolving,

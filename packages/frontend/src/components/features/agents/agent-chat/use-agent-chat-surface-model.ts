@@ -41,9 +41,8 @@ const EMPTY_COMPOSER_OPTIONS = Object.freeze([]) as unknown as ComboboxOption[];
 const EMPTY_COMPOSER_MODEL_GROUPS = Object.freeze([]) as unknown as ComboboxGroup[];
 
 const parseDraftStateKey = (draftStateKey: string) => {
-  const [taskId = "", role = "", externalSessionId = "", contextSwitchVersion = ""] =
-    draftStateKey.split(":");
-  return { taskId, role, externalSessionId, contextSwitchVersion };
+  const [taskId = "", role = "", externalSessionId = ""] = draftStateKey.split(":");
+  return { taskId, role, externalSessionId };
 };
 
 const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string): boolean => {
@@ -52,7 +51,6 @@ const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string)
   return (
     previous.taskId === next.taskId &&
     previous.role === next.role &&
-    previous.contextSwitchVersion === next.contextSwitchVersion &&
     previous.externalSessionId !== next.externalSessionId
   );
 };

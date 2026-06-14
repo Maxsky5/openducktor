@@ -1,6 +1,5 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { isRoleAvailableForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -61,21 +60,6 @@ export const buildPreviousSelectionQueryUpdate = (params: {
     [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.externalSessionId,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
   };
-};
-
-export const shouldTriggerContextSwitchIntent = (params: {
-  currentSession: AgentSessionRouteIdentity | null;
-  currentRole: AgentRole;
-  nextSession: AgentSessionRouteIdentity | null;
-  nextRole: AgentRole;
-}): boolean => {
-  if (params.currentRole !== params.nextRole) {
-    return true;
-  }
-  if (params.currentSession === null || params.nextSession === null) {
-    return params.currentSession !== params.nextSession;
-  }
-  return !matchesAgentSessionIdentity(params.currentSession, params.nextSession);
 };
 
 export const buildAgentStudioAsyncActivityContextKey = (

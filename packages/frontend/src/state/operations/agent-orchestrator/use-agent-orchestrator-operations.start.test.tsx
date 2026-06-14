@@ -377,7 +377,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
           sourceSession: {
             externalSessionId: "external-in-memory",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         });
         secondSessionId = session.externalSessionId;
@@ -623,7 +623,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
           sourceSession: {
             externalSessionId: "external-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         });
         externalSessionId = session.externalSessionId;

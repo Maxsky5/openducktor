@@ -59,7 +59,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     workspaceName: "Active Workspace",
   },
   taskId: "task-1",
-  role: "spec",
   activeSession: null,
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
@@ -239,10 +238,8 @@ describe("useAgentStudioFreshSessionCreation", () => {
         ),
     );
     const sendAgentMessage = mock(async () => {});
-    const onContextSwitchIntent = mock(() => {});
     const harness = createHookHarness(
       createBaseArgs({
-        role: "build",
         activeSession: createAgentSessionFixture({
           externalSessionId: "active-build",
           role: "build",
@@ -250,7 +247,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
         }),
         startAgentSession,
         sendAgentMessage,
-        onContextSwitchIntent,
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
@@ -291,7 +287,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-existing"), [
       expect.objectContaining({ kind: "text", text: expect.stringContaining("task-1") }),
     ]);
-    expect(onContextSwitchIntent).toHaveBeenCalledTimes(1);
 
     await harness.unmount();
   });
@@ -300,17 +295,14 @@ describe("useAgentStudioFreshSessionCreation", () => {
     const startAgentSession = mock(async () => {
       throw new Error("start failed");
     });
-    const onContextSwitchIntent = mock(() => {});
     const harness = createHookHarness(
       createBaseArgs({
-        role: "build",
         activeSession: createAgentSessionFixture({
           externalSessionId: "active-spec",
           role: "spec",
           taskId: "task-1",
         }),
         startAgentSession,
-        onContextSwitchIntent,
         executeRequestedSessionStart: async (_request, executeWithDecision) =>
           executeWithDecision({
             startMode: "reuse",
@@ -335,8 +327,6 @@ describe("useAgentStudioFreshSessionCreation", () => {
       });
     });
     await harness.waitFor(() => toastErrorMock.mock.calls.length > 0);
-
-    expect(onContextSwitchIntent).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

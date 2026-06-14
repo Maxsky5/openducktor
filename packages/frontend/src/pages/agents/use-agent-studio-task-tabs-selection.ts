@@ -13,8 +13,6 @@ type UseTaskTabSelectionArgs = {
   persistedActiveTaskId: string | null;
   intentActiveTaskId: string | null;
   tabsStorageHydratedWorkspaceId: string | null;
-  clearComposerInput: () => void;
-  onContextSwitchIntent: (() => void) | undefined;
   navigateToTaskIntent: NavigateToTaskIntent;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
@@ -36,8 +34,6 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     persistedActiveTaskId,
     intentActiveTaskId,
     tabsStorageHydratedWorkspaceId,
-    clearComposerInput,
-    onContextSwitchIntent,
     navigateToTaskIntent,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
@@ -122,8 +118,6 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
         return;
       }
 
-      onContextSwitchIntent?.();
-      clearComposerInput();
       setIntentActiveTaskId(nextTaskId);
       setOpenTaskTabs((current) => {
         if (current.includes(nextTaskId)) {
@@ -136,9 +130,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     },
     [
       activeTaskTabId,
-      clearComposerInput,
       navigateToTaskIntent,
-      onContextSwitchIntent,
       setIntentActiveTaskId,
       setOpenTaskTabs,
       setPersistedActiveTaskId,

@@ -102,7 +102,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isLoadingChecks: false,
   readSessionModelCatalog: async () => emptyCatalog,
   readSessionTodos: async () => [],
-  clearComposerInput: () => {},
   ...overrides,
 });
 
@@ -605,14 +604,12 @@ describe("useAgentStudioSelectionController", () => {
 
   test("uses detached tab workflow default role instead of query role selection", async () => {
     const updateQuery = mock(() => {});
-    const clearComposerInput = mock(() => {});
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         updateQuery,
-        clearComposerInput,
       }),
     );
 
@@ -627,7 +624,6 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.viewTaskId).toBe("task-2");
       expect(latest.viewRole).toBe("build");
       expect(latest.viewLaunchActionId).toBe("build_implementation_start");
-      expect(clearComposerInput).toHaveBeenCalledTimes(1);
       expect(updateQuery).toHaveBeenCalledTimes(1);
       expect(updateQuery).toHaveBeenCalledWith(
         expect.objectContaining({

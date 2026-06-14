@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createMemoryStorage,
@@ -102,7 +102,6 @@ const withPersistenceWorkspaceId = (
   isLoadingTasks: false,
   latestSessionByTaskId: new Map(),
   updateQuery: () => {},
-  clearComposerInput: () => {},
   ...overrides,
 });
 
@@ -134,7 +133,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -166,7 +164,6 @@ describe("useAgentStudioTaskTabs", () => {
       const taskTwo = createTask("task-2");
       const latestSession = createSession("task-2", "session-2");
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const clearComposerInput = mock(() => {});
 
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
@@ -179,7 +176,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput,
         }),
       );
 
@@ -188,7 +184,6 @@ describe("useAgentStudioTaskTabs", () => {
         state.handleSelectTab("task-2");
       });
 
-      expect(clearComposerInput).toHaveBeenCalledTimes(1);
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
         task: "task-2",
@@ -244,7 +239,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -294,7 +288,6 @@ describe("useAgentStudioTaskTabs", () => {
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
           updateQuery: () => {},
-          clearComposerInput: () => {},
         }),
       );
 
@@ -329,7 +322,6 @@ describe("useAgentStudioTaskTabs", () => {
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
       const updateCalls: Array<Record<string, string | undefined>> = [];
-      const clearComposerInput = mock(() => {});
 
       const harness = createHookHarness(
         withPersistenceWorkspaceId({
@@ -342,7 +334,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput,
         }),
       );
 
@@ -358,7 +349,6 @@ describe("useAgentStudioTaskTabs", () => {
         state.handleCloseTab("task-2");
       });
 
-      expect(clearComposerInput).toHaveBeenCalledTimes(2);
       expect(harness.getLatest().tabTaskIds).toEqual(["task-1"]);
       const lastUpdate = updateCalls[updateCalls.length - 1];
       expect(lastUpdate).toEqual({
@@ -395,7 +385,6 @@ describe("useAgentStudioTaskTabs", () => {
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
           updateQuery: () => {},
-          clearComposerInput: () => {},
         }),
       );
 
@@ -448,7 +437,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -501,7 +489,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -519,7 +506,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
 
       await harness.update({
@@ -533,7 +519,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
 
       expect(updateCalls).toHaveLength(1);
@@ -577,7 +562,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -596,7 +580,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
 
       await harness.waitFor(() => updateCalls.length > 0);
@@ -642,7 +625,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -676,7 +658,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -694,7 +675,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
       await harness.waitFor(() => updateCalls.length === 2);
 
@@ -709,7 +689,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
       await harness.waitFor(() => updateCalls.length === 3);
 
@@ -751,7 +730,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -780,7 +758,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
 
       await harness.waitFor(() => updateCalls.length > 0);
@@ -831,7 +808,6 @@ describe("useAgentStudioTaskTabs", () => {
           updateQuery: (updates) => {
             updateCalls.push(updates);
           },
-          clearComposerInput: () => {},
         }),
       );
 
@@ -850,7 +826,6 @@ describe("useAgentStudioTaskTabs", () => {
         updateQuery: (updates) => {
           updateCalls.push(updates);
         },
-        clearComposerInput: () => {},
       });
 
       expect(updateCalls).toHaveLength(0);
@@ -886,7 +861,6 @@ describe("useAgentStudioTaskTabs", () => {
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
           updateQuery: () => {},
-          clearComposerInput: () => {},
         }),
       );
 
@@ -922,7 +896,6 @@ describe("useAgentStudioTaskTabs", () => {
           isLoadingTasks: false,
           latestSessionByTaskId: new Map(),
           updateQuery: () => {},
-          clearComposerInput: () => {},
         }),
       );
 

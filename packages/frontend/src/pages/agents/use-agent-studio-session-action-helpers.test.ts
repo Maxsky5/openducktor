@@ -5,7 +5,6 @@ import {
   buildAgentStudioSelectionQueryUpdate,
   buildCreateSessionStartKey,
   buildPreviousSelectionQueryUpdate,
-  shouldTriggerContextSwitchIntent,
 } from "./use-agent-studio-session-action-helpers";
 
 describe("use-agent-studio-session-action-helpers", () => {
@@ -76,7 +75,7 @@ describe("use-agent-studio-session-action-helpers", () => {
     });
   });
 
-  test("buildCreateSessionStartKey and shouldTriggerContextSwitchIntent", () => {
+  test("buildCreateSessionStartKey keeps in-flight start identity stable", () => {
     expect(
       buildCreateSessionStartKey({
         taskId: "task-1",
@@ -84,39 +83,5 @@ describe("use-agent-studio-session-action-helpers", () => {
         launchActionId: "qa_review",
       }),
     ).toBe("task-1:qa:qa_review");
-
-    expect(
-      shouldTriggerContextSwitchIntent({
-        currentSession: {
-          externalSessionId: "session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-        },
-        currentRole: "spec",
-        nextSession: {
-          externalSessionId: "session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-        },
-        nextRole: "spec",
-      }),
-    ).toBe(false);
-
-    expect(
-      shouldTriggerContextSwitchIntent({
-        currentSession: {
-          externalSessionId: "session-1",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-        },
-        currentRole: "spec",
-        nextSession: {
-          externalSessionId: "session-2",
-          runtimeKind: "opencode",
-          workingDirectory: "/repo",
-        },
-        nextRole: "spec",
-      }),
-    ).toBe(true);
   });
 });

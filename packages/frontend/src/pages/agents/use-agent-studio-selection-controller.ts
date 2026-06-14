@@ -58,8 +58,6 @@ type UseAgentStudioSelectionControllerArgs = {
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
   ) => Promise<AgentModelCatalog>;
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
-  clearComposerInput: () => void;
-  onContextSwitchIntent?: () => void;
 };
 
 export type AgentStudioSelectionControllerResult = {
@@ -116,8 +114,6 @@ export function useAgentStudioSelectionController({
   isLoadingChecks,
   readSessionModelCatalog,
   readSessionTodos,
-  clearComposerInput,
-  onContextSwitchIntent,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
   const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
@@ -229,8 +225,6 @@ export function useAgentStudioSelectionController({
     latestSessionByTaskId,
     activeSessionByTaskId,
     updateQuery,
-    clearComposerInput,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
   });
 
   const viewTaskId = activeTaskTabId || taskId;

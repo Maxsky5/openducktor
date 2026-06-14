@@ -58,7 +58,6 @@ type UseAgentStudioSessionStartFlowArgs = {
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   updateQuery: (updates: QueryUpdate) => void;
-  onContextSwitchIntent?: () => void;
 };
 
 type AgentStudioSessionStartRequest = SessionStartLaunchRequest;
@@ -83,7 +82,6 @@ export function useAgentStudioSessionStartFlow({
   humanRequestChangesTask,
   setTaskTargetBranch,
   updateQuery,
-  onContextSwitchIntent,
 }: UseAgentStudioSessionStartFlowArgs): {
   isStarting: boolean;
   sessionStartModal: SessionStartModalModel | null;
@@ -291,7 +289,6 @@ export function useAgentStudioSessionStartFlow({
   const { handleCreateSession } = useAgentStudioFreshSessionCreation({
     activeWorkspace,
     taskId,
-    role,
     activeSession,
     selectedTask,
     agentStudioReady,
@@ -301,7 +298,6 @@ export function useAgentStudioSessionStartFlow({
     settleStartedAgentSession,
     sendAgentMessage,
     updateQuery,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
     setStartingActivityCountByContext,
     startingSessionByTask,
     executeRequestedSessionStart,

@@ -10,7 +10,6 @@ import {
   type SessionStartFlowRequest,
   type SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { errorMessage } from "@/lib/errors";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -23,13 +22,11 @@ import {
   decrementActivityCountRecord,
   incrementActivityCountRecord,
   type QueryUpdate,
-  shouldTriggerContextSwitchIntent,
 } from "../use-agent-studio-session-action-helpers";
 
 type UseAgentStudioFreshSessionCreationArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskId: string;
-  role: AgentRole;
   activeSession: AgentSessionState | null;
   selectedTask: TaskCard | null;
   agentStudioReady: boolean;
@@ -39,7 +36,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   updateQuery: (updates: QueryUpdate) => void;
-  onContextSwitchIntent?: () => void;
   setStartingActivityCountByContext: Dispatch<SetStateAction<Record<string, number>>>;
   startingSessionByTask: Map<string, Promise<SessionStartWorkflowResult | undefined>>;
   onPostStartActionError?: (action: "kickoff", error: Error) => void;
@@ -52,7 +48,6 @@ type UseAgentStudioFreshSessionCreationArgs = {
 export function useAgentStudioFreshSessionCreation({
   activeWorkspace,
   taskId,
-  role,
   activeSession,
   selectedTask,
   agentStudioReady,
@@ -62,7 +57,6 @@ export function useAgentStudioFreshSessionCreation({
   settleStartedAgentSession,
   sendAgentMessage,
   updateQuery,
-  onContextSwitchIntent,
   setStartingActivityCountByContext,
   startingSessionByTask,
   onPostStartActionError,
@@ -98,26 +92,10 @@ export function useAgentStudioFreshSessionCreation({
       const executeStartedSession = async (
         decision: ResolvedSessionStartDecision,
       ): Promise<SessionStartWorkflowResult | undefined> => {
-        const reuseTargetSession =
-          decision.startMode === "reuse" &&
-          matchesAgentSessionIdentity(activeSession, decision.sourceSession)
-            ? activeSession
-            : null;
-        const shouldSwitchContext = shouldTriggerContextSwitchIntent({
-          currentSession: activeSession,
-          currentRole: activeSession?.role ?? role,
-          nextSession: decision.startMode === "reuse" ? reuseTargetSession : null,
-          nextRole: params.nextRole,
-        });
-
         setStartingActivityCountByContext((current) =>
           incrementActivityCountRecord(current, startContextKey),
         );
         try {
-          if (shouldSwitchContext && decision.startMode !== "reuse") {
-            onContextSwitchIntent?.();
-          }
-
           try {
             const workflow = await executeSessionStartFromDecision({
               activeWorkspace,
@@ -149,10 +127,6 @@ export function useAgentStudioFreshSessionCreation({
               return undefined;
             }
 
-            if (shouldSwitchContext && decision.startMode === "reuse") {
-              onContextSwitchIntent?.();
-            }
-
             applyFreshSessionSelectionQuery(workflow, params.nextRole);
             return workflow;
           } catch (error) {
@@ -180,14 +154,11 @@ export function useAgentStudioFreshSessionCreation({
       );
     },
     [
-      activeSession,
       activeWorkspace,
       applyFreshSessionSelectionQuery,
-      onContextSwitchIntent,
       onPostStartActionError,
       executeRequestedSessionStart,
       queryClient,
-      role,
       selectedTask,
       sendAgentMessage,
       settleStartedAgentSession,

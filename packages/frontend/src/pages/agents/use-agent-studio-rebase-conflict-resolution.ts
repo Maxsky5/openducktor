@@ -35,7 +35,6 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
-  onContextSwitchIntent: () => void;
   startSessionRequest: (
     request: SessionStartLaunchRequest & {
       role: "build";
@@ -58,7 +57,6 @@ export function useAgentStudioRebaseConflictResolution({
   activeWorkspace,
   selection,
   scheduleQueryUpdate,
-  onContextSwitchIntent,
   startSessionRequest,
   loadPromptOverrides = loadEffectivePromptOverrides,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
@@ -128,12 +126,6 @@ export function useAgentStudioRebaseConflictResolution({
         onOpenSession: (session) => {
           const builderSession =
             builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
-          if (
-            viewActiveSession?.role !== "build" ||
-            !matchesAgentSessionIdentity(viewActiveSession, session)
-          ) {
-            onContextSwitchIntent();
-          }
           scheduleQueryUpdate({
             task: viewTaskId,
             session: session.externalSessionId,
@@ -145,7 +137,6 @@ export function useAgentStudioRebaseConflictResolution({
     [
       activeSession,
       handleResolveGitConflict,
-      onContextSwitchIntent,
       scheduleQueryUpdate,
       selectedSessionFromRoute,
       sessionsForTask,

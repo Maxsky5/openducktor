@@ -79,7 +79,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
       sessionsForTask: [builderSession],
     },
     scheduleQueryUpdate: mock(() => {}),
-    onContextSwitchIntent: mock(() => {}),
     startSessionRequest: mock(async () => sessionWorkflowResult("build-new-1")),
     loadPromptOverrides: mock(async () => ({})),
     ...overrides,
@@ -117,7 +116,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         session: "build-1",
         agent: "build",
       });
-      expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(1);
     } finally {
       await harness.unmount();
     }
@@ -288,7 +286,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
 
       expect(resolved).toBe(false);
       expect(args.scheduleQueryUpdate).toHaveBeenCalledTimes(0);
-      expect(args.onContextSwitchIntent).toHaveBeenCalledTimes(0);
     } finally {
       await harness.unmount();
     }

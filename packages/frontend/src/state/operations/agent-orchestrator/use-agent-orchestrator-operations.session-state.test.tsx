@@ -483,7 +483,7 @@ describe("use-agent-orchestrator-operations session state", () => {
           sourceSession: {
             externalSessionId: "external-1",
             runtimeKind: "opencode",
-            workingDirectory: "/repo/worktree",
+            workingDirectory: "/tmp/repo/worktree",
           },
         });
         reusedSessionId = session.externalSessionId;

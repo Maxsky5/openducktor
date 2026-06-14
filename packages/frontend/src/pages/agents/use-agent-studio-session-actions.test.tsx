@@ -291,14 +291,12 @@ describe("useAgentStudioSessionActions", () => {
   test("prepares a message-first session target without starting or sending", async () => {
     const updateQuery = mock(() => {});
     const scheduleSelectionIntent = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const startAgentSession = mock(async () => sessionIdentity("session-new"));
     const sendAgentMessage = mock(async () => {});
     const harness = createHookHarness({
       ...createBaseArgs(),
       updateQuery,
       scheduleSelectionIntent,
-      onContextSwitchIntent,
       startAgentSession,
       sendAgentMessage,
     });
@@ -324,7 +322,6 @@ describe("useAgentStudioSessionActions", () => {
       externalSessionId: null,
       role: "build",
     });
-    expect(onContextSwitchIntent).toHaveBeenCalled();
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
 
@@ -1559,11 +1556,8 @@ describe("useAgentStudioSessionActions", () => {
   test("selection actions ignore invalid session ids without mutating query state", async () => {
     const updateQuery = mock(() => {});
     const scheduleSelectionIntent = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeSessionRoute: null,
-      activeSessionRole: "spec" as const,
       activeSessionExists: false,
       agentStudioReady: true,
       isActiveTaskReady: true,
@@ -1572,7 +1566,6 @@ describe("useAgentStudioSessionActions", () => {
       selectedTask: createTask(),
       updateQuery,
       scheduleSelectionIntent,
-      onContextSwitchIntent,
     });
 
     await harness.mount();
@@ -1582,19 +1575,15 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(updateQuery).not.toHaveBeenCalled();
     expect(scheduleSelectionIntent).not.toHaveBeenCalled();
-    expect(onContextSwitchIntent).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
 
-  test("selection actions do not signal context switch for same session and role", async () => {
+  test("selection actions apply selected session identity", async () => {
     const updateQuery = mock(() => {});
-    const onContextSwitchIntent = mock(() => {});
     const session = createSession({ externalSessionId: "session-1", role: "spec" });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeSessionRoute: session,
-      activeSessionRole: "spec" as const,
       activeSessionExists: true,
       agentStudioReady: true,
       isActiveTaskReady: true,
@@ -1603,7 +1592,6 @@ describe("useAgentStudioSessionActions", () => {
       selectedTask: createTask(),
       updateQuery,
       scheduleSelectionIntent: undefined,
-      onContextSwitchIntent,
     });
 
     await harness.mount();
@@ -1616,7 +1604,6 @@ describe("useAgentStudioSessionActions", () => {
       session: "session-1",
       agent: "spec",
     });
-    expect(onContextSwitchIntent).not.toHaveBeenCalled();
 
     await harness.unmount();
   });

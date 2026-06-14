@@ -770,7 +770,8 @@ describe("KanbanPage session start modal flow", () => {
     expect(startAgentSessionMock).not.toHaveBeenCalled();
     expect(updateAgentSessionModelMock).not.toHaveBeenCalled();
     expect(toastErrorMock).toHaveBeenCalledWith("Failed to start the session.", {
-      description: "Reusable session is missing a runtime kind.",
+      description:
+        "Starting a build build_implementation_start session for TASK-123 requires a source session.",
     });
 
     await act(async () => {

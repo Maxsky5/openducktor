@@ -37,7 +37,6 @@ import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-se
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
 export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult & {
-  contextSwitchVersion: number;
   isSessionSelectionResolving: boolean;
 };
 
@@ -56,7 +55,6 @@ type AgentStudioOrchestrationComposerContext = {
 
 type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
-  onContextSwitchIntent: () => void;
   scheduleSelectionIntent: (intent: {
     taskId: string;
     externalSessionId: string | null;
@@ -266,7 +264,6 @@ export function useAgentStudioOrchestrationController({
   const { agentStudioReady } = readiness;
   const {
     updateQuery,
-    onContextSwitchIntent,
     startAgentSession,
     settleStartedAgentSession,
     sendAgentMessage,
@@ -384,7 +381,6 @@ export function useAgentStudioOrchestrationController({
     answerAgentQuestion,
     updateQuery,
     scheduleSelectionIntent,
-    onContextSwitchIntent,
   });
 
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =

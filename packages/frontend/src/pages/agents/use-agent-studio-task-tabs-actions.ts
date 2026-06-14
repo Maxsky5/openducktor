@@ -20,8 +20,6 @@ const focusTaskTabTrigger = (taskId: string): void => {
 type UseTaskTabActionsArgs = {
   tabTaskIds: string[];
   activeTaskTabId: string;
-  clearComposerInput: () => void;
-  onContextSwitchIntent: (() => void) | undefined;
   clearTaskSelection: () => void;
   navigateToTaskIntent: NavigateToTaskIntent;
   handleSelectTab: (nextTaskId: string) => void;
@@ -44,8 +42,6 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
   const {
     tabTaskIds,
     activeTaskTabId,
-    clearComposerInput,
-    onContextSwitchIntent,
     clearTaskSelection,
     navigateToTaskIntent,
     handleSelectTab,
@@ -80,8 +76,6 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
         return;
       }
 
-      clearComposerInput();
-      onContextSwitchIntent?.();
       setIntentActiveTaskId(nextActiveTaskId ?? null);
 
       if (!nextActiveTaskId) {
@@ -94,10 +88,8 @@ export function useTaskTabActions(args: UseTaskTabActionsArgs): UseTaskTabAction
     },
     [
       activeTaskTabId,
-      clearComposerInput,
       clearTaskSelection,
       navigateToTaskIntent,
-      onContextSwitchIntent,
       setIntentActiveTaskId,
       setOpenTaskTabs,
       setPersistedActiveTaskId,

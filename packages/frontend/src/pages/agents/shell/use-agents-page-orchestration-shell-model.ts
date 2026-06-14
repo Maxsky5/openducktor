@@ -67,10 +67,8 @@ export function useAgentsPageOrchestrationShellModel({
   const {
     selection,
     readiness,
-    contextSwitchVersion,
     isSessionSelectionResolving,
     scheduleQueryUpdate,
-    signalContextSwitchIntent,
     scheduleSelectionIntent,
   } = routeSession;
 
@@ -80,14 +78,8 @@ export function useAgentsPageOrchestrationShellModel({
         selection.viewTaskId,
         selection.viewRole,
         selection.viewActiveSession?.externalSessionId ?? "new",
-        contextSwitchVersion,
       ].join(":"),
-    [
-      contextSwitchVersion,
-      selection.viewActiveSession?.externalSessionId,
-      selection.viewRole,
-      selection.viewTaskId,
-    ],
+    [selection.viewActiveSession?.externalSessionId, selection.viewRole, selection.viewTaskId],
   );
 
   const orchestrationSelection = useMemo<
@@ -96,10 +88,9 @@ export function useAgentsPageOrchestrationShellModel({
     () => ({
       ...selection,
       isLoadingTasks: isForegroundLoadingTasks,
-      contextSwitchVersion,
       isSessionSelectionResolving,
     }),
-    [contextSwitchVersion, isForegroundLoadingTasks, isSessionSelectionResolving, selection],
+    [isForegroundLoadingTasks, isSessionSelectionResolving, selection],
   );
 
   const orchestration = useAgentStudioOrchestrationController({
@@ -112,7 +103,6 @@ export function useAgentsPageOrchestrationShellModel({
     draftStateKey,
     actions: {
       updateQuery: scheduleQueryUpdate,
-      onContextSwitchIntent: signalContextSwitchIntent,
       openTaskDetails,
       startAgentSession: agentOperations.startAgentSession,
       settleStartedAgentSession: agentOperations.settleStartedAgentSession,
@@ -162,7 +152,6 @@ export function useAgentsPageOrchestrationShellModel({
     activeWorkspace,
     selection: rebaseConflictSelection,
     scheduleQueryUpdate,
-    onContextSwitchIntent: signalContextSwitchIntent,
     startSessionRequest: orchestration.startSessionRequest,
   });
 

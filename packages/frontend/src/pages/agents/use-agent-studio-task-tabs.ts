@@ -36,8 +36,6 @@ export function useAgentStudioTaskTabs(args: {
   latestSessionByTaskId: Map<string, AgentSessionSummary>;
   activeSessionByTaskId?: Map<string, AgentSessionSummary>;
   updateQuery: (updates: QueryUpdate) => void;
-  clearComposerInput: () => void;
-  onContextSwitchIntent?: () => void;
 }): {
   tabTaskIds: string[];
   activeTaskTabId: string;
@@ -62,8 +60,6 @@ export function useAgentStudioTaskTabs(args: {
     latestSessionByTaskId,
     activeSessionByTaskId,
     updateQuery,
-    clearComposerInput,
-    onContextSwitchIntent,
   } = args;
 
   const [openTaskTabs, setOpenTaskTabs] = useState<string[]>([]);
@@ -124,8 +120,6 @@ export function useAgentStudioTaskTabs(args: {
     persistedActiveTaskId,
     intentActiveTaskId,
     tabsStorageHydratedWorkspaceId,
-    clearComposerInput,
-    onContextSwitchIntent,
     navigateToTaskIntent,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
@@ -168,8 +162,6 @@ export function useAgentStudioTaskTabs(args: {
   const { handleCreateTab, handleCloseTab, handleReorderTab } = useTaskTabActions({
     tabTaskIds,
     activeTaskTabId,
-    clearComposerInput,
-    onContextSwitchIntent,
     clearTaskSelection,
     navigateToTaskIntent,
     handleSelectTab,

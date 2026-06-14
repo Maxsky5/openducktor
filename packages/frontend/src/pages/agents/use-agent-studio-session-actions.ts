@@ -77,7 +77,6 @@ type UseAgentStudioSessionActionsArgs = {
     externalSessionId: string | null;
     role: AgentRole;
   }) => void;
-  onContextSwitchIntent?: () => void;
 };
 
 export type UseAgentStudioSessionActionsResult = {
@@ -132,7 +131,6 @@ export function useAgentStudioSessionActions({
   answerAgentQuestion,
   updateQuery,
   scheduleSelectionIntent,
-  onContextSwitchIntent,
 }: UseAgentStudioSessionActionsArgs): UseAgentStudioSessionActionsResult {
   const sessionState = useAgentStudioSessionActionState({
     activeSession,
@@ -185,7 +183,6 @@ export function useAgentStudioSessionActions({
     humanRequestChangesTask,
     ...(setTaskTargetBranch ? { setTaskTargetBranch } : {}),
     updateQuery,
-    ...(onContextSwitchIntent ? { onContextSwitchIntent } : {}),
   });
 
   const { isSending, onSend } = useAgentStudioSendAction({
@@ -244,8 +241,6 @@ export function useAgentStudioSessionActions({
     handlePrepareMessageFirstSession,
   } = useAgentStudioSelectionActions({
     taskId,
-    activeSessionRoute: activeSession,
-    activeSessionRole: sessionState.activeSessionRole,
     activeSessionExists: sessionState.hasActiveSession,
     agentStudioReady,
     isActiveTaskReady,
@@ -254,7 +249,6 @@ export function useAgentStudioSessionActions({
     selectedTask,
     updateQuery,
     scheduleSelectionIntent,
-    onContextSwitchIntent,
   });
 
   const selectedRoleAvailable = selectedTask ? canStartSessionForRole(selectedTask, role) : false;
