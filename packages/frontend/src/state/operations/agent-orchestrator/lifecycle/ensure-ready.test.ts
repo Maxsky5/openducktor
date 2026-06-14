@@ -4,10 +4,13 @@ import type { TaskCard } from "@openducktor/contracts";
 import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  createAgentSessionCollectionRefFixture,
   createAgentSessionPresenceSnapshotFixture,
   createDeferred,
   createSessionListenerRegistryRefFixture,
+  findAgentSessionFixture,
   hasSessionListenerFixture,
+  replaceAgentSessionFixture,
   setSessionListenerFixture,
 } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
@@ -96,7 +99,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef: { current: {} },
+      sessionsRef: createAgentSessionCollectionRefFixture([]),
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
@@ -147,11 +150,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       };
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({ status: "idle" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture();
 
     const ensureReady = createEnsureSessionReady({
@@ -167,11 +166,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -244,11 +243,9 @@ describe("agent-orchestrator-ensure-ready", () => {
         snapshot: null,
       });
 
-    const sessionsRef = {
-      current: {
-        "external-1": buildSession({ externalSessionId: "external-1", status: "idle" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({ externalSessionId: "external-1", status: "idle" }),
+    ]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
       {
         externalSessionId: "external-1",
@@ -271,11 +268,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["external-1"];
+        const current = findAgentSessionFixture(sessionsRef, "external-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["external-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -298,7 +295,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "external-1")).toBe(
         true,
       );
-      expect(sessionsRef.current["external-1"]?.runtimeKind).toBe("opencode");
+      expect(findAgentSessionFixture(sessionsRef, "external-1")?.runtimeKind).toBe("opencode");
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
@@ -341,30 +338,28 @@ describe("agent-orchestrator-ensure-ready", () => {
         snapshot: null,
       });
 
-    const sessionsRef = {
-      current: {
-        "external-1": buildSession({
-          externalSessionId: "external-1",
-          status: "idle",
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        externalSessionId: "external-1",
+        status: "idle",
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+    ]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
       {
         externalSessionId: "external-1",
@@ -388,11 +383,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
         updateCalls += 1;
-        const current = sessionsRef.current["external-1"];
+        const current = findAgentSessionFixture(sessionsRef, "external-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["external-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -415,8 +410,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "external-1")).toBe(
         true,
       );
-      expect(sessionsRef.current["external-1"]?.runtimeKind).toBe("opencode");
-      expect(sessionsRef.current["external-1"]?.pendingApprovals).toHaveLength(0);
+      expect(findAgentSessionFixture(sessionsRef, "external-1")?.runtimeKind).toBe("opencode");
+      expect(findAgentSessionFixture(sessionsRef, "external-1")?.pendingApprovals).toHaveLength(0);
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
@@ -436,15 +431,13 @@ describe("agent-orchestrator-ensure-ready", () => {
       });
     adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
-          runtimeKind: "opencode",
-          selectedModel: null,
-          status: "idle",
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        runtimeKind: "opencode",
+        selectedModel: null,
+        status: "idle",
+      }),
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -459,11 +452,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => {
@@ -481,7 +474,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       await ensureReady("session-1");
 
       expect(ensureRuntimeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.runtimeKind).toBe("opencode");
     } finally {
     }
   });
@@ -498,21 +491,19 @@ describe("agent-orchestrator-ensure-ready", () => {
       });
     adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        runtimeKind: "opencode",
+        selectedModel: {
           runtimeKind: "opencode",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5.4",
-            variant: "high",
-            profileId: "Hephaestus (Deep Agent)",
-          },
-          status: "idle",
-        }),
-      },
-    };
+          providerId: "openai",
+          modelId: "gpt-5.4",
+          variant: "high",
+          profileId: "Hephaestus (Deep Agent)",
+        },
+        status: "idle",
+      }),
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -543,7 +534,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       await ensureReady("session-1");
 
       expect(ensureRuntimeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.runtimeKind).toBe("opencode");
     } finally {
     }
   });
@@ -573,11 +564,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef: {
-        current: {
-          "session-1": runtimeSession,
-        },
-      },
+      sessionsRef: createAgentSessionCollectionRefFixture([runtimeSession]),
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
@@ -672,15 +659,13 @@ describe("agent-orchestrator-ensure-ready", () => {
       }),
     ];
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          pendingApprovals: [],
-          pendingQuestions: [],
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        status: "idle",
+        pendingApprovals: [],
+        pendingQuestions: [],
+      }),
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -695,11 +680,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -718,8 +703,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       );
       expect(listenCalls).toBe(1);
       expect(resumeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.status).toBe("idle");
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.pendingApprovals).toEqual([
         {
           requestId: "perm-1",
           requestType: "permission_grant" as const,
@@ -764,43 +749,41 @@ describe("agent-orchestrator-ensure-ready", () => {
       stopCalls += 1;
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        status: "idle",
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture();
 
     const ensureReady = createEnsureSessionReady({
@@ -816,11 +799,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -851,8 +834,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(ensureRuntimeCalls).toBe(1);
       expect(resumeCalls).toBe(1);
       expect(stopCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.pendingApprovals).toEqual([]);
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.pendingQuestions).toEqual([]);
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
@@ -882,43 +865,41 @@ describe("agent-orchestrator-ensure-ready", () => {
       };
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
-          status: "error",
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        status: "error",
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
 
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
       {
@@ -942,11 +923,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -968,7 +949,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(stopCalls).toBe(1);
       expect(resumeCalls).toBe(1);
       expect(listenCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("error");
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.status).toBe("error");
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
@@ -1012,11 +993,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       });
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({ status: "idle" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
       {
         externalSessionId: "session-1",
@@ -1039,11 +1016,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -1092,11 +1069,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       };
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({ status: "error" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "error" })]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
       {
         externalSessionId: "session-1",
@@ -1119,11 +1092,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1185,11 +1158,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         },
       });
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({ status: "error" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "error" })]);
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
       {
         externalSessionId: "session-1",
@@ -1212,11 +1181,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef,
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {
         listenCalls += 1;
@@ -1264,11 +1233,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       };
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({ status: "idle" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1283,11 +1248,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1329,11 +1294,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       };
     };
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({ status: "idle" }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1348,11 +1309,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1413,20 +1374,18 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
     adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5.4",
-            variant: "high",
-            profileId: "Hephaestus (Deep Agent)",
-          },
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        status: "idle",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5.4",
+          variant: "high",
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ]);
     const promptOverrides = {
       "system.role.build.base": {
         template: "Build override for {{task.title}}",
@@ -1447,11 +1406,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async () => ({
@@ -1473,7 +1432,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           profileId: "Hephaestus (Deep Agent)",
         },
       });
-      expect(sessionsRef.current["session-1"]?.title).toBe("Builder Session");
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.title).toBe("Builder Session");
       expect(resumedInput).toMatchObject({
         systemPrompt: expect.stringContaining("Build override for Implement feature"),
       });
@@ -1523,15 +1482,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
     adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
 
-    const sessionsRef = {
-      current: {
-        "session-1": buildSession({
-          runtimeKind: "opencode",
-          selectedModel: null,
-          status: "idle",
-        }),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildSession({
+        runtimeKind: "opencode",
+        selectedModel: null,
+        status: "idle",
+      }),
+    ]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1546,11 +1503,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: (_externalSessionId, updater) => {
-        const current = sessionsRef.current["session-1"];
+        const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
           return;
         }
-        sessionsRef.current["session-1"] = updater(current);
+        sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
       },
       listenToAgentSession: async () => {},
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
@@ -1575,7 +1532,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         systemPrompt: expect.stringContaining("Task context"),
       });
       expect(resumedInput).not.toHaveProperty("runtimeConnection");
-      expect(sessionsRef.current["session-1"]?.runtimeKind).toBe("opencode");
+      expect(findAgentSessionFixture(sessionsRef, "session-1")?.runtimeKind).toBe("opencode");
     } finally {
       adapter.resumeSession = originalResumeSession;
       adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
@@ -1596,11 +1553,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef: {
-        current: {
-          "session-1": buildSession(),
-        },
-      },
+      sessionsRef: createAgentSessionCollectionRefFixture([buildSession()]),
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},
@@ -1642,11 +1595,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef,
       currentWorkspaceRepoPathRef,
-      sessionsRef: {
-        current: {
-          "session-1": buildSession(),
-        },
-      },
+      sessionsRef: createAgentSessionCollectionRefFixture([buildSession()]),
       taskRef: { current: [taskFixture] },
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
       updateSession: () => {},

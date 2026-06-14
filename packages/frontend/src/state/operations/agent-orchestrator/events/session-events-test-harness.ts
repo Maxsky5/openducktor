@@ -6,7 +6,7 @@ import {
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
-  getAgentSessionByExternalSessionId,
+  listAgentSessions,
 } from "@/state/agent-session-collection";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
@@ -15,6 +15,12 @@ import {
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  createAgentSessionCollectionRefFixture,
+  findAgentSessionFixture,
+  getAgentSessionFixture,
+  replaceAgentSessionFixture,
+} from "../test-utils";
 import { createSessionEventBatcher } from "./session-event-batching";
 import type {
   ListenToAgentSessionParams,
@@ -70,13 +76,19 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
 export const getSession = (
   sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
-): AgentSessionState => {
-  const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
-  if (!session) {
-    throw new Error(`Expected session ${externalSessionId}`);
-  }
-  return session;
-};
+): AgentSessionState => getAgentSessionFixture(sessionsRef, externalSessionId);
+
+export const findSession = (
+  sessionsRef: { current: AgentSessionCollection },
+  externalSessionId = "session-1",
+): AgentSessionState | undefined => findAgentSessionFixture(sessionsRef, externalSessionId);
+
+export const replaceSessionForTest = (
+  collection: AgentSessionCollection,
+  session: AgentSessionState,
+): AgentSessionCollection => replaceAgentSessionFixture(collection, session);
+
+export const createSessionsRef = createAgentSessionCollectionRefFixture;
 
 export const getSessionMessages = (
   sessionsRef: { current: AgentSessionCollection },
@@ -121,7 +133,7 @@ export const listenToAgentSessionEvents = (
   const targetExternalSessionId =
     providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
   params.sessionsRef.current = createAgentSessionCollection(
-    Object.values(params.sessionsRef.current),
+    listAgentSessions(params.sessionsRef.current),
   );
   const session = getSession(params.sessionsRef, targetExternalSessionId);
   const sessionRef = providedSessionRef ?? {

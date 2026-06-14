@@ -1,7 +1,7 @@
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 
-export type AgentSessionCollection = Record<string, AgentSessionState>;
+export type AgentSessionCollection = ReadonlyMap<string, AgentSessionState>;
 
 export type AgentSessionCollectionUpdater =
   | AgentSessionCollection
@@ -10,10 +10,10 @@ export type AgentSessionCollectionUpdater =
 export const agentSessionCollectionKey = (identity: AgentSessionIdentity): string =>
   agentSessionIdentityKey(identity);
 
-export const emptyAgentSessionCollection = (): AgentSessionCollection => ({});
+export const emptyAgentSessionCollection = (): AgentSessionCollection => new Map();
 
 export const listAgentSessions = (collection: AgentSessionCollection): AgentSessionState[] =>
-  Object.values(collection);
+  Array.from(collection.values());
 
 export const createAgentSessionCollection = (
   sessions: Iterable<AgentSessionState>,
@@ -32,7 +32,7 @@ export const getAgentSession = (
   if (!identity) {
     return null;
   }
-  return collection[agentSessionCollectionKey(identity)] ?? null;
+  return collection.get(agentSessionCollectionKey(identity)) ?? null;
 };
 
 export const getAgentSessionByExternalSessionId = (
@@ -55,18 +55,18 @@ export const replaceAgentSession = (
   session: AgentSessionState,
 ): AgentSessionCollection => {
   const key = agentSessionCollectionKey(session);
-  const next: AgentSessionCollection = {};
-  let changed = collection[key] !== session;
+  const next = new Map<string, AgentSessionState>();
+  let changed = collection.get(key) !== session;
 
   for (const current of listAgentSessions(collection)) {
     if (current.externalSessionId === session.externalSessionId) {
       changed = changed || current !== session;
       continue;
     }
-    next[agentSessionCollectionKey(current)] = current;
+    next.set(agentSessionCollectionKey(current), current);
   }
 
-  next[key] = session;
+  next.set(key, session);
   return changed ? next : collection;
 };
 
@@ -75,13 +75,13 @@ export const removeAgentSessionByExternalSessionId = (
   externalSessionId: string,
 ): AgentSessionCollection => {
   let changed = false;
-  const next: AgentSessionCollection = {};
+  const next = new Map<string, AgentSessionState>();
   for (const session of listAgentSessions(collection)) {
     if (session.externalSessionId === externalSessionId) {
       changed = true;
       continue;
     }
-    next[agentSessionCollectionKey(session)] = session;
+    next.set(agentSessionCollectionKey(session), session);
   }
   return changed ? next : collection;
 };
@@ -95,13 +95,13 @@ export const removeAgentSessionsByExternalSessionIds = (
   }
   const idsToRemove = new Set(externalSessionIds);
   let changed = false;
-  const next: AgentSessionCollection = {};
+  const next = new Map<string, AgentSessionState>();
   for (const session of listAgentSessions(collection)) {
     if (idsToRemove.has(session.externalSessionId)) {
       changed = true;
       continue;
     }
-    next[agentSessionCollectionKey(session)] = session;
+    next.set(agentSessionCollectionKey(session), session);
   }
   return changed ? next : collection;
 };

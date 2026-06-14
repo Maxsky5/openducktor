@@ -23,6 +23,10 @@ import {
   listenToAgentSessionEvents,
   type SessionEventAdapter,
 } from "../agent-orchestrator/events/session-events";
+import {
+  createAgentSessionCollectionRefFixture,
+  updateAgentSessionFixture,
+} from "../agent-orchestrator/test-utils";
 import { host } from "../shared/host";
 import { useTaskOperations } from "./use-task-operations";
 
@@ -1846,24 +1850,14 @@ describe("use-task-operations", () => {
       refreshTaskStoreCheckForRepo: async (): Promise<TaskStoreCheck> => makeTaskStoreCheck(),
     });
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildAgentSession(),
-      },
-    };
+    const sessionsRef = createAgentSessionCollectionRefFixture([
+      buildAgentSession({ externalSessionId: "session-1" }),
+    ]);
     const updateSession = (
       externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[externalSessionId];
-      if (!current) {
-        return;
-      }
-
-      sessionsRef.current = {
-        ...sessionsRef.current,
-        [externalSessionId]: updater(current),
-      };
+      updateAgentSessionFixture(sessionsRef, externalSessionId, updater);
     };
 
     try {

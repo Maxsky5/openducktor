@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
+import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
@@ -124,9 +125,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     try {
       await harness.mount();
       await harness.run((hook) => {
-        hook.commitSessions({
-          "session-1": createSessionFixture(),
-        });
+        hook.commitSessions(createAgentSessionCollection([createSessionFixture()]));
 
         const registry = hook.refBridges.sessionListenerRegistryRef.current;
         setSessionListener(
@@ -162,7 +161,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       expect(unsubscribeCalls).toEqual(["first", "second"]);
-      expect(harness.getLatest().sessionCollection).toEqual({});
+      expect(listAgentSessions(harness.getLatest().sessionCollection)).toEqual([]);
       expect(harness.getLatest().refBridges.sessionListenerRegistryRef.current.size).toBe(0);
     } finally {
       await harness.unmount();

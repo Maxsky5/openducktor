@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
@@ -33,6 +34,10 @@ const persistedSessionRecord = (
   selectedModel: input.selectedModel ?? null,
 });
 
+const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
+  current: createAgentSessionCollection(sessions),
+});
+
 describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
@@ -40,7 +45,7 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
   test("loads and returns a persisted reusable session", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
-    const sessionsRef = { current: {} as Record<string, AgentSessionState> };
+    const sessionsRef = createSessionsRef();
     let loadCalls = 0;
     host.agentSessionsList = async () => [
       persistedSessionRecord({
@@ -56,11 +61,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         sessionsRef,
         loadAgentSessions: async () => {
           loadCalls += 1;
-          sessionsRef.current = {
-            "ext-build": createBuildSessionFixture({
+          sessionsRef.current = createAgentSessionCollection([
+            createBuildSessionFixture({
               externalSessionId: "ext-build",
             }),
-          };
+          ]);
         },
       });
       await expect(
@@ -94,13 +99,11 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
   test("rejects reuse when the build continuation target no longer matches", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
-      sessionsRef: {
-        current: {
-          "ext-build": createBuildSessionFixture({
-            workingDirectory: "/tmp/repo/old-worktree",
-          }),
-        },
-      },
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          workingDirectory: "/tmp/repo/old-worktree",
+        }),
+      ]),
     });
 
     await expect(
@@ -127,14 +130,12 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
   test("fails fast for qa reuse when no builder continuation target exists", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
-      sessionsRef: {
-        current: {
-          "ext-qa": createBuildSessionFixture({
-            externalSessionId: "ext-qa",
-            role: "qa",
-          }),
-        },
-      },
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-qa",
+          role: "qa",
+        }),
+      ]),
     });
 
     await expect(
@@ -182,14 +183,12 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
 
   test("rejects qa reuse when the task workflow does not allow qa", async () => {
     const sessionDependencies = createSessionDependenciesFixture({
-      sessionsRef: {
-        current: {
-          "ext-qa": createBuildSessionFixture({
-            externalSessionId: "ext-qa",
-            role: "qa",
-          }),
-        },
-      },
+      sessionsRef: createSessionsRef([
+        createBuildSessionFixture({
+          externalSessionId: "ext-qa",
+          role: "qa",
+        }),
+      ]),
     });
     const taskCard = createTaskCardFixture(
       {

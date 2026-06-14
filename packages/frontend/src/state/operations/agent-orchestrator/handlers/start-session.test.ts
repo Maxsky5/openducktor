@@ -38,6 +38,10 @@ const getSession = (
     externalSessionId,
   ) as AgentSessionState | null) ?? undefined;
 
+const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
+  current: createAgentSessionCollection(sessions),
+});
+
 const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
   return createStartAgentSession(toStartSessionDependencies(deps));
 };
@@ -133,7 +137,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: null,
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [] },
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: null },
@@ -169,7 +173,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const inFlightMap = new Map<string, Promise<string>>([
       ["/tmp/repo::task-1::build::reuse::session-in-flight::::", inFlight],
     ]);
-    const sessionsRef = { current: {} };
+    const sessionsRef = createSessionsRef();
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
@@ -237,7 +241,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -305,7 +309,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -491,7 +495,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         repoEpochRef: { current: 1 },
         currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
         setSessionCollection: () => {},
-        sessionsRef: { current: {} },
+        sessionsRef: createSessionsRef(),
         inFlightStartsByWorkspaceTaskRef: { current: new Map() },
         loadAgentSessions: async () => {},
         listenToAgentSession: async () => {},
@@ -630,28 +634,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          "external-newer": {
-            runtimeKind: "opencode",
-            externalSessionId: "external-newer",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: null,
-          },
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-newer",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: null,
         },
-      },
+      ]),
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -700,46 +702,44 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          latest: {
-            runtimeKind: "opencode",
-            externalSessionId: "external-latest",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: null,
-          },
-          "external-chosen": {
-            runtimeKind: "opencode",
-            externalSessionId: "external-chosen",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:00:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: null,
-          },
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-latest",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: null,
         },
-      },
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-chosen",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:00:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: null,
+        },
+      ]),
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -802,28 +802,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          stale: {
-            runtimeKind: "opencode",
-            externalSessionId: "external-stale",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/old-worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: null,
-          },
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-stale",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/old-worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: null,
         },
-      },
+      ]),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -874,28 +872,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          "external-chosen": {
-            runtimeKind: "opencode",
-            externalSessionId: "external-chosen",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: BUILD_SELECTION,
-          },
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-chosen",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: BUILD_SELECTION,
         },
-      },
+      ]),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -1046,33 +1042,31 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          "external-reused": {
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-reused",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: {
             runtimeKind: "opencode",
-            externalSessionId: "external-reused",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              profileId: "Ares",
-            },
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "Ares",
           },
         },
-      },
+      ]),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -1141,34 +1135,32 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          "external-reused": {
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "external-reused",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: {
             runtimeKind: "opencode",
-            externalSessionId: "external-reused",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "high",
-              profileId: "Sisyphus",
-            },
+            providerId: "openai",
+            modelId: "gpt-5",
+            variant: "high",
+            profileId: "Sisyphus",
           },
         },
-      },
+      ]),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -1245,28 +1237,26 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: {
-        current: {
-          existingBuild: {
-            runtimeKind: "opencode",
-            externalSessionId: "existing-build-ext",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:10:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: null,
-          },
+      sessionsRef: createSessionsRef([
+        {
+          runtimeKind: "opencode",
+          externalSessionId: "existing-build-ext",
+          taskId: "task-1",
+          role: "build",
+          status: "idle",
+          startedAt: "2026-02-22T08:10:00.000Z",
+          workingDirectory: "/tmp/repo/worktree",
+          historyLoadState: "not_requested",
+          messages: [],
+          draftAssistantText: "",
+          draftAssistantMessageId: null,
+          draftReasoningText: "",
+          draftReasoningMessageId: null,
+          pendingApprovals: [],
+          pendingQuestions: [],
+          selectedModel: null,
         },
-      },
+      ]),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -1421,7 +1411,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }),
     ]);
 
-    const sessionsRef = { current: {} };
+    const sessionsRef = createSessionsRef();
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
@@ -1443,15 +1433,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
-        sessionsRef.current = {
-          "external-build-newer": {
+        sessionsRef.current = createAgentSessionCollection([
+          {
             runtimeKind: "opencode",
             externalSessionId: "external-build-newer",
             taskId: "task-1",
             role: "build",
             status: "idle",
             startedAt: "2026-02-22T08:30:00.000Z",
-            runtimeId: "runtime-1",
             workingDirectory: "/tmp/repo/worktree",
             historyLoadState: "not_requested",
             messages: [],
@@ -1463,7 +1452,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
             pendingQuestions: [],
             selectedModel: null,
           },
-        };
+        ]);
       },
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
@@ -1857,27 +1846,25 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
-    const sessionsRef: { current: AgentSessionCollection } = {
-      current: {
-        "external-source-build": {
-          externalSessionId: "external-source-build",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: BUILD_SELECTION,
-        } as unknown as AgentSessionState,
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      {
+        externalSessionId: "external-source-build",
+        taskId: "task-1",
+        role: "build",
+        status: "idle",
+        startedAt: "2026-02-22T08:10:00.000Z",
+        workingDirectory: "/tmp/repo/worktree",
+        historyLoadState: "not_requested",
+        messages: [],
+        draftAssistantText: "",
+        draftAssistantMessageId: null,
+        draftReasoningText: "",
+        draftReasoningMessageId: null,
+        pendingApprovals: [],
+        pendingQuestions: [],
+        selectedModel: BUILD_SELECTION,
+      } as unknown as AgentSessionState,
+    ]);
     adapter.forkSession = async (input) => {
       forkCalls.push(input);
       return {
@@ -2170,7 +2157,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       }),
     ]);
 
-    const sessionsRef = { current: {} };
+    const sessionsRef = createSessionsRef();
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
@@ -2193,15 +2180,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
-        sessionsRef.current = {
-          "external-opencode": {
+        sessionsRef.current = createAgentSessionCollection([
+          {
             runtimeKind: "opencode",
             externalSessionId: "external-opencode",
             taskId: "task-1",
             role: "build",
             status: "idle",
             startedAt: "2026-02-22T08:20:00.000Z",
-            runtimeId: "runtime-1",
             workingDirectory: "/tmp/repo/worktree",
             historyLoadState: "not_requested",
             messages: [],
@@ -2218,7 +2204,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
               profileId: "Ares",
             },
           },
-        };
+        ]);
       },
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
@@ -2274,7 +2260,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ]);
 
-    const sessionsRef = { current: {} };
+    const sessionsRef = createSessionsRef();
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
@@ -2297,15 +2283,14 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadRepoPromptOverrides: async () => ({}),
       loadAgentSessions: async () => {
         loadAgentSessionsCalls += 1;
-        sessionsRef.current = {
-          "external-claude": {
+        sessionsRef.current = createAgentSessionCollection([
+          {
             runtimeKind: "opencode",
             externalSessionId: "external-claude",
             taskId: "task-1",
             role: "build",
             status: "idle",
             startedAt: "2026-02-22T08:20:00.000Z",
-            runtimeId: "runtime-1",
             workingDirectory: "/tmp/repo/worktree",
             historyLoadState: "not_requested",
             messages: [],
@@ -2322,7 +2307,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
               profileId: "Hephaestus",
             },
           },
-        };
+        ]);
       },
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
@@ -2360,7 +2345,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -2406,7 +2391,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: {
         current: [
           createTaskCardFixture({
@@ -2467,7 +2452,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: {
         current: [
           createTaskCardFixture({
@@ -2536,7 +2521,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: {
         current: [
           createTaskCardFixture({
@@ -2605,7 +2590,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/other" },
@@ -2697,8 +2682,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
           selectedModel: BUILD_SELECTION,
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
-      expect(sessionsRef.current).toEqual({});
-      expect(sessionsState).toEqual({});
+      expect(listAgentSessions(sessionsRef.current)).toEqual([]);
+      expect(listAgentSessions(sessionsState)).toEqual([]);
     } finally {
       adapter.startSession = originalStartSession;
       host.agentSessionsList = originalAgentSessionsList;
@@ -2733,7 +2718,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
@@ -2797,7 +2782,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
@@ -2863,7 +2848,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
@@ -3012,7 +2997,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -3082,7 +3067,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         activeRepo: "/tmp/repo",
         adapter,
         setSessionCollection: () => {},
-        sessionsRef: { current: {} },
+        sessionsRef: createSessionsRef(),
         taskRef: { current: [taskFixture] },
         repoEpochRef: { current: 1 },
         currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -3163,7 +3148,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       activeRepo: "/tmp/repo",
       adapter,
       setSessionCollection: () => {},
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },

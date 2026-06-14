@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createAgentSessionCollection } from "@/state/agent-session-collection";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import {
   BUILD_SELECTION,
@@ -548,15 +549,17 @@ describe("use-agent-orchestrator-operations session state", () => {
     try {
       await harness.mount();
       await harness.run(async () => {
-        harness.getLatest().commitSessions({
-          "external-1": createAgentSessionFixture({
-            externalSessionId: "external-1",
-            taskId: "task-1",
-            runtimeKind: "opencode",
-            role: "build",
-            workingDirectory: "/tmp/repo/worktree",
-          }),
-        });
+        harness.getLatest().commitSessions(
+          createAgentSessionCollection([
+            createAgentSessionFixture({
+              externalSessionId: "external-1",
+              taskId: "task-1",
+              runtimeKind: "opencode",
+              role: "build",
+              workingDirectory: "/tmp/repo/worktree",
+            }),
+          ]),
+        );
       });
 
       await harness.run(async () => {

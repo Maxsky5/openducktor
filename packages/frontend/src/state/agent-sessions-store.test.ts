@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
-import { createAgentSessionCollection } from "./agent-session-collection";
+import { createAgentSessionCollection, listAgentSessions } from "./agent-session-collection";
 import { createAgentSessionsStore, toAgentSessionSummary } from "./agent-sessions-store";
 
 describe("toAgentSessionSummary", () => {
@@ -151,7 +151,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.resetWorkspace("/repo-b");
 
-    expect(store.getSessionCollectionSnapshot()).toEqual({});
+    expect(listAgentSessions(store.getSessionCollectionSnapshot())).toEqual([]);
     expect(store.getActivitySnapshot()).toEqual({
       workspaceRepoPath: "/repo-b",
       sessions: [],

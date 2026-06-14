@@ -6,9 +6,16 @@ import type {
 } from "@openducktor/core";
 import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import {
+  type AgentSessionCollection,
+  createAgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
+import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createSessionListenerRegistry,
   hasSessionListenerForExternalSessionId,
@@ -90,6 +97,48 @@ export const withTimeout = async <T>(
 
 export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCard =>
   createSharedTaskCardFixture(ORCHESTRATOR_TASK_CARD_DEFAULTS, overrides);
+
+export type AgentSessionCollectionRef = { current: AgentSessionCollection };
+
+export const createAgentSessionCollectionRefFixture = (
+  sessions: AgentSessionState[],
+): AgentSessionCollectionRef => ({
+  current: createAgentSessionCollection(sessions),
+});
+
+export const findAgentSessionFixture = (
+  sessionsRef: AgentSessionCollectionRef,
+  externalSessionId = "session-1",
+): AgentSessionState | undefined =>
+  getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId) ?? undefined;
+
+export const getAgentSessionFixture = (
+  sessionsRef: AgentSessionCollectionRef,
+  externalSessionId = "session-1",
+): AgentSessionState => {
+  const session = findAgentSessionFixture(sessionsRef, externalSessionId);
+  if (!session) {
+    throw new Error(`Expected session ${externalSessionId}`);
+  }
+  return session;
+};
+
+export const replaceAgentSessionFixture = (
+  collection: AgentSessionCollection,
+  session: AgentSessionState,
+): AgentSessionCollection => replaceAgentSession(collection, session);
+
+export const updateAgentSessionFixture = (
+  sessionsRef: AgentSessionCollectionRef,
+  externalSessionId: string,
+  updater: (current: AgentSessionState) => AgentSessionState,
+): void => {
+  const current = findAgentSessionFixture(sessionsRef, externalSessionId);
+  if (!current) {
+    return;
+  }
+  sessionsRef.current = replaceAgentSessionFixture(sessionsRef.current, updater(current));
+};
 
 const createLiveAgentSessionSnapshotFixture = (
   overrides: Partial<LiveAgentSessionSnapshot> = {},

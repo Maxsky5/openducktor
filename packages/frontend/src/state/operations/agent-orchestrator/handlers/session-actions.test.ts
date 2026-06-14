@@ -4,8 +4,8 @@ import type { AgentSessionStopTarget } from "@openducktor/contracts";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
-  emptyAgentSessionCollection,
   getAgentSessionByExternalSessionId,
+  listAgentSessions,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
 import {
@@ -55,6 +55,10 @@ const getSession = (
   return session;
 };
 
+const createSessionsRef = (sessions: AgentSessionState[] = []) => ({
+  current: createAgentSessionCollection(sessions),
+});
+
 const mockAgentSessionPresenceSnapshot = (
   adapter: OpencodeSdkAdapter,
   snapshot: ReturnType<
@@ -75,8 +79,8 @@ const createDefaultActiveWorkspace = () => ({
 
 const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}) => {
   const adapter = overrides.adapter ?? new OpencodeSdkAdapter();
-  const sessionsRef = overrides.sessionsRef ?? { current: emptyAgentSessionCollection() };
-  sessionsRef.current = createAgentSessionCollection(Object.values(sessionsRef.current));
+  const sessionsRef = overrides.sessionsRef ?? createSessionsRef();
+  sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
   const userMessageStartedAtBySession: Record<string, number> = {};
 
   const dependencies: SessionActionDependencies = {
@@ -174,44 +178,42 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const adapter = new OpencodeSdkAdapter();
     const stopTargets: AgentSessionStopTarget[] = [];
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "planner",
-          workingDirectory: "/tmp/repo",
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "planner",
+        workingDirectory: "/tmp/repo",
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
     const actions = createSessionActions({
       adapter,
       sessionsRef,
@@ -248,42 +250,40 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     let clearCalls = 0;
     let unsubscribeCalls = 0;
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
 
     const stopAuthoritativeSession = async () => {
       throw new Error("build stop failed");
@@ -326,13 +326,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("records stop intent before awaiting authoritative session stop", async () => {
     const adapter = new OpencodeSdkAdapter();
     const stopDeferred = createDeferred<void>();
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+      }),
+    ]);
     const actions = createSessionActions({
       adapter,
       sessionsRef,
@@ -371,45 +369,43 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       };
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "build",
-          messages: [
-            {
-              id: "tool-running",
-              role: "tool",
-              content: "Tool todowrite running...",
-              timestamp: "2026-02-22T08:00:08.000Z",
-              meta: {
-                kind: "tool",
-                partId: "part-tool-running",
-                callId: "call-tool-running",
-                tool: "todowrite",
-                toolType: "todo",
-                status: "running",
-              },
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "build",
+        messages: [
+          {
+            id: "tool-running",
+            role: "tool",
+            content: "Tool todowrite running...",
+            timestamp: "2026-02-22T08:00:08.000Z",
+            meta: {
+              kind: "tool",
+              partId: "part-tool-running",
+              callId: "call-tool-running",
+              tool: "todowrite",
+              toolType: "todo",
+              status: "running",
             },
-          ],
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-        }),
-      },
-    };
+          },
+        ],
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+    ]);
 
     const updateSession = (
       externalSessionId: string,
@@ -501,30 +497,28 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       localStopCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          runtimeKind: "codex",
-          role: "build",
-          messages: [
-            {
-              id: "tool-running",
-              role: "tool",
-              content: "Tool todowrite running...",
-              timestamp: "2026-02-22T08:00:08.000Z",
-              meta: {
-                kind: "tool",
-                partId: "part-tool-running",
-                callId: "call-tool-running",
-                tool: "todowrite",
-                toolType: "todo",
-                status: "running",
-              },
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        runtimeKind: "codex",
+        role: "build",
+        messages: [
+          {
+            id: "tool-running",
+            role: "tool",
+            content: "Tool todowrite running...",
+            timestamp: "2026-02-22T08:00:08.000Z",
+            meta: {
+              kind: "tool",
+              partId: "part-tool-running",
+              callId: "call-tool-running",
+              tool: "todowrite",
+              toolType: "todo",
+              status: "running",
             },
-          ],
-        }),
-      },
-    };
+          },
+        ],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -582,11 +576,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       },
     ]);
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession(),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession()]);
 
     const actions = createSessionActions({
       adapter,
@@ -626,13 +616,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       localReleaseCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          role: "qa",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        role: "qa",
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -665,42 +653,40 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const persistDeferred = createDeferred<void>();
     const callOrder: string[] = [];
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Proceed",
-                  question: "Proceed?",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Proceed",
+                question: "Proceed?",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -759,13 +745,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       localReleaseCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          runtimeKind: "opencode",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        runtimeKind: "opencode",
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -805,11 +789,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const invalidationCalls: Array<{ repoPath: string; taskId: string; runtimeKind?: string }> = [];
     let loadAgentSessionsCalls = 0;
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession(),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession()]);
 
     const actions = createSessionActions({
       activeWorkspace: null,
@@ -856,28 +836,26 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       replyCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: ["*"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: ["*"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+    ]);
     const updateSessionOptions: unknown[] = [];
 
     const actions = createSessionActions({
@@ -971,30 +949,28 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       replyCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "stopped",
-          externalSessionId: "session-1",
-          pendingApprovals: [
-            {
-              requestId: "perm-1",
-              requestType: "permission_grant" as const,
-              title: `Approve permission: ${"read"}`,
-              summary: `Approval request for ${"read"}.`,
-              affectedPaths: [".env"],
-              action: { name: "read" },
-              mutation: "read_only" as const,
-              supportedReplyOutcomes: [
-                "approve_once" as const,
-                "approve_session" as const,
-                "reject" as const,
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "stopped",
+        externalSessionId: "session-1",
+        pendingApprovals: [
+          {
+            requestId: "perm-1",
+            requestType: "permission_grant" as const,
+            title: `Approve permission: ${"read"}`,
+            summary: `Approval request for ${"read"}.`,
+            affectedPaths: [".env"],
+            action: { name: "read" },
+            mutation: "read_only" as const,
+            supportedReplyOutcomes: [
+              "approve_once" as const,
+              "approve_session" as const,
+              "reject" as const,
+            ],
+          },
+        ],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1027,7 +1003,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     const actions = createSessionActions({
       adapter,
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       updateSession: () => {
         updateCalls += 1;
       },
@@ -1053,43 +1029,41 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       replyCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          messages: [
-            {
-              id: "tool-1",
-              role: "tool",
-              content: "Question requested",
-              timestamp: "2026-02-22T08:00:01.000Z",
-              meta: {
-                kind: "tool",
-                partId: "part-1",
-                callId: "call-1",
-                tool: "question",
-                toolType: "question" as const,
-                status: "completed",
-                metadata: {},
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        messages: [
+          {
+            id: "tool-1",
+            role: "tool",
+            content: "Question requested",
+            timestamp: "2026-02-22T08:00:01.000Z",
+            meta: {
+              kind: "tool",
+              partId: "part-1",
+              callId: "call-1",
+              tool: "question",
+              toolType: "question" as const,
+              status: "completed",
+              metadata: {},
+            },
+          },
+        ],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
               },
-            },
-          ],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+            ],
+          },
+        ],
+      }),
+    ]);
     const updateSessionOptions: unknown[] = [];
 
     const actions = createSessionActions({
@@ -1132,7 +1106,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     const actions = createSessionActions({
       adapter,
-      sessionsRef: { current: {} },
+      sessionsRef: createSessionsRef(),
       updateSession: () => {
         updateCalls += 1;
       },
@@ -1194,28 +1168,26 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       replyCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "stopped",
-          externalSessionId: "session-1",
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [
-                {
-                  header: "Confirm",
-                  question: "Confirm",
-                  options: [],
-                  multiple: false,
-                  custom: false,
-                },
-              ],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "stopped",
+        externalSessionId: "session-1",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Confirm",
+                options: [],
+                multiple: false,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1244,20 +1216,18 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5.3-codex",
-            variant: "high",
-            profileId: "Hephaestus (Deep Agent)",
-          },
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        selectedModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5.3-codex",
+          variant: "high",
+          profileId: "Hephaestus (Deep Agent)",
+        },
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1300,11 +1270,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "starting" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
 
     const actions = createSessionActions({
       adapter,
@@ -1352,19 +1318,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "starting",
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "starting",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+          },
+        ],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1410,11 +1374,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "starting" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
 
     const actions = createSessionActions({
       adapter,
@@ -1452,15 +1412,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       callOrder.push("send");
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          historyLoadState: "not_requested",
-          messages: [],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        historyLoadState: "not_requested",
+        messages: [],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1520,15 +1478,13 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          historyLoadState: "not_requested",
-          messages: [],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        historyLoadState: "not_requested",
+        messages: [],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1566,19 +1522,17 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "idle",
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
-            },
-          ],
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "idle",
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [{ header: "Confirm", question: "Confirm", options: [] }],
+          },
+        ],
+      }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1612,11 +1566,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sendCalls += 1;
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "idle", role: "build", taskId: "task-1" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "idle", role: "build", taskId: "task-1" }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1658,11 +1610,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("allows stopping a running session even when role is unavailable", async () => {
     const adapter = new OpencodeSdkAdapter();
     let stopCalls = 0;
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "running", role: "build", taskId: "task-1" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({ status: "running", role: "build", taskId: "task-1" }),
+    ]);
 
     const actions = createSessionActions({
       adapter,
@@ -1712,11 +1662,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       throw new Error("send failed");
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({ status: "idle" }),
-      },
-    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
 
     const actions = createSessionActions({
       adapter,
@@ -1776,17 +1722,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       });
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "running",
-          draftAssistantText: "Still working",
-          draftAssistantMessageId: "assistant-live-1",
-          draftReasoningText: "Thinking",
-          draftReasoningMessageId: "reasoning-live-1",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+        draftAssistantText: "Still working",
+        draftAssistantMessageId: "assistant-live-1",
+        draftReasoningText: "Thinking",
+        draftReasoningMessageId: "reasoning-live-1",
+      }),
+    ]);
     let recordUserAnchorCalls = 0;
     const turnModelBySessionRef = {
       current: {
@@ -1852,17 +1796,15 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       throw new Error("queued send failed");
     };
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "session-1": buildSession({
-          status: "running",
-          draftAssistantText: "Still working",
-          draftAssistantMessageId: "assistant-live-1",
-          draftReasoningText: "Thinking",
-          draftReasoningMessageId: "reasoning-live-1",
-        }),
-      },
-    };
+    const sessionsRef = createSessionsRef([
+      buildSession({
+        status: "running",
+        draftAssistantText: "Still working",
+        draftAssistantMessageId: "assistant-live-1",
+        draftReasoningText: "Thinking",
+        draftReasoningMessageId: "reasoning-live-1",
+      }),
+    ]);
     let recordUserAnchorCalls = 0;
     const turnModelBySessionRef = {
       current: {

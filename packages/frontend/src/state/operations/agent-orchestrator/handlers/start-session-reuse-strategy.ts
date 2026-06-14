@@ -1,6 +1,9 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { appQueryClient } from "@/lib/query-client";
-import { getAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
+import {
+  getAgentSessionByExternalSessionId,
+  listAgentSessions,
+} from "@/state/agent-session-collection";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
@@ -141,7 +144,7 @@ export const resolveLoadedSourceSession = async ({
   deps: StartSessionExecutionDependencies;
   sourceExternalSessionId: string;
 }): Promise<AgentSessionState> => {
-  const existingSourceSession = Object.values(deps.session.sessionsRef.current).find(
+  const existingSourceSession = listAgentSessions(deps.session.sessionsRef.current).find(
     (entry) =>
       entry.taskId === ctx.taskId &&
       entry.role === ctx.role &&
@@ -189,7 +192,7 @@ export const executeReuseStart = async ({
   }
   const { matchesQaTarget, matchesBuildTarget } = createWorkingDirectoryMatchers({ ctx, deps });
 
-  const existingSession = Object.values(deps.session.sessionsRef.current).find(
+  const existingSession = listAgentSessions(deps.session.sessionsRef.current).find(
     (entry) =>
       entry.taskId === ctx.taskId &&
       entry.role === ctx.role &&

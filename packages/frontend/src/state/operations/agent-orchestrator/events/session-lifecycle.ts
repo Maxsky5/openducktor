@@ -306,10 +306,7 @@ export const handleSessionCompactionStarted = (
 };
 
 const settleTerminalMessages = (
-  session: Pick<
-    SessionLifecycleEventContext["store"]["sessionsRef"]["current"][string],
-    "externalSessionId" | "messages"
-  >,
+  session: Pick<AgentSessionState, "externalSessionId" | "messages">,
   timestamp: string,
   options?: {
     outcome?: "completed" | "error";
