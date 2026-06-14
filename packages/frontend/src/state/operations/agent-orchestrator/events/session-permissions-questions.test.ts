@@ -11,6 +11,13 @@ import {
 
 type SessionsRef = { current: Record<string, AgentSessionState> };
 
+const flushAutoReject = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+};
+
 const startTestSessionListener = async (input: {
   externalSessionId: string;
   sessionsRef: SessionsRef;
@@ -132,7 +139,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       timestamp: "2026-02-22T08:00:05.000Z",
     });
 
-    await Promise.resolve();
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
@@ -1200,7 +1208,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
     });
-    await Promise.resolve();
+    expect(sessionsRef.current["external-child-session"]).toBeUndefined();
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1211,6 +1220,7 @@ describe("agent-orchestrator session permissions and questions", () => {
       }),
     );
     expect(sessionsRef.current["external-parent-session"]?.pendingApprovals).toHaveLength(0);
+    expect(sessionsRef.current["external-child-session"]).toBeUndefined();
     const [parentSubagentMessage] = getSessionMessages(sessionsRef, "external-parent-session");
     expect(parentSubagentMessage?.meta).toMatchObject({
       kind: "subagent",
@@ -1313,7 +1323,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       childExternalSessionId: "external-child-session",
       subagentCorrelationKey,
     });
-    await Promise.resolve();
+    expect(sessionsRef.current["external-child-session"]?.pendingApprovals).toHaveLength(1);
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledWith(
       expect.objectContaining({

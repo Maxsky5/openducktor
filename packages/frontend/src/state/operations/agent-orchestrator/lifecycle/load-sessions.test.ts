@@ -49,7 +49,7 @@ const createLoaderHarness = ({
   listSessionPresence,
   loadSessionHistory = async () => [],
   tasks = [taskFixture],
-  loadRepoPromptOverrides,
+  loadRepoPromptOverrides = async () => ({}),
 }: {
   initialSessionsById?: Record<string, AgentSessionState>;
   listSessionPresence: Parameters<
@@ -90,7 +90,7 @@ const createLoaderHarness = ({
     },
     queryClient: new QueryClient(),
     taskRef: { current: tasks },
-    ...(loadRepoPromptOverrides ? { loadRepoPromptOverrides } : {}),
+    loadRepoPromptOverrides,
   });
 
   return {

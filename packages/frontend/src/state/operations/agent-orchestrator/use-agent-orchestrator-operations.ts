@@ -140,7 +140,7 @@ export function useAgentOrchestratorOperations({
     [activeWorkspace, agentEngine, refBridges, updateSession, queryBackedPromptOverrides],
   );
   useRepoSessionReadModelEffects({
-    workspaceRepoPath,
+    activeWorkspace,
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
     commitSessions,
@@ -149,6 +149,7 @@ export function useAgentOrchestratorOperations({
     listenToAgentSession,
     setSessionReadModelError,
     queryClient,
+    loadRepoPromptOverrides: queryBackedPromptOverrides,
   });
   const ensureRuntime = useMemo(
     () =>

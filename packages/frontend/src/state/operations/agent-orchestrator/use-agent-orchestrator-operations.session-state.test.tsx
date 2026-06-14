@@ -10,6 +10,7 @@ import {
   OpencodeSdkAdapter,
   opencodeSdkAdapterPrototype,
   persistedSessionFixture,
+  sessionMessagesToArray,
   setupOrchestratorOperationsTestEnvironment,
   taskFixture,
   taskFixtureWithPersistedBuildSession,
@@ -677,6 +678,86 @@ describe("use-agent-orchestrator-operations session state", () => {
       OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
+      OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
+      opencodeSdkAdapterPrototype.listSessionPresence = originalListSessionPresence;
+    }
+  });
+
+  test("passes prompt context to repo-wide startup history loads", async () => {
+    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
+    const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
+    const originalListSessionPresence = opencodeSdkAdapterPrototype.listSessionPresence;
+    const codexRecord = {
+      ...persistedSessionFixture,
+      runtimeKind: "codex" as const,
+    };
+    const receivedHistoryInputRef: {
+      current: Parameters<InstanceType<typeof OpencodeSdkAdapter>["loadSessionHistory"]>[0] | null;
+    } = { current: null };
+
+    host.agentSessionsListBulk = async () => ({
+      "task-1": [codexRecord],
+    });
+    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
+      createAgentSessionPresenceSnapshotFixture({
+        ref: {
+          runtimeKind: "codex",
+          externalSessionId: codexRecord.externalSessionId,
+          workingDirectory: codexRecord.workingDirectory,
+        },
+        snapshot: {
+          title: "BUILD task-1",
+          workingDirectory: codexRecord.workingDirectory,
+          status: { type: "busy" },
+        },
+      }),
+    ];
+    OpencodeSdkAdapter.prototype.loadSessionHistory = async (input) => {
+      receivedHistoryInputRef.current = input;
+      return [
+        {
+          messageId: "history-system-1",
+          role: "system",
+          timestamp: input.systemPromptContext?.startedAt ?? codexRecord.startedAt,
+          text: `System prompt:\n\n${input.systemPromptContext?.systemPrompt ?? ""}`,
+          parts: [],
+        },
+      ];
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixtureWithPersistedBuildSession],
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+      const loaded = await harness.waitFor((state) =>
+        state.sessions.some(
+          (session) =>
+            session.externalSessionId === codexRecord.externalSessionId &&
+            session.historyLoadState === "loaded",
+        ),
+      );
+      const session = loaded.sessions.find(
+        (entry) => entry.externalSessionId === codexRecord.externalSessionId,
+      );
+      const receivedHistoryInput = receivedHistoryInputRef.current;
+      if (!receivedHistoryInput) {
+        throw new Error("Expected startup history to be loaded.");
+      }
+
+      expect(receivedHistoryInput.systemPromptContext).toMatchObject({
+        startedAt: codexRecord.startedAt,
+        systemPrompt: expect.stringContaining("Task context"),
+      });
+      expect(
+        session ? sessionMessagesToArray(session).map((message) => message.content) : [],
+      ).toEqual([expect.stringContaining("System prompt:\n\n")]);
+    } finally {
+      await harness.unmount();
+      host.agentSessionsListBulk = originalAgentSessionsListBulk;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       opencodeSdkAdapterPrototype.listSessionPresence = originalListSessionPresence;
     }

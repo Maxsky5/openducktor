@@ -77,8 +77,8 @@ type CreateLoadAgentSessionsArgs = {
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
   queryClient: QueryClient;
-  taskRef?: MutableRefObject<TaskCard[]>;
-  loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  taskRef: MutableRefObject<TaskCard[]>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 type CreateLoadAgentSessionHistoryArgs = {
@@ -87,8 +87,8 @@ type CreateLoadAgentSessionHistoryArgs = {
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   updateSession: UpdateSession;
   activeWorkspace: ActiveWorkspace | null;
-  taskRef?: MutableRefObject<TaskCard[]>;
-  loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  taskRef: MutableRefObject<TaskCard[]>;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 const isRepoOperationStale = ({
@@ -124,7 +124,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions: CommitSessions;
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
-  historyRuntimeContext?: SessionHistoryRuntimeContext;
+  historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
   options?: AgentSessionLoadOptions;
 }): Promise<void> => {
@@ -210,6 +210,7 @@ export const createLoadAgentSessions = ({
       return;
     }
 
+    const workspace = activeWorkspace;
     const repoPath = activeWorkspace.repoPath;
     const repoEpochAtStart = repoEpochRef.current;
     const isStaleRepoOperation = (): boolean =>
@@ -235,8 +236,8 @@ export const createLoadAgentSessions = ({
     }
 
     const historyRuntimeContext = buildHistoryRuntimeContext({
-      activeWorkspace,
-      taskRef,
+      activeWorkspace: workspace,
+      tasks: taskRef.current,
       loadRepoPromptOverrides,
     });
 
@@ -247,7 +248,7 @@ export const createLoadAgentSessions = ({
       commitSessions: setSessionsById,
       updateSession,
       ...(listenToAgentSession ? { listenToAgentSession } : {}),
-      ...(historyRuntimeContext ? { historyRuntimeContext } : {}),
+      historyRuntimeContext,
       isStaleRepoOperation,
       ...(options ? { options } : {}),
     });
@@ -267,7 +268,7 @@ export const createLoadAgentSessionHistory = ({
 }) => Promise<void>) => {
   return async ({ session }): Promise<void> => {
     const repoPath = currentWorkspaceRepoPathRef.current;
-    if (!repoPath) {
+    if (!repoPath || !activeWorkspace) {
       return;
     }
 
@@ -288,7 +289,7 @@ export const createLoadAgentSessionHistory = ({
       sessions: [session],
       context: buildHistoryRuntimeContext({
         activeWorkspace,
-        taskRef,
+        tasks: taskRef.current,
         loadRepoPromptOverrides,
       }),
     });

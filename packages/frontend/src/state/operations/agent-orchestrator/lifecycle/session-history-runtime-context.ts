@@ -1,5 +1,4 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
-import type { MutableRefObject } from "react";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { buildSessionSystemPrompt } from "../support/session-prompt";
@@ -21,20 +20,16 @@ const taskCardsById = (tasks: readonly TaskCard[]): ReadonlyMap<string, TaskCard
 
 export const buildHistoryRuntimeContext = ({
   activeWorkspace,
-  taskRef,
+  tasks,
   loadRepoPromptOverrides,
 }: {
-  activeWorkspace: ActiveWorkspace | null;
-  taskRef: MutableRefObject<TaskCard[]> | undefined;
-  loadRepoPromptOverrides: ((workspaceId: string) => Promise<RepoPromptOverrides>) | undefined;
-}): SessionHistoryRuntimeContext | undefined => {
-  const workspaceId = activeWorkspace?.workspaceId;
-  if (!workspaceId || !taskRef || !loadRepoPromptOverrides) {
-    return undefined;
-  }
+  activeWorkspace: ActiveWorkspace;
+  tasks: readonly TaskCard[];
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+}): SessionHistoryRuntimeContext => {
   return {
-    workspaceId,
-    taskCardsById: taskCardsById(taskRef.current),
+    workspaceId: activeWorkspace.workspaceId,
+    taskCardsById: taskCardsById(tasks),
     loadRepoPromptOverrides,
   };
 };
@@ -46,9 +41,9 @@ export const withSessionHistoryRuntimeContext = async <
   context,
 }: {
   sessions: readonly Session[];
-  context: SessionHistoryRuntimeContext | undefined;
+  context: SessionHistoryRuntimeContext;
 }): Promise<Session[]> => {
-  if (!context || sessions.length === 0) {
+  if (sessions.length === 0) {
     return [...sessions];
   }
 

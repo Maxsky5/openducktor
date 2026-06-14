@@ -10,6 +10,13 @@ import {
   type SessionEventAdapter,
 } from "./session-events-test-harness";
 
+const flushAutoReject = async (): Promise<void> => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+};
+
 describe("agent-orchestrator session errors and terminal state", () => {
   test("keeps permission pending when auto-reject reply fails", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
@@ -107,8 +114,8 @@ describe("agent-orchestrator session errors and terminal state", () => {
       subagentCorrelationKey: "part:assistant-parent:subtask-fail",
     });
 
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(1);
     expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
@@ -204,7 +211,8 @@ describe("agent-orchestrator session errors and terminal state", () => {
       timestamp: "2026-02-22T08:00:05.000Z",
     });
 
-    await Promise.resolve();
+    expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
+    await flushAutoReject();
 
     expect(replyApproval).toHaveBeenCalledTimes(0);
     expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);

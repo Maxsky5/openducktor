@@ -232,12 +232,22 @@ const autoRejectMutatingApproval = (
   context: SessionLifecycleEventContext,
   event: ApprovalRequiredEvent,
   role: AgentRole,
-  replySessionId = context.store.externalSessionId,
+  {
+    pendingSessionId,
+    replySessionId = context.store.externalSessionId,
+  }: {
+    pendingSessionId: string;
+    replySessionId?: string;
+  },
 ): void => {
   const pendingApproval = toPendingApproval(event);
   const markManualResponseRequired = (error: unknown): void => {
+    const manualResponseSessionId =
+      context.store.sessionsRef.current[pendingSessionId] !== undefined
+        ? pendingSessionId
+        : replySessionId;
     context.store.updateSession(
-      replySessionId,
+      manualResponseSessionId,
       (current) => ({
         ...current,
         pendingApprovals: [
@@ -282,7 +292,7 @@ const autoRejectMutatingApproval = (
     )
     .then(() => {
       context.store.updateSession(
-        replySessionId,
+        pendingSessionId,
         (current) => ({
           ...current,
           pendingApprovals: current.pendingApprovals.filter(
@@ -319,7 +329,10 @@ export const handlePermissionRequired = (
   }
 
   if (role && shouldAutoRejectApproval(context, role, event)) {
-    autoRejectMutatingApproval(context, event, role);
+    recordSessionPendingApproval(context, route.targetSessionId, event);
+    autoRejectMutatingApproval(context, event, role, {
+      pendingSessionId: route.targetSessionId,
+    });
     return;
   }
 

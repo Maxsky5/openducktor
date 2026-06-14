@@ -1,17 +1,19 @@
-import type { TaskCard } from "@openducktor/contracts";
+import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { ActiveWorkspace } from "@/types/state-slices";
 import { loadRepoAgentSessions } from "../lifecycle/load-sessions";
+import { buildHistoryRuntimeContext } from "../lifecycle/session-history-runtime-context";
 import { loadTaskSessionRecordsForTasks } from "../session-read-model/task-session-records";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 
 type UseRepoSessionReadModelEffectsArgs = {
-  workspaceRepoPath: string | null;
+  activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   currentWorkspaceRepoPathRef: { current: string | null };
   commitSessions: (
@@ -24,10 +26,11 @@ type UseRepoSessionReadModelEffectsArgs = {
   listenToAgentSession?: ListenToAgentSession;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
   queryClient: QueryClient;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 export const useRepoSessionReadModelEffects = ({
-  workspaceRepoPath,
+  activeWorkspace,
   tasks,
   currentWorkspaceRepoPathRef,
   commitSessions,
@@ -36,9 +39,12 @@ export const useRepoSessionReadModelEffects = ({
   listenToAgentSession,
   setSessionReadModelError,
   queryClient,
+  loadRepoPromptOverrides,
 }: UseRepoSessionReadModelEffectsArgs) => {
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+
   useEffect(() => {
-    if (!workspaceRepoPath) {
+    if (!workspaceRepoPath || !activeWorkspace) {
       setSessionReadModelError(null);
       return;
     }
@@ -62,6 +68,11 @@ export const useRepoSessionReadModelEffects = ({
         if (!isCurrentRepo()) {
           return;
         }
+        const historyRuntimeContext = buildHistoryRuntimeContext({
+          activeWorkspace,
+          tasks,
+          loadRepoPromptOverrides,
+        });
         await loadRepoAgentSessions({
           repoPath: workspaceRepoPath,
           tasks: taskSessionRecords,
@@ -69,6 +80,7 @@ export const useRepoSessionReadModelEffects = ({
           commitSessions,
           updateSession,
           ...(listenToAgentSession ? { listenToAgentSession } : {}),
+          historyRuntimeContext,
           isStaleRepoOperation: () => !isCurrentRepo(),
         });
       } catch (error) {
@@ -97,5 +109,7 @@ export const useRepoSessionReadModelEffects = ({
     setSessionReadModelError,
     tasks,
     workspaceRepoPath,
+    activeWorkspace,
+    loadRepoPromptOverrides,
   ]);
 };

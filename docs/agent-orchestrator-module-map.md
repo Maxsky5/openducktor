@@ -24,6 +24,8 @@ Owns:
 - merging persisted records plus runtime presence into `AgentSessionState`
 - subscribing to live sessions returned by runtime presence
 - loading initial history only for requested sessions or live sessions whose history has not been requested
+- passing the same transient runtime prompt context to every initial history load,
+  whether it came from repo startup or an explicit selected-session load
 
 Must not own:
 
@@ -218,7 +220,10 @@ session history has one frontend read boundary.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter owns any runtime-side state preparation
    needed before events can flow.
-7. Initial history is loaded from materialized session state for requested sessions and live sessions whose history has not been requested.
+7. Initial history is loaded from materialized session state for requested
+   sessions and live sessions whose history has not been requested. Each history
+   load receives transient runtime prompt context through the shared history
+   context builder; prompt text is never copied into session state.
 8. Subsequent status, transcript, permissions, and questions come from runtime events.
 
 ## Regression Anchors
@@ -231,6 +236,7 @@ Use these compact tests as the first-line safety net:
 | Runtime presence classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
 | Running-session history baseline after reload | `lifecycle/load-sessions.test.ts` |
+| Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
 | User messages preserved while repo/session reads are in flight | `lifecycle/load-sessions.test.ts` |
 | Per-session history failure isolation | `lifecycle/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `lifecycle/session-history-loader.test.ts` |
@@ -254,6 +260,8 @@ Use these compact tests as the first-line safety net:
 - Do not load selected transcript history by refetching task session records.
   The selected session state already owns runtime kind, working directory, role,
   and selected model for history reads.
+- Do not create separate history-loading paths for repo startup and selected
+  sessions. They must share the same transient prompt-context boundary.
 - Do not add fallback runtime routing. Persisted sessions carry `runtimeKind` and
   `workingDirectory`; missing data is an actionable error.
 - Keep runtime ids and runtime routes in low-level adapters/registry code. UI and
