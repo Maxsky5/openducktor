@@ -198,7 +198,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle).toMatchObject({
-      externalSessionId: "external-1",
       phase: "resolving_runtime",
       canReadRuntimeData: false,
       canRenderHistory: false,
@@ -218,7 +217,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle).toMatchObject({
-      externalSessionId: "external-1",
       phase: "history_failed",
       canReadRuntimeData: false,
       canRenderHistory: false,
@@ -238,7 +236,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle).toMatchObject({
-      externalSessionId: "external-1",
       phase: "loading_history",
       canReadRuntimeData: true,
       canRenderHistory: false,

@@ -342,16 +342,16 @@ export function useAgentStudioSelectionController({
       : firstLaunchAction(viewRole);
   const shouldWaitForTaskSessionRecords =
     isLoadingTaskSessionRecords &&
-    viewSelection.sessionRoute === null &&
+    viewSelectedSessionRoute === null &&
     viewSessionsForTask.length === 0 &&
     viewSelectedTask !== null;
   const selectedSessionLifecycle = useMemo(() => {
-    if (sessionReadModelError && viewSelection.sessionRoute === null && viewSelectedTask !== null) {
-      return createFailedSelectedSessionViewLifecycle(viewSessionParamFromSelection);
+    if (sessionReadModelError && viewSelectedSessionRoute === null && viewSelectedTask !== null) {
+      return createFailedSelectedSessionViewLifecycle();
     }
 
     if (shouldWaitForTaskSessionRecords) {
-      return createResolvingSelectedSessionViewLifecycle(viewSessionParamFromSelection);
+      return createResolvingSelectedSessionViewLifecycle();
     }
 
     return deriveSelectedAgentSessionViewLifecycle({
@@ -365,8 +365,6 @@ export function useAgentStudioSelectionController({
     shouldWaitForTaskSessionRecords,
     viewSelectedSessionRoute,
     viewSelectedTask,
-    viewSelection.sessionRoute,
-    viewSessionParamFromSelection,
     viewSessionReadinessState,
     viewActiveSession,
   ]);
@@ -380,7 +378,7 @@ export function useAgentStudioSelectionController({
   });
   useEffect(() => {
     if (
-      selectedSessionLifecycle.externalSessionId === null ||
+      viewSelectedSessionRoute === null ||
       !shouldEnsureAgentSessionReadyForView(selectedSessionLifecycle) ||
       !viewActiveSession
     ) {
@@ -388,7 +386,12 @@ export function useAgentStudioSelectionController({
     }
 
     void loadAgentSessionHistory({ session: viewActiveSession });
-  }, [loadAgentSessionHistory, selectedSessionLifecycle, viewActiveSession]);
+  }, [
+    loadAgentSessionHistory,
+    selectedSessionLifecycle,
+    viewActiveSession,
+    viewSelectedSessionRoute,
+  ]);
   const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(

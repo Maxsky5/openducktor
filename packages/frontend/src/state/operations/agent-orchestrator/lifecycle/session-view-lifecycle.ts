@@ -27,7 +27,6 @@ export type AgentSessionViewLifecycle = {
 };
 
 export type SelectedAgentSessionViewLifecycle = {
-  externalSessionId: string | null;
   phase: AgentSessionViewLifecyclePhase;
   canReadRuntimeData: boolean;
   canRenderHistory: boolean;
@@ -39,27 +38,21 @@ type SelectedAgentSessionLifecyclePhaseInput = Pick<SelectedAgentSessionViewLife
 type AgentSessionLifecycleHistoryInput = Pick<AgentSessionViewLifecycle, "historyRequest">;
 
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = {
-  externalSessionId: null,
   phase: "inactive",
   canReadRuntimeData: false,
   canRenderHistory: false,
   historyRequest: "none",
 };
 
-export const createResolvingSelectedSessionViewLifecycle = (
-  externalSessionId: string | null = null,
-): SelectedAgentSessionViewLifecycle => ({
-  externalSessionId,
-  phase: "resolving_session",
-  canReadRuntimeData: false,
-  canRenderHistory: false,
-  historyRequest: "none",
-});
+export const createResolvingSelectedSessionViewLifecycle =
+  (): SelectedAgentSessionViewLifecycle => ({
+    phase: "resolving_session",
+    canReadRuntimeData: false,
+    canRenderHistory: false,
+    historyRequest: "none",
+  });
 
-export const createFailedSelectedSessionViewLifecycle = (
-  externalSessionId: string | null = null,
-): SelectedAgentSessionViewLifecycle => ({
-  externalSessionId,
+export const createFailedSelectedSessionViewLifecycle = (): SelectedAgentSessionViewLifecycle => ({
   phase: "history_failed",
   canReadRuntimeData: false,
   canRenderHistory: false,
@@ -196,7 +189,6 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
   if (!session) {
     const hasLoadFailed = sessionLoadError !== null && sessionLoadError !== undefined;
     return {
-      externalSessionId: selectedSessionRoute.externalSessionId,
       phase: hasLoadFailed
         ? "history_failed"
         : repoReadinessState !== "ready"
@@ -211,7 +203,6 @@ export const deriveSelectedAgentSessionViewLifecycle = ({
   const lifecycle = deriveAgentSessionViewLifecycle({ session, repoReadinessState });
 
   return {
-    externalSessionId: selectedSessionRoute.externalSessionId,
     phase: lifecycle.phase,
     canReadRuntimeData: lifecycle.canReadRuntimeData,
     canRenderHistory: lifecycle.canRenderHistory,

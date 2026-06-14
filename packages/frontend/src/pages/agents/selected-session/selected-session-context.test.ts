@@ -197,7 +197,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const readyContext = buildAgentStudioSelectedSessionContext(
       createInput({
         lifecycle: createSelectedSessionLifecycleFixture({
-          externalSessionId: null,
           phase: "inactive",
           canReadRuntimeData: false,
           canRenderHistory: false,
@@ -218,7 +217,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const startingContext = buildAgentStudioSelectedSessionContext(
       createInput({
         lifecycle: createSelectedSessionLifecycleFixture({
-          externalSessionId: null,
           phase: "inactive",
           canReadRuntimeData: false,
           canRenderHistory: false,

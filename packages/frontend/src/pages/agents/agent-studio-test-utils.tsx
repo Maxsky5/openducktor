@@ -56,7 +56,6 @@ const PAGE_SESSION_DEFAULTS: Partial<AgentSessionState> = {
 export const createSelectedSessionLifecycleFixture = (
   overrides: Partial<SelectedAgentSessionViewLifecycle> = {},
 ): SelectedAgentSessionViewLifecycle => ({
-  externalSessionId: "session-1",
   phase: "ready",
   canReadRuntimeData: true,
   canRenderHistory: true,
