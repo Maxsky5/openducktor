@@ -13,6 +13,7 @@ import {
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadRuntimeReadiness, AgentChatThreadSession } from "../agent-chat.types";
+import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 
 const readSessionHistory = mock(
   async (): Promise<AgentSessionHistoryMessage[]> => [
@@ -547,17 +548,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
 
       const model = harness.getLatest().model;
-      expect(model.thread.session).toEqual({
-        externalSessionId: liveSession.externalSessionId,
-        status: liveSession.status,
-        runtimeKind: liveSession.runtimeKind,
-        workingDirectory: liveSession.workingDirectory,
-        messages: liveSession.messages,
-        pendingApprovals: liveSession.pendingApprovals,
-        pendingQuestions: liveSession.pendingQuestions,
-        selectedModel: liveSession.selectedModel,
-        todos: [],
-      });
+      expect(model.thread.session).toEqual(toAgentChatThreadSession(liveSession, []));
       expect(model.thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
       expect(model.thread.canReplyToApprovals).toBe(true);
       expect(readSessionHistory).not.toHaveBeenCalled();

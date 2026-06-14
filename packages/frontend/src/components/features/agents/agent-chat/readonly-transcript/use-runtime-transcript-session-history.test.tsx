@@ -7,6 +7,7 @@ import { createHookHarness as createSharedHookHarness } from "@/test-utils/react
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
 (
@@ -104,17 +105,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       await harness.mount();
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().session).toEqual({
-        externalSessionId: liveSession.externalSessionId,
-        status: liveSession.status,
-        runtimeKind: liveSession.runtimeKind,
-        workingDirectory: liveSession.workingDirectory,
-        messages: liveSession.messages,
-        pendingApprovals: liveSession.pendingApprovals,
-        pendingQuestions: liveSession.pendingQuestions,
-        selectedModel: liveSession.selectedModel,
-        todos: [],
-      });
+      expect(harness.getLatest().session).toEqual(toAgentChatThreadSession(liveSession, []));
       expect(harness.getLatest().lifecycle).toMatchObject({
         repoReadinessState: "ready",
       });

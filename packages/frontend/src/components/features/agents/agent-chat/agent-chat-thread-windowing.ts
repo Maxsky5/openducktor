@@ -4,11 +4,7 @@ import {
   getSessionMessageCount,
   isFinalAssistantChatMessage,
 } from "@/state/operations/agent-orchestrator/support/messages";
-import type {
-  AgentChatMessage,
-  AgentSessionMessages,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 
 /** Initial number of user turns rendered from the bottom of the transcript. */
@@ -95,36 +91,21 @@ export type AgentChatWindowRowsStateBuilder = {
   complete: () => AgentChatWindowRowsState;
 };
 
-const isSessionMessagesState = (
-  messages: AgentSessionMessages,
-): messages is SessionMessagesState => {
-  return (
-    typeof messages === "object" &&
-    messages !== null &&
-    "count" in messages &&
-    "version" in messages
-  );
-};
-
 const areSessionMessageContainersEquivalent = (
-  previousMessages: AgentSessionMessages,
-  nextMessages: AgentSessionMessages,
+  previousMessages: AgentChatThreadSession["messages"],
+  nextMessages: AgentChatThreadSession["messages"],
   externalSessionId: string,
 ): boolean => {
-  if (isSessionMessagesState(previousMessages) && isSessionMessagesState(nextMessages)) {
-    if (previousMessages === nextMessages) {
-      return true;
-    }
-
-    return (
-      previousMessages.externalSessionId === externalSessionId &&
-      nextMessages.externalSessionId === externalSessionId &&
-      previousMessages.version === nextMessages.version &&
-      previousMessages.count === nextMessages.count
-    );
+  if (previousMessages === nextMessages) {
+    return true;
   }
 
-  return false;
+  return (
+    previousMessages.externalSessionId === externalSessionId &&
+    nextMessages.externalSessionId === externalSessionId &&
+    previousMessages.version === nextMessages.version &&
+    previousMessages.count === nextMessages.count
+  );
 };
 
 const appendMessageRows = (

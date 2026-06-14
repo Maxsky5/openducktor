@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import {
@@ -732,7 +733,7 @@ describe("AgentChatThread", () => {
     };
 
     try {
-      const attachmentMessages = Array.from({ length: 80 }, (_, index) =>
+      const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
         buildMessage(
           "user",
           `Attachment message ${index + 1}`,
@@ -792,7 +793,7 @@ describe("AgentChatThread", () => {
       await waitForScheduledTranscriptWork();
 
       await waitFor(() => {
-        expect(rendered.queryByText("Attachment message 80")).not.toBeNull();
+        expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
       });
       expect(rendered.queryByText("Attachment message 1")).toBeNull();
       expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
@@ -844,10 +845,10 @@ describe("AgentChatThread", () => {
             session: {
               ...session,
               status: "running",
-              messages: [
+              messages: createSessionMessagesState("session-streaming", [
                 ...initialMessages,
                 buildMessage("assistant", "Streaming update", { id: "assistant-2" }),
-              ],
+              ]),
             },
           },
         }),

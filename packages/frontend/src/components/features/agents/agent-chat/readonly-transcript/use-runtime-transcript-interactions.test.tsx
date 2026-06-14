@@ -8,6 +8,7 @@ import type {
   AgentSessionIdentity,
 } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";
+import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 
 (
@@ -47,14 +48,15 @@ const createQuestionRequest = (requestId: string): AgentQuestionRequest => ({
 
 const createThreadSession = (
   overrides: Parameters<typeof createAgentSessionFixture>[0] = {},
-): AgentChatThreadSession => ({
-  ...createAgentSessionFixture({
-    runtimeKind: "opencode",
-    workingDirectory: "/repo-a",
-    ...overrides,
-  }),
-  todos: [],
-});
+): AgentChatThreadSession =>
+  toAgentChatThreadSession(
+    createAgentSessionFixture({
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      ...overrides,
+    }),
+    [],
+  );
 
 const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity => ({
   externalSessionId: "session-1",

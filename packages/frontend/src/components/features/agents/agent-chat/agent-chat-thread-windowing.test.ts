@@ -135,29 +135,6 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(reusedRowsState?.turns).toBe(initialRowsState.turns);
   });
 
-  test("peekReusableAgentChatWindowRowsState does not trust raw arrays for cheap reuse", () => {
-    const session = buildSession({
-      externalSessionId: "session-raw-cache",
-      messages: [buildMessage("assistant", "Message", { id: "assistant-1" })],
-    });
-    const cache = new Map();
-
-    writeAgentChatWindowRowsCacheEntry({
-      session,
-      showThinkingMessages: true,
-      rowsState: buildAgentChatWindowRowsState(session, { showThinkingMessages: true }),
-      cache,
-    });
-
-    expect(
-      peekReusableAgentChatWindowRowsState({
-        session,
-        showThinkingMessages: true,
-        cache,
-      }),
-    ).toBeNull();
-  });
-
   test("createAgentChatWindowRowsStateBuilder matches synchronous row state after chunking", () => {
     const session = buildSession({
       externalSessionId: "session-builder-equivalence",
@@ -257,26 +234,51 @@ describe("agent-chat-thread windowing helpers", () => {
     expect(updatedSignature).toBe(baselineSignature);
   });
 
-  test("getAgentChatWindowRowsKey changes when messages are appended in place", () => {
-    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
-    const session = buildSession({ messages });
+  test("getAgentChatWindowRowsKey changes when the session gets a new message state", () => {
+    const session = buildSession({
+      externalSessionId: "session-revision",
+      messages: createSessionMessagesState("session-revision", [
+        buildMessage("assistant", "Message 1", { id: "message-1" }),
+      ]),
+    });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
     const previousSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
-    messages.push(buildMessage("assistant", "Message 2", { id: "message-2" }));
-    const nextSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
+    const nextSession = buildSession({
+      ...session,
+      messages: createSessionMessagesState(
+        "session-revision",
+        [
+          buildMessage("assistant", "Message 1", { id: "message-1" }),
+          buildMessage("assistant", "Message 2", { id: "message-2" }),
+        ],
+        session.messages.version + 1,
+      ),
+    });
+    const nextSignature = getAgentChatWindowRowsKey(nextSession, true, resolveMessageIdentityToken);
 
     expect(nextSignature).not.toBe(previousSignature);
   });
 
-  test("getAgentChatWindowRowsKey changes when a message object is replaced in place", () => {
-    const messages = [buildMessage("assistant", "Message 1", { id: "message-1" })];
-    const session = buildSession({ messages });
+  test("getAgentChatWindowRowsKey changes when the message state revision changes", () => {
+    const session = buildSession({
+      externalSessionId: "session-revision-update",
+      messages: createSessionMessagesState("session-revision-update", [
+        buildMessage("assistant", "Message 1", { id: "message-1" }),
+      ]),
+    });
     const resolveMessageIdentityToken = createMessageIdentityResolver();
 
     const previousSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
-    messages[0] = buildMessage("assistant", "Message 1 updated", { id: "message-1" });
-    const nextSignature = getAgentChatWindowRowsKey(session, true, resolveMessageIdentityToken);
+    const nextSession = buildSession({
+      ...session,
+      messages: createSessionMessagesState(
+        "session-revision-update",
+        [buildMessage("assistant", "Message 1 updated", { id: "message-1" })],
+        session.messages.version + 1,
+      ),
+    });
+    const nextSignature = getAgentChatWindowRowsKey(nextSession, true, resolveMessageIdentityToken);
 
     expect(nextSignature).not.toBe(previousSignature);
   });

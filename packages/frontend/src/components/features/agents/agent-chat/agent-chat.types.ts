@@ -14,7 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionState, SessionMessagesState } from "@/types/agent-orchestrator";
 export type AgentRoleOption = {
   role: AgentRole;
   label: string;
@@ -39,11 +39,11 @@ export type AgentChatThreadSession = Pick<
   | "status"
   | "runtimeKind"
   | "workingDirectory"
-  | "messages"
   | "pendingApprovals"
   | "pendingQuestions"
   | "selectedModel"
 > & {
+  messages: SessionMessagesState;
   todos: AgentSessionTodoItem[];
 };
 

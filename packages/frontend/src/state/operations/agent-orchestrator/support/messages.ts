@@ -10,6 +10,10 @@ type MessageRoleIndexCache = Partial<Record<MessageRole, number[]>>;
 type MessageLastIndexCache = Partial<Record<MessageRole, number>>;
 
 export type SessionMessageOwner = Pick<AgentSessionState, "externalSessionId" | "messages">;
+export type SessionMessagesRevision = Pick<
+  SessionMessagesState,
+  "externalSessionId" | "count" | "version"
+>;
 
 const SESSION_MESSAGES_DATA = Symbol("sessionMessagesData");
 const SESSION_MESSAGES_BY_ID = Symbol("sessionMessagesById");
@@ -311,6 +315,19 @@ export const createSessionMessagesState = (
   version = 0,
 ): SessionMessagesState => {
   return createInternalState(externalSessionId, [...messages], version);
+};
+
+export const toSessionMessagesState = (owner: SessionMessageOwner): SessionMessagesState => {
+  return getSessionState(owner);
+};
+
+export const getSessionMessagesRevision = (owner: SessionMessageOwner): SessionMessagesRevision => {
+  const state = getSessionState(owner);
+  return {
+    externalSessionId: state.externalSessionId,
+    count: state.count,
+    version: state.version,
+  };
 };
 
 export const getSessionMessageCount = (owner: SessionMessageOwner): number => {

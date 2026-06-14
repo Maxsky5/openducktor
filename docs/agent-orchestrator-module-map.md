@@ -56,6 +56,10 @@ Invariant: history loading is explicit and singular. The selected session view o
 session action asks to load one concrete session route; the repo projection never
 bulk-loads transcripts.
 
+Invariant: transcript storage is owned by the session message helpers. UI chat
+models receive a `SessionMessagesState` handle; raw message arrays may be
+normalized at boundaries but must not leak into transcript rendering.
+
 ### Event Stream
 
 Files:

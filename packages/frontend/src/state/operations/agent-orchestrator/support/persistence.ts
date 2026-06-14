@@ -22,6 +22,7 @@ import {
 import { toReasoningMessageId, toToolMessageId } from "./chat-message-ids";
 import { isFinalAssistantHistoryMessage } from "./history-finality";
 import { appendHistorySubagentMessage } from "./history-subagent-messages";
+import { createSessionMessagesState } from "./messages";
 import { mergeModelSelection, normalizePersistedSelection } from "./models";
 import {
   readPersistedRuntimeKind,
@@ -92,7 +93,7 @@ export const fromPersistedSessionRecord = (
     runtimeKind,
     workingDirectory: session.workingDirectory,
     historyLoadState: "not_requested",
-    messages: [],
+    messages: createSessionMessagesState(session.externalSessionId),
     draftAssistantText: "",
     draftAssistantMessageId: null,
     draftReasoningText: "",

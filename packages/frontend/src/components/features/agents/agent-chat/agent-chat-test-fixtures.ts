@@ -5,6 +5,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
@@ -80,7 +81,10 @@ const baseSession: AgentSessionState = {
   startedAt: "2026-02-20T10:00:30.000Z",
   workingDirectory: "/repo",
   historyLoadState: "not_requested",
-  messages: [baseMessage],
+  messages: toSessionMessagesState({
+    externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
+    messages: [baseMessage],
+  }),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",
@@ -110,10 +114,14 @@ export const buildSession = (
   overrides: AgentChatThreadSessionOverrides = {},
 ): AgentChatThreadSession => {
   const { todos = [], ...overrideSession } = overrides;
-
-  return {
+  const session = {
     ...baseSession,
     ...overrideSession,
+  };
+
+  return {
+    ...session,
+    messages: toSessionMessagesState(session),
     todos,
   };
 };

@@ -1,6 +1,8 @@
 import { startTransition, useEffect, useMemo, useReducer, useRef } from "react";
-import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
-import type { SessionMessagesState } from "@/types/agent-orchestrator";
+import {
+  getSessionMessageCount,
+  getSessionMessagesRevision,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatThreadSession } from "./agent-chat.types";
 import {
   type AgentChatWindowRow,
@@ -20,15 +22,10 @@ type TranscriptRowsRevision = {
   externalSessionId: string | null;
   sessionStatus: AgentChatThreadSession["status"] | null;
   showThinkingMessages: boolean;
-  messagesKind: "state" | "array" | "none";
   messagesExternalSessionId: string | null;
   version: number | null;
   count: number | null;
-  rawSessionToken: number | null;
 };
-
-const rawSessionTokenBySession = new WeakMap<AgentChatThreadSession, number>();
-let nextRawSessionToken = 1;
 
 export type TranscriptRowsState = {
   revision: TranscriptRowsRevision;
@@ -43,11 +40,9 @@ const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
   externalSessionId: null,
   sessionStatus: null,
   showThinkingMessages: false,
-  messagesKind: "none",
   messagesExternalSessionId: null,
   version: null,
   count: null,
-  rawSessionToken: null,
 });
 
 const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
@@ -59,17 +54,6 @@ const EMPTY_TRANSCRIPT_ROWS_STATE: TranscriptRowsState = Object.freeze({
   activeStreamingAssistantMessageId: null,
 });
 
-const isSessionMessagesState = (
-  messages: AgentChatThreadSession["messages"],
-): messages is SessionMessagesState => {
-  return (
-    typeof messages === "object" &&
-    messages !== null &&
-    "count" in messages &&
-    "version" in messages
-  );
-};
-
 const buildTranscriptRowsRevision = (
   session: AgentChatThreadSession | null,
   showThinkingMessages: boolean,
@@ -78,44 +62,15 @@ const buildTranscriptRowsRevision = (
     return EMPTY_TRANSCRIPT_ROWS_REVISION;
   }
 
-  if (isSessionMessagesState(session.messages)) {
-    return {
-      externalSessionId: session.externalSessionId,
-      sessionStatus: session.status,
-      showThinkingMessages,
-      messagesKind: "state",
-      messagesExternalSessionId: session.messages.externalSessionId,
-      version: session.messages.version,
-      count: session.messages.count,
-      rawSessionToken: null,
-    };
-  }
-
-  const rawSessionToken = (() => {
-    if (!Array.isArray(session.messages)) {
-      return null;
-    }
-
-    const cachedToken = rawSessionTokenBySession.get(session);
-    if (typeof cachedToken === "number") {
-      return cachedToken;
-    }
-
-    const nextToken = nextRawSessionToken;
-    nextRawSessionToken += 1;
-    rawSessionTokenBySession.set(session, nextToken);
-    return nextToken;
-  })();
+  const messagesRevision = getSessionMessagesRevision(session);
 
   return {
     externalSessionId: session.externalSessionId,
     sessionStatus: session.status,
     showThinkingMessages,
-    messagesKind: Array.isArray(session.messages) ? "array" : "none",
-    messagesExternalSessionId: null,
-    version: null,
-    count: getSessionMessageCount(session),
-    rawSessionToken,
+    messagesExternalSessionId: messagesRevision.externalSessionId,
+    version: messagesRevision.version,
+    count: messagesRevision.count,
   };
 };
 
@@ -180,11 +135,9 @@ const areTranscriptRowsRevisionsEqual = (
     left.externalSessionId === right.externalSessionId &&
     left.sessionStatus === right.sessionStatus &&
     left.showThinkingMessages === right.showThinkingMessages &&
-    left.messagesKind === right.messagesKind &&
     left.messagesExternalSessionId === right.messagesExternalSessionId &&
     left.version === right.version &&
-    left.count === right.count &&
-    left.rawSessionToken === right.rawSessionToken
+    left.count === right.count
   );
 };
 
@@ -193,11 +146,9 @@ const toTranscriptRowsRevisionKey = (revision: TranscriptRowsRevision): string =
     revision.externalSessionId ?? "",
     revision.sessionStatus ?? "",
     revision.showThinkingMessages ? "thinking:on" : "thinking:off",
-    revision.messagesKind,
     revision.messagesExternalSessionId ?? "",
     revision.version ?? "",
     revision.count ?? "",
-    revision.rawSessionToken ?? "",
   ].join("\u001f");
 };
 
