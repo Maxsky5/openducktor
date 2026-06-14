@@ -1,7 +1,7 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
 import type {
@@ -9,16 +9,16 @@ import type {
   AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { loadRepoAgentSessions } from "../lifecycle/load-sessions";
-import { buildHistoryRuntimeContext } from "../lifecycle/session-history-runtime-context";
-import { loadTaskSessionRecordsForTasks } from "../session-read-model/task-session-records";
+import { loadRepoAgentSessionsForTasks } from "../lifecycle/load-sessions";
+import { createRepoStaleGuard } from "../support/core";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import type { UpdateAgentSession } from "./use-agent-session-mutations";
 
 type UseRepoSessionReadModelEffectsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
-  currentWorkspaceRepoPathRef: { current: string | null };
+  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
+  repoEpochRef: MutableRefObject<number>;
   sessionsRef: { readonly current: AgentSessionCollection };
   commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   updateSession: UpdateAgentSession;
@@ -33,6 +33,7 @@ export const useRepoSessionReadModelEffects = ({
   activeWorkspace,
   tasks,
   currentWorkspaceRepoPathRef,
+  repoEpochRef,
   sessionsRef,
   commitSessions,
   updateSession,
@@ -51,42 +52,35 @@ export const useRepoSessionReadModelEffects = ({
     }
 
     let cancelled = false;
+    const isRepoStale = createRepoStaleGuard({
+      repoPath: workspaceRepoPath,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+    });
 
-    const isCurrentRepo = (): boolean =>
-      !cancelled && currentWorkspaceRepoPathRef.current === workspaceRepoPath;
+    const isStaleRepoOperation = (): boolean => cancelled || isRepoStale();
 
     const loadSessionReadModel = async (): Promise<void> => {
-      if (!isCurrentRepo()) {
+      if (isStaleRepoOperation()) {
         return;
       }
       setSessionReadModelError(null);
       try {
-        const taskSessionRecords = await loadTaskSessionRecordsForTasks({
-          queryClient,
-          repoPath: workspaceRepoPath,
-          tasks,
-        });
-        if (!isCurrentRepo()) {
-          return;
-        }
-        const historyRuntimeContext = buildHistoryRuntimeContext({
+        await loadRepoAgentSessionsForTasks({
           activeWorkspace,
-          tasks,
-          loadRepoPromptOverrides,
-        });
-        await loadRepoAgentSessions({
           repoPath: workspaceRepoPath,
-          tasks: taskSessionRecords,
+          tasks,
           adapter: agentEngine,
           commitSessions,
           updateSession,
           ...(listenToAgentSession ? { listenToAgentSession } : {}),
           sessionsRef,
-          historyRuntimeContext,
-          isStaleRepoOperation: () => !isCurrentRepo(),
+          queryClient,
+          loadRepoPromptOverrides,
+          isStaleRepoOperation,
         });
       } catch (error) {
-        if (isCurrentRepo()) {
+        if (!isStaleRepoOperation()) {
           setSessionReadModelError(
             `Failed to load agent session read model for repo '${workspaceRepoPath}': ${errorMessage(
               error,
@@ -108,6 +102,7 @@ export const useRepoSessionReadModelEffects = ({
     commitSessions,
     updateSession,
     currentWorkspaceRepoPathRef,
+    repoEpochRef,
     sessionsRef,
     setSessionReadModelError,
     tasks,

@@ -19,7 +19,11 @@ import {
   readRepoRuntimeSessionPresence,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
-import { loadTaskSessionRecordsForTask } from "../session-read-model/task-session-records";
+import {
+  loadTaskSessionRecordsForTask,
+  loadTaskSessionRecordsForTasks,
+} from "../session-read-model/task-session-records";
+import { createRepoStaleGuard } from "../support/core";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
 import {
   loadSessionHistorySnapshot,
@@ -66,22 +70,6 @@ type CreateLoadAgentSessionHistoryArgs = {
   activeWorkspace: ActiveWorkspace | null;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-};
-
-const isRepoOperationStale = ({
-  repoPath,
-  repoEpochAtStart,
-  repoEpochRef,
-  currentWorkspaceRepoPathRef,
-}: {
-  repoPath: string;
-  repoEpochAtStart: number;
-  repoEpochRef: MutableRefObject<number>;
-  currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-}): boolean => {
-  return (
-    repoEpochRef.current !== repoEpochAtStart || currentWorkspaceRepoPathRef.current !== repoPath
-  );
 };
 
 const selectSessionHistoryTargets = ({
@@ -203,6 +191,61 @@ export const loadRepoAgentSessions = async ({
   });
 };
 
+export const loadRepoAgentSessionsForTasks = async ({
+  activeWorkspace,
+  repoPath,
+  tasks,
+  adapter,
+  commitSessions,
+  updateSession,
+  listenToAgentSession,
+  sessionsRef,
+  queryClient,
+  loadRepoPromptOverrides,
+  isStaleRepoOperation,
+}: {
+  activeWorkspace: ActiveWorkspace;
+  repoPath: string;
+  tasks: TaskCard[];
+  adapter: SessionLoaderAdapter;
+  commitSessions: CommitSessions;
+  updateSession: UpdateSession;
+  listenToAgentSession?: ListenToAgentSession;
+  sessionsRef: SessionsSnapshotRef;
+  queryClient: QueryClient;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+  isStaleRepoOperation: () => boolean;
+}): Promise<void> => {
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
+  const taskSessionRecords = await loadTaskSessionRecordsForTasks({
+    queryClient,
+    repoPath,
+    tasks,
+  });
+  if (isStaleRepoOperation()) {
+    return;
+  }
+
+  await loadRepoAgentSessions({
+    repoPath,
+    tasks: taskSessionRecords,
+    adapter,
+    commitSessions,
+    updateSession,
+    ...(listenToAgentSession ? { listenToAgentSession } : {}),
+    sessionsRef,
+    historyRuntimeContext: buildHistoryRuntimeContext({
+      activeWorkspace,
+      tasks,
+      loadRepoPromptOverrides,
+    }),
+    isStaleRepoOperation,
+  });
+};
+
 export const createLoadAgentSessions = ({
   activeWorkspace,
   adapter,
@@ -226,14 +269,11 @@ export const createLoadAgentSessions = ({
 
     const workspace = activeWorkspace;
     const repoPath = activeWorkspace.repoPath;
-    const repoEpochAtStart = repoEpochRef.current;
-    const isStaleRepoOperation = (): boolean =>
-      isRepoOperationStale({
-        repoPath,
-        repoEpochAtStart,
-        repoEpochRef,
-        currentWorkspaceRepoPathRef,
-      });
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+    });
 
     if (isStaleRepoOperation()) {
       return;
@@ -287,14 +327,11 @@ export const createLoadAgentSessionHistory = ({
       return;
     }
 
-    const repoEpochAtStart = repoEpochRef.current;
-    const isStaleRepoOperation = (): boolean =>
-      isRepoOperationStale({
-        repoPath,
-        repoEpochAtStart,
-        repoEpochRef,
-        currentWorkspaceRepoPathRef,
-      });
+    const isStaleRepoOperation = createRepoStaleGuard({
+      repoPath,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+    });
 
     if (isStaleRepoOperation()) {
       return;

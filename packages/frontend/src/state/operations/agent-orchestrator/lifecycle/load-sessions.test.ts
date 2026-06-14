@@ -11,10 +11,11 @@ import {
   getAgentSessionByExternalSessionId,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
-import { createLoadAgentSessions } from "./load-sessions";
+import { createLoadAgentSessions, loadRepoAgentSessionsForTasks } from "./load-sessions";
 
 const record: AgentSessionRecord = {
   externalSessionId: "external-1",
@@ -117,6 +118,60 @@ const createLoaderHarness = ({
 };
 
 describe("createLoadAgentSessions", () => {
+  test("loads the repo read model from task session record queries", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(agentSessionQueryKeys.bulk("/repo", ["task-1"]), {
+      "task-1": [record],
+    });
+    let sessionCollection = emptyAgentSessionCollection();
+    let presenceReads = 0;
+
+    await loadRepoAgentSessionsForTasks({
+      activeWorkspace: {
+        workspaceId: "workspace-1",
+        workspaceName: "Workspace",
+        repoPath: "/repo",
+      },
+      repoPath: "/repo",
+      tasks: [taskFixture],
+      adapter: {
+        listSessionPresence: async () => {
+          presenceReads += 1;
+          return [];
+        },
+        loadSessionHistory: async () => [],
+      },
+      commitSessions: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+      },
+      updateSession: (identity, updater) => {
+        const current = getAgentSession(sessionCollection, identity);
+        if (!current) {
+          return;
+        }
+        sessionCollection = replaceAgentSession(sessionCollection, updater(current));
+      },
+      sessionsRef: {
+        get current() {
+          return sessionCollection;
+        },
+      },
+      queryClient,
+      loadRepoPromptOverrides: async () => ({}),
+      isStaleRepoOperation: () => false,
+    });
+
+    expect(presenceReads).toBe(1);
+    expect(getAgentSessionByExternalSessionId(sessionCollection, record.externalSessionId)).toEqual(
+      expect.objectContaining({
+        externalSessionId: record.externalSessionId,
+        status: "stopped",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
+      }),
+    );
+  });
+
   test("commits the repo session read model from one runtime presence scan", async () => {
     const harness = createLoaderHarness({
       listSessionPresence: async () => [

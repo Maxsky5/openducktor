@@ -141,6 +141,7 @@ export function useAgentOrchestratorOperations({
     activeWorkspace,
     tasks,
     currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
+    repoEpochRef: refBridges.repoEpochRef,
     sessionsRef,
     commitSessions,
     updateSession,
