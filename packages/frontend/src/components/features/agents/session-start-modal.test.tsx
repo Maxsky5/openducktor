@@ -20,6 +20,11 @@ const reactActEnvironment = globalThis as {
 reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 
 const noop = () => {};
+const existingSessionOption = (externalSessionId: string) => ({
+  value: `opencode\u0000${externalSessionId}\u0000/repo/worktree`,
+  sourceExternalSessionId: externalSessionId,
+  label: "Session #1",
+});
 
 const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionStartModalModel => ({
   open: true,
@@ -45,9 +50,9 @@ const createModel = (overrides: Partial<SessionStartModalModel> = {}): SessionSt
   availableStartModes: ["fresh"],
   selectedStartMode: "fresh",
   existingSessionOptions: [],
-  selectedSourceSessionId: "",
+  selectedSourceSessionValue: "",
   onSelectStartMode: noop,
-  onSelectSourceSession: noop,
+  onSelectSourceSessionValue: noop,
   onSelectRuntime: noop,
   onSelectAgent: noop,
   onSelectModel: noop,
@@ -136,6 +141,7 @@ describe("SessionStartModal", () => {
       runInBackground: false,
       startMode: "fresh",
       sourceExternalSessionId: null,
+      sourceSessionOptionValue: null,
     });
 
     expect(screen.getByRole("button", { name: /start session/i })).toBeTruthy();
@@ -149,8 +155,8 @@ describe("SessionStartModal", () => {
         model: createModel({
           availableStartModes: ["fresh", "reuse"],
           selectedStartMode: "reuse",
-          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
-          selectedSourceSessionId: "session-1",
+          existingSessionOptions: [existingSessionOption("session-1")],
+          selectedSourceSessionValue: existingSessionOption("session-1").value,
         }),
       }),
     );
@@ -183,8 +189,8 @@ describe("SessionStartModal", () => {
           selectedModelSelection: null,
           availableStartModes: ["fresh", "reuse"],
           selectedStartMode: "reuse",
-          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
-          selectedSourceSessionId: "session-1",
+          existingSessionOptions: [existingSessionOption("session-1")],
+          selectedSourceSessionValue: existingSessionOption("session-1").value,
           onConfirm,
         }),
       }),
@@ -201,6 +207,7 @@ describe("SessionStartModal", () => {
       runInBackground: false,
       startMode: "reuse",
       sourceExternalSessionId: "session-1",
+      sourceSessionOptionValue: existingSessionOption("session-1").value,
     });
 
     unmount();
@@ -214,8 +221,8 @@ describe("SessionStartModal", () => {
           selectedModelSelection: null,
           availableStartModes: ["fresh", "reuse"],
           selectedStartMode: "reuse",
-          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
-          selectedSourceSessionId: "session-1",
+          existingSessionOptions: [existingSessionOption("session-1")],
+          selectedSourceSessionValue: existingSessionOption("session-1").value,
         }),
       }),
     );
@@ -255,8 +262,8 @@ describe("SessionStartModal", () => {
         model: createModel({
           availableStartModes: ["reuse", "fork"],
           selectedStartMode: "fork",
-          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
-          selectedSourceSessionId: "session-1",
+          existingSessionOptions: [existingSessionOption("session-1")],
+          selectedSourceSessionValue: existingSessionOption("session-1").value,
         }),
       }),
     );
@@ -291,8 +298,8 @@ describe("SessionStartModal", () => {
         model: createModel({
           availableStartModes: ["fresh", "reuse", "fork"],
           selectedStartMode: "reuse",
-          existingSessionOptions: [{ value: "session-1", label: "Session #1" }],
-          selectedSourceSessionId: "session-1",
+          existingSessionOptions: [existingSessionOption("session-1")],
+          selectedSourceSessionValue: existingSessionOption("session-1").value,
         }),
       }),
     );

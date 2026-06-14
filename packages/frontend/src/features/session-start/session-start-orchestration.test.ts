@@ -70,8 +70,8 @@ describe("session-start-orchestration", () => {
     });
     expect(request.initialTargetBranchError).toBe("saved target branch is invalid");
     expect(request.existingSessionOptions).toEqual([
-      expect.objectContaining({ value: "builder-session-2" }),
-      expect.objectContaining({ value: "builder-session-1" }),
+      expect.objectContaining({ sourceExternalSessionId: "builder-session-2" }),
+      expect.objectContaining({ sourceExternalSessionId: "builder-session-1" }),
     ]);
   });
 
@@ -246,6 +246,7 @@ describe("session-start-orchestration", () => {
         existingSessionOptions: [
           {
             value: "codex-session-1",
+            sourceExternalSessionId: "codex-session-1",
             label: "Codex session",
             description: "Existing Codex builder session",
             runtimeKind: "codex",

@@ -78,6 +78,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       spec: {
         role: "spec",
         externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree",
         startedAt: "2026-02-22T12:00:00.000Z",
         status: "running",
         taskId: "task-1",

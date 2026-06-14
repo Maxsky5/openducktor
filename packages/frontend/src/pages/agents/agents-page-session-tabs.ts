@@ -3,9 +3,10 @@ import { type AgentRole, isRecord } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { firstLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionOptionSummary,
-  buildRoleSessionSequenceById,
+  buildRoleSessionSequenceByIdentity,
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
@@ -470,12 +471,13 @@ export const buildSessionSelectorGroups = (params: {
     if (roleSessions.length === 0) {
       continue;
     }
-    const roleSessionNumberById = buildRoleSessionSequenceById(roleSessions);
+    const roleSessionNumberByIdentity = buildRoleSessionSequenceByIdentity(roleSessions);
     const roleOptions: ComboboxOption[] = roleSessions.map((session, index) => ({
       value: session.externalSessionId,
       label: formatAgentSessionOptionLabel({
         session,
-        sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
+        sessionNumber:
+          roleSessionNumberByIdentity.get(agentSessionIdentityKey(session)) ?? index + 1,
         roleLabelByRole: params.roleLabelByRole,
       }),
       description: formatAgentSessionOptionDescription(session),

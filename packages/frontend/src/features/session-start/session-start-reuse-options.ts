@@ -1,6 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
-  buildRoleSessionSequenceById,
+  buildRoleSessionSequenceByIdentity,
   compareAgentSessionRecency,
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
@@ -17,16 +18,18 @@ export const buildReusableSessionOptions = ({
   role: AgentRole;
 }): SessionStartExistingSessionOption[] => {
   const roleSessions = sessions.filter((session) => session.role === role);
-  const roleSessionNumberById = buildRoleSessionSequenceById(roleSessions);
+  const roleSessionNumberByIdentity = buildRoleSessionSequenceByIdentity(roleSessions);
 
   return roleSessions.sort(compareAgentSessionRecency).map((session, index) => {
     const runtimeKind = session.selectedModel?.runtimeKind ?? session.runtimeKind;
     return {
-      value: session.externalSessionId,
+      value: agentSessionIdentityKey(session),
+      sourceExternalSessionId: session.externalSessionId,
       runtimeKind: session.runtimeKind,
       label: formatAgentSessionOptionLabel({
         session,
-        sessionNumber: roleSessionNumberById.get(session.externalSessionId) ?? index + 1,
+        sessionNumber:
+          roleSessionNumberByIdentity.get(agentSessionIdentityKey(session)) ?? index + 1,
         roleLabelByRole: AGENT_ROLE_LABELS,
       }),
       description: formatAgentSessionOptionDescription(session),

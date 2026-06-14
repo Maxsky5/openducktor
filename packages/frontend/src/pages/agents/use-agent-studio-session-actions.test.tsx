@@ -216,6 +216,7 @@ const confirmSessionStartModal = async (
       runInBackground: false,
       startMode: "fresh",
       sourceExternalSessionId: null,
+      sourceSessionOptionValue: null,
     });
   });
 };
@@ -354,6 +355,7 @@ describe("useAgentStudioSessionActions", () => {
         existingSessionOptions: [
           {
             value: "builder-1",
+            sourceExternalSessionId: "builder-1",
             label: "Builder #1",
             description: "Existing Builder session",
           },
@@ -366,7 +368,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.waitFor((state) => state.sessionStartModal !== null);
     expect(harness.getLatest().sessionStartModal?.description).toContain("Generate Pull Request");
     expect(harness.getLatest().sessionStartModal?.selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().sessionStartModal?.selectedSourceSessionId).toBe("builder-1");
+    expect(harness.getLatest().sessionStartModal?.selectedSourceSessionValue).toBe("builder-1");
 
     await harness.unmount();
   });
@@ -445,6 +447,7 @@ describe("useAgentStudioSessionActions", () => {
         runInBackground: false,
         startMode: "fresh",
         sourceExternalSessionId: null,
+        sourceSessionOptionValue: null,
       });
     });
     await harness.run(async () => {

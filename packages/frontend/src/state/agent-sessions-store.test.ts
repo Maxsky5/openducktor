@@ -116,9 +116,48 @@ describe("createAgentSessionsStore activity snapshots", () => {
     expect(nextSnapshot).not.toBe(initialSnapshot);
     expect(nextSnapshot[0]).toMatchObject({
       externalSessionId: "session-1",
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
       hasPendingApprovals: true,
       hasPendingQuestions: false,
     });
+  });
+
+  test("keeps activity summaries distinct by runtime identity", () => {
+    const store = createAgentSessionsStore();
+    const opencodeSession = createAgentSessionFixture({
+      externalSessionId: "shared-session",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/opencode",
+      status: "running",
+    });
+    const codexSession = createAgentSessionFixture({
+      externalSessionId: "shared-session",
+      taskId: "task-2",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/codex",
+      status: "running",
+    });
+
+    store.setSessionCollection(createAgentSessionCollection([opencodeSession, codexSession]));
+
+    expect(store.getActivitySessionsSnapshot()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalSessionId: "shared-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/opencode",
+          taskId: "task-1",
+        }),
+        expect.objectContaining({
+          externalSessionId: "shared-session",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/codex",
+          taskId: "task-2",
+        }),
+      ]),
+    );
   });
 
   test("omits role-less sessions from activity snapshots", () => {

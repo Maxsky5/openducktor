@@ -5,6 +5,8 @@ import { summarizeAgentActivity } from "./agent-activity-read-model";
 const buildSession = (
   overrides: {
     externalSessionId?: string;
+    runtimeKind?: AgentActivitySessionSummary["runtimeKind"];
+    workingDirectory?: string;
     taskId?: string;
     role?: AgentActivitySessionSummary["role"];
     startedAt?: string;
@@ -14,6 +16,8 @@ const buildSession = (
   } = {},
 ): AgentActivitySessionSummary => ({
   externalSessionId: overrides.externalSessionId ?? "session-1",
+  runtimeKind: overrides.runtimeKind ?? "opencode",
+  workingDirectory: overrides.workingDirectory ?? "/repo/worktree",
   taskId: overrides.taskId ?? "task-1",
   role: overrides.role ?? ("spec" as const),
   status: overrides.status ?? "idle",
@@ -47,6 +51,8 @@ describe("summarizeAgentActivity", () => {
     expect(summary.activeSessions).toHaveLength(2);
     expect(summary.activeSessions[0]).toMatchObject({
       externalSessionId: "session-2",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
       taskId: "task-2",
       taskTitle: "Two",
     });

@@ -243,7 +243,7 @@ const confirmSessionStartModal = async ({
 
   if (startMode !== "fresh" && sourceExternalSessionId) {
     await harness.run((state) => {
-      state.sessionStartModal?.onSelectSourceSession(sourceExternalSessionId);
+      state.sessionStartModal?.onSelectSourceSessionValue(sourceExternalSessionId);
     });
   }
 
@@ -253,9 +253,13 @@ const confirmSessionStartModal = async ({
       return false;
     }
     if (startMode === "reuse") {
-      return sourceExternalSessionId
-        ? modal.selectedSourceSessionId === sourceExternalSessionId
-        : true;
+      if (!sourceExternalSessionId) {
+        return true;
+      }
+      const selectedOption = modal.existingSessionOptions.find(
+        (option) => option.value === modal.selectedSourceSessionValue,
+      );
+      return selectedOption?.sourceExternalSessionId === sourceExternalSessionId;
     }
 
     const selection = modal.selectedModelSelection;
@@ -267,10 +271,13 @@ const confirmSessionStartModal = async ({
   });
 
   await harness.run(async (state) => {
+    const modal = state.sessionStartModal;
     state.sessionStartModal?.onConfirm({
       runInBackground: false,
       startMode,
       sourceExternalSessionId,
+      sourceSessionOptionValue:
+        startMode === "fresh" ? null : (modal?.selectedSourceSessionValue ?? null),
     });
   });
 };
@@ -900,10 +907,14 @@ describe("useAgentStudioSessionStartFlow", () => {
     const modal = await waitForSessionStartModal(harness);
     expect(modal.open).toBe(true);
     expect(modal.selectedStartMode).toBe("reuse");
-    expect(modal.selectedSourceSessionId).toBe("session-build-latest");
+    const selectedSourceOption = modal.existingSessionOptions[0];
+    if (!selectedSourceOption) {
+      throw new Error("Expected a reusable builder session option.");
+    }
+    expect(modal.selectedSourceSessionValue).toBe(selectedSourceOption.value);
     expect(modal.existingSessionOptions).toEqual([
-      expect.objectContaining({ value: "session-build-latest" }),
-      expect.objectContaining({ value: "session-build-older" }),
+      expect.objectContaining({ sourceExternalSessionId: "session-build-latest" }),
+      expect.objectContaining({ sourceExternalSessionId: "session-build-older" }),
     ]);
     expect(startAgentSession).not.toHaveBeenCalled();
 

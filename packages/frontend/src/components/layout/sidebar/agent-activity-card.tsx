@@ -1,6 +1,7 @@
 import { Activity, ChevronRight, CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentActivitySessionItem } from "@/state/read-models/agent-activity-read-model";
 
 type AgentActivityCardProps = {
@@ -29,7 +30,7 @@ function SessionList({
   return (
     <ul className="mt-1 space-y-1 border-t border-border pt-2">
       {sessions.map((session) => (
-        <li key={session.externalSessionId}>
+        <li key={agentSessionIdentityKey(session)}>
           <Link
             to={toSessionHref(session)}
             className="block rounded-md border border-border bg-card px-2 py-1.5 hover:border-input hover:bg-accent"

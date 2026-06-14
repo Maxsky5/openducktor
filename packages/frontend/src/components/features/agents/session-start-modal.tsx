@@ -23,11 +23,16 @@ type SessionStartModalConfirmInput =
   | {
       runInBackground: boolean;
       startMode: AgentSessionStartMode;
+      sourceSessionOptionValue: string | null;
       sourceExternalSessionId: string | null;
       targetBranch?: string;
     };
 type SessionStartModalConfirmPayload = Exclude<SessionStartModalConfirmInput, boolean>;
 type SessionStartModalConfirmDraft = Omit<SessionStartModalConfirmPayload, "runInBackground">;
+
+type ExistingSessionOption = ComboboxOption & {
+  sourceExternalSessionId: string;
+};
 
 export type SessionStartModalModel = {
   open: boolean;
@@ -48,13 +53,13 @@ export type SessionStartModalModel = {
   variantOptions: ComboboxOption[];
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
-  existingSessionOptions: ComboboxOption[];
-  selectedSourceSessionId: string;
+  existingSessionOptions: ExistingSessionOption[];
+  selectedSourceSessionValue: string;
   showTargetBranchSelector?: boolean;
   targetBranchOptions?: ComboboxOption[];
   selectedTargetBranch?: string;
   onSelectStartMode: (startMode: AgentSessionStartMode) => void;
-  onSelectSourceSession: (externalSessionId: string) => void;
+  onSelectSourceSessionValue: (sourceSessionValue: string) => void;
   onSelectTargetBranch?: (branch: string) => void;
   onSelectRuntime: (runtimeKind: RuntimeKind) => void;
   onSelectAgent: (agent: string) => void;
@@ -112,16 +117,16 @@ function StartModeField({
 
 type ExistingSessionFieldProps = {
   disabled: boolean;
-  existingSessionOptions: ComboboxOption[];
-  selectedSourceSessionId: string;
-  onSelectSourceSession: (externalSessionId: string) => void;
+  existingSessionOptions: ExistingSessionOption[];
+  selectedSourceSessionValue: string;
+  onSelectSourceSessionValue: (sourceSessionValue: string) => void;
 };
 
 function ExistingSessionField({
   disabled,
   existingSessionOptions,
-  selectedSourceSessionId,
-  onSelectSourceSession,
+  selectedSourceSessionValue,
+  onSelectSourceSessionValue,
 }: ExistingSessionFieldProps): ReactElement {
   return (
     <div className="grid gap-1.5" data-testid="session-start-source-field">
@@ -129,13 +134,13 @@ function ExistingSessionField({
         Existing Session
       </label>
       <Combobox
-        value={selectedSourceSessionId}
+        value={selectedSourceSessionValue}
         options={existingSessionOptions}
         placeholder="Select session"
         searchPlaceholder="Search session..."
         disabled={disabled}
         className="sm:min-w-[28rem]"
-        onValueChange={onSelectSourceSession}
+        onValueChange={onSelectSourceSessionValue}
       />
     </div>
   );
@@ -419,12 +424,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     availableStartModes,
     selectedStartMode,
     existingSessionOptions,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     showTargetBranchSelector = false,
     targetBranchOptions = [],
     selectedTargetBranch = "",
     onSelectStartMode,
-    onSelectSourceSession,
+    onSelectSourceSessionValue,
     onSelectTargetBranch,
     onSelectRuntime,
     onSelectAgent,
@@ -444,9 +449,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
   const hasExistingSessionOptions = existingSessionOptions.length > 0;
   const isReuseMode = selectedStartMode === "reuse";
   const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
-  const hasExistingSessionSelection = existingSessionOptions.some(
-    (option) => option.value === selectedSourceSessionId,
+  const selectedSourceSessionOption = existingSessionOptions.find(
+    (option) => option.value === selectedSourceSessionValue,
   );
+  const hasExistingSessionSelection = selectedSourceSessionOption !== undefined;
   const confirmDisabled =
     isStarting ||
     (!isReuseMode &&
@@ -454,7 +460,10 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
     (requiresExistingSession && !hasExistingSessionSelection);
   const confirmInput = {
     startMode: selectedStartMode,
-    sourceExternalSessionId: requiresExistingSession ? selectedSourceSessionId : null,
+    sourceSessionOptionValue: requiresExistingSession ? selectedSourceSessionValue : null,
+    sourceExternalSessionId: requiresExistingSession
+      ? (selectedSourceSessionOption?.sourceExternalSessionId ?? null)
+      : null,
     ...(showTargetBranchSelector ? { targetBranch: selectedTargetBranch } : {}),
   };
   const handleConfirm = (): void => {
@@ -516,8 +525,8 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
                 <ExistingSessionField
                   disabled={isStarting || !hasExistingSessionOptions}
                   existingSessionOptions={existingSessionOptions}
-                  selectedSourceSessionId={selectedSourceSessionId}
-                  onSelectSourceSession={onSelectSourceSession}
+                  selectedSourceSessionValue={selectedSourceSessionValue}
+                  onSelectSourceSessionValue={onSelectSourceSessionValue}
                 />
               ) : null}
 

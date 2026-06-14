@@ -4,6 +4,7 @@ import type { SessionLaunchActionId } from "./session-start-launch-options";
 
 export type SessionStartExistingSessionOption = {
   value: string;
+  sourceExternalSessionId: string;
   label: string;
   description: string;
   secondaryLabel?: string;

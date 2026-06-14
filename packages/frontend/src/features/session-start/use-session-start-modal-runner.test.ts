@@ -43,6 +43,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "fresh",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         },
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
@@ -59,6 +60,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "reuse",
           sourceExternalSessionId: "session-1",
+          sourceSessionOptionValue: "session-1",
           targetBranch: "refs/remotes/origin/feature/session-start",
         },
         requestContext: REQUEST_CONTEXT,
@@ -80,6 +82,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "fork",
           sourceExternalSessionId: "session-2",
+          sourceSessionOptionValue: "session-2",
           targetBranch: "refs/heads/local-review",
         },
         requestContext: REQUEST_CONTEXT,
@@ -101,6 +104,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "fresh",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         },
         requestContext: REQUEST_CONTEXT,
         selectedModel: null,
@@ -114,6 +118,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "reuse",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         },
         requestContext: REQUEST_CONTEXT,
         selectedModel: SELECTED_MODEL,
@@ -129,6 +134,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "fresh",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
         requestContext: REQUEST_CONTEXT,
@@ -143,6 +149,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "reuse",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
         requestContext: REQUEST_CONTEXT,
@@ -157,6 +164,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "fork",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
         requestContext: REQUEST_CONTEXT,
@@ -171,6 +179,7 @@ describe("buildSessionStartModalDecision", () => {
         input: {
           startMode: "fork",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
           targetBranch: "refs/remotes/origin",
         },
         requestContext: REQUEST_CONTEXT,
@@ -230,6 +239,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
     expect(
       requireSourceSessionRuntimeKind({
         value: "session-1",
+        sourceExternalSessionId: "session-1",
         label: "Reusable session",
         description: "Reusable session with runtime",
         runtimeKind: "opencode",
@@ -242,6 +252,7 @@ describe("assertRuntimeSupportsSelectedStartMode", () => {
     expect(() =>
       requireSourceSessionRuntimeKind({
         value: "session-2",
+        sourceExternalSessionId: "session-2",
         label: "Missing runtime session",
         description: "Reusable session without runtime",
         selectedModel: null,

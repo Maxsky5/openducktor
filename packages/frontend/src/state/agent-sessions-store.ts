@@ -1,3 +1,4 @@
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
   emptyAgentSessionCollection,
@@ -42,7 +43,13 @@ export const isWorkflowAgentSessionSummary = (
 
 export type AgentActivitySessionSummary = Pick<
   WorkflowAgentSessionState,
-  "externalSessionId" | "taskId" | "role" | "status" | "startedAt"
+  | "externalSessionId"
+  | "runtimeKind"
+  | "workingDirectory"
+  | "taskId"
+  | "role"
+  | "status"
+  | "startedAt"
 > & {
   hasPendingApprovals: boolean;
   hasPendingQuestions: boolean;
@@ -93,6 +100,8 @@ export const toAgentActivitySessionSummary = (
 
   return {
     externalSessionId: session.externalSessionId,
+    runtimeKind: session.runtimeKind,
+    workingDirectory: session.workingDirectory,
     taskId: session.taskId,
     role: session.role,
     status: session.status,
@@ -127,6 +136,8 @@ const areActivitySummariesEquivalent = (
 ): boolean => {
   return (
     left?.externalSessionId === right.externalSessionId &&
+    left.runtimeKind === right.runtimeKind &&
+    left.workingDirectory === right.workingDirectory &&
     left.taskId === right.taskId &&
     left.role === right.role &&
     left.status === right.status &&
@@ -218,11 +229,11 @@ export const createAgentSessionsStore = (
         return;
       }
 
-      const previousSummaryById = new Map(
-        sessionSummaries.map((summary) => [summary.externalSessionId, summary]),
+      const previousSummaryByIdentity = new Map(
+        sessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
       );
-      const previousActivitySummaryById = new Map(
-        activitySessionSummaries.map((summary) => [summary.externalSessionId, summary]),
+      const previousActivitySummaryByIdentity = new Map(
+        activitySessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
       );
       const nextSessions = listAgentSessions(nextCollection).sort(sortByStartedAtDesc);
       const nextSessionSummaries = nextSessions.flatMap((session) => {
@@ -230,7 +241,7 @@ export const createAgentSessionsStore = (
           return [];
         }
         const nextSummary = toAgentSessionSummary(session);
-        const previousSummary = previousSummaryById.get(session.externalSessionId);
+        const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
         return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
           ? [previousSummary]
           : [nextSummary];
@@ -240,7 +251,9 @@ export const createAgentSessionsStore = (
           return [];
         }
         const nextSummary = toAgentActivitySessionSummary(session);
-        const previousSummary = previousActivitySummaryById.get(session.externalSessionId);
+        const previousSummary = previousActivitySummaryByIdentity.get(
+          agentSessionIdentityKey(session),
+        );
         return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
           ? [previousSummary]
           : [nextSummary];

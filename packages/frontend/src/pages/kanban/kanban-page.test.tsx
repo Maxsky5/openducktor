@@ -1032,10 +1032,19 @@ describe("KanbanPage session start modal flow", () => {
     expect(sendAgentMessageMock).not.toHaveBeenCalled();
     expect(latestSessionStartModalModel?.open).toBe(true);
     expect(latestSessionStartModalModel?.selectedStartMode).toBe("reuse");
-    expect(latestSessionStartModalModel?.selectedSourceSessionId).toBe("session-build-latest");
+    const existingSessionOptions = latestSessionStartModalModel?.existingSessionOptions as
+      | Array<{ value: string }>
+      | undefined;
+    const selectedSourceOption = existingSessionOptions?.[0];
+    if (!selectedSourceOption) {
+      throw new Error("Expected a reusable builder session option.");
+    }
+    expect(latestSessionStartModalModel?.selectedSourceSessionValue).toBe(
+      selectedSourceOption.value,
+    );
     expect(latestSessionStartModalModel?.existingSessionOptions).toEqual([
-      expect.objectContaining({ value: "session-build-latest" }),
-      expect.objectContaining({ value: "session-build-older" }),
+      expect.objectContaining({ sourceExternalSessionId: "session-build-latest" }),
+      expect.objectContaining({ sourceExternalSessionId: "session-build-older" }),
     ]);
 
     await act(async () => {

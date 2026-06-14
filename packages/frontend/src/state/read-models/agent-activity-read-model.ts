@@ -3,6 +3,8 @@ import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 
 export type AgentActivitySessionItem = {
   externalSessionId: string;
+  runtimeKind: AgentActivitySessionSummary["runtimeKind"];
+  workingDirectory: string;
   taskId: string;
   taskTitle: string;
   role: AgentActivitySessionSummary["role"];
@@ -45,6 +47,8 @@ export const summarizeAgentActivity = ({
   for (const session of sessions) {
     const sessionItem: AgentActivitySessionItem = {
       externalSessionId: session.externalSessionId,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
       taskId: session.taskId,
       taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
       role: session.role,

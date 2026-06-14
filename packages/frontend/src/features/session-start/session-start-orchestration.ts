@@ -1,6 +1,7 @@
 import type { GitTargetBranch, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { getSessionLaunchAction } from "./session-start-launch-options";
@@ -32,6 +33,8 @@ type SessionStartModalRunRequest = SessionStartModalOpenRequest & {
 
 type SessionStartContextSession = {
   externalSessionId: string;
+  runtimeKind: AgentSessionSummary["runtimeKind"];
+  workingDirectory: string;
   taskId: string;
   role: AgentSessionSummary["role"];
 };
@@ -86,7 +89,7 @@ const resolveExistingSessionOptions = (
   });
 };
 
-const resolveInitialSourceSessionId = ({
+const resolveInitialSourceExternalSessionId = ({
   request,
   existingSessionOptions,
   activeSession,
@@ -103,12 +106,12 @@ const resolveInitialSourceSessionId = ({
     activeSession &&
     activeSession.taskId === request.taskId &&
     activeSession.role === request.role &&
-    existingSessionOptions.some((option) => option.value === activeSession.externalSessionId)
+    existingSessionOptions.some((option) => option.value === agentSessionIdentityKey(activeSession))
   ) {
     return activeSession.externalSessionId;
   }
 
-  return existingSessionOptions[0]?.value ?? null;
+  return existingSessionOptions[0]?.sourceExternalSessionId ?? null;
 };
 
 export const buildSessionStartModalRequest = ({
@@ -120,7 +123,7 @@ export const buildSessionStartModalRequest = ({
   selectedTask,
 }: BuildSessionStartModalRequestArgs): SessionStartModalRunRequest => {
   const existingSessionOptions = resolveExistingSessionOptions(request, taskSessions);
-  const initialSourceExternalSessionId = resolveInitialSourceSessionId({
+  const initialSourceExternalSessionId = resolveInitialSourceExternalSessionId({
     request,
     existingSessionOptions,
     activeSession,

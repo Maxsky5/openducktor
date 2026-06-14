@@ -1,10 +1,11 @@
 import type { AgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export type AgentSessionRecencySummary = Pick<AgentSessionState, "externalSessionId" | "startedAt">;
 
 export type AgentSessionOptionSummary = AgentSessionRecencySummary &
-  Pick<AgentSessionState, "role" | "status">;
+  Pick<AgentSessionState, "runtimeKind" | "workingDirectory" | "role" | "status">;
 
 export const compareAgentSessionRecency = (
   a: AgentSessionRecencySummary,
@@ -19,7 +20,7 @@ export const compareAgentSessionRecency = (
   return a.externalSessionId > b.externalSessionId ? -1 : 1;
 };
 
-export const buildRoleSessionSequenceById = (
+export const buildRoleSessionSequenceByIdentity = (
   sessions: AgentSessionOptionSummary[],
 ): Map<string, number> => {
   return new Map(
@@ -29,11 +30,16 @@ export const buildRoleSessionSequenceById = (
           return a.startedAt < b.startedAt ? -1 : 1;
         }
         if (a.externalSessionId === b.externalSessionId) {
-          return 0;
+          const leftIdentityKey = agentSessionIdentityKey(a);
+          const rightIdentityKey = agentSessionIdentityKey(b);
+          if (leftIdentityKey === rightIdentityKey) {
+            return 0;
+          }
+          return leftIdentityKey < rightIdentityKey ? -1 : 1;
         }
         return a.externalSessionId < b.externalSessionId ? -1 : 1;
       })
-      .map((session, index) => [session.externalSessionId, index + 1]),
+      .map((session, index) => [agentSessionIdentityKey(session), index + 1]),
   );
 };
 

@@ -220,14 +220,14 @@ export function useSessionStartModalRunner({
     availableStartModes,
     selectedStartMode,
     existingSessionOptions,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     showTargetBranchSelector,
     targetBranchOptions,
     selectedTargetBranch,
     openStartModal,
     closeStartModal,
     handleSelectStartMode,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectAgent,
@@ -313,7 +313,7 @@ export function useSessionStartModalRunner({
 
         if (decision.startMode === "reuse") {
           const sourceOption = existingSessionOptions.find(
-            (option) => option.value === decision.sourceExternalSessionId,
+            (option) => option.value === input.sourceSessionOptionValue,
           );
           const sourceRuntimeKind = requireSourceSessionRuntimeKind(sourceOption);
 
@@ -384,12 +384,12 @@ export function useSessionStartModalRunner({
       availableStartModes,
       selectedStartMode,
       existingSessionOptions,
-      selectedSourceSessionId,
+      selectedSourceSessionValue,
       showTargetBranchSelector,
       targetBranchOptions,
       selectedTargetBranch,
       onSelectStartMode: handleSelectStartMode,
-      onSelectSourceSession: handleSelectSourceSession,
+      onSelectSourceSessionValue: handleSelectSourceSessionValue,
       onSelectTargetBranch: handleSelectTargetBranch,
       onSelectRuntime: handleSelectRuntime,
       onSelectAgent: handleSelectAgent,
@@ -417,7 +417,7 @@ export function useSessionStartModalRunner({
     handleSelectModel,
     handleSelectTargetBranch,
     handleSelectRuntime,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectStartMode,
     handleSelectVariant,
     intent,
@@ -429,7 +429,7 @@ export function useSessionStartModalRunner({
     runtimeOptions,
     selectedTargetBranch,
     selectedRuntimeKind,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     selectedStartMode,
     showTargetBranchSelector,
     selection,

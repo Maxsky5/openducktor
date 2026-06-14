@@ -205,14 +205,17 @@ const createExistingSessionWithModel = ({
   description = "Reusable builder session",
   label = "Builder session",
   runtimeKind,
+  sourceExternalSessionId,
   value,
 }: {
   description?: string;
   label?: string;
   runtimeKind: RuntimeKind;
+  sourceExternalSessionId?: string;
   value: string;
 }) => ({
   value,
+  sourceExternalSessionId: sourceExternalSessionId ?? value,
   label,
   description,
   runtimeKind,
@@ -542,6 +545,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-build-1",
+            sourceExternalSessionId: "session-build-1",
             label: "Builder session 1",
             description: "Latest builder session",
             selectedModel: null,
@@ -563,6 +567,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-build-pr",
+            sourceExternalSessionId: "session-build-pr",
             label: "Builder session PR",
             description: "Builder session for PR generation",
             selectedModel: null,
@@ -849,11 +854,13 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-2",
+            sourceExternalSessionId: "session-2",
             label: "QA session 2",
             description: "Second session",
           },
           {
             value: "session-1",
+            sourceExternalSessionId: "session-1",
             label: "QA session 1",
             description: "First session",
           },
@@ -866,7 +873,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-1");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-1");
 
     await harness.unmount();
   });
@@ -885,6 +892,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-fallback",
+            sourceExternalSessionId: "session-fallback",
             label: "Builder session fallback",
             description: "Fallback builder session",
             selectedModel: {
@@ -903,7 +911,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-fallback");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-fallback");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -934,7 +942,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["fresh", "reuse"]);
     expect(harness.getLatest().selectedStartMode).toBe("fresh");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("");
 
     await harness.unmount();
   });
@@ -957,6 +965,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-newer",
+            sourceExternalSessionId: "session-newer",
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
@@ -969,6 +978,7 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-older",
+            sourceExternalSessionId: "session-older",
             label: "Builder session 1",
             description: "Older builder session",
             selectedModel: {
@@ -997,7 +1007,7 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("session-newer");
+      harness.getLatest().handleSelectSourceSessionValue("session-newer");
     });
 
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
@@ -1030,6 +1040,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-pr-2",
+            sourceExternalSessionId: "session-pr-2",
             label: "Builder session 2",
             description: "Latest builder session",
             selectedModel: {
@@ -1042,6 +1053,7 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-pr-1",
+            sourceExternalSessionId: "session-pr-1",
             label: "Builder session 1",
             description: "Older builder session",
             selectedModel: {
@@ -1061,7 +1073,7 @@ describe("useSessionStartModalState", () => {
 
     expect(harness.getLatest().availableStartModes).toEqual(["reuse", "fork"]);
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-1");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-1");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "openai",
@@ -1075,7 +1087,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("fork");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-1");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-1");
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
@@ -1086,10 +1098,10 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("session-pr-2");
+      harness.getLatest().handleSelectSourceSessionValue("session-pr-2");
     });
 
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-2");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-2");
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
@@ -1104,7 +1116,7 @@ describe("useSessionStartModalState", () => {
     });
 
     expect(harness.getLatest().selectedStartMode).toBe("reuse");
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-pr-2");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-pr-2");
     expect(harness.getLatest().selectedRuntimeKind).toBe("opencode");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
@@ -1279,6 +1291,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-with-model",
+            sourceExternalSessionId: "session-with-model",
             label: "Builder session with model",
             description: "Session with persisted model",
             selectedModel: {
@@ -1291,6 +1304,7 @@ describe("useSessionStartModalState", () => {
           },
           {
             value: "session-without-model",
+            sourceExternalSessionId: "session-without-model",
             label: "Builder session without model",
             description: "Session without persisted model",
             selectedModel: null,
@@ -1311,7 +1325,7 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("session-without-model");
+      harness.getLatest().handleSelectSourceSessionValue("session-without-model");
     });
 
     expect(harness.getLatest().selection).toBeNull();
@@ -1333,6 +1347,7 @@ describe("useSessionStartModalState", () => {
         existingSessionOptions: [
           {
             value: "session-valid",
+            sourceExternalSessionId: "session-valid",
             label: "Builder session valid",
             description: "Valid builder session",
             selectedModel: {
@@ -1350,10 +1365,10 @@ describe("useSessionStartModalState", () => {
     });
 
     await harness.run(() => {
-      harness.getLatest().handleSelectSourceSession("missing-session");
+      harness.getLatest().handleSelectSourceSessionValue("missing-session");
     });
 
-    expect(harness.getLatest().selectedSourceSessionId).toBe("session-valid");
+    expect(harness.getLatest().selectedSourceSessionValue).toBe("session-valid");
     expect(harness.getLatest().selection).toEqual({
       runtimeKind: "opencode",
       providerId: "anthropic",

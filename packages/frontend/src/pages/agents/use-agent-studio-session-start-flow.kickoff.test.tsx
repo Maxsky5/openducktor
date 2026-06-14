@@ -176,6 +176,7 @@ describe("useAgentStudioSessionStartFlow kickoff failures", () => {
         runInBackground: false,
         startMode: "fresh",
         sourceExternalSessionId: null,
+        sourceSessionOptionValue: null,
       });
     });
 

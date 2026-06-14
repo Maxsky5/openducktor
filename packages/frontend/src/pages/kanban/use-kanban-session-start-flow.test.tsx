@@ -341,20 +341,20 @@ describe("useKanbanSessionStartFlow", () => {
     expect(modal?.title).toBe("Start Builder Session");
     expect(modal?.availableStartModes).toEqual(["reuse", "fork"]);
     expect(modal?.selectedStartMode).toBe("reuse");
-    expect(modal?.selectedSourceSessionId).toBe("builder-session-2");
+    expect(modal?.selectedSourceSessionValue).toBe(modal?.existingSessionOptions[0]?.value);
     expect(modal?.description).toBe(
       "Choose how to reuse an existing session or fork an existing session for Generate Pull Request.",
     );
     expect(modal?.existingSessionOptions).toEqual([
       expect.objectContaining({
-        value: "builder-session-2",
+        sourceExternalSessionId: "builder-session-2",
         label: "Builder #2",
         description: "3/20/2026, 12:00:00 PM · idle · builder-",
         secondaryLabel: "Latest",
         selectedModel: expect.objectContaining({ profileId: "builder" }),
       }),
       expect.objectContaining({
-        value: "builder-session-1",
+        sourceExternalSessionId: "builder-session-1",
         label: "Builder #1",
         description: "3/19/2026, 12:00:00 PM · idle · builder-",
         selectedModel: expect.objectContaining({ profileId: "builder" }),
@@ -399,6 +399,8 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     await harness.waitFor((state) => state.sessionStartModal != null);
+    const selectedSourceSessionValue =
+      harness.getLatest().sessionStartModal?.selectedSourceSessionValue ?? null;
 
     await harness.run((state) => {
       state.sessionStartModal?.onSelectAgent("builder");
@@ -410,6 +412,7 @@ describe("useKanbanSessionStartFlow", () => {
         runInBackground: false,
         startMode: "reuse",
         sourceExternalSessionId: "builder-session-2",
+        sourceSessionOptionValue: selectedSourceSessionValue,
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -471,6 +474,7 @@ describe("useKanbanSessionStartFlow", () => {
         runInBackground: false,
         startMode: "fresh",
         sourceExternalSessionId: null,
+        sourceSessionOptionValue: null,
         targetBranch: "refs/remotes/origin/release/2026.04",
       });
       await Promise.resolve();
@@ -513,6 +517,7 @@ describe("useKanbanSessionStartFlow", () => {
           runInBackground: true,
           startMode: "fresh",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -534,6 +539,7 @@ describe("useKanbanSessionStartFlow", () => {
           runInBackground: true,
           startMode: "fresh",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -568,6 +574,7 @@ describe("useKanbanSessionStartFlow", () => {
           runInBackground: true,
           startMode: "fresh",
           sourceExternalSessionId: null,
+          sourceSessionOptionValue: null,
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -675,12 +682,14 @@ describe("useKanbanSessionStartFlow", () => {
       expect(modal).not.toBeNull();
       expect(modal?.selectedStartMode).toBe("reuse");
       expect(modal?.selectedModelSelection).toBeNull();
+      const selectedSourceSessionValue = modal?.selectedSourceSessionValue ?? null;
 
       await harness.run(async () => {
         modal?.onConfirm({
           runInBackground: false,
           startMode: "reuse",
           sourceExternalSessionId: "builder-session-2",
+          sourceSessionOptionValue: selectedSourceSessionValue,
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -738,11 +747,13 @@ describe("useKanbanSessionStartFlow", () => {
     expect(sessionStartModal).not.toBeNull();
     expect(sessionStartModal?.open).toBe(true);
     expect(sessionStartModal?.selectedStartMode).toBe("reuse");
-    expect(sessionStartModal?.selectedSourceSessionId).toBe("builder-session-2");
+    expect(sessionStartModal?.selectedSourceSessionValue).toBe(
+      sessionStartModal?.existingSessionOptions[0]?.value,
+    );
     expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
     expect(sessionStartModal?.existingSessionOptions).toEqual([
-      expect.objectContaining({ value: "builder-session-2" }),
-      expect.objectContaining({ value: "builder-session-1" }),
+      expect.objectContaining({ sourceExternalSessionId: "builder-session-2" }),
+      expect.objectContaining({ sourceExternalSessionId: "builder-session-1" }),
     ]);
     expect(humanRequestChangesTask).not.toHaveBeenCalled();
     expect(startAgentSession).not.toHaveBeenCalled();
@@ -816,7 +827,9 @@ describe("useKanbanSessionStartFlow", () => {
     expect(sessionStartModal).not.toBeNull();
     expect(sessionStartModal?.open).toBe(true);
     expect(sessionStartModal?.selectedStartMode).toBe("reuse");
-    expect(sessionStartModal?.selectedSourceSessionId).toBe("builder-session-2");
+    expect(sessionStartModal?.selectedSourceSessionValue).toBe(
+      sessionStartModal?.existingSessionOptions[0]?.value,
+    );
     expect(sessionStartModal?.availableStartModes).toEqual(["fresh", "reuse"]);
 
     await harness.unmount();

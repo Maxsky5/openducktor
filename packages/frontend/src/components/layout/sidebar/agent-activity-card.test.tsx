@@ -5,7 +5,8 @@ import { MemoryRouter } from "react-router-dom";
 import { AgentActivityCard } from "./agent-activity-card";
 
 const activeSession = {
-  runtimeKind: "opencode",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktree",
   externalSessionId: "session-1",
   taskId: "task-1",
   taskTitle: "Add SSO",
@@ -15,7 +16,8 @@ const activeSession = {
 };
 
 const waitingSession = {
-  runtimeKind: "opencode",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/repo/worktree",
   externalSessionId: "session-2",
   taskId: "task-2",
   taskTitle: "Validate QA flow",

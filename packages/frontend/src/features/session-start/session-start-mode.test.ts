@@ -18,6 +18,7 @@ describe("resolveLaunchStartMode", () => {
         existingSessionOptions: [
           {
             value: "session-1",
+            sourceExternalSessionId: "session-1",
             label: "Builder #1",
             description: "Existing builder session",
           },

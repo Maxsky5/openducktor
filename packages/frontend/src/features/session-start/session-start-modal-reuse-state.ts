@@ -19,28 +19,47 @@ const EMPTY_EXISTING_SESSION_OPTIONS: SessionStartExistingSessionOption[] = [];
 
 const resolveSourceSelection = (
   options: SessionStartExistingSessionOption[],
-  sourceExternalSessionId: string,
+  sourceSessionValue: string,
 ): AgentModelSelection | null => {
-  if (!sourceExternalSessionId) {
+  if (!sourceSessionValue) {
     return null;
   }
 
-  const selectedOption = options.find((option) => option.value === sourceExternalSessionId);
+  const selectedOption = options.find((option) => option.value === sourceSessionValue);
   return selectedOption?.selectedModel ?? null;
 };
 
-const resolveValidSourceSessionId = (
+const firstSourceSessionValue = (options: SessionStartExistingSessionOption[]): string =>
+  options[0]?.value ?? "";
+
+const resolveSelectedSourceSessionValue = (
+  options: SessionStartExistingSessionOption[],
+  sourceSessionValue: string | null | undefined,
+): string => {
+  const normalizedSourceSessionValue = sourceSessionValue?.trim() ?? "";
+  if (!normalizedSourceSessionValue) {
+    return firstSourceSessionValue(options);
+  }
+
+  const matchingOption = options.find((option) => option.value === normalizedSourceSessionValue);
+
+  return matchingOption?.value ?? firstSourceSessionValue(options);
+};
+
+const resolveInitialSourceSessionValue = (
   options: SessionStartExistingSessionOption[],
   sourceExternalSessionId: string | null | undefined,
 ): string => {
-  const normalizedSourceSessionId = sourceExternalSessionId?.trim() ?? "";
-  if (!normalizedSourceSessionId) {
-    return options[0]?.value ?? "";
+  const normalizedExternalSessionId = sourceExternalSessionId?.trim() ?? "";
+  if (!normalizedExternalSessionId) {
+    return firstSourceSessionValue(options);
   }
 
-  return options.some((option) => option.value === normalizedSourceSessionId)
-    ? normalizedSourceSessionId
-    : (options[0]?.value ?? "");
+  const matchingOption = options.find(
+    (option) => option.sourceExternalSessionId === normalizedExternalSessionId,
+  );
+
+  return matchingOption?.value ?? firstSourceSessionValue(options);
 };
 
 const resolveInitialStartState = ({
@@ -54,7 +73,7 @@ const resolveInitialStartState = ({
   initialStartMode: AgentSessionStartMode | undefined;
   launchActionId: SessionLaunchActionId;
 }): {
-  selectedSourceSessionId: string;
+  selectedSourceSessionValue: string;
   selectedStartMode: AgentSessionStartMode;
 } => {
   const allowedStartModes = getSessionLaunchAction(launchActionId).allowedStartModes;
@@ -79,7 +98,7 @@ const resolveInitialStartState = ({
 
   return {
     selectedStartMode,
-    selectedSourceSessionId: resolveValidSourceSessionId(
+    selectedSourceSessionValue: resolveInitialSourceSessionValue(
       existingSessionOptions,
       initialSourceExternalSessionId,
     ),
@@ -90,17 +109,17 @@ const buildReuseSelectionDraft = ({
   catalog,
   options,
   runtimeDefinitions,
-  sourceExternalSessionId,
+  sourceSessionValue,
 }: {
   catalog: AgentModelCatalog | null;
   options: SessionStartExistingSessionOption[];
   runtimeDefinitions: RuntimeDescriptor[];
-  sourceExternalSessionId: string;
+  sourceSessionValue: string;
 }): {
   runtimeKind: RuntimeKind | null;
   selection: AgentModelSelection | null;
 } => {
-  const sourceSelection = resolveSourceSelection(options, sourceExternalSessionId);
+  const sourceSelection = resolveSourceSelection(options, sourceSessionValue);
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions: filterRuntimeDefinitionsForStartMode(runtimeDefinitions, "reuse"),
     requestedRuntimeKind: sourceSelection?.runtimeKind ?? null,
@@ -137,14 +156,14 @@ type UseSessionStartModalReuseStateResult = {
   availableStartModes: AgentSessionStartMode[];
   existingSessionOptions: SessionStartExistingSessionOption[];
   initializeStartState: (intent: SessionStartModalIntent) => {
-    selectedSourceSessionId: string;
+    selectedSourceSessionValue: string;
     selectedStartMode: AgentSessionStartMode;
   };
   resetStartState: () => void;
   reuseSelection: AgentModelSelection | null;
-  selectedSourceSessionId: string;
+  selectedSourceSessionValue: string;
   selectedStartMode: AgentSessionStartMode;
-  handleSelectSourceSession: (externalSessionId: string) => void;
+  handleSelectSourceSessionValue: (sourceSessionValue: string) => void;
   handleSelectStartMode: (startMode: AgentSessionStartMode) => void;
 };
 
@@ -156,7 +175,7 @@ export function useSessionStartModalReuseState({
   setSelection,
 }: UseSessionStartModalReuseStateArgs): UseSessionStartModalReuseStateResult {
   const [selectedStartMode, setSelectedStartMode] = useState<AgentSessionStartMode>("fresh");
-  const [selectedSourceSessionId, setSelectedSourceSessionId] = useState("");
+  const [selectedSourceSessionValue, setSelectedSourceSessionValue] = useState("");
 
   const availableStartModes = useMemo<AgentSessionStartMode[]>(
     () =>
@@ -175,16 +194,16 @@ export function useSessionStartModalReuseState({
 
   const resetStartState = useCallback((): void => {
     setSelectedStartMode("fresh");
-    setSelectedSourceSessionId("");
+    setSelectedSourceSessionValue("");
   }, []);
 
   const applyReuseSourceSelection = useCallback(
-    (sourceExternalSessionId: string, options = existingSessionOptions): void => {
+    (sourceSessionValue: string, options = existingSessionOptions): void => {
       const nextDraft = buildReuseSelectionDraft({
         catalog,
         options,
         runtimeDefinitions,
-        sourceExternalSessionId,
+        sourceSessionValue,
       });
       setRequestedRuntimeKind(nextDraft.runtimeKind);
       setSelection((current) =>
@@ -198,7 +217,7 @@ export function useSessionStartModalReuseState({
     (
       nextIntent: SessionStartModalIntent,
     ): {
-      selectedSourceSessionId: string;
+      selectedSourceSessionValue: string;
       selectedStartMode: AgentSessionStartMode;
     } => {
       const nextState = resolveInitialStartState({
@@ -208,10 +227,10 @@ export function useSessionStartModalReuseState({
         initialSourceExternalSessionId: nextIntent.initialSourceExternalSessionId,
       });
       setSelectedStartMode(nextState.selectedStartMode);
-      setSelectedSourceSessionId(nextState.selectedSourceSessionId);
+      setSelectedSourceSessionValue(nextState.selectedSourceSessionValue);
       if (nextState.selectedStartMode === "reuse") {
         applyReuseSourceSelection(
-          nextState.selectedSourceSessionId,
+          nextState.selectedSourceSessionValue,
           nextIntent.existingSessionOptions ?? [],
         );
       }
@@ -220,19 +239,19 @@ export function useSessionStartModalReuseState({
     [applyReuseSourceSelection],
   );
 
-  const effectiveSelectedSourceSessionId =
+  const effectiveSelectedSourceSessionValue =
     effectiveSelectedStartMode === "reuse"
-      ? resolveValidSourceSessionId(existingSessionOptions, selectedSourceSessionId)
-      : selectedSourceSessionId;
+      ? resolveSelectedSourceSessionValue(existingSessionOptions, selectedSourceSessionValue)
+      : selectedSourceSessionValue;
 
   const reuseSelectionDraft = useMemo(
     () =>
-      effectiveSelectedStartMode === "reuse" && effectiveSelectedSourceSessionId
+      effectiveSelectedStartMode === "reuse" && effectiveSelectedSourceSessionValue
         ? buildReuseSelectionDraft({
             catalog,
             options: existingSessionOptions,
             runtimeDefinitions,
-            sourceExternalSessionId: effectiveSelectedSourceSessionId,
+            sourceSessionValue: effectiveSelectedSourceSessionValue,
           })
         : {
             runtimeKind: null,
@@ -240,7 +259,7 @@ export function useSessionStartModalReuseState({
           },
     [
       catalog,
-      effectiveSelectedSourceSessionId,
+      effectiveSelectedSourceSessionValue,
       effectiveSelectedStartMode,
       existingSessionOptions,
       runtimeDefinitions,
@@ -258,34 +277,34 @@ export function useSessionStartModalReuseState({
         return;
       }
 
-      const nextSourceSessionId = resolveValidSourceSessionId(
+      const nextSourceSessionValue = resolveSelectedSourceSessionValue(
         existingSessionOptions,
-        selectedSourceSessionId,
+        selectedSourceSessionValue,
       );
-      if (!nextSourceSessionId) {
+      if (!nextSourceSessionValue) {
         return;
       }
 
-      setSelectedSourceSessionId(nextSourceSessionId);
-      applyReuseSourceSelection(nextSourceSessionId);
+      setSelectedSourceSessionValue(nextSourceSessionValue);
+      applyReuseSourceSelection(nextSourceSessionValue);
     },
-    [applyReuseSourceSelection, existingSessionOptions, selectedSourceSessionId],
+    [applyReuseSourceSelection, existingSessionOptions, selectedSourceSessionValue],
   );
 
-  const handleSelectSourceSession = useCallback(
-    (externalSessionId: string): void => {
-      const nextSourceSessionId = resolveValidSourceSessionId(
+  const handleSelectSourceSessionValue = useCallback(
+    (sourceSessionValue: string): void => {
+      const nextSourceSessionValue = resolveSelectedSourceSessionValue(
         existingSessionOptions,
-        externalSessionId,
+        sourceSessionValue,
       );
-      setSelectedSourceSessionId(nextSourceSessionId);
+      setSelectedSourceSessionValue(nextSourceSessionValue);
       if (effectiveSelectedStartMode !== "reuse") {
         return;
       }
-      if (!nextSourceSessionId) {
+      if (!nextSourceSessionValue) {
         return;
       }
-      applyReuseSourceSelection(nextSourceSessionId);
+      applyReuseSourceSelection(nextSourceSessionValue);
     },
     [applyReuseSourceSelection, effectiveSelectedStartMode, existingSessionOptions],
   );
@@ -296,9 +315,9 @@ export function useSessionStartModalReuseState({
     initializeStartState,
     resetStartState,
     reuseSelection: reuseSelectionDraft.selection,
-    selectedSourceSessionId: effectiveSelectedSourceSessionId,
+    selectedSourceSessionValue: effectiveSelectedSourceSessionValue,
     selectedStartMode: effectiveSelectedStartMode,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectStartMode,
   };
 }

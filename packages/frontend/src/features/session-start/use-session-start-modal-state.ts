@@ -66,14 +66,14 @@ type UseSessionStartModalStateResult = {
   availableStartModes: AgentSessionStartMode[];
   selectedStartMode: AgentSessionStartMode;
   existingSessionOptions: SessionStartExistingSessionOption[];
-  selectedSourceSessionId: string;
+  selectedSourceSessionValue: string;
   showTargetBranchSelector: boolean;
   targetBranchOptions: ComboboxOption[];
   selectedTargetBranch: string;
   openStartModal: (nextIntent: SessionStartModalIntent) => void;
   closeStartModal: () => void;
   handleSelectStartMode: (startMode: AgentSessionStartMode) => void;
-  handleSelectSourceSession: (externalSessionId: string) => void;
+  handleSelectSourceSessionValue: (sourceSessionValue: string) => void;
   handleSelectTargetBranch: (branch: string) => void;
   handleSelectRuntime: (runtimeKind: RuntimeKind) => void;
   handleSelectAgent: (profileId: string) => void;
@@ -119,9 +119,9 @@ export function useSessionStartModalState({
     initializeStartState,
     resetStartState,
     reuseSelection,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     selectedStartMode,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectStartMode,
   } = useSessionStartModalReuseState({
     catalog,
@@ -358,14 +358,14 @@ export function useSessionStartModalState({
     availableStartModes: orderedStartModes,
     selectedStartMode,
     existingSessionOptions,
-    selectedSourceSessionId,
+    selectedSourceSessionValue,
     showTargetBranchSelector,
     targetBranchOptions,
     selectedTargetBranch,
     openStartModal,
     closeStartModal,
     handleSelectStartMode: handleSelectedStartModeChange,
-    handleSelectSourceSession,
+    handleSelectSourceSessionValue,
     handleSelectTargetBranch,
     handleSelectRuntime,
     handleSelectAgent,
