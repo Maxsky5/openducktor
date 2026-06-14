@@ -17,6 +17,35 @@ describe("toAgentSessionSummary", () => {
   });
 });
 
+describe("createAgentSessionsStore session snapshots", () => {
+  test("looks up sessions by canonical runtime identity", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktree",
+    });
+
+    store.setSessionsById({ [session.externalSessionId]: session });
+
+    expect(
+      store.getSessionSnapshot({
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktree/",
+      }),
+    ).toBe(session);
+    expect(
+      store.getSessionSnapshot({
+        externalSessionId: "session-1",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/worktree",
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("createAgentSessionsStore activity snapshots", () => {
   test("reuses the activity snapshot when only non-activity fields change", () => {
     const store = createAgentSessionsStore();

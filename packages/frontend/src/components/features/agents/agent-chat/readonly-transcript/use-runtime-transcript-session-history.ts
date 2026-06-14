@@ -1,6 +1,7 @@
 import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   type AgentSessionHistoryLoadState,
   type AgentSessionViewLifecycle,
@@ -8,7 +9,6 @@ import {
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
-import { matchesAgentSessionIdentity } from "@/state/operations/agent-orchestrator/support/session-identity";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_HISTORY_STALE_TIME_MS,

@@ -22,9 +22,8 @@ Read-only transcripts do not load active-session runtime data such as model
 catalogs or todos.
 
 Session identity equality and stable identity keys are owned by
-`state/operations/agent-orchestrator/support/session-identity.ts`. Do not
-hand-roll externalSessionId/runtimeKind/working directory comparisons in the
-hooks.
+`lib/agent-session-identity.ts`. Do not hand-roll externalSessionId/runtimeKind/
+working directory comparisons in the hooks.
 
 ## Integration Points
 

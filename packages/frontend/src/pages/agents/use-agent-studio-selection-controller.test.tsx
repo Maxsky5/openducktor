@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   isSelectedAgentSessionResolving,
   isSelectedAgentSessionViewLoading,
@@ -6,7 +7,7 @@ import {
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,
@@ -165,8 +166,13 @@ describe("useAgentStudioSelectionController", () => {
       useSpecState: () => {
         throw new Error("useSpecState is not used in this test");
       },
-      useAgentSession: (externalSessionId: string | null) =>
-        externalSessionId ? (sessionByIdRef.current[externalSessionId] ?? null) : null,
+      useAgentSession: (identity: AgentSessionIdentity | null) => {
+        if (!identity) {
+          return null;
+        }
+        const session = sessionByIdRef.current[identity.externalSessionId] ?? null;
+        return matchesAgentSessionIdentity(session, identity) ? session : null;
+      },
     }));
 
     ({ useAgentStudioSelectionController } = await import(

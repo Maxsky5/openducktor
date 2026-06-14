@@ -6,11 +6,11 @@ export {
 
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import { agentSessionIdentityKey } from "@/state/operations/agent-orchestrator/support/session-identity";
 import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 

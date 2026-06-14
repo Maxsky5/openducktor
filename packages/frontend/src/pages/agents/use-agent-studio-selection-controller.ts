@@ -303,7 +303,7 @@ export function useAgentStudioSelectionController({
     viewSessionsForTask,
   ]);
   const viewSelectedSessionRoute = viewSelection.sessionRoute;
-  const viewActiveSession = useAgentSession(viewSelectedSessionRoute?.externalSessionId ?? null);
+  const viewActiveSession = useAgentSession(viewSelectedSessionRoute);
   const viewSessionReadinessState = useMemo(
     () =>
       deriveRepoRuntimeReadiness({

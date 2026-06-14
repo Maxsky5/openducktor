@@ -1,9 +1,6 @@
 import type { RuntimeApprovalReplyOutcome } from "@openducktor/contracts";
 import { useCallback, useReducer } from "react";
-import {
-  agentSessionIdentityKey,
-  matchesAgentSessionIdentity,
-} from "@/state/operations/agent-orchestrator/support/session-identity";
+import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,

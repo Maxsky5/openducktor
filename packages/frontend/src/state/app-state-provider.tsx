@@ -6,7 +6,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -171,12 +171,14 @@ export const useAgentActivitySnapshot = (): AgentActivitySessionsSnapshot => {
   );
 };
 
-export const useAgentSession = (externalSessionId: string | null): AgentSessionState | null => {
+export const useAgentSession = (
+  identity: AgentSessionIdentity | null,
+): AgentSessionState | null => {
   const sessionStore = useAgentSessionsContext();
   return useSyncExternalStore(
     sessionStore.subscribe,
-    () => sessionStore.getSessionSnapshot(externalSessionId),
-    () => sessionStore.getSessionSnapshot(externalSessionId),
+    () => sessionStore.getSessionSnapshot(identity),
+    () => sessionStore.getSessionSnapshot(identity),
   );
 };
 

@@ -378,6 +378,105 @@ describe("repo session read model", () => {
     ]);
   });
 
+  test("does not reuse mounted state from a different runtime identity", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const currentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: record.externalSessionId,
+        taskId: "task-1",
+        runtimeKind: "codex",
+        role: "build",
+        status: "running",
+        startedAt: record.startedAt,
+        workingDirectory: "/repo/other-worktree",
+        historyLoadState: "loaded",
+      }),
+      messages: createSessionMessagesState(record.externalSessionId, [
+        {
+          id: "wrong-runtime-message",
+          role: "assistant",
+          content: "Output from a different runtime identity",
+          timestamp: "2026-06-11T08:00:01.000Z",
+        },
+      ]),
+    };
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [record.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    const session = readModel.sessionsById[record.externalSessionId];
+    if (!session) {
+      throw new Error(`Expected ${record.externalSessionId} to be present.`);
+    }
+    expect(session.status).toBe("stopped");
+    expect(session.runtimeKind).toBe(record.runtimeKind);
+    expect(session.workingDirectory).toBe(record.workingDirectory);
+    expect(session.historyLoadState).toBe("not_requested");
+    expect(sessionMessagesToArray(session)).toEqual([]);
+    expect(readModel.liveSessions).toEqual([]);
+  });
+
+  test("matches mounted state with an equivalent normalized working directory", async () => {
+    const record = createRecord({ workingDirectory: "/repo/worktree" });
+    const tasks = [createTask([record])];
+    const currentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: record.externalSessionId,
+        taskId: "task-1",
+        runtimeKind: "opencode",
+        role: "build",
+        status: "running",
+        startedAt: record.startedAt,
+        workingDirectory: "/repo/worktree/",
+        historyLoadState: "loaded",
+      }),
+      messages: createSessionMessagesState(record.externalSessionId, [
+        {
+          id: "mounted-message",
+          role: "assistant",
+          content: "Mounted transcript",
+          timestamp: "2026-06-11T08:00:01.000Z",
+        },
+      ]),
+    };
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [record.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    const session = readModel.sessionsById[record.externalSessionId];
+    if (!session) {
+      throw new Error(`Expected ${record.externalSessionId} to be present.`);
+    }
+    expect(session.status).toBe("running");
+    expect(session.workingDirectory).toBe(record.workingDirectory);
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+      "Mounted transcript",
+    ]);
+  });
+
   test("uses the persisted selected model instead of stale mounted model state", async () => {
     const record = createRecord({ selectedModel: null });
     const tasks = [createTask([record])];

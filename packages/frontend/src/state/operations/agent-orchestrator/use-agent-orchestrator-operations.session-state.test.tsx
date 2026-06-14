@@ -563,7 +563,13 @@ describe("use-agent-orchestrator-operations session state", () => {
         await harness.getLatest().removeAgentSession("external-1");
       });
 
-      expect(harness.getLatest().sessionStore.getSessionSnapshot("external-1")).toBeNull();
+      expect(
+        harness.getLatest().sessionStore.getSessionSnapshot({
+          externalSessionId: "external-1",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo/worktree",
+        }),
+      ).toBeNull();
     } finally {
       await harness.unmount();
     }

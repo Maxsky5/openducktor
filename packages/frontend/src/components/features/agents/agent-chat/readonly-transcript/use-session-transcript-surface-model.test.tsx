@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "
 import type { ChatSettings, SettingsSnapshot } from "@openducktor/contracts";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -29,7 +30,7 @@ const readSessionHistory = mock(
 const replyAgentApproval = mock(async () => {});
 const answerAgentQuestion = mock(async () => {});
 const useAgentSessionMock = mock(
-  (_externalSessionId: string | null): AgentSessionState | null => null,
+  (_identity: AgentSessionIdentity | null): AgentSessionState | null => null,
 );
 let settingsChat: ChatSettings = createChatSettingsFixture();
 let settingsSnapshotError: Error | null = null;
@@ -108,6 +109,12 @@ function makeLiveTranscriptSession(): AgentSessionState {
   };
 }
 
+function mockLiveTranscriptSessionLookup(session = makeLiveTranscriptSession()): void {
+  useAgentSessionMock.mockImplementation((identity: AgentSessionIdentity | null) =>
+    matchesAgentSessionIdentity(session, identity) ? session : null,
+  );
+}
+
 function makeSettingsSnapshot(chat = settingsChat): SettingsSnapshot {
   return createSettingsSnapshotFixture({ chat });
 }
@@ -151,7 +158,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     answerAgentQuestion.mockClear();
     useAgentSessionMock.mockClear();
     useAgentSessionMock.mockImplementation(
-      (_externalSessionId: string | null): AgentSessionState | null => null,
+      (_identity: AgentSessionIdentity | null): AgentSessionState | null => null,
     );
     settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
@@ -311,7 +318,11 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
-      expect(useAgentSessionMock).toHaveBeenCalledWith("session-requested");
+      expect(useAgentSessionMock).toHaveBeenCalledWith({
+        externalSessionId: "session-requested",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo-a",
+      });
       expect(readSessionHistory).toHaveBeenCalledWith({
         repoPath: "/repo-a",
         runtimeKind: "opencode",
@@ -515,9 +526,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("prefers an already-live transcript session when it exists locally", async () => {
     const liveSession = makeLiveTranscriptSession();
-    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
-      requestedSessionId === "session-subagent-1" ? liveSession : null,
-    );
+    mockLiveTranscriptSessionLookup(liveSession);
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -562,9 +571,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("uses live subagent approvals on the transcript session", async () => {
     const pendingApproval = makePendingApproval();
-    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
-      requestedSessionId === "session-subagent-1" ? makeLiveTranscriptSession() : null,
-    );
+    mockLiveTranscriptSessionLookup();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -595,9 +602,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
   });
 
   test("replies to live subagent approvals through the runtime transcript session", async () => {
-    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
-      requestedSessionId === "session-subagent-1" ? makeLiveTranscriptSession() : null,
-    );
+    mockLiveTranscriptSessionLookup();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );
@@ -635,9 +640,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
   test("uses and replies to live subagent questions through the runtime transcript session", async () => {
     const pendingQuestion = makePendingQuestion();
-    useAgentSessionMock.mockImplementation((requestedSessionId: string | null) =>
-      requestedSessionId === "session-subagent-1" ? makeLiveTranscriptSession() : null,
-    );
+    mockLiveTranscriptSessionLookup();
     const { useSessionTranscriptSurfaceModel } = await import(
       "./use-session-transcript-surface-model"
     );

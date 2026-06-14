@@ -5,6 +5,7 @@ import type {
   AgentSessionRef,
 } from "@openducktor/core";
 import { toMissingAgentSessionPresenceSnapshot } from "@openducktor/core";
+import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { projectRepoSessionPresenceSnapshot } from "../lifecycle/session-presence";
 import { normalizeWorkingDirectory } from "../support/core";
@@ -32,12 +33,6 @@ export type RepoSessionReadModel = {
   initialHistorySessions: AgentSessionState[];
 };
 
-const toSessionKey = (
-  runtimeKind: RuntimeKind,
-  workingDirectory: string,
-  externalSessionId: string,
-): string => `${runtimeKind}::${normalizeWorkingDirectory(workingDirectory)}::${externalSessionId}`;
-
 const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionRecord[] => {
   const records: TaskSessionRecord[] = [];
   for (const task of tasks) {
@@ -48,24 +43,26 @@ const collectTaskSessionRecords = (tasks: TaskSessionRecords[]): TaskSessionReco
   return records;
 };
 
-const collectPersistedSessionIds = (records: TaskSessionRecord[]): Set<string> =>
-  new Set(records.map(({ record }) => record.externalSessionId));
+const collectPersistedSessionKeys = (records: TaskSessionRecord[]): Set<string> =>
+  new Set(records.map(({ record }) => agentSessionIdentityKey(record)));
 
 const shouldKeepLocalSession = (
   session: AgentSessionState,
-  persistedSessionIds: Set<string>,
+  persistedSessionKeys: Set<string>,
 ): boolean => {
-  return !persistedSessionIds.has(session.externalSessionId) && session.status === "starting";
+  return (
+    !persistedSessionKeys.has(agentSessionIdentityKey(session)) && session.status === "starting"
+  );
 };
 
 const selectLocalSessions = (
   currentSessionsById: Record<string, AgentSessionState>,
   taskSessionRecords: TaskSessionRecord[],
 ): Record<string, AgentSessionState> => {
-  const persistedSessionIds = collectPersistedSessionIds(taskSessionRecords);
+  const persistedSessionKeys = collectPersistedSessionKeys(taskSessionRecords);
   return Object.fromEntries(
     Object.entries(currentSessionsById).filter(([, session]) =>
-      shouldKeepLocalSession(session, persistedSessionIds),
+      shouldKeepLocalSession(session, persistedSessionKeys),
     ),
   );
 };
@@ -137,14 +134,7 @@ export const readRepoRuntimeSessionPresence = async ({
       const directories = Array.from(directorySet).sort();
       const snapshots = await listSessionPresence({ repoPath, runtimeKind, directories });
       for (const snapshot of snapshots) {
-        snapshotsBySessionKey.set(
-          toSessionKey(
-            snapshot.ref.runtimeKind,
-            snapshot.ref.workingDirectory,
-            snapshot.ref.externalSessionId,
-          ),
-          snapshot,
-        );
+        snapshotsBySessionKey.set(agentSessionIdentityKey(snapshot.ref), snapshot);
       }
     }),
   );
@@ -170,8 +160,11 @@ export const buildRepoSessionReadModel = ({
 
   for (const { taskId, record } of taskSessionRecords) {
     const ref = toPersistedSessionRef({ repoPath, record });
-    const sessionKey = toSessionKey(ref.runtimeKind, ref.workingDirectory, ref.externalSessionId);
-    const current = currentSessionsById[record.externalSessionId];
+    const sessionKey = agentSessionIdentityKey(ref);
+    const currentByExternalId = currentSessionsById[record.externalSessionId];
+    const current = matchesAgentSessionIdentity(currentByExternalId, record)
+      ? currentByExternalId
+      : undefined;
     const snapshot =
       runtimePresence.snapshotsBySessionKey.get(sessionKey) ??
       toMissingAgentSessionPresenceSnapshot(ref);

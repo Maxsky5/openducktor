@@ -1,4 +1,9 @@
-import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  WorkflowAgentSessionState,
+} from "@/types/agent-orchestrator";
 import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/workflow-session";
 
 export type AgentSessionsById = Record<string, AgentSessionState>;
@@ -53,7 +58,7 @@ export type AgentSessionsStore = {
   getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionsByIdSnapshot: () => AgentSessionsById;
-  getSessionSnapshot: (externalSessionId: string | null) => AgentSessionState | null;
+  getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
   setSessionsById: (nextSessionsById: AgentSessionsById) => void;
   resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
@@ -203,8 +208,13 @@ export const createAgentSessionsStore = (
     getActivitySessionsSnapshot: () => activitySessionSummaries,
     getActivitySnapshot: () => activitySnapshot,
     getSessionsByIdSnapshot: () => sessionsById,
-    getSessionSnapshot: (externalSessionId) =>
-      externalSessionId ? (sessionsById[externalSessionId] ?? null) : null,
+    getSessionSnapshot: (identity) => {
+      if (!identity) {
+        return null;
+      }
+      const session = sessionsById[identity.externalSessionId] ?? null;
+      return matchesAgentSessionIdentity(session, identity) ? session : null;
+    },
     setSessionsById: (nextSessionsById) => {
       if (nextSessionsById === sessionsById) {
         return;

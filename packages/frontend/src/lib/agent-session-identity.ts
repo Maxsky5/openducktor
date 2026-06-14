@@ -1,3 +1,4 @@
+import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type AgentSessionIdentityLike = Pick<
@@ -12,7 +13,9 @@ export const agentSessionIdentityKey = ({
   runtimeKind,
   workingDirectory,
 }: AgentSessionIdentityLike): string =>
-  [externalSessionId, runtimeKind, workingDirectory].join(SESSION_IDENTITY_KEY_SEPARATOR);
+  [externalSessionId, runtimeKind, normalizeWorkingDirectory(workingDirectory)].join(
+    SESSION_IDENTITY_KEY_SEPARATOR,
+  );
 
 export const matchesAgentSessionIdentity = (
   session: AgentSessionIdentityLike | null | undefined,
@@ -22,6 +25,4 @@ export const matchesAgentSessionIdentity = (
   session !== undefined &&
   target !== null &&
   target !== undefined &&
-  session.externalSessionId === target.externalSessionId &&
-  session.runtimeKind === target.runtimeKind &&
-  session.workingDirectory === target.workingDirectory;
+  agentSessionIdentityKey(session) === agentSessionIdentityKey(target);
