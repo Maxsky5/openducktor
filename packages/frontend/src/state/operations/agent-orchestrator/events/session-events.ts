@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   ListenToAgentSessionParams,
@@ -106,6 +107,12 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
   }
 };
 
+const isObservedSessionMounted = ({
+  sessionRef,
+  sessionsRef,
+}: Pick<ListenToAgentSessionParams, "sessionRef" | "sessionsRef">): boolean =>
+  matchesAgentSessionIdentity(sessionsRef.current[sessionRef.externalSessionId], sessionRef);
+
 export const listenToAgentSessionEvents = async (
   context: ListenToAgentSessionParams,
 ): Promise<() => void> => {
@@ -130,6 +137,11 @@ export const listenToAgentSessionEvents = async (
     }
 
     if (queuedEvents.length === 0) {
+      return;
+    }
+
+    if (!isObservedSessionMounted(eventContext)) {
+      queuedEvents = [];
       return;
     }
 
@@ -224,6 +236,11 @@ export const listenToAgentSessionEvents = async (
   };
 
   const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
+    if (!isObservedSessionMounted(eventContext)) {
+      queuedEvents = [];
+      return;
+    }
+
     if (isImmediateSessionEvent(event)) {
       flushQueuedEvents();
       handleSessionEvent(handlerContext, event);

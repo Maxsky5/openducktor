@@ -74,6 +74,74 @@ describe("agent-orchestrator session transcript events", () => {
     expect(getSession(sessionsRef).historyLoadState).toBe("loaded");
   });
 
+  test("ignores observed session events after the mounted identity changes", async () => {
+    const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
+    const adapter: SessionEventAdapter = {
+      subscribeEvents: async (_sessionRef, handler) => {
+        handlers.push(
+          handler as unknown as (event: { type: string; [key: string]: unknown }) => void,
+        );
+        return () => {};
+      },
+      replyApproval: async () => {},
+    };
+    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+      current: {
+        "session-1": buildSession({ workingDirectory: "/tmp/other-worktree" }),
+      },
+    };
+    let updateCount = 0;
+    const updateSession = (
+      externalSessionId: string,
+      updater: (current: AgentSessionState) => AgentSessionState,
+    ) => {
+      const current = sessionsRef.current[externalSessionId];
+      if (!current) {
+        return;
+      }
+      updateCount += 1;
+      sessionsRef.current = {
+        ...sessionsRef.current,
+        [externalSessionId]: updater(current),
+      };
+    };
+
+    await listenToAgentSessionEvents({
+      adapter,
+      sessionRef: {
+        externalSessionId: "session-1",
+        repoPath: "/tmp/repo",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo",
+      },
+      sessionsRef,
+      draftRawBySessionRef: { current: {} },
+      draftSourceBySessionRef: { current: {} },
+      draftMessageIdBySessionRef: { current: {} },
+      draftFlushTimeoutBySessionRef: { current: {} },
+      updateSession,
+      resolveTurnDurationMs: () => undefined,
+      clearTurnDuration: () => {},
+      refreshTaskData: async () => {},
+      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+    });
+
+    const handleEvent = handlers[0];
+    if (!handleEvent) {
+      throw new Error("Expected session event handler to be registered");
+    }
+    handleEvent({
+      type: "assistant_message",
+      externalSessionId: "session-1",
+      messageId: "assistant-1",
+      timestamp: "2026-02-22T08:00:03.000Z",
+      message: "Wrong worktree event",
+    });
+
+    expect(updateCount).toBe(0);
+    expect(getSessionMessages(sessionsRef)).toEqual([]);
+  });
+
   test("records inputReadyAtMs when tool input first becomes meaningful", async () => {
     const originalDateNow = Date.now;
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];

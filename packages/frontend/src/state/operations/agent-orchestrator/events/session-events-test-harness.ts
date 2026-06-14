@@ -43,7 +43,7 @@ export const createRecordingRuntimeDataWriter = () => {
 
 export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  externalSessionId: "external-1",
+  externalSessionId: "session-1",
   taskId: "task-1",
   role: "spec",
   status: "running",
