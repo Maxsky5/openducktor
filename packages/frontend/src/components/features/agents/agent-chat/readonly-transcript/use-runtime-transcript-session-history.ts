@@ -1,4 +1,4 @@
-import type { AgentSessionHistoryMessage, AgentSessionRef } from "@openducktor/core";
+import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
@@ -13,7 +13,9 @@ import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
-type ReadSessionHistory = (session: AgentSessionRef) => Promise<AgentSessionHistoryMessage[]>;
+type ReadSessionHistory = (
+  session: LoadAgentSessionHistoryInput,
+) => Promise<AgentSessionHistoryMessage[]>;
 
 type UseRuntimeTranscriptSessionHistoryArgs = {
   isOpen: boolean;

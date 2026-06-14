@@ -280,4 +280,50 @@ describe("agent-orchestrator-public-operations", () => {
       roles: ["build", "qa"],
     });
   });
+
+  test("forwards full session history inputs without stripping transient context", async () => {
+    const readSessionHistory = mock(async () => []);
+    const operations = createOrchestratorPublicOperations({
+      loadAgentSessionHistory,
+      loadAgentSessions: async () => {},
+      readSessionModelCatalog: async () => ({
+        providers: [],
+        models: [],
+        variants: [],
+        profiles: [],
+        defaultModelsByProvider: {},
+      }),
+      readSessionSlashCommands: async () => ({ commands: [] }),
+      readSessionFileSearch: async () => [],
+      readSessionTodos: async () => [],
+      readSessionHistory,
+      removeAgentSession: async () => {},
+      removeAgentSessions: async () => {},
+      sessionActions: createSessionActions(),
+    });
+
+    await operations.readSessionHistory({
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      systemPromptContext: {
+        systemPrompt: "Use the repository rules.",
+        startedAt: "2026-06-14T08:00:00.000Z",
+      },
+      limit: 50,
+    });
+
+    expect(readSessionHistory).toHaveBeenCalledWith({
+      repoPath: "/repo-a",
+      runtimeKind: "codex",
+      workingDirectory: "/repo-a/worktree",
+      externalSessionId: "session-1",
+      systemPromptContext: {
+        systemPrompt: "Use the repository rules.",
+        startedAt: "2026-06-14T08:00:00.000Z",
+      },
+      limit: 50,
+    });
+  });
 });

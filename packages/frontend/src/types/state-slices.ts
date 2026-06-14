@@ -28,6 +28,7 @@ import type {
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
   AgentUserMessagePart,
+  LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import type { AgentSessionLoadOptions, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
@@ -169,7 +170,9 @@ export type AgentOperationsContextValue = {
     runtimeKind: RuntimeKind,
   ) => Promise<AgentModelCatalog>;
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
-  readSessionHistory: (session: AgentSessionRef) => Promise<AgentSessionHistoryMessage[]>;
+  readSessionHistory: (
+    session: LoadAgentSessionHistoryInput,
+  ) => Promise<AgentSessionHistoryMessage[]>;
   readSessionSlashCommands: (
     repoPath: string,
     runtimeKind: RuntimeKind,

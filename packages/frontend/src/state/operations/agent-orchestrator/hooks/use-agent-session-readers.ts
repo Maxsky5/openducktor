@@ -1,5 +1,9 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
+import type {
+  AgentEnginePort,
+  AgentSessionRef,
+  LoadAgentSessionHistoryInput,
+} from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 
 export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
@@ -13,7 +17,7 @@ export const useAgentSessionReaders = (agentEngine: AgentEnginePort) => {
     [agentEngine],
   );
   const readSessionHistory = useCallback(
-    (session: AgentSessionRef) => agentEngine.loadSessionHistory(session),
+    (session: LoadAgentSessionHistoryInput) => agentEngine.loadSessionHistory(session),
     [agentEngine],
   );
   const readSessionSlashCommands = useCallback(
