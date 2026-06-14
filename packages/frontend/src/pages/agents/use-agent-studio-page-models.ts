@@ -250,13 +250,7 @@ export function useAgentStudioPageModels({
   );
   const selectedRuntimeReadiness = selectedSession.runtime.runtimeReadiness;
   const selectedRuntimeLifecycle = selectedSession.runtime.lifecycle;
-  const selectedSessionLifecycle = useMemo(
-    () => ({
-      ...selectedRuntimeLifecycle,
-      isViewSwitching: selectedSession.chat.isViewSwitching,
-    }),
-    [selectedRuntimeLifecycle, selectedSession.chat.isViewSwitching],
-  );
+  const selectedSessionLifecycle = selectedRuntimeLifecycle;
   const runtimeReadiness = useMemo(
     () => ({
       readinessState: selectedRuntimeReadiness.readinessState,

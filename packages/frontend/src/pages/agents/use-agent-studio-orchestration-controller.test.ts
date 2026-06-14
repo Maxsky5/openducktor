@@ -102,7 +102,6 @@ const baseArgs: BuildArgs = {
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
-    isViewSwitching: false,
     activeSessionContextUsage: null,
     documents: baseDocuments,
     readiness: baseReadiness,
@@ -254,7 +253,7 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
     });
 
-    expect(context.chat.isViewSwitching).toBe(true);
+    expect(context.runtime.lifecycle.isViewSwitching).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
     expect(isSelectedAgentSessionHistoryLoading(context.runtime.lifecycle)).toBe(true);
@@ -279,16 +278,13 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
           ...baseArgs.selectedSession.runtime,
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "history_failed",
+            isViewSwitching: true,
           }),
-        },
-        chat: {
-          ...baseArgs.selectedSession.chat,
-          isViewSwitching: true,
         },
       },
     });
 
-    expect(failed.selectedSession.chat.isViewSwitching).toBe(true);
+    expect(failed.selectedSession.runtime.lifecycle.isViewSwitching).toBe(true);
     expect(failed.selectedSession.runtime.lifecycle.phase).toBe("history_failed");
   });
 });

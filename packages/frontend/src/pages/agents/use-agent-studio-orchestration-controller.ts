@@ -164,7 +164,7 @@ type BuildAgentStudioPageModelsArgsInput = {
 
 type BuildSelectedSessionContextFromOrchestrationInput = Omit<
   AgentStudioSelectedSessionContextInput,
-  "isViewSwitching" | "lifecycle" | "sessionRuntimeDataError"
+  "lifecycle" | "sessionRuntimeDataError"
 > & {
   viewSessionRuntimeDataError?: string | null;
   isActiveTaskReady: boolean;
@@ -178,13 +178,18 @@ export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
   isSessionSelectionResolving,
   viewSessionLifecycle,
   ...input
-}: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext =>
-  buildAgentStudioSelectedSessionContext({
+}: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext => {
+  const lifecycle: SelectedAgentSessionViewLifecycle = {
+    ...viewSessionLifecycle,
+    isViewSwitching: Boolean(input.taskId && !isActiveTaskReady) || isSessionSelectionResolving,
+  };
+
+  return buildAgentStudioSelectedSessionContext({
     ...input,
     sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
-    lifecycle: viewSessionLifecycle,
-    isViewSwitching: Boolean(input.taskId && !isActiveTaskReady) || isSessionSelectionResolving,
+    lifecycle,
   });
+};
 
 export const buildAgentStudioPageModelsArgs = ({
   view,

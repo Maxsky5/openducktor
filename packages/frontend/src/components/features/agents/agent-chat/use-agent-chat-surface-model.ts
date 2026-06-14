@@ -29,10 +29,7 @@ import type {
   AgentChatThreadSession,
 } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
-import {
-  type AgentChatThreadLifecycle,
-  resolveAgentChatThreadContext,
-} from "./agent-chat-thread-context";
+import { resolveAgentChatThreadContext } from "./agent-chat-thread-context";
 import { useAgentChatLayout } from "./use-agent-chat-layout";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -155,8 +152,10 @@ type AgentChatComposerConfig = {
   onSelectVariant: (variant: string) => void;
 };
 
-export type AgentChatSurfaceSessionLifecycle = AgentChatThreadLifecycle &
-  Pick<SelectedAgentSessionViewLifecycle, "phase" | "canRenderHistory" | "historyRequest">;
+export type AgentChatSurfaceSessionLifecycle = Pick<
+  SelectedAgentSessionViewLifecycle,
+  "phase" | "canRenderHistory" | "historyRequest" | "isViewSwitching"
+>;
 
 type UseAgentChatSurfaceModelArgs = {
   mode: AgentChatMode;

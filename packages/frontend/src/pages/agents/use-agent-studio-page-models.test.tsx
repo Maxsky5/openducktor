@@ -150,7 +150,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
-    isViewSwitching: false,
     activeSessionRuntimeData: emptyRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
@@ -259,7 +258,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
       lifecycle: selectedSessionCore.lifecycle,
-      isViewSwitching: selectedSessionCore.isViewSwitching,
       activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
         totalTokens: 12,
         contextWindow: 100,
@@ -588,8 +586,8 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             phase: "resolving_session",
             canRenderHistory: false,
+            isViewSwitching: true,
           }),
-          isViewSwitching: true,
         },
         selectedSessionActions: {
           canKickoffNewSession: true,
