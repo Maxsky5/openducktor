@@ -152,11 +152,13 @@ Selected-session state must not maintain parent-owned pending-input projections.
 Files:
 
 - `hooks/use-session-runtime-data.ts`
+- `support/session-runtime-data-plan.ts`
 - `support/session-runtime-data-writer.ts`
 - `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`
 
 Owns:
 
+- deciding whether the selected session has enough stable runtime context to read runtime data
 - reading selected-session model catalog and todos through TanStack Query
 - owning live todo state through the same todos query cache used for selected-session reads
 - reporting selected-session runtime-data read errors

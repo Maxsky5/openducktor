@@ -2,9 +2,8 @@ import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { findRuntimeDefinition, runtimeSupportsCapability } from "@/lib/agent-runtime";
 import type { SessionRepoReadinessState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { resolveRuntimeWorkingDirectoryRefState } from "@/state/operations/agent-orchestrator/support/session-runtime-ref";
+import { deriveSessionRuntimeDataPlan } from "@/state/operations/agent-orchestrator/support/session-runtime-data-plan";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_MODEL_CATALOG_STALE_TIME_MS,
@@ -47,29 +46,18 @@ export const useSessionRuntimeData = ({
   readSessionModelCatalog,
   readSessionTodos,
 }: UseSessionRuntimeDataArgs): SessionRuntimeDataState => {
-  const { runtimeRef, runtimeRefError: runtimeDataSupportError } = useMemo(
-    () => resolveRuntimeWorkingDirectoryRefState({ repoPath, session }),
-    [repoPath, session],
+  const runtimeDataPlan = useMemo(
+    () =>
+      deriveSessionRuntimeDataPlan({
+        repoPath,
+        session,
+        runtimeDefinitions,
+        repoReadinessState,
+      }),
+    [repoPath, repoReadinessState, runtimeDefinitions, session],
   );
-  const canReadSessionRuntimeData =
-    repoReadinessState === "ready" &&
-    runtimeRef !== null &&
-    runtimeDataSupportError === null &&
-    session?.status !== "starting";
-  const runtimeDefinition = session?.runtimeKind
-    ? findRuntimeDefinition(runtimeDefinitions, session.runtimeKind)
-    : null;
-  const supportsTodos = runtimeDefinition
-    ? runtimeSupportsCapability(runtimeDefinition, "optionalSurfaces.supportsTodos")
-    : false;
-  const runtimeSessionRef =
-    runtimeRef && session
-      ? {
-          ...runtimeRef,
-          externalSessionId: session.externalSessionId,
-        }
-      : null;
-  const shouldLoadTodos = canReadSessionRuntimeData && runtimeSessionRef !== null && supportsTodos;
+  const runtimeRef = runtimeDataPlan.runtimeRef;
+  const sessionRef = runtimeDataPlan.sessionRef;
 
   const catalogQuery = useQuery({
     queryKey: runtimeRef
@@ -79,18 +67,18 @@ export const useSessionRuntimeData = ({
       ? (): Promise<AgentModelCatalog> =>
           readSessionModelCatalog(runtimeRef.repoPath, runtimeRef.runtimeKind)
       : skipToken,
-    enabled: canReadSessionRuntimeData,
+    enabled: runtimeDataPlan.canReadModelCatalog,
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
   });
 
   const todosQuery = useQuery({
-    queryKey: runtimeSessionRef
-      ? agentSessionRuntimeQueryKeys.todos(runtimeSessionRef)
+    queryKey: sessionRef
+      ? agentSessionRuntimeQueryKeys.todos(sessionRef)
       : agentSessionRuntimeQueryKeys.todosUnavailable(),
-    queryFn: runtimeSessionRef
-      ? (): Promise<AgentSessionTodoItem[]> => readSessionTodos(runtimeSessionRef)
+    queryFn: sessionRef
+      ? (): Promise<AgentSessionTodoItem[]> => readSessionTodos(sessionRef)
       : skipToken,
-    enabled: shouldLoadTodos,
+    enabled: runtimeDataPlan.canReadTodos,
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
@@ -106,13 +94,13 @@ export const useSessionRuntimeData = ({
       catalogQuery.error instanceof Error ? catalogQuery.error.message : null;
     const todosQueryError = todosQuery.error instanceof Error ? todosQuery.error.message : null;
     const runtimeDataQueryError = catalogQueryError ?? todosQueryError;
-    const runtimeDataError = runtimeDataSupportError ?? runtimeDataQueryError;
+    const runtimeDataError = runtimeDataPlan.runtimeDataSupportError ?? runtimeDataQueryError;
     const resolvedCatalog = catalogQuery.data ?? null;
     const resolvedTodos = todosQuery.data ?? [];
     const isLoadingModelCatalog =
-      runtimeDataSupportError || catalogQueryError
+      runtimeDataPlan.runtimeDataSupportError || catalogQueryError
         ? false
-        : canReadSessionRuntimeData
+        : runtimeDataPlan.canReadModelCatalog
           ? resolvedCatalog === null && catalogQuery.isPending
           : false;
 
@@ -129,9 +117,9 @@ export const useSessionRuntimeData = ({
     catalogQuery.error,
     catalogQuery.isPending,
     session,
-    canReadSessionRuntimeData,
+    runtimeDataPlan.canReadModelCatalog,
+    runtimeDataPlan.runtimeDataSupportError,
     todosQuery.data,
     todosQuery.error,
-    runtimeDataSupportError,
   ]);
 };
