@@ -8,6 +8,7 @@ import {
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentChatThreadSession } from "../agent-chat.types";
+import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { createReadonlyTranscriptSession } from "./readonly-transcript-session";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
@@ -28,19 +29,6 @@ type RuntimeTranscriptSessionHistory = {
   isHistoryLoading: boolean;
   historyError: string | null;
 };
-
-const toReadonlyLiveTranscriptSession = (session: AgentSessionState): AgentChatThreadSession => ({
-  externalSessionId: session.externalSessionId,
-  ...(session.title ? { title: session.title } : {}),
-  status: session.status,
-  runtimeKind: session.runtimeKind,
-  workingDirectory: session.workingDirectory,
-  messages: session.messages,
-  pendingApprovals: session.pendingApprovals,
-  pendingQuestions: session.pendingQuestions,
-  selectedModel: session.selectedModel,
-  todos: [],
-});
 
 export function useRuntimeTranscriptSessionHistory({
   isOpen,
@@ -85,7 +73,7 @@ export function useRuntimeTranscriptSessionHistory({
 
   const session = useMemo(() => {
     if (sourceLiveSession) {
-      return toReadonlyLiveTranscriptSession(sourceLiveSession);
+      return toAgentChatThreadSession(sourceLiveSession, []);
     }
     if (!activeWorkspace || !source || !externalSessionId || !historyQuery.data) {
       return null;
