@@ -60,6 +60,20 @@ describe("createRuntimeRegistry", () => {
       ),
     ).resolves.toEqual(runtime);
   });
+  test("returns an existing workspace runtime when the repo path formatting differs", async () => {
+    const runtime = createRuntime({ repoPath: "/repo", workingDirectory: "/repo" });
+    const registry = createRuntimeRegistry({ runtimes: [runtime] });
+    await expect(
+      Effect.runPromise(
+        registry.ensureWorkspaceRuntime({
+          runtimeKind: "opencode",
+          repoPath: "/repo/",
+          workingDirectory: "/repo/",
+          descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+        }),
+      ),
+    ).resolves.toEqual(runtime);
+  });
   test("finds runtimes by id from initial registrations", async () => {
     const runtime = createRuntime();
     const registry = createRuntimeRegistry({ runtimes: [runtime] });
@@ -209,6 +223,54 @@ describe("createRuntimeRegistry", () => {
     };
     const first = Effect.runPromise(registry.ensureWorkspaceRuntime(input));
     const second = Effect.runPromise(registry.ensureWorkspaceRuntime(input));
+    resolveStart(createRuntime());
+    await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
+    await expect(
+      Effect.runPromise(
+        registry.listRuntimesByRepo({ repoPath: "/repo", runtimeKind: "opencode" }),
+      ),
+    ).resolves.toEqual([createRuntime()]);
+    expect(starts).toBe(1);
+  });
+  test("deduplicates parallel workspace runtime ensure calls with equivalent repo paths", async () => {
+    let starts = 0;
+    let resolveStart: (runtime: RuntimeInstanceSummary) => void = () => {};
+    const started = new Promise<RuntimeInstanceSummary>((resolve) => {
+      resolveStart = resolve;
+    });
+    const registry = createRuntimeRegistry({
+      workspaceStarter: {
+        startWorkspaceRuntime() {
+          return Effect.tryPromise({
+            try: async () => {
+              starts += 1;
+              return {
+                runtime: await started,
+                stop: () => Effect.succeed(undefined),
+              };
+            },
+            catch: (cause) =>
+              toHostOperationError(cause, "test.workspaceStarter.startWorkspaceRuntime"),
+          });
+        },
+      },
+    });
+    const first = Effect.runPromise(
+      registry.ensureWorkspaceRuntime({
+        runtimeKind: "opencode",
+        repoPath: "/repo",
+        workingDirectory: "/repo",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      }),
+    );
+    const second = Effect.runPromise(
+      registry.ensureWorkspaceRuntime({
+        runtimeKind: "opencode",
+        repoPath: "/repo/",
+        workingDirectory: "/repo/",
+        descriptor: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      }),
+    );
     resolveStart(createRuntime());
     await expect(Promise.all([first, second])).resolves.toEqual([createRuntime(), createRuntime()]);
     await expect(

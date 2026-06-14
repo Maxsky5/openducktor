@@ -24,7 +24,6 @@ import {
   probeCodexMcpStatus,
   probeOpenCodeMcpStatus,
   probeOpenCodeSessionStatus,
-  runtimeEnsureFlightKey,
   stopOpenCodeSession,
 } from "./runtime-registry-probes";
 export type CreateRuntimeRegistryInput = {
@@ -42,14 +41,17 @@ type RuntimeSessionTargetInput = {
   repoPath: string;
 };
 
+const workspaceRuntimeKey = (runtimeKind: string, repoPath: string): string =>
+  `${runtimeKind}::${normalizePathForComparison(repoPath)}`;
+
 const findWorkspaceRuntime = (
   runtimes: Iterable<RuntimeInstanceSummary>,
   input: RuntimeEnsureWorkspaceInput,
 ): RuntimeInstanceSummary | undefined => {
+  const key = workspaceRuntimeKey(input.runtimeKind, input.repoPath);
   for (const runtime of runtimes) {
     if (
-      runtime.kind === input.runtimeKind &&
-      runtime.repoPath === input.repoPath &&
+      workspaceRuntimeKey(runtime.kind, runtime.repoPath) === key &&
       runtime.role === "workspace"
     ) {
       return runtime;
@@ -261,7 +263,7 @@ export const createRuntimeRegistry = ({
             }),
           );
         }
-        const flightKey = runtimeEnsureFlightKey(input.runtimeKind, input.repoPath);
+        const flightKey = workspaceRuntimeKey(input.runtimeKind, input.repoPath);
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             const reservation = yield* Effect.sync(() => {

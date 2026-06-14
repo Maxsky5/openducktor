@@ -78,9 +78,6 @@ const isLiveSessionStatus = (value: unknown): boolean => {
   return status === "busy" || status === "retry";
 };
 
-export const runtimeEnsureFlightKey = (runtimeKind: string, repoPath: string): string =>
-  `${runtimeKind}::${repoPath}`;
-
 const requireObjectPayload = (value: unknown, context: string) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return Effect.fail(
