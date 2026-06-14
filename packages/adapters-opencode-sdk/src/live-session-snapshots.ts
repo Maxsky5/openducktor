@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/core";
 import { formatWorkflowAgentSessionTitle } from "@openducktor/core";
 import { unwrapData } from "./data-utils";
-import { listOpencodeLiveSessionPendingInput } from "./message-ops";
+import { listOpencodeLiveSessionPendingInput } from "./pending-input-ops";
 import { isLocalSessionBusy, isUserMessageSendInFlight } from "./session-activity";
 import { toIsoFromEpoch } from "./session-runtime-utils";
 import type { ClientFactory, SessionRecord } from "./types";

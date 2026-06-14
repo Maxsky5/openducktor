@@ -66,13 +66,8 @@ import {
   listOpencodeLocalPresenceSnapshots,
 } from "./live-session-snapshots";
 import { sendUserMessage } from "./message-execution";
-import {
-  loadAndSeedSessionHistory,
-  loadSessionHistory,
-  loadSessionTodos,
-  replyApproval,
-  replyQuestion,
-} from "./message-ops";
+import { loadAndSeedSessionHistory, loadSessionHistory, loadSessionTodos } from "./message-ops";
+import { replyApproval, replyQuestion } from "./pending-input-ops";
 import {
   type OpencodeRuntimeResolutionInput,
   toOpencodeRuntimeClientInput,
