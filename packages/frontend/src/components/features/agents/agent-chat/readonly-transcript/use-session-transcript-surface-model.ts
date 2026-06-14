@@ -5,6 +5,7 @@ import {
   useRuntimeDefinitionsContext,
 } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
+import { deriveAgentSessionHistoryViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-settings";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useRepoRuntimeHealthWarmup } from "../../use-repo-runtime-health-warmup";
@@ -78,11 +79,16 @@ export function useSessionTranscriptSurfaceModel({
   const isSessionWorking = transcriptInteractions.session
     ? isAgentSessionWorkingStatus(transcriptInteractions.session.status)
     : false;
-  const isTranscriptLoading = sessionHistory.isHistoryLoading;
+  const sessionLifecycle = deriveAgentSessionHistoryViewLifecycle({
+    session: transcriptInteractions.session,
+    externalSessionId,
+    historyLoadState: sessionHistory.historyLoadState,
+    repoReadinessState: runtimeReadiness.readinessState,
+  });
   const isResolvingTranscript =
     Boolean(isOpen && activeWorkspace && externalSessionId && source) &&
     transcriptInteractions.session === null &&
-    isTranscriptLoading;
+    sessionHistory.isHistoryLoading;
   const chatSettingsLoadError =
     chatSettingsError && activeWorkspace
       ? `Failed to load chat settings: ${errorMessageFromUnknown(
@@ -113,10 +119,7 @@ export function useSessionTranscriptSurfaceModel({
   const model = useAgentChatSurfaceModel({
     mode: "non_interactive",
     session: transcriptInteractions.session,
-    sessionLifecycle: {
-      phase: isTranscriptLoading ? "loading_history" : "ready",
-      repoReadinessState: runtimeReadiness.readinessState,
-    },
+    sessionLifecycle,
     isContextSwitching: isResolvingTranscript,
     chatSettings,
     isSessionWorking,

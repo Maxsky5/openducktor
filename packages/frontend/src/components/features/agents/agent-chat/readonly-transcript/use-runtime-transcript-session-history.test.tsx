@@ -77,6 +77,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.workingDirectory).toBe("/repo-a/worktree");
       expect(session?.status).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
+      expect(harness.getLatest().historyLoadState).toBe("loaded");
       expect(harness.getLatest().historyError).toBeNull();
     } finally {
       await harness.unmount();
@@ -113,6 +114,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         selectedModel: liveSession.selectedModel,
         todos: [],
       });
+      expect(harness.getLatest().historyLoadState).toBe("loaded");
       expect(harness.getLatest().isHistoryLoading).toBe(false);
     } finally {
       await harness.unmount();
@@ -162,6 +164,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(harness.getLatest()).toEqual({
         session: null,
+        historyLoadState: "failed",
         isHistoryLoading: false,
         historyError: "history unavailable",
       });

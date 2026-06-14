@@ -11,7 +11,7 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentChatThreadSession } from "../agent-chat.types";
+import type { AgentChatThreadRuntimeReadiness, AgentChatThreadSession } from "../agent-chat.types";
 import type { RuntimeSessionTranscriptSource } from "./runtime-session-transcript-source";
 
 const readSessionHistory = mock(
@@ -39,6 +39,14 @@ let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("../use-repo-runtime-readiness")>;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
+let runtimeReadiness: AgentChatThreadRuntimeReadiness = {
+  readinessState: "ready",
+  isReady: true,
+  isRuntimeStarting: false,
+  blockedReason: null,
+  isLoadingChecks: false,
+  refreshChecks: async () => {},
+};
 
 function makeTranscriptSource(): RuntimeSessionTranscriptSource {
   return {
@@ -146,6 +154,14 @@ describe("useSessionTranscriptSurfaceModel", () => {
     );
     settingsChat = createChatSettingsFixture();
     settingsSnapshotError = null;
+    runtimeReadiness = {
+      readinessState: "ready",
+      isReady: true,
+      isRuntimeStarting: false,
+      blockedReason: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    };
     actualHostOperations.host.workspaceGetSettingsSnapshot = async () => {
       if (settingsSnapshotError) {
         throw settingsSnapshotError;
@@ -185,14 +201,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }));
 
     mock.module("../use-repo-runtime-readiness", () => ({
-      useRepoRuntimeReadiness: () => ({
-        readinessState: "ready" as const,
-        isReady: true,
-        isRuntimeStarting: false,
-        blockedReason: null,
-        isLoadingChecks: false,
-        refreshChecks: async () => {},
-      }),
+      useRepoRuntimeReadiness: () => runtimeReadiness,
     }));
   });
 
@@ -423,6 +432,50 @@ describe("useSessionTranscriptSurfaceModel", () => {
         await deferredHistory.promise;
       });
       await harness.waitFor((state) => state.model.thread.sessionLifecycle.phase === "ready");
+    } finally {
+      deferredHistory.resolve([]);
+      await harness.unmount();
+    }
+  });
+
+  test("uses the canonical runtime waiting lifecycle while runtime readiness is checking", async () => {
+    runtimeReadiness = {
+      readinessState: "checking",
+      isReady: false,
+      isRuntimeStarting: true,
+      blockedReason: null,
+      isLoadingChecks: true,
+      refreshChecks: async () => {},
+    };
+    const deferredHistory = createDeferred<AgentSessionHistoryMessage[]>();
+    readSessionHistory.mockImplementationOnce(async () => deferredHistory.promise);
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        activeWorkspace: {
+          workspaceId: "workspace-a",
+          workspaceName: "Workspace A",
+          repoPath: "/repo-a",
+        },
+        isOpen: true,
+        externalSessionId: "session-subagent-1",
+        source: makeTranscriptSource(),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
+
+      expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
+        phase: "waiting_for_runtime",
+        repoReadinessState: "checking",
+      });
+      expect(harness.getLatest().model.thread.emptyState).toBe(null);
     } finally {
       deferredHistory.resolve([]);
       await harness.unmount();
@@ -692,6 +745,9 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).toHaveBeenCalledTimes(1);
+      expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
+        phase: "history_failed",
+      });
       expect(harness.getLatest().model.thread.emptyState).toEqual({
         title: "Failed to load conversation: history unavailable",
       });

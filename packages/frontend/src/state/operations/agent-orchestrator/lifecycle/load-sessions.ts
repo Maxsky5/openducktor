@@ -6,8 +6,6 @@ import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-o
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
-  type RepoRuntimeSessionPresenceRead,
-  type RepoSessionReadModel,
   readRepoRuntimeSessionPresence,
   selectRepoSessionHistoryTargets,
   type TaskSessionRecords,
@@ -36,43 +34,17 @@ type SessionsById = Record<string, AgentSessionState>;
 type SessionStateUpdater = SessionsById | ((current: SessionsById) => SessionsById);
 
 type CommitSessions = (updater: SessionStateUpdater) => void;
+type SessionsSnapshotRef = { readonly current: SessionsById };
 
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence"> &
   SessionHistoryLoaderAdapter;
-
-const commitRepoSessionReadModel = ({
-  repoPath,
-  tasks,
-  runtimePresence,
-  commitSessions,
-}: {
-  repoPath: string;
-  tasks: TaskSessionRecords[];
-  runtimePresence: RepoRuntimeSessionPresenceRead;
-  commitSessions: CommitSessions;
-}): RepoSessionReadModel => {
-  let committedReadModel: RepoSessionReadModel | undefined;
-  commitSessions((currentSessionsById) => {
-    const readModel = buildRepoSessionReadModel({
-      repoPath,
-      tasks,
-      currentSessionsById,
-      runtimePresence,
-    });
-    committedReadModel = readModel;
-    return readModel.sessionsById;
-  });
-  if (committedReadModel === undefined) {
-    throw new Error("Failed to commit repo session read model.");
-  }
-  return committedReadModel;
-};
 
 type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: SessionLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
+  sessionsRef: SessionsSnapshotRef;
   setSessionsById: CommitSessions;
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
@@ -114,6 +86,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions,
   updateSession,
   listenToAgentSession,
+  sessionsRef,
   historyRuntimeContext,
   isStaleRepoOperation,
   options,
@@ -124,6 +97,7 @@ export const loadRepoAgentSessions = async ({
   commitSessions: CommitSessions;
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
+  sessionsRef: SessionsSnapshotRef;
   historyRuntimeContext: SessionHistoryRuntimeContext;
   isStaleRepoOperation: () => boolean;
   options?: AgentSessionLoadOptions;
@@ -141,12 +115,13 @@ export const loadRepoAgentSessions = async ({
     return;
   }
 
-  const readModel = commitRepoSessionReadModel({
+  const readModel = buildRepoSessionReadModel({
     repoPath,
     tasks,
+    currentSessionsById: sessionsRef.current,
     runtimePresence,
-    commitSessions,
   });
+  commitSessions(readModel.sessionsById);
 
   if (isStaleRepoOperation()) {
     return;
@@ -197,6 +172,7 @@ export const createLoadAgentSessions = ({
   setSessionsById,
   updateSession,
   listenToAgentSession,
+  sessionsRef,
   queryClient,
   taskRef,
   loadRepoPromptOverrides,
@@ -247,6 +223,7 @@ export const createLoadAgentSessions = ({
       commitSessions: setSessionsById,
       updateSession,
       ...(listenToAgentSession ? { listenToAgentSession } : {}),
+      sessionsRef,
       historyRuntimeContext,
       isStaleRepoOperation,
       ...(options ? { options } : {}),

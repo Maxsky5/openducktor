@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   canReadAgentSessionRuntimeData,
+  deriveAgentSessionHistoryViewLifecycle,
   deriveAgentSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
   getAgentSessionTranscriptState,
@@ -213,6 +214,62 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.phase).toBe("ready");
     expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
     expect(shouldLoadAgentSessionHistory(lifecycle)).toBe(false);
+  });
+});
+
+describe("deriveAgentSessionHistoryViewLifecycle", () => {
+  test("uses history load state for a transcript target before a session exists", () => {
+    const lifecycle = deriveAgentSessionHistoryViewLifecycle({
+      session: null,
+      externalSessionId: "external-1",
+      historyLoadState: "loading",
+      repoReadinessState: "checking",
+    });
+
+    expect(lifecycle).toEqual({
+      phase: "waiting_for_runtime",
+      repoReadinessState: "checking",
+    });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "runtime_waiting" });
+  });
+
+  test("uses visible transcript messages when history is loaded", () => {
+    const lifecycle = deriveAgentSessionHistoryViewLifecycle({
+      session: {
+        externalSessionId: "external-1",
+        messages: [
+          {
+            id: "message-1",
+            role: "user",
+            content: "existing transcript",
+            timestamp: "2026-02-22T08:00:03.000Z",
+          },
+        ],
+      },
+      externalSessionId: "external-1",
+      historyLoadState: "loaded",
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle).toEqual({
+      phase: "ready",
+      repoReadinessState: "ready",
+    });
+    expect(getAgentSessionTranscriptState(lifecycle)).toEqual({ kind: "visible" });
+  });
+
+  test("stays inactive when there is no transcript target", () => {
+    const lifecycle = deriveAgentSessionHistoryViewLifecycle({
+      session: null,
+      externalSessionId: null,
+      historyLoadState: null,
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle).toEqual({
+      phase: "inactive",
+      repoReadinessState: "ready",
+    });
   });
 });
 

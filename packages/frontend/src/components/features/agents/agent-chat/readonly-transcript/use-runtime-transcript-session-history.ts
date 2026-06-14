@@ -1,6 +1,7 @@
 import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import type { AgentSessionHistoryLoadState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
   agentSessionRuntimeQueryKeys,
   SESSION_HISTORY_STALE_TIME_MS,
@@ -28,6 +29,7 @@ type UseRuntimeTranscriptSessionHistoryArgs = {
 
 type RuntimeTranscriptSessionHistory = {
   session: AgentChatThreadSession | null;
+  historyLoadState: AgentSessionHistoryLoadState | null;
   isHistoryLoading: boolean;
   historyError: string | null;
 };
@@ -88,9 +90,25 @@ export function useRuntimeTranscriptSessionHistory({
       history: historyQuery.data,
     });
   }, [activeWorkspace, externalSessionId, historyQuery.data, sourceLiveSession, source]);
+  const historyLoadState: AgentSessionHistoryLoadState | null = (() => {
+    if (sourceLiveSession || session) {
+      return "loaded";
+    }
+    if (!isOpen || !activeWorkspace || !externalSessionId || !source) {
+      return null;
+    }
+    if (historyQuery.error) {
+      return "failed";
+    }
+    if (historyQuery.isPending) {
+      return "loading";
+    }
+    return "not_requested";
+  })();
 
   return {
     session,
+    historyLoadState,
     isHistoryLoading: historyQueryEnabled && historyQuery.isPending,
     historyError: historyQuery.error
       ? errorMessageFromUnknown(historyQuery.error, "Failed to load transcript history.")

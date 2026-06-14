@@ -75,6 +75,11 @@ const createLoaderHarness = ({
     },
     repoEpochRef: { current: 0 },
     currentWorkspaceRepoPathRef: { current: "/repo" },
+    sessionsRef: {
+      get current() {
+        return sessionsById;
+      },
+    },
     setSessionsById: (updater) => {
       sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
     },

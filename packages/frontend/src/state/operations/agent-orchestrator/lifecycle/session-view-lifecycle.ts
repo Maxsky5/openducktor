@@ -3,6 +3,16 @@ import { getSessionMessageCount } from "../support/messages";
 
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
 
+export type AgentSessionLifecycleSource = Pick<
+  AgentSessionState,
+  "externalSessionId" | "historyLoadState" | "messages"
+>;
+export type AgentSessionHistoryLoadState = AgentSessionLifecycleSource["historyLoadState"];
+export type AgentSessionTranscriptSource = Pick<
+  AgentSessionLifecycleSource,
+  "externalSessionId" | "messages"
+>;
+
 export type AgentSessionViewLifecyclePhase =
   | "inactive"
   | "resolving_session"
@@ -117,7 +127,7 @@ export const deriveAgentSessionViewLifecycle = ({
   session,
   repoReadinessState,
 }: {
-  session: AgentSessionState | null;
+  session: AgentSessionLifecycleSource | null;
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
   if (!session) {
@@ -159,6 +169,37 @@ export const deriveAgentSessionViewLifecycle = ({
         repoReadinessState,
       };
   }
+};
+
+export const deriveAgentSessionHistoryViewLifecycle = ({
+  session,
+  externalSessionId,
+  historyLoadState,
+  repoReadinessState,
+}: {
+  session: AgentSessionTranscriptSource | null;
+  externalSessionId: string | null;
+  historyLoadState: AgentSessionHistoryLoadState | null;
+  repoReadinessState: SessionRepoReadinessState;
+}): AgentSessionViewLifecycle => {
+  if (session && historyLoadState) {
+    return deriveAgentSessionViewLifecycle({
+      session: { ...session, historyLoadState },
+      repoReadinessState,
+    });
+  }
+
+  if (externalSessionId && historyLoadState) {
+    return deriveAgentSessionViewLifecycle({
+      session: { externalSessionId, historyLoadState, messages: [] },
+      repoReadinessState,
+    });
+  }
+
+  return {
+    phase: "inactive",
+    repoReadinessState,
+  };
 };
 
 export const deriveSelectedAgentSessionViewLifecycle = ({

@@ -16,6 +16,7 @@ type UseRepoSessionReadModelEffectsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   currentWorkspaceRepoPathRef: { current: string | null };
+  sessionsRef: { readonly current: Record<string, AgentSessionState> };
   commitSessions: (
     updater:
       | Record<string, AgentSessionState>
@@ -33,6 +34,7 @@ export const useRepoSessionReadModelEffects = ({
   activeWorkspace,
   tasks,
   currentWorkspaceRepoPathRef,
+  sessionsRef,
   commitSessions,
   updateSession,
   agentEngine,
@@ -80,6 +82,7 @@ export const useRepoSessionReadModelEffects = ({
           commitSessions,
           updateSession,
           ...(listenToAgentSession ? { listenToAgentSession } : {}),
+          sessionsRef,
           historyRuntimeContext,
           isStaleRepoOperation: () => !isCurrentRepo(),
         });
@@ -106,6 +109,7 @@ export const useRepoSessionReadModelEffects = ({
     commitSessions,
     updateSession,
     currentWorkspaceRepoPathRef,
+    sessionsRef,
     setSessionReadModelError,
     tasks,
     workspaceRepoPath,
