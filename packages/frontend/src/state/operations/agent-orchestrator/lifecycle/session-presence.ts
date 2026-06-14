@@ -19,9 +19,6 @@ export const sessionPresenceHasPendingInput = (snapshot: AgentSessionPresenceSna
   return snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
 };
 
-const isMountedNonTerminalSession = (session: AgentSessionState): boolean =>
-  session.status !== "stopped" && session.status !== "error";
-
 export const applyAgentSessionPresenceSnapshotToSession = (
   current: AgentSessionState,
   snapshot: AgentSessionPresenceSnapshot,
@@ -56,18 +53,14 @@ export const applyAgentSessionPresenceSnapshotToSession = (
     };
   }
 
-  const preserveMountedLiveState =
-    snapshot.presence === "persisted_only" && isMountedNonTerminalSession(current);
-  const liveTurnPatch = preserveMountedLiveState ? {} : settleLiveTurnFields();
-
   return {
     ...current,
     runtimeKind: snapshot.ref.runtimeKind,
     workingDirectory: snapshot.ref.workingDirectory,
-    status: preserveMountedLiveState ? current.status : statusWithoutRuntimePresence(current),
-    pendingApprovals: preserveMountedLiveState ? current.pendingApprovals : [],
-    pendingQuestions: preserveMountedLiveState ? current.pendingQuestions : [],
-    ...liveTurnPatch,
+    status: statusWithoutRuntimePresence(current),
+    pendingApprovals: [],
+    pendingQuestions: [],
+    ...settleLiveTurnFields(),
     ...promptOverridesPatch,
     selectedModel,
   };

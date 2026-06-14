@@ -149,25 +149,9 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("surfaces idle status when runtime presence is idle without pending input", async () => {
+  test("surfaces idle status from initial runtime presence", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const busyPresence = await readRepoRuntimeSessionPresence({
-      repoPath: "/repo",
-      tasks,
-      listSessionPresence: async () => [
-        createPresence({
-          runtimeKind: "opencode",
-          externalSessionId: record.externalSessionId,
-          status: { type: "busy" },
-        }),
-      ],
-    });
-    const busyRead = buildRepoSessionReadModel({
-      repoPath: "/repo",
-      tasks,
-      runtimePresence: busyPresence,
-    });
     const idlePresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
@@ -183,7 +167,6 @@ describe("repo session read model", () => {
     const idleRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: busyRead.sessionsById,
       runtimePresence: idlePresence,
     });
 
@@ -274,6 +257,106 @@ describe("repo session read model", () => {
     ]);
   });
 
+  test("does not let a runtime presence snapshot rewrite an event-owned session", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const currentSession = {
+      ...createAgentSessionFixture({
+        externalSessionId: record.externalSessionId,
+        taskId: "task-1",
+        runtimeKind: "opencode",
+        role: "build",
+        status: "idle",
+        startedAt: record.startedAt,
+        workingDirectory: record.workingDirectory,
+        historyLoadState: "loaded",
+      }),
+      pendingQuestions: [
+        {
+          requestId: "current-question",
+          questions: [],
+        },
+      ],
+      messages: createSessionMessagesState(record.externalSessionId, [
+        {
+          id: "existing-message",
+          role: "assistant",
+          content: "Event-owned transcript",
+          timestamp: "2026-06-11T08:00:01.000Z",
+        },
+      ]),
+    };
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [
+        createPresence({
+          runtimeKind: "opencode",
+          externalSessionId: record.externalSessionId,
+          status: { type: "busy" },
+          pendingQuestions: [],
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [record.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    const session = readModel.sessionsById[record.externalSessionId];
+    if (!session) {
+      throw new Error(`Expected ${record.externalSessionId} to be present.`);
+    }
+    expect(session?.status).toBe("idle");
+    expect(session?.pendingQuestions).toEqual(currentSession.pendingQuestions);
+    expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
+      "Event-owned transcript",
+    ]);
+  });
+
+  test("does not let an idle runtime presence snapshot demote an event-owned running session", async () => {
+    const record = createRecord();
+    const tasks = [createTask([record])];
+    const currentSession = createAgentSessionFixture({
+      externalSessionId: record.externalSessionId,
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      role: "build",
+      status: "running",
+      startedAt: record.startedAt,
+      workingDirectory: record.workingDirectory,
+      historyLoadState: "loaded",
+    });
+    const presence = await readRepoRuntimeSessionPresence({
+      repoPath: "/repo",
+      tasks,
+      listSessionPresence: async () => [
+        createPresence({
+          runtimeKind: "opencode",
+          externalSessionId: record.externalSessionId,
+          status: { type: "idle" },
+          pendingQuestions: [],
+        }),
+      ],
+    });
+
+    const readModel = buildRepoSessionReadModel({
+      repoPath: "/repo",
+      tasks,
+      currentSessionsById: {
+        [record.externalSessionId]: currentSession,
+      },
+      runtimePresence: presence,
+    });
+
+    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("running");
+  });
+
   test("drops local task sessions that are no longer present in persisted task records", async () => {
     const tasks = [createTask([])];
     const currentSession = {
@@ -345,25 +428,9 @@ describe("repo session read model", () => {
     expect(readModel.sessionsById[currentSession.externalSessionId]).toBe(currentSession);
   });
 
-  test("surfaces idle pending input and idle status from runtime presence", async () => {
+  test("surfaces idle pending input and idle status from initial runtime presence", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const busyPresence = await readRepoRuntimeSessionPresence({
-      repoPath: "/repo",
-      tasks,
-      listSessionPresence: async () => [
-        createPresence({
-          runtimeKind: "opencode",
-          externalSessionId: record.externalSessionId,
-          status: { type: "busy" },
-        }),
-      ],
-    });
-    const busyRead = buildRepoSessionReadModel({
-      repoPath: "/repo",
-      tasks,
-      runtimePresence: busyPresence,
-    });
     const pendingQuestion = { requestId: "question-1", questions: [] };
     const idlePresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
@@ -381,7 +448,6 @@ describe("repo session read model", () => {
     const idleRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: busyRead.sessionsById,
       runtimePresence: idlePresence,
     });
 
@@ -395,23 +461,7 @@ describe("repo session read model", () => {
     const tasks = [createTask([record])];
     const firstQuestion = { requestId: "question-1", questions: [] };
     const secondQuestion = { requestId: "question-2", questions: [] };
-    const firstPresence = await readRepoRuntimeSessionPresence({
-      repoPath: "/repo",
-      tasks,
-      listSessionPresence: async () => [
-        createPresence({
-          runtimeKind: "opencode",
-          externalSessionId: record.externalSessionId,
-          pendingQuestions: [firstQuestion, secondQuestion],
-        }),
-      ],
-    });
-    const firstRead = buildRepoSessionReadModel({
-      repoPath: "/repo",
-      tasks,
-      runtimePresence: firstPresence,
-    });
-    const secondPresence = await readRepoRuntimeSessionPresence({
+    const presence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
@@ -423,33 +473,22 @@ describe("repo session read model", () => {
       ],
     });
 
-    const secondRead = buildRepoSessionReadModel({
+    const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: firstRead.sessionsById,
-      runtimePresence: secondPresence,
+      runtimePresence: presence,
     });
 
-    expect(secondRead.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([
+    expect(readModel.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([
       secondQuestion,
       firstQuestion,
     ]);
   });
 
-  test("updates pending input when the same request id carries new runtime details", async () => {
+  test("keeps pending input details from initial runtime presence", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const firstQuestion = {
-      requestId: "question-1",
-      questions: [
-        {
-          header: "Old",
-          question: "Old question?",
-          options: [{ label: "A", description: "Answer A" }],
-        },
-      ],
-    };
-    const updatedQuestion = {
+    const question = {
       requestId: "question-1",
       questions: [
         {
@@ -459,49 +498,25 @@ describe("repo session read model", () => {
         },
       ],
     };
-    const firstPresence = await readRepoRuntimeSessionPresence({
+    const presence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
       tasks,
       listSessionPresence: async () => [
         createPresence({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
-          pendingQuestions: [firstQuestion],
-        }),
-      ],
-    });
-    const firstRead = buildRepoSessionReadModel({
-      repoPath: "/repo",
-      tasks,
-      runtimePresence: firstPresence,
-    });
-    const currentSession = firstRead.sessionsById[record.externalSessionId];
-    if (!currentSession) {
-      throw new Error(`Expected ${record.externalSessionId} to be present.`);
-    }
-    const secondPresence = await readRepoRuntimeSessionPresence({
-      repoPath: "/repo",
-      tasks,
-      listSessionPresence: async () => [
-        createPresence({
-          runtimeKind: "opencode",
-          externalSessionId: record.externalSessionId,
-          pendingQuestions: [updatedQuestion],
+          pendingQuestions: [question],
         }),
       ],
     });
 
-    const secondRead = buildRepoSessionReadModel({
+    const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: firstRead.sessionsById,
-      runtimePresence: secondPresence,
+      runtimePresence: presence,
     });
 
-    expect(secondRead.sessionsById[record.externalSessionId]).not.toBe(currentSession);
-    expect(secondRead.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([
-      updatedQuestion,
-    ]);
+    expect(readModel.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([question]);
   });
 
   test("propagates runtime scan failures instead of committing a stale stopped model", async () => {

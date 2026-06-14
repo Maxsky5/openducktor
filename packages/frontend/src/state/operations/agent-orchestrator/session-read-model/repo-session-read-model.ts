@@ -60,6 +60,9 @@ const shouldKeepLocalSession = (
   return !persistedSessionIds.has(session.externalSessionId) && session.status === "starting";
 };
 
+const isEventOwnedSession = (session: AgentSessionState): boolean =>
+  session.status !== "stopped" && session.status !== "error";
+
 const selectLocalSessions = (
   currentSessionsById: Record<string, AgentSessionState>,
   taskSessionRecords: TaskSessionRecord[],
@@ -180,12 +183,15 @@ export const buildRepoSessionReadModel = ({
         ref,
         reason: "No live runtime session found for persisted session.",
       });
-    const baseSession = toPersistedSessionView({
+    const persistedSessionView = toPersistedSessionView({
       taskId,
       record,
       current,
     });
-    const session = applyAgentSessionPresenceSnapshotToSession(baseSession, snapshot);
+    const session =
+      current && isEventOwnedSession(current)
+        ? persistedSessionView
+        : applyAgentSessionPresenceSnapshotToSession(persistedSessionView, snapshot);
     sessionsById[record.externalSessionId] = session;
 
     if (shouldListenToAgentSessionPresenceSnapshot(snapshot)) {
