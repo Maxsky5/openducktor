@@ -196,8 +196,6 @@ export function useKanbanSessionStartFlow({
       const params = new URLSearchParams({
         task: intent.taskId,
         session: session.externalSessionId,
-        runtimeKind: session.runtimeKind,
-        workingDirectory: session.workingDirectory,
         agent: intent.role,
       });
       navigate(`/agents?${params.toString()}`);

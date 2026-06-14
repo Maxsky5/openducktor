@@ -26,10 +26,7 @@ import {
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type {
-  AgentStudioSessionRouteParam,
-  AgentStudioQueryUpdate as QueryUpdate,
-} from "./agent-studio-navigation";
+import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import {
   findAgentStudioSessionSelectionCandidate,
   groupSessionsByTaskId,
@@ -49,12 +46,12 @@ type UseAgentStudioSelectionControllerArgs = {
   sessions: AgentSessionSummary[];
   sessionReadModelError: string | null;
   taskIdParam: string;
-  sessionParam: AgentStudioSessionRouteParam | null;
+  sessionParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectionIntent: {
     taskId: string;
-    session: AgentStudioSessionRouteParam | null;
+    externalSessionId: string | null;
     role: AgentRole;
   } | null;
   updateQuery: (updates: QueryUpdate) => void;
@@ -147,12 +144,12 @@ export function useAgentStudioSelectionController({
     : roleFromQuery;
   const effectiveSelectionIntent = isRepoNavigationBoundaryPending ? null : selectionIntent;
   const selectedTaskIdParam = effectiveSelectionIntent?.taskId ?? effectiveTaskIdParam;
-  const selectedSessionParam = effectiveSelectionIntent?.session ?? effectiveSessionParam;
+  const selectedSessionParam = effectiveSelectionIntent?.externalSessionId ?? effectiveSessionParam;
   const selectedHasExplicitRoleParam =
     effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
   const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
   const keepSelectedExplicitRoleSessionless =
-    effectiveSelectionIntent?.session === null && effectiveSessionParam === null;
+    effectiveSelectionIntent?.externalSessionId === null && effectiveSessionParam === null;
 
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
@@ -185,7 +182,7 @@ export function useAgentStudioSelectionController({
   const activeSessionSummary = useMemo(() => {
     return resolveAgentStudioSessionSelection({
       sessionsForTask,
-      sessionParam: selectedSessionParam,
+      externalSessionId: selectedSessionParam,
       hasExplicitRoleParam: selectedHasExplicitRoleParam,
       roleFromQuery: selectedRoleFromQuery,
       selectedTask,
@@ -276,20 +273,20 @@ export function useAgentStudioSelectionController({
       : null;
   const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
   const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const viewSessionParamFromSelection = viewSelectionIntent
-    ? viewSelectionIntent.session
-    : effectiveSessionParam;
+  const viewSessionParamFromSelection =
+    viewSelectionIntent?.externalSessionId ?? effectiveSessionParam;
 
   const viewSelection = useMemo(() => {
     return resolveAgentStudioViewSessionSelection({
       sessionSummaries: viewSessionsForTask,
       persistedRecords: viewPersistedSessionRecords,
-      sessionParam: viewSessionParamFromSelection,
+      externalSessionId: viewSessionParamFromSelection,
       hasExplicitRoleParam: viewHasExplicitRoleSelection,
       roleFromQuery: viewRoleFromSelection,
       selectedTask: viewSelectedTask,
       fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
-      keepExplicitRoleSessionless: viewSelectionIntent?.session === null,
+      keepExplicitRoleSessionless:
+        viewSelectionIntent?.externalSessionId === null && effectiveSessionParam === null,
     });
   }, [
     viewHasExplicitRoleSelection,
@@ -297,7 +294,8 @@ export function useAgentStudioSelectionController({
     viewRoleFromSelection,
     viewSelectedTask,
     viewSessionParamFromSelection,
-    viewSelectionIntent?.session,
+    effectiveSessionParam,
+    viewSelectionIntent?.externalSessionId,
     viewPersistedSessionRecords,
     viewSessionsForTask,
   ]);

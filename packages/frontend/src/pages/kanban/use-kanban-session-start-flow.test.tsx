@@ -890,7 +890,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-1&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-1&agent=build",
+      "/agents?task=TASK-1&session=builder-session-1&agent=build",
     );
 
     await harness.unmount();
@@ -908,7 +908,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-archived&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-archived&agent=build",
+      "/agents?task=TASK-1&session=builder-session-archived&agent=build",
     );
 
     await harness.unmount();
@@ -924,7 +924,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-2&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-2&agent=build",
+      "/agents?task=TASK-1&session=builder-session-2&agent=build",
     );
 
     await harness.unmount();
@@ -990,7 +990,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-old-waiting&runtimeKind=opencode&workingDirectory=%2Frepo%2Fworktrees%2Fbuilder-session-old-waiting&agent=build",
+      "/agents?task=TASK-1&session=builder-session-old-waiting&agent=build",
     );
 
     await harness.unmount();

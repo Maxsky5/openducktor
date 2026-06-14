@@ -73,10 +73,7 @@ const createSession = (
     ...overrides,
   });
 
-const externalSessionParam = (externalSessionId: string) => ({
-  kind: "external" as const,
-  externalSessionId,
-});
+const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 const isFullSessionState = (entry: HookArgs["sessions"][number]): entry is AgentSessionState =>
   "messages" in entry;
@@ -408,7 +405,7 @@ describe("useAgentStudioSelectionController", () => {
         roleFromQuery: "spec",
         selectionIntent: {
           taskId: "task-1",
-          session: externalSessionParam("session-planner"),
+          externalSessionId: externalSessionParam("session-planner"),
           role: "planner",
         },
       }),
@@ -442,7 +439,7 @@ describe("useAgentStudioSelectionController", () => {
         roleFromQuery: "spec",
         selectionIntent: {
           taskId: "task-1",
-          session: null,
+          externalSessionId: null,
           role: "build",
         },
       }),
@@ -477,7 +474,7 @@ describe("useAgentStudioSelectionController", () => {
         roleFromQuery: "build",
         selectionIntent: {
           taskId: "task-1",
-          session: null,
+          externalSessionId: null,
           role: "build",
         },
       }),

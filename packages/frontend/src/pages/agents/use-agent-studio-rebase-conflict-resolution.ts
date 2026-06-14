@@ -136,8 +136,6 @@ export function useAgentStudioRebaseConflictResolution({
           scheduleQueryUpdate({
             task: viewTaskId,
             session: session.externalSessionId,
-            runtimeKind: session.runtimeKind,
-            workingDirectory: session.workingDirectory,
             agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },

@@ -5,20 +5,14 @@ import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
-import {
-  AGENT_STUDIO_QUERY_KEYS,
-  type AgentStudioQueryUpdate,
-  type AgentStudioSessionRouteParam,
-  isSameAgentStudioSessionRouteParam,
-  toAgentStudioSessionRouteParam,
-} from "./agent-studio-navigation";
+import { AGENT_STUDIO_QUERY_KEYS, type AgentStudioQueryUpdate } from "./agent-studio-navigation";
 
 type UseAgentStudioQuerySessionSyncArgs = {
   isRepoNavigationBoundaryPending: boolean;
   isLoadingTasks: boolean;
   tasks: TaskCard[];
   taskIdParam: string;
-  sessionParam: AgentStudioSessionRouteParam | null;
+  sessionParam: string | null;
   sessionFromQuery: AgentSessionSummary | null;
   resolvedTaskId: string;
   resolvedSession: AgentSessionSummary | null;
@@ -80,18 +74,11 @@ const resolveAgentStudioQuerySessionUpdate = ({
   }
 
   if (sessionParam && !shouldClearSessionParam && isWorkflowAgentSessionSummary(resolvedSession)) {
-    const resolvedSessionParam = toAgentStudioSessionRouteParam({
-      externalSessionId: resolvedSession.externalSessionId,
-      runtimeKind: resolvedSession.runtimeKind,
-      workingDirectory: resolvedSession.workingDirectory,
-    });
     if (taskIdParam !== resolvedSession.taskId) {
       updates[AGENT_STUDIO_QUERY_KEYS.task] = resolvedSession.taskId;
     }
-    if (!isSameAgentStudioSessionRouteParam(sessionParam, resolvedSessionParam)) {
+    if (sessionParam !== resolvedSession.externalSessionId) {
       updates[AGENT_STUDIO_QUERY_KEYS.session] = resolvedSession.externalSessionId;
-      updates[AGENT_STUDIO_QUERY_KEYS.runtimeKind] = resolvedSession.runtimeKind;
-      updates[AGENT_STUDIO_QUERY_KEYS.workingDirectory] = resolvedSession.workingDirectory;
     }
     if (roleFromQuery !== resolvedSession.role) {
       updates[AGENT_STUDIO_QUERY_KEYS.agent] = resolvedSession.role;

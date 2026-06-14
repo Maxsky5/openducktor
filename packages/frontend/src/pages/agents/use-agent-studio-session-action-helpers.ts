@@ -34,8 +34,6 @@ const buildSessionSelectionQueryUpdate = (
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.session?.externalSessionId,
-    [AGENT_STUDIO_QUERY_KEYS.runtimeKind]: params.session?.runtimeKind,
-    [AGENT_STUDIO_QUERY_KEYS.workingDirectory]: params.session?.workingDirectory,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
   };
 };
@@ -61,8 +59,6 @@ export const buildPreviousSelectionQueryUpdate = (params: {
   return {
     [AGENT_STUDIO_QUERY_KEYS.task]: params.activeSession?.taskId ?? params.taskId,
     [AGENT_STUDIO_QUERY_KEYS.session]: params.activeSession?.externalSessionId,
-    [AGENT_STUDIO_QUERY_KEYS.runtimeKind]: params.activeSession?.runtimeKind,
-    [AGENT_STUDIO_QUERY_KEYS.workingDirectory]: params.activeSession?.workingDirectory,
     [AGENT_STUDIO_QUERY_KEYS.agent]: params.role,
   };
 };

@@ -31,10 +31,7 @@ type LegacyHookArgs = {
   initialNavigation?: AgentStudioNavigationState;
 };
 
-const externalSessionParam = (externalSessionId: string) => ({
-  kind: "external" as const,
-  externalSessionId,
-});
+const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 const createActiveWorkspace = (
   repoPath: string,
@@ -122,7 +119,7 @@ const useHookHarness = (args: LegacyHookArgs) => {
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
     initialNavigation ?? {
       taskId: "",
-      session: null,
+      externalSessionId: null,
       role: null,
     },
   );
@@ -200,7 +197,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toMatchObject({
         taskId: "task-from-context",
-        session: externalSessionParam("session-from-context"),
+        externalSessionId: externalSessionParam("session-from-context"),
         role: "planner",
       });
 
@@ -229,7 +226,7 @@ describe("useRepoNavigationPersistence", () => {
           workspaceRepoPath: "/repo",
           initialNavigation: {
             taskId: "",
-            session: null,
+            externalSessionId: null,
             role: "planner",
           },
         }),
@@ -239,7 +236,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "",
-        session: null,
+        externalSessionId: null,
         role: "planner",
       });
 
@@ -266,7 +263,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.run((latest) => {
         latest.setNavigation({
           taskId: "task-from-cleanup",
-          session: externalSessionParam("session-from-cleanup"),
+          externalSessionId: externalSessionParam("session-from-cleanup"),
           role: "spec",
         });
       });
@@ -310,7 +307,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.run((latest) => {
         latest.setNavigation({
           taskId: "task-without-role",
-          session: externalSessionParam("session-without-role"),
+          externalSessionId: externalSessionParam("session-without-role"),
           role: null,
         });
       });
@@ -361,7 +358,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "",
-        session: null,
+        externalSessionId: null,
         role: null,
       });
 
@@ -490,7 +487,7 @@ describe("useRepoNavigationPersistence", () => {
         persistenceWorkspaceId: "workspace-repo-a",
         initialNavigation: {
           taskId: "task-a",
-          session: externalSessionParam("session-a"),
+          externalSessionId: externalSessionParam("session-a"),
           role: "build",
         },
       });
@@ -507,7 +504,7 @@ describe("useRepoNavigationPersistence", () => {
       expect(harness.getLatest().isRepoNavigationBoundaryPending).toBeFalse();
       expect(harness.getLatest().navigation).toEqual({
         taskId: "task-b",
-        session: externalSessionParam("session-b"),
+        externalSessionId: externalSessionParam("session-b"),
         role: "planner",
       });
 
@@ -551,7 +548,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "task-a",
-        session: externalSessionParam("session-a"),
+        externalSessionId: externalSessionParam("session-a"),
         role: "spec",
       });
 
@@ -587,7 +584,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "task-a",
-        session: externalSessionParam("session-a"),
+        externalSessionId: externalSessionParam("session-a"),
         role: "spec",
       });
 
@@ -639,7 +636,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.run((latest) => {
         latest.setNavigation({
           taskId: "task-from-cleanup",
-          session: externalSessionParam("session-from-cleanup"),
+          externalSessionId: externalSessionParam("session-from-cleanup"),
           role: "spec",
         });
       });

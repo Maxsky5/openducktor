@@ -1,19 +1,15 @@
 import type { AgentRole } from "@openducktor/core";
-import {
-  type AgentStudioSessionRouteParam,
-  isSameAgentStudioSessionRouteParam,
-} from "../query-sync/agent-studio-navigation";
 
 export type AgentStudioSelectionIntent = {
   taskId: string;
-  session: AgentStudioSessionRouteParam | null;
+  externalSessionId: string | null;
   role: AgentRole;
 };
 
 export const isSelectionIntentResolved = (params: {
   selectionIntent: AgentStudioSelectionIntent;
   taskIdParam: string;
-  sessionParam: AgentStudioSessionRouteParam | null;
+  sessionParam: string | null;
   roleFromQuery: AgentRole;
 }): boolean => {
   const { selectionIntent, taskIdParam, sessionParam, roleFromQuery } = params;
@@ -21,5 +17,5 @@ export const isSelectionIntentResolved = (params: {
     return false;
   }
 
-  return isSameAgentStudioSessionRouteParam(selectionIntent.session, sessionParam);
+  return selectionIntent.externalSessionId === sessionParam;
 };

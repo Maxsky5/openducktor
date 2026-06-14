@@ -19,10 +19,7 @@ enableReactActEnvironment();
 type HookArgs = Parameters<typeof useAgentStudioQuerySync>[0];
 type SearchParamsCall = Parameters<SetURLSearchParams>;
 
-const externalSessionParam = (externalSessionId: string) => ({
-  kind: "external" as const,
-  externalSessionId,
-});
+const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 type LegacyHookArgs = {
   activeWorkspace?: ActiveWorkspace | null;

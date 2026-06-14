@@ -256,8 +256,6 @@ export function useKanbanPageModels({
           const search = new URLSearchParams({
             task: taskId,
             session: session.externalSessionId,
-            runtimeKind: session.runtimeKind,
-            workingDirectory: session.workingDirectory,
             agent: "build",
           });
           navigate(`/agents?${search.toString()}`);

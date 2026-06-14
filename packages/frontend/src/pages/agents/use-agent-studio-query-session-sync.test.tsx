@@ -19,10 +19,7 @@ const createSession = (taskId: string, externalSessionId: string) =>
     taskId,
   });
 
-const externalSessionParam = (externalSessionId: string) => ({
-  kind: "external" as const,
-  externalSessionId,
-});
+const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 const useHookHarness = (props: HookArgs) => {
   useAgentStudioQuerySessionSync(props);

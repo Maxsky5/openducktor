@@ -22,7 +22,6 @@ import type {
 } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
-import type { AgentStudioSessionRouteParam } from "./query-sync/agent-studio-navigation";
 import { useAgentStudioQuestionActions } from "./session-actions/use-agent-studio-question-actions";
 import { useAgentStudioSelectionActions } from "./session-actions/use-agent-studio-selection-actions";
 import { useAgentStudioSendAction } from "./session-actions/use-agent-studio-send-action";
@@ -74,7 +73,7 @@ type UseAgentStudioSessionActionsArgs = {
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent?: (intent: {
     taskId: string;
-    session: AgentStudioSessionRouteParam | null;
+    externalSessionId: string | null;
     role: AgentRole;
   }) => void;
   onContextSwitchIntent?: () => void;

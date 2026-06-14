@@ -22,7 +22,6 @@ import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navig
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
-import type { AgentStudioSessionRouteParam } from "./query-sync/agent-studio-navigation";
 import type {
   AgentStudioSelectedSessionContext,
   AgentStudioSelectedSessionContextInput,
@@ -59,7 +58,7 @@ type AgentStudioOrchestrationActionsContext = {
   onContextSwitchIntent: () => void;
   scheduleSelectionIntent: (intent: {
     taskId: string;
-    session: AgentStudioSessionRouteParam | null;
+    externalSessionId: string | null;
     role: AgentRole;
   }) => void;
   openTaskDetails: () => void;

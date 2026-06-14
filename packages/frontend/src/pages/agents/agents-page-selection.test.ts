@@ -21,7 +21,7 @@ import {
 
 const resolveAgentStudioActiveSession = (args: {
   sessionsForTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionsForTask"];
-  sessionParam: Parameters<typeof resolveAgentStudioSessionSelection>[0]["sessionParam"];
+  externalSessionId: Parameters<typeof resolveAgentStudioSessionSelection>[0]["externalSessionId"];
   hasExplicitRoleParam: boolean;
   roleFromQuery: Parameters<typeof resolveAgentStudioSessionSelection>[0]["roleFromQuery"];
   selectedTask: Parameters<typeof resolveAgentStudioSessionSelection>[0]["selectedTask"];
@@ -32,10 +32,7 @@ const resolveAgentStudioActiveSession = (args: {
   }).activeSession;
 };
 
-const externalSessionParam = (externalSessionId: string) => ({
-  kind: "external" as const,
-  externalSessionId,
-});
+const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 const catalogFixture: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -222,7 +219,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [plannerSession, buildSession],
-      sessionParam: externalSessionParam("session-from-other-task"),
+      externalSessionId: externalSessionParam("session-from-other-task"),
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -247,7 +244,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [plannerSession, buildSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: true,
       roleFromQuery: "planner",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -266,7 +263,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioSessionSelection({
       sessionsForTask: [buildSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -299,7 +296,7 @@ describe("agents-page-selection", () => {
 
     const selection = resolveAgentStudioSessionSelectionFromCandidates({
       sessionsForTask: persistedSessions,
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
@@ -330,7 +327,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [olderBuildSession, runningSpecSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -359,7 +356,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [olderRunningSession, newerStartingSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
@@ -386,7 +383,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [buildSession, specSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({
@@ -414,7 +411,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [buildSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({
@@ -450,7 +447,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [olderSpecSession, latestSpecSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "planner",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "spec_ready" }),
@@ -477,7 +474,7 @@ describe("agents-page-selection", () => {
 
     const resolvedWithPlanner = resolveAgentStudioActiveSession({
       sessionsForTask: [latestSpecSession, latestPlannerSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
@@ -485,7 +482,7 @@ describe("agents-page-selection", () => {
 
     const resolvedWithFallback = resolveAgentStudioActiveSession({
       sessionsForTask: [latestSpecSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
@@ -520,7 +517,7 @@ describe("agents-page-selection", () => {
     for (const status of statuses) {
       const resolved = resolveAgentStudioActiveSession({
         sessionsForTask: [olderBuildSession, latestBuildSession],
-        sessionParam: null,
+        externalSessionId: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "spec",
         selectedTask: createTaskCardFixture({ id: "task-1", status }),
@@ -551,7 +548,7 @@ describe("agents-page-selection", () => {
     for (const status of statuses) {
       const resolvedWithBuild = resolveAgentStudioActiveSession({
         sessionsForTask: [latestSpecSession, latestBuildSession],
-        sessionParam: null,
+        externalSessionId: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "qa",
         selectedTask: createTaskCardFixture({ id: "task-1", status }),
@@ -559,7 +556,7 @@ describe("agents-page-selection", () => {
 
       const resolvedFallback = resolveAgentStudioActiveSession({
         sessionsForTask: [latestSpecSession],
-        sessionParam: null,
+        externalSessionId: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "qa",
         selectedTask: createTaskCardFixture({ id: "task-1", status }),
@@ -580,7 +577,7 @@ describe("agents-page-selection", () => {
 
     const resolved = resolveAgentStudioActiveSession({
       sessionsForTask: [buildSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: null,
@@ -592,7 +589,7 @@ describe("agents-page-selection", () => {
   test("resolves role from workflow default even when no session exists", () => {
     const selection = resolveAgentStudioSessionSelection({
       sessionsForTask: [],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
@@ -614,7 +611,7 @@ describe("agents-page-selection", () => {
 
     const selection = resolveAgentStudioSessionSelection({
       sessionsForTask: [qaSession],
-      sessionParam: externalSessionParam("qa-1"),
+      externalSessionId: externalSessionParam("qa-1"),
       hasExplicitRoleParam: false,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "human_review" }),
@@ -636,7 +633,7 @@ describe("agents-page-selection", () => {
 
     const selection = resolveAgentStudioSessionSelection({
       sessionsForTask: [buildSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -665,7 +662,7 @@ describe("agents-page-selection", () => {
 
     const selection = resolveAgentStudioSessionSelection({
       sessionsForTask: [olderSpecSession, newerQaSession],
-      sessionParam: null,
+      externalSessionId: null,
       hasExplicitRoleParam: false,
       roleFromQuery: "spec",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "blocked" }),

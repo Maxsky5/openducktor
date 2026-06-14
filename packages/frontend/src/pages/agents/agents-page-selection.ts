@@ -12,7 +12,6 @@ import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
-import type { AgentStudioSessionRouteParam } from "./agent-studio-navigation";
 import { AGENT_ROLE_ORDER } from "./agents-page-constants";
 
 export {
@@ -114,7 +113,7 @@ export type AgentStudioSessionSelectionCandidate = AgentSessionRouteIdentity & {
 
 type AgentStudioSessionSelectionInput<TSession extends AgentStudioSessionSelectionCandidate> = {
   sessionsForTask: TSession[];
-  sessionParam: AgentStudioSessionRouteParam | null;
+  externalSessionId: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
@@ -126,7 +125,7 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
   TSession extends AgentStudioSessionSelectionCandidate,
 >({
   sessionsForTask,
-  sessionParam,
+  externalSessionId,
   hasExplicitRoleParam,
   roleFromQuery,
   selectedTask,
@@ -166,8 +165,11 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
     };
   };
 
-  if (sessionParam) {
-    const explicitSession = findAgentStudioSessionSelectionCandidate(sessionsForTask, sessionParam);
+  if (externalSessionId) {
+    const explicitSession = findAgentStudioSessionSelectionCandidate(
+      sessionsForTask,
+      externalSessionId,
+    );
     if (explicitSession?.role) {
       return toSelection(explicitSession.role, explicitSession);
     }
@@ -227,20 +229,13 @@ export const findAgentStudioSessionSelectionCandidate = <
   TSession extends AgentStudioSessionSelectionCandidate,
 >(
   sessions: TSession[],
-  sessionParam: AgentStudioSessionRouteParam | null,
+  externalSessionId: string | null,
 ): TSession | null => {
-  if (!sessionParam) {
+  if (!externalSessionId) {
     return null;
   }
 
-  if (sessionParam.kind === "exact") {
-    const identity = agentSessionIdentityKey(sessionParam.identity);
-    return sessions.find((entry) => agentSessionIdentityKey(entry) === identity) ?? null;
-  }
-
-  const matches = sessions.filter(
-    (entry) => entry.externalSessionId === sessionParam.externalSessionId,
-  );
+  const matches = sessions.filter((entry) => entry.externalSessionId === externalSessionId);
   return matches.length === 1 ? (matches[0] ?? null) : null;
 };
 
@@ -319,24 +314,24 @@ const buildViewSessionSelectionCandidates = (
 };
 
 const resolveViewSessionParam = ({
-  sessionParam,
+  externalSessionId,
   candidates,
 }: {
-  sessionParam: AgentStudioSessionRouteParam | null;
+  externalSessionId: string | null;
   candidates: ViewSessionSelectionCandidate[];
-}): AgentStudioSessionRouteParam | null => {
-  if (!sessionParam) {
+}): string | null => {
+  if (!externalSessionId) {
     return null;
   }
   const belongsToVisibleSession =
-    findAgentStudioSessionSelectionCandidate(candidates, sessionParam) !== null;
-  return belongsToVisibleSession ? sessionParam : null;
+    findAgentStudioSessionSelectionCandidate(candidates, externalSessionId) !== null;
+  return belongsToVisibleSession ? externalSessionId : null;
 };
 
 export const resolveAgentStudioViewSessionSelection = ({
   sessionSummaries,
   persistedRecords,
-  sessionParam,
+  externalSessionId,
   hasExplicitRoleParam,
   roleFromQuery,
   selectedTask,
@@ -345,7 +340,7 @@ export const resolveAgentStudioViewSessionSelection = ({
 }: {
   sessionSummaries: AgentSessionSummary[];
   persistedRecords: AgentSessionRecord[];
-  sessionParam: AgentStudioSessionRouteParam | null;
+  externalSessionId: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectedTask: TaskCard | null;
@@ -358,12 +353,12 @@ export const resolveAgentStudioViewSessionSelection = ({
 } => {
   const candidates = buildViewSessionSelectionCandidates(sessionSummaries, persistedRecords);
   const resolvedSessionParam = resolveViewSessionParam({
-    sessionParam,
+    externalSessionId,
     candidates,
   });
   const selection = resolveAgentStudioSessionSelectionFromCandidates({
     sessionsForTask: candidates,
-    sessionParam: resolvedSessionParam,
+    externalSessionId: resolvedSessionParam,
     hasExplicitRoleParam,
     roleFromQuery,
     selectedTask,

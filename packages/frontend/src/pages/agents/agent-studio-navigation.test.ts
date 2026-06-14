@@ -7,18 +7,18 @@ describe("agent-studio-navigation", () => {
       restoreNavigationFromPersistedContext(
         {
           taskId: "task-current",
-          session: null,
+          externalSessionId: null,
           role: null,
         },
         {
           taskId: "task-persisted",
-          session: { kind: "external", externalSessionId: "session-persisted" },
+          externalSessionId: "session-persisted",
           role: "planner",
         },
       ),
     ).toEqual({
       taskId: "task-current",
-      session: null,
+      externalSessionId: null,
       role: "planner",
     });
   });
@@ -28,18 +28,18 @@ describe("agent-studio-navigation", () => {
       restoreNavigationFromPersistedContext(
         {
           taskId: "task-current",
-          session: null,
+          externalSessionId: null,
           role: null,
         },
         {
           taskId: "task-current",
-          session: { kind: "external", externalSessionId: "session-persisted" },
+          externalSessionId: "session-persisted",
           role: "planner",
         },
       ),
     ).toEqual({
       taskId: "task-current",
-      session: { kind: "external", externalSessionId: "session-persisted" },
+      externalSessionId: "session-persisted",
       role: "planner",
     });
   });

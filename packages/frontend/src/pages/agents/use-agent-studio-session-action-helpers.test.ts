@@ -25,8 +25,6 @@ describe("use-agent-studio-session-action-helpers", () => {
     ).toEqual({
       task: "task-1",
       session: "session-1",
-      runtimeKind: "opencode",
-      workingDirectory: "/repo/worktrees/session-1",
       agent: "spec",
     });
   });
@@ -53,8 +51,6 @@ describe("use-agent-studio-session-action-helpers", () => {
       {
         task: "task-1",
         session: "session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktrees/session-1",
         agent: "build",
       },
     ]);
@@ -76,8 +72,6 @@ describe("use-agent-studio-session-action-helpers", () => {
     ).toEqual({
       task: "task-existing",
       session: "session-existing",
-      runtimeKind: "opencode",
-      workingDirectory: activeSession.workingDirectory,
       agent: "spec",
     });
   });

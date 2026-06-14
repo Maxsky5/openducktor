@@ -8,7 +8,6 @@ import {
 } from "@/state/agent-sessions-store";
 import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
-import type { AgentStudioSessionRouteParam } from "../query-sync/agent-studio-navigation";
 import {
   applyAgentStudioSelectionQuery,
   canStartSessionForRole,
@@ -18,7 +17,7 @@ import {
 
 type SelectionIntentScheduler = (intent: {
   taskId: string;
-  session: AgentStudioSessionRouteParam | null;
+  externalSessionId: string | null;
   role: AgentRole;
 }) => void;
 
@@ -76,7 +75,7 @@ const applySelectionIntent = ({
   });
   scheduleSelectionIntent?.({
     taskId: nextTaskId,
-    session: nextSessionRoute ? { kind: "exact", identity: nextSessionRoute } : null,
+    externalSessionId: nextSessionRoute?.externalSessionId ?? null,
     role: nextRole,
   });
 };

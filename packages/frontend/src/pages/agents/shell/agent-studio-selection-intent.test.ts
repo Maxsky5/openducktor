@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { isSelectionIntentResolved } from "./agent-studio-selection-intent";
 
-const externalSessionParam = (externalSessionId: string) => ({
-  kind: "external" as const,
-  externalSessionId,
-});
+const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 describe("agent-studio-selection-intent", () => {
   test("resolves a sessionless role intent when the query has no concrete session", () => {
@@ -12,7 +9,7 @@ describe("agent-studio-selection-intent", () => {
       isSelectionIntentResolved({
         selectionIntent: {
           taskId: "task-1",
-          session: null,
+          externalSessionId: null,
           role: "build",
         },
         taskIdParam: "task-1",
@@ -25,7 +22,7 @@ describe("agent-studio-selection-intent", () => {
       isSelectionIntentResolved({
         selectionIntent: {
           taskId: "task-1",
-          session: null,
+          externalSessionId: null,
           role: "build",
         },
         taskIdParam: "task-1",
@@ -38,7 +35,7 @@ describe("agent-studio-selection-intent", () => {
   test("resolves a session intent only when task, role, and session match", () => {
     const selectionIntent = {
       taskId: "task-1",
-      session: externalSessionParam("session-1"),
+      externalSessionId: externalSessionParam("session-1"),
       role: "planner" as const,
     };
 
