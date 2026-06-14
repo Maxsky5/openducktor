@@ -5,7 +5,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import { toSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type {
@@ -13,6 +13,7 @@ import type {
   AgentChatMessage,
   AgentQuestionRequest,
   AgentSessionState,
+  SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import type {
   AgentChatThreadSession,
@@ -81,10 +82,7 @@ const baseSession: AgentSessionState = {
   startedAt: "2026-02-20T10:00:30.000Z",
   workingDirectory: "/repo",
   historyLoadState: "not_requested",
-  messages: toSessionMessagesState({
-    externalSessionId: TEST_EXTERNAL_SESSION_IDS.chatDefault,
-    messages: [baseMessage],
-  }),
+  messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.chatDefault, [baseMessage]),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",
@@ -106,7 +104,8 @@ export const buildTask = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   ...overrides,
 });
 
-type AgentChatThreadSessionOverrides = Partial<AgentSessionState> & {
+type AgentChatThreadSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: SessionMessagesState | AgentChatMessage[];
   todos?: AgentChatThreadSession["todos"];
 };
 
@@ -114,14 +113,18 @@ export const buildSession = (
   overrides: AgentChatThreadSessionOverrides = {},
 ): AgentChatThreadSession => {
   const { todos = [], ...overrideSession } = overrides;
+  const { messages: overrideMessages, ...overrideSessionFields } = overrideSession;
   const session = {
     ...baseSession,
-    ...overrideSession,
+    ...overrideSessionFields,
   };
+  const messages = Array.isArray(overrideMessages)
+    ? createSessionMessagesState(session.externalSessionId, overrideMessages)
+    : (overrideMessages ?? baseSession.messages);
 
   return {
     ...session,
-    messages: toSessionMessagesState(session),
+    messages,
     todos,
   };
 };

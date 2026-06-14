@@ -8,7 +8,12 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import type {
+  AgentChatMessage,
+  AgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
 
 const BASE_TASK_STORE_CHECK_FIXTURE: TaskStoreCheck = {
@@ -93,7 +98,7 @@ const BASE_AGENT_SESSION_FIXTURE: AgentSessionState = {
   startedAt: "2026-02-22T08:00:00.000Z",
   workingDirectory: "/tmp/repo/worktree",
   historyLoadState: "loaded",
-  messages: [],
+  messages: createSessionMessagesState(TEST_EXTERNAL_SESSION_IDS.default),
   draftAssistantText: "",
   draftAssistantMessageId: null,
   draftReasoningText: "",
@@ -260,23 +265,50 @@ export const createTaskCardFixture = (
   return structuredClone(merged);
 };
 
-type LegacyAgentSessionOverrides = Partial<AgentSessionState> & {
+type AgentSessionFixtureMessages = SessionMessagesState | AgentChatMessage[];
+
+type LegacyAgentSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
+  messages?: AgentSessionFixtureMessages;
   runId?: string | null;
+};
+
+const toAgentSessionFixtureMessages = (
+  externalSessionId: string,
+  messages: AgentSessionFixtureMessages | undefined,
+): SessionMessagesState => {
+  if (!messages) {
+    return createSessionMessagesState(externalSessionId);
+  }
+  return Array.isArray(messages)
+    ? createSessionMessagesState(externalSessionId, messages)
+    : messages;
 };
 
 export const createAgentSessionFixture = (
   defaults: LegacyAgentSessionOverrides = {},
   overrides: LegacyAgentSessionOverrides = {},
 ): AgentSessionState => {
-  const { runId: _defaultRunId, ...defaultSession } = defaults;
-  const { runId: _overrideRunId, ...overrideSession } = overrides;
+  const { runId: _defaultRunId, messages: defaultMessages, ...defaultSession } = defaults;
+  const { runId: _overrideRunId, messages: overrideMessages, ...overrideSession } = overrides;
+  const externalSessionId =
+    overrideSession.externalSessionId ??
+    defaultSession.externalSessionId ??
+    BASE_AGENT_SESSION_FIXTURE.externalSessionId;
   const merged: AgentSessionState = {
     ...BASE_AGENT_SESSION_FIXTURE,
     ...defaultSession,
     ...overrideSession,
+    messages: toAgentSessionFixtureMessages(
+      externalSessionId,
+      overrideMessages ?? defaultMessages ?? BASE_AGENT_SESSION_FIXTURE.messages,
+    ),
   };
 
-  return structuredClone(merged);
+  const { messages, ...cloneableSession } = merged;
+  return {
+    ...structuredClone(cloneableSession),
+    messages,
+  };
 };
 
 export const createRepoRuntimeHealthFixture = (

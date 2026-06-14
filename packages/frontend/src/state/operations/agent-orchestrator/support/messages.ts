@@ -1,6 +1,5 @@
 import type {
   AgentChatMessage,
-  AgentSessionMessages,
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
@@ -9,7 +8,11 @@ type MessageRole = AgentChatMessage["role"];
 type MessageRoleIndexCache = Partial<Record<MessageRole, number[]>>;
 type MessageLastIndexCache = Partial<Record<MessageRole, number>>;
 
-export type SessionMessageOwner = Pick<AgentSessionState, "externalSessionId" | "messages">;
+export type SessionMessagesInput = SessionMessagesState | AgentChatMessage[];
+export type SessionMessageOwner = {
+  externalSessionId: AgentSessionState["externalSessionId"];
+  messages: SessionMessagesInput;
+};
 export type SessionMessagesRevision = Pick<
   SessionMessagesState,
   "externalSessionId" | "count" | "version"
@@ -35,7 +38,7 @@ const hasCachedRole = (
 };
 
 const isSessionMessagesState = (
-  messages: AgentSessionMessages,
+  messages: SessionMessagesInput,
 ): messages is SessionMessagesState => {
   return typeof messages === "object" && messages !== null && SESSION_MESSAGES_DATA in messages;
 };
@@ -73,6 +76,12 @@ const getSessionState = (owner: SessionMessageOwner): InternalSessionMessagesSta
     }
     return toInternalState(
       createSessionMessagesState(owner.externalSessionId, state[SESSION_MESSAGES_DATA]),
+    );
+  }
+
+  if (!Array.isArray(owner.messages)) {
+    throw new Error(
+      `Session messages for '${owner.externalSessionId}' are missing canonical message data.`,
     );
   }
 
@@ -573,7 +582,7 @@ export const upsertSessionMessage = (
 };
 
 export const findFirstChangedSessionMessageIndex = (
-  previousMessages: AgentSessionMessages | null,
+  previousMessages: SessionMessagesInput | null,
   nextOwner: SessionMessageOwner,
 ): number => {
   if (previousMessages === null) {

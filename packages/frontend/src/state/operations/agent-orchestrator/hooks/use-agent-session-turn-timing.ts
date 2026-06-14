@@ -1,4 +1,8 @@
 import { useCallback } from "react";
+import {
+  createSessionMessagesState,
+  getSessionMessagesSlice,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AssistantTurnTimingState,
@@ -69,7 +73,7 @@ export const useAgentSessionTurnTiming = ({
     (
       externalSessionId: string,
       timestamp: string,
-      messages: AgentSessionState["messages"] = [],
+      messages: AgentSessionState["messages"] = createSessionMessagesState(externalSessionId),
     ): number | undefined => {
       const completedAtMs = toTimestampMs(timestamp) ?? Date.now();
       const currentTiming = assistantTurnTimingBySessionRef.current[externalSessionId] ?? {};
@@ -77,7 +81,7 @@ export const useAgentSessionTurnTiming = ({
       const activityStartedAtMs =
         currentTiming.activityStartedAtMs ??
         readAssistantActivityStartedAtMsFromMessages({
-          messages: Array.isArray(messages) ? messages : [],
+          messages: getSessionMessagesSlice({ externalSessionId, messages }, 0),
           previousAssistantCompletedAtMs,
           completedAtMs,
         });

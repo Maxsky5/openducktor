@@ -117,7 +117,7 @@ export type SessionMessagesState = {
   readonly version: number;
 };
 
-export type AgentSessionMessages = AgentChatMessage[] | SessionMessagesState;
+export type AgentSessionMessages = SessionMessagesState;
 
 export type AgentApprovalRequest = AgentPendingApprovalRequest;
 

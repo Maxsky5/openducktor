@@ -1,6 +1,9 @@
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useMemo, useRef } from "react";
-import { findFirstChangedSessionMessageIndex } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  createSessionMessagesState,
+  findFirstChangedSessionMessageIndex,
+} from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioContextUsage,
@@ -64,6 +67,8 @@ export const useActiveSessionContextUsage = ({
       selectedModelEntry?.contextWindow ?? "",
       selectedModelEntry?.outputLimit ?? "",
     ].join(":");
+    const emptyCacheMessages = (): AgentSessionState["messages"] =>
+      createSessionMessagesState(activeExternalSessionIdForContextUsage ?? "");
     const commitCachedUsage = (
       usage: NonNullable<AgentStudioContextUsage>,
       sourceIndex: number,
@@ -108,7 +113,11 @@ export const useActiveSessionContextUsage = ({
         return null;
       }
 
-      return commitCachedUsage(nextUsage, Number.MAX_SAFE_INTEGER, activeSessionMessages ?? []);
+      return commitCachedUsage(
+        nextUsage,
+        Number.MAX_SAFE_INTEGER,
+        activeSessionMessages ?? emptyCacheMessages(),
+      );
     }
 
     let nextUsageEntry: AgentStudioContextUsageEntry = null;
@@ -173,7 +182,7 @@ export const useActiveSessionContextUsage = ({
     return commitCachedUsage(
       nextUsageEntry.usage,
       nextUsageEntry.sourceIndex,
-      activeSessionMessageOwnerForContextUsage?.messages ?? [],
+      activeSessionMessageOwnerForContextUsage?.messages ?? emptyCacheMessages(),
     );
   }, [
     activeSessionLiveContextUsage,
