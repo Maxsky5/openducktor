@@ -1,6 +1,6 @@
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { createSessionMessagesState, getSessionMessagesSlice } from "../support/messages";
+import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
@@ -134,17 +134,11 @@ export const executeForkStart = async ({
   const initialMessages: AgentSessionState["messages"] = createSessionMessagesState(
     summary.externalSessionId,
     [
-      ...getSessionMessagesSlice(
-        {
-          externalSessionId: summary.externalSessionId,
-          messages: buildSessionHeaderMessages({
-            externalSessionId: summary.externalSessionId,
-            systemPrompt: promptContext.systemPrompt,
-            startedAt: summary.startedAt,
-          }),
-        },
-        0,
-      ),
+      ...buildSessionHeaderMessages({
+        externalSessionId: summary.externalSessionId,
+        systemPrompt: promptContext.systemPrompt,
+        startedAt: summary.startedAt,
+      }),
       ...historyToChatMessages(forkHistory, {
         role: ctx.role,
         selectedModel,

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   coerceSessionSelectionToCatalog,
@@ -14,7 +15,7 @@ import {
 
 const createSession = (messages: AgentChatMessage[]) => ({
   externalSessionId: "session-1",
-  messages,
+  messages: createSessionMessagesFixture("session-1", messages),
 });
 
 const catalogFixture: AgentModelCatalog = {

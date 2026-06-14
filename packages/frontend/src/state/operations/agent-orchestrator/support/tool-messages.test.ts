@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import {
   isStopAbortSessionErrorMessage,
@@ -9,7 +10,7 @@ import {
 
 const createSession = (messages: AgentChatMessage[]) => ({
   externalSessionId: "session-1",
-  messages,
+  messages: createSessionMessagesFixture("session-1", messages),
 });
 
 describe("agent-orchestrator/support/tool-messages", () => {

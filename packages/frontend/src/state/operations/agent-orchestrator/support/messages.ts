@@ -1,17 +1,12 @@
-import type {
-  AgentChatMessage,
-  AgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import type { AgentChatMessage, SessionMessagesState } from "@/types/agent-orchestrator";
 
 type MessageRole = AgentChatMessage["role"];
 type MessageRoleIndexCache = Partial<Record<MessageRole, number[]>>;
 type MessageLastIndexCache = Partial<Record<MessageRole, number>>;
 
-export type SessionMessagesInput = SessionMessagesState | AgentChatMessage[];
 export type SessionMessageOwner = {
-  externalSessionId: AgentSessionState["externalSessionId"];
-  messages: SessionMessagesInput;
+  externalSessionId: string;
+  messages: SessionMessagesState;
 };
 export type SessionMessagesRevision = Pick<
   SessionMessagesState,
@@ -37,10 +32,10 @@ const hasCachedRole = (
   return cache !== undefined && Object.hasOwn(cache, role);
 };
 
-const isSessionMessagesState = (
-  messages: SessionMessagesInput,
-): messages is SessionMessagesState => {
-  return typeof messages === "object" && messages !== null && SESSION_MESSAGES_DATA in messages;
+const hasInternalSessionMessagesData = (
+  messages: SessionMessagesState,
+): messages is InternalSessionMessagesState => {
+  return SESSION_MESSAGES_DATA in messages;
 };
 
 const toInternalState = (state: SessionMessagesState): InternalSessionMessagesState => {
@@ -69,23 +64,20 @@ const createInternalState = (
 };
 
 const getSessionState = (owner: SessionMessageOwner): InternalSessionMessagesState => {
-  if (isSessionMessagesState(owner.messages)) {
-    const state = toInternalState(owner.messages);
-    if (state.externalSessionId === owner.externalSessionId) {
-      return state;
-    }
-    return toInternalState(
-      createSessionMessagesState(owner.externalSessionId, state[SESSION_MESSAGES_DATA]),
-    );
-  }
-
-  if (!Array.isArray(owner.messages)) {
+  if (!hasInternalSessionMessagesData(owner.messages)) {
     throw new Error(
       `Session messages for '${owner.externalSessionId}' are missing canonical message data.`,
     );
   }
 
-  return toInternalState(createSessionMessagesState(owner.externalSessionId, owner.messages));
+  const state = toInternalState(owner.messages);
+  if (state.externalSessionId === owner.externalSessionId) {
+    return state;
+  }
+
+  return toInternalState(
+    createSessionMessagesState(owner.externalSessionId, state[SESSION_MESSAGES_DATA]),
+  );
 };
 
 const buildIdIndex = (messages: AgentChatMessage[]): Map<string, number> => {
@@ -582,16 +574,14 @@ export const upsertSessionMessage = (
 };
 
 export const findFirstChangedSessionMessageIndex = (
-  previousMessages: SessionMessagesInput | null,
+  previousMessages: SessionMessagesState | null,
   nextOwner: SessionMessageOwner,
 ): number => {
   if (previousMessages === null) {
     return 0;
   }
 
-  const previous = isSessionMessagesState(previousMessages)
-    ? toInternalState(previousMessages)
-    : toInternalState(createSessionMessagesState(nextOwner.externalSessionId, previousMessages));
+  const previous = toInternalState(previousMessages);
   const next = getSessionState(nextOwner);
   if (previous === next) {
     return -1;

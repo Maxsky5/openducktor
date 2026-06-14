@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import {
+  createSessionMessagesFixture,
   findSessionMessageForTest,
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   fromPersistedSessionRecord,
   historyToChatMessages,
@@ -25,6 +26,11 @@ const recordFixture: AgentSessionRecord = {
     modelId: "gpt-5",
   },
 };
+
+const historyOwner = (messages: AgentChatMessage[]) => ({
+  externalSessionId: "external-1",
+  messages: createSessionMessagesFixture("external-1", messages),
+});
 
 describe("agent-orchestrator/support/persistence", () => {
   test("loads persisted sessions as idle until runtime state is read", () => {
@@ -692,7 +698,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
+    const assistant = sessionMessageAt(historyOwner(messages), 0);
     if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
@@ -741,7 +747,7 @@ describe("agent-orchestrator/support/persistence", () => {
     );
 
     const assistant = findSessionMessageForTest(
-      { externalSessionId: "external-1", messages },
+      historyOwner(messages),
       (message) => message.id === "m-assistant-final",
     );
     if (assistant?.meta?.kind !== "assistant") {
@@ -847,7 +853,7 @@ describe("agent-orchestrator/support/persistence", () => {
     );
 
     expect(messages).toHaveLength(2);
-    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 1);
+    const assistant = sessionMessageAt(historyOwner(messages), 1);
     if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
@@ -882,7 +888,7 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const assistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 0);
+    const assistant = sessionMessageAt(historyOwner(messages), 0);
     if (assistant?.meta?.kind !== "assistant") {
       throw new Error("Expected assistant message with assistant meta");
     }
@@ -1064,8 +1070,8 @@ describe("agent-orchestrator/support/persistence", () => {
       },
     );
 
-    const firstAssistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 1);
-    const secondAssistant = sessionMessageAt({ externalSessionId: "external-1", messages }, 2);
+    const firstAssistant = sessionMessageAt(historyOwner(messages), 1);
+    const secondAssistant = sessionMessageAt(historyOwner(messages), 2);
     if (firstAssistant?.meta?.kind !== "assistant") {
       throw new Error("Expected first assistant message with assistant meta");
     }
