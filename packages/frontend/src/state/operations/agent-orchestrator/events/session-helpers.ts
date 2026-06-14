@@ -62,7 +62,7 @@ export const flushDraftBuffers = (
   const reasoningDraft = resolveDraftFieldState("reasoning", rawByChannel, messageIdByChannel);
 
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => ({
       ...current,
       draftAssistantText: "",
@@ -129,7 +129,7 @@ export const settleDraftToIdle = (
   timestamp: string,
 ): boolean => {
   let shouldClear = false;
-  context.store.updateSession(context.store.externalSessionId, (current) => {
+  context.store.updateSession(context.store.sessionIdentity, (current) => {
     if (current.status === "starting") {
       return current;
     }

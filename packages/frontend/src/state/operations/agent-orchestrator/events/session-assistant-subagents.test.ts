@@ -1,15 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
-  type AgentSessionState,
   buildSession,
   createSessionsRef,
+  createSessionUpdater,
   findSession,
   getSession,
   getSessionMessages,
   handleAssistantPart,
   listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  replaceSessionForTest,
   type SessionEventAdapter,
   type SessionPartEventContext,
   sessionMessageAt,
@@ -32,16 +31,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     let clearTurnDurationCalls = 0;
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -130,16 +120,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -413,16 +394,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -483,20 +455,17 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
   test("records explicit tool start timing for live assistant turns", async () => {
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
     const recordTurnActivityTimestamp = mock(() => {});
+    const session = getSession(sessionsRef);
 
     const context: SessionPartEventContext = {
       store: {
+        sessionIdentity: session,
         externalSessionId: "session-1",
         sessionsRef,
-        updateSession: (externalSessionId, updater) => {
-          const current = findSession(sessionsRef, externalSessionId);
-          if (!current) {
-            return;
-          }
-          sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-        },
+        updateSession: createSessionUpdater(sessionsRef),
       },
       drafts: {
+        sessionIdentity: session,
         externalSessionId: "session-1",
         draftRawBySessionRef: { current: {} },
         draftSourceBySessionRef: { current: {} },
@@ -504,6 +473,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         draftFlushTimeoutBySessionRef: { current: {} },
       },
       turn: {
+        sessionIdentity: session,
         externalSessionId: "session-1",
         recordTurnActivityTimestamp,
         recordTurnUserMessageTimestamp: () => {},
@@ -560,16 +530,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
     const recordTurnActivityTimestamp = mock(() => {});
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -628,16 +589,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -723,16 +675,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -803,16 +746,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -924,16 +858,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -1021,16 +946,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -1120,16 +1036,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -1244,16 +1151,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,

@@ -3,10 +3,10 @@ import { useCallback } from "react";
 import {
   type AgentSessionCollection,
   type AgentSessionCollectionUpdater,
-  getAgentSessionByExternalSessionId,
+  getAgentSession,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { isWorkflowAgentSession } from "../support/workflow-session";
@@ -19,7 +19,7 @@ type UseAgentSessionMutationsArgs = {
 };
 
 export type UpdateAgentSession = (
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;
@@ -31,9 +31,9 @@ export const useAgentSessionMutations = ({
   persistSessionRecord,
 }: UseAgentSessionMutationsArgs): { updateSession: UpdateAgentSession } => {
   const updateSession = useCallback<UpdateAgentSession>(
-    (externalSessionId, updater, options): void => {
+    (identity, updater, options): void => {
       const currentSessions = sessionsRef.current;
-      const current = getAgentSessionByExternalSessionId(currentSessions, externalSessionId);
+      const current = getAgentSession(currentSessions, identity);
       if (!current) {
         return;
       }
@@ -56,7 +56,7 @@ export const useAgentSessionMutations = ({
       }
 
       if (shouldPersist && !isWorkflowAgentSession(nextSession)) {
-        throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
+        throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
       }
 
       commitSessions(replaceAgentSession(currentSessions, nextSession));
@@ -68,7 +68,7 @@ export const useAgentSessionMutations = ({
           {
             tags: {
               repoPath: workspaceRepoPath,
-              externalSessionId,
+              externalSessionId: nextSession.externalSessionId,
               taskId: nextSession.taskId,
               role: nextSession.role,
             },

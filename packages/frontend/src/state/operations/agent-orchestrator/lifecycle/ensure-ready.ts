@@ -4,7 +4,11 @@ import {
   type AgentSessionCollection,
   getAgentSessionByExternalSessionId,
 } from "@/state/agent-session-collection";
-import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  WorkflowAgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
@@ -33,7 +37,7 @@ type EnsureSessionReadyDependencies = {
   taskRef: { current: TaskCard[] };
   sessionListenerRegistryRef: { current: SessionListenerRegistry };
   updateSession: (
-    externalSessionId: string,
+    identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
@@ -118,7 +122,7 @@ export const createEnsureSessionReady = ({
         shouldListen: boolean;
       },
     ): Promise<void> => {
-      updateSession(externalSessionId, (current) =>
+      updateSession(session, (current) =>
         applyAgentSessionPresenceSnapshotToSession(current, snapshot),
       );
       if (shouldListen) {
@@ -199,7 +203,7 @@ export const createEnsureSessionReady = ({
         return;
       }
       updateSession(
-        externalSessionId,
+        session,
         (current) => applyAgentSessionPresenceSnapshotToSession(current, sessionPresence),
         { persist: false },
       );

@@ -1,4 +1,4 @@
-import { getAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
+import { getAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import {
@@ -111,7 +111,7 @@ export const handleSessionStarted = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: Extract<SessionEvent, { type: "session_started" }>,
 ): void => {
-  context.store.updateSession(context.store.externalSessionId, (current) => ({
+  context.store.updateSession(context.store.sessionIdentity, (current) => ({
     ...current,
     status: "running",
     messages: appendSessionMessage(current, {
@@ -129,7 +129,7 @@ export const handleAssistantMessage = (
 ): void => {
   flushDraftBuffers(context);
   clearDraftBuffers(context);
-  context.store.updateSession(context.store.externalSessionId, (current) => {
+  context.store.updateSession(context.store.sessionIdentity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
     const durationMs = context.turn.resolveTurnDurationMs(
       context.store.externalSessionId,
@@ -177,7 +177,7 @@ export const handleUserMessage = (
 ): void => {
   context.turn.recordTurnUserMessageTimestamp(context.store.externalSessionId, event.timestamp);
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       return {
         ...current,
@@ -203,7 +203,7 @@ export const handleSessionStatus = (
   if (status.type === "busy") {
     context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, event.timestamp);
     context.store.updateSession(
-      context.store.externalSessionId,
+      context.store.sessionIdentity,
       (current) =>
         current.status === "error"
           ? current
@@ -219,7 +219,7 @@ export const handleSessionStatus = (
   if (status.type === "retry") {
     const retryMessage = normalizeRetryStatusMessage(status.message);
     context.store.updateSession(
-      context.store.externalSessionId,
+      context.store.sessionIdentity,
       (current) =>
         current.status === "error"
           ? current
@@ -248,10 +248,7 @@ export const handleSessionTodosUpdated = (
   context: Pick<SessionLifecycleEventContext, "store" | "runtimeData">,
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
-  const current = getAgentSessionByExternalSessionId(
-    context.store.sessionsRef.current,
-    context.store.externalSessionId,
-  );
+  const current = getAgentSession(context.store.sessionsRef.current, context.store.sessionIdentity);
   if (!current) {
     return;
   }
@@ -260,7 +257,7 @@ export const handleSessionTodosUpdated = (
     mergeTodoListPreservingOrder(todos, event.todos),
   );
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => ({
       ...current,
       messages: settleDanglingTodoToolMessages(current, event.timestamp),
@@ -275,7 +272,7 @@ export const handleSessionCompacted = (
 ): void => {
   const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => ({
       ...current,
       messages: upsertSessionMessage(
@@ -293,7 +290,7 @@ export const handleSessionCompactionStarted = (
 ): void => {
   const messageId = event.messageId ?? `session-compaction:${event.externalSessionId}`;
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => ({
       ...current,
       messages: upsertSessionMessage(
@@ -337,7 +334,7 @@ export const handleSessionError = (
   clearDraftBuffers(context);
   const sessionErrorMessage = normalizeSessionErrorMessage(event.message);
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const finalized = finalizeDraftAssistantMessage(
         current,
@@ -402,7 +399,7 @@ export const handleSessionFinished = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const finalized = finalizeDraftAssistantMessage(
         current,

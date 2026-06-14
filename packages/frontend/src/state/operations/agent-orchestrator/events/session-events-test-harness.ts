@@ -6,6 +6,7 @@ import {
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
+  getAgentSession,
   listAgentSessions,
 } from "@/state/agent-session-collection";
 import { withMockedToast } from "@/test-utils/mock-toast";
@@ -14,7 +15,7 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionCollectionRefFixture,
   findAgentSessionFixture,
@@ -89,6 +90,19 @@ export const replaceSessionForTest = (
 ): AgentSessionCollection => replaceAgentSessionFixture(collection, session);
 
 export const createSessionsRef = createAgentSessionCollectionRefFixture;
+
+export const createSessionUpdater = (sessionsRef: { current: AgentSessionCollection }) => {
+  return (
+    identity: AgentSessionIdentity,
+    updater: (current: AgentSessionState) => AgentSessionState,
+  ): void => {
+    const current = getAgentSession(sessionsRef.current, identity);
+    if (!current) {
+      return;
+    }
+    sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+  };
+};
 
 export const getSessionMessages = (
   sessionsRef: { current: AgentSessionCollection },
@@ -169,6 +183,7 @@ export const getLastSessionMessage = (
 ) => lastSessionMessageForTest(getSession(sessionsRef, externalSessionId));
 
 export type { AgentSessionState, SessionEvent, SessionEventAdapter, SessionPartEventContext };
+export type SessionUpdateFn = ListenToAgentSessionParams["updateSession"];
 export {
   createSessionEventBatcher,
   handleAssistantPart,

@@ -22,7 +22,11 @@ import {
   type AgentSessionCollectionUpdater,
   getAgentSessionByExternalSessionId,
 } from "@/state/agent-session-collection";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionLoadOptions,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
@@ -64,7 +68,7 @@ type SessionActionsDependencies = {
   ) => number | undefined;
   readTurnUserMessageStartedAtMs: (externalSessionId: string) => number | undefined;
   updateSession: (
-    externalSessionId: string,
+    identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
@@ -114,15 +118,13 @@ const settleStartingSession = (
   sessionsRef: { current: AgentSessionCollection },
   updateSession: SessionActionsDependencies["updateSession"],
 ): void => {
-  if (
-    getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId)?.status !==
-    "starting"
-  ) {
+  const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+  if (session?.status !== "starting") {
     return;
   }
 
   updateSession(
-    externalSessionId,
+    session,
     (current) => ({
       ...current,
       status,
@@ -296,7 +298,7 @@ export const createAgentSessionActions = ({
 
     if (!isBusyQueuedSend) {
       updateSession(
-        externalSessionId,
+        readySession,
         (current) => ({
           ...current,
           status: "running",
@@ -320,7 +322,7 @@ export const createAgentSessionActions = ({
       });
     } catch (error) {
       updateSession(
-        externalSessionId,
+        readySession,
         (current) => ({
           ...current,
           status: isBusyQueuedSend ? current.status : "error",
@@ -337,7 +339,7 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       updateSession(
-        externalSessionId,
+        readySession,
         (current) => ({
           ...current,
           messages: appendSessionMessage(current, {
@@ -402,7 +404,7 @@ export const createAgentSessionActions = ({
     let stopRepoPath: string | null = null;
 
     updateSession(
-      externalSessionId,
+      session,
       (current) => ({
         ...current,
         stopRequestedAt: now(),
@@ -428,7 +430,7 @@ export const createAgentSessionActions = ({
       });
     } catch (error) {
       updateSession(
-        externalSessionId,
+        session,
         (current) => ({
           ...current,
           stopRequestedAt: null,
@@ -459,7 +461,7 @@ export const createAgentSessionActions = ({
 
     let stoppedSessionSnapshot: AgentSessionState | null = null;
     const stoppedAt = now();
-    updateSession(externalSessionId, (current) => {
+    updateSession(session, (current) => {
       const shouldAppendUserStoppedNotice = Boolean(current.stopRequestedAt);
       const nextSession: AgentSessionState = {
         ...current,
@@ -504,17 +506,19 @@ export const createAgentSessionActions = ({
     selection: AgentModelSelection | null,
   ): void => {
     const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
-    if (session) {
-      const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
-      adapter.updateSessionModel({
-        ...toRuntimeSessionRef(repoPath, session),
-        externalSessionId,
-        model: selection,
-      });
+    if (!session) {
+      return;
     }
 
-    updateSession(
+    const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
+    adapter.updateSessionModel({
+      ...toRuntimeSessionRef(repoPath, session),
       externalSessionId,
+      model: selection,
+    });
+
+    updateSession(
+      session,
       (current) => ({
         ...current,
         selectedModel: selection,
@@ -549,7 +553,7 @@ export const createAgentSessionActions = ({
     });
 
     updateSession(
-      externalSessionId,
+      session,
       (current) => ({
         ...current,
         pendingApprovals: current.pendingApprovals.filter((entry) => entry.requestId !== requestId),
@@ -581,7 +585,7 @@ export const createAgentSessionActions = ({
       answers,
     });
     updateSession(
-      externalSessionId,
+      session,
       (current) => {
         const { pendingQuestions, messages } = applyQuestionAnswerToSession(
           current,

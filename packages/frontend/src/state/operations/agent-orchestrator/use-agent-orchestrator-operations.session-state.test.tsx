@@ -83,7 +83,7 @@ describe("use-agent-orchestrator-operations session state", () => {
     };
     opencodeSdkAdapterPrototype.listSessionPresence = async () => [
       createAgentSessionPresenceSnapshotFixture({
-        ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo" },
+        ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
         snapshot: {
           title: "SPEC task-1",
           status: { type: "idle" },
@@ -137,13 +137,9 @@ describe("use-agent-orchestrator-operations session state", () => {
         await harness.getLatest().loadAgentSessions("task-1");
       });
 
-      await expect(
-        harness.run(async () => {
-          await harness
-            .getLatest()
-            .sendAgentMessage("external-1", [{ kind: "text", text: "prime" }]);
-        }),
-      ).rejects.toThrow("Session is waiting for pending runtime input.");
+      await harness.run(async () => {
+        await harness.getLatest().sendAgentMessage("external-1", [{ kind: "text", text: "prime" }]);
+      });
 
       expect(eventHandlerRef.current).not.toBeNull();
       const registeredEventHandler = eventHandlerRef.current as SessionEventHandler;

@@ -2,7 +2,7 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentEvent, AgentRole, AgentSessionRef } from "@openducktor/core";
 import type { MutableRefObject } from "react";
 import type { AgentSessionCollection } from "@/state/agent-session-collection";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { SessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
 
 export type DraftChannel = "reasoning";
@@ -10,7 +10,7 @@ export type DraftSource = "delta" | "part";
 export type DraftChannelValueMap<T> = Partial<Record<DraftChannel, T>>;
 
 export type UpdateSession = (
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;
@@ -60,6 +60,7 @@ export type ListenToAgentSessionParams = {
 };
 
 type SessionEventTargetContext = {
+  sessionIdentity: AgentSessionIdentity;
   externalSessionId: string;
 };
 
@@ -128,12 +129,14 @@ export type SessionEventHandlerContext = {
 };
 
 const createStoreContext = (context: ListenToAgentSessionParams): SessionStoreContext => ({
+  sessionIdentity: context.sessionRef,
   externalSessionId: context.sessionRef.externalSessionId,
   sessionsRef: context.sessionsRef,
   updateSession: context.updateSession,
 });
 
 const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftContext => ({
+  sessionIdentity: context.sessionRef,
   externalSessionId: context.sessionRef.externalSessionId,
   draftRawBySessionRef: context.draftRawBySessionRef,
   draftSourceBySessionRef: context.draftSourceBySessionRef,
@@ -146,6 +149,7 @@ const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftCo
 });
 
 const createTurnContext = (context: ListenToAgentSessionParams): SessionTurnContext => ({
+  sessionIdentity: context.sessionRef,
   externalSessionId: context.sessionRef.externalSessionId,
   ...(context.turnModelBySessionRef
     ? { turnModelBySessionRef: context.turnModelBySessionRef }

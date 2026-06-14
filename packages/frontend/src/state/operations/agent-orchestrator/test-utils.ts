@@ -8,6 +8,7 @@ import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/cor
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
+  getAgentSession,
   getAgentSessionByExternalSessionId,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
@@ -15,7 +16,7 @@ import {
   createDeferred as createSharedDeferred,
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createSessionListenerRegistry,
   hasSessionListenerForExternalSessionId,
@@ -130,10 +131,10 @@ export const replaceAgentSessionFixture = (
 
 export const updateAgentSessionFixture = (
   sessionsRef: AgentSessionCollectionRef,
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
 ): void => {
-  const current = findAgentSessionFixture(sessionsRef, externalSessionId);
+  const current = getAgentSession(sessionsRef.current, identity);
   if (!current) {
     return;
   }

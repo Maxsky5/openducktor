@@ -7,6 +7,7 @@ import {
   type AgentSessionCollection,
   createAgentSessionCollection,
   emptyAgentSessionCollection,
+  getAgentSession,
   getAgentSessionByExternalSessionId,
   replaceAgentSession,
 } from "@/state/agent-session-collection";
@@ -89,8 +90,8 @@ const createLoaderHarness = ({
     setSessionCollection: (updater) => {
       sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
     },
-    updateSession: (externalSessionId, updater) => {
-      const current = getAgentSessionByExternalSessionId(sessionCollection, externalSessionId);
+    updateSession: (identity, updater) => {
+      const current = getAgentSession(sessionCollection, identity);
       if (!current) {
         return;
       }

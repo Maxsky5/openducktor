@@ -1,9 +1,6 @@
 import { toast } from "sonner";
-import {
-  getAgentSession,
-  getAgentSessionByExternalSessionId,
-  replaceAgentSession,
-} from "@/state/agent-session-collection";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { getAgentSession, replaceAgentSession } from "@/state/agent-session-collection";
 import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   ListenToAgentSessionParams,
@@ -120,7 +117,6 @@ const isObservedSessionMounted = ({
 export const listenToAgentSessionEvents = async (
   context: ListenToAgentSessionParams,
 ): Promise<() => void> => {
-  const externalSessionId = context.sessionRef.externalSessionId;
   const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
     current: {} as Record<string, string>,
   };
@@ -168,16 +164,13 @@ export const listenToAgentSessionEvents = async (
     const batchedHandlerContext = createSessionEventHandlerContext({
       ...eventContext,
       sessionsRef: batchedSessionsRef,
-      updateSession: (targetExternalSessionId, updater, options) => {
-        if (targetExternalSessionId !== externalSessionId) {
-          context.updateSession(targetExternalSessionId, updater, options);
+      updateSession: (targetSessionIdentity, updater, options) => {
+        if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {
+          context.updateSession(targetSessionIdentity, updater, options);
           return;
         }
 
-        const current = getAgentSessionByExternalSessionId(
-          batchedSessionsRef.current,
-          targetExternalSessionId,
-        );
+        const current = getAgentSession(batchedSessionsRef.current, targetSessionIdentity);
         if (!current) {
           return;
         }
@@ -206,10 +199,7 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    const nextSession = getAgentSessionByExternalSessionId(
-      batchedSessionsRef.current,
-      externalSessionId,
-    );
+    const nextSession = getAgentSession(batchedSessionsRef.current, context.sessionRef);
     if (!nextSession) {
       if (queuedEvents.length > 0) {
         scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
@@ -218,7 +208,7 @@ export const listenToAgentSessionEvents = async (
     }
 
     context.updateSession(
-      externalSessionId,
+      context.sessionRef,
       () => nextSession,
       shouldPersistBufferedSession ? { persist: true } : undefined,
     );

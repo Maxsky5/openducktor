@@ -6,7 +6,11 @@ import type {
   AgentSessionCollection,
   AgentSessionCollectionUpdater,
 } from "@/state/agent-session-collection";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionLoadOptions,
+  AgentSessionState,
+} from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
@@ -28,7 +32,7 @@ import {
 } from "./session-history-runtime-context";
 
 type UpdateSession = (
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;

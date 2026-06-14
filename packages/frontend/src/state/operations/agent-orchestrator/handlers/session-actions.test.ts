@@ -4,6 +4,7 @@ import type { AgentSessionStopTarget } from "@openducktor/contracts";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
+  getAgentSession,
   getAgentSessionByExternalSessionId,
   listAgentSessions,
   replaceAgentSession,
@@ -14,7 +15,7 @@ import {
   sessionMessageAt,
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { listenToAgentSessionEvents } from "../events/session-events";
 import {
   createAgentSessionPresenceSnapshotFixture,
@@ -105,8 +106,8 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
     },
     readTurnUserMessageStartedAtMs: (externalSessionId) =>
       userMessageStartedAtBySession[externalSessionId],
-    updateSession: (externalSessionId, updater) => {
-      const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+    updateSession: (identity, updater) => {
+      const current = getAgentSession(sessionsRef.current, identity);
       if (!current) {
         return;
       }
@@ -408,10 +409,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     ]);
 
     const updateSession = (
-      externalSessionId: string,
+      identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+      const current = getAgentSession(sessionsRef.current, identity);
       if (!current) {
         return;
       }
@@ -861,8 +862,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      updateSession: (externalSessionId, updater, options) => {
-        const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+      updateSession: (identity, updater, options) => {
+        const current = getAgentSession(sessionsRef.current, identity);
         if (!current) {
           return;
         }
@@ -1069,8 +1070,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      updateSession: (externalSessionId, updater, options) => {
-        const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+      updateSession: (identity, updater, options) => {
+        const current = getAgentSession(sessionsRef.current, identity);
         if (!current) {
           return;
         }
@@ -1279,8 +1280,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       sessionListenerRegistryRef: createSessionListenerRegistryRefFixture([
         { externalSessionId: "session-1" },
       ]),
-      updateSession: (externalSessionId, updater) => {
-        const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
+      updateSession: (identity, updater) => {
+        const current = getAgentSession(sessionsRef.current, identity);
         if (!current) {
           return;
         }

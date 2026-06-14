@@ -3,12 +3,12 @@ import {
   type AgentSessionState,
   buildSession,
   createSessionsRef,
+  createSessionUpdater,
   findSession,
   getSession,
   getSessionMessages,
   listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  replaceSessionForTest,
   type SessionEventAdapter,
   sessionMessageAt,
 } from "./session-events-test-harness";
@@ -39,16 +39,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -122,16 +113,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     const sessionsRef = createSessionsRef([buildSession()]);
     const contextUsageMessageIdBySessionRef = { current: {} as Record<string, string> };
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -208,16 +190,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       } as Record<string, AgentSessionState["selectedModel"]>,
     };
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -290,16 +263,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -397,16 +361,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -500,16 +455,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -584,16 +530,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -654,16 +591,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "starting" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -713,16 +641,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -767,16 +686,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "build", status: "idle" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -860,16 +770,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,

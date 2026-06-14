@@ -32,7 +32,7 @@ type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
 const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) =>
       current.status === "running"
         ? current
@@ -201,7 +201,7 @@ export const handleAssistantDelta = (
     const messageId = event.messageId;
     markSessionRunning(context);
     context.store.updateSession(
-      context.store.externalSessionId,
+      context.store.sessionIdentity,
       (current) => {
         const existingMessage = findSessionMessageById(current, messageId);
         const baseContent = existingMessage?.role === "assistant" ? existingMessage.content : "";
@@ -242,7 +242,7 @@ const settleSessionBeforeDraftUpdate = (
   prepareCurrent: PrepareCurrent,
 ): void => {
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const prepared = prepareCurrent(current);
       return prepared.status === "running"
@@ -266,7 +266,7 @@ const handleTextPart = (
     return;
   }
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const prepared = prepareCurrent(current);
       if (part.text.trim().length === 0) {
@@ -309,7 +309,7 @@ const handleReasoningPart = (
 
   clearDraftChannelBuffer(context, "reasoning");
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const prepared = prepareCurrent(current);
       const messageId = toReasoningMessageId(part.messageId, part.partId);
@@ -356,7 +356,7 @@ const handleSubagentPart = (
   const eventTimestamp = eventTimestampMs(event.timestamp);
 
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const prepared = prepareCurrent(current);
       const fallbackMatches =
@@ -454,7 +454,7 @@ const handleStepPart = (
   }
 
   context.store.updateSession(
-    context.store.externalSessionId,
+    context.store.sessionIdentity,
     (current) => {
       const prepared = prepareCurrent(current);
       const model = resolvePartModelSelection(context, prepared, part.messageId);

@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
-  type AgentSessionState,
   buildSession,
   createRecordingRuntimeDataWriter,
   createSessionsRef,
+  createSessionUpdater,
   findSession,
   getSession,
   getSessionMessages,
   listenToAgentSessionEvents,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  replaceSessionForTest,
   type SessionEvent,
   type SessionEventAdapter,
+  type SessionUpdateFn,
   withMockedToast,
 } from "./session-events-test-harness";
 
@@ -28,16 +28,7 @@ describe("agent-orchestrator session transcript events", () => {
       replyApproval: async () => {},
     };
     const sessionsRef = createSessionsRef([buildSession({ historyLoadState: "loaded" })]);
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -85,16 +76,10 @@ describe("agent-orchestrator session transcript events", () => {
       buildSession({ workingDirectory: "/tmp/other-worktree" }),
     ]);
     let updateCount = 0;
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateCount += 1;
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+      applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -148,16 +133,7 @@ describe("agent-orchestrator session transcript events", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ role: "planner" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     try {
       await listenToAgentSessionEvents({
@@ -358,16 +334,7 @@ describe("agent-orchestrator session transcript events", () => {
 
         const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
 
-        const updateSession = (
-          externalSessionId: string,
-          updater: (current: AgentSessionState) => AgentSessionState,
-        ) => {
-          const current = findSession(sessionsRef, externalSessionId);
-          if (!current) {
-            return;
-          }
-          sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-        };
+        const updateSession = createSessionUpdater(sessionsRef);
 
         await listenToAgentSessionEvents({
           adapter,
@@ -453,16 +420,7 @@ describe("agent-orchestrator session transcript events", () => {
 
     const sessionsRef = createSessionsRef([buildSession()]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -588,17 +546,10 @@ describe("agent-orchestrator session transcript events", () => {
       }),
     ]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-      options?: { persist?: boolean },
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+      applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -698,16 +649,7 @@ describe("agent-orchestrator session transcript events", () => {
 
     const sessionsRef = createSessionsRef([buildSession()]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,
@@ -783,16 +725,10 @@ describe("agent-orchestrator session transcript events", () => {
     const runtimeData = createRecordingRuntimeDataWriter();
     let updateSessionCalls = 0;
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+      applySessionUpdate(identity, updater);
     };
 
     const unsubscribe = await listenToAgentSessionEvents({
@@ -878,16 +814,10 @@ describe("agent-orchestrator session transcript events", () => {
     const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
     let updateSessionCalls = 0;
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+      applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -956,16 +886,10 @@ describe("agent-orchestrator session transcript events", () => {
     const sessionsRef = createSessionsRef([buildSession({ status: "running", role: "build" })]);
     let updateSessionCalls = 0;
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
+    const applySessionUpdate = createSessionUpdater(sessionsRef);
+    const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
+      applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -1072,16 +996,7 @@ describe("agent-orchestrator session transcript events", () => {
 
     const sessionsRef = createSessionsRef([buildSession({ status: "running", role: "build" })]);
 
-    const updateSession = (
-      externalSessionId: string,
-      updater: (current: AgentSessionState) => AgentSessionState,
-    ) => {
-      const current = findSession(sessionsRef, externalSessionId);
-      if (!current) {
-        return;
-      }
-      sessionsRef.current = replaceSessionForTest(sessionsRef.current, updater(current));
-    };
+    const updateSession = createSessionUpdater(sessionsRef);
 
     await listenToAgentSessionEvents({
       adapter,

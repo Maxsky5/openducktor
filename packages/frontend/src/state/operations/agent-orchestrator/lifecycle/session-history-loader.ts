@@ -1,11 +1,11 @@
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { mergeHistoryMessages } from "../support/history-message-merge";
 import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
 
 type UpdateSession = (
-  externalSessionId: string,
+  identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
 ) => void;
@@ -49,11 +49,9 @@ export const loadSessionHistorySnapshot = async ({
     return { externalSessionId: session.externalSessionId, status: "stale" };
   }
 
-  updateSession(
-    session.externalSessionId,
-    (current) => ({ ...current, historyLoadState: "loading" }),
-    { persist: false },
-  );
+  updateSession(session, (current) => ({ ...current, historyLoadState: "loading" }), {
+    persist: false,
+  });
 
   try {
     const history = await adapter.loadSessionHistory({
@@ -76,7 +74,7 @@ export const loadSessionHistorySnapshot = async ({
     const loadedMessages = createSessionMessagesState(session.externalSessionId, historyMessages);
     const historyContextUsage = historyToSessionContextUsage(history);
     updateSession(
-      session.externalSessionId,
+      session,
       (current) => ({
         ...current,
         runtimeKind: session.runtimeKind,
@@ -92,11 +90,9 @@ export const loadSessionHistorySnapshot = async ({
     if (isStaleRepoOperation()) {
       return { externalSessionId: session.externalSessionId, status: "stale" };
     }
-    updateSession(
-      session.externalSessionId,
-      (current) => ({ ...current, historyLoadState: "failed" }),
-      { persist: false },
-    );
+    updateSession(session, (current) => ({ ...current, historyLoadState: "failed" }), {
+      persist: false,
+    });
     return { externalSessionId: session.externalSessionId, status: "failed", error };
   }
 };

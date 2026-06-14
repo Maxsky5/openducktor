@@ -13,7 +13,7 @@ import {
   createTaskStoreCheckFixture as createSharedTaskStoreCheckFixture,
   type TaskStoreCheckFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { agentSessionQueryKeys } from "../../queries/agent-sessions";
 import { documentQueryKeys } from "../../queries/documents";
@@ -1854,10 +1854,10 @@ describe("use-task-operations", () => {
       buildAgentSession({ externalSessionId: "session-1" }),
     ]);
     const updateSession = (
-      externalSessionId: string,
+      identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      updateAgentSessionFixture(sessionsRef, externalSessionId, updater);
+      updateAgentSessionFixture(sessionsRef, identity, updater);
     };
 
     try {

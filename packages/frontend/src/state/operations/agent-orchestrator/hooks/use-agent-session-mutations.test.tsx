@@ -15,8 +15,9 @@ import { useAgentSessionMutations } from "./use-agent-session-mutations";
 describe("useAgentSessionMutations", () => {
   test("persists changed workflow sessions", async () => {
     const store = createAgentSessionsStore();
+    const session = createSession();
     const sessionsRef: { current: AgentSessionCollection } = {
-      current: createAgentSessionCollection([createSession()]),
+      current: createAgentSessionCollection([session]),
     };
     const persisted: AgentSessionRecord[] = [];
     const Harness = () =>
@@ -35,7 +36,7 @@ describe("useAgentSessionMutations", () => {
     const harness = createHookHarness(Harness, undefined);
     await harness.mount();
     await harness.run(({ updateSession }) => {
-      updateSession("external-1", (current) => ({ ...current, status: "running" }), {
+      updateSession(session, (current) => ({ ...current, status: "running" }), {
         persist: true,
       });
     });
@@ -47,7 +48,7 @@ describe("useAgentSessionMutations", () => {
     expect(persisted).toHaveLength(1);
 
     await harness.run(({ updateSession }) => {
-      updateSession("external-1", (current) => ({ ...current, status: "idle" }), {
+      updateSession(session, (current) => ({ ...current, status: "idle" }), {
         persist: true,
       });
     });
@@ -59,8 +60,9 @@ describe("useAgentSessionMutations", () => {
 
   test("rejects persisted updates for role-less sessions before local commit", async () => {
     const store = createAgentSessionsStore();
+    const session = createSession();
     const sessionsRef: { current: AgentSessionCollection } = {
-      current: createAgentSessionCollection([createSession()]),
+      current: createAgentSessionCollection([session]),
     };
     const persisted: AgentSessionRecord[] = [];
     const Harness = () =>
@@ -80,7 +82,7 @@ describe("useAgentSessionMutations", () => {
     await harness.mount();
 
     expect(() =>
-      harness.getLatest().updateSession("external-1", (current) => ({ ...current, role: null }), {
+      harness.getLatest().updateSession(session, (current) => ({ ...current, role: null }), {
         persist: true,
       }),
     ).toThrow("Session 'external-1' is not a workflow session.");
