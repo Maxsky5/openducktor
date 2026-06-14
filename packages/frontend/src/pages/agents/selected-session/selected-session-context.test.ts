@@ -237,8 +237,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "runtime_waiting" },
           canReadRuntimeData: false,
-          isRuntimeWaiting: true,
-          isLoading: true,
         }),
         readiness: {
           agentStudioReadinessState: "blocked",
@@ -252,7 +250,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.runtime.sessionRuntimeDataError).toBe("session todos unavailable");
-    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(true);
+    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.runtime.runtimeReadiness).toMatchObject({
       readinessState: "blocked",
       isReady: false,
@@ -272,8 +270,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
           transcriptState: { kind: "runtime_waiting" },
           canReadRuntimeData: false,
           isResolving: true,
-          isRuntimeWaiting: true,
-          isLoading: true,
         }),
         readiness: {
           agentStudioReadinessState: "checking",
@@ -286,7 +282,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(true);
+    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.chat.emptyState).toBeNull();
   });
 
@@ -308,7 +304,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(false);
+    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "visible" });
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {

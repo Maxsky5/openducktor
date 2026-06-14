@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  isAgentSessionTranscriptLoading,
+  type SelectedAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 
 type WorktreeRecoverySelection = {
   viewTaskId: string;
@@ -34,7 +37,7 @@ export function useAgentStudioWorktreeRecoverySignal({
     selection.viewActiveSession?.externalSessionId ?? "",
     selection.viewActiveSession?.status ?? "",
     selection.viewActiveSession?.workingDirectory ?? "",
-    selection.viewSessionLifecycle.isLoading ? "1" : "0",
+    isAgentSessionTranscriptLoading(selection.viewSessionLifecycle.transcriptState) ? "1" : "0",
     isForegroundLoadingTasks ? "1" : "0",
   ].join(":");
   const [worktreeRecoveryState, setWorktreeRecoveryState] = useState({

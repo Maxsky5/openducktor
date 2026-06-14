@@ -519,8 +519,6 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "runtime_waiting" },
             isResolving: true,
-            isRuntimeWaiting: true,
-            isLoading: true,
           }),
         },
         readiness: {
@@ -556,8 +554,6 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "runtime_waiting" },
             isResolving: true,
-            isRuntimeWaiting: true,
-            isLoading: true,
           }),
         },
         readiness: {
@@ -593,7 +589,6 @@ describe("useAgentStudioPageModels", () => {
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "session_loading", reason: "preparing" },
             isResolving: true,
-            isLoading: true,
           }),
           isChatContextSwitching: true,
         },
@@ -716,7 +711,6 @@ describe("useAgentStudioPageModels", () => {
           sessionsForTask: [pendingSession],
           lifecycle: createSelectedSessionLifecycleFixture({
             transcriptState: { kind: "session_loading", reason: "history" },
-            isLoading: true,
           }),
         },
       }),

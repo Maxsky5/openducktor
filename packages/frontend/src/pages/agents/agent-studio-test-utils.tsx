@@ -61,8 +61,6 @@ export const createSelectedSessionLifecycleFixture = (
   canReadRuntimeData: true,
   shouldLoadHistory: false,
   isResolving: false,
-  isRuntimeWaiting: false,
-  isLoading: false,
   ...overrides,
 });
 

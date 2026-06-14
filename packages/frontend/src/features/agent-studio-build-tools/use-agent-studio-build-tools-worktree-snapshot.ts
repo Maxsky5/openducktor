@@ -12,7 +12,10 @@ import type {
   useAgentStudioOrchestrationController,
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  isAgentSessionTranscriptLoading,
+  type SelectedAgentSessionViewLifecycle,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
@@ -139,7 +142,9 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
   const sessionRole = session.role;
-  const isSessionViewLoading = viewSessionLifecycle.isLoading;
+  const isSessionViewLoading = isAgentSessionTranscriptLoading(
+    viewSessionLifecycle.transcriptState,
+  );
   const gitPanelContextMode: AgentStudioGitPanelContextMode =
     sessionRole === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =

@@ -1,6 +1,7 @@
 import { memo, type ReactElement, useEffect } from "react";
 import { MemoizedAgentStudioRightPanel } from "@/components/features/agents/agent-studio-right-panel";
 import { useAgentStudioBuildWorktreeRefresh } from "@/features/agent-studio-build-tools/use-agent-studio-build-worktree-refresh";
+import { isAgentSessionTranscriptLoading } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
 import {
   type UseAgentsPageRightPanelModelArgs,
@@ -51,7 +52,7 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
   useAgentStudioBuildWorktreeRefresh({
     viewRole: panelKind === "build_tools" && isPanelOpen ? viewRole : null,
     activeSession,
-    isSessionViewLoading: viewSessionLifecycle.isLoading,
+    isSessionViewLoading: isAgentSessionTranscriptLoading(viewSessionLifecycle.transcriptState),
     refreshWorktree,
   });
 

@@ -163,7 +163,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.runtime.lifecycle.transcriptState).toEqual({
       kind: "visible",
     });
-    expect(mapped.selectedSession.runtime.lifecycle.isRuntimeWaiting).toBe(false);
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
     expect(mapped.taskTabs.onCreateTab).toBe(onCreateTab);
     expect(mapped.taskTabs.onCloseTab).toBe(onCloseTab);
@@ -233,8 +232,6 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
       viewSessionLifecycle: createSelectedSessionLifecycleFixture({
         transcriptState: { kind: "runtime_waiting" },
         isResolving: true,
-        isRuntimeWaiting: true,
-        isLoading: true,
       }),
       activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
       documents: baseDocuments,
@@ -254,8 +251,7 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
     expect(context.chat.isContextSwitching).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(context.runtime.lifecycle.isLoading).toBe(true);
-    expect(context.runtime.lifecycle.isRuntimeWaiting).toBe(true);
+    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
     expect(context.workflow.selectedInteractionRole).toBe("planner");
     expect(context.documents.activeDocument?.title).toBe("Implementation Plan");

@@ -45,7 +45,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(true);
   });
 
@@ -89,7 +88,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
@@ -175,7 +173,6 @@ describe("deriveAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
-    expect(lifecycle.isLoading).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
@@ -260,8 +257,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     expect(lifecycle.transcriptState).toEqual({
       kind: "runtime_waiting",
     });
-    expect(lifecycle.isLoading).toBe(true);
-    expect(lifecycle.isRuntimeWaiting).toBe(true);
     expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
@@ -275,8 +270,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "failed" });
-    expect(lifecycle.isLoading).toBe(false);
-    expect(lifecycle.isRuntimeWaiting).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(false);
   });
 
@@ -293,8 +286,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       kind: "session_loading",
       reason: "history",
     });
-    expect(lifecycle.isLoading).toBe(true);
-    expect(lifecycle.isRuntimeWaiting).toBe(false);
     expect(lifecycle.shouldLoadHistory).toBe(true);
   });
 
@@ -310,8 +301,6 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     expect(lifecycle.transcriptState).toEqual({
       kind: "runtime_waiting",
     });
-    expect(lifecycle.isLoading).toBe(true);
-    expect(lifecycle.isRuntimeWaiting).toBe(true);
   });
 
   test("waits for runtime readiness before resolving loading task session records", () => {
@@ -355,7 +344,5 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
     });
 
     expect(lifecycle.transcriptState).toEqual({ kind: "empty" });
-    expect(lifecycle.isLoading).toBe(false);
-    expect(lifecycle.isRuntimeWaiting).toBe(false);
   });
 });

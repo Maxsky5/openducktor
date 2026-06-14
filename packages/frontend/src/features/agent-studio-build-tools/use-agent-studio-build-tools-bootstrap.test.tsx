@@ -49,7 +49,6 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
         ),
         viewSessionLifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "session_loading", reason: "history" },
-          isLoading: true,
         }),
       }),
     );

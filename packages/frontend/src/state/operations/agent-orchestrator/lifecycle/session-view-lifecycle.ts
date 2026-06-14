@@ -26,8 +26,6 @@ export type AgentSessionViewLifecycle = {
   canReadRuntimeData: boolean;
   shouldLoadHistory: boolean;
   isResolving: boolean;
-  isRuntimeWaiting: boolean;
-  isLoading: boolean;
 };
 
 export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
@@ -50,10 +48,12 @@ const lifecycle = ({
   canReadRuntimeData: repoReadinessState === "ready" && canReadRuntimeDataWhenReady,
   shouldLoadHistory: repoReadinessState === "ready" && shouldLoadHistoryWhenReady,
   isResolving,
-  isRuntimeWaiting: transcriptState.kind === "runtime_waiting",
-  isLoading:
-    transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading",
 });
+
+export const isAgentSessionTranscriptLoading = (
+  transcriptState: AgentSessionTranscriptState,
+): boolean =>
+  transcriptState.kind === "runtime_waiting" || transcriptState.kind === "session_loading";
 
 const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = lifecycle({
   repoReadinessState: "ready",
