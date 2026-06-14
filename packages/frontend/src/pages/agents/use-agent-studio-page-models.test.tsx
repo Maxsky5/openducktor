@@ -351,11 +351,11 @@ describe("useAgentStudioPageModels", () => {
       totalTokens: 12,
       contextWindow: 100,
     });
-    expect(state.agentChatModel.thread.readinessState).toBe("ready");
+    expect(state.agentChatModel.thread.runtimeReadiness.readinessState).toBe("ready");
     expect(state.agentChatModel.thread.isSessionWorking).toBe(true);
     expect(state.agentChatModel.chatSettings.showThinkingMessages).toBe(false);
 
-    state.agentChatModel.thread.onRefreshChecks();
+    await state.agentChatModel.thread.runtimeReadiness.refreshChecks();
     await state.agentChatModel.composer.onSend(createComposerDraft("message"));
     state.agentChatModel.composer.onStopSession();
 
@@ -497,9 +497,9 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.isSessionHistoryLoading).toBe(false);
-    expect(thread.isWaitingForRuntimeReadiness).toBe(true);
-    expect(thread.readinessState).toBe("checking");
+    expect(thread.sessionLifecycle.phase).toBe("waiting_for_runtime");
+    expect(thread.sessionLifecycle.canRenderHistory).toBe(true);
+    expect(thread.runtimeReadiness.readinessState).toBe("checking");
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",
     );
@@ -636,7 +636,10 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.isSessionHistoryLoading).toBe(false);
+    expect(thread.sessionLifecycle).toMatchObject({
+      phase: "loading_history",
+      canRenderHistory: true,
+    });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
@@ -719,7 +722,14 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.isSessionHistoryLoading).toBe(true);
+    expect(harness.getLatest().agentChatModel.thread.sessionLifecycle).toMatchObject({
+      phase: "loading_history",
+      canRenderHistory: false,
+    });
+    const html = renderToStaticMarkup(
+      createAgentChatThreadElement(harness.getLatest().agentChatModel),
+    );
+    expect(html).toContain("Loading session");
 
     await harness.unmount();
   });

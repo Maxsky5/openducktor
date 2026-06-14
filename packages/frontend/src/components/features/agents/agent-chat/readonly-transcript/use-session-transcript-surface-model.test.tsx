@@ -434,8 +434,10 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
-      expect(harness.getLatest().model.thread.isSessionViewLoading).toBe(true);
-      expect(harness.getLatest().model.thread.isSessionHistoryLoading).toBe(true);
+      expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
+        phase: "loading_history",
+        canRenderHistory: false,
+      });
       expect(harness.getLatest().model.thread.emptyState).toBe(null);
 
       await harness.run(async () => {
@@ -452,7 +454,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
         ]);
         await deferredHistory.promise;
       });
-      await harness.waitFor((state) => state.model.thread.isSessionHistoryLoading === false);
+      await harness.waitFor((state) => state.model.thread.sessionLifecycle.phase === "ready");
     } finally {
       deferredHistory.resolve([]);
       await harness.unmount();
@@ -537,8 +539,10 @@ describe("useSessionTranscriptSurfaceModel", () => {
         selectedModel: liveSession.selectedModel,
         todos: [],
       });
-      expect(model.thread.isSessionViewLoading).toBe(false);
-      expect(model.thread.isSessionHistoryLoading).toBe(false);
+      expect(model.thread.sessionLifecycle).toMatchObject({
+        phase: "ready",
+        canRenderHistory: true,
+      });
       expect(model.thread.canReplyToApprovals).toBe(true);
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {

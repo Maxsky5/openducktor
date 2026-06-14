@@ -13,11 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
-import {
-  isSelectedAgentSessionHistoryLoading,
-  isSelectedAgentSessionWaitingForRuntimeReadiness,
-  type SelectedAgentSessionViewLifecycle,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
@@ -26,6 +22,7 @@ import type {
   AgentChatEmptyStateModel,
   AgentChatMode,
   AgentChatSurfaceModel,
+  AgentChatThreadRuntimeReadiness,
   AgentChatThreadSession,
 } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
@@ -76,15 +73,6 @@ export const invokeStopAgentSession = (
     return;
   }
   void stopAgentSession(externalSessionId).catch(() => undefined);
-};
-
-type AgentChatRuntimeReadiness = {
-  readinessState: "ready" | "checking" | "blocked";
-  isReady: boolean;
-  isRuntimeStarting: boolean;
-  blockedReason: string | null;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
 };
 
 type AgentChatPendingQuestionActions = {
@@ -166,7 +154,7 @@ type UseAgentChatSurfaceModelArgs = {
   isSessionWorking: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
-  runtimeReadiness: AgentChatRuntimeReadiness;
+  runtimeReadiness: AgentChatThreadRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
@@ -206,10 +194,6 @@ export function useAgentChatSurfaceModel({
     lifecycle: sessionLifecycle,
     isContextSwitching,
   });
-  const isSessionHistoryLoading =
-    isSelectedAgentSessionHistoryLoading(sessionLifecycle) && !sessionLifecycle.canRenderHistory;
-  const isWaitingForRuntimeReadiness =
-    isSelectedAgentSessionWaitingForRuntimeReadiness(sessionLifecycle);
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
@@ -257,18 +241,11 @@ export function useAgentChatSurfaceModel({
   const threadModel = useMemo(
     () => ({
       session: threadSession,
+      sessionLifecycle,
+      runtimeReadiness,
+      isContextSwitching: isThreadContextSwitching,
       isSessionWorking,
-      isSessionViewLoading: isThreadContextSwitching,
-      isSessionHistoryLoading,
-      isWaitingForRuntimeReadiness:
-        isWaitingForRuntimeReadiness || runtimeReadiness.isRuntimeStarting,
-      readinessState: runtimeReadiness.readinessState,
       isInteractionEnabled: isComposerInteractionEnabled,
-      blockedReason: runtimeReadiness.blockedReason,
-      isLoadingChecks: runtimeReadiness.isLoadingChecks,
-      onRefreshChecks: (): void => {
-        void runtimeReadiness.refreshChecks();
-      },
       emptyState,
       isStarting: composer?.isStarting ?? false,
       isSending: composer?.isSending ?? false,
@@ -302,7 +279,6 @@ export function useAgentChatSurfaceModel({
       handleToggleTodoPanel,
       isThreadContextSwitching,
       isComposerInteractionEnabled,
-      isSessionHistoryLoading,
       isSessionWorking,
       messagesContainerRef,
       pendingQuestions,
@@ -310,7 +286,7 @@ export function useAgentChatSurfaceModel({
       resolvedSessionAgentColors,
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
-      isWaitingForRuntimeReadiness,
+      sessionLifecycle,
       sessionRuntimeDataError,
       subagentPendingApprovalCountByExternalSessionId,
       subagentPendingQuestionCountByExternalSessionId,

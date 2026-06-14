@@ -66,9 +66,7 @@ type AgentChatTranscriptProps = {
     description: string;
   } | null;
   showRuntimeBlockedCard: boolean;
-  blockedReason: string | null;
-  isLoadingChecks: boolean;
-  onRefreshChecks: () => void;
+  runtimeReadiness: AgentChatThreadModel["runtimeReadiness"];
   showSessionLoadingOverlay: boolean;
 };
 
@@ -270,9 +268,7 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   resolveRowRef,
   statusOverlay,
   showRuntimeBlockedCard,
-  blockedReason,
-  isLoadingChecks,
-  onRefreshChecks,
+  runtimeReadiness,
   showSessionLoadingOverlay,
 }: AgentChatTranscriptProps): ReactElement {
   const visibleStatusOverlay =
@@ -297,17 +293,21 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
         <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-destructive-border bg-destructive-surface px-4 py-3 text-sm text-destructive-muted shadow-sm">
           <div className="flex min-w-0 items-start gap-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <p className="min-w-0">{blockedReason}</p>
+            <p className="min-w-0">{runtimeReadiness.blockedReason}</p>
           </div>
           <Button
             type="button"
             size="sm"
             variant="outline"
             className="h-8 border-destructive-border bg-card text-destructive-muted hover:bg-destructive-surface"
-            disabled={isLoadingChecks}
-            onClick={onRefreshChecks}
+            disabled={runtimeReadiness.isLoadingChecks}
+            onClick={() => {
+              void runtimeReadiness.refreshChecks();
+            }}
           >
-            <RefreshCcw className={cn("size-3.5", isLoadingChecks ? "animate-spin" : "")} />
+            <RefreshCcw
+              className={cn("size-3.5", runtimeReadiness.isLoadingChecks ? "animate-spin" : "")}
+            />
             Recheck
           </Button>
         </div>
@@ -439,14 +439,10 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
 export function AgentChatThread({ model }: { model: AgentChatThreadModel }): ReactElement {
   const {
     session,
-    isSessionViewLoading,
-    isSessionHistoryLoading,
-    isWaitingForRuntimeReadiness,
-    readinessState,
+    sessionLifecycle,
+    runtimeReadiness,
+    isContextSwitching,
     isInteractionEnabled,
-    blockedReason,
-    isLoadingChecks,
-    onRefreshChecks,
     emptyState,
     isStarting,
     isSending,
@@ -473,7 +469,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   const activeExternalSessionId = session?.externalSessionId ?? null;
   const { isTranscriptRenderDeferred } = useAgentChatDeferredTranscript({
     activeExternalSessionId,
-    shouldDefer: isSessionViewLoading,
+    shouldDefer: isContextSwitching,
   });
   const { transcriptState, isTranscriptRowsMissing } = useAgentChatTranscriptRows({
     session,
@@ -482,20 +478,15 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
   });
   const { hideTranscriptWhileDeferred, statusOverlay, showRuntimeBlockedCard } =
     getAgentChatThreadState({
-      isSessionViewLoading,
-      isSessionHistoryLoading,
-      isWaitingForRuntimeReadiness,
-      readinessState,
-      blockedReason,
+      sessionLifecycle,
+      runtimeReadiness,
+      isSessionContextSwitching: isContextSwitching,
       isTranscriptRenderDeferred,
       isTranscriptRowsMissing,
     });
 
   const shouldResetTranscriptWindowForLoading =
-    isSessionViewLoading ||
-    isSessionHistoryLoading ||
-    isTranscriptRenderDeferred ||
-    isTranscriptRowsMissing;
+    hideTranscriptWhileDeferred || statusOverlay?.kind === "session_loading";
   const rows = transcriptState.rows;
   const transcriptTurns = transcriptState.turns;
   const hasAttachmentMessages = transcriptState.hasAttachmentMessages;
@@ -680,9 +671,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
         resolveRowRef={resolveRowRef}
         statusOverlay={statusOverlay}
         showRuntimeBlockedCard={showRuntimeBlockedCard}
-        blockedReason={blockedReason}
-        isLoadingChecks={isLoadingChecks}
-        onRefreshChecks={onRefreshChecks}
+        runtimeReadiness={runtimeReadiness}
         showSessionLoadingOverlay={showSessionLoadingOverlay}
       />
 

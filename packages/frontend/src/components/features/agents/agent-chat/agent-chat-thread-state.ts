@@ -1,13 +1,11 @@
+import { isSelectedAgentSessionWaitingForRuntimeReadiness } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 
 type BuildAgentChatThreadStateArgs = Pick<
   AgentChatThreadModel,
-  | "isSessionViewLoading"
-  | "isSessionHistoryLoading"
-  | "isWaitingForRuntimeReadiness"
-  | "readinessState"
-  | "blockedReason"
+  "sessionLifecycle" | "runtimeReadiness"
 > & {
+  isSessionContextSwitching: boolean;
   isTranscriptRenderDeferred: boolean;
   isTranscriptRowsMissing?: boolean;
 };
@@ -24,31 +22,40 @@ export type AgentChatThreadState = {
 };
 
 export const getAgentChatThreadState = ({
-  isSessionViewLoading,
-  isSessionHistoryLoading,
-  isWaitingForRuntimeReadiness,
-  readinessState,
-  blockedReason,
+  sessionLifecycle,
+  runtimeReadiness,
+  isSessionContextSwitching,
   isTranscriptRenderDeferred,
   isTranscriptRowsMissing = false,
 }: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
+  const isWaitingForRuntimeReadiness =
+    isSelectedAgentSessionWaitingForRuntimeReadiness(sessionLifecycle) ||
+    runtimeReadiness.isRuntimeStarting;
+  const isPreparingSessionView =
+    isSessionContextSwitching || sessionLifecycle.phase === "resolving_session";
+  const isBlockingHistoryLoad =
+    sessionLifecycle.phase === "loading_history" && !sessionLifecycle.canRenderHistory;
   const isTranscriptLoading =
-    isSessionViewLoading ||
-    isSessionHistoryLoading ||
-    isTranscriptRenderDeferred ||
-    isTranscriptRowsMissing;
+    !isWaitingForRuntimeReadiness &&
+    (isPreparingSessionView ||
+      isBlockingHistoryLoad ||
+      isTranscriptRenderDeferred ||
+      isTranscriptRowsMissing);
   const hideTranscriptWhileDeferred = isTranscriptRenderDeferred;
   const statusOverlay = (() => {
     if (
       isWaitingForRuntimeReadiness &&
-      (readinessState === "checking" || readinessState === "ready")
+      (runtimeReadiness.readinessState === "checking" ||
+        runtimeReadiness.readinessState === "ready")
     ) {
       return {
         kind: "runtime_waiting" as const,
         title:
-          readinessState === "ready" ? "Session runtime is reconnecting" : "Runtime is starting",
+          runtimeReadiness.readinessState === "ready"
+            ? "Session runtime is reconnecting"
+            : "Runtime is starting",
         description:
-          readinessState === "ready"
+          runtimeReadiness.readinessState === "ready"
             ? "Waiting for the selected session runtime to become available before loading this session."
             : "Waiting for runtime and MCP health before loading this session.",
       };
@@ -62,7 +69,7 @@ export const getAgentChatThreadState = ({
       kind: "session_loading" as const,
       title: "Loading session",
       description:
-        isSessionHistoryLoading || isTranscriptRenderDeferred || isTranscriptRowsMissing
+        isBlockingHistoryLoad || isTranscriptRenderDeferred || isTranscriptRowsMissing
           ? "Loading the selected conversation."
           : "Preparing the selected session view.",
     };
@@ -72,6 +79,7 @@ export const getAgentChatThreadState = ({
     isTranscriptLoading,
     hideTranscriptWhileDeferred,
     statusOverlay,
-    showRuntimeBlockedCard: readinessState === "blocked" && Boolean(blockedReason),
+    showRuntimeBlockedCard:
+      runtimeReadiness.readinessState === "blocked" && Boolean(runtimeReadiness.blockedReason),
   };
 };

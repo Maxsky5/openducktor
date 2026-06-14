@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
-  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionViewLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
@@ -257,7 +257,7 @@ describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
     expect(context.chat.isContextSwitching).toBe(true);
     expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
     expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(isSelectedAgentSessionHistoryLoading(context.runtime.lifecycle)).toBe(true);
+    expect(isSelectedAgentSessionViewLoading(context.runtime.lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(context.runtime.lifecycle)).toBe(true);
     expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
     expect(context.workflow.selectedInteractionRole).toBe("planner");

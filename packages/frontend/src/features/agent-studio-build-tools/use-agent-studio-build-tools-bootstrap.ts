@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import {
-  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionViewLoading,
   type SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 
@@ -51,7 +51,7 @@ export function useAgentStudioBuildToolsBootstrap({
   const sessionRole = session.role;
   const sessionWorkingDirectory = session.workingDirectory;
   const hasActiveSession = session.hasActiveSession;
-  const isSessionHistoryLoading = isSelectedAgentSessionHistoryLoading(viewSessionLifecycle);
+  const isSessionViewLoading = isSelectedAgentSessionViewLoading(viewSessionLifecycle);
 
   return useMemo(() => {
     const isVisibleBuildToolsPanel =
@@ -67,7 +67,7 @@ export function useAgentStudioBuildToolsBootstrap({
       };
     }
 
-    const isBuildSessionContextStable = sessionRole !== "build" || !isSessionHistoryLoading;
+    const isBuildSessionContextStable = sessionRole !== "build" || !isSessionViewLoading;
 
     return {
       isEnabled: Boolean(workspaceRepoPath) && isBuildSessionContextStable,
@@ -82,7 +82,7 @@ export function useAgentStudioBuildToolsBootstrap({
     workspaceRepoPath,
     hasActiveSession,
     isPanelOpen,
-    isSessionHistoryLoading,
+    isSessionViewLoading,
     panelKind,
     sessionRole,
     sessionWorkingDirectory,

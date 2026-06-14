@@ -3,7 +3,7 @@ import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   deriveAgentSessionViewLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
-  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionViewLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
   shouldEnsureAgentSessionReadyForView,
 } from "./session-view-lifecycle";
@@ -203,7 +203,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       canRenderHistory: false,
       historyRequest: "none",
     });
-    expect(isSelectedAgentSessionHistoryLoading(lifecycle)).toBe(true);
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(true);
     expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(false);
   });
@@ -222,7 +222,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       canRenderHistory: false,
       historyRequest: "none",
     });
-    expect(isSelectedAgentSessionHistoryLoading(lifecycle)).toBe(false);
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(false);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
     expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(false);
   });
@@ -241,7 +241,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
       canRenderHistory: false,
       historyRequest: "load",
     });
-    expect(isSelectedAgentSessionHistoryLoading(lifecycle)).toBe(true);
+    expect(isSelectedAgentSessionViewLoading(lifecycle)).toBe(true);
     expect(isSelectedAgentSessionWaitingForRuntimeReadiness(lifecycle)).toBe(false);
     expect(shouldEnsureAgentSessionReadyForView(lifecycle)).toBe(true);
   });

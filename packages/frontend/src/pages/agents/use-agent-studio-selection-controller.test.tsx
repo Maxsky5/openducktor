@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
-  isSelectedAgentSessionHistoryLoading,
   isSelectedAgentSessionResolving,
+  isSelectedAgentSessionViewLoading,
   isSelectedAgentSessionWaitingForRuntimeReadiness,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -268,7 +268,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(isSelectedAgentSessionResolving(latest.viewSessionLifecycle)).toBe(true);
-      expect(isSelectedAgentSessionHistoryLoading(latest.viewSessionLifecycle)).toBe(true);
+      expect(isSelectedAgentSessionViewLoading(latest.viewSessionLifecycle)).toBe(true);
       expect(latest.viewSessionLifecycle.phase).toBe("resolving_session");
       expect(latest.viewActiveSession).toBeNull();
     } finally {
@@ -306,7 +306,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(isSelectedAgentSessionResolving(latest.viewSessionLifecycle)).toBe(true);
-      expect(isSelectedAgentSessionHistoryLoading(latest.viewSessionLifecycle)).toBe(true);
+      expect(isSelectedAgentSessionViewLoading(latest.viewSessionLifecycle)).toBe(true);
       expect(isSelectedAgentSessionWaitingForRuntimeReadiness(latest.viewSessionLifecycle)).toBe(
         true,
       );
@@ -343,7 +343,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(isSelectedAgentSessionResolving(latest.viewSessionLifecycle)).toBe(false);
       expect(latest.viewSessionLifecycle.phase).toBe("history_failed");
-      expect(isSelectedAgentSessionHistoryLoading(latest.viewSessionLifecycle)).toBe(false);
+      expect(isSelectedAgentSessionViewLoading(latest.viewSessionLifecycle)).toBe(false);
       expect(isSelectedAgentSessionWaitingForRuntimeReadiness(latest.viewSessionLifecycle)).toBe(
         false,
       );

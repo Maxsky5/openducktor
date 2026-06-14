@@ -83,7 +83,7 @@ export const isSelectedAgentSessionWaitingForRuntimeReadiness = (
   lifecycle: SelectedAgentSessionLifecyclePhaseInput,
 ): boolean => lifecycle.phase === "resolving_runtime" || lifecycle.phase === "waiting_for_runtime";
 
-export const isSelectedAgentSessionHistoryLoading = (
+export const isSelectedAgentSessionViewLoading = (
   lifecycle: SelectedAgentSessionLifecyclePhaseInput,
 ): boolean =>
   lifecycle.phase === "resolving_session" ||

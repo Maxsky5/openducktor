@@ -13,7 +13,7 @@ import type {
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
 import {
-  isSelectedAgentSessionHistoryLoading,
+  isSelectedAgentSessionViewLoading,
   type SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
@@ -142,7 +142,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
   const sessionRole = session.role;
-  const isSessionHistoryLoading = isSelectedAgentSessionHistoryLoading(viewSessionLifecycle);
+  const isSessionViewLoading = isSelectedAgentSessionViewLoading(viewSessionLifecycle);
   const gitPanelContextMode: AgentStudioGitPanelContextMode =
     sessionRole === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
@@ -153,7 +153,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewTaskId,
     viewSelectedTaskId: viewSelectedTask?.id ?? null,
   });
-  const isSessionContextStable = sessionRole !== "build" || !isSessionHistoryLoading;
+  const isSessionContextStable = sessionRole !== "build" || !isSessionViewLoading;
   const hasSelectedTask = selectedTaskId != null;
   const taskTargetBranchState = useMemo(
     () =>

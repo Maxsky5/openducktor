@@ -13,6 +13,7 @@ import type {
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 export type AgentRoleOption = {
   role: AgentRole;
@@ -46,17 +47,27 @@ export type AgentChatThreadSession = Pick<
   todos: AgentSessionTodoItem[];
 };
 
-export type AgentChatThreadModel = {
-  session: AgentChatThreadSession | null;
-  isSessionWorking: boolean;
-  isSessionViewLoading: boolean;
-  isSessionHistoryLoading: boolean;
-  isWaitingForRuntimeReadiness: boolean;
+export type AgentChatThreadSessionLifecycle = Pick<
+  SelectedAgentSessionViewLifecycle,
+  "phase" | "canRenderHistory" | "historyRequest"
+>;
+
+export type AgentChatThreadRuntimeReadiness = {
   readinessState: "ready" | "checking" | "blocked";
-  isInteractionEnabled: boolean;
+  isReady: boolean;
+  isRuntimeStarting: boolean;
   blockedReason: string | null;
   isLoadingChecks: boolean;
-  onRefreshChecks: () => void;
+  refreshChecks: () => Promise<void>;
+};
+
+export type AgentChatThreadModel = {
+  session: AgentChatThreadSession | null;
+  sessionLifecycle: AgentChatThreadSessionLifecycle;
+  runtimeReadiness: AgentChatThreadRuntimeReadiness;
+  isContextSwitching: boolean;
+  isSessionWorking: boolean;
+  isInteractionEnabled: boolean;
   emptyState: AgentChatEmptyStateModel | null;
   isStarting: boolean;
   isSending: boolean;
