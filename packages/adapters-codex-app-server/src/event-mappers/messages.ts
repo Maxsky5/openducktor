@@ -6,7 +6,6 @@ import {
 import {
   codexItemId,
   codexItemTypeMatches,
-  codexUserInputsFromItem,
   terminalHistoryPart,
 } from "../codex-app-server-transcript";
 import type { CodexMappingResult } from "../codex-canonical-events";
@@ -17,6 +16,7 @@ import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
 } from "../codex-user-input-display";
+import { codexUserInputsFromItem } from "../codex-user-inputs";
 
 export const userMessageMapper: CodexEventMapper = {
   name: "user_message",

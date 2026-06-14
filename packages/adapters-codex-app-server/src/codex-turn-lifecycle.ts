@@ -5,8 +5,8 @@ import {
   type CodexThreadStatusSnapshot,
   codexThreadStatusSnapshot,
 } from "./codex-app-server-threads";
-import { toCodexTurnInputList } from "./codex-app-server-transcript";
 import type { CodexSessionLookup } from "./codex-local-session-state";
+import { toCodexTurnInputList } from "./codex-user-inputs";
 import { requireModelSelection, toTransportModelSelection } from "./model-catalog";
 import type { CodexAppServerClient, CodexSessionState } from "./types";
 
