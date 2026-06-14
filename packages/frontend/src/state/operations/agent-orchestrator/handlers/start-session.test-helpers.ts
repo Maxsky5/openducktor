@@ -10,7 +10,6 @@ const ensureRuntimeWithKind = async (
   const workingDirectory = options?.targetWorkingDirectory ?? "/tmp/repo";
 
   return {
-    kind: runtimeKind,
     runtimeKind,
     workingDirectory,
   };

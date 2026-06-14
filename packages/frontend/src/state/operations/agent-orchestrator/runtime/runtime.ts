@@ -17,7 +17,6 @@ import { runOrchestratorSideEffect } from "../support/async-side-effects";
 
 export type RuntimeInfo = {
   runtimeKind: RuntimeKind;
-  kind?: string;
   workingDirectory: string;
 };
 
