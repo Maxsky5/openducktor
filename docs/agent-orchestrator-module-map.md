@@ -9,12 +9,11 @@ and selected-session UI derives loading state from one selected route.
 
 ## Owners
 
-### Repo Session Read Model
+### Repo Session Projection
 
 Files:
 
 - `session-read-model/repo-session-read-model.ts`
-- `lifecycle/load-sessions.ts`
 - `hooks/use-repo-session-read-model-effects.ts`
 
 Owns:
@@ -22,13 +21,10 @@ Owns:
 - reading persisted task session records supplied by the task-session-record query
 - scanning runtime presence by repo path, runtime kind, and working directory
 - merging persisted records plus runtime presence into `AgentSessionState`
-- subscribing to live sessions returned by runtime presence
-- loading initial history only for requested sessions or live sessions whose history has not been requested
-- passing the same transient runtime prompt context to every initial history load,
-  whether it came from repo startup or an explicit selected-session load
+- returning runtime session refs that should be observed
 
 Invariant: missing runtime presence means the runtime did not report the session
-as live. The read model keeps durable session identity plus already loaded
+as live. The projection keeps durable session identity plus already loaded
 transcript history, but it must not preserve live-only status, pending input, or
 streaming state without runtime presence. Runtime events own live state only
 after presence proves the session is live and a listener is running.
@@ -38,7 +34,25 @@ Must not own:
 - model catalog, slash commands, file search, diffs, or other active-session reads
 - runtime startup policy
 - page navigation state
+- history target selection or history loading
 - permission/question polling
+
+### Session History Loading
+
+Files:
+
+- `lifecycle/load-sessions.ts`
+- `lifecycle/session-history-loader.ts`
+- `lifecycle/session-history-runtime-context.ts`
+
+Owns:
+
+- observing projected runtime session refs
+- selecting history loads for requested sessions or observed sessions whose
+  history has not been requested
+- passing transient runtime prompt context to history loads without storing it in
+  session state
+- merging runtime history into transcript messages without erasing live messages
 
 ### Event Stream
 
@@ -261,6 +275,8 @@ Use these compact tests as the first-line safety net:
 - Do not make the repo session read model prepare runtime sessions. It may
   project persisted records plus presence snapshots and hand live refs to the
   session observer only.
+- Do not make the repo session read model select transcript/history load
+  targets. Session history loading owns that policy.
 - Do not add runtime transcript open/attach operations to the app-state operations
   context. Readonly transcripts load local history and reply with runtime context refs.
 - Do not load selected transcript history by refetching task session records.
