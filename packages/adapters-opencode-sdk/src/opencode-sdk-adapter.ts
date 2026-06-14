@@ -17,7 +17,6 @@ import type {
   ListAgentModelsInput,
   ListLiveAgentSessionsInput,
   ListSessionPresenceInput,
-  LiveAgentSessionSnapshot,
   LiveAgentSessionSummary,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
@@ -61,8 +60,10 @@ import {
   seedHistoryUserMessage,
 } from "./event-stream/message-events/user-emitter";
 import {
+  applyOpencodeInFlightSendToPresenceSnapshot,
+  findOpencodeLocalPresenceSnapshot,
   listOpencodeLiveAgentSessionSnapshots,
-  normalizeSessionDirectory,
+  listOpencodeLocalPresenceSnapshots,
 } from "./live-session-snapshots";
 import { sendUserMessage } from "./message-execution";
 import {
@@ -78,8 +79,6 @@ import {
 } from "./runtime-connection";
 import {
   finishUserMessageSend,
-  isLocalSessionBusy,
-  isUserMessageSendInFlight,
   markStreamTurnIdle,
   startUserMessageSend,
 } from "./session-activity";
@@ -253,83 +252,6 @@ export class OpencodeSdkAdapter
 
   listRuntimeDefinitions(): RuntimeDescriptor[] {
     return [this.getRuntimeDefinition()];
-  }
-
-  private toLocalPresenceSnapshot(session: SessionRecord): LiveAgentSessionSnapshot {
-    return {
-      externalSessionId: session.externalSessionId,
-      title: session.input.role
-        ? formatWorkflowAgentSessionTitle(session.input.role, session.input.taskId)
-        : "OpenCode",
-      workingDirectory: session.input.workingDirectory,
-      startedAt: session.summary.startedAt,
-      status: isLocalSessionBusy(session) ? { type: "busy" } : { type: "idle" },
-      pendingApprovals: [],
-      pendingQuestions: [],
-    };
-  }
-
-  private applyInFlightSendToPresenceSnapshot(
-    runtimeEndpoint: string,
-    snapshot: LiveAgentSessionSnapshot,
-  ): LiveAgentSessionSnapshot {
-    const localSession = this.sessions.get(snapshot.externalSessionId);
-    if (
-      !localSession ||
-      localSession.eventTransportKey !== runtimeEndpoint ||
-      !isUserMessageSendInFlight(localSession) ||
-      snapshot.status.type !== "idle"
-    ) {
-      return snapshot;
-    }
-
-    return {
-      ...snapshot,
-      status: { type: "busy" },
-    };
-  }
-
-  private listLocalPresenceSnapshots(input: {
-    runtimeEndpoint: string;
-    repoPath: string;
-    runtimeKind: string;
-    directories?: string[];
-    existingExternalSessionIds: Set<string>;
-  }): LiveAgentSessionSnapshot[] {
-    const requestedDirectorySet =
-      input.directories && input.directories.length > 0
-        ? new Set(
-            input.directories
-              .map((directory) => normalizeSessionDirectory(directory))
-              .filter((directory): directory is string => directory !== undefined),
-          )
-        : null;
-
-    const snapshots: LiveAgentSessionSnapshot[] = [];
-    for (const session of this.sessions.values()) {
-      if (
-        input.existingExternalSessionIds.has(session.externalSessionId) ||
-        session.eventTransportKey !== input.runtimeEndpoint ||
-        session.input.repoPath !== input.repoPath ||
-        session.input.runtimeKind !== input.runtimeKind
-      ) {
-        continue;
-      }
-
-      const workingDirectory = normalizeSessionDirectory(session.input.workingDirectory);
-      if (!workingDirectory) {
-        continue;
-      }
-      if (requestedDirectorySet && !requestedDirectorySet.has(workingDirectory)) {
-        continue;
-      }
-
-      snapshots.push({
-        ...this.toLocalPresenceSnapshot(session),
-        workingDirectory,
-      });
-    }
-    return snapshots;
   }
 
   async startSession(input: StartAgentSessionInput): Promise<AgentSessionSummary> {
@@ -551,7 +473,8 @@ export class OpencodeSdkAdapter
     const existingExternalSessionIds = new Set(
       snapshots.map((snapshot) => snapshot.externalSessionId),
     );
-    const localSnapshots = this.listLocalPresenceSnapshots({
+    const localSnapshots = listOpencodeLocalPresenceSnapshots({
+      sessions: this.sessions,
       runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
       repoPath: input.repoPath,
       runtimeKind: input.runtimeKind,
@@ -566,10 +489,11 @@ export class OpencodeSdkAdapter
           workingDirectory: snapshot.workingDirectory,
           externalSessionId: snapshot.externalSessionId,
         },
-        snapshot: this.applyInFlightSendToPresenceSnapshot(
-          runtimeClientInput.runtimeEndpoint,
+        snapshot: applyOpencodeInFlightSendToPresenceSnapshot({
+          sessions: this.sessions,
+          runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
           snapshot,
-        ),
+        }),
       }),
     );
   }
@@ -591,22 +515,15 @@ export class OpencodeSdkAdapter
     const scannedSnapshot =
       snapshots.find((candidate) => candidate.externalSessionId === input.externalSessionId) ??
       null;
-    const localSession = this.sessions.get(input.externalSessionId);
-    const localSessionWorkingDirectory = normalizeSessionDirectory(
-      localSession?.input.workingDirectory,
-    );
-    const requestedWorkingDirectory = normalizeSessionDirectory(input.workingDirectory);
-    const matchingLocalSession =
-      localSession?.eventTransportKey === runtimeClientInput.runtimeEndpoint &&
-      localSession.input.repoPath === input.repoPath &&
-      localSession.input.runtimeKind === input.runtimeKind &&
-      localSessionWorkingDirectory !== undefined &&
-      localSessionWorkingDirectory === requestedWorkingDirectory
-        ? localSession
-        : null;
-    const snapshot =
-      scannedSnapshot ??
-      (matchingLocalSession ? this.toLocalPresenceSnapshot(matchingLocalSession) : null);
+    const localSnapshot = findOpencodeLocalPresenceSnapshot({
+      sessions: this.sessions,
+      runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
+      repoPath: input.repoPath,
+      runtimeKind: input.runtimeKind,
+      workingDirectory: input.workingDirectory,
+      externalSessionId: input.externalSessionId,
+    });
+    const snapshot = scannedSnapshot ?? localSnapshot;
     if (!snapshot) {
       return toAgentSessionPresenceSnapshotFromLiveSnapshot({
         ref: input,
@@ -615,16 +532,19 @@ export class OpencodeSdkAdapter
     }
 
     const canonicalWorkingDirectory =
-      scannedSnapshot?.workingDirectory ?? localSessionWorkingDirectory ?? input.workingDirectory;
+      scannedSnapshot?.workingDirectory ??
+      localSnapshot?.workingDirectory ??
+      input.workingDirectory;
     return toAgentSessionPresenceSnapshotFromLiveSnapshot({
       ref: {
         ...input,
         workingDirectory: canonicalWorkingDirectory,
       },
-      snapshot: this.applyInFlightSendToPresenceSnapshot(
-        runtimeClientInput.runtimeEndpoint,
+      snapshot: applyOpencodeInFlightSendToPresenceSnapshot({
+        sessions: this.sessions,
+        runtimeEndpoint: runtimeClientInput.runtimeEndpoint,
         snapshot,
-      ),
+      }),
     });
   }
 
