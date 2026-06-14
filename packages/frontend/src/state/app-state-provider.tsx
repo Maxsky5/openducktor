@@ -62,8 +62,8 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
     [runtimeCatalogOperations],
   );
   const startRepoRuntime = useCallback(
-    (repoPath: string, runtimeKind: RuntimeKind) =>
-      ensureRuntimeAndInvalidateReadinessQueries({
+    async (repoPath: string, runtimeKind: RuntimeKind): Promise<void> => {
+      await ensureRuntimeAndInvalidateReadinessQueries({
         repoPath,
         runtimeKind,
         ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
@@ -71,7 +71,8 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
             repoPath: nextRepoPath,
             runtimeKind: nextRuntimeKind,
           }),
-      }),
+      });
+    },
     [runtimeRegistry],
   );
 

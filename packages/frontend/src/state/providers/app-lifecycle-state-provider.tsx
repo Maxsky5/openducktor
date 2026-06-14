@@ -1,4 +1,4 @@
-import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeKind } from "@openducktor/contracts";
 import type { PropsWithChildren, ReactElement } from "react";
 import {
   useChecksOperationsContext,
@@ -11,7 +11,7 @@ import {
 import { useAppLifecycle } from "../lifecycle/use-app-lifecycle";
 
 type AppLifecycleStateProviderProps = PropsWithChildren<{
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
+  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<void>;
 }>;
 
 export function AppLifecycleStateProvider({

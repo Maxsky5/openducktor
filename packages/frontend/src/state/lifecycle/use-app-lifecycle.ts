@@ -2,7 +2,6 @@ import {
   externalTaskSyncEventSchema,
   type RepoStoreHealth,
   type RuntimeDescriptor,
-  type RuntimeInstanceSummary,
   type RuntimeKind,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
@@ -58,7 +57,7 @@ type UseAppLifecycleArgs = {
     taskIdOrIds?: string | string[],
     options?: TaskDataRefreshOptions,
   ) => Promise<void>;
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<RuntimeInstanceSummary>;
+  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<void>;
   clearBranchData: () => void;
   taskStorePreparationToastDelayMs?: number;
 };

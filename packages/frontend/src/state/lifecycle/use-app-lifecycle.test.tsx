@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
-  type RuntimeInstanceSummary,
   type RuntimeKind,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
@@ -66,25 +65,6 @@ const makeUnavailableTaskStoreCheck = (): TaskStoreCheck =>
     },
   });
 
-const makeRuntimeSummary = (repoPath: string, runtimeKind: RuntimeKind): RuntimeInstanceSummary => {
-  const descriptor =
-    runtimeKind === "codex" ? CODEX_RUNTIME_DESCRIPTOR : OPENCODE_RUNTIME_DESCRIPTOR;
-  return {
-    kind: runtimeKind,
-    runtimeId: `${runtimeKind}-runtime`,
-    repoPath,
-    taskId: null,
-    role: "workspace",
-    workingDirectory: repoPath,
-    runtimeRoute:
-      runtimeKind === "codex"
-        ? { type: "stdio", identity: `${runtimeKind}-runtime` }
-        : { type: "local_http", endpoint: "http://127.0.0.1:3030" },
-    startedAt: "2026-02-22T08:00:00.000Z",
-    descriptor,
-  };
-};
-
 const createActiveWorkspace = (
   repoPath: string,
   workspaceId = repoPath.replace(/^\//, "").replaceAll("/", "-"),
@@ -122,12 +102,7 @@ const normalizeHookArgs = ({
   ...rest,
   runtimeDefinitions: rest.runtimeDefinitions ?? [],
   refreshRepoRuntimeHealthForRepo: rest.refreshRepoRuntimeHealthForRepo ?? mock(async () => ({})),
-  startRepoRuntime:
-    rest.startRepoRuntime ??
-    mock(
-      async (repoPath, runtimeKind): Promise<RuntimeInstanceSummary> =>
-        makeRuntimeSummary(repoPath, runtimeKind),
-    ),
+  startRepoRuntime: rest.startRepoRuntime ?? mock(async () => {}),
   activeWorkspace: activeWorkspace ?? (activeRepo ? createActiveWorkspace(activeRepo) : null),
 });
 beforeEach(() => {
@@ -205,7 +180,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
-    const runtimeDeferred = createDeferred<RuntimeInstanceSummary>();
+    const runtimeDeferred = createDeferred<void>();
     const startRepoRuntime = mock(async (_repoPath: string, _runtimeKind: string) => {
       return runtimeDeferred.promise;
     });
@@ -248,7 +223,7 @@ describe("useAppLifecycle", () => {
       });
       expect(refreshRepoRuntimeHealthForRepo).toHaveBeenCalledWith("/repo", true);
     } finally {
-      runtimeDeferred.resolve(makeRuntimeSummary("/repo", "opencode"));
+      runtimeDeferred.resolve(undefined);
       await harness.unmount();
     }
   });
@@ -257,8 +232,8 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
-    const opencodeStartup = createDeferred<RuntimeInstanceSummary>();
-    const codexStartup = createDeferred<RuntimeInstanceSummary>();
+    const opencodeStartup = createDeferred<void>();
+    const codexStartup = createDeferred<void>();
     const startRepoRuntime = mock((_repoPath: string, runtimeKind: RuntimeKind) => {
       return runtimeKind === "opencode" ? opencodeStartup.promise : codexStartup.promise;
     });
@@ -321,7 +296,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
-    const startup = createDeferred<RuntimeInstanceSummary>();
+    const startup = createDeferred<void>();
     const refreshRepoRuntimeHealthForRepo = mock(async () => {
       throw new CancelledError();
     });
@@ -359,7 +334,7 @@ describe("useAppLifecycle", () => {
         toastError.mock.calls.some(([title]) => title === "Runtime diagnostics unavailable"),
       ).toBe(false);
     } finally {
-      startup.resolve(makeRuntimeSummary("/repo", "opencode"));
+      startup.resolve(undefined);
       await harness.unmount();
     }
   });
@@ -368,7 +343,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
-    const startup = createDeferred<RuntimeInstanceSummary>();
+    const startup = createDeferred<void>();
     const refreshRepoRuntimeHealthForRepo = mock(async () => {
       throw new Error("diagnostics transport failed");
     });
@@ -408,7 +383,7 @@ describe("useAppLifecycle", () => {
         description: "diagnostics transport failed",
       });
     } finally {
-      startup.resolve(makeRuntimeSummary("/repo", "opencode"));
+      startup.resolve(undefined);
       await harness.unmount();
     }
   });
@@ -417,9 +392,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
-    const startRepoRuntime = mock(async (repoPath: string, runtimeKind: RuntimeKind) =>
-      makeRuntimeSummary(repoPath, runtimeKind),
-    );
+    const startRepoRuntime = mock(async () => {});
     const baseArgs: HookArgs = {
       activeRepo: "/repo",
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
@@ -466,9 +439,7 @@ describe("useAppLifecycle", () => {
     const { useAppLifecycle } = await import("./use-app-lifecycle");
     type HookArgs = LegacyUseAppLifecycleArgs;
 
-    const startRepoRuntime = mock(async (repoPath: string, runtimeKind: RuntimeKind) =>
-      makeRuntimeSummary(repoPath, runtimeKind),
-    );
+    const startRepoRuntime = mock(async () => {});
     const refreshRepoRuntimeHealthForRepo = mock(async () => ({}));
     const baseArgs: HookArgs = {
       activeRepo: "/repo",
