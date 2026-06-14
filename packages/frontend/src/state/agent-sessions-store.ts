@@ -1,4 +1,9 @@
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  type AgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSession,
+  listAgentSessions,
+} from "@/state/agent-session-collection";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
@@ -6,7 +11,6 @@ import type {
 } from "@/types/agent-orchestrator";
 import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestrator/support/workflow-session";
 
-export type AgentSessionsById = Record<string, AgentSessionState>;
 export type AgentSessionSummary = Pick<
   AgentSessionState,
   | "externalSessionId"
@@ -57,9 +61,9 @@ export type AgentSessionsStore = {
   getSessionSummariesSnapshot: () => AgentSessionSummary[];
   getActivitySessionsSnapshot: () => AgentActivitySessionSummary[];
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
-  getSessionsByIdSnapshot: () => AgentSessionsById;
+  getSessionCollectionSnapshot: () => AgentSessionCollection;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
-  setSessionsById: (nextSessionsById: AgentSessionsById) => void;
+  setSessionCollection: (nextCollection: AgentSessionCollection) => void;
   resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
@@ -156,7 +160,7 @@ export const createAgentSessionsStore = (
   initialWorkspaceRepoPath: string | null = null,
 ): AgentSessionsStore => {
   let workspaceRepoPath = initialWorkspaceRepoPath;
-  let sessionsById: AgentSessionsById = {};
+  let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
   let sessions: AgentSessionState[] = [];
   let sessionSummaries: AgentSessionSummary[] = [];
   let activitySessionSummaries: AgentActivitySessionSummary[] = [];
@@ -207,16 +211,10 @@ export const createAgentSessionsStore = (
     getSessionSummariesSnapshot: () => sessionSummaries,
     getActivitySessionsSnapshot: () => activitySessionSummaries,
     getActivitySnapshot: () => activitySnapshot,
-    getSessionsByIdSnapshot: () => sessionsById,
-    getSessionSnapshot: (identity) => {
-      if (!identity) {
-        return null;
-      }
-      const session = sessionsById[identity.externalSessionId] ?? null;
-      return matchesAgentSessionIdentity(session, identity) ? session : null;
-    },
-    setSessionsById: (nextSessionsById) => {
-      if (nextSessionsById === sessionsById) {
+    getSessionCollectionSnapshot: () => sessionCollection,
+    getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
+    setSessionCollection: (nextCollection) => {
+      if (nextCollection === sessionCollection) {
         return;
       }
 
@@ -226,7 +224,7 @@ export const createAgentSessionsStore = (
       const previousActivitySummaryById = new Map(
         activitySessionSummaries.map((summary) => [summary.externalSessionId, summary]),
       );
-      const nextSessions = Object.values(nextSessionsById).sort(sortByStartedAtDesc);
+      const nextSessions = listAgentSessions(nextCollection).sort(sortByStartedAtDesc);
       const nextSessionSummaries = nextSessions.flatMap((session) => {
         if (!shouldIncludeAgentSessionInActivity(session)) {
           return [];
@@ -248,7 +246,7 @@ export const createAgentSessionsStore = (
           : [nextSummary];
       });
 
-      sessionsById = nextSessionsById;
+      sessionCollection = nextCollection;
       sessions = nextSessions;
       sessionSummaries = areArraysReferenceEqual(sessionSummaries, nextSessionSummaries)
         ? sessionSummaries
@@ -266,7 +264,7 @@ export const createAgentSessionsStore = (
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       workspaceRepoPath = nextWorkspaceRepoPath;
-      sessionsById = {};
+      sessionCollection = emptyAgentSessionCollection();
       sessions = [];
       sessionSummaries = [];
       activitySessionSummaries = [];

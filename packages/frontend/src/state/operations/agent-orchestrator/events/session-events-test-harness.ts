@@ -3,6 +3,11 @@ import {
   type AgentSessionTodoItem,
   buildReadOnlyPermissionRejectionMessage,
 } from "@openducktor/core";
+import {
+  type AgentSessionCollection,
+  createAgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+} from "@/state/agent-session-collection";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
   lastSessionMessageForTest,
@@ -63,10 +68,10 @@ export const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentS
 });
 
 export const getSession = (
-  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ): AgentSessionState => {
-  const session = sessionsRef.current[externalSessionId];
+  const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
   if (!session) {
     throw new Error(`Expected session ${externalSessionId}`);
   }
@@ -74,7 +79,7 @@ export const getSession = (
 };
 
 export const getSessionMessages = (
-  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
@@ -115,6 +120,9 @@ export const listenToAgentSessionEvents = (
   } = params;
   const targetExternalSessionId =
     providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
+  params.sessionsRef.current = createAgentSessionCollection(
+    Object.values(params.sessionsRef.current),
+  );
   const session = getSession(params.sessionsRef, targetExternalSessionId);
   const sessionRef = providedSessionRef ?? {
     externalSessionId: targetExternalSessionId,
@@ -144,7 +152,7 @@ export const listenToAgentSessionEvents = (
 };
 
 export const getLastSessionMessage = (
-  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ) => lastSessionMessageForTest(getSession(sessionsRef, externalSessionId));
 

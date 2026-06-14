@@ -7,6 +7,12 @@ import {
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import {
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  listAgentSessions,
+  removeAgentSessionsByExternalSessionIds,
+} from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { listenToAgentSessionEvents } from "../events/session-events";
 import {
@@ -27,12 +33,8 @@ type UseAgentSessionListenersArgs = {
   workspaceId: string | null;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   refBridges: RefBridges;
-  sessionsRef: { current: Record<string, AgentSessionState> };
-  commitSessions: (
-    updater:
-      | Record<string, AgentSessionState>
-      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-  ) => void;
+  sessionsRef: { current: AgentSessionCollection };
+  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   updateSession: UpdateAgentSession;
   queryClient: QueryClient;
   recordTurnActivityTimestamp: (externalSessionId: string, timestamp: string | number) => void;
@@ -112,15 +114,7 @@ export const useAgentSessionListeners = ({
       }
 
       commitSessions((current) => {
-        let hasChanges = false;
-        const next = { ...current };
-        for (const externalSessionId of externalSessionIds) {
-          if (next[externalSessionId]) {
-            delete next[externalSessionId];
-            hasChanges = true;
-          }
-        }
-        return hasChanges ? next : current;
+        return removeAgentSessionsByExternalSessionIds(current, externalSessionIds);
       });
     },
     [commitSessions, refBridges, sessionListenerRegistryRef],
@@ -136,7 +130,7 @@ export const useAgentSessionListeners = ({
   const removeAgentSessions = useCallback(
     async ({ taskId, roles }: { taskId: string; roles?: AgentRole[] }): Promise<void> => {
       const matchingRoles = roles ? new Set(roles) : null;
-      const matchingSessions = Object.values(sessionsRef.current).filter(
+      const matchingSessions = listAgentSessions(sessionsRef.current).filter(
         (session) =>
           session.taskId === taskId &&
           (matchingRoles === null || (session.role !== null && matchingRoles.has(session.role))),

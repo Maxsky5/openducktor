@@ -162,7 +162,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       expect(unsubscribeCalls).toEqual(["first", "second"]);
-      expect(harness.getLatest().sessionsById).toEqual({});
+      expect(harness.getLatest().sessionCollection).toEqual({});
       expect(harness.getLatest().refBridges.sessionListenerRegistryRef.current.size).toBe(0);
     } finally {
       await harness.unmount();

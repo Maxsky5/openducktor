@@ -10,7 +10,11 @@ import type {
   AgentRole,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionCollection,
+  AgentSessionCollectionUpdater,
+} from "@/state/agent-session-collection";
+import type { AgentSessionLoadOptions } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ListenToAgentSession } from "../support/session-runtime-ref";
@@ -38,14 +42,9 @@ export type StartAgentSessionInput =
       sourceExternalSessionId: string;
     };
 
-export type SessionStateById = Record<string, AgentSessionState>;
-export type SessionStateUpdater =
-  | SessionStateById
-  | ((current: SessionStateById) => SessionStateById);
-
 export type SessionDependencies = {
-  setSessionsById: (updater: SessionStateUpdater) => void;
-  sessionsRef: { current: SessionStateById };
+  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  sessionsRef: { current: AgentSessionCollection };
   inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<string>> };
   loadAgentSessions: (taskId: string, options?: AgentSessionLoadOptions) => Promise<void>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;

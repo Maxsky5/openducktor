@@ -3,6 +3,15 @@ import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentModelSelection } from "@openducktor/core";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import {
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  createAgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+  listAgentSessions,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { withCapturedConsole } from "@/test-utils/console-capture";
 import {
@@ -19,6 +28,15 @@ import {
 } from "./start-session.test-helpers";
 
 type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
+
+const getSession = (
+  sessionCollection: AgentSessionCollection,
+  externalSessionId: string,
+): AgentSessionState | undefined =>
+  (getAgentSessionByExternalSessionId(
+    sessionCollection,
+    externalSessionId,
+  ) as AgentSessionState | null) ?? undefined;
 
 const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
   return createStartAgentSession(toStartSessionDependencies(deps));
@@ -114,7 +132,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: null,
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [] },
       repoEpochRef: { current: 0 },
@@ -155,7 +173,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
@@ -218,7 +236,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -286,7 +304,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
@@ -333,8 +351,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
   test("waits for the initial session snapshot to persist before resolving", async () => {
     const persistDeferred = createDeferred<void>();
-    let sessionsById: Record<string, AgentSessionState> = {};
-    const sessionsRef = { current: sessionsById };
+    let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
+    const sessionsRef = { current: sessionCollection };
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
@@ -348,9 +366,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
-        sessionsRef.current = sessionsById;
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionsRef.current = sessionCollection;
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
@@ -383,10 +401,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         selectedModel: PLANNER_SELECTION,
       });
 
-      await waitForSessionCount(() => Object.values(sessionsById).length, 1);
+      await waitForSessionCount(() => listAgentSessions(sessionCollection).length, 1);
 
-      expect(Object.values(sessionsById)).toHaveLength(1);
-      expect(Object.values(sessionsById)[0]?.status).toBe("starting");
+      expect(listAgentSessions(sessionCollection)).toHaveLength(1);
+      expect(listAgentSessions(sessionCollection)[0]?.status).toBe("starting");
       await expect(withTimeout(startPromise, 25)).resolves.toBe("timeout");
 
       persistDeferred.resolve();
@@ -399,9 +417,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("keeps fresh sessions starting after listener start", async () => {
-    let sessionsById: Record<string, AgentSessionState> = {};
+    let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
     const lifecycleEvents: string[] = [];
-    const sessionsRef = { current: sessionsById };
+    const sessionsRef = { current: sessionCollection };
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
     adapter.startSession = async () => ({
@@ -415,10 +433,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
-        sessionsRef.current = sessionsById;
-        lifecycleEvents.push(`status:${sessionsById["planner-external"]?.status ?? "missing"}`);
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionsRef.current = sessionCollection;
+        lifecycleEvents.push(
+          `status:${getSession(sessionCollection, "planner-external")?.status ?? "missing"}`,
+        );
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
@@ -453,7 +473,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         }),
       ).resolves.toBe("planner-external");
 
-      expect(sessionsById["planner-external"]?.status).toBe("starting");
+      expect(getSession(sessionCollection, "planner-external")?.status).toBe("starting");
       expect(lifecycleEvents).toContain("listener:started");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
@@ -470,7 +490,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         activeWorkspaceId: "workspace-1",
         repoEpochRef: { current: 1 },
         currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-        setSessionsById: () => {},
+        setSessionCollection: () => {},
         sessionsRef: { current: {} },
         inFlightStartsByWorkspaceTaskRef: { current: new Map() },
         loadAgentSessions: async () => {},
@@ -530,7 +550,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("stops and removes the started session when initial persistence fails", async () => {
     const stoppedSessionIds: string[] = [];
     const listenedSessionIds: string[] = [];
-    const sessionsRef = { current: {} as Record<string, AgentSessionState> };
+    const sessionsRef = { current: emptyAgentSessionCollection() };
     const adapter = new OpencodeSdkAdapter();
     adapter.startSession = async () => ({
       runtimeKind: "opencode",
@@ -548,7 +568,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
+      setSessionCollection: (updater) => {
         sessionsRef.current =
           typeof updater === "function" ? updater(sessionsRef.current) : updater;
       },
@@ -595,7 +615,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
     expect(stoppedSessionIds).toEqual(["external-session-persist-fail"]);
     expect(listenedSessionIds).toEqual([]);
-    expect(sessionsRef.current["external-session-persist-fail"]).toBeUndefined();
+    expect(getSession(sessionsRef.current, "external-session-persist-fail")).toBeUndefined();
   });
 
   test("reuses most recent in-memory session for same task and role", async () => {
@@ -609,7 +629,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           "external-newer": {
@@ -679,7 +699,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           latest: {
@@ -781,7 +801,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           stale: {
@@ -853,7 +873,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           "external-chosen": {
@@ -921,9 +941,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       variant: "medium",
       profileId: "Sisyphus",
     };
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        "external-reused": {
+    const sessionsRef: { current: AgentSessionCollection } = {
+      current: createAgentSessionCollection([
+        {
           runtimeKind: "opencode",
           externalSessionId: "external-reused",
           taskId: "task-1",
@@ -941,13 +961,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           pendingQuestions: [],
           selectedModel: existingSelectedModel,
         },
-      },
+      ]),
     };
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
+    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
       sessionsRef.current = typeof updater === "function" ? updater(sessionsRef.current) : updater;
     };
 
@@ -957,7 +973,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById,
+      setSessionCollection,
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
@@ -991,7 +1007,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
           sourceExternalSessionId: "external-reused",
         }),
       ).resolves.toBe("external-reused");
-      expect(sessionsRef.current["external-reused"]?.selectedModel).toEqual(existingSelectedModel);
+      expect(getSession(sessionsRef.current, "external-reused")?.selectedModel).toEqual(
+        existingSelectedModel,
+      );
       expect(persistedSessions).toBe(0);
     } finally {
       host.agentSessionsList = originalAgentSessionsList;
@@ -1027,7 +1045,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           "external-reused": {
@@ -1122,7 +1140,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           "external-reused": {
@@ -1226,7 +1244,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: {
         current: {
           existingBuild: {
@@ -1304,9 +1322,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
-      current: {
-        existingSpec: {
+    const sessionsRef: { current: AgentSessionCollection } = {
+      current: createAgentSessionCollection([
+        {
           runtimeKind: "opencode",
           externalSessionId: "existing-spec-ext",
           taskId: "task-1",
@@ -1324,13 +1342,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
           pendingQuestions: [],
           selectedModel: null,
         },
-      },
+      ]),
     };
 
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef,
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -1407,7 +1425,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
@@ -1467,8 +1485,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const persistedSnapshots: AgentSessionRecord[] = [];
-    let sessionsById: Record<string, AgentSessionState> = {
-      "external-source-build": {
+    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
+      {
         runtimeKind: "opencode",
         externalSessionId: "external-source-build",
         taskId: "task-1",
@@ -1491,7 +1509,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
           profileId: "builder",
         },
       },
-    };
+    ]);
 
     adapter.forkSession = async (input) => {
       expect(input.taskId).toBe("task-1");
@@ -1536,10 +1554,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
       },
-      sessionsRef: { current: sessionsById },
+      sessionsRef: { current: sessionCollection },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -1572,12 +1590,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
       });
 
       expect(externalSessionId).toBe("external-forked-pr-session");
-      expect(sessionsById["external-forked-pr-session"]?.workingDirectory).toBe(
+      expect(getSession(sessionCollection, "external-forked-pr-session")?.workingDirectory).toBe(
         "/tmp/repo/worktree",
       );
-      const forkedMessages = sessionsById["external-forked-pr-session"]
-        ? sessionMessagesToArray(sessionsById["external-forked-pr-session"])
-        : [];
+      const forkedSession = getSession(sessionCollection, "external-forked-pr-session");
+      const forkedMessages = forkedSession ? sessionMessagesToArray(forkedSession) : [];
       expect(forkedMessages.slice(0, 3)).toEqual([
         {
           id: "history:system-prompt:external-forked-pr-session",
@@ -1621,8 +1638,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalForkSession = adapter.forkSession;
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const loadAgentSessionsCalls: Array<{ taskId: string; targetExternalSessionId?: string }> = [];
-    let sessionsById: Record<string, AgentSessionState> = {
-      "external-source-build": {
+    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
+      {
         runtimeKind: "opencode",
         externalSessionId: "external-source-build",
         taskId: "task-1",
@@ -1641,7 +1658,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         pendingQuestions: [],
         selectedModel: BUILD_SELECTION,
       },
-    };
+    ]);
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
@@ -1662,13 +1679,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
     ];
 
-    const sessionsRef = { current: sessionsById };
+    const sessionsRef = { current: sessionCollection };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
-        sessionsRef.current = sessionsById;
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionsRef.current = sessionCollection;
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
@@ -1690,19 +1707,16 @@ describe("agent-orchestrator/handlers/start-session", () => {
         loadAgentSessionsCalls.push(
           targetExternalSessionId ? { taskId, targetExternalSessionId } : { taskId },
         );
-        const sourceBuild = sessionsById["external-source-build"];
+        const sourceBuild = getSession(sessionCollection, "external-source-build");
         if (!sourceBuild) {
           throw new Error("Missing external-source-build session");
         }
-        sessionsById = {
-          ...sessionsById,
-          "external-source-build": {
-            ...sourceBuild,
-            status: "idle",
-            messages: [],
-          },
-        };
-        sessionsRef.current = sessionsById;
+        sessionCollection = replaceAgentSession(sessionCollection, {
+          ...sourceBuild,
+          status: "idle",
+          messages: [],
+        });
+        sessionsRef.current = sessionCollection;
       },
       refreshTaskData: async () => {},
       persistSessionRecord: async () => {},
@@ -1725,9 +1739,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
           targetExternalSessionId: "external-source-build",
         },
       ]);
-      const forkedMessages = sessionsById["external-forked-from-loaded-source"]
-        ? sessionMessagesToArray(sessionsById["external-forked-from-loaded-source"])
-        : [];
+      const forkedSession = getSession(sessionCollection, "external-forked-from-loaded-source");
+      const forkedMessages = forkedSession ? sessionMessagesToArray(forkedSession) : [];
       expect(forkedMessages.slice(0, 2)).toEqual([
         {
           id: "history:system-prompt:external-forked-from-loaded-source",
@@ -1757,8 +1770,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
-    let sessionsById: Record<string, AgentSessionState> = {
-      "external-source-build": {
+    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
+      {
         runtimeKind: "opencode",
         externalSessionId: "external-source-build",
         taskId: "task-1",
@@ -1776,7 +1789,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         pendingQuestions: [],
         selectedModel: BUILD_SELECTION,
       },
-    };
+    ]);
 
     adapter.forkSession = async (input) => {
       forkCalls.push(input);
@@ -1795,13 +1808,13 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return [];
     };
 
-    const sessionsRef = { current: sessionsById };
+    const sessionsRef = { current: sessionCollection };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
-        sessionsRef.current = sessionsById;
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionsRef.current = sessionCollection;
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
@@ -1844,7 +1857,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const adapter = new OpencodeSdkAdapter();
     const originalForkSession = adapter.forkSession;
     const forkCalls: unknown[] = [];
-    const sessionsRef: { current: Record<string, AgentSessionState> } = {
+    const sessionsRef: { current: AgentSessionCollection } = {
       current: {
         "external-source-build": {
           externalSessionId: "external-source-build",
@@ -1879,7 +1892,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef,
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -1925,8 +1938,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const originalStopSession = adapter.stopSession;
     const stoppedSessionIds: string[] = [];
-    let sessionsById: Record<string, AgentSessionState> = {
-      "external-source-build": {
+    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
+      {
         runtimeKind: "opencode",
         externalSessionId: "external-source-build",
         taskId: "task-1",
@@ -1945,7 +1958,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         pendingQuestions: [],
         selectedModel: BUILD_SELECTION,
       },
-    };
+    ]);
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
@@ -1966,10 +1979,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
       },
-      sessionsRef: { current: sessionsById },
+      sessionsRef: { current: sessionCollection },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
@@ -2003,7 +2016,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         'Failed to initialize started session "external-fork-history-failure": history unavailable. The started session was stopped before local registration.',
       );
       expect(stoppedSessionIds).toEqual(["external-fork-history-failure"]);
-      expect(sessionsById["external-fork-history-failure"]).toBeUndefined();
+      expect(getSession(sessionCollection, "external-fork-history-failure")).toBeUndefined();
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -2018,8 +2031,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalLoadSessionHistory = adapter.loadSessionHistory;
     const originalStopSession = adapter.stopSession;
     const stoppedSessionIds: string[] = [];
-    let sessionsById: Record<string, AgentSessionState> = {
-      "external-source-build": {
+    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
+      {
         runtimeKind: "opencode",
         externalSessionId: "external-source-build",
         taskId: "task-1",
@@ -2038,8 +2051,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
         pendingQuestions: [],
         selectedModel: BUILD_SELECTION,
       },
-    };
-    const sessionsRef = { current: sessionsById };
+    ]);
+    const sessionsRef = { current: sessionCollection };
 
     adapter.forkSession = async () => ({
       runtimeKind: "opencode",
@@ -2071,9 +2084,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: (updater) => {
-        sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
-        sessionsRef.current = sessionsById;
+      setSessionCollection: (updater) => {
+        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+        sessionsRef.current = sessionCollection;
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
@@ -2107,7 +2120,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         }),
       ).rejects.toThrow("Workspace changed while starting session.");
       expect(stoppedSessionIds).toEqual(["external-forked-stale-after-history"]);
-      expect(sessionsById["external-forked-stale-after-history"]).toBeUndefined();
+      expect(getSession(sessionCollection, "external-forked-stale-after-history")).toBeUndefined();
     } finally {
       adapter.forkSession = originalForkSession;
       adapter.loadSessionHistory = originalLoadSessionHistory;
@@ -2161,7 +2174,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef,
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2265,7 +2278,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef,
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
@@ -2346,7 +2359,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
@@ -2392,7 +2405,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: {
         current: [
@@ -2453,7 +2466,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: {
         current: [
@@ -2522,7 +2535,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: {
         current: [
@@ -2591,7 +2604,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter: new OpencodeSdkAdapter(),
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2629,13 +2642,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
 
   test("does not diverge ref/state when workspace becomes stale during initial session commit", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    let sessionsState: Record<string, AgentSessionState> = {};
-    const sessionsRef: { current: Record<string, AgentSessionState> } = { current: {} };
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
+    let sessionsState: AgentSessionCollection = emptyAgentSessionCollection();
+    const sessionsRef: { current: AgentSessionCollection } = {
+      current: emptyAgentSessionCollection(),
+    };
+    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
       currentWorkspaceRepoPathRef.current = "/tmp/other";
       sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
     };
@@ -2656,7 +2667,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById,
+      setSessionCollection,
       sessionsRef,
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2721,7 +2732,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2785,7 +2796,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2851,7 +2862,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2901,12 +2912,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     let refreshCalls = 0;
     let startCalls = 0;
 
-    let sessionsState: Record<string, AgentSessionState> = {};
-    const setSessionsById = (
-      updater:
-        | Record<string, AgentSessionState>
-        | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-    ) => {
+    let sessionsState: AgentSessionCollection = emptyAgentSessionCollection();
+    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
       sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
     };
 
@@ -2926,11 +2933,11 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const sessionsRef = { current: {} as Record<string, never> };
+    const sessionsRef = { current: emptyAgentSessionCollection() };
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById,
+      setSessionCollection,
       sessionsRef,
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -2972,8 +2979,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(persistCalls).toBe(1);
       expect(kickoffCalls).toBe(0);
       expect(refreshCalls).toBe(0);
-      expect(Object.keys(sessionsState)).toContain("external-created");
-      const createdSession = sessionsState["external-created"];
+      expect(getSession(sessionsState, "external-created")).toBeDefined();
+      const createdSession = getSession(sessionsState, "external-created");
       expect(createdSession).toBeDefined();
       const createdHeaderMessage = createdSession ? sessionMessageAt(createdSession, 0) : undefined;
       expect(createdHeaderMessage).toEqual({
@@ -3004,7 +3011,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
@@ -3074,7 +3081,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       const start = createStartAgentSessionWithFlatDeps({
         activeRepo: "/tmp/repo",
         adapter,
-        setSessionsById: () => {},
+        setSessionCollection: () => {},
         sessionsRef: { current: {} },
         taskRef: { current: [taskFixture] },
         repoEpochRef: { current: 1 },
@@ -3155,7 +3162,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
       adapter,
-      setSessionsById: () => {},
+      setSessionCollection: () => {},
       sessionsRef: { current: {} },
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },

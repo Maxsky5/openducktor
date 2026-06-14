@@ -1,4 +1,5 @@
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
+import { emptyAgentSessionCollection } from "@/state/agent-session-collection";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   RuntimeDependencies,
@@ -27,8 +28,8 @@ export const createStartSessionContextFixture = (
 export const createSessionDependenciesFixture = (
   overrides: Partial<SessionDependencies> = {},
 ): SessionDependencies => ({
-  setSessionsById: () => {},
-  sessionsRef: { current: {} },
+  setSessionCollection: () => {},
+  sessionsRef: { current: emptyAgentSessionCollection() },
   inFlightStartsByWorkspaceTaskRef: { current: new Map() },
   loadAgentSessions: async () => {},
   persistSessionRecord: async () => {},

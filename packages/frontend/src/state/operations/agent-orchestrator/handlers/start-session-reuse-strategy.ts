@@ -1,5 +1,6 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { appQueryClient } from "@/lib/query-client";
+import { getAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
@@ -39,14 +40,21 @@ const loadSessionForReuse = async ({
   mode: "reuse" | "fork";
   forceReload?: boolean;
 }): Promise<AgentSessionState> => {
-  if (forceReload || !deps.session.sessionsRef.current[externalSessionId]) {
+  const currentSession = getAgentSessionByExternalSessionId(
+    deps.session.sessionsRef.current,
+    externalSessionId,
+  );
+  if (forceReload || !currentSession) {
     await deps.session.loadAgentSessions(ctx.taskId, {
       targetExternalSessionId: externalSessionId,
     });
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const loadedSession = deps.session.sessionsRef.current[externalSessionId];
+  const loadedSession = getAgentSessionByExternalSessionId(
+    deps.session.sessionsRef.current,
+    externalSessionId,
+  );
   if (!loadedSession) {
     throw new Error(
       `Failed to load session "${externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,

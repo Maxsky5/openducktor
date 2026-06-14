@@ -1,5 +1,9 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
+import {
+  type AgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+} from "@/state/agent-session-collection";
 import type { AgentSessionState, WorkflowAgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
@@ -25,7 +29,7 @@ type EnsureSessionReadyDependencies = {
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  sessionsRef: { current: Record<string, AgentSessionState> };
+  sessionsRef: { current: AgentSessionCollection };
   taskRef: { current: TaskCard[] };
   sessionListenerRegistryRef: { current: SessionListenerRegistry };
   updateSession: (
@@ -118,9 +122,9 @@ export const createEnsureSessionReady = ({
         applyAgentSessionPresenceSnapshotToSession(current, snapshot),
       );
       if (shouldListen) {
-        await listenToAgentSession(
-          toRuntimeSessionRef(repoPath, sessionsRef.current[externalSessionId] ?? session),
-        );
+        const currentSession =
+          getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId) ?? session;
+        await listenToAgentSession(toRuntimeSessionRef(repoPath, currentSession));
       }
       if (sessionPresenceHasPendingInput(snapshot)) {
         throw new Error(PENDING_INPUT_NOT_READY_ERROR);
@@ -128,7 +132,7 @@ export const createEnsureSessionReady = ({
     };
 
     assertNotStale();
-    const session = sessionsRef.current[externalSessionId];
+    const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
     if (!session) {
       throw new Error(`Session not found: ${externalSessionId}`);
     }

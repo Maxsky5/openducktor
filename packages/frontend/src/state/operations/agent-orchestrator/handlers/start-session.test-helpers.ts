@@ -54,7 +54,7 @@ export const toStartSessionDependencies = (
       currentWorkspaceRepoPathRef: deps.currentWorkspaceRepoPathRef,
     },
     session: {
-      setSessionsById: deps.setSessionsById,
+      setSessionCollection: deps.setSessionCollection,
       sessionsRef: deps.sessionsRef,
       inFlightStartsByWorkspaceTaskRef: deps.inFlightStartsByWorkspaceTaskRef,
       loadAgentSessions: deps.loadAgentSessions,

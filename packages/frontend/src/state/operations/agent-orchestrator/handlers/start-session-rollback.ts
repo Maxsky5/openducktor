@@ -1,4 +1,5 @@
 import { errorMessage } from "@/lib/errors";
+import { removeAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
 import { runOrchestratorTask } from "../support/async-side-effects";
 import type {
   RuntimeDependencies,
@@ -62,14 +63,9 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
   runtime: RuntimeDependencies;
 }): Promise<never> => {
   const externalSessionId = startedCtx.summary.externalSessionId;
-  session.setSessionsById((current) => {
-    if (!(externalSessionId in current)) {
-      return current;
-    }
-    const next = { ...current };
-    delete next[externalSessionId];
-    return next;
-  });
+  session.setSessionCollection((current) =>
+    removeAgentSessionByExternalSessionId(current, externalSessionId),
+  );
 
   try {
     await runOrchestratorTask(

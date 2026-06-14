@@ -2,10 +2,11 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
-  type AgentSessionsById,
-  type AgentSessionsStore,
-  createAgentSessionsStore,
-} from "@/state/agent-sessions-store";
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  emptyAgentSessionCollection,
+} from "@/state/agent-session-collection";
+import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
@@ -16,10 +17,8 @@ import {
   type SessionListenerRegistry,
 } from "../support/session-listener-registry";
 
-type SessionStateUpdater = AgentSessionsById | ((current: AgentSessionsById) => AgentSessionsById);
-
 type OrchestratorMutableState = {
-  sessionsById: AgentSessionsById;
+  sessionCollection: AgentSessionCollection;
   tasks: TaskCard[];
   currentWorkspaceRepoPath: string | null;
   repoEpoch: number;
@@ -34,7 +33,7 @@ type OrchestratorMutableState = {
 };
 
 type OrchestratorRefBridges = {
-  sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
+  sessionsRef: MutableRefObject<AgentSessionCollection>;
   taskRef: MutableRefObject<TaskCard[]>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
@@ -56,10 +55,10 @@ type UseOrchestratorSessionStateArgs = {
 };
 
 type UseOrchestratorSessionStateResult = {
-  sessionsById: AgentSessionsById;
+  sessionCollection: AgentSessionCollection;
   sessionStore: AgentSessionsStore;
   refBridges: OrchestratorRefBridges;
-  commitSessions: (updater: SessionStateUpdater) => void;
+  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
 };
 
 const createMutableBridge = <K extends keyof OrchestratorMutableState>(
@@ -86,7 +85,7 @@ export const useOrchestratorSessionState = ({
     [],
   );
   const mutableStateRef = useRef<OrchestratorMutableState>({
-    sessionsById: {},
+    sessionCollection: emptyAgentSessionCollection(),
     tasks,
     currentWorkspaceRepoPath: workspaceRepoPath,
     repoEpoch: 0,
@@ -101,7 +100,7 @@ export const useOrchestratorSessionState = ({
   });
   const refBridges = useMemo<OrchestratorRefBridges>(
     () => ({
-      sessionsRef: createMutableBridge(mutableStateRef, "sessionsById"),
+      sessionsRef: createMutableBridge(mutableStateRef, "sessionCollection"),
       taskRef: createMutableBridge(mutableStateRef, "tasks"),
       currentWorkspaceRepoPathRef: createMutableBridge(mutableStateRef, "currentWorkspaceRepoPath"),
       repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
@@ -127,12 +126,12 @@ export const useOrchestratorSessionState = ({
   );
 
   const commitSessions = useCallback(
-    (updater: SessionStateUpdater): void => {
-      const current = mutableStateRef.current.sessionsById;
+    (updater: AgentSessionCollectionUpdater): void => {
+      const current = mutableStateRef.current.sessionCollection;
       const next = typeof updater === "function" ? updater(current) : updater;
-      mutableStateRef.current.sessionsById = next;
+      mutableStateRef.current.sessionCollection = next;
 
-      sessionStore.setSessionsById(next);
+      sessionStore.setSessionCollection(next);
     },
     [sessionStore],
   );
@@ -161,7 +160,7 @@ export const useOrchestratorSessionState = ({
     mutableStateRef.current.assistantTurnTimingBySession = {};
     mutableStateRef.current.turnModelBySession = {};
     mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
-    mutableStateRef.current.sessionsById = {};
+    mutableStateRef.current.sessionCollection = emptyAgentSessionCollection();
     sessionStore.resetWorkspace(workspaceRepoPath);
   }, [workspaceRepoPath, sessionStore]);
 
@@ -179,8 +178,8 @@ export const useOrchestratorSessionState = ({
 
   return useMemo(
     () => ({
-      get sessionsById() {
-        return sessionStore.getSessionsByIdSnapshot();
+      get sessionCollection() {
+        return sessionStore.getSessionCollectionSnapshot();
       },
       sessionStore,
       refBridges,

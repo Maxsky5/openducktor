@@ -5,7 +5,15 @@ import type {
   AgentSessionRef,
 } from "@openducktor/core";
 import { toMissingAgentSessionPresenceSnapshot } from "@openducktor/core";
-import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  type AgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSession,
+  getAgentSessionByExternalSessionId,
+  listAgentSessions,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { projectRepoSessionPresenceSnapshot } from "../lifecycle/session-presence";
 import { normalizeWorkingDirectory } from "../support/core";
@@ -28,7 +36,7 @@ export type RepoRuntimeSessionPresenceRead = {
 };
 
 export type RepoSessionReadModel = {
-  sessionsById: Record<string, AgentSessionState>;
+  sessionCollection: AgentSessionCollection;
   liveSessions: AgentSessionRef[];
   initialHistorySessions: AgentSessionState[];
 };
@@ -56,15 +64,17 @@ const shouldKeepLocalSession = (
 };
 
 const selectLocalSessions = (
-  currentSessionsById: Record<string, AgentSessionState>,
+  currentSessionCollection: AgentSessionCollection,
   taskSessionRecords: TaskSessionRecord[],
-): Record<string, AgentSessionState> => {
+): AgentSessionCollection => {
   const persistedSessionKeys = collectPersistedSessionKeys(taskSessionRecords);
-  return Object.fromEntries(
-    Object.entries(currentSessionsById).filter(([, session]) =>
-      shouldKeepLocalSession(session, persistedSessionKeys),
-    ),
-  );
+  let localSessions = emptyAgentSessionCollection();
+  for (const session of listAgentSessions(currentSessionCollection)) {
+    if (shouldKeepLocalSession(session, persistedSessionKeys)) {
+      localSessions = replaceAgentSession(localSessions, session);
+    }
+  }
+  return localSessions;
 };
 
 const toPersistedSessionView = ({
@@ -145,26 +155,24 @@ export const readRepoRuntimeSessionPresence = async ({
 export const buildRepoSessionReadModel = ({
   repoPath,
   tasks,
-  currentSessionsById = {},
+  currentSessionCollection,
   runtimePresence,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
-  currentSessionsById?: Record<string, AgentSessionState>;
+  currentSessionCollection?: AgentSessionCollection;
   runtimePresence: RepoRuntimeSessionPresenceRead;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
-  const sessionsById = { ...selectLocalSessions(currentSessionsById, taskSessionRecords) };
+  const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
+  let sessionCollection = selectLocalSessions(currentSessions, taskSessionRecords);
   const liveSessions: AgentSessionRef[] = [];
   const initialHistorySessions: AgentSessionState[] = [];
 
   for (const { taskId, record } of taskSessionRecords) {
     const ref = toPersistedSessionRef({ repoPath, record });
     const sessionKey = agentSessionIdentityKey(ref);
-    const currentByExternalId = currentSessionsById[record.externalSessionId];
-    const current = matchesAgentSessionIdentity(currentByExternalId, record)
-      ? currentByExternalId
-      : undefined;
+    const current = getAgentSession(currentSessions, record) ?? undefined;
     const snapshot =
       runtimePresence.snapshotsBySessionKey.get(sessionKey) ??
       toMissingAgentSessionPresenceSnapshot(ref);
@@ -175,7 +183,7 @@ export const buildRepoSessionReadModel = ({
     });
     const presenceProjection = projectRepoSessionPresenceSnapshot(persistedSessionView, snapshot);
     const { session } = presenceProjection;
-    sessionsById[record.externalSessionId] = session;
+    sessionCollection = replaceAgentSession(sessionCollection, session);
 
     if (presenceProjection.shouldListen) {
       liveSessions.push(toRuntimeSessionRef(repoPath, session));
@@ -185,7 +193,7 @@ export const buildRepoSessionReadModel = ({
     }
   }
 
-  return { sessionsById, liveSessions, initialHistorySessions };
+  return { sessionCollection, liveSessions, initialHistorySessions };
 };
 
 export const selectRepoSessionHistoryTargets = ({
@@ -200,7 +208,10 @@ export const selectRepoSessionHistoryTargets = ({
     return readModel.initialHistorySessions;
   }
 
-  const session = readModel.sessionsById[requestedSessionId];
+  const session = getAgentSessionByExternalSessionId(
+    readModel.sessionCollection,
+    requestedSessionId,
+  );
   if (!session) {
     throw new Error(`Cannot load history for unknown session '${requestedSessionId}'.`);
   }

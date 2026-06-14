@@ -2,6 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { AgentSessionStopTarget } from "@openducktor/contracts";
 import {
+  type AgentSessionCollection,
+  createAgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
+import {
   findSessionMessageForTest,
   lastSessionMessageForTest,
   sessionMessageAt,
@@ -19,7 +26,7 @@ import { createAgentSessionActions } from "./session-actions";
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  externalSessionId: "external-1",
+  externalSessionId: "session-1",
   taskId: "task-1",
   role: "build",
   status: "running",
@@ -38,10 +45,10 @@ const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionS
 });
 
 const getSession = (
-  sessionsRef: { current: Record<string, AgentSessionState> },
+  sessionsRef: { current: AgentSessionCollection },
   externalSessionId = "session-1",
 ): AgentSessionState => {
-  const session = sessionsRef.current[externalSessionId];
+  const session = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
   if (!session) {
     throw new Error(`Expected session ${externalSessionId}`);
   }
@@ -68,13 +75,14 @@ const createDefaultActiveWorkspace = () => ({
 
 const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}) => {
   const adapter = overrides.adapter ?? new OpencodeSdkAdapter();
-  const sessionsRef = overrides.sessionsRef ?? { current: {} };
+  const sessionsRef = overrides.sessionsRef ?? { current: emptyAgentSessionCollection() };
+  sessionsRef.current = createAgentSessionCollection(Object.values(sessionsRef.current));
   const userMessageStartedAtBySession: Record<string, number> = {};
 
   const dependencies: SessionActionDependencies = {
     activeWorkspace: createDefaultActiveWorkspace(),
     adapter,
-    setSessionsById: () => {},
+    setSessionCollection: () => {},
     sessionsRef,
     taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
     repoEpochRef: { current: 1 },
@@ -94,11 +102,11 @@ const createSessionActions = (overrides: Partial<SessionActionDependencies> = {}
     readTurnUserMessageStartedAtMs: (externalSessionId) =>
       userMessageStartedAtBySession[externalSessionId],
     updateSession: (externalSessionId, updater) => {
-      const current = sessionsRef.current[externalSessionId];
+      const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
       if (!current) {
         return;
       }
-      sessionsRef.current[externalSessionId] = updater(current);
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, updater(current));
     },
     listenToAgentSession: async () => {},
     resolveTaskWorktree: async () => null,
@@ -220,12 +228,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           taskId: "task-1",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo",
-          externalSessionId: "external-1",
+          externalSessionId: "session-1",
         },
       ]);
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
     } finally {
     }
   });
@@ -306,10 +314,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(clearCalls).toBe(0);
       expect(localStopCalls).toBe(0);
       expect(unsubscribeCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
-      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(1);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
+      expect(getSession(sessionsRef)?.status).toBe("running");
+      expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
+      expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(1);
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.stopSession = originalStopSession;
     }
@@ -338,14 +346,14 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       const stopPromise = actions.stopAgentSession("session-1");
       await Promise.resolve();
 
-      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeString();
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(getSession(sessionsRef)?.stopRequestedAt).toBeString();
+      expect(getSession(sessionsRef)?.status).toBe("running");
 
       stopDeferred.resolve();
       await stopPromise;
 
-      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
     } finally {
     }
   });
@@ -407,11 +415,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       externalSessionId: string,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      const current = sessionsRef.current[externalSessionId];
+      const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
       if (!current) {
         return;
       }
-      sessionsRef.current[externalSessionId] = updater(current);
+      sessionsRef.current = replaceAgentSession(sessionsRef.current, updater(current));
     };
 
     const unsubscribe = await listenToAgentSessionEvents({
@@ -476,8 +484,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       }
       expect(toolMessage.meta.status).toBe("error");
       expect(toolMessage.meta.error).toBe("Session stopped at your request.");
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
     } finally {
       adapter.subscribeEvents = originalSubscribeEvents;
       adapter.stopSession = originalStopSession;
@@ -546,8 +554,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       }
       expect(toolMessage.meta.status).toBe("error");
       expect(toolMessage.meta.error).toBe("Session stopped at your request.");
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.stopRequestedAt).toBeNull();
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.stopRequestedAt).toBeNull();
     } finally {
       adapter.stopSession = originalStopSession;
     }
@@ -601,7 +609,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(callOrder).toEqual(["host-stop", "local-release"]);
       expect(clearCalls).toBe(1);
       expect(unsubscribeCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
     } finally {
       adapter.releaseSession = originalReleaseSession;
       console.warn = originalWarn;
@@ -636,7 +644,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           taskId: "task-1",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo/worktree",
-          externalSessionId: "external-1",
+          externalSessionId: "session-1",
         });
       },
     });
@@ -645,7 +653,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.stopAgentSession("session-1");
       expect(buildStopCalls).toBe(1);
       expect(localReleaseCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
     } finally {
       adapter.releaseSession = originalReleaseSession;
     }
@@ -732,9 +740,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(callOrder.indexOf("invalidate-stop-queries")).toBeGreaterThan(persistEndIndex);
       expect(callOrder.indexOf("refresh-task-data")).toBeGreaterThan(persistEndIndex);
       expect(callOrder.indexOf("load-agent-sessions")).toBeGreaterThan(persistEndIndex);
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
     } finally {
     }
   });
@@ -876,12 +884,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       updateSession: (externalSessionId, updater, options) => {
-        const current = sessionsRef.current[externalSessionId];
+        const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
         if (!current) {
           return;
         }
         updateSessionOptions.push(options);
-        sessionsRef.current[externalSessionId] = updater(current);
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, updater(current));
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -896,12 +904,12 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         providerId: "openai",
         modelId: "gpt-5",
       });
-      expect(sessionsRef.current["session-1"]?.selectedModel?.modelId).toBe("gpt-5");
+      expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
       expect(updateSessionOptions).toEqual([{ persist: true }]);
 
       await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
       expect(replyCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toHaveLength(0);
+      expect(getSession(sessionsRef)?.pendingApprovals).toHaveLength(0);
       expect(updateSessionOptions).toEqual([{ persist: true }, { persist: false }]);
     } finally {
       adapter.updateSessionModel = originalUpdateSessionModel;
@@ -920,11 +928,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       createAgentSessionPresenceSnapshotFixture({
         ref: {
-          externalSessionId: "external-session-1",
+          externalSessionId: "session-1",
           workingDirectory: "/tmp/repo",
         },
         snapshot: {
-          externalSessionId: "external-session-1",
+          externalSessionId: "session-1",
           title: "Build",
           workingDirectory: "/tmp/repo",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -967,7 +975,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       current: {
         "session-1": buildSession({
           status: "stopped",
-          externalSessionId: "external-session-1",
+          externalSessionId: "session-1",
           pendingApprovals: [
             {
               requestId: "perm-1",
@@ -1000,7 +1008,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.replyAgentApproval("session-1", "perm-1", "approve_once");
       expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingApprovals).toEqual([]);
+      expect(getSession(sessionsRef)?.pendingApprovals).toEqual([]);
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.resumeSession = originalResumeSession;
@@ -1088,19 +1096,19 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       sessionsRef,
       updateSession: (externalSessionId, updater, options) => {
-        const current = sessionsRef.current[externalSessionId];
+        const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
         if (!current) {
           return;
         }
         updateSessionOptions.push(options);
-        sessionsRef.current[externalSessionId] = updater(current);
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, updater(current));
       },
     });
 
     try {
       await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
       expect(replyCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(0);
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(0);
       expect(updateSessionOptions).toEqual([{ persist: false }]);
       const message = sessionMessageAt(getSession(sessionsRef), 0);
       if (message?.meta?.kind !== "tool") {
@@ -1153,11 +1161,11 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       adapter,
       createAgentSessionPresenceSnapshotFixture({
         ref: {
-          externalSessionId: "external-session-1",
+          externalSessionId: "session-1",
           workingDirectory: "/tmp/repo",
         },
         snapshot: {
-          externalSessionId: "external-session-1",
+          externalSessionId: "session-1",
           title: "Build",
           workingDirectory: "/tmp/repo",
           startedAt: "2026-02-22T08:00:00.000Z",
@@ -1190,7 +1198,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       current: {
         "session-1": buildSession({
           status: "stopped",
-          externalSessionId: "external-session-1",
+          externalSessionId: "session-1",
           pendingQuestions: [
             {
               requestId: "question-1",
@@ -1218,7 +1226,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.answerAgentQuestion("session-1", "question-1", [["yes"]]);
       expect(resumeCalls).toBe(0);
       expect(replyCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toEqual([]);
+      expect(getSession(sessionsRef)?.pendingQuestions).toEqual([]);
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.resumeSession = originalResumeSession;
@@ -1268,7 +1276,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
       expect(sendCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(getSession(sessionsRef)?.status).toBe("running");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
@@ -1306,7 +1314,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         { externalSessionId: "session-1" },
       ]),
       updateSession: (externalSessionId, updater) => {
-        const current = sessionsRef.current[externalSessionId];
+        const current = getAgentSessionByExternalSessionId(sessionsRef.current, externalSessionId);
         if (!current) {
           return;
         }
@@ -1315,7 +1323,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
           expect(next.status).not.toBe("idle");
         }
         committedStatuses.push(next.status);
-        sessionsRef.current[externalSessionId] = next;
+        sessionsRef.current = replaceAgentSession(sessionsRef.current, next);
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1329,7 +1337,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
       expect(sendCalls).toBe(1);
       expect(committedStatuses).not.toContain("idle");
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
+      expect(getSession(sessionsRef)?.status).toBe("running");
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
@@ -1376,7 +1384,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
 
       expect(sendCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
+      expect(getSession(sessionsRef)?.status).toBe("idle");
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1393,7 +1401,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
         repoPath: "/tmp/repo",
         runtimeKind: "opencode",
         workingDirectory: "/tmp/repo/worktree",
-        externalSessionId: "external-1",
+        externalSessionId: "session-1",
       },
       pendingApprovals: [],
       pendingQuestions: [],
@@ -1428,7 +1436,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       ).rejects.toThrow("Task not found: task-1");
 
       expect(sendCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("error");
+      expect(getSession(sessionsRef)?.status).toBe("error");
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1476,7 +1484,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
       expect(callOrder).toEqual(["send"]);
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.historyLoadState).toBe("not_requested");
+      expect(getSession(sessionsRef)?.historyLoadState).toBe("not_requested");
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
@@ -1491,9 +1499,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     mockAgentSessionPresenceSnapshot(
       adapter,
       createAgentSessionPresenceSnapshotFixture({
-        ref: { externalSessionId: "external-1", workingDirectory: "/tmp/repo/worktree" },
+        ref: { externalSessionId: "session-1", workingDirectory: "/tmp/repo/worktree" },
         snapshot: {
-          externalSessionId: "external-1",
+          externalSessionId: "session-1",
           status: { type: "idle" },
           title: "Session 1",
           workingDirectory: "/tmp/repo/worktree",
@@ -1542,8 +1550,8 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       ).rejects.toThrow("Session is waiting for pending runtime input.");
 
       expect(sendCalls).toBe(0);
-      expect(sessionsRef.current["session-1"]?.status).toBe("idle");
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
+      expect(getSession(sessionsRef)?.status).toBe("idle");
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.listSessionPresence = originalListAgentSessionPresenceSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
@@ -1590,7 +1598,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: " hello " }]);
       expect(sendCalls).toBe(0);
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
-      expect(sessionsRef.current["session-1"]?.pendingQuestions).toHaveLength(1);
+      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
     } finally {
       adapter.sendUserMessage = originalSendUserMessage;
     }
@@ -1689,7 +1697,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.stopAgentSession("session-1");
       expect(stopCalls).toBe(1);
-      expect(sessionsRef.current["session-1"]?.status).toBe("stopped");
+      expect(getSession(sessionsRef)?.status).toBe("stopped");
     } finally {
     }
   });
@@ -1729,7 +1737,7 @@ describe("agent-orchestrator/handlers/session-actions", () => {
 
     try {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "hello" }]);
-      expect(sessionsRef.current["session-1"]?.status).toBe("error");
+      expect(getSession(sessionsRef)?.status).toBe("error");
       const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
         message.content.includes("Failed to send message:"),
       );
@@ -1819,10 +1827,10 @@ describe("agent-orchestrator/handlers/session-actions", () => {
       expect(sendCalls).toEqual([
         { externalSessionId: "session-1", parts: [{ kind: "text", text: "queued follow-up" }] },
       ]);
-      expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
-      expect(sessionsRef.current["session-1"]?.draftAssistantMessageId).toBe("assistant-live-1");
-      expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
-      expect(sessionsRef.current["session-1"]?.draftReasoningMessageId).toBe("reasoning-live-1");
+      expect(getSession(sessionsRef)?.draftAssistantText).toBe("Still working");
+      expect(getSession(sessionsRef)?.draftAssistantMessageId).toBe("assistant-live-1");
+      expect(getSession(sessionsRef)?.draftReasoningText).toBe("Thinking");
+      expect(getSession(sessionsRef)?.draftReasoningMessageId).toBe("reasoning-live-1");
       expect(recordUserAnchorCalls).toBe(0);
       expect(turnModelBySessionRef.current["session-1"]?.modelId).toBe("gpt-5");
     } finally {
@@ -1892,9 +1900,9 @@ describe("agent-orchestrator/handlers/session-actions", () => {
     try {
       await actions.sendAgentMessage("session-1", [{ kind: "text", text: "queued follow-up" }]);
 
-      expect(sessionsRef.current["session-1"]?.status).toBe("running");
-      expect(sessionsRef.current["session-1"]?.draftAssistantText).toBe("Still working");
-      expect(sessionsRef.current["session-1"]?.draftReasoningText).toBe("Thinking");
+      expect(getSession(sessionsRef)?.status).toBe("running");
+      expect(getSession(sessionsRef)?.draftAssistantText).toBe("Still working");
+      expect(getSession(sessionsRef)?.draftReasoningText).toBe("Thinking");
       const failureMessage = findSessionMessageForTest(getSession(sessionsRef), (message) =>
         message.content.includes("Failed to send message:"),
       );

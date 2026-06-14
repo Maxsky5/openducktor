@@ -55,7 +55,7 @@ const taskFixture: TaskCard = {
 
 const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
   runtimeKind: "opencode",
-  externalSessionId: "external-1",
+  externalSessionId: "session-1",
   taskId: "task-1",
   role: "build",
   status: "idle",
@@ -198,7 +198,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           repoPath: "/tmp/repo",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo/worktree",
-          externalSessionId: "external-1",
+          externalSessionId: "session-1",
         },
       ]);
     } finally {
@@ -224,7 +224,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
-        externalSessionId: "external-1",
+        externalSessionId: "session-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
         status: "idle",
@@ -246,7 +246,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     const sessionsRef = {
       current: {
-        "external-1": buildSession({ status: "idle" }),
+        "external-1": buildSession({ externalSessionId: "external-1", status: "idle" }),
       },
     };
     const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
@@ -344,6 +344,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const sessionsRef = {
       current: {
         "external-1": buildSession({
+          externalSessionId: "external-1",
           status: "idle",
           pendingApprovals: [
             {
@@ -594,7 +595,7 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     try {
       await expect(ensureReady("session-1")).rejects.toThrow(
-        "Session 'external-1' is missing runtime kind metadata.",
+        "Session 'session-1' is missing runtime kind metadata.",
       );
       expect(ensureRuntimeCalls).toBe(0);
     } finally {
@@ -635,7 +636,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return {
         runtimeKind: "opencode",
-        externalSessionId: "external-1",
+        externalSessionId: "session-1",
         startedAt: "2026-02-22T08:00:00.000Z",
         role: "build",
         status: "idle",
@@ -1464,7 +1465,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady("session-1");
       expect(resumedInput).toMatchObject({
-        externalSessionId: "external-1",
+        externalSessionId: "session-1",
         model: {
           providerId: "openai",
           modelId: "gpt-5.4",

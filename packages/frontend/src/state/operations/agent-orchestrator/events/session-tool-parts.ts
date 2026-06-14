@@ -1,4 +1,5 @@
 import { isOdtWorkflowMutationToolName } from "@openducktor/core";
+import { getAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -216,7 +217,10 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  const activeSession = context.store.sessionsRef.current[context.store.externalSessionId] ?? null;
+  const activeSession = getAgentSessionByExternalSessionId(
+    context.store.sessionsRef.current,
+    context.store.externalSessionId,
+  );
   const taskId = activeSession?.taskId;
   const runtimeDescriptor =
     activeSession?.runtimeKind && context.refresh.resolveRuntimeDefinition

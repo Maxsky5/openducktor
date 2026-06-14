@@ -4,7 +4,10 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionCollection,
+  AgentSessionCollectionUpdater,
+} from "@/state/agent-session-collection";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { loadRepoAgentSessions } from "../lifecycle/load-sessions";
 import { buildHistoryRuntimeContext } from "../lifecycle/session-history-runtime-context";
@@ -16,12 +19,8 @@ type UseRepoSessionReadModelEffectsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   currentWorkspaceRepoPathRef: { current: string | null };
-  sessionsRef: { readonly current: Record<string, AgentSessionState> };
-  commitSessions: (
-    updater:
-      | Record<string, AgentSessionState>
-      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-  ) => void;
+  sessionsRef: { readonly current: AgentSessionCollection };
+  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   updateSession: UpdateAgentSession;
   agentEngine: Pick<AgentEnginePort, "listSessionPresence" | "loadSessionHistory">;
   listenToAgentSession?: ListenToAgentSession;

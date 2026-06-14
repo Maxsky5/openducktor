@@ -1,4 +1,5 @@
 import type { AgentModelSelection } from "@openducktor/core";
+import { replaceAgentSession } from "@/state/agent-session-collection";
 import { throwIfRepoStale } from "../support/core";
 import type {
   ResolvedRuntimeAndModel,
@@ -39,14 +40,11 @@ export const registerStartedSession = async ({
     ...(initialMessages ? { initialMessages } : {}),
   });
 
-  deps.session.setSessionsById((current) => {
+  deps.session.setSessionCollection((current) => {
     if (ctx.isStaleRepoOperation()) {
       return current;
     }
-    return {
-      ...current,
-      [startedCtx.summary.externalSessionId]: initialSession,
-    };
+    return replaceAgentSession(current, initialSession);
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 

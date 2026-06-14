@@ -1,8 +1,8 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
+import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -41,11 +41,7 @@ type UseAgentOrchestratorOperationsArgs = {
 };
 
 type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
-  commitSessions: (
-    updater:
-      | Record<string, AgentSessionState>
-      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-  ) => void;
+  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
   readModelState: AgentSessionReadModelStateContextValue;
@@ -109,7 +105,7 @@ export function useAgentOrchestratorOperations({
         repoEpochRef: refBridges.repoEpochRef,
         currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
         sessionsRef,
-        setSessionsById: commitSessions,
+        setSessionCollection: commitSessions,
         updateSession,
         listenToAgentSession,
         queryClient,
@@ -171,7 +167,7 @@ export function useAgentOrchestratorOperations({
       createAgentSessionActions({
         activeWorkspace,
         adapter: agentEngine,
-        setSessionsById: commitSessions,
+        setSessionCollection: commitSessions,
         sessionsRef: refBridges.sessionsRef,
         taskRef: refBridges.taskRef,
         repoEpochRef: refBridges.repoEpochRef,

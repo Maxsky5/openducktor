@@ -199,7 +199,7 @@ describe("useAgentSessionListeners", () => {
     ).toBe(false);
     expect(state.refBridges.draftRawBySessionRef.current["external-1"]).toBeUndefined();
     expect(state.refBridges.assistantTurnTimingBySessionRef.current["external-1"]).toBeUndefined();
-    expect(state.sessionStore.getSessionsByIdSnapshot()["external-1"]).toBeUndefined();
+    expect(state.sessionStore.getSessionCollectionSnapshot()["external-1"]).toBeUndefined();
     await harness.unmount();
   });
 });

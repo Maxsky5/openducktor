@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "@/pages/agents/agent-studio-test-utils";
+import { createAgentSessionCollection } from "./agent-session-collection";
 import { createAgentSessionsStore, toAgentSessionSummary } from "./agent-sessions-store";
 
 describe("toAgentSessionSummary", () => {
@@ -27,7 +28,7 @@ describe("createAgentSessionsStore session snapshots", () => {
       workingDirectory: "/repo/worktree",
     });
 
-    store.setSessionsById({ [session.externalSessionId]: session });
+    store.setSessionCollection(createAgentSessionCollection([session]));
 
     expect(
       store.getSessionSnapshot({
@@ -55,7 +56,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
     });
 
-    store.setSessionsById({ [baseSession.externalSessionId]: baseSession });
+    store.setSessionCollection(createAgentSessionCollection([baseSession]));
 
     const initialSnapshot = store.getActivitySessionsSnapshot();
     const updatedSession = {
@@ -72,7 +73,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       ],
     };
 
-    store.setSessionsById({ [updatedSession.externalSessionId]: updatedSession });
+    store.setSessionCollection(createAgentSessionCollection([updatedSession]));
 
     expect(store.getActivitySessionsSnapshot()).toBe(initialSnapshot);
   });
@@ -86,7 +87,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       pendingApprovals: [],
     });
 
-    store.setSessionsById({ [session.externalSessionId]: session });
+    store.setSessionCollection(createAgentSessionCollection([session]));
 
     const initialSnapshot = store.getActivitySessionsSnapshot();
     const updatedSession = {
@@ -109,7 +110,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       ],
     };
 
-    store.setSessionsById({ [updatedSession.externalSessionId]: updatedSession });
+    store.setSessionCollection(createAgentSessionCollection([updatedSession]));
 
     const nextSnapshot = store.getActivitySessionsSnapshot();
     expect(nextSnapshot).not.toBe(initialSnapshot);
@@ -129,7 +130,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       role: null,
     });
 
-    store.setSessionsById({ [session.externalSessionId]: session });
+    store.setSessionCollection(createAgentSessionCollection([session]));
 
     expect(store.getActivitySessionsSnapshot()).toEqual([]);
   });
@@ -142,7 +143,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
       status: "running",
     });
 
-    store.setSessionsById({ [session.externalSessionId]: session });
+    store.setSessionCollection(createAgentSessionCollection([session]));
     expect(store.getActivitySnapshot()).toMatchObject({
       workspaceRepoPath: "/repo-a",
       sessions: [expect.objectContaining({ externalSessionId: "session-1" })],
@@ -150,7 +151,7 @@ describe("createAgentSessionsStore activity snapshots", () => {
 
     store.resetWorkspace("/repo-b");
 
-    expect(store.getSessionsByIdSnapshot()).toEqual({});
+    expect(store.getSessionCollectionSnapshot()).toEqual({});
     expect(store.getActivitySnapshot()).toEqual({
       workspaceRepoPath: "/repo-b",
       sessions: [],

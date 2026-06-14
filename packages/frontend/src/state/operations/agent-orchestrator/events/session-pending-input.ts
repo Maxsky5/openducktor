@@ -1,6 +1,7 @@
 import type { AgentRole } from "@openducktor/core";
 import { isReadOnlyAgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
+import { getAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
 import type { AgentApprovalRequest, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   appendSessionMessage,
@@ -56,13 +57,21 @@ const resolvePermissionPolicyRole = (
   event: ApprovalRequiredEvent,
 ): AgentRole | undefined => {
   if (event.parentExternalSessionId) {
-    const parentRole = context.store.sessionsRef.current[event.parentExternalSessionId]?.role;
+    const parentRole = getAgentSessionByExternalSessionId(
+      context.store.sessionsRef.current,
+      event.parentExternalSessionId,
+    )?.role;
     if (parentRole) {
       return parentRole;
     }
   }
 
-  return context.store.sessionsRef.current[context.store.externalSessionId]?.role ?? undefined;
+  return (
+    getAgentSessionByExternalSessionId(
+      context.store.sessionsRef.current,
+      context.store.externalSessionId,
+    )?.role ?? undefined
+  );
 };
 
 const resolveSubagentMessageForSessionLink = (
@@ -179,7 +188,10 @@ const shouldAutoRejectApproval = (
     return false;
   }
 
-  const session = context.store.sessionsRef.current[context.store.externalSessionId];
+  const session = getAgentSessionByExternalSessionId(
+    context.store.sessionsRef.current,
+    context.store.externalSessionId,
+  );
   if (!session?.runtimeKind || !context.approvals.resolveRuntimeDefinition) {
     return false;
   }
@@ -243,7 +255,8 @@ const autoRejectMutatingApproval = (
   const pendingApproval = toPendingApproval(event);
   const markManualResponseRequired = (error: unknown): void => {
     const manualResponseSessionId =
-      context.store.sessionsRef.current[pendingSessionId] !== undefined
+      getAgentSessionByExternalSessionId(context.store.sessionsRef.current, pendingSessionId) !==
+      null
         ? pendingSessionId
         : replySessionId;
     context.store.updateSession(
@@ -266,7 +279,10 @@ const autoRejectMutatingApproval = (
     patchParentSubagentSessionLink(context, event);
   };
 
-  const replySession = context.store.sessionsRef.current[replySessionId];
+  const replySession = getAgentSessionByExternalSessionId(
+    context.store.sessionsRef.current,
+    replySessionId,
+  );
   if (!replySession) {
     markManualResponseRequired(new Error(`Session '${replySessionId}' is not loaded.`));
     return;

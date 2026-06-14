@@ -1,3 +1,4 @@
+import { getAgentSessionByExternalSessionId } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import {
@@ -247,7 +248,10 @@ export const handleSessionTodosUpdated = (
   context: Pick<SessionLifecycleEventContext, "store" | "runtimeData">,
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
-  const current = context.store.sessionsRef.current[context.store.externalSessionId];
+  const current = getAgentSessionByExternalSessionId(
+    context.store.sessionsRef.current,
+    context.store.externalSessionId,
+  );
   if (!current) {
     return;
   }

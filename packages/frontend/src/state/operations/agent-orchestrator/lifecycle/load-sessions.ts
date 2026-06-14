@@ -2,6 +2,10 @@ import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
+import type {
+  AgentSessionCollection,
+  AgentSessionCollectionUpdater,
+} from "@/state/agent-session-collection";
 import type { AgentSessionLoadOptions, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
@@ -29,12 +33,8 @@ type UpdateSession = (
   options?: { persist?: boolean },
 ) => void;
 
-type SessionsById = Record<string, AgentSessionState>;
-
-type SessionStateUpdater = SessionsById | ((current: SessionsById) => SessionsById);
-
-type CommitSessions = (updater: SessionStateUpdater) => void;
-type SessionsSnapshotRef = { readonly current: SessionsById };
+type CommitSessions = (updater: AgentSessionCollectionUpdater) => void;
+type SessionsSnapshotRef = { readonly current: AgentSessionCollection };
 
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence"> &
   SessionHistoryLoaderAdapter;
@@ -45,7 +45,7 @@ type CreateLoadAgentSessionsArgs = {
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   sessionsRef: SessionsSnapshotRef;
-  setSessionsById: CommitSessions;
+  setSessionCollection: CommitSessions;
   updateSession: UpdateSession;
   listenToAgentSession?: ListenToAgentSession;
   queryClient: QueryClient;
@@ -118,10 +118,10 @@ export const loadRepoAgentSessions = async ({
   const readModel = buildRepoSessionReadModel({
     repoPath,
     tasks,
-    currentSessionsById: sessionsRef.current,
+    currentSessionCollection: sessionsRef.current,
     runtimePresence,
   });
-  commitSessions(readModel.sessionsById);
+  commitSessions(readModel.sessionCollection);
 
   if (isStaleRepoOperation()) {
     return;
@@ -169,7 +169,7 @@ export const createLoadAgentSessions = ({
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
-  setSessionsById,
+  setSessionCollection,
   updateSession,
   listenToAgentSession,
   sessionsRef,
@@ -220,7 +220,7 @@ export const createLoadAgentSessions = ({
       repoPath,
       tasks: [task],
       adapter,
-      commitSessions: setSessionsById,
+      commitSessions: setSessionCollection,
       updateSession,
       ...(listenToAgentSession ? { listenToAgentSession } : {}),
       sessionsRef,

@@ -5,6 +5,10 @@ import {
   type AgentPendingQuestionRequest,
   toAgentSessionPresenceSnapshotFromLiveSnapshot,
 } from "@openducktor/core";
+import {
+  createAgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+} from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
@@ -14,6 +18,11 @@ import {
   selectRepoSessionHistoryTargets,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
+
+type RepoSessionReadModel = ReturnType<typeof buildRepoSessionReadModel>;
+
+const getReadModelSession = (readModel: RepoSessionReadModel, externalSessionId: string) =>
+  getAgentSessionByExternalSessionId(readModel.sessionCollection, externalSessionId);
 
 const createRecord = (overrides: Partial<AgentSessionRecord> = {}): AgentSessionRecord => ({
   externalSessionId: "external-1",
@@ -92,7 +101,7 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    const session = readModel.sessionsById[record.externalSessionId];
+    const session = getReadModelSession(readModel, record.externalSessionId);
     expect(session?.status).toBe("idle");
     expect(session?.runtimeKind).toBe(runtimeKind);
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
@@ -119,7 +128,7 @@ describe("repo session read model", () => {
       tasks,
       runtimePresence: firstPresence,
     });
-    expect(firstRead.sessionsById[record.externalSessionId]?.status).toBe("stopped");
+    expect(getReadModelSession(firstRead, record.externalSessionId)?.status).toBe("stopped");
 
     const secondPresence = await readRepoRuntimeSessionPresence({
       repoPath: "/repo",
@@ -135,11 +144,11 @@ describe("repo session read model", () => {
     const secondRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: firstRead.sessionsById,
+      currentSessionCollection: firstRead.sessionCollection,
       runtimePresence: secondPresence,
     });
 
-    expect(secondRead.sessionsById[record.externalSessionId]?.status).toBe("running");
+    expect(getReadModelSession(secondRead, record.externalSessionId)?.status).toBe("running");
     expect(secondRead.liveSessions).toEqual([
       {
         repoPath: "/repo",
@@ -207,10 +216,10 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [firstRecord.externalSessionId]: firstCurrentSession,
-        [secondRecord.externalSessionId]: secondCurrentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([
+        firstCurrentSession,
+        secondCurrentSession,
+      ]),
       runtimePresence: presence,
     });
 
@@ -275,7 +284,7 @@ describe("repo session read model", () => {
       runtimePresence: idlePresence,
     });
 
-    expect(idleRead.sessionsById[record.externalSessionId]?.status).toBe("idle");
+    expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
   test("keeps a mounted active session when a repo runtime scan misses it", async () => {
@@ -306,11 +315,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: busyRead.sessionsById,
+      currentSessionCollection: busyRead.sessionCollection,
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("running");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
     expect(readModel.liveSessions).toEqual([
       {
         repoPath: "/repo",
@@ -353,13 +362,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    const session = readModel.sessionsById[record.externalSessionId];
+    const session = getReadModelSession(readModel, record.externalSessionId);
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
@@ -410,13 +417,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    const session = readModel.sessionsById[record.externalSessionId];
+    const session = getReadModelSession(readModel, record.externalSessionId);
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
@@ -460,13 +465,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    const session = readModel.sessionsById[record.externalSessionId];
+    const session = getReadModelSession(readModel, record.externalSessionId);
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
@@ -503,13 +506,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.selectedModel).toBeNull();
+    expect(getReadModelSession(readModel, record.externalSessionId)?.selectedModel).toBeNull();
   });
 
   test("applies runtime status and pending input without dropping mounted transcript state", async () => {
@@ -557,13 +558,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    const session = readModel.sessionsById[record.externalSessionId];
+    const session = getReadModelSession(readModel, record.externalSessionId);
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
@@ -603,13 +602,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
   });
 
   test("lets missing runtime presence demote mounted idle session state", async () => {
@@ -634,13 +631,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [record.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.status).toBe("idle");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
     expect(readModel.liveSessions).toEqual([]);
   });
 
@@ -675,13 +670,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [currentSession.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[currentSession.externalSessionId]).toBeUndefined();
+    expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
     expect(readModel.liveSessions).toEqual([]);
   });
 
@@ -706,13 +699,11 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      currentSessionsById: {
-        [currentSession.externalSessionId]: currentSession,
-      },
+      currentSessionCollection: createAgentSessionCollection([currentSession]),
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[currentSession.externalSessionId]).toBe(currentSession);
+    expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBe(currentSession);
   });
 
   test("surfaces idle pending input and idle status from initial runtime presence", async () => {
@@ -738,7 +729,7 @@ describe("repo session read model", () => {
       runtimePresence: idlePresence,
     });
 
-    const session = idleRead.sessionsById[record.externalSessionId];
+    const session = getReadModelSession(idleRead, record.externalSessionId);
     expect(session?.status).toBe("idle");
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
   });
@@ -766,7 +757,7 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([
+    expect(getReadModelSession(readModel, record.externalSessionId)?.pendingQuestions).toEqual([
       secondQuestion,
       firstQuestion,
     ]);
@@ -803,7 +794,9 @@ describe("repo session read model", () => {
       runtimePresence: presence,
     });
 
-    expect(readModel.sessionsById[record.externalSessionId]?.pendingQuestions).toEqual([question]);
+    expect(getReadModelSession(readModel, record.externalSessionId)?.pendingQuestions).toEqual([
+      question,
+    ]);
   });
 
   test("propagates runtime scan failures instead of committing a stale stopped model", async () => {

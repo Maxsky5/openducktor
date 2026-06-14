@@ -1,6 +1,7 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentEvent, AgentRole, AgentSessionRef } from "@openducktor/core";
 import type { MutableRefObject } from "react";
+import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { SessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
 
@@ -33,7 +34,7 @@ export type ListenToAgentSessionParams = {
   adapter: SessionEventAdapter;
   sessionRef: AgentSessionRef;
   eventBatchWindowMs?: number;
-  sessionsRef: MutableRefObject<Record<string, AgentSessionState>>;
+  sessionsRef: MutableRefObject<AgentSessionCollection>;
   draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
   draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
   draftMessageIdBySessionRef?: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;

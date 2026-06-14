@@ -1,5 +1,9 @@
 import { toast } from "sonner";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import {
+  getAgentSession,
+  getAgentSessionByExternalSessionId,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
 import type {
   ListenToAgentSessionParams,
@@ -111,7 +115,7 @@ const isObservedSessionMounted = ({
   sessionRef,
   sessionsRef,
 }: Pick<ListenToAgentSessionParams, "sessionRef" | "sessionsRef">): boolean =>
-  matchesAgentSessionIdentity(sessionsRef.current[sessionRef.externalSessionId], sessionRef);
+  getAgentSession(sessionsRef.current, sessionRef) !== null;
 
 export const listenToAgentSessionEvents = async (
   context: ListenToAgentSessionParams,
@@ -170,7 +174,10 @@ export const listenToAgentSessionEvents = async (
           return;
         }
 
-        const current = batchedSessionsRef.current[targetExternalSessionId];
+        const current = getAgentSessionByExternalSessionId(
+          batchedSessionsRef.current,
+          targetExternalSessionId,
+        );
         if (!current) {
           return;
         }
@@ -184,10 +191,7 @@ export const listenToAgentSessionEvents = async (
         if (options?.persist === true) {
           shouldPersistBufferedSession = true;
         }
-        batchedSessionsRef.current = {
-          ...batchedSessionsRef.current,
-          [targetExternalSessionId]: next,
-        };
+        batchedSessionsRef.current = replaceAgentSession(batchedSessionsRef.current, next);
       },
     });
 
@@ -202,7 +206,10 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    const nextSession = batchedSessionsRef.current[externalSessionId];
+    const nextSession = getAgentSessionByExternalSessionId(
+      batchedSessionsRef.current,
+      externalSessionId,
+    );
     if (!nextSession) {
       if (queuedEvents.length > 0) {
         scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);

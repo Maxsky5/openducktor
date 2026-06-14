@@ -1,5 +1,11 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { useCallback } from "react";
+import {
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  getAgentSessionByExternalSessionId,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
 import { toPersistedSessionRecord } from "../support/persistence";
@@ -7,12 +13,8 @@ import { isWorkflowAgentSession } from "../support/workflow-session";
 
 type UseAgentSessionMutationsArgs = {
   workspaceRepoPath: string | null;
-  sessionsRef: { current: Record<string, AgentSessionState> };
-  commitSessions: (
-    updater:
-      | Record<string, AgentSessionState>
-      | ((current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>),
-  ) => void;
+  sessionsRef: { current: AgentSessionCollection };
+  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
 };
 
@@ -31,7 +33,7 @@ export const useAgentSessionMutations = ({
   const updateSession = useCallback<UpdateAgentSession>(
     (externalSessionId, updater, options): void => {
       const currentSessions = sessionsRef.current;
-      const current = currentSessions[externalSessionId];
+      const current = getAgentSessionByExternalSessionId(currentSessions, externalSessionId);
       if (!current) {
         return;
       }
@@ -57,11 +59,7 @@ export const useAgentSessionMutations = ({
         throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
       }
 
-      const nextSessions = {
-        ...currentSessions,
-        [externalSessionId]: nextSession,
-      };
-      commitSessions(nextSessions);
+      commitSessions(replaceAgentSession(currentSessions, nextSession));
 
       if (shouldPersist) {
         runOrchestratorSideEffect(

@@ -3,9 +3,15 @@ import type { AgentSessionRecord, RepoPromptOverrides, TaskCard } from "@openduc
 import type { AgentSessionRef } from "@openducktor/core";
 import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
+import {
+  type AgentSessionCollection,
+  createAgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSessionByExternalSessionId,
+  replaceAgentSession,
+} from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
 import { createAgentSessionFixture, createDeferred } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { createSessionMessagesState } from "../support/messages";
 import { createLoadAgentSessions } from "./load-sessions";
 
@@ -45,13 +51,13 @@ const taskFixture: TaskCard = {
 };
 
 const createLoaderHarness = ({
-  initialSessionsById = {},
+  initialSessionCollection = emptyAgentSessionCollection(),
   listSessionPresence,
   loadSessionHistory = async () => [],
   tasks = [taskFixture],
   loadRepoPromptOverrides = async () => ({}),
 }: {
-  initialSessionsById?: Record<string, AgentSessionState>;
+  initialSessionCollection?: AgentSessionCollection;
   listSessionPresence: Parameters<
     typeof createLoadAgentSessions
   >[0]["adapter"]["listSessionPresence"];
@@ -61,7 +67,7 @@ const createLoaderHarness = ({
   tasks?: TaskCard[];
   loadRepoPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 }) => {
-  let sessionsById: Record<string, AgentSessionState> = initialSessionsById;
+  let sessionCollection: AgentSessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
   const loadAgentSessions = createLoadAgentSessions({
     activeWorkspace: {
@@ -77,18 +83,18 @@ const createLoaderHarness = ({
     currentWorkspaceRepoPathRef: { current: "/repo" },
     sessionsRef: {
       get current() {
-        return sessionsById;
+        return sessionCollection;
       },
     },
-    setSessionsById: (updater) => {
-      sessionsById = typeof updater === "function" ? updater(sessionsById) : updater;
+    setSessionCollection: (updater) => {
+      sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
     },
     updateSession: (externalSessionId, updater) => {
-      const current = sessionsById[externalSessionId];
+      const current = getAgentSessionByExternalSessionId(sessionCollection, externalSessionId);
       if (!current) {
         return;
       }
-      sessionsById = { ...sessionsById, [externalSessionId]: updater(current) };
+      sessionCollection = replaceAgentSession(sessionCollection, updater(current));
     },
     listenToAgentSession: async (session) => {
       listenedSessions.push(session);
@@ -101,11 +107,10 @@ const createLoaderHarness = ({
   return {
     loadAgentSessions,
     listenedSessions,
-    getSession: (externalSessionId: string) => sessionsById[externalSessionId] ?? null,
-    setSessions: (
-      updater: (current: Record<string, AgentSessionState>) => Record<string, AgentSessionState>,
-    ) => {
-      sessionsById = updater(sessionsById);
+    getSession: (externalSessionId: string) =>
+      getAgentSessionByExternalSessionId(sessionCollection, externalSessionId),
+    setSessions: (updater: (current: AgentSessionCollection) => AgentSessionCollection) => {
+      sessionCollection = updater(sessionCollection);
     },
   };
 };
@@ -196,8 +201,8 @@ describe("createLoadAgentSessions", () => {
   test("commits an empty persisted read model after task session records are removed", async () => {
     let presenceReads = 0;
     const harness = createLoaderHarness({
-      initialSessionsById: {
-        [record.externalSessionId]: createAgentSessionFixture({
+      initialSessionCollection: createAgentSessionCollection([
+        createAgentSessionFixture({
           externalSessionId: record.externalSessionId,
           taskId: "task-1",
           runtimeKind: "opencode",
@@ -206,7 +211,7 @@ describe("createLoadAgentSessions", () => {
           startedAt: record.startedAt,
           workingDirectory: record.workingDirectory,
         }),
-      },
+      ]),
       listSessionPresence: async () => {
         presenceReads += 1;
         return [];
@@ -319,9 +324,8 @@ describe("createLoadAgentSessions", () => {
     });
 
     const loading = harness.loadAgentSessions("task-1", { persistedRecords: [record] });
-    harness.setSessions((current) => ({
-      ...current,
-      [record.externalSessionId]: {
+    harness.setSessions((current) =>
+      replaceAgentSession(current, {
         ...createAgentSessionFixture({
           externalSessionId: record.externalSessionId,
           taskId: "task-1",
@@ -345,8 +349,8 @@ describe("createLoadAgentSessions", () => {
             },
           },
         ]),
-      },
-    }));
+      }),
+    );
     presenceReady.resolve(undefined);
     await loading;
 
@@ -446,9 +450,7 @@ describe("createLoadAgentSessions", () => {
       messages: createSessionMessagesState(record.externalSessionId, []),
     };
     const harness = createLoaderHarness({
-      initialSessionsById: {
-        [record.externalSessionId]: mountedSession,
-      },
+      initialSessionCollection: createAgentSessionCollection([mountedSession]),
       listSessionPresence: async () => [
         toAgentSessionPresenceSnapshotFromLiveSnapshot({
           ref: {
@@ -518,9 +520,7 @@ describe("createLoadAgentSessions", () => {
       ]),
     };
     const harness = createLoaderHarness({
-      initialSessionsById: {
-        [record.externalSessionId]: mountedSession,
-      },
+      initialSessionCollection: createAgentSessionCollection([mountedSession]),
       listSessionPresence: async () => [],
       loadSessionHistory: async () => {
         historyLoads += 1;
