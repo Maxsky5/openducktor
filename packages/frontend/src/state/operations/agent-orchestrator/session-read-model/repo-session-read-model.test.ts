@@ -3,7 +3,7 @@ import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
 import {
   type AgentPendingApprovalRequest,
   type AgentPendingQuestionRequest,
-  toAgentSessionPresenceSnapshotFromLiveSnapshot,
+  toAgentSessionRuntimeSnapshot,
 } from "@openducktor/core";
 import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-session-collection";
 import { sessionMessagesToArray } from "@/test-utils/session-message-test-helpers";
@@ -11,7 +11,7 @@ import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import { createSessionMessagesState } from "../support/messages";
 import {
   buildRepoSessionReadModel,
-  readRepoRuntimeSessionPresence,
+  readRepoRuntimeSessionSnapshots,
   type TaskSessionRecords,
 } from "./repo-session-read-model";
 
@@ -41,22 +41,22 @@ const createTask = (
   ...overrides,
 });
 
-const createPresence = ({
+const createRuntimeSnapshot = ({
   runtimeKind,
   externalSessionId,
   pendingApprovals = [],
   pendingQuestions = [],
-  status = { type: "busy" as const },
+  runtimeActivity = "running",
   workingDirectory = "/repo/worktree",
 }: {
   runtimeKind: RuntimeKind;
   externalSessionId: string;
   pendingApprovals?: AgentPendingApprovalRequest[];
   pendingQuestions?: AgentPendingQuestionRequest[];
-  status?: { type: "busy" } | { type: "idle" };
+  runtimeActivity?: "running" | "idle";
   workingDirectory?: string;
 }) =>
-  toAgentSessionPresenceSnapshotFromLiveSnapshot({
+  toAgentSessionRuntimeSnapshot({
     ref: {
       repoPath: "/repo",
       runtimeKind,
@@ -64,11 +64,9 @@ const createPresence = ({
       externalSessionId,
     },
     snapshot: {
-      externalSessionId,
       title: `${runtimeKind} session`,
       startedAt: "2026-06-11T08:00:00.000Z",
-      status,
-      workingDirectory,
+      runtimeActivity,
       pendingApprovals,
       pendingQuestions,
     },
@@ -78,19 +76,19 @@ describe("repo session read model", () => {
   test.each([
     "opencode",
     "codex",
-  ] as const)("restores %s waiting-input sessions from live runtime presence", async (runtimeKind) => {
+  ] as const)("restores %s waiting-input sessions from live runtime snapshot", async (runtimeKind) => {
     const record = createRecord({ runtimeKind });
     const tasks = [createTask([record])];
     const pendingQuestion = { requestId: `${runtimeKind}-question`, questions: [] };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind,
           externalSessionId: record.externalSessionId,
           pendingQuestions: [pendingQuestion],
-          status: { type: "idle" },
+          runtimeActivity: "idle",
         }),
       ],
     });
@@ -98,7 +96,7 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -115,24 +113,24 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("ignores runtime presence snapshots outside the requested working directories", async () => {
+  test("ignores runtime snapshots outside the requested working directories", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
           workingDirectory: record.workingDirectory,
-          status: { type: "busy" },
+          runtimeActivity: "running",
         }),
-        createPresence({
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
           workingDirectory: "/repo/other-worktree",
-          status: { type: "idle" },
+          runtimeActivity: "idle",
         }),
       ],
     });
@@ -140,7 +138,7 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(listAgentSessions(readModel.sessionCollection)).toHaveLength(1);
@@ -152,26 +150,26 @@ describe("repo session read model", () => {
   test("applies a later live runtime snapshot to a previously missing persisted session", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const firstPresence = await readRepoRuntimeSessionPresence({
+    const firstRuntimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
     const firstRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: firstPresence,
+      runtimeSnapshots: firstRuntimeSnapshots,
     });
     expect(getReadModelSession(firstRead, record.externalSessionId)?.status).toBe("idle");
 
-    const secondPresence = await readRepoRuntimeSessionPresence({
+    const secondRuntimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
-          status: { type: "busy" },
+          runtimeActivity: "running",
         }),
       ],
     });
@@ -179,7 +177,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionCollection: firstRead.sessionCollection,
-      runtimePresence: secondPresence,
+      runtimeSnapshots: secondRuntimeSnapshots,
     });
 
     expect(getReadModelSession(secondRead, record.externalSessionId)?.status).toBe("running");
@@ -230,19 +228,19 @@ describe("repo session read model", () => {
       workingDirectory: secondRecord.workingDirectory,
       historyLoadState: "loaded",
     });
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: firstRecord.externalSessionId,
-          status: { type: "busy" },
+          runtimeActivity: "running",
         }),
-        createPresence({
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: secondRecord.externalSessionId,
-          status: { type: "busy" },
+          runtimeActivity: "running",
         }),
       ],
     });
@@ -254,7 +252,7 @@ describe("repo session read model", () => {
         firstCurrentSession,
         secondCurrentSession,
       ]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(readModel.liveSessionRefs.map((session) => session.externalSessionId)).toEqual([
@@ -271,17 +269,17 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("surfaces idle status from initial runtime presence", async () => {
+  test("surfaces idle status from initial runtime snapshot", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const idlePresence = await readRepoRuntimeSessionPresence({
+    const idleRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
-          status: { type: "idle" },
+          runtimeActivity: "idle",
         }),
       ],
     });
@@ -289,49 +287,49 @@ describe("repo session read model", () => {
     const idleRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: idlePresence,
+      runtimeSnapshots: idleRuntimeSnapshot,
     });
 
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("demotes a mounted active session when runtime presence is missing", async () => {
+  test("demotes a mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
-    const busyPresence = await readRepoRuntimeSessionPresence({
+    const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
-          status: { type: "busy" },
+          runtimeActivity: "running",
         }),
       ],
     });
     const busyRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: busyPresence,
+      runtimeSnapshots: busyRuntimeSnapshot,
     });
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: busyRead.sessionCollection,
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("keeps mounted transcript but clears runtime-owned state when runtime presence is missing", async () => {
+  test("keeps mounted transcript but clears runtime-owned state when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -354,17 +352,17 @@ describe("repo session read model", () => {
         },
       ]),
     };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -402,17 +400,17 @@ describe("repo session read model", () => {
         },
       ]),
     };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -450,17 +448,17 @@ describe("repo session read model", () => {
         },
       ]),
     };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -491,17 +489,17 @@ describe("repo session read model", () => {
         modelId: "stale-model",
       },
     });
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.selectedModel).toBeNull();
@@ -536,14 +534,14 @@ describe("repo session read model", () => {
         },
       ]),
     };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
-          status: { type: "busy" },
+          runtimeActivity: "running",
           pendingQuestions: [],
         }),
       ],
@@ -553,7 +551,7 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     const session = getReadModelSession(readModel, record.externalSessionId);
@@ -567,7 +565,7 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("lets idle runtime presence demote a mounted running session", async () => {
+  test("lets idle runtime snapshot demote a mounted running session", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = createAgentSessionFixture({
@@ -580,14 +578,14 @@ describe("repo session read model", () => {
       workingDirectory: record.workingDirectory,
       historyLoadState: "loaded",
     });
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
-          status: { type: "idle" },
+          runtimeActivity: "idle",
           pendingQuestions: [],
         }),
       ],
@@ -597,13 +595,13 @@ describe("repo session read model", () => {
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("lets missing runtime presence demote mounted idle session state", async () => {
+  test("lets missing runtime snapshot demote mounted idle session state", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = createAgentSessionFixture({
@@ -616,17 +614,17 @@ describe("repo session read model", () => {
       workingDirectory: record.workingDirectory,
       historyLoadState: "loaded",
     });
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
@@ -655,17 +653,17 @@ describe("repo session read model", () => {
         },
       ]),
     };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBeNull();
@@ -684,35 +682,35 @@ describe("repo session read model", () => {
       workingDirectory: "/repo/worktree",
       historyLoadState: "loaded",
     });
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
       currentSessionCollection: createAgentSessionCollection([currentSession]),
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, currentSession.externalSessionId)).toBe(currentSession);
   });
 
-  test("surfaces idle pending input and idle status from initial runtime presence", async () => {
+  test("surfaces idle pending input and idle status from initial runtime snapshot", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const pendingQuestion = { requestId: "question-1", questions: [] };
-    const idlePresence = await readRepoRuntimeSessionPresence({
+    const idleRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
           pendingQuestions: [pendingQuestion],
-          status: { type: "idle" },
+          runtimeActivity: "idle",
         }),
       ],
     });
@@ -720,7 +718,7 @@ describe("repo session read model", () => {
     const idleRead = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: idlePresence,
+      runtimeSnapshots: idleRuntimeSnapshot,
     });
 
     const session = getReadModelSession(idleRead, record.externalSessionId);
@@ -728,16 +726,16 @@ describe("repo session read model", () => {
     expect(session?.pendingQuestions).toEqual([pendingQuestion]);
   });
 
-  test("keeps pending input in runtime presence order", async () => {
+  test("keeps pending input in runtime snapshot order", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const firstQuestion = { requestId: "question-1", questions: [] };
     const secondQuestion = { requestId: "question-2", questions: [] };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
           pendingQuestions: [secondQuestion, firstQuestion],
@@ -748,7 +746,7 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.pendingQuestions).toEqual([
@@ -757,7 +755,7 @@ describe("repo session read model", () => {
     ]);
   });
 
-  test("keeps pending input details from initial runtime presence", async () => {
+  test("keeps pending input details from initial runtime snapshot", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const question = {
@@ -770,11 +768,11 @@ describe("repo session read model", () => {
         },
       ],
     };
-    const presence = await readRepoRuntimeSessionPresence({
+    const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
       repoPath: "/repo",
       tasks,
-      listSessionPresence: async () => [
-        createPresence({
+      listSessionRuntimeSnapshots: async () => [
+        createRuntimeSnapshot({
           runtimeKind: "opencode",
           externalSessionId: record.externalSessionId,
           pendingQuestions: [question],
@@ -785,7 +783,7 @@ describe("repo session read model", () => {
     const readModel = buildRepoSessionReadModel({
       repoPath: "/repo",
       tasks,
-      runtimePresence: presence,
+      runtimeSnapshots: runtimeSnapshots,
     });
 
     expect(getReadModelSession(readModel, record.externalSessionId)?.pendingQuestions).toEqual([
@@ -797,10 +795,10 @@ describe("repo session read model", () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     await expect(
-      readRepoRuntimeSessionPresence({
+      readRepoRuntimeSessionSnapshots({
         repoPath: "/repo",
         tasks,
-        listSessionPresence: async () => {
+        listSessionRuntimeSnapshots: async () => {
           throw new Error("runtime not ready");
         },
       }),

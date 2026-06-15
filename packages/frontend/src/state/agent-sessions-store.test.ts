@@ -23,6 +23,39 @@ describe("toAgentSessionSummary", () => {
 });
 
 describe("createAgentSessionsStore session snapshots", () => {
+  test("updates one session atomically and returns the applied state", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/old",
+      status: "idle",
+    });
+    store.setSessionCollection(createAgentSessionCollection([session]));
+
+    let notifyCount = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifyCount += 1;
+    });
+
+    const movedSession = store.updateSession(session, (current) => ({
+      ...current,
+      workingDirectory: "/repo/new",
+      status: "running",
+    }));
+    if (!movedSession) {
+      throw new Error("Expected session update to apply.");
+    }
+    const noopResult = store.updateSession(movedSession, (current) => current);
+    unsubscribe();
+
+    expect(movedSession?.status).toBe("running");
+    expect(store.getSessionSnapshot(session)).toBeNull();
+    expect(store.getSessionSnapshot(movedSession)).toBe(movedSession);
+    expect(noopResult).toBeNull();
+    expect(notifyCount).toBe(1);
+  });
+
   test("looks up sessions by canonical runtime identity", () => {
     const store = createAgentSessionsStore();
     const session = createAgentSessionFixture({

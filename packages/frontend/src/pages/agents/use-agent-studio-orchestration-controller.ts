@@ -5,7 +5,6 @@ import type {
   RuntimeDescriptor,
   WorkspaceRecord,
 } from "@openducktor/contracts";
-import type { AgentRole } from "@openducktor/core";
 import { useMemo } from "react";
 import type {
   AgentStudioTaskTabsModel,
@@ -14,20 +13,14 @@ import type {
 import { useAgentSessionApprovalActions } from "@/components/features/agents/agent-chat/use-agent-session-approval-actions";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
-import type {
-  SessionRepoReadinessState as AgentStudioReadinessState,
-  SelectedAgentSessionViewLifecycle,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
-import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { useAgentStudioChatComposer } from "./chat-composer/use-agent-studio-chat-composer";
-import type {
-  AgentStudioSelectedSessionContext,
-  AgentStudioSelectedSessionContextInput,
-} from "./selected-session/selected-session-context";
+import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
+import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
+import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-intent";
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
@@ -36,18 +29,7 @@ import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
 
-export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult & {
-  isSessionSelectionResolving: boolean;
-};
-
-export type AgentStudioOrchestrationReadinessContext = {
-  agentStudioReadinessState: AgentStudioReadinessState;
-  agentStudioReady: boolean;
-  isRuntimeStarting: boolean;
-  agentStudioBlockedReason: string | null;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-};
+export type AgentStudioOrchestrationSelectionContext = AgentStudioSelectionControllerResult;
 
 type AgentStudioOrchestrationComposerContext = {
   draftStateKey: string;
@@ -55,11 +37,7 @@ type AgentStudioOrchestrationComposerContext = {
 
 type AgentStudioOrchestrationActionsContext = {
   updateQuery: (updates: QueryUpdate) => void;
-  scheduleSelectionIntent: (intent: {
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  }) => void;
+  scheduleSelectionIntent: (intent: AgentStudioSelectionIntent) => void;
   openTaskDetails: () => void;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
@@ -79,7 +57,6 @@ type UseAgentStudioOrchestrationControllerArgs = {
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
   selection: AgentStudioOrchestrationSelectionContext;
-  readiness: AgentStudioOrchestrationReadinessContext;
   hasActiveGitConflict: boolean;
   draftStateKey: string;
   actions: AgentStudioOrchestrationActionsContext;
@@ -145,6 +122,7 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "modelOptions"
   | "modelGroups"
   | "variantOptions"
+  | "activeSessionContextUsage"
   | "agentAccentColorsByProfileId"
   | "handleSelectAgentProfile"
   | "handleSelectModel"
@@ -159,26 +137,6 @@ type BuildAgentStudioPageModelsArgsInput = {
   modelSelection: AgentStudioPageModelsModelSelectionContext;
   chatSettings: ChatSettings;
   composer: AgentStudioOrchestrationComposerContext;
-};
-
-type BuildSelectedSessionContextFromOrchestrationInput = Omit<
-  AgentStudioSelectedSessionContextInput,
-  "lifecycle" | "sessionRuntimeDataError"
-> & {
-  viewSessionRuntimeDataError?: string | null;
-  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
-};
-
-export const buildAgentStudioSelectedSessionContextFromOrchestration = ({
-  viewSessionRuntimeDataError,
-  viewSessionLifecycle,
-  ...input
-}: BuildSelectedSessionContextFromOrchestrationInput): AgentStudioSelectedSessionContext => {
-  return buildAgentStudioSelectedSessionContext({
-    ...input,
-    sessionRuntimeDataError: viewSessionRuntimeDataError ?? null,
-    lifecycle: viewSessionLifecycle,
-  });
 };
 
 export const buildAgentStudioPageModelsArgs = ({
@@ -236,7 +194,6 @@ export function useAgentStudioOrchestrationController({
   branches,
   runtimeDefinitions,
   selection,
-  readiness,
   hasActiveGitConflict,
   draftStateKey,
   actions,
@@ -251,6 +208,7 @@ export function useAgentStudioOrchestrationController({
     viewActiveSession,
     viewSessionRuntimeData,
     viewSessionRuntimeDataError = null,
+    viewRuntimeReadiness,
     activeTaskTabId,
     taskTabs,
     availableTabTasks,
@@ -261,7 +219,7 @@ export function useAgentStudioOrchestrationController({
     handleCloseTab,
     handleReorderTab,
   } = selection;
-  const { agentStudioReady } = readiness;
+  const agentStudioReady = viewRuntimeReadiness.isReady;
   const {
     updateQuery,
     startAgentSession,
@@ -369,7 +327,6 @@ export function useAgentStudioOrchestrationController({
     selectedTask: viewSelectedTask,
     agentStudioReady,
     isActiveTaskReady,
-    isSessionSelectionResolving: selection.isSessionSelectionResolving,
     selectionForNewSession,
     reusablePrompts,
     repoSettings,
@@ -394,31 +351,29 @@ export function useAgentStudioOrchestrationController({
   const roleLabelByRole = useMemo(() => buildRoleLabelByRole(ROLE_OPTIONS), []);
   const selectedSessionContext = useMemo(
     () =>
-      buildAgentStudioSelectedSessionContextFromOrchestration({
+      buildAgentStudioSelectedSessionContext({
         taskId: viewTaskId,
         role: viewRole,
         selectedTask: viewSelectedTask,
         sessionsForTask: viewSessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
         activeSession: viewActiveSession,
-        activeSessionRuntimeData: viewSessionRuntimeData,
+        activeSessionRuntimeData: {
+          todos: viewSessionRuntimeData.todos,
+          isLoadingModelCatalog: viewSessionRuntimeData.isLoadingModelCatalog,
+        },
         runtimeDefinitions,
-        viewSessionRuntimeDataError,
+        sessionRuntimeDataError: viewSessionRuntimeDataError,
         hasActiveGitConflict,
-        viewSessionLifecycle: selection.viewSessionLifecycle,
-        activeSessionContextUsage,
+        lifecycle: selection.viewSessionLifecycle,
+        runtimeReadiness: viewRuntimeReadiness,
         documents: {
           specDoc,
           planDoc,
           qaDoc,
         },
-        readiness,
         sessionActions: {
-          isStarting,
           isSessionWorking,
-          canKickoffNewSession,
-          kickoffLabel,
-          startLaunchKickoff,
           onSubmitQuestionAnswers,
           isSubmittingQuestionByRequestId,
         },
@@ -430,30 +385,26 @@ export function useAgentStudioOrchestrationController({
         roleLabelByRole,
       }),
     [
-      activeSessionContextUsage,
       approvalReplyErrorByRequestId,
-      canKickoffNewSession,
       hasActiveGitConflict,
       isSessionWorking,
-      isStarting,
       isSubmittingApprovalByRequestId,
       isSubmittingQuestionByRequestId,
-      kickoffLabel,
       onReplyApproval,
       onSubmitQuestionAnswers,
       planDoc,
       qaDoc,
-      readiness,
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
       selection.viewSessionLifecycle,
       specDoc,
-      startLaunchKickoff,
       viewActiveSession,
-      viewSessionRuntimeData,
+      viewSessionRuntimeData.isLoadingModelCatalog,
+      viewSessionRuntimeData.todos,
       viewRole,
       viewSelectedTask,
+      viewRuntimeReadiness,
       viewSessionRuntimeDataError,
       viewSessionsForTask,
       viewTaskId,
@@ -482,7 +433,10 @@ export function useAgentStudioOrchestrationController({
       isSessionWorking,
       isWaitingInput,
       busySendBlockedReason,
+      canKickoffNewSession,
+      kickoffLabel,
       canStopSession,
+      startLaunchKickoff,
       onSend,
       handleWorkflowStepSelect,
       handleSessionSelectionChange,
@@ -511,6 +465,7 @@ export function useAgentStudioOrchestrationController({
       modelOptions,
       modelGroups,
       variantOptions,
+      activeSessionContextUsage,
       agentAccentColorsByProfileId,
       handleSelectAgentProfile,
       handleSelectModel,

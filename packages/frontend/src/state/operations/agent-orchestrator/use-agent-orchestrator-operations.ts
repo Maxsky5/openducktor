@@ -1,7 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
-import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
 import type {
   ActiveWorkspace,
@@ -9,20 +8,21 @@ import type {
   AgentSessionReadModelStateContextValue,
   AgentStateContextValue,
 } from "@/types/state-slices";
+import type { UpdateSession } from "./events/session-event-types";
 import { createOrchestratorPublicOperations } from "./handlers/public-operations";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import { useAgentSessionListeners } from "./hooks/use-agent-session-listeners";
-import { useAgentSessionMutations } from "./hooks/use-agent-session-mutations";
-import { useAgentSessionReaders } from "./hooks/use-agent-session-readers";
-import { useAgentSessionTurnTiming } from "./hooks/use-agent-session-turn-timing";
+import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
 import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { createLoadAgentSessionHistory } from "./lifecycle/session-history-loader";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
+import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";
+import { toPersistedSessionRecord } from "./support/persistence";
 import { createSessionCacheEffects } from "./support/session-cache-effects";
+import { isWorkflowAgentSession } from "./support/workflow-session";
 
 type UseAgentOrchestratorOperationsArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -42,7 +42,6 @@ type UseAgentOrchestratorOperationsArgs = {
 };
 
 type UseAgentOrchestratorOperationsResult = AgentStateContextValue & {
-  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
   sessionStore: AgentSessionsStore;
   operations: AgentOperationsContextValue;
   readModelState: AgentSessionReadModelStateContextValue;
@@ -63,84 +62,134 @@ export function useAgentOrchestratorOperations({
     [dependencies],
   );
   const { queryClient, hostPort, runtimeHostPort } = resolvedDependencies;
-  const { sessionStore, refBridges, commitSessions } = useOrchestratorSessionState({
+  const {
+    sessionStore,
+    taskRef,
+    currentWorkspaceRepoPathRef,
+    repoEpochRef,
+    sessionStartGateRef,
+    sessionObserversRef,
+    sessionTransientState,
+  } = useOrchestratorSessionState({
     activeWorkspace,
     tasks,
   });
-  const { sessionsRef } = refBridges;
   const sessionCacheEffects = useMemo(
     () => createSessionCacheEffects({ workspaceRepoPath, queryClient, hostPort }),
     [workspaceRepoPath, queryClient, hostPort],
   );
   const { persistSessionRecord, invalidateSessionStopQueries } = sessionCacheEffects;
-  const turnTiming = useAgentSessionTurnTiming({
-    assistantTurnTimingBySessionRef: refBridges.assistantTurnTimingBySessionRef,
-  });
-  const { updateSession } = useAgentSessionMutations({
-    workspaceRepoPath,
-    sessionsRef,
-    commitSessions,
-    persistSessionRecord,
-  });
+  const { assistantTurnTiming } = sessionTransientState;
+  const updateSession = useCallback<UpdateSession>(
+    (identity, updater, options) => {
+      const shouldPersist = options?.persist === true;
+      const nextSession = sessionStore.updateSession(identity, (current) => {
+        const next = updater(current);
+        if (shouldPersist && !isWorkflowAgentSession(next)) {
+          throw new Error(`Session '${identity.externalSessionId}' is not a workflow session.`);
+        }
+        return next;
+      });
+      if (!nextSession) {
+        return null;
+      }
+
+      if (shouldPersist) {
+        runOrchestratorSideEffect(
+          "operations-persist-session-snapshot",
+          persistSessionRecord(nextSession.taskId, toPersistedSessionRecord(nextSession)),
+          {
+            tags: {
+              repoPath: workspaceRepoPath,
+              externalSessionId: nextSession.externalSessionId,
+              taskId: nextSession.taskId,
+              role: nextSession.role,
+            },
+          },
+        );
+      }
+
+      return nextSession;
+    },
+    [persistSessionRecord, sessionStore, workspaceRepoPath],
+  );
   const queryBackedPromptOverrides = useCallback(
     (workspaceId: string) => loadRepoPromptOverrides(workspaceId, { queryClient }),
     [queryClient],
   );
-  const { listenToAgentSession, removeAgentSession, removeAgentSessions } =
-    useAgentSessionListeners({
+  const { observeAgentSession, removeAgentSession, removeAgentSessions } = useAgentSessionObservers(
+    {
       agentEngine,
       workspaceId: activeWorkspace?.workspaceId ?? null,
       loadRepoPromptOverrides: queryBackedPromptOverrides,
-      refBridges,
-      sessionsRef,
-      commitSessions,
+      sessionObserversRef,
+      sessionTransientState,
+      readSessions: sessionStore.getSessionsSnapshot,
+      readSession: sessionStore.getSessionSnapshot,
+      setSessionCollection: sessionStore.setSessionCollection,
       updateSession,
       queryClient,
-      ...turnTiming,
+      recordTurnActivityTimestamp: assistantTurnTiming.recordTurnActivityTimestamp,
+      recordTurnUserMessageTimestamp: assistantTurnTiming.recordTurnUserMessageTimestamp,
+      resolveTurnDurationMs: assistantTurnTiming.resolveTurnDurationMs,
+      clearTurnDuration: assistantTurnTiming.clearTurnDuration,
       refreshTaskData,
-    });
+    },
+  );
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
         activeWorkspace,
         adapter: agentEngine,
-        repoEpochRef: refBridges.repoEpochRef,
-        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-        setSessionCollection: commitSessions,
-        listenToAgentSession,
+        repoEpochRef,
+        currentWorkspaceRepoPathRef,
+        readSessionCollection: sessionStore.getSessionCollectionSnapshot,
+        setSessionCollection: sessionStore.setSessionCollection,
+        observeAgentSession,
         queryClient,
       }),
-    [activeWorkspace, agentEngine, listenToAgentSession, commitSessions, queryClient, refBridges],
+    [
+      activeWorkspace,
+      agentEngine,
+      currentWorkspaceRepoPathRef,
+      observeAgentSession,
+      queryClient,
+      repoEpochRef,
+      sessionStore,
+    ],
   );
   const loadAgentSessionHistory = useMemo(
     () =>
       createLoadAgentSessionHistory({
         activeWorkspace,
         adapter: agentEngine,
-        repoEpochRef: refBridges.repoEpochRef,
-        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-        sessionsRef,
+        repoEpochRef,
+        currentWorkspaceRepoPathRef,
+        readSessionSnapshot: sessionStore.getSessionSnapshot,
         updateSession,
-        taskRef: refBridges.taskRef,
+        taskRef,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
     [
       activeWorkspace,
       agentEngine,
+      currentWorkspaceRepoPathRef,
       queryBackedPromptOverrides,
-      refBridges,
-      sessionsRef,
+      repoEpochRef,
+      sessionStore,
+      taskRef,
       updateSession,
     ],
   );
   useRepoSessionReadModelEffects({
     activeWorkspace,
     tasks,
-    currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-    repoEpochRef: refBridges.repoEpochRef,
-    commitSessions,
+    currentWorkspaceRepoPathRef,
+    repoEpochRef,
+    readSessionCollection: sessionStore.getSessionCollectionSnapshot,
+    setSessionCollection: sessionStore.setSessionCollection,
     agentEngine,
-    listenToAgentSession,
+    observeAgentSession,
     setIsLoadingSessionReadModel,
     setSessionReadModelError,
     queryClient,
@@ -162,25 +211,24 @@ export function useAgentOrchestratorOperations({
       createAgentSessionActions({
         activeWorkspace,
         adapter: agentEngine,
-        setSessionCollection: commitSessions,
-        sessionsRef: refBridges.sessionsRef,
-        taskRef: refBridges.taskRef,
-        repoEpochRef: refBridges.repoEpochRef,
-        currentWorkspaceRepoPathRef: refBridges.currentWorkspaceRepoPathRef,
-        inFlightStartsByWorkspaceTaskRef: refBridges.inFlightStartsByWorkspaceTaskRef,
-        sessionListenerRegistryRef: refBridges.sessionListenerRegistryRef,
-        turnModelBySessionRef: refBridges.turnModelBySessionRef,
-        recordTurnUserMessageTimestamp: turnTiming.recordTurnUserMessageTimestamp,
-        readTurnUserMessageStartedAtMs: turnTiming.readTurnUserMessageStartedAtMs,
+        setSessionCollection: sessionStore.setSessionCollection,
+        readSessionSnapshot: sessionStore.getSessionSnapshot,
+        taskRef,
+        repoEpochRef,
+        currentWorkspaceRepoPathRef,
+        sessionStartGateRef,
+        sessionObserversRef,
+        sessionTransientState,
+        recordTurnUserMessageTimestamp: assistantTurnTiming.recordTurnUserMessageTimestamp,
+        readTurnUserMessageStartedAtMs: assistantTurnTiming.readTurnUserMessageStartedAtMs,
         updateSession,
-        listenToAgentSession,
+        observeAgentSession,
         resolveTaskWorktree: hostPort.taskWorktreeGet,
         ensureRuntime,
         loadTaskDocuments,
         loadRepoPromptOverrides: queryBackedPromptOverrides,
         loadAgentSessions,
         loadAgentSessionHistory,
-        clearTurnDuration: turnTiming.clearTurnDuration,
         refreshTaskData,
         persistSessionRecord,
         stopAuthoritativeSession: hostPort.agentSessionStop,
@@ -189,25 +237,27 @@ export function useAgentOrchestratorOperations({
     [
       activeWorkspace,
       agentEngine,
-      listenToAgentSession,
-      commitSessions,
+      currentWorkspaceRepoPathRef,
       ensureRuntime,
       hostPort,
       invalidateSessionStopQueries,
       loadAgentSessionHistory,
       loadAgentSessions,
+      observeAgentSession,
       persistSessionRecord,
       queryBackedPromptOverrides,
-      refBridges,
+      repoEpochRef,
       refreshTaskData,
-      turnTiming.clearTurnDuration,
-      turnTiming.recordTurnUserMessageTimestamp,
-      turnTiming.readTurnUserMessageStartedAtMs,
+      sessionObserversRef,
+      sessionStore,
+      sessionStartGateRef,
+      sessionTransientState,
+      taskRef,
+      assistantTurnTiming.recordTurnUserMessageTimestamp,
+      assistantTurnTiming.readTurnUserMessageStartedAtMs,
       updateSession,
     ],
   );
-  const readers = useAgentSessionReaders(agentEngine);
-
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
     const readModelState = { isLoadingSessionReadModel, sessionReadModelError };
     const operations = createOrchestratorPublicOperations({
@@ -215,7 +265,7 @@ export function useAgentOrchestratorOperations({
       loadAgentSessionHistory: async (session) => {
         await loadAgentSessionHistory(session);
       },
-      ...readers,
+      agentEngine,
       removeAgentSession,
       removeAgentSessions,
       sessionActions,
@@ -227,7 +277,6 @@ export function useAgentOrchestratorOperations({
       },
       ...readModelState,
       ...operations,
-      commitSessions,
       sessionStore,
       operations,
       readModelState,
@@ -236,10 +285,9 @@ export function useAgentOrchestratorOperations({
     isLoadingSessionReadModel,
     sessionReadModelError,
     sessionStore,
-    commitSessions,
+    agentEngine,
     loadAgentSessions,
     loadAgentSessionHistory,
-    readers,
     removeAgentSessions,
     removeAgentSession,
     sessionActions,

@@ -14,19 +14,13 @@ import {
   hasMeaningfulAgentUserMessageParts,
   normalizeAgentUserMessageParts,
 } from "@openducktor/core";
+import type { SessionStartGate } from "@/features/session-start/session-start-gate";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
-import {
-  type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
-  getAgentSession,
-} from "@/state/agent-session-collection";
-import type {
-  AgentSessionIdentity,
-  AgentSessionRouteIdentity,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import { createEnsureSessionReady } from "../lifecycle/ensure-ready";
@@ -36,18 +30,19 @@ import { appendSessionMessage } from "../support/messages";
 import { toPersistedSessionRecord } from "../support/persistence";
 import { annotateQuestionToolMessage } from "../support/question-messages";
 import {
-  removeSessionListenersByExternalSessionId,
-  type SessionListenerRegistry,
-} from "../support/session-listener-registry";
-import {
   buildUserStoppedNoticeMessage,
   USER_STOPPED_NOTICE,
 } from "../support/session-notice-messages";
+import type { SessionObservers } from "../support/session-observers";
 import {
-  type ListenToAgentSession,
+  type ObserveAgentSession,
   toRuntimeSessionContextRef,
   toRuntimeSessionRef,
 } from "../support/session-runtime-ref";
+import {
+  clearSessionTransientState,
+  type SessionTransientState,
+} from "../support/session-transient-state";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import { createStartAgentSession } from "./start-session";
 
@@ -55,31 +50,30 @@ type SessionActionsDependencies = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: AgentEnginePort;
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
-  sessionsRef: { current: AgentSessionCollection };
+  readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   taskRef: { current: TaskCard[] };
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<AgentSessionRouteIdentity>> };
-  sessionListenerRegistryRef: { current: SessionListenerRegistry };
-  turnModelBySessionRef?: { current: Record<string, AgentSessionState["selectedModel"]> };
+  sessionStartGateRef: { current: SessionStartGate<AgentSessionIdentity> };
+  sessionObserversRef: { current: SessionObservers };
+  sessionTransientState: SessionTransientState;
   recordTurnUserMessageTimestamp: (
-    externalSessionId: string,
+    sessionKey: string,
     timestamp: string | number,
   ) => number | undefined;
-  readTurnUserMessageStartedAtMs: (externalSessionId: string) => number | undefined;
+  readTurnUserMessageStartedAtMs: (sessionKey: string) => number | undefined;
   updateSession: (
     identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
-  ) => void;
-  listenToAgentSession: ListenToAgentSession;
+  ) => AgentSessionState | null;
+  observeAgentSession: ObserveAgentSession;
   resolveTaskWorktree: (repoPath: string, taskId: string) => Promise<TaskWorktreeSummary | null>;
   ensureRuntime: EnsureRuntime;
   loadTaskDocuments: (repoPath: string, taskId: string) => Promise<TaskDocuments>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
   loadAgentSessions: (taskId: string) => Promise<void>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<unknown>;
-  clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
@@ -94,30 +88,28 @@ type SessionActionsDependencies = {
   }) => Promise<void>;
 };
 
+type ReadSessionSnapshot = SessionActionsDependencies["readSessionSnapshot"];
+
 const markTurnUserAnchorIfMissing = (
   recordTurnUserMessageTimestamp: SessionActionsDependencies["recordTurnUserMessageTimestamp"],
   readTurnUserMessageStartedAtMs: SessionActionsDependencies["readTurnUserMessageStartedAtMs"],
-  turnModelBySessionRef:
-    | { current: Record<string, AgentSessionState["selectedModel"]> }
-    | undefined,
+  turnMetadata: SessionTransientState["turnMetadata"],
   session: AgentSessionState,
 ): void => {
-  const { externalSessionId } = session;
-  if (readTurnUserMessageStartedAtMs(externalSessionId) === undefined) {
-    recordTurnUserMessageTimestamp(externalSessionId, Date.now());
+  const sessionKey = agentSessionIdentityKey(session);
+  if (readTurnUserMessageStartedAtMs(sessionKey) === undefined) {
+    recordTurnUserMessageTimestamp(sessionKey, Date.now());
   }
-  if (turnModelBySessionRef) {
-    turnModelBySessionRef.current[externalSessionId] = session.selectedModel ?? null;
-  }
+  turnMetadata.recordModel(sessionKey, session.selectedModel ?? null);
 };
 
 const settleStartingSession = (
   identity: AgentSessionIdentity,
   status: Extract<AgentSessionState["status"], "idle" | "error">,
-  sessionsRef: { current: AgentSessionCollection },
+  readSessionSnapshot: ReadSessionSnapshot,
   updateSession: SessionActionsDependencies["updateSession"],
 ): void => {
-  const session = getAgentSession(sessionsRef.current, identity);
+  const session = readSessionSnapshot(identity);
   if (session?.status !== "starting") {
     return;
   }
@@ -140,10 +132,10 @@ const requireWorkspaceRepoPath = (workspaceRepoPath: string | null): string => {
 };
 
 const requireLoadedSession = (
-  sessionsRef: { current: AgentSessionCollection },
+  readSessionSnapshot: ReadSessionSnapshot,
   identity: AgentSessionIdentity,
 ): AgentSessionState => {
-  const session = getAgentSession(sessionsRef.current, identity);
+  const session = readSessionSnapshot(identity);
   if (!session) {
     throw new Error(`Session '${identity.externalSessionId}' is not loaded.`);
   }
@@ -153,18 +145,18 @@ const requireLoadedSession = (
 const ensureSessionReadyForSend = async ({
   session,
   ensureSessionReady,
-  sessionsRef,
+  readSessionSnapshot,
   updateSession,
 }: {
   session: AgentSessionState;
   ensureSessionReady: (session: AgentSessionIdentity) => Promise<AgentSessionIdentity>;
-  sessionsRef: { current: AgentSessionCollection };
+  readSessionSnapshot: ReadSessionSnapshot;
   updateSession: SessionActionsDependencies["updateSession"];
 }): Promise<AgentSessionIdentity> => {
   try {
     return await ensureSessionReady(session);
   } catch (error) {
-    settleStartingSession(session, "error", sessionsRef, updateSession);
+    settleStartingSession(session, "error", readSessionSnapshot, updateSession);
     throw error;
   }
 };
@@ -219,40 +211,40 @@ export const createAgentSessionActions = ({
   activeWorkspace,
   adapter,
   setSessionCollection,
-  sessionsRef,
+  readSessionSnapshot,
   taskRef,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
-  inFlightStartsByWorkspaceTaskRef,
-  sessionListenerRegistryRef,
-  turnModelBySessionRef,
+  sessionStartGateRef,
+  sessionObserversRef,
+  sessionTransientState,
   recordTurnUserMessageTimestamp,
   readTurnUserMessageStartedAtMs,
   updateSession,
-  listenToAgentSession,
+  observeAgentSession,
   resolveTaskWorktree,
   ensureRuntime,
   loadTaskDocuments,
   loadRepoPromptOverrides,
   loadAgentSessions,
   loadAgentSessionHistory,
-  clearTurnDuration,
   refreshTaskData,
   persistSessionRecord,
   stopAuthoritativeSession,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
+  const { turnMetadata } = sessionTransientState;
   const ensureSessionReady = createEnsureSessionReady({
     activeWorkspace,
     adapter,
     repoEpochRef,
     currentWorkspaceRepoPathRef,
-    sessionsRef,
+    readSessionSnapshot,
     taskRef,
-    sessionListenerRegistryRef,
+    sessionObserversRef,
     updateSession,
-    listenToAgentSession,
+    observeAgentSession,
     ensureRuntime,
     loadRepoPromptOverrides,
   });
@@ -266,7 +258,7 @@ export const createAgentSessionActions = ({
       return;
     }
 
-    const currentSession = requireLoadedSession(sessionsRef, identity);
+    const currentSession = requireLoadedSession(readSessionSnapshot, identity);
     const externalSessionId = currentSession.externalSessionId;
     if (!isWorkflowAgentSession(currentSession)) {
       throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
@@ -276,35 +268,31 @@ export const createAgentSessionActions = ({
       throw new Error(unavailableRoleErrorMessage(task, currentSession.role));
     }
     if (isAgentSessionWaitingInput(currentSession)) {
-      settleStartingSession(currentSession, "idle", sessionsRef, updateSession);
+      settleStartingSession(currentSession, "idle", readSessionSnapshot, updateSession);
       return;
     }
 
     const readySessionIdentity = await ensureSessionReadyForSend({
       session: currentSession,
       ensureSessionReady,
-      sessionsRef,
+      readSessionSnapshot,
       updateSession,
     });
 
-    const readySession = getAgentSession(sessionsRef.current, readySessionIdentity);
+    const readySession = readSessionSnapshot(readySessionIdentity);
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
-      settleStartingSession(readySessionIdentity, "idle", sessionsRef, updateSession);
+      settleStartingSession(readySessionIdentity, "idle", readSessionSnapshot, updateSession);
       return;
     }
 
     const readyExternalSessionId = readySession.externalSessionId;
+    const readySessionKey = agentSessionIdentityKey(readySession);
     const selectedModel = readySession.selectedModel ?? undefined;
     const isBusyQueuedSend = readySession.status === "running";
     let pendingUserMessageStartedAt: number | undefined;
     if (!isBusyQueuedSend) {
-      pendingUserMessageStartedAt = recordTurnUserMessageTimestamp(
-        readyExternalSessionId,
-        Date.now(),
-      );
-      if (turnModelBySessionRef) {
-        turnModelBySessionRef.current[readyExternalSessionId] = selectedModel ?? null;
-      }
+      pendingUserMessageStartedAt = recordTurnUserMessageTimestamp(readySessionKey, Date.now());
+      turnMetadata.recordModel(readySessionKey, selectedModel ?? null);
     }
 
     if (!isBusyQueuedSend) {
@@ -369,10 +357,7 @@ export const createAgentSessionActions = ({
         { persist: false },
       );
       if (!isBusyQueuedSend) {
-        clearTurnDuration(readyExternalSessionId);
-        if (turnModelBySessionRef) {
-          delete turnModelBySessionRef.current[readyExternalSessionId];
-        }
+        clearSessionTransientState(sessionTransientState, readySession);
       }
     }
   };
@@ -385,12 +370,12 @@ export const createAgentSessionActions = ({
     },
     session: {
       setSessionCollection,
-      sessionsRef,
-      inFlightStartsByWorkspaceTaskRef,
+      readSessionSnapshot,
+      sessionStartGateRef,
       loadAgentSessions,
       loadAgentSessionHistory,
       persistSessionRecord,
-      listenToAgentSession,
+      observeAgentSession,
     },
     runtime: {
       adapter,
@@ -409,7 +394,7 @@ export const createAgentSessionActions = ({
   });
 
   const stopAgentSession = async (identity: AgentSessionIdentity): Promise<void> => {
-    const session = getAgentSession(sessionsRef.current, identity);
+    const session = readSessionSnapshot(identity);
     if (!session) {
       return;
     }
@@ -437,9 +422,6 @@ export const createAgentSessionActions = ({
         externalSessionId: session.externalSessionId,
         runtimeKind: session.runtimeKind,
         workingDirectory: session.workingDirectory,
-        ...(session.externalSessionId.trim().length > 0
-          ? { externalSessionId: session.externalSessionId }
-          : {}),
       });
     } catch (error) {
       updateSession(
@@ -455,28 +437,22 @@ export const createAgentSessionActions = ({
       );
     }
 
+    const stoppedSessionRef = toRuntimeSessionRef(stopRepoPath, session);
     try {
-      await adapter.releaseSession(toRuntimeSessionRef(stopRepoPath, session));
+      await adapter.releaseSession(stoppedSessionRef);
     } catch (error) {
       console.warn(
         `Failed to release local session '${externalSessionId}' after authoritative stop: ${errorMessage(error)}`,
       );
     }
 
-    removeSessionListenersByExternalSessionId(
-      sessionListenerRegistryRef.current,
-      externalSessionId,
-    );
-    clearTurnDuration(externalSessionId);
-    if (turnModelBySessionRef) {
-      delete turnModelBySessionRef.current[externalSessionId];
-    }
+    sessionObserversRef.current.remove(stoppedSessionRef);
+    clearSessionTransientState(sessionTransientState, stoppedSessionRef);
 
-    let stoppedSessionSnapshot: AgentSessionState | null = null;
     const stoppedAt = now();
-    updateSession(session, (current) => {
+    const nextStoppedSession = updateSession(session, (current) => {
       const shouldAppendUserStoppedNotice = Boolean(current.stopRequestedAt);
-      const nextSession: AgentSessionState = {
+      return {
         ...current,
         status: "stopped",
         messages: shouldAppendUserStoppedNotice
@@ -490,11 +466,8 @@ export const createAgentSessionActions = ({
         pendingApprovals: [],
         pendingQuestions: [],
       };
-      stoppedSessionSnapshot = nextSession;
-      return nextSession;
     });
 
-    const nextStoppedSession = stoppedSessionSnapshot as AgentSessionState | null;
     if (nextStoppedSession && isWorkflowAgentSession(nextStoppedSession)) {
       await persistSessionRecord(
         nextStoppedSession.taskId,
@@ -518,7 +491,7 @@ export const createAgentSessionActions = ({
     identity: AgentSessionIdentity,
     selection: AgentModelSelection | null,
   ): void => {
-    const session = getAgentSession(sessionsRef.current, identity);
+    const session = readSessionSnapshot(identity);
     if (!session) {
       return;
     }
@@ -547,11 +520,11 @@ export const createAgentSessionActions = ({
     outcome: RuntimeApprovalReplyOutcome,
     message?: string,
   ): Promise<void> => {
-    const session = requireLoadedSession(sessionsRef, identity);
+    const session = requireLoadedSession(readSessionSnapshot, identity);
     markTurnUserAnchorIfMissing(
       recordTurnUserMessageTimestamp,
       readTurnUserMessageStartedAtMs,
-      turnModelBySessionRef,
+      turnMetadata,
       session,
     );
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
@@ -577,11 +550,11 @@ export const createAgentSessionActions = ({
     requestId: string,
     answers: string[][],
   ): Promise<void> => {
-    const session = requireLoadedSession(sessionsRef, identity);
+    const session = requireLoadedSession(readSessionSnapshot, identity);
     markTurnUserAnchorIfMissing(
       recordTurnUserMessageTimestamp,
       readTurnUserMessageStartedAtMs,
-      turnModelBySessionRef,
+      turnMetadata,
       session,
     );
     const repoPath = requireWorkspaceRepoPath(workspaceRepoPath);
@@ -614,7 +587,7 @@ export const createAgentSessionActions = ({
     sendAgentMessage,
     startAgentSession,
     settleStartedAgentSession: (session: AgentSessionIdentity): void => {
-      settleStartingSession(session, "idle", sessionsRef, updateSession);
+      settleStartingSession(session, "idle", readSessionSnapshot, updateSession);
     },
     stopAgentSession,
     updateAgentSessionModel,

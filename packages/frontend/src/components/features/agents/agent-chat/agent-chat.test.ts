@@ -11,7 +11,6 @@ import {
 } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
-  mode: "interactive" as const,
   chatSettings: createChatSettingsFixture(),
   thread: {
     session: buildSession({
@@ -52,7 +51,7 @@ const buildModel = () => ({
   },
   composer: {
     taskId: "task-1",
-    displayedSessionId: "session-1",
+    displayedSessionKey: "session-1",
     isInteractionEnabled: true,
     isReadOnly: false,
     readOnlyReason: null,
@@ -125,12 +124,11 @@ describe("AgentChat", () => {
     expect(html).toContain("Header slot");
   });
 
-  test("hides the composer in non-interactive mode", () => {
+  test("hides the composer when the surface has no composer model", () => {
     const interactiveModel = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentChatSurface, {
         model: {
-          mode: "non_interactive",
           chatSettings: interactiveModel.chatSettings,
           thread: {
             ...interactiveModel.thread,

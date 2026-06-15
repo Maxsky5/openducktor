@@ -1,11 +1,9 @@
 import {
   externalTaskSyncEventSchema,
   type RepoStoreHealth,
-  type RuntimeDescriptor,
-  type RuntimeKind,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
-import { CancelledError, isCancelledError } from "@tanstack/react-query";
+import { CancelledError } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { BROWSER_LIVE_STREAM_WARNING_EVENT_KIND } from "@/lib/browser-live/constants";
@@ -14,7 +12,6 @@ import { errorMessage } from "@/lib/errors";
 import { hostBridge } from "@/lib/host-client";
 import type { TaskDataRefreshOptions } from "@/state/app-state-contexts";
 import { getBlockingRepoStoreHealth, summarizeTaskLoadError } from "@/state/tasks/task-load-errors";
-import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 const TASK_STORE_PREPARATION_TOAST_DELAY_MS = 1_000;
@@ -43,42 +40,32 @@ const rememberProcessedExternalTaskEvent = (
 
 type UseAppLifecycleArgs = {
   activeWorkspace: ActiveWorkspace | null;
-  runtimeDefinitions: RuntimeDescriptor[];
   refreshWorkspaces: () => Promise<void>;
   refreshBranches: (force?: boolean) => Promise<void>;
   refreshRuntimeCheck: (force?: boolean) => Promise<unknown>;
   refreshTaskStoreCheckForRepo: (repoPath: string, force?: boolean) => Promise<TaskStoreCheck>;
-  refreshRepoRuntimeHealthForRepo: (
-    repoPath: string,
-    force?: boolean,
-  ) => Promise<RepoRuntimeHealthMap>;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
     options?: TaskDataRefreshOptions,
   ) => Promise<void>;
-  startRepoRuntime: (repoPath: string, runtimeKind: RuntimeKind) => Promise<void>;
   clearBranchData: () => void;
   taskStorePreparationToastDelayMs?: number;
 };
 
 export function useAppLifecycle({
   activeWorkspace,
-  runtimeDefinitions,
   refreshWorkspaces,
   refreshBranches,
   refreshRuntimeCheck,
   refreshTaskStoreCheckForRepo,
-  refreshRepoRuntimeHealthForRepo,
   refreshTaskData,
-  startRepoRuntime,
   clearBranchData,
   taskStorePreparationToastDelayMs = TASK_STORE_PREPARATION_TOAST_DELAY_MS,
 }: UseAppLifecycleArgs): void {
   const repoLoadVersionRef = useRef(0);
   const activeWorkspaceRef = useRef(activeWorkspace);
   const refreshTaskDataRef = useRef(refreshTaskData);
-  const runtimeKindsKey = runtimeDefinitions.map((definition) => definition.kind).join(",");
   const processedTaskEventIdsRef = useRef<Set<string> | null>(null);
   if (processedTaskEventIdsRef.current === null) {
     processedTaskEventIdsRef.current = new Set<string>();
@@ -112,60 +99,6 @@ export function useAppLifecycle({
       },
     );
   }, [refreshRuntimeCheck, refreshWorkspaces]);
-
-  useEffect(() => {
-    const repoPath = activeWorkspace?.repoPath ?? null;
-    if (!repoPath || runtimeKindsKey.length === 0) {
-      return;
-    }
-
-    let disposed = false;
-    const runtimeKinds = runtimeKindsKey.split(",") as RuntimeKind[];
-
-    const refreshRuntimeHealth = (): void => {
-      void refreshRepoRuntimeHealthForRepo(repoPath, true).catch((error: unknown) => {
-        if (
-          disposed ||
-          activeWorkspaceRef.current?.repoPath !== repoPath ||
-          isCancelledError(error)
-        ) {
-          return;
-        }
-        toast.error("Runtime diagnostics unavailable", {
-          description: errorMessage(error),
-        });
-      });
-    };
-
-    refreshRuntimeHealth();
-
-    for (const runtimeKind of runtimeKinds) {
-      void startRepoRuntime(repoPath, runtimeKind)
-        .catch((error: unknown) => {
-          if (disposed || activeWorkspaceRef.current?.repoPath !== repoPath) {
-            return;
-          }
-          toast.error(`Runtime startup failed for ${runtimeKind}`, {
-            description: errorMessage(error),
-          });
-        })
-        .finally(() => {
-          if (disposed || activeWorkspaceRef.current?.repoPath !== repoPath) {
-            return;
-          }
-          refreshRuntimeHealth();
-        });
-    }
-
-    return () => {
-      disposed = true;
-    };
-  }, [
-    activeWorkspace?.repoPath,
-    refreshRepoRuntimeHealthForRepo,
-    runtimeKindsKey,
-    startRepoRuntime,
-  ]);
 
   useEffect(() => {
     let disposed = false;

@@ -4,12 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import type { ActiveWorkspace, WorkspaceSelectionOperationsInput } from "@/types/state-slices";
-import {
-  loadRepoConfigFromQuery,
-  loadWorkspaceListFromQuery,
-  workspaceQueryKeys,
-} from "../../queries/workspace";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "../shared/runtime-readiness-publication";
+import { loadWorkspaceListFromQuery, workspaceQueryKeys } from "../../queries/workspace";
 import {
   normalizeRepoPath,
   shouldResetBranchStateForRepoChange,
@@ -285,35 +280,6 @@ export function useWorkspaceSelectionOperations({
           clearStateForWorkspaceTransition(selectedWorkspace);
           setActiveWorkspace(selectedWorkspace);
 
-          void loadRepoConfigFromQuery(queryClient, selectedWorkspace.workspaceId, hostClient)
-            .then((repoConfig) => {
-              if (workspaceSwitchVersionRef.current !== switchVersion) {
-                return;
-              }
-              if (!repoConfig?.defaultRuntimeKind?.trim()) {
-                throw new Error(
-                  "Repository default runtime is not configured. Select a repository default runtime before switching repositories.",
-                );
-              }
-
-              return ensureRuntimeAndInvalidateReadinessQueries({
-                repoPath: selectedWorkspace.repoPath,
-                runtimeKind: repoConfig.defaultRuntimeKind,
-                ensureRuntime: (repoPath, runtimeKind) =>
-                  hostClient.runtimeEnsure(repoPath, runtimeKind),
-                queryClient,
-              });
-            })
-            .catch((error) => {
-              if (workspaceSwitchVersionRef.current !== switchVersion) {
-                return;
-              }
-
-              toast.error("Runtime unavailable", {
-                description: errorMessage(error),
-              });
-            });
-
           try {
             await refreshWorkspaces();
           } catch (error) {
@@ -343,7 +309,6 @@ export function useWorkspaceSelectionOperations({
       clearStateForWorkspaceTransition,
       hostClient,
       markWorkspaceActiveLocally,
-      queryClient,
       refreshWorkspaceCachesAfterMutation,
       refreshWorkspaces,
       setActiveWorkspace,

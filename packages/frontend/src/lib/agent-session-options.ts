@@ -2,7 +2,10 @@ import type { AgentRole } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
-export type AgentSessionRecencySummary = Pick<AgentSessionState, "externalSessionId" | "startedAt">;
+export type AgentSessionRecencySummary = Pick<
+  AgentSessionState,
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "startedAt"
+>;
 
 export type AgentSessionOptionSummary = AgentSessionRecencySummary &
   Pick<AgentSessionState, "runtimeKind" | "workingDirectory" | "role" | "status">;
@@ -14,10 +17,12 @@ export const compareAgentSessionRecency = (
   if (a.startedAt !== b.startedAt) {
     return a.startedAt > b.startedAt ? -1 : 1;
   }
-  if (a.externalSessionId === b.externalSessionId) {
+  const leftIdentityKey = agentSessionIdentityKey(a);
+  const rightIdentityKey = agentSessionIdentityKey(b);
+  if (leftIdentityKey === rightIdentityKey) {
     return 0;
   }
-  return a.externalSessionId > b.externalSessionId ? -1 : 1;
+  return leftIdentityKey > rightIdentityKey ? -1 : 1;
 };
 
 export const buildRoleSessionSequenceByIdentity = (
@@ -29,15 +34,12 @@ export const buildRoleSessionSequenceByIdentity = (
         if (a.startedAt !== b.startedAt) {
           return a.startedAt < b.startedAt ? -1 : 1;
         }
-        if (a.externalSessionId === b.externalSessionId) {
-          const leftIdentityKey = agentSessionIdentityKey(a);
-          const rightIdentityKey = agentSessionIdentityKey(b);
-          if (leftIdentityKey === rightIdentityKey) {
-            return 0;
-          }
-          return leftIdentityKey < rightIdentityKey ? -1 : 1;
+        const leftIdentityKey = agentSessionIdentityKey(a);
+        const rightIdentityKey = agentSessionIdentityKey(b);
+        if (leftIdentityKey === rightIdentityKey) {
+          return 0;
         }
-        return a.externalSessionId < b.externalSessionId ? -1 : 1;
+        return leftIdentityKey < rightIdentityKey ? -1 : 1;
       })
       .map((session, index) => [agentSessionIdentityKey(session), index + 1]),
   );

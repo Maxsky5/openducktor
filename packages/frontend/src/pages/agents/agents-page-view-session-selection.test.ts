@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import {
+  agentSessionIdentityKey,
+  parseAgentSessionIdentityKey,
+} from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   groupSessionsByTaskId,
   resolveAgentStudioViewSessionSelection,
 } from "./agents-page-selection";
-
-const externalSessionParam = (externalSessionId: string) => externalSessionId;
 
 describe("Agent Studio view session selection", () => {
   test("groups sessions by task with newest sessions first", () => {
@@ -64,7 +66,7 @@ describe("Agent Studio view session selection", () => {
     ]);
   });
 
-  test("waits for the read model to materialize a selected route as a session summary", () => {
+  test("uses the selected route identity before the read model materializes a summary", () => {
     const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
@@ -77,9 +79,12 @@ describe("Agent Studio view session selection", () => {
       }),
     );
 
+    const sessionKey = agentSessionIdentityKey(sessionSummary);
+    const routeIdentity = parseAgentSessionIdentityKey(sessionKey);
     const loadingSelection = resolveAgentStudioViewSessionSelection({
       sessionSummaries: [],
-      externalSessionId: externalSessionParam("session-reloaded"),
+      sessionKey,
+      sessionIdentity: routeIdentity,
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -89,12 +94,13 @@ describe("Agent Studio view session selection", () => {
     expect(loadingSelection).toEqual({
       role: "build",
       sessionSummary: null,
-      sessionRoute: null,
+      sessionIdentity: routeIdentity,
     });
 
     const materializedSelection = resolveAgentStudioViewSessionSelection({
       sessionSummaries: [sessionSummary],
-      externalSessionId: externalSessionParam(sessionSummary.externalSessionId),
+      sessionKey,
+      sessionIdentity: routeIdentity,
       hasExplicitRoleParam: true,
       roleFromQuery: "build",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
@@ -102,14 +108,44 @@ describe("Agent Studio view session selection", () => {
     });
 
     expect(materializedSelection.sessionSummary).toBe(sessionSummary);
-    expect(materializedSelection.sessionRoute).toEqual({
+    expect(materializedSelection.sessionIdentity).toEqual({
       externalSessionId: sessionSummary.externalSessionId,
       runtimeKind: "opencode",
       workingDirectory: "/repo/live",
     });
   });
 
-  test("does not resolve an ambiguous external id across visible session summaries", () => {
+  test("uses a concrete selection intent identity before summaries materialize", () => {
+    const selection = resolveAgentStudioViewSessionSelection({
+      sessionSummaries: [],
+      sessionKey: "session-started",
+      sessionIdentity: null,
+      hasExplicitRoleParam: true,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+      fallbackRole: "build",
+      selectionIntent: {
+        role: "build",
+        sessionIdentity: {
+          externalSessionId: "session-started",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/live",
+        },
+      },
+    });
+
+    expect(selection).toEqual({
+      role: "build",
+      sessionSummary: null,
+      sessionIdentity: {
+        externalSessionId: "session-started",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/live",
+      },
+    });
+  });
+
+  test("resolves duplicated external ids by full session identity", () => {
     const liveBuildSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
@@ -135,21 +171,24 @@ describe("Agent Studio view session selection", () => {
 
     const selection = resolveAgentStudioViewSessionSelection({
       sessionSummaries: [liveBuildSummary, livePlannerSummary],
-      externalSessionId: externalSessionParam("shared-session-id"),
+      sessionKey: agentSessionIdentityKey(liveBuildSummary),
+      sessionIdentity: parseAgentSessionIdentityKey(agentSessionIdentityKey(liveBuildSummary)),
       hasExplicitRoleParam: true,
       roleFromQuery: "qa",
       selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
       fallbackRole: "qa",
     });
 
-    expect(selection).toEqual({
-      role: "qa",
-      sessionSummary: null,
-      sessionRoute: null,
+    expect(selection.sessionSummary).toBe(liveBuildSummary);
+    expect(selection.sessionIdentity).toEqual({
+      externalSessionId: "shared-session-id",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/live",
     });
+    expect(selection.role).toBe("build");
   });
 
-  test("sanitizes the route session before resolving view selection", () => {
+  test("sanitizes the selected session identity before resolving view selection", () => {
     const sessionSummary = toAgentSessionSummary(
       createAgentSessionFixture({
         runtimeKind: "opencode",
@@ -164,33 +203,36 @@ describe("Agent Studio view session selection", () => {
 
     expect(
       resolveAgentStudioViewSessionSelection({
-        externalSessionId: externalSessionParam("session-summary"),
+        sessionKey: agentSessionIdentityKey(sessionSummary),
+        sessionIdentity: parseAgentSessionIdentityKey(agentSessionIdentityKey(sessionSummary)),
         sessionSummaries: [sessionSummary],
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
         fallbackRole: "build",
-      }).sessionRoute?.externalSessionId,
+      }).sessionIdentity?.externalSessionId,
     ).toBe("session-summary");
     expect(
       resolveAgentStudioViewSessionSelection({
-        externalSessionId: externalSessionParam("session-unknown"),
+        sessionKey: "session-unknown",
+        sessionIdentity: null,
         sessionSummaries: [sessionSummary],
         hasExplicitRoleParam: true,
         roleFromQuery: "planner",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
         fallbackRole: "planner",
-      }).sessionRoute?.externalSessionId,
+      }).sessionIdentity?.externalSessionId,
     ).toBeUndefined();
     expect(
       resolveAgentStudioViewSessionSelection({
-        externalSessionId: externalSessionParam("session-other-task"),
+        sessionKey: "session-other-task",
+        sessionIdentity: null,
         sessionSummaries: [sessionSummary],
         hasExplicitRoleParam: false,
         roleFromQuery: "build",
         selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
         fallbackRole: "build",
-      }).sessionRoute?.externalSessionId,
+      }).sessionIdentity?.externalSessionId,
     ).toBe("session-summary");
   });
 });

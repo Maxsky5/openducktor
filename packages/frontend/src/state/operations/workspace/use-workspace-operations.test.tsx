@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import {
-  OPENCODE_RUNTIME_DESCRIPTOR,
-  type SettingsSnapshot,
-  type WorkspaceRecord,
-} from "@openducktor/contracts";
+import type { SettingsSnapshot, WorkspaceRecord } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { act, createElement, type PropsWithChildren, useEffect, useRef, useState } from "react";
@@ -31,14 +27,8 @@ const createWorkspaceHostClient = (): WorkspaceIntegrationHostClient =>
     workspaceSelect: async (repoPath: string) => workspace(repoPath, true),
     workspaceReorder: async (workspaceOrder: string[]) =>
       workspaceOrder.map((workspaceId) => workspace(`/${workspaceId}`)),
-    workspaceGetRepoConfig: async () => {
-      throw new Error("workspaceGetRepoConfig not configured");
-    },
     workspaceGetSettingsSnapshot: async () => {
       throw new Error("workspaceGetSettingsSnapshot not configured");
-    },
-    runtimeEnsure: async () => {
-      throw new Error("runtimeEnsure not configured");
     },
     gitGetCurrentBranch: async () => {
       throw new Error("gitGetCurrentBranch not configured");
@@ -557,72 +547,20 @@ describe("use-workspace-operations", () => {
     }
   });
 
-  test("selectWorkspace clears state and triggers runtime ensure", async () => {
+  test("selectWorkspace clears state without starting a runtime", async () => {
     const setActiveRepo = mock(() => {});
     const clearTaskData = mock(() => {});
     const clearActiveTaskStoreCheck = mock(() => {});
     const workspaceSelect = mock(async (): Promise<WorkspaceRecord> => workspace("/repo-a", true));
-    const runtimeDeferred = createDeferred<{
-      kind: "opencode";
-      runtimeId: string;
-      repoPath: string;
-      taskId: null;
-      role: "workspace";
-      workingDirectory: string;
-      runtimeRoute: {
-        type: "local_http";
-        endpoint: string;
-      };
-      startedAt: string;
-      descriptor: typeof OPENCODE_RUNTIME_DESCRIPTOR;
-    }>();
-    const runtimeEnsure = mock(async () => runtimeDeferred.promise);
-    const workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo-a",
-      workspaceName: "repo-a",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
-    const runtimeValue = {
-      kind: "opencode",
-      runtimeId: "runtime-1",
-      repoPath: "/repo-a",
-      taskId: null,
-      role: "workspace",
-      workingDirectory: "/tmp/repo-a",
-      runtimeRoute: {
-        type: "local_http" as const,
-        endpoint: "http://127.0.0.1:3030",
-      },
-      startedAt: "2026-02-22T08:00:00.000Z",
-      descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-    } as const;
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
     );
 
     const original = {
       workspaceSelect: workspaceHost.workspaceSelect,
-      runtimeEnsure: workspaceHost.runtimeEnsure,
-      workspaceGetRepoConfig: workspaceHost.workspaceGetRepoConfig,
       workspaceList: workspaceHost.workspaceList,
     };
     workspaceHost.workspaceSelect = workspaceSelect;
-    workspaceHost.runtimeEnsure = runtimeEnsure;
-    workspaceHost.workspaceGetRepoConfig = workspaceGetRepoConfig;
     workspaceHost.workspaceList = workspaceList;
 
     const harness = createHookHarness({
@@ -646,7 +584,6 @@ describe("use-workspace-operations", () => {
       const selectResult = await withTimeout(selectPromise, 20);
       expect(selectResult).toBeUndefined();
       expect(workspaceList).toHaveBeenCalled();
-      runtimeDeferred.resolve(runtimeValue);
       await selectPromise;
       await Promise.resolve();
 
@@ -654,13 +591,9 @@ describe("use-workspace-operations", () => {
       expect(clearTaskData).toHaveBeenCalled();
       expect(clearActiveTaskStoreCheck).toHaveBeenCalled();
       expect(workspaceSelect).toHaveBeenCalledWith("repo-a");
-      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a", "opencode");
     } finally {
-      runtimeDeferred.resolve(runtimeValue);
       await harness.unmount();
       workspaceHost.workspaceSelect = original.workspaceSelect;
-      workspaceHost.runtimeEnsure = original.runtimeEnsure;
-      workspaceHost.workspaceGetRepoConfig = original.workspaceGetRepoConfig;
       workspaceHost.workspaceList = original.workspaceList;
     }
   });
@@ -677,42 +610,6 @@ describe("use-workspace-operations", () => {
     );
     hostClient.workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
-    );
-    hostClient.workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo-a",
-      workspaceName: "repo-a",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
-    hostClient.runtimeEnsure = mock(
-      async () =>
-        ({
-          kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: "/repo-a",
-          taskId: null,
-          role: "workspace" as const,
-          workingDirectory: "/tmp/repo-a",
-          runtimeRoute: {
-            type: "local_http" as const,
-            endpoint: "http://127.0.0.1:3030",
-          },
-          startedAt: "2026-02-22T08:00:00.000Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        }) as const,
     );
     let latest: ReturnType<typeof useWorkspaceOperations> | null = null;
 
@@ -770,42 +667,6 @@ describe("use-workspace-operations", () => {
     const workspaceList = mock(
       async (): Promise<WorkspaceRecord[]> => [workspace("/repo-a", true)],
     );
-    const workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo-a",
-      workspaceName: "repo-a",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
-    const runtimeEnsure = mock(
-      async () =>
-        ({
-          kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: "/repo-a",
-          taskId: null,
-          role: "workspace" as const,
-          workingDirectory: "/tmp/repo-a",
-          runtimeRoute: {
-            type: "local_http" as const,
-            endpoint: "http://127.0.0.1:3030",
-          },
-          startedAt: "2026-02-22T08:00:00.000Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        }) as const,
-    );
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
       detached: false,
@@ -825,14 +686,10 @@ describe("use-workspace-operations", () => {
 
     const originalWorkspaceSelect = workspaceHost.workspaceSelect;
     const originalWorkspaceList = workspaceHost.workspaceList;
-    const originalWorkspaceGetRepoConfig = workspaceHost.workspaceGetRepoConfig;
-    const originalRuntimeEnsure = workspaceHost.runtimeEnsure;
     const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
     const originalGitGetBranches = workspaceHost.gitGetBranches;
     workspaceHost.workspaceSelect = workspaceSelect;
     workspaceHost.workspaceList = workspaceList;
-    workspaceHost.workspaceGetRepoConfig = workspaceGetRepoConfig;
-    workspaceHost.runtimeEnsure = runtimeEnsure;
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
@@ -915,7 +772,6 @@ describe("use-workspace-operations", () => {
       expect(gitGetCurrentBranch).toHaveBeenCalledWith("/repo-a");
       expect(gitGetBranches).toHaveBeenCalledWith("/repo-a");
       expect(workspaceList).toHaveBeenCalled();
-      expect(runtimeEnsure).toHaveBeenCalledWith("/repo-a", "opencode");
 
       if (!latest) {
         throw new Error("Hook not mounted");
@@ -944,8 +800,6 @@ describe("use-workspace-operations", () => {
       unmount();
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
       workspaceHost.workspaceList = originalWorkspaceList;
-      workspaceHost.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      workspaceHost.runtimeEnsure = originalRuntimeEnsure;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
     }
@@ -1052,42 +906,6 @@ describe("use-workspace-operations", () => {
     const workspaceList = mock(async (): Promise<WorkspaceRecord[]> => {
       throw new Error("workspace list failed");
     });
-    const workspaceGetRepoConfig = mock(async () => ({
-      workspaceId: "repo-a",
-      workspaceName: "repo-a",
-      repoPath: "/repo-a",
-      defaultRuntimeKind: "opencode" as const,
-      branchPrefix: "obp",
-      defaultTargetBranch: { remote: "origin", branch: "main" },
-      git: {
-        providers: {},
-      },
-      hooks: {
-        preStart: [],
-        postComplete: [],
-      },
-      devServers: [],
-      worktreeCopyPaths: [],
-      promptOverrides: {},
-      agentDefaults: {},
-    }));
-    const runtimeEnsure = mock(
-      async () =>
-        ({
-          kind: "opencode",
-          runtimeId: "runtime-1",
-          repoPath: "/repo-a",
-          taskId: null,
-          role: "workspace" as const,
-          workingDirectory: "/tmp/repo-a",
-          runtimeRoute: {
-            type: "local_http" as const,
-            endpoint: "http://127.0.0.1:3030",
-          },
-          startedAt: "2026-02-22T08:00:00.000Z",
-          descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
-        }) as const,
-    );
     const gitGetCurrentBranch = mock(async () => ({
       name: "main",
       detached: false,
@@ -1107,14 +925,10 @@ describe("use-workspace-operations", () => {
 
     const originalWorkspaceSelect = workspaceHost.workspaceSelect;
     const originalWorkspaceList = workspaceHost.workspaceList;
-    const originalWorkspaceGetRepoConfig = workspaceHost.workspaceGetRepoConfig;
-    const originalRuntimeEnsure = workspaceHost.runtimeEnsure;
     const originalGitGetCurrentBranch = workspaceHost.gitGetCurrentBranch;
     const originalGitGetBranches = workspaceHost.gitGetBranches;
     workspaceHost.workspaceSelect = workspaceSelect;
     workspaceHost.workspaceList = workspaceList;
-    workspaceHost.workspaceGetRepoConfig = workspaceGetRepoConfig;
-    workspaceHost.runtimeEnsure = runtimeEnsure;
     workspaceHost.gitGetCurrentBranch = gitGetCurrentBranch;
     workspaceHost.gitGetBranches = gitGetBranches;
 
@@ -1226,8 +1040,6 @@ describe("use-workspace-operations", () => {
       unmount();
       workspaceHost.workspaceSelect = originalWorkspaceSelect;
       workspaceHost.workspaceList = originalWorkspaceList;
-      workspaceHost.workspaceGetRepoConfig = originalWorkspaceGetRepoConfig;
-      workspaceHost.runtimeEnsure = originalRuntimeEnsure;
       workspaceHost.gitGetCurrentBranch = originalGitGetCurrentBranch;
       workspaceHost.gitGetBranches = originalGitGetBranches;
       (toast as { error: typeof toast.error }).error = originalToastError;

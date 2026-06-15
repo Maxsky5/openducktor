@@ -113,7 +113,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
-        session: "build-1",
+        session: agentSessionIdentityKey(sessionWorkflowResult("build-1")),
         agent: "build",
       });
     } finally {
@@ -212,7 +212,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
-        session: "build-new-9",
+        session: agentSessionIdentityKey(sessionWorkflowResult("build-new-9")),
         agent: "build",
       });
     } finally {
@@ -245,7 +245,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
       );
       expect(args.scheduleQueryUpdate).toHaveBeenCalledWith({
         task: "task-1",
-        session: "build-new-9",
+        session: agentSessionIdentityKey(sessionWorkflowResult("build-new-9")),
         agent: "build",
       });
     } finally {

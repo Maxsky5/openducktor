@@ -1,3 +1,4 @@
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   forEachSessionMessage,
   getSessionMessageAt,
@@ -56,10 +57,8 @@ export type AgentChatWindowRowsCacheEntry = AgentChatWindowRowsState & {
 
 const CHAT_WINDOW_ROWS_CACHE_LIMIT = 6;
 
-const toAgentChatWindowRowsCacheKey = (
-  externalSessionId: string,
-  showThinkingMessages: boolean,
-): string => `${externalSessionId}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
+const toAgentChatWindowRowsCacheKey = (sessionKey: string, showThinkingMessages: boolean): string =>
+  `${sessionKey}:${showThinkingMessages ? "thinking:on" : "thinking:off"}`;
 
 const touchAgentChatWindowRowsCacheEntry = (
   cache: Map<string, AgentChatWindowRowsCacheEntry>,
@@ -111,7 +110,7 @@ const areSessionMessageContainersEquivalent = (
 
 const appendMessageRows = (
   rows: AgentChatWindowRow[],
-  externalSessionId: string,
+  sessionKey: string,
   message: AgentChatMessage,
   showThinkingMessages: boolean,
 ): void => {
@@ -129,16 +128,14 @@ const appendMessageRows = (
   if (shouldShowTurnDuration) {
     rows.push({
       kind: "turn_duration",
-      // Scope row identity to the active session to avoid cross-session cache reuse.
-      key: `${externalSessionId}:${message.id}:duration`,
+      key: `${sessionKey}:${message.id}:duration`,
       durationMs: turnDurationMs,
     });
   }
 
   rows.push({
     kind: "message",
-    // Message IDs can repeat across sessions; include session ID for stable row keys.
-    key: `${externalSessionId}:${message.id}`,
+    key: `${sessionKey}:${message.id}`,
     message,
   });
 };
@@ -197,7 +194,10 @@ export const writeAgentChatWindowRowsCacheEntry = ({
   rowsState: AgentChatWindowRowsState;
   cache: Map<string, AgentChatWindowRowsCacheEntry>;
 }): AgentChatWindowRowsCacheEntry => {
-  const cacheKey = toAgentChatWindowRowsCacheKey(session.externalSessionId, showThinkingMessages);
+  const cacheKey = toAgentChatWindowRowsCacheKey(
+    agentSessionIdentityKey(session),
+    showThinkingMessages,
+  );
   const cacheEntry = createWindowRowsCacheEntry(session.messages, rowsState);
   touchAgentChatWindowRowsCacheEntry(cache, cacheKey, cacheEntry);
   return cacheEntry;
@@ -212,7 +212,10 @@ export const peekReusableAgentChatWindowRowsState = ({
   showThinkingMessages: boolean;
   cache: Map<string, AgentChatWindowRowsCacheEntry>;
 }): Pick<AgentChatWindowRowsState, keyof AgentChatWindowResolvedState> | null => {
-  const cacheKey = toAgentChatWindowRowsCacheKey(session.externalSessionId, showThinkingMessages);
+  const cacheKey = toAgentChatWindowRowsCacheKey(
+    agentSessionIdentityKey(session),
+    showThinkingMessages,
+  );
   const cacheEntry = cache.get(cacheKey);
   if (!cacheEntry) {
     return null;
@@ -238,6 +241,7 @@ export function createAgentChatWindowRowsStateBuilder(
 ): AgentChatWindowRowsStateBuilder {
   const rows: AgentChatWindowRow[] = [];
   const turnRowStartIndexes: number[] = [];
+  const sessionKey = agentSessionIdentityKey(session);
   const messageCount = getSessionMessageCount(session);
   let hasAttachmentMessages = false;
   let lastUserMessageId: string | null = null;
@@ -278,7 +282,7 @@ export function createAgentChatWindowRowsStateBuilder(
       turnRowStartIndexes.push(nextRowStart);
     }
 
-    appendMessageRows(rows, session.externalSessionId, message, showThinkingMessages);
+    appendMessageRows(rows, sessionKey, message, showThinkingMessages);
   };
 
   return {
@@ -364,7 +368,7 @@ export function getAgentChatWindowRowsKey(
   resolveMessageIdentityToken: (message: AgentChatMessage) => number,
 ): string {
   const signatureParts: string[] = [
-    session.externalSessionId,
+    agentSessionIdentityKey(session),
     showThinkingMessages ? "thinking:on" : "thinking:off",
   ];
 

@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_AGENT_RUNTIMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { type ComponentProps, createElement as createReactElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { buildMessage } from "./agent-chat-test-fixtures";
@@ -23,9 +25,18 @@ const TEST_RUNTIME_DEFINITIONS_CONTEXT = {
 } satisfies ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"];
 
 const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+const DEFAULT_TEST_SESSION_IDENTITY: AgentSessionIdentity = {
+  externalSessionId: "session-parent",
+  runtimeKind: "opencode",
+  workingDirectory: "/repo",
+};
 
-type AgentChatMessageCardTestProps = ComponentProps<typeof AgentChatMessageCard> & {
+type AgentChatMessageCardTestProps = Omit<
+  ComponentProps<typeof AgentChatMessageCard>,
+  "sessionIdentity"
+> & {
   chatSettings?: typeof DEFAULT_TEST_CHAT_SETTINGS;
+  sessionIdentity?: AgentSessionIdentity | null;
 };
 
 const createElement = (
@@ -39,7 +50,7 @@ const createElement = (
       AgentChatSettingsProvider,
       { value: chatSettings },
       createReactElement(AgentChatMessageCard, {
-        sessionRuntimeKind: "opencode",
+        sessionIdentity: DEFAULT_TEST_SESSION_IDENTITY,
         ...props,
       }),
     ),
@@ -349,6 +360,7 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
+        sessionIdentity: null,
       }),
     );
 
@@ -378,7 +390,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -794,8 +805,12 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingApprovalCountByExternalSessionId: {
-          "session-child-waiting": 1,
+        subagentPendingApprovalCountBySessionKey: {
+          [agentSessionIdentityKey({
+            externalSessionId: "session-child-waiting",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          })]: 1,
         },
       }),
     );
@@ -823,8 +838,12 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingQuestionCountByExternalSessionId: {
-          "session-child-question": 1,
+        subagentPendingQuestionCountBySessionKey: {
+          [agentSessionIdentityKey({
+            externalSessionId: "session-child-question",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          })]: 1,
         },
       }),
     );
@@ -853,8 +872,12 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         }),
         sessionAgentColors: {},
-        subagentPendingApprovalCountByExternalSessionId: {
-          "session-child-completed": 1,
+        subagentPendingApprovalCountBySessionKey: {
+          [agentSessionIdentityKey({
+            externalSessionId: "session-child-completed",
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+          })]: 1,
         },
       }),
     );
@@ -995,7 +1018,10 @@ describe("AgentChatMessageCard tool duration", () => {
             variant: "high",
           },
         },
-        sessionRuntimeKind: "codex",
+        sessionIdentity: {
+          ...DEFAULT_TEST_SESSION_IDENTITY,
+          runtimeKind: "codex",
+        },
         sessionAgentColors: {},
       }),
     );
@@ -1249,7 +1275,10 @@ describe("AgentChatMessageCard tool duration", () => {
             modelId: "gpt-5.3-codex",
           },
         },
-        sessionRuntimeKind: "codex",
+        sessionIdentity: {
+          ...DEFAULT_TEST_SESSION_IDENTITY,
+          runtimeKind: "codex",
+        },
         sessionAgentColors: {},
       }),
     );
@@ -1315,7 +1344,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1362,7 +1390,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1408,7 +1435,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1462,7 +1488,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1502,7 +1527,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1536,7 +1560,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1574,7 +1597,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 
@@ -1618,7 +1640,6 @@ describe("AgentChatMessageCard tool duration", () => {
           },
         },
         sessionAgentColors: {},
-        sessionWorkingDirectory: "/repo",
       }),
     );
 

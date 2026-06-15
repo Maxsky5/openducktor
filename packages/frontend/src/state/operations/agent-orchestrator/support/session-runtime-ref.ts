@@ -6,18 +6,18 @@ import type {
 } from "@openducktor/core";
 import { requireRepoRuntimeRef, requireSessionWorkingDirectory } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import {
   readPersistedRuntimeKind,
   requireSessionRuntimeKindForPersistence,
 } from "./session-runtime-metadata";
 
-export type ListenToAgentSession = (session: AgentSessionRef) => Promise<void>;
+export type ObserveAgentSession = (session: AgentSessionRef) => Promise<void>;
 
-export type RuntimeWorkingDirectoryAccessState = {
-  runtimeKind?: AgentSessionState["runtimeKind"] | null;
-  workingDirectory: string;
-};
+export type RuntimeWorkingDirectoryAccessState = Pick<
+  AgentSessionIdentity,
+  "runtimeKind" | "workingDirectory"
+>;
 
 export type RuntimeWorkingDirectoryRefState = {
   runtimeRef: RuntimeWorkingDirectoryRef | null;
@@ -31,14 +31,14 @@ const toRuntimeWorkingDirectoryRefFromMetadata = ({
   action,
 }: {
   repoPath: string | null | undefined;
-  runtimeKind: AgentSessionState["runtimeKind"] | null | undefined;
-  workingDirectory: string | null | undefined;
+  runtimeKind: AgentSessionIdentity["runtimeKind"];
+  workingDirectory: AgentSessionIdentity["workingDirectory"];
   action: string;
 }): RuntimeWorkingDirectoryRef => {
   const runtimeRef = requireRepoRuntimeRef(
     {
       ...(repoPath !== null && repoPath !== undefined ? { repoPath } : {}),
-      ...(runtimeKind ? { runtimeKind } : {}),
+      runtimeKind,
     },
     action,
   );
@@ -59,7 +59,7 @@ export const toRuntimeWorkingDirectoryRef = ({
 }): RuntimeWorkingDirectoryRef =>
   toRuntimeWorkingDirectoryRefFromMetadata({
     repoPath,
-    runtimeKind: session.runtimeKind ?? null,
+    runtimeKind: session.runtimeKind,
     workingDirectory: session.workingDirectory,
     action,
   });

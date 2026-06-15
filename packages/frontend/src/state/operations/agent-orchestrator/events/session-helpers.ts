@@ -4,7 +4,6 @@ import { finalizeDraftAssistantMessage } from "../support/assistant-meta";
 import { sanitizeStreamingText } from "../support/core";
 import type {
   DraftChannel,
-  DraftChannelValueMap,
   SessionLifecycleEventContext,
   SessionPart,
 } from "./session-event-types";
@@ -13,19 +12,7 @@ const DRAFT_FLUSH_DELAY_MS = 100;
 export const clearDraftBuffers = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
-  const timeoutId =
-    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
-  if (timeoutId !== undefined) {
-    clearTimeout(timeoutId);
-  }
-  if (context.drafts.draftFlushTimeoutBySessionRef) {
-    delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
-  }
-  delete context.drafts.draftRawBySessionRef.current[context.store.externalSessionId];
-  delete context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId];
-  if (context.drafts.draftMessageIdBySessionRef) {
-    delete context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId];
-  }
+  context.drafts.buffers.clearSession(context.store.sessionKey);
 };
 
 export const eventTimestampMs = (timestamp: string): number => {
@@ -35,31 +22,19 @@ export const eventTimestampMs = (timestamp: string): number => {
 
 const resolveDraftFieldState = (
   channel: DraftChannel,
-  rawByChannel: DraftChannelValueMap<string> | undefined,
-  messageIdByChannel: DraftChannelValueMap<string> | undefined,
+  context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): { text: string; messageId: string | null } => {
-  const raw = rawByChannel?.[channel] ?? "";
-  const text = sanitizeStreamingText(raw);
-  const messageId = text.length > 0 ? (messageIdByChannel?.[channel] ?? null) : null;
+  const draft = context.drafts.buffers.readChannel(context.store.sessionKey, channel);
+  const text = sanitizeStreamingText(draft.raw);
+  const messageId = text.length > 0 ? (draft.messageId ?? null) : null;
   return { text, messageId };
 };
 
 export const flushDraftBuffers = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
-  const timeoutId =
-    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
-  if (timeoutId !== undefined) {
-    clearTimeout(timeoutId);
-    if (context.drafts.draftFlushTimeoutBySessionRef) {
-      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
-    }
-  }
-
-  const rawByChannel = context.drafts.draftRawBySessionRef.current[context.store.externalSessionId];
-  const messageIdByChannel =
-    context.drafts.draftMessageIdBySessionRef?.current[context.store.externalSessionId];
-  const reasoningDraft = resolveDraftFieldState("reasoning", rawByChannel, messageIdByChannel);
+  context.drafts.buffers.clearFlushTimeout(context.store.sessionKey);
+  const reasoningDraft = resolveDraftFieldState("reasoning", context);
 
   context.store.updateSession(
     context.store.sessionIdentity,
@@ -77,21 +52,11 @@ export const flushDraftBuffers = (
 export const scheduleDraftFlush = (
   context: Pick<SessionLifecycleEventContext, "drafts" | "store">,
 ): void => {
-  const draftFlushTimeoutBySessionRef = context.drafts.draftFlushTimeoutBySessionRef;
-  if (!draftFlushTimeoutBySessionRef) {
-    flushDraftBuffers(context);
-    return;
-  }
-
-  const existingTimeoutId = draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
-  if (existingTimeoutId !== undefined) {
-    clearTimeout(existingTimeoutId);
-  }
-
-  draftFlushTimeoutBySessionRef.current[context.store.externalSessionId] = setTimeout(() => {
-    delete draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
-    flushDraftBuffers(context);
-  }, DRAFT_FLUSH_DELAY_MS);
+  context.drafts.buffers.scheduleFlush(
+    context.store.sessionKey,
+    () => flushDraftBuffers(context),
+    DRAFT_FLUSH_DELAY_MS,
+  );
 };
 
 const hasMeaningfulToolInputValue = (value: unknown): boolean => {
@@ -135,11 +100,12 @@ export const settleDraftToIdle = (
     }
 
     const durationMs = context.turn.resolveTurnDurationMs(
+      context.store.sessionKey,
       context.store.externalSessionId,
       timestamp,
       current.messages,
     );
-    const model = context.turn.turnModelBySessionRef?.current[context.store.externalSessionId];
+    const model = context.turn.turnMetadata.readModel(context.store.sessionKey);
     const finalized = finalizeDraftAssistantMessage(
       current,
       timestamp,

@@ -1,11 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   createAgentSessionFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
-import { useAgentStudioQuerySessionSync } from "./use-agent-studio-query-session-sync";
+import { useAgentStudioQuerySessionSync } from "./query-sync/use-agent-studio-query-session-sync";
 
 enableReactActEnvironment();
 
@@ -19,7 +20,8 @@ const createSession = (taskId: string, externalSessionId: string) =>
     taskId,
   });
 
-const externalSessionParam = (externalSessionId: string) => externalSessionId;
+const sessionKeyParam = (session: ReturnType<typeof createAgentSessionFixture>): string =>
+  agentSessionIdentityKey(session);
 
 const useHookHarness = (props: HookArgs) => {
   useAgentStudioQuerySessionSync(props);
@@ -34,7 +36,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isLoadingTasks: false,
   tasks: [createTask("task-1")],
   taskIdParam: "task-1",
-  sessionParam: null,
+  sessionKeyParam: null,
   sessionFromQuery: null,
   resolvedTaskId: "task-1",
   resolvedSession: null,
@@ -78,7 +80,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1"), createTask("task-2")],
         taskIdParam: "",
-        sessionParam: externalSessionParam("ext-session-2"),
+        sessionKeyParam: sessionKeyParam(selectedSession),
         sessionFromQuery: selectedSession,
         resolvedTaskId: "task-2",
         resolvedSession: selectedSession,
@@ -102,7 +104,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1")],
         taskIdParam: "missing-task",
-        sessionParam: externalSessionParam("session-2"),
+        sessionKeyParam: "session-2",
         resolvedTaskId: "",
         scheduleQueryUpdate,
       }),
@@ -122,7 +124,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1")],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("removed-session"),
+        sessionKeyParam: "removed-session",
         sessionFromQuery: null,
         resolvedTaskId: "task-1",
         scheduleQueryUpdate,
@@ -147,7 +149,7 @@ describe("useAgentStudioQuerySessionSync", () => {
         isRepoNavigationBoundaryPending: true,
         tasks: [createTask("task-1"), createTask("task-2")],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("ext-session-2"),
+        sessionKeyParam: sessionKeyParam(selectedSession),
         sessionFromQuery: selectedSession,
         resolvedTaskId: "task-1",
         resolvedSession: selectedSession,
@@ -170,7 +172,7 @@ describe("useAgentStudioQuerySessionSync", () => {
       createBaseArgs({
         tasks: [createTask("task-1"), createTask("task-2")],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("ext-session-2"),
+        sessionKeyParam: sessionKeyParam(selectedSession),
         sessionFromQuery: selectedSession,
         resolvedTaskId: "task-1",
         resolvedSession: null,
@@ -199,7 +201,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("ext-session-1"),
+        sessionKeyParam: sessionKeyParam(resolvedSession),
         sessionFromQuery: resolvedSession,
         resolvedTaskId: "task-1",
         resolvedSession,
@@ -233,7 +235,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "",
-        sessionParam: externalSessionParam("ext-session-1"),
+        sessionKeyParam: sessionKeyParam(resolvedSession),
         sessionFromQuery: resolvedSession,
         resolvedTaskId: "task-1",
         resolvedSession,
@@ -268,7 +270,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         resolvedTaskId: "task-1",
         resolvedSession,
         roleFromQuery: "spec",
@@ -295,7 +297,7 @@ describe("useAgentStudioQuerySessionSync", () => {
     const harness = createHookHarness(
       createBaseArgs({
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         resolvedTaskId: "task-1",
         resolvedSession,
         roleFromQuery: "qa",

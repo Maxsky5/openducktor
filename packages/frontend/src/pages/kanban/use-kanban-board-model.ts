@@ -40,44 +40,6 @@ const shouldDisplayKanbanTaskSession = (
   return isAgentSessionWorkingStatus(session.status);
 };
 
-const compareTaskSessionOrder = (
-  left: WorkflowAgentSessionSummary,
-  right: WorkflowAgentSessionSummary,
-): number => {
-  const leftPresentationState = toKanbanSessionPresentationState(left);
-  const rightPresentationState = toKanbanSessionPresentationState(right);
-
-  if (leftPresentationState !== rightPresentationState) {
-    return leftPresentationState === "waiting_input" ? -1 : 1;
-  }
-
-  if (left.status !== right.status) {
-    if (left.status === "running") {
-      return -1;
-    }
-
-    if (right.status === "running") {
-      return 1;
-    }
-
-    if (left.status === "starting") {
-      return -1;
-    }
-
-    if (right.status === "starting") {
-      return 1;
-    }
-  }
-
-  if (left.startedAt !== right.startedAt) {
-    return left.startedAt > right.startedAt ? -1 : 1;
-  }
-  if (left.externalSessionId === right.externalSessionId) {
-    return 0;
-  }
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
-};
-
 const comparePrimaryTaskSession = (
   left: WorkflowAgentSessionSummary,
   right: WorkflowAgentSessionSummary,
@@ -85,12 +47,16 @@ const comparePrimaryTaskSession = (
   return compareActiveSessionForPrimary(
     {
       externalSessionId: left.externalSessionId,
+      runtimeKind: left.runtimeKind,
+      workingDirectory: left.workingDirectory,
       status: left.status,
       presentationState: toKanbanSessionPresentationState(left),
       startedAt: left.startedAt,
     },
     {
       externalSessionId: right.externalSessionId,
+      runtimeKind: right.runtimeKind,
+      workingDirectory: right.workingDirectory,
       status: right.status,
       presentationState: toKanbanSessionPresentationState(right),
       startedAt: right.startedAt,
@@ -193,7 +159,7 @@ export const buildTaskSessionsByTaskId = (
   }
 
   for (const taskSessions of sessionsByTaskId.values()) {
-    taskSessions.sort(compareTaskSessionOrder);
+    taskSessions.sort(comparePrimaryTaskSession);
   }
 
   return new Map(

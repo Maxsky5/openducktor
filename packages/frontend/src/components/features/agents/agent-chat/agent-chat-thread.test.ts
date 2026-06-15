@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
@@ -702,7 +703,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("stages a large attachment transcript on session switch", async () => {
+  test("renders a large attachment transcript through the history window on session switch", async () => {
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
     const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
@@ -882,6 +883,7 @@ describe("AgentChatThread", () => {
       pendingApprovals: [],
       status: "running",
     });
+    const sessionKey = agentSessionIdentityKey(runningSession);
     const model = {
       ...buildBaseModel(),
       isSessionWorking: true,
@@ -904,7 +906,7 @@ describe("AgentChatThread", () => {
       return turn.getAttribute("style") ?? "";
     };
 
-    const runningLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    const runningLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
     expect(runningLatestTurnStyle).not.toBeNull();
     expect(runningLatestTurnStyle).not.toContain("content-visibility");
 
@@ -925,8 +927,8 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    const completedOlderTurnStyle = getTurnStyle(`${externalSessionId}:user-3`);
-    const completedLatestTurnStyle = getTurnStyle(`${externalSessionId}:user-12`);
+    const completedOlderTurnStyle = getTurnStyle(`${sessionKey}:user-3`);
+    const completedLatestTurnStyle = getTurnStyle(`${sessionKey}:user-12`);
     expect(completedOlderTurnStyle).not.toBeNull();
     expect(completedOlderTurnStyle).toContain("content-visibility");
     expect(completedLatestTurnStyle).not.toBeNull();
@@ -1123,7 +1125,7 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Old cached message");
   });
 
-  test("preserves expanded tool details while same-session history hydration appends messages", async () => {
+  test("preserves expanded tool details while same-session history load appends messages", async () => {
     const messages = [
       buildMessage("tool", "Tool read_task completed", {
         id: "tool-1",

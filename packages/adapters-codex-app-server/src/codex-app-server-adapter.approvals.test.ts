@@ -249,7 +249,7 @@ describe("CodexAppServerAdapter approvals", () => {
     unsubscribe();
   });
 
-  test("preserves initial-turn approvals for late listeners and presence snapshots", async () => {
+  test("preserves initial-turn approvals for late listeners and runtime snapshots", async () => {
     const { adapter, drainServerRequests } = createHarness({}, { deferTurnStart: true });
     drainServerRequests.mockImplementationOnce(async () => [
       {
@@ -276,14 +276,14 @@ describe("CodexAppServerAdapter approvals", () => {
     );
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread/start-runtime-ensure",
       }),
     ).resolves.toMatchObject({
-      presence: "runtime",
+      availability: "runtime",
       classification: "waiting_for_permission",
       pendingApprovals: [expect.objectContaining({ requestId: "31" })],
     });
@@ -370,14 +370,14 @@ describe("CodexAppServerAdapter approvals", () => {
     });
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",
         externalSessionId: "thread/start-runtime-ensure",
       }),
     ).resolves.toMatchObject({
-      presence: "runtime",
+      availability: "runtime",
       classification: "waiting_for_question",
       pendingQuestions: [
         expect.objectContaining({
@@ -463,7 +463,7 @@ describe("CodexAppServerAdapter approvals", () => {
     );
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",

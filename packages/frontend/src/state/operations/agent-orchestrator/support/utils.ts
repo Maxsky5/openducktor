@@ -1,4 +1,3 @@
-export { shouldStartSessionListener } from "./core";
 export { upsertSessionMessage as upsertMessage } from "./messages";
 export {
   coerceSessionSelectionToCatalog,

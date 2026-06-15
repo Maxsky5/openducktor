@@ -1,5 +1,6 @@
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import { OPENCODE_RUNTIME_DESCRIPTOR, type TaskCard } from "@openducktor/contracts";
+import type { AgentEnginePort } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { useAgentOrchestratorOperations } from "./use-agent-orchestrator-operations";
@@ -83,7 +84,7 @@ export const createHookHarness = (args: {
   activeWorkspace?: ActiveWorkspace;
   tasks: TaskCard[];
   refreshTaskData: (repoPath: string) => Promise<void>;
-  agentEngine?: OpencodeSdkAdapter;
+  agentEngine?: AgentEnginePort;
   dependencies?: OrchestratorDependencies;
 }) => {
   let latest: ReturnType<typeof useAgentOrchestratorOperations> | null = null;
@@ -118,7 +119,7 @@ export const createHookHarness = (args: {
       activeWorkspace: ActiveWorkspace;
       tasks: TaskCard[];
       refreshTaskData: (repoPath: string) => Promise<void>;
-      agentEngine: OpencodeSdkAdapter;
+      agentEngine: AgentEnginePort;
       dependencies: OrchestratorDependencies;
     }>,
   ) => {

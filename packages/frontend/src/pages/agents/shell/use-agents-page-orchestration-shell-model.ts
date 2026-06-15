@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useMemo } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import type {
   useAgentOperations,
@@ -64,22 +65,16 @@ export function useAgentsPageOrchestrationShellModel({
   humanRequestChangesTask,
   setTaskTargetBranch,
 }: UseAgentsPageOrchestrationShellModelArgs): AgentsPageOrchestrationShellModel {
-  const {
-    selection,
-    readiness,
-    isSessionSelectionResolving,
-    scheduleQueryUpdate,
-    scheduleSelectionIntent,
-  } = routeSession;
+  const { selection, scheduleQueryUpdate, scheduleSelectionIntent } = routeSession;
 
   const draftStateKey = useMemo(
     () =>
       [
         selection.viewTaskId,
         selection.viewRole,
-        selection.viewActiveSession?.externalSessionId ?? "new",
+        selection.viewActiveSession ? agentSessionIdentityKey(selection.viewActiveSession) : "new",
       ].join(":"),
-    [selection.viewActiveSession?.externalSessionId, selection.viewRole, selection.viewTaskId],
+    [selection.viewActiveSession, selection.viewRole, selection.viewTaskId],
   );
 
   const orchestrationSelection = useMemo<
@@ -88,9 +83,8 @@ export function useAgentsPageOrchestrationShellModel({
     () => ({
       ...selection,
       isLoadingTasks: isForegroundLoadingTasks,
-      isSessionSelectionResolving,
     }),
-    [isForegroundLoadingTasks, isSessionSelectionResolving, selection],
+    [isForegroundLoadingTasks, selection],
   );
 
   const orchestration = useAgentStudioOrchestrationController({
@@ -98,7 +92,6 @@ export function useAgentsPageOrchestrationShellModel({
     branches,
     runtimeDefinitions,
     selection: orchestrationSelection,
-    readiness,
     hasActiveGitConflict,
     draftStateKey,
     actions: {

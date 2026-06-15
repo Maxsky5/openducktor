@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import { type AgentStudioNavigationState, toContextStorageKey } from "./agent-studio-navigation";
 import {
   createMemoryStorage,
   seedWorkspaceNavigationContexts,
@@ -12,6 +11,10 @@ import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "./agent-studio-test-utils";
+import {
+  type AgentStudioNavigationState,
+  toContextStorageKey,
+} from "./query-sync/agent-studio-navigation";
 import {
   resolveRepoNavigationBoundaryPhase,
   useRepoNavigationPersistence,
@@ -31,7 +34,7 @@ type LegacyHookArgs = {
   initialNavigation?: AgentStudioNavigationState;
 };
 
-const externalSessionParam = (externalSessionId: string) => externalSessionId;
+const sessionKeyParam = (sessionKey: string) => sessionKey;
 
 const createActiveWorkspace = (
   repoPath: string,
@@ -119,7 +122,7 @@ const useHookHarness = (args: LegacyHookArgs) => {
   const [navigation, setNavigation] = useState<AgentStudioNavigationState>(
     initialNavigation ?? {
       taskId: "",
-      externalSessionId: null,
+      sessionKey: null,
       role: null,
     },
   );
@@ -182,7 +185,7 @@ describe("useRepoNavigationPersistence", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
-          externalSessionId: "session-from-context",
+          sessionKey: "session-from-context",
         }),
       );
 
@@ -197,7 +200,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toMatchObject({
         taskId: "task-from-context",
-        externalSessionId: externalSessionParam("session-from-context"),
+        sessionKey: sessionKeyParam("session-from-context"),
         role: "planner",
       });
 
@@ -217,7 +220,7 @@ describe("useRepoNavigationPersistence", () => {
         "workspace-repo": {
           taskId: "task-from-context",
           role: "qa",
-          externalSessionId: "session-from-context",
+          sessionKey: "session-from-context",
         },
       });
 
@@ -226,7 +229,7 @@ describe("useRepoNavigationPersistence", () => {
           workspaceRepoPath: "/repo",
           initialNavigation: {
             taskId: "",
-            externalSessionId: null,
+            sessionKey: null,
             role: "planner",
           },
         }),
@@ -236,7 +239,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "",
-        externalSessionId: null,
+        sessionKey: null,
         role: "planner",
       });
 
@@ -263,7 +266,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.run((latest) => {
         latest.setNavigation({
           taskId: "task-from-cleanup",
-          externalSessionId: externalSessionParam("session-from-cleanup"),
+          sessionKey: sessionKeyParam("session-from-cleanup"),
           role: "spec",
         });
       });
@@ -278,7 +281,7 @@ describe("useRepoNavigationPersistence", () => {
       expect(JSON.parse(stored)).toEqual({
         taskId: "task-from-cleanup",
         role: "spec",
-        externalSessionId: "session-from-cleanup",
+        sessionKey: "session-from-cleanup",
       });
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
@@ -307,7 +310,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.run((latest) => {
         latest.setNavigation({
           taskId: "task-without-role",
-          externalSessionId: externalSessionParam("session-without-role"),
+          sessionKey: sessionKeyParam("session-without-role"),
           role: null,
         });
       });
@@ -321,7 +324,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(JSON.parse(stored)).toEqual({
         taskId: "task-without-role",
-        externalSessionId: "session-without-role",
+        sessionKey: "session-without-role",
       });
     } finally {
       Object.defineProperty(globalThis, "localStorage", {
@@ -358,7 +361,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "",
-        externalSessionId: null,
+        sessionKey: null,
         role: null,
       });
 
@@ -367,7 +370,7 @@ describe("useRepoNavigationPersistence", () => {
         JSON.stringify({
           taskId: "task-from-context",
           role: "planner",
-          externalSessionId: "session-from-context",
+          sessionKey: "session-from-context",
         }),
       );
 
@@ -437,7 +440,7 @@ describe("useRepoNavigationPersistence", () => {
         JSON.stringify({
           taskId: "task-from-repo-b",
           role: "planner",
-          externalSessionId: "session-from-repo-b",
+          sessionKey: "session-from-repo-b",
         }),
       );
 
@@ -478,7 +481,7 @@ describe("useRepoNavigationPersistence", () => {
         JSON.stringify({
           taskId: "task-b",
           role: "planner",
-          externalSessionId: "session-b",
+          sessionKey: "session-b",
         }),
       );
 
@@ -487,7 +490,7 @@ describe("useRepoNavigationPersistence", () => {
         persistenceWorkspaceId: "workspace-repo-a",
         initialNavigation: {
           taskId: "task-a",
-          externalSessionId: externalSessionParam("session-a"),
+          sessionKey: sessionKeyParam("session-a"),
           role: "build",
         },
       });
@@ -504,7 +507,7 @@ describe("useRepoNavigationPersistence", () => {
       expect(harness.getLatest().isRepoNavigationBoundaryPending).toBeFalse();
       expect(harness.getLatest().navigation).toEqual({
         taskId: "task-b",
-        externalSessionId: externalSessionParam("session-b"),
+        sessionKey: sessionKeyParam("session-b"),
         role: "planner",
       });
 
@@ -522,8 +525,8 @@ describe("useRepoNavigationPersistence", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", externalSessionId: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", externalSessionId: "session-b" },
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionKey: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionKey: "session-b" },
       });
 
       const harness = createHookHarness({
@@ -548,7 +551,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "task-a",
-        externalSessionId: externalSessionParam("session-a"),
+        sessionKey: sessionKeyParam("session-a"),
         role: "spec",
       });
 
@@ -560,8 +563,8 @@ describe("useRepoNavigationPersistence", () => {
     const memoryStorage = createMemoryStorage();
     await withMockedLocalStorage(memoryStorage, async () => {
       seedWorkspaceNavigationContexts(memoryStorage, {
-        "workspace-repo-a": { taskId: "task-a", role: "spec", externalSessionId: "session-a" },
-        "workspace-repo-b": { taskId: "task-b", role: "planner", externalSessionId: "session-b" },
+        "workspace-repo-a": { taskId: "task-a", role: "spec", sessionKey: "session-a" },
+        "workspace-repo-b": { taskId: "task-b", role: "planner", sessionKey: "session-b" },
       });
 
       const harness = createHookHarness({
@@ -584,7 +587,7 @@ describe("useRepoNavigationPersistence", () => {
 
       expect(harness.getLatest().navigation).toEqual({
         taskId: "task-a",
-        externalSessionId: externalSessionParam("session-a"),
+        sessionKey: sessionKeyParam("session-a"),
         role: "spec",
       });
 
@@ -636,7 +639,7 @@ describe("useRepoNavigationPersistence", () => {
       await harness.run((latest) => {
         latest.setNavigation({
           taskId: "task-from-cleanup",
-          externalSessionId: externalSessionParam("session-from-cleanup"),
+          sessionKey: sessionKeyParam("session-from-cleanup"),
           role: "spec",
         });
       });
@@ -699,7 +702,7 @@ describe("useRepoNavigationPersistence", () => {
       expect(JSON.parse(stored)).toEqual({
         taskId: "task-from-cleanup",
         role: "spec",
-        externalSessionId: "session-from-cleanup",
+        sessionKey: "session-from-cleanup",
       });
       expect(harness.getLatest().persistenceError).toBeNull();
 

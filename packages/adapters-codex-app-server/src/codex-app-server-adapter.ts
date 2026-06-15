@@ -6,9 +6,9 @@ import type {
   AgentModelCatalog,
   AgentSessionHistoryMessage,
   AgentSessionPort,
-  AgentSessionPresenceSnapshot,
   AgentSessionRef,
   AgentSessionRuntimeRef,
+  AgentSessionRuntimeSnapshot,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentSkillCatalog,
@@ -18,14 +18,12 @@ import type {
   ListAgentModelsInput,
   ListAgentSkillsInput,
   ListAgentSlashCommandsInput,
-  ListLiveAgentSessionsInput,
-  ListSessionPresenceInput,
-  LiveAgentSessionSummary,
+  ListSessionRuntimeSnapshotsInput,
   LoadAgentFileStatusInput,
   LoadAgentSessionDiffInput,
   LoadAgentSessionHistoryInput,
   LoadAgentSessionTodosInput,
-  ReadSessionPresenceInput,
+  ReadSessionRuntimeSnapshotInput,
   ReplyApprovalInput,
   ReplyQuestionInput,
   ResumeAgentSessionInput,
@@ -58,10 +56,9 @@ import {
   sessionStateFromThreadStart,
 } from "./codex-session-lifecycle";
 import {
-  listCodexSessionPresence,
-  listLiveCodexAgentSessions,
-  readCodexSessionPresence,
-} from "./codex-session-presence-reader";
+  listCodexSessionRuntimeSnapshots,
+  readCodexSessionRuntimeSnapshot,
+} from "./codex-session-runtime-snapshot-reader";
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import { requireNormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 import {
@@ -362,22 +359,16 @@ export class CodexAppServerAdapter
     this.localSessions.release(input.externalSessionId);
   }
 
-  async listLiveAgentSessions(
-    input: ListLiveAgentSessionsInput,
-  ): Promise<LiveAgentSessionSummary[]> {
-    return listLiveCodexAgentSessions(this.presenceReaderDeps(), input);
+  async listSessionRuntimeSnapshots(
+    input: ListSessionRuntimeSnapshotsInput,
+  ): Promise<AgentSessionRuntimeSnapshot[]> {
+    return listCodexSessionRuntimeSnapshots(this.runtimeSnapshotReaderDeps(), input);
   }
 
-  async listSessionPresence(
-    input: ListSessionPresenceInput,
-  ): Promise<AgentSessionPresenceSnapshot[]> {
-    return listCodexSessionPresence(this.presenceReaderDeps(), input);
-  }
-
-  async readSessionPresence(
-    input: ReadSessionPresenceInput,
-  ): Promise<AgentSessionPresenceSnapshot> {
-    return readCodexSessionPresence(this.presenceReaderDeps(), input);
+  async readSessionRuntimeSnapshot(
+    input: ReadSessionRuntimeSnapshotInput,
+  ): Promise<AgentSessionRuntimeSnapshot> {
+    return readCodexSessionRuntimeSnapshot(this.runtimeSnapshotReaderDeps(), input);
   }
 
   async replyApproval(input: ReplyApprovalInput): Promise<void> {
@@ -509,7 +500,7 @@ export class CodexAppServerAdapter
     this.localSessions.release(input.externalSessionId);
   }
 
-  private presenceReaderDeps() {
+  private runtimeSnapshotReaderDeps() {
     return {
       runtimeClients: this.runtimeClients,
       threadInventory: this.threadInventory,

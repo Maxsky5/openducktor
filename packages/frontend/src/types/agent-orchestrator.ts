@@ -175,5 +175,3 @@ export type AgentSessionIdentity = Pick<
   AgentSessionState,
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
-
-export type AgentSessionRouteIdentity = AgentSessionIdentity;

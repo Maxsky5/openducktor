@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
 import type { TaskCard } from "@openducktor/contracts";
-import {
-  type AgentSessionRuntimeRef,
-  toAgentSessionPresenceSnapshotFromLiveSnapshot,
-} from "@openducktor/core";
-import { replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
+import { type AgentSessionRuntimeRef, toAgentSessionRuntimeSnapshot } from "@openducktor/core";
+import { getAgentSession, replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type {
   AgentChatMessage,
@@ -13,13 +10,13 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
+  addSessionObserverFixture,
   createAgentSessionCollectionRefFixture,
-  createAgentSessionPresenceSnapshotFixture,
+  createAgentSessionRuntimeSnapshotFixture,
   createDeferred,
-  createSessionListenerRegistryRefFixture,
+  createSessionObserversRefFixture,
   findAgentSessionFixture,
-  hasSessionListenerFixture,
-  setSessionListenerFixture,
+  hasSessionObserverFixture,
 } from "../test-utils";
 import { createEnsureSessionReady } from "./ensure-ready";
 
@@ -104,14 +101,22 @@ const resumedSummary = (input: AgentSessionRuntimeRef, externalSessionId = "exte
 
 const createAdapter = () => {
   const adapter = new OpencodeSdkAdapter();
-  adapter.listSessionPresence = async () => [];
-  adapter.readSessionPresence = async (input) =>
-    toAgentSessionPresenceSnapshotFromLiveSnapshot({
+  adapter.listSessionRuntimeSnapshots = async () => [];
+  adapter.readSessionRuntimeSnapshot = async (input) =>
+    toAgentSessionRuntimeSnapshot({
       ref: input,
       snapshot: null,
     });
   return adapter;
 };
+
+const createSessionReader = (
+  sessionsRef: ReturnType<typeof createAgentSessionCollectionRefFixture>,
+) => {
+  return (identity: Parameters<typeof getAgentSession>[1]) =>
+    getAgentSession(sessionsRef.current, identity);
+};
+
 describe("agent-orchestrator-ensure-ready", () => {
   test("throws when the local session is missing", async () => {
     const adapter = createAdapter();
@@ -125,11 +130,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef: createAgentSessionCollectionRefFixture([]),
+      readSessionSnapshot: () => null,
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: () => {},
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -144,23 +149,23 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("starts listener and skips resume for healthy runtime session", async () => {
+  test("starts observer and skips resume for healthy runtime session", async () => {
     let listenCalls = 0;
     let stopCalls = 0;
     let resumeCalls = 0;
-    const readSnapshotCalls: Parameters<OpencodeSdkAdapter["readSessionPresence"]>[0][] = [];
+    const readSnapshotCalls: Parameters<OpencodeSdkAdapter["readSessionRuntimeSnapshot"]>[0][] = [];
 
     const adapter = createAdapter();
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
-    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
-    adapter.listSessionPresence = async () => {
+    const originalListSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
+    const originalReadSessionRuntimeSnapshot = adapter.readSessionRuntimeSnapshot;
+    adapter.listSessionRuntimeSnapshots = async () => {
       throw new Error("ensure-ready must use the single-session snapshot read");
     };
-    adapter.readSessionPresence = async (input) => {
+    adapter.readSessionRuntimeSnapshot = async (input) => {
       readSnapshotCalls.push(input);
-      return createAgentSessionPresenceSnapshotFixture({ ref: input });
+      return createAgentSessionRuntimeSnapshotFixture({ ref: input });
     };
     adapter.stopSession = async () => {
       stopCalls += 1;
@@ -171,7 +176,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture();
+    const sessionObserversRef = createSessionObserversRefFixture();
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -182,9 +187,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -196,9 +201,9 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
-        setSessionListenerFixture(sessionListenerRegistryRef.current, {
+        addSessionObserverFixture(sessionObserversRef.current, {
           externalSessionId: "session-1",
         });
       },
@@ -213,7 +218,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     try {
       await ensureReady(buildSession());
       expect(listenCalls).toBe(1);
-      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
+      expect(
+        hasSessionObserverFixture(sessionObserversRef.current, {
+          externalSessionId: "session-1",
+        }),
+      ).toBe(true);
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(0);
       expect(readSnapshotCalls).toEqual([
@@ -227,23 +236,23 @@ describe("agent-orchestrator-ensure-ready", () => {
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
-      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
+      adapter.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
+      adapter.readSessionRuntimeSnapshot = originalReadSessionRuntimeSnapshot;
     }
   });
 
-  test("keeps existing listener and skips resume for healthy runtime session", async () => {
+  test("keeps existing observer and skips resume for healthy runtime session", async () => {
     let unsubscribeCalls = 0;
 
     const adapter = createAdapter();
-    adapter.readSessionPresence = async (input) =>
-      createAgentSessionPresenceSnapshotFixture({ ref: input });
+    adapter.readSessionRuntimeSnapshot = async (input) =>
+      createAgentSessionRuntimeSnapshotFixture({ ref: input });
     adapter.resumeSession = async () => {
       throw new Error("Session resume should not run for a healthy runtime session.");
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "session-1",
         unsubscribe: () => {
@@ -261,9 +270,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -275,8 +284,8 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
-        throw new Error("Existing listener should be reused.");
+      observeAgentSession: async () => {
+        throw new Error("Existing observer should be reused.");
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -289,11 +298,15 @@ describe("agent-orchestrator-ensure-ready", () => {
     await ensureReady(buildSession());
 
     expect(unsubscribeCalls).toBe(0);
-    expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
+    expect(
+      hasSessionObserverFixture(sessionObserversRef.current, {
+        externalSessionId: "session-1",
+      }),
+    ).toBe(true);
   });
 
-  test("keeps the local listener while failing on a missing live runtime session", async () => {
-    const listenerStarted = true;
+  test("keeps the local observer while failing on a missing live runtime session", async () => {
+    const observerStarted = true;
     const releaseCalls = 0;
     let resumeCalls = 0;
     let stopCalls = 0;
@@ -302,7 +315,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
+    const originalReadSessionRuntimeSnapshot = adapter.readSessionRuntimeSnapshot;
     adapter.resumeSession = async (input) => {
       resumeCalls += 1;
       return resumedSummary(input, "session-1");
@@ -310,8 +323,8 @@ describe("agent-orchestrator-ensure-ready", () => {
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
-    adapter.readSessionPresence = async () =>
-      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    adapter.readSessionRuntimeSnapshot = async () =>
+      toAgentSessionRuntimeSnapshot({
         ref: {
           repoPath: "/tmp/repo",
           runtimeKind: "opencode",
@@ -324,7 +337,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const sessionsRef = createAgentSessionCollectionRefFixture([
       buildSession({ externalSessionId: "external-1", status: "idle" }),
     ]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "external-1",
         unsubscribe: () => {
@@ -342,9 +355,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "external-1");
         if (!current) {
@@ -356,7 +369,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -372,16 +385,18 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(releaseCalls).toBe(0);
       expect(resumeCalls).toBe(1);
       expect(stopCalls).toBe(1);
-      expect(listenerStarted).toBe(true);
+      expect(observerStarted).toBe(true);
       expect(unsubscribeCalls).toBe(0);
-      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "external-1")).toBe(
-        true,
-      );
+      expect(
+        hasSessionObserverFixture(sessionObserversRef.current, {
+          externalSessionId: "external-1",
+        }),
+      ).toBe(true);
       expect(findAgentSessionFixture(sessionsRef, "external-1")?.runtimeKind).toBe("opencode");
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
+      adapter.readSessionRuntimeSnapshot = originalReadSessionRuntimeSnapshot;
     }
   });
 
@@ -394,7 +409,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
+    const originalReadSessionRuntimeSnapshot = adapter.readSessionRuntimeSnapshot;
     adapter.resumeSession = async (input) => {
       resumeCalls += 1;
       return resumedSummary(input);
@@ -403,8 +418,8 @@ describe("agent-orchestrator-ensure-ready", () => {
       stopCalls += 1;
       throw new Error("stop boom");
     };
-    adapter.readSessionPresence = async () =>
-      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    adapter.readSessionRuntimeSnapshot = async () =>
+      toAgentSessionRuntimeSnapshot({
         ref: {
           repoPath: "/tmp/repo",
           runtimeKind: "opencode",
@@ -436,7 +451,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         ],
       }),
     ]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "external-1",
         unsubscribe: () => {
@@ -454,9 +469,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         updateCalls += 1;
         const current = findAgentSessionFixture(sessionsRef, "external-1");
@@ -469,7 +484,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -489,15 +504,17 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(resumeCalls).toBe(1);
       expect(stopCalls).toBe(1);
       expect(unsubscribeCalls).toBe(0);
-      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "external-1")).toBe(
-        true,
-      );
+      expect(
+        hasSessionObserverFixture(sessionObserversRef.current, {
+          externalSessionId: "external-1",
+        }),
+      ).toBe(true);
       expect(findAgentSessionFixture(sessionsRef, "external-1")?.runtimeKind).toBe("opencode");
       expect(findAgentSessionFixture(sessionsRef, "external-1")?.pendingApprovals).toHaveLength(0);
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
+      adapter.readSessionRuntimeSnapshot = originalReadSessionRuntimeSnapshot;
     }
   });
 
@@ -505,13 +522,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     let ensureRuntimeCalls = 0;
 
     const adapter = createAdapter();
-    adapter.readSessionPresence = async () =>
-      createAgentSessionPresenceSnapshotFixture({
+    adapter.readSessionRuntimeSnapshot = async () =>
+      createAgentSessionRuntimeSnapshotFixture({
         snapshot: {
           title: "Builder Session",
         },
       });
-    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
+    adapter.listSessionRuntimeSnapshots = async () => [createAgentSessionRuntimeSnapshotFixture()];
 
     const sessionsRef = createAgentSessionCollectionRefFixture([
       buildSession({
@@ -530,9 +547,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -544,7 +561,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
@@ -569,13 +586,13 @@ describe("agent-orchestrator-ensure-ready", () => {
     let ensureRuntimeCalls = 0;
 
     const adapter = createAdapter();
-    adapter.readSessionPresence = async () =>
-      createAgentSessionPresenceSnapshotFixture({
+    adapter.readSessionRuntimeSnapshot = async () =>
+      createAgentSessionRuntimeSnapshotFixture({
         snapshot: {
           title: "Builder Session",
         },
       });
-    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
+    adapter.listSessionRuntimeSnapshots = async () => [createAgentSessionRuntimeSnapshotFixture()];
 
     const sessionsRef = createAgentSessionCollectionRefFixture([
       buildSession({
@@ -600,11 +617,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: () => {},
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
@@ -640,6 +657,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     delete (runtimeSession as Partial<AgentSessionState>).runtimeKind;
 
     const adapter = createAdapter();
+    const sessionsRef = createAgentSessionCollectionRefFixture([runtimeSession]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -650,11 +668,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef: createAgentSessionCollectionRefFixture([runtimeSession]),
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: () => {},
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         ensureRuntimeCalls += 1;
         return {
@@ -673,18 +691,18 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("blocks readiness when runtime presence reports pending input", async () => {
+  test("blocks readiness when runtime snapshot reports pending input", async () => {
     let listenCalls = 0;
     let resumeCalls = 0;
 
     const adapter = createAdapter();
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
-    adapter.readSessionPresence = async () =>
-      createAgentSessionPresenceSnapshotFixture({
+    const originalListSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
+    adapter.readSessionRuntimeSnapshot = async () =>
+      createAgentSessionRuntimeSnapshotFixture({
         snapshot: {
           title: "BUILD task-1",
-          status: { type: "busy" },
+          runtimeActivity: "running",
           pendingApprovals: [
             {
               requestId: "perm-1",
@@ -707,15 +725,13 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return resumedSummary(input, "session-1");
     };
-    adapter.listSessionPresence = async () => [
-      createAgentSessionPresenceSnapshotFixture({
+    adapter.listSessionRuntimeSnapshots = async () => [
+      createAgentSessionRuntimeSnapshotFixture({
         ref: { repoPath: "/tmp/repo", workingDirectory: "/tmp/repo/worktree" },
         snapshot: {
-          externalSessionId: "external-1",
           title: "BUILD task-1",
-          workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
-          status: { type: "busy" },
+          runtimeActivity: "running",
           pendingApprovals: [
             {
               requestId: "perm-1",
@@ -754,9 +770,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -768,7 +784,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -804,11 +820,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       ]);
     } finally {
       adapter.resumeSession = originalResumeSession;
-      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
     }
   });
 
-  test("fails fast when a runtime session with legacy runtime metadata is missing from the live snapshot", async () => {
+  test("fails fast when a runtime session with legacy runtime metadata is missing from the runtime snapshot source", async () => {
     let listenCalls = 0;
     let ensureRuntimeCalls = 0;
     let resumeCalls = 0;
@@ -860,7 +876,7 @@ describe("agent-orchestrator-ensure-ready", () => {
         ],
       }),
     ]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture();
+    const sessionObserversRef = createSessionObserversRefFixture();
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -871,9 +887,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -885,9 +901,9 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
-        setSessionListenerFixture(sessionListenerRegistryRef.current, {
+        addSessionObserverFixture(sessionObserversRef.current, {
           externalSessionId: "session-1",
         });
       },
@@ -908,9 +924,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       );
 
       expect(listenCalls).toBe(0);
-      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(
-        false,
-      );
+      expect(
+        hasSessionObserverFixture(sessionObserversRef.current, {
+          externalSessionId: "session-1",
+        }),
+      ).toBe(false);
       expect(ensureRuntimeCalls).toBe(1);
       expect(resumeCalls).toBe(1);
       expect(stopCalls).toBe(1);
@@ -922,7 +940,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("fails fast when a resumed session is missing from the live snapshot", async () => {
+  test("fails fast when a resumed session is missing from the runtime snapshot source", async () => {
     let listenCalls = 0;
     let unsubscribeCalls = 0;
     let stopCalls = 0;
@@ -975,7 +993,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       }),
     ]);
 
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "session-1",
         unsubscribe: () => {
@@ -993,9 +1011,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1007,7 +1025,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -1034,11 +1052,11 @@ describe("agent-orchestrator-ensure-ready", () => {
     }
   });
 
-  test("clears stale listener handles and restarts listener after successful resume", async () => {
+  test("keeps exact observer handles after successful resume", async () => {
     let listenCalls = 0;
     let unsubscribeCalls = 0;
     let resumeCalls = 0;
-    let readPresenceCalls = 0;
+    let readRuntimeSnapshotCalls = 0;
 
     const adapter = createAdapter();
     const originalResumeSession = adapter.resumeSession;
@@ -1046,19 +1064,17 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return resumedSummary(input);
     };
-    adapter.readSessionPresence = async (input) => {
-      readPresenceCalls += 1;
-      return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    adapter.readSessionRuntimeSnapshot = async (input) => {
+      readRuntimeSnapshotCalls += 1;
+      return toAgentSessionRuntimeSnapshot({
         ref: input,
         snapshot:
-          readPresenceCalls === 1
+          readRuntimeSnapshotCalls === 1
             ? null
             : {
-                externalSessionId: "external-1",
                 title: "BUILD task-1",
-                workingDirectory: "/tmp/repo/worktree",
                 startedAt: "2026-02-22T08:00:00.000Z",
-                status: { type: "idle" },
+                runtimeActivity: "idle",
                 pendingApprovals: [],
                 pendingQuestions: [],
               },
@@ -1066,7 +1082,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "idle" })]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "session-1",
         unsubscribe: () => {
@@ -1084,9 +1100,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1098,9 +1114,9 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
-        setSessionListenerFixture(sessionListenerRegistryRef.current, {
+        addSessionObserverFixture(sessionObserversRef.current, {
           externalSessionId: "session-1",
         });
       },
@@ -1116,9 +1132,13 @@ describe("agent-orchestrator-ensure-ready", () => {
       await ensureReady(buildSession());
 
       expect(resumeCalls).toBe(1);
-      expect(unsubscribeCalls).toBe(1);
-      expect(listenCalls).toBe(1);
-      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
+      expect(unsubscribeCalls).toBe(0);
+      expect(listenCalls).toBe(0);
+      expect(
+        hasSessionObserverFixture(sessionObserversRef.current, {
+          externalSessionId: "session-1",
+        }),
+      ).toBe(true);
     } finally {
       adapter.resumeSession = originalResumeSession;
     }
@@ -1140,7 +1160,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     };
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "error" })]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "session-1",
         unsubscribe: () => {
@@ -1158,9 +1178,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1172,7 +1192,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1188,7 +1208,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       });
       expect(resumeCalls).toBe(1);
       expect(unsubscribeCalls).toBe(0);
-      expect(hasSessionListenerFixture(sessionListenerRegistryRef.current, "session-1")).toBe(true);
+      expect(
+        hasSessionObserverFixture(sessionObserversRef.current, {
+          externalSessionId: "session-1",
+        }),
+      ).toBe(true);
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
@@ -1204,7 +1228,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const adapter = createAdapter();
     const originalStopSession = adapter.stopSession;
     const originalResumeSession = adapter.resumeSession;
-    const originalReadLiveAgentSessionSnapshot = adapter.readSessionPresence;
+    const originalReadSessionRuntimeSnapshot = adapter.readSessionRuntimeSnapshot;
     adapter.stopSession = async () => {
       stopCalls += 1;
     };
@@ -1212,22 +1236,20 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumeCalls += 1;
       return resumedSummary(input);
     };
-    adapter.readSessionPresence = async (input) =>
-      toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    adapter.readSessionRuntimeSnapshot = async (input) =>
+      toAgentSessionRuntimeSnapshot({
         ref: input,
         snapshot: {
-          externalSessionId: "external-1",
           title: "BUILD task-1",
-          workingDirectory: "/tmp/repo/worktree",
           startedAt: "2026-02-22T08:00:00.000Z",
-          status: { type: "idle" },
+          runtimeActivity: "idle",
           pendingApprovals: [],
           pendingQuestions: [],
         },
       });
 
     const sessionsRef = createAgentSessionCollectionRefFixture([buildSession({ status: "error" })]);
-    const sessionListenerRegistryRef = createSessionListenerRegistryRefFixture([
+    const sessionObserversRef = createSessionObserversRefFixture([
       {
         externalSessionId: "session-1",
         unsubscribe: () => {
@@ -1245,9 +1267,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef,
+      sessionObserversRef,
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1259,7 +1281,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -1275,12 +1297,12 @@ describe("agent-orchestrator-ensure-ready", () => {
 
       expect(stopCalls).toBe(0);
       expect(resumeCalls).toBe(1);
-      expect(unsubscribeCalls).toBe(1);
-      expect(listenCalls).toBe(1);
+      expect(unsubscribeCalls).toBe(0);
+      expect(listenCalls).toBe(0);
     } finally {
       adapter.stopSession = originalStopSession;
       adapter.resumeSession = originalResumeSession;
-      adapter.readSessionPresence = originalReadLiveAgentSessionSnapshot;
+      adapter.readSessionRuntimeSnapshot = originalReadSessionRuntimeSnapshot;
     }
   });
 
@@ -1310,9 +1332,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1324,7 +1346,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1369,9 +1391,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1383,7 +1405,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1410,21 +1432,19 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     const adapter = createAdapter();
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
-    let readPresenceCalls = 0;
-    adapter.readSessionPresence = async (input) => {
-      readPresenceCalls += 1;
-      return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    const originalListSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
+    let readRuntimeSnapshotCalls = 0;
+    adapter.readSessionRuntimeSnapshot = async (input) => {
+      readRuntimeSnapshotCalls += 1;
+      return toAgentSessionRuntimeSnapshot({
         ref: input,
         snapshot:
-          readPresenceCalls === 1
+          readRuntimeSnapshotCalls === 1
             ? null
             : {
-                externalSessionId: input.externalSessionId,
                 title: "Builder Session",
-                workingDirectory: input.workingDirectory,
                 startedAt: "2026-02-22T08:00:00.000Z",
-                status: { type: "idle" },
+                runtimeActivity: "idle",
                 pendingApprovals: [],
                 pendingQuestions: [],
               },
@@ -1434,7 +1454,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumedInput = input;
       return resumedSummary(input);
     };
-    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
+    adapter.listSessionRuntimeSnapshots = async () => [createAgentSessionRuntimeSnapshotFixture()];
 
     const sessionsRef = createAgentSessionCollectionRefFixture([
       buildSession({
@@ -1464,9 +1484,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1478,7 +1498,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1504,7 +1524,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       });
     } finally {
       adapter.resumeSession = originalResumeSession;
-      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
     }
   });
 
@@ -1516,21 +1536,19 @@ describe("agent-orchestrator-ensure-ready", () => {
 
     const adapter = createAdapter();
     const originalResumeSession = adapter.resumeSession;
-    const originalListLiveAgentSessionSnapshots = adapter.listSessionPresence;
-    let readPresenceCalls = 0;
-    adapter.readSessionPresence = async (input) => {
-      readPresenceCalls += 1;
-      return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+    const originalListSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
+    let readRuntimeSnapshotCalls = 0;
+    adapter.readSessionRuntimeSnapshot = async (input) => {
+      readRuntimeSnapshotCalls += 1;
+      return toAgentSessionRuntimeSnapshot({
         ref: input,
         snapshot:
-          readPresenceCalls === 1
+          readRuntimeSnapshotCalls === 1
             ? null
             : {
-                externalSessionId: input.externalSessionId,
                 title: "Builder Session",
-                workingDirectory: input.workingDirectory,
                 startedAt: "2026-02-22T08:00:00.000Z",
-                status: { type: "idle" },
+                runtimeActivity: "idle",
                 pendingApprovals: [],
                 pendingQuestions: [],
               },
@@ -1540,7 +1558,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       resumedInput = input;
       return resumedSummary(input);
     };
-    adapter.listSessionPresence = async () => [createAgentSessionPresenceSnapshotFixture()];
+    adapter.listSessionRuntimeSnapshots = async () => [createAgentSessionRuntimeSnapshotFixture()];
 
     const sessionsRef = createAgentSessionCollectionRefFixture([
       buildSession({
@@ -1559,9 +1577,9 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef,
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: (identity, updater) => {
         const current = findAgentSessionFixture(sessionsRef, "session-1");
         if (!current) {
@@ -1573,7 +1591,7 @@ describe("agent-orchestrator-ensure-ready", () => {
           updater(current),
         );
       },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async (_repoPath, _taskId, _role, options) => {
         ensuredRuntimeKind = options?.runtimeKind;
         return {
@@ -1599,7 +1617,7 @@ describe("agent-orchestrator-ensure-ready", () => {
       expect(findAgentSessionFixture(sessionsRef, "session-1")?.runtimeKind).toBe("opencode");
     } finally {
       adapter.resumeSession = originalResumeSession;
-      adapter.listSessionPresence = originalListLiveAgentSessionSnapshots;
+      adapter.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
     }
   });
 
@@ -1607,6 +1625,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     let runtimeCalls = 0;
 
     const adapter = createAdapter();
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession()]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1617,11 +1636,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      sessionsRef: createAgentSessionCollectionRefFixture([buildSession()]),
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: () => {},
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
@@ -1649,6 +1668,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
 
     const adapter = createAdapter();
+    const sessionsRef = createAgentSessionCollectionRefFixture([buildSession()]);
 
     const ensureReady = createEnsureSessionReady({
       activeWorkspace: {
@@ -1659,11 +1679,11 @@ describe("agent-orchestrator-ensure-ready", () => {
       adapter,
       repoEpochRef,
       currentWorkspaceRepoPathRef,
-      sessionsRef: createAgentSessionCollectionRefFixture([buildSession()]),
+      readSessionSnapshot: createSessionReader(sessionsRef),
       taskRef: { current: [taskFixture] },
-      sessionListenerRegistryRef: createSessionListenerRegistryRefFixture(),
+      sessionObserversRef: createSessionObserversRefFixture(),
       updateSession: () => {},
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {

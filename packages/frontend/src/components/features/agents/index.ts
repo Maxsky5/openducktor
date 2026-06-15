@@ -6,7 +6,6 @@ export {
 export type {
   AgentChatComposerModel,
   AgentChatEmptyStateModel,
-  AgentChatMode,
   AgentChatModel,
   AgentChatSurfaceModel,
   AgentChatThreadModel,

@@ -1,5 +1,5 @@
 import type { AgentRole } from "@openducktor/core";
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import {
   type AgentStudioSelectionIntent,
   isSelectionIntentResolved,
@@ -8,70 +8,84 @@ import {
 type UseAgentStudioSelectionIntentStateArgs = {
   isRepoNavigationBoundaryPending: boolean;
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionKeyParam: string | null;
   roleFromQuery: AgentRole;
 };
 
 export type AgentStudioSelectionIntentState = {
   selectionIntentForController: AgentStudioSelectionIntent | null;
-  isSessionSelectionResolving: boolean;
   scheduleSelectionIntent: (intent: AgentStudioSelectionIntent) => void;
 };
+
+type SelectionIntentResolutionState =
+  | { kind: "idle" }
+  | { kind: "pending"; intent: AgentStudioSelectionIntent }
+  | { kind: "resolved"; intent: AgentStudioSelectionIntent };
+
+const idleSelectionIntentState: SelectionIntentResolutionState = { kind: "idle" };
 
 export function useAgentStudioSelectionIntentState({
   isRepoNavigationBoundaryPending,
   taskIdParam,
-  sessionParam,
+  sessionKeyParam,
   roleFromQuery,
 }: UseAgentStudioSelectionIntentStateArgs): AgentStudioSelectionIntentState {
-  const [selectionIntent, setSelectionIntent] = useState<AgentStudioSelectionIntent | null>(null);
-  const [sessionlessSelection, setSessionlessSelection] =
-    useState<AgentStudioSelectionIntent | null>(null);
+  const [intentState, setIntentState] =
+    useState<SelectionIntentResolutionState>(idleSelectionIntentState);
 
-  const scheduleSelectionIntent = useCallback((intent: AgentStudioSelectionIntent): void => {
-    setSelectionIntent(intent);
-    setSessionlessSelection(intent.externalSessionId === null ? intent : null);
-  }, []);
-
-  const activeSessionlessSelection =
-    sessionlessSelection &&
-    sessionlessSelection.taskId === taskIdParam &&
-    sessionlessSelection.role === roleFromQuery &&
-    sessionParam === null
-      ? sessionlessSelection
-      : null;
-
-  if (isRepoNavigationBoundaryPending) {
-    if (selectionIntent !== null) {
-      setSelectionIntent(null);
-    }
-  } else if (selectionIntent) {
-    const selectionIntentResolved = isSelectionIntentResolved({
-      selectionIntent,
-      taskIdParam,
-      sessionParam,
-      roleFromQuery,
-    });
-
-    if (selectionIntentResolved) {
-      setSelectionIntent(null);
-    }
-  }
-
-  const isSessionSelectionResolving = Boolean(
-    selectionIntent &&
-      !isRepoNavigationBoundaryPending &&
-      !isSelectionIntentResolved({
-        selectionIntent,
+  const scheduleSelectionIntent = useCallback(
+    (intent: AgentStudioSelectionIntent): void => {
+      const isResolved = isSelectionIntentResolved({
+        selectionIntent: intent,
         taskIdParam,
-        sessionParam,
+        sessionKeyParam,
         roleFromQuery,
-      }),
+      });
+      setIntentState({ kind: isResolved ? "resolved" : "pending", intent });
+    },
+    [roleFromQuery, sessionKeyParam, taskIdParam],
   );
 
+  const currentIntent = intentState.kind === "idle" ? null : intentState.intent;
+  const currentIntentResolved = currentIntent
+    ? isSelectionIntentResolved({
+        selectionIntent: currentIntent,
+        taskIdParam,
+        sessionKeyParam,
+        roleFromQuery,
+      })
+    : false;
+
+  useLayoutEffect(() => {
+    setIntentState((current) => {
+      if (current.kind === "idle") {
+        return current;
+      }
+      if (isRepoNavigationBoundaryPending) {
+        return idleSelectionIntentState;
+      }
+
+      const isResolved = isSelectionIntentResolved({
+        selectionIntent: current.intent,
+        taskIdParam,
+        sessionKeyParam,
+        roleFromQuery,
+      });
+      if (current.kind === "pending") {
+        return isResolved ? { kind: "resolved", intent: current.intent } : current;
+      }
+      return isResolved ? current : idleSelectionIntentState;
+    });
+  }, [isRepoNavigationBoundaryPending, roleFromQuery, sessionKeyParam, taskIdParam]);
+
+  const selectionIntentForController =
+    !isRepoNavigationBoundaryPending &&
+    (intentState.kind === "pending" || (intentState.kind === "resolved" && currentIntentResolved))
+      ? intentState.intent
+      : null;
+
   return {
-    selectionIntentForController: selectionIntent ?? activeSessionlessSelection,
-    isSessionSelectionResolving,
+    selectionIntentForController,
     scheduleSelectionIntent,
   };
 }

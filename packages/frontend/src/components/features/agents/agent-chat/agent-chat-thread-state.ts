@@ -5,12 +5,10 @@ type BuildAgentChatThreadStateArgs = Pick<
   "sessionLifecycle" | "runtimeReadiness"
 > & {
   isTranscriptPending: boolean;
-  isTranscriptRenderDeferred: boolean;
   isTranscriptRowsMissing?: boolean;
 };
 
 export type AgentChatThreadState = {
-  hideTranscriptRows: boolean;
   shouldResetTranscriptWindow: boolean;
   transcriptNotice: {
     kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
@@ -23,12 +21,9 @@ export const getAgentChatThreadState = ({
   sessionLifecycle,
   runtimeReadiness,
   isTranscriptPending,
-  isTranscriptRenderDeferred,
   isTranscriptRowsMissing = false,
 }: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
-  const isRenderLocallyLoading =
-    isTranscriptPending || isTranscriptRenderDeferred || isTranscriptRowsMissing;
-  const hideTranscriptRows = isTranscriptRenderDeferred;
+  const isRenderLocallyLoading = isTranscriptPending || isTranscriptRowsMissing;
   const transcriptState = sessionLifecycle.transcriptState;
   const shouldResetTranscriptWindow =
     isRenderLocallyLoading || transcriptState.kind === "session_loading";
@@ -76,7 +71,6 @@ export const getAgentChatThreadState = ({
   })();
 
   return {
-    hideTranscriptRows,
     shouldResetTranscriptWindow,
     transcriptNotice,
   };

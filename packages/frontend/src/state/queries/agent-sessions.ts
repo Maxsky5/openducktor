@@ -1,5 +1,6 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { host } from "../operations/host";
 
 const AGENT_SESSION_LIST_STALE_TIME_MS = 30_000;
@@ -81,8 +82,9 @@ export const upsertAgentSessionRecordInQuery = (
         return current;
       }
 
+      const sessionKey = agentSessionIdentityKey(session);
       const existingIndex = current.findIndex(
-        (entry) => entry.externalSessionId === session.externalSessionId,
+        (entry) => agentSessionIdentityKey(entry) === sessionKey,
       );
       if (existingIndex === -1) {
         return [...current, session];

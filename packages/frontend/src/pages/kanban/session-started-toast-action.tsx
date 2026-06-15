@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
-import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 
 export const renderSessionStartedToastAction = (
   intent: KanbanSessionStartIntent,
-  session: AgentSessionRouteIdentity,
-  onOpen: (intent: KanbanSessionStartIntent, session: AgentSessionRouteIdentity) => void,
+  session: AgentSessionIdentity,
+  onOpen: (intent: KanbanSessionStartIntent, session: AgentSessionIdentity) => void,
 ) => {
   return (
     <Button

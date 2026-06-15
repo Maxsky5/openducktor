@@ -8,10 +8,7 @@ import {
 import { ROLE_OPTIONS } from "./agents-page-constants";
 import { buildRoleLabelByRole } from "./agents-page-view-model";
 import { buildAgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
-import {
-  buildAgentStudioPageModelsArgs,
-  buildAgentStudioSelectedSessionContextFromOrchestration,
-} from "./use-agent-studio-orchestration-controller";
+import { buildAgentStudioPageModelsArgs } from "./use-agent-studio-orchestration-controller";
 
 type BuildArgs = Parameters<typeof buildAgentStudioPageModelsArgs>[0];
 
@@ -37,11 +34,11 @@ const onReorderTab = () => {};
 const handleSelectAgentProfile = () => {};
 const handleSelectModel = () => {};
 const handleSelectVariant = () => {};
-const baseReadiness = {
-  agentStudioReadinessState: "ready" as const,
-  agentStudioReady: true,
+const baseRuntimeReadiness = {
+  readinessState: "ready" as const,
+  isReady: true,
   isRuntimeStarting: false,
-  agentStudioBlockedReason: "",
+  blockedReason: null,
   isLoadingChecks: false,
   refreshChecks: async () => {},
 };
@@ -98,9 +95,8 @@ const baseArgs: BuildArgs = {
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
-    activeSessionContextUsage: null,
     documents: baseDocuments,
-    readiness: baseReadiness,
+    runtimeReadiness: baseRuntimeReadiness,
     sessionActions: baseSessionActions,
     approvals: baseApprovals,
     roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
@@ -140,6 +136,7 @@ const baseArgs: BuildArgs = {
     handleSelectModel,
     handleSelectVariant,
     agentAccentColorsByProfileId: {},
+    activeSessionContextUsage: null,
   },
   chatSettings: {
     showThinkingMessages: true,
@@ -211,53 +208,6 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(withTaskFallback.activeTabValue).toBe("task-1");
     expect(withEmptyFallback.activeTabValue).toBe("__agent_studio_empty__");
   });
-});
-
-describe("buildAgentStudioSelectedSessionContextFromOrchestration", () => {
-  test("maps raw orchestration inputs into selected-session context", () => {
-    const context = buildAgentStudioSelectedSessionContextFromOrchestration({
-      taskId: "task-1",
-      role: "planner",
-      selectedTask: task,
-      sessionsForTask: [session],
-      allSessionSummaries: [session],
-      activeSession: session,
-      activeSessionRuntimeData: baseActiveSessionRuntimeData,
-      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-      viewSessionRuntimeDataError: "runtime data failed",
-      hasActiveGitConflict: true,
-      viewSessionLifecycle: createSelectedSessionLifecycleFixture({
-        transcriptState: { kind: "runtime_waiting" },
-      }),
-      activeSessionContextUsage: { totalTokens: 64, contextWindow: 1024 },
-      documents: baseDocuments,
-      readiness: {
-        ...baseReadiness,
-        agentStudioReadinessState: "checking",
-        agentStudioReady: false,
-      },
-      sessionActions: {
-        ...baseSessionActions,
-        canKickoffNewSession: true,
-      },
-      approvals: baseApprovals,
-      roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
-    });
-
-    expect(context.runtime.sessionRuntimeDataError).toBe("runtime data failed");
-    expect(context.runtime.runtimeReadiness.readinessState).toBe("checking");
-    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
-    expect(context.chat.contextUsage).toEqual({ totalTokens: 64, contextWindow: 1024 });
-    expect(context.workflow.selectedInteractionRole).toBe("planner");
-    expect(context.documents.activeDocument?.title).toBe("Implementation Plan");
-    expect(context.rightPanel).toMatchObject({
-      role: "planner",
-      hasTaskContext: true,
-      hasDocumentPanel: true,
-      hasBuildToolsPanel: false,
-    });
-  });
-
   test("forwards selected-session runtime state without recomputing it", () => {
     const failed = buildAgentStudioPageModelsArgs({
       ...baseArgs,

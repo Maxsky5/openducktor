@@ -1,6 +1,6 @@
-import type { ReusablePrompt, TaskCard } from "@openducktor/contracts";
+import type { ReusablePrompt } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentRole, AgentUserMessagePart } from "@openducktor/core";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { validateComposerAttachments } from "@/components/features/agents/agent-chat/agent-chat-attachments";
 import {
   type AgentChatComposerDraft,
@@ -15,11 +15,9 @@ import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import {
-  buildAgentStudioAsyncActivityContextKey,
-  canStartSessionForRole,
-  decrementActivityCountRecord,
-  incrementActivityCountRecord,
-} from "../use-agent-studio-session-action-helpers";
+  buildAgentStudioSessionActivityKey,
+  useAgentStudioAsyncActivityTracker,
+} from "../use-agent-studio-async-activity";
 
 type UseAgentStudioSendActionArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -29,12 +27,12 @@ type UseAgentStudioSendActionArgs = {
   activeSessionIsLoadingModelCatalog: boolean;
   activeSessionSelectedModel: AgentSessionState["selectedModel"] | null;
   agentStudioReady: boolean;
+  canStartNewSession: boolean;
   canQueueBusyFollowups: boolean;
   reusablePrompts: ReusablePrompt[];
   isStarting: boolean;
   isWaitingInput: boolean;
   busySendBlockedReason: string | null;
-  selectedTask: TaskCard | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null | undefined;
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
   startSession: () => Promise<SessionStartWorkflowResult | undefined>;
@@ -48,12 +46,12 @@ export function useAgentStudioSendAction({
   activeSessionIsLoadingModelCatalog,
   activeSessionSelectedModel,
   agentStudioReady,
+  canStartNewSession,
   canQueueBusyFollowups,
   reusablePrompts,
   isStarting,
   isWaitingInput,
   busySendBlockedReason,
-  selectedTask,
   selectedModelDescriptor,
   sendAgentMessage,
   startSession,
@@ -61,31 +59,28 @@ export function useAgentStudioSendAction({
   isSending: boolean;
   onSend: (draft: AgentChatComposerDraft) => Promise<boolean>;
 } {
-  const [sendingActivityCountByContext, setSendingActivityCountByContext] = useState<
-    Record<string, number>
-  >({});
-  const inFlightContextsRef = useRef<Set<string> | null>(null);
-  if (inFlightContextsRef.current === null) {
-    inFlightContextsRef.current = new Set<string>();
-  }
-  const inFlightContexts = inFlightContextsRef.current;
+  const {
+    begin: beginSendingActivity,
+    hasInFlight: hasSendingActivityInFlight,
+    isActive: isSendingActivityActive,
+  } = useAgentStudioAsyncActivityTracker();
   const activeSessionIdentity = useMemo(
     () => (activeSession ? toAgentSessionIdentity(activeSession) : null),
     [activeSession],
   );
-  const activeExternalSessionId = activeSessionIdentity?.externalSessionId ?? null;
-  const activeComposerContextKey = buildAgentStudioAsyncActivityContextKey({
+  const activeComposerContextKey = buildAgentStudioSessionActivityKey({
     activeWorkspace,
     taskId,
     role,
-    externalSessionId: activeExternalSessionId,
+    session: activeSessionIdentity,
   });
-  const isSending = (sendingActivityCountByContext[activeComposerContextKey] ?? 0) > 0;
+  const isSending = isSendingActivityActive(activeComposerContextKey);
 
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft): Promise<boolean> => {
       if (
-        (!canQueueBusyFollowups && (isSending || inFlightContexts.has(activeComposerContextKey))) ||
+        (!canQueueBusyFollowups &&
+          (isSending || hasSendingActivityInFlight(activeComposerContextKey))) ||
         isStarting ||
         !agentStudioReady ||
         isWaitingInput ||
@@ -93,7 +88,7 @@ export function useAgentStudioSendAction({
       ) {
         return false;
       }
-      if (!activeSessionIdentity && !canStartSessionForRole(selectedTask, role)) {
+      if (!activeSessionIdentity && !canStartNewSession) {
         return false;
       }
       if (activeSessionIsLoadingModelCatalog && !activeSessionSelectedModel) {
@@ -127,11 +122,7 @@ export function useAgentStudioSendAction({
       if (!draftHasMeaningfulContent(draft) || !taskId) {
         return false;
       }
-      const sendContextKeys = new Set<string>([activeComposerContextKey]);
-      inFlightContexts.add(activeComposerContextKey);
-      setSendingActivityCountByContext((current) =>
-        incrementActivityCountRecord(current, activeComposerContextKey),
-      );
+      const activity = beginSendingActivity(activeComposerContextKey);
 
       try {
         let targetSession: AgentSessionIdentity | null | undefined = activeSessionIdentity;
@@ -144,19 +135,13 @@ export function useAgentStudioSendAction({
           return false;
         }
 
-        const targetComposerContextKey = buildAgentStudioAsyncActivityContextKey({
+        const targetComposerContextKey = buildAgentStudioSessionActivityKey({
           activeWorkspace,
           taskId,
           role,
-          externalSessionId: targetSession.externalSessionId,
+          session: targetSession,
         });
-        if (!sendContextKeys.has(targetComposerContextKey)) {
-          sendContextKeys.add(targetComposerContextKey);
-          inFlightContexts.add(targetComposerContextKey);
-          setSendingActivityCountByContext((current) =>
-            incrementActivityCountRecord(current, targetComposerContextKey),
-          );
-        }
+        activity.add(targetComposerContextKey);
         await sendAgentMessage(
           targetSession,
           reusablePromptMessageParts ??
@@ -172,16 +157,7 @@ export function useAgentStudioSendAction({
         );
         return true;
       } finally {
-        for (const contextKey of sendContextKeys) {
-          inFlightContexts.delete(contextKey);
-        }
-        setSendingActivityCountByContext((current) => {
-          let next = current;
-          for (const contextKey of sendContextKeys) {
-            next = decrementActivityCountRecord(next, contextKey);
-          }
-          return next;
-        });
+        activity.finish();
       }
     },
     [
@@ -191,15 +167,16 @@ export function useAgentStudioSendAction({
       activeSessionIsLoadingModelCatalog,
       activeSessionSelectedModel,
       agentStudioReady,
+      beginSendingActivity,
+      canStartNewSession,
       canQueueBusyFollowups,
-      inFlightContexts,
+      hasSendingActivityInFlight,
       reusablePrompts,
       isSending,
       isStarting,
       isWaitingInput,
       busySendBlockedReason,
       role,
-      selectedTask,
       selectedModelDescriptor?.attachmentSupport,
       sendAgentMessage,
       startSession,

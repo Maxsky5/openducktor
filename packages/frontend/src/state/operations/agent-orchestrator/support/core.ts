@@ -1,5 +1,3 @@
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-
 export { normalizeWorkingDirectory } from "@/lib/working-directory";
 
 export const toBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
@@ -16,11 +14,6 @@ export const now = (): string => new Date().toISOString();
 export const sanitizeStreamingText = (value: string): string => {
   return value.replace(/\n{3,}/g, "\n\n").trimStart();
 };
-
-export const shouldStartSessionListener = (
-  status: AgentSessionState["status"] | null | undefined,
-  hasActiveUnsubscriber: boolean,
-): boolean => status !== "error" && !hasActiveUnsubscriber;
 
 type RefValue<T> = { current: T };
 

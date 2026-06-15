@@ -30,11 +30,7 @@ import type {
   AgentUserMessagePart,
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
-import type {
-  AgentSessionIdentity,
-  AgentSessionRouteIdentity,
-  AgentSessionState,
-} from "./agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -193,7 +189,7 @@ export type AgentOperationsContextValue = {
     workingDirectory: string,
     query: string,
   ) => Promise<AgentFileSearchResult[]>;
-  removeAgentSession: (externalSessionId: string) => Promise<void>;
+  removeAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   removeAgentSessions: (input: { taskId: string; roles?: AgentRole[] }) => Promise<void>;
   startAgentSession: (
     input:
@@ -220,7 +216,7 @@ export type AgentOperationsContextValue = {
           startMode: "fork";
           sourceSession: AgentSessionIdentity;
         },
-  ) => Promise<AgentSessionRouteIdentity>;
+  ) => Promise<AgentSessionIdentity>;
   settleStartedAgentSession: (session: AgentSessionIdentity) => void;
   sendAgentMessage: (session: AgentSessionIdentity, parts: AgentUserMessagePart[]) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;

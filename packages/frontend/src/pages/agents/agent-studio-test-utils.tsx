@@ -14,7 +14,7 @@ import {
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
@@ -63,8 +63,8 @@ const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
 };
 
 export const createSelectedSessionLifecycleFixture = (
-  overrides: Partial<SelectedAgentSessionViewLifecycle> = {},
-): SelectedAgentSessionViewLifecycle => ({
+  overrides: Partial<AgentSessionViewLifecycle> = {},
+): AgentSessionViewLifecycle => ({
   repoReadinessState: "ready",
   transcriptState: { kind: "visible" },
   ...overrides,

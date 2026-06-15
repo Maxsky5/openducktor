@@ -12,8 +12,10 @@ enableReactActEnvironment();
 
 const createElement = (
   type: typeof AgentChatMessageCard,
-  props: React.ComponentProps<typeof AgentChatMessageCard>,
-) => createReactElement(type, props);
+  props: Omit<React.ComponentProps<typeof AgentChatMessageCard>, "sessionIdentity"> & {
+    sessionIdentity?: React.ComponentProps<typeof AgentChatMessageCard>["sessionIdentity"];
+  },
+) => createReactElement(type, { sessionIdentity: null, ...props });
 
 const writeClipboardMock = mock(async (_value: string) => {});
 let restoreClipboard: (() => void) | null = null;

@@ -1,51 +1,38 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
-import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
-import type {
-  AgentSessionIdentity,
-  AgentSessionState,
-  WorkflowAgentSessionState,
-} from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
-import {
-  hasSessionListener,
-  removeSessionListenersByExternalSessionId,
-  type SessionListenerRegistry,
-} from "../support/session-listener-registry";
+import type { SessionObservers } from "../support/session-observers";
 import { loadSessionPromptContext } from "../support/session-prompt";
-import { type ListenToAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
+import { type ObserveAgentSession, toRuntimeSessionRef } from "../support/session-runtime-ref";
 import { isWorkflowAgentSession } from "../support/workflow-session";
 import {
-  type AgentSessionPresenceSnapshot,
-  applyAgentSessionPresenceSnapshotToSession,
-  sessionPresenceHasPendingInput,
-} from "./session-presence";
+  type AgentSessionRuntimeSnapshot,
+  type AvailableAgentSessionRuntimeSnapshot,
+  applyAgentSessionRuntimeSnapshotToSession,
+  sessionRuntimeSnapshotHasPendingInput,
+} from "./session-runtime-snapshot";
 
 type EnsureSessionReadyDependencies = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
-  sessionsRef: { current: AgentSessionCollection };
+  readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
   taskRef: { current: TaskCard[] };
-  sessionListenerRegistryRef: { current: SessionListenerRegistry };
+  sessionObserversRef: { current: SessionObservers };
   updateSession: (
     identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
     options?: { persist?: boolean },
   ) => void;
-  listenToAgentSession: ListenToAgentSession;
+  observeAgentSession: ObserveAgentSession;
   ensureRuntime: EnsureRuntime;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
-
-type ConfirmedAgentSessionPresenceSnapshot = Extract<
-  AgentSessionPresenceSnapshot,
-  { presence: "runtime" }
->;
 
 const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
 const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
@@ -55,11 +42,11 @@ export const createEnsureSessionReady = ({
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
-  sessionsRef,
+  readSessionSnapshot,
   taskRef,
-  sessionListenerRegistryRef,
+  sessionObserversRef,
   updateSession,
-  listenToAgentSession,
+  observeAgentSession,
   ensureRuntime,
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
@@ -81,25 +68,8 @@ export const createEnsureSessionReady = ({
       throwIfRepoStale(isStaleRepoOperation, STALE_PREPARE_ERROR);
     };
 
-    const applyRuntimePresenceSnapshot = async (
-      snapshot: ConfirmedAgentSessionPresenceSnapshot,
-      session: WorkflowAgentSessionState,
-    ): Promise<AgentSessionIdentity> => {
-      updateSession(session, (current) =>
-        applyAgentSessionPresenceSnapshotToSession(current, snapshot),
-      );
-      const sessionRef = snapshot.ref;
-      if (!hasSessionListener(sessionListenerRegistryRef.current, sessionRef)) {
-        await listenToAgentSession(sessionRef);
-      }
-      if (sessionPresenceHasPendingInput(snapshot)) {
-        throw new Error(PENDING_INPUT_NOT_READY_ERROR);
-      }
-      return sessionRef;
-    };
-
     assertNotStale();
-    const session = getAgentSession(sessionsRef.current, sessionIdentity);
+    const session = readSessionSnapshot(sessionIdentity);
     if (!session) {
       throw new Error(`Session not found: ${externalSessionId}`);
     }
@@ -107,6 +77,28 @@ export const createEnsureSessionReady = ({
       throw new Error(`Session '${externalSessionId}' is not a workflow session.`);
     }
     const sessionRef = toRuntimeSessionRef(repoPath, session);
+    const applyRuntimeSnapshot = (
+      snapshot: AgentSessionRuntimeSnapshot,
+      options?: { persist?: boolean },
+    ): void => {
+      updateSession(
+        session,
+        (current) => applyAgentSessionRuntimeSnapshotToSession(current, snapshot),
+        options,
+      );
+    };
+    const observeRuntimeSession = async (
+      snapshot: AvailableAgentSessionRuntimeSnapshot,
+    ): Promise<AgentSessionIdentity> => {
+      applyRuntimeSnapshot(snapshot);
+      if (!sessionObserversRef.current.has(snapshot.ref)) {
+        await observeAgentSession(snapshot.ref);
+      }
+      if (sessionRuntimeSnapshotHasPendingInput(snapshot)) {
+        throw new Error(PENDING_INPUT_NOT_READY_ERROR);
+      }
+      return snapshot.ref;
+    };
     const cleanupStaleResumedSessionIfNeeded = async (
       resumedSessionRef: AgentSessionRef,
     ): Promise<void> => {
@@ -117,13 +109,13 @@ export const createEnsureSessionReady = ({
       await adapter.stopSession(resumedSessionRef);
       throw new Error(STALE_PREPARE_ERROR);
     };
-    const resumeSessionAndReadPresence = async ({
+    const resumeSessionAndReadSnapshot = async ({
       resumedSessionRef,
       systemPrompt,
     }: {
       resumedSessionRef: AgentSessionRef;
       systemPrompt: string;
-    }): Promise<AgentSessionPresenceSnapshot> => {
+    }): Promise<AgentSessionRuntimeSnapshot> => {
       await adapter.resumeSession({
         ...resumedSessionRef,
         taskId: session.taskId,
@@ -133,20 +125,16 @@ export const createEnsureSessionReady = ({
       });
       await cleanupStaleResumedSessionIfNeeded(resumedSessionRef);
 
-      return adapter.readSessionPresence(resumedSessionRef);
+      return adapter.readSessionRuntimeSnapshot(resumedSessionRef);
     };
 
     if (session.status !== "error") {
-      const sessionPresence = await adapter.readSessionPresence(sessionRef);
+      const runtimeSnapshot = await adapter.readSessionRuntimeSnapshot(sessionRef);
       assertNotStale();
-      if (sessionPresence.presence === "runtime") {
-        return applyRuntimePresenceSnapshot(sessionPresence, session);
+      if (runtimeSnapshot.availability === "runtime") {
+        return observeRuntimeSession(runtimeSnapshot);
       }
-      updateSession(
-        session,
-        (current) => applyAgentSessionPresenceSnapshotToSession(current, sessionPresence),
-        { persist: false },
-      );
+      applyRuntimeSnapshot(runtimeSnapshot, { persist: false });
       assertNotStale();
     }
 
@@ -169,29 +157,19 @@ export const createEnsureSessionReady = ({
       runtimeKind: requestedRuntimeKind,
     });
     assertNotStale();
-    const sessionPresence = await resumeSessionAndReadPresence({
+    const runtimeSnapshot = await resumeSessionAndReadSnapshot({
       resumedSessionRef: sessionRef,
       systemPrompt: promptContext.systemPrompt,
     });
     assertNotStale();
 
-    if (sessionPresence.presence !== "runtime") {
+    if (runtimeSnapshot.availability !== "runtime") {
       await adapter.stopSession(sessionRef);
       throw new Error(`Runtime did not report resumed session '${externalSessionId}'.`);
     }
 
     assertNotStale();
 
-    removeSessionListenersByExternalSessionId(
-      sessionListenerRegistryRef.current,
-      externalSessionId,
-    );
-    const readySessionIdentity = await applyRuntimePresenceSnapshot(sessionPresence, session);
-
-    if (isStaleRepoOperation()) {
-      return readySessionIdentity;
-    }
-
-    return readySessionIdentity;
+    return observeRuntimeSession(runtimeSnapshot);
   };
 };

@@ -1,4 +1,5 @@
 import {
+  type AgentSessionRecord,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeDescriptor,
   type RuntimeInstanceSummary,
@@ -64,6 +65,7 @@ export const createTaskStore = (
     workingDirectory: string;
     selectedModel: null;
   }> = {},
+  extraAgentSessions: AgentSessionRecord[] = [],
 ): TaskStorePort =>
   ({
     getTaskMetadata() {
@@ -81,7 +83,7 @@ export const createTaskStore = (
           return {
             spec: { markdown: "" },
             plan: { markdown: "" },
-            agentSessions: [session],
+            agentSessions: [session, ...extraAgentSessions],
           };
         },
         catch: (cause) =>

@@ -8,6 +8,7 @@ import type {
   ResumeAgentSessionInput,
   StartAgentSessionInput,
 } from "@openducktor/core";
+import { agentSessionStatusFromActivity } from "@openducktor/core";
 import {
   codexThreadStatusSnapshot,
   extractThreadId,
@@ -158,7 +159,7 @@ const sessionStateFromThreadResumeResponse = (
     startedAt: startedAt ?? threadSnapshot.startedAt,
     title: threadSnapshot.title,
     role: "role" in input ? input.role : null,
-    status: threadSnapshot.status.agentSessionStatus,
+    status: agentSessionStatusFromActivity(threadSnapshot.status.classification),
   });
   return buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);
 };

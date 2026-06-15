@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useMemo, useReducer, useRef } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   getSessionMessageCount,
   getSessionMessagesRevision,
@@ -19,10 +20,10 @@ const TRANSCRIPT_DERIVATION_MAX_MESSAGES_PER_CHUNK = 250;
 const TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT = 100;
 
 type TranscriptRowsRevision = {
-  externalSessionId: string | null;
+  sessionKey: string | null;
   sessionStatus: AgentChatThreadSession["status"] | null;
   showThinkingMessages: boolean;
-  messagesExternalSessionId: string | null;
+  messagesSessionKey: string | null;
   version: number | null;
   count: number | null;
 };
@@ -37,10 +38,10 @@ export type TranscriptRowsState = {
 };
 
 const EMPTY_TRANSCRIPT_ROWS_REVISION: TranscriptRowsRevision = Object.freeze({
-  externalSessionId: null,
+  sessionKey: null,
   sessionStatus: null,
   showThinkingMessages: false,
-  messagesExternalSessionId: null,
+  messagesSessionKey: null,
   version: null,
   count: null,
 });
@@ -63,12 +64,14 @@ const buildTranscriptRowsRevision = (
   }
 
   const messagesRevision = getSessionMessagesRevision(session);
+  const sessionKey = agentSessionIdentityKey(session);
 
   return {
-    externalSessionId: session.externalSessionId,
+    sessionKey,
     sessionStatus: session.status,
     showThinkingMessages,
-    messagesExternalSessionId: messagesRevision.externalSessionId,
+    messagesSessionKey:
+      messagesRevision.externalSessionId === session.externalSessionId ? sessionKey : null,
     version: messagesRevision.version,
     count: messagesRevision.count,
   };
@@ -132,10 +135,10 @@ const areTranscriptRowsRevisionsEqual = (
   right: TranscriptRowsRevision,
 ): boolean => {
   return (
-    left.externalSessionId === right.externalSessionId &&
+    left.sessionKey === right.sessionKey &&
     left.sessionStatus === right.sessionStatus &&
     left.showThinkingMessages === right.showThinkingMessages &&
-    left.messagesExternalSessionId === right.messagesExternalSessionId &&
+    left.messagesSessionKey === right.messagesSessionKey &&
     left.version === right.version &&
     left.count === right.count
   );
@@ -143,10 +146,10 @@ const areTranscriptRowsRevisionsEqual = (
 
 const toTranscriptRowsRevisionKey = (revision: TranscriptRowsRevision): string => {
   return [
-    revision.externalSessionId ?? "",
+    revision.sessionKey ?? "",
     revision.sessionStatus ?? "",
     revision.showThinkingMessages ? "thinking:on" : "thinking:off",
-    revision.messagesExternalSessionId ?? "",
+    revision.messagesSessionKey ?? "",
     revision.version ?? "",
     revision.count ?? "",
   ].join("\u001f");
@@ -161,11 +164,9 @@ const now = (): number => {
 export const useAgentChatTranscriptRows = ({
   session,
   showThinkingMessages,
-  shouldPauseDerivation,
 }: {
   session: AgentChatThreadSession | null;
   showThinkingMessages: boolean;
-  shouldPauseDerivation: boolean;
 }): {
   transcriptState: TranscriptRowsState;
   hasRowsForActiveSession: boolean;
@@ -191,11 +192,7 @@ export const useAgentChatTranscriptRows = ({
     (_current: TranscriptRowsState, next: TranscriptRowsState) => next,
     undefined,
     () => {
-      if (
-        !session ||
-        shouldPauseDerivation ||
-        getSessionMessageCount(session) > TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT
-      ) {
+      if (!session || getSessionMessageCount(session) > TRANSCRIPT_DERIVATION_SYNC_MESSAGE_LIMIT) {
         return EMPTY_TRANSCRIPT_ROWS_STATE;
       }
 
@@ -214,18 +211,14 @@ export const useAgentChatTranscriptRows = ({
   resolvedTranscriptStateRef.current = resolvedTranscriptState;
   const hasRowsForActiveSession = Boolean(
     session &&
-      resolvedTranscriptState.revision.externalSessionId === session.externalSessionId &&
+      resolvedTranscriptState.revision.sessionKey === agentSessionIdentityKey(session) &&
       resolvedTranscriptState.revision.showThinkingMessages === showThinkingMessages,
   );
   const hasCurrentRowsForActiveSession = Boolean(
     session && areTranscriptRowsRevisionsEqual(resolvedTranscriptState.revision, activeRevision),
   );
-  const isTranscriptRowsMissing = Boolean(
-    session && !shouldPauseDerivation && !hasRowsForActiveSession,
-  );
-  const isTranscriptRowsPending = Boolean(
-    session && !shouldPauseDerivation && !hasCurrentRowsForActiveSession,
-  );
+  const isTranscriptRowsMissing = Boolean(session && !hasRowsForActiveSession);
+  const isTranscriptRowsPending = Boolean(session && !hasCurrentRowsForActiveSession);
 
   useEffect(() => {
     // activeRevisionKey intentionally triggers this effect; async work reads refs below.
@@ -241,7 +234,6 @@ export const useAgentChatTranscriptRows = ({
     }
 
     if (
-      shouldPauseDerivation ||
       areTranscriptRowsRevisionsEqual(resolvedTranscriptStateRef.current.revision, currentRevision)
     ) {
       return;
@@ -339,7 +331,7 @@ export const useAgentChatTranscriptRows = ({
         globalThis.clearTimeout(scheduledWorkId);
       }
     };
-  }, [activeRevisionKey, rowsCache, shouldPauseDerivation, showThinkingMessages]);
+  }, [activeRevisionKey, rowsCache, showThinkingMessages]);
 
   const transcriptState = useMemo(() => {
     if (!hasRowsForActiveSession) {

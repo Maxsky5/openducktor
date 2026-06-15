@@ -1,5 +1,4 @@
 import {
-  type AgentSessionRecord,
   type AgentSessionStopTarget,
   type RepoRuntimeHealthCheck,
   type RepoRuntimeStartupStatus,
@@ -137,57 +136,33 @@ export const loadTargetSession = (
   taskReader: TaskReader,
   repoPath: string,
   taskId: string,
-  externalSessionId: string,
+  request: AgentSessionStopTarget,
 ) =>
   Effect.gen(function* () {
     const metadata = yield* taskReader.getTaskMetadata({ repoPath, taskId });
+    const requestWorkingDirectory = normalizePathForComparison(request.workingDirectory);
     const session = metadata.agentSessions.find(
-      (entry) => entry.externalSessionId === externalSessionId,
+      (entry) =>
+        entry.externalSessionId.trim() === request.externalSessionId.trim() &&
+        entry.runtimeKind.trim() === request.runtimeKind &&
+        normalizePathForComparison(entry.workingDirectory) === requestWorkingDirectory,
     );
     if (!session) {
       return yield* Effect.fail(
         new HostValidationError({
-          field: "externalSessionId",
-          message: `Agent session with externalSessionId ${externalSessionId} was not found for task ${taskId}`,
-          details: { repoPath, taskId, externalSessionId },
+          field: "session",
+          message: `Agent session ${request.externalSessionId} (${request.runtimeKind}, ${request.workingDirectory}) was not found for task ${taskId}`,
+          details: {
+            repoPath,
+            taskId,
+            externalSessionId: request.externalSessionId,
+            runtimeKind: request.runtimeKind,
+            workingDirectory: request.workingDirectory,
+          },
         }),
       );
     }
     return session;
-  });
-export const validateSessionStopTarget = (
-  request: AgentSessionStopTarget,
-  session: AgentSessionRecord,
-) =>
-  Effect.gen(function* () {
-    if (session.runtimeKind.trim() !== request.runtimeKind) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "runtimeKind",
-          message: `Agent session with externalSessionId ${request.externalSessionId} runtime kind mismatch: expected ${request.runtimeKind}, found ${session.runtimeKind.trim()}`,
-          details: {
-            externalSessionId: request.externalSessionId,
-            expectedRuntimeKind: request.runtimeKind,
-            actualRuntimeKind: session.runtimeKind.trim(),
-          },
-        }),
-      );
-    }
-    const sessionWorkingDirectory = normalizePathForComparison(session.workingDirectory);
-    const requestWorkingDirectory = normalizePathForComparison(request.workingDirectory);
-    if (sessionWorkingDirectory !== requestWorkingDirectory) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "workingDirectory",
-          message: `Agent session with externalSessionId ${request.externalSessionId} working directory mismatch: expected ${request.workingDirectory}, found ${session.workingDirectory}`,
-          details: {
-            externalSessionId: request.externalSessionId,
-            expectedWorkingDirectory: request.workingDirectory,
-            actualWorkingDirectory: session.workingDirectory,
-          },
-        }),
-      );
-    }
   });
 export const findWorkspaceRuntime = (
   runtimes: RuntimeInstanceSummary[],

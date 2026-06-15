@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentChatThreadSession } from "./agent-chat.types";
@@ -15,7 +16,6 @@ import { useAgentChatTranscriptRows } from "./use-agent-chat-transcript-rows";
 type HarnessProps = {
   session: AgentChatThreadSession | null;
   showThinkingMessages: boolean;
-  shouldPauseDerivation: boolean;
 };
 
 type HookResult = ReturnType<typeof useAgentChatTranscriptRows>;
@@ -120,7 +120,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     expect(harness.getLatest().transcriptState.rows).toEqual([]);
@@ -139,19 +138,18 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session: firstSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     await harness.update({
       session: secondSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
 
     const rowKeys = harness.getLatest().transcriptState.rows.map((row) => row.key);
+    const secondSessionKey = agentSessionIdentityKey(secondSession);
     expect(rowKeys.length).toBeGreaterThan(0);
-    expect(rowKeys.every((key) => key.startsWith("session-stale-b:"))).toBe(true);
+    expect(rowKeys.every((key) => key.startsWith(`${secondSessionKey}:`))).toBe(true);
     await harness.unmount();
   });
 
@@ -160,7 +158,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     await harness.update({
@@ -169,7 +166,6 @@ describe("useAgentChatTranscriptRows", () => {
         pendingQuestions: [buildQuestionRequest({ requestId: "question-same-revision" })],
       },
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
 
@@ -189,7 +185,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
     const resolvedRows = harness.getLatest().transcriptState.rows;
@@ -204,7 +199,6 @@ describe("useAgentChatTranscriptRows", () => {
         ),
       }),
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     expect(harness.getLatest().transcriptState.rows).toBe(resolvedRows);
@@ -226,7 +220,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session: firstSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
     const cachedRows = harness.getLatest().transcriptState.rows;
@@ -234,7 +227,6 @@ describe("useAgentChatTranscriptRows", () => {
     await harness.update({
       session: secondSession,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
     await harness.update({
@@ -243,7 +235,6 @@ describe("useAgentChatTranscriptRows", () => {
         messages: createSessionMessagesState("session-cache-reuse", messages, 1),
       }),
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
 
     expect(harness.getLatest().transcriptState.rows).toBe(cachedRows);
@@ -261,7 +252,6 @@ describe("useAgentChatTranscriptRows", () => {
     const harness = await mountHarness({
       session,
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     expect(harness.getLatest().transcriptState.rows[1]?.kind).toBe("message");
 
@@ -275,7 +265,6 @@ describe("useAgentChatTranscriptRows", () => {
         ),
       }),
       showThinkingMessages: true,
-      shouldPauseDerivation: false,
     });
     await flushTranscriptDerivation();
 

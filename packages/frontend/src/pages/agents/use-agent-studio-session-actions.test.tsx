@@ -248,7 +248,6 @@ const createBaseArgs = (): HookArgs => {
     selectedTask: createTask(),
     agentStudioReady: true,
     isActiveTaskReady: true,
-    isSessionSelectionResolving: false,
     selectionForNewSession: {
       runtimeKind: "opencode",
       providerId: "openai",
@@ -319,11 +318,40 @@ describe("useAgentStudioSessionActions", () => {
     );
     expect(scheduleSelectionIntent).toHaveBeenCalledWith({
       taskId: "task-1",
-      externalSessionId: null,
+      sessionIdentity: null,
       role: "build",
     });
     expect(startAgentSession).not.toHaveBeenCalled();
     expect(sendAgentMessage).not.toHaveBeenCalled();
+
+    await harness.unmount();
+  });
+
+  test("does not prepare a message-first target when parent start policy rejects it", async () => {
+    const updateQuery = mock(() => {});
+    const scheduleSelectionIntent = mock(() => {});
+    const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
+      taskId: "task-1",
+      sessionsForTask: [],
+      canPrepareMessageFirstSession: () => false,
+      updateQuery,
+      scheduleSelectionIntent,
+    });
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handlePrepareMessageFirstSession({
+        id: "build:build_implementation_start:message_first",
+        role: "build",
+        launchActionId: "build_implementation_start",
+        label: "Prepare Builder session",
+        description: "Open a Builder composer without sending a kickoff.",
+        disabled: false,
+      });
+    });
+
+    expect(updateQuery).not.toHaveBeenCalled();
+    expect(scheduleSelectionIntent).not.toHaveBeenCalled();
 
     await harness.unmount();
   });
@@ -520,7 +548,11 @@ describe("useAgentStudioSessionActions", () => {
     expect(sendAgentMessage).toHaveBeenCalledWith(sessionIdentity("session-new"), [
       { kind: "text", text: "  hello world  " },
     ]);
-    expect(updateCalls.some((entry) => entry.session === "session-new")).toBe(true);
+    expect(
+      updateCalls.some(
+        (entry) => entry.session === agentSessionIdentityKey(sessionIdentity("session-new")),
+      ),
+    ).toBe(true);
 
     await harness.unmount();
   });
@@ -1316,7 +1348,7 @@ describe("useAgentStudioSessionActions", () => {
     const draft = createComposerDraft("  hello world  ");
     const nextSession = createSession({
       taskId: "task-1",
-      externalSessionId: "session-new",
+      ...sessionIdentity("session-new"),
       role: "spec",
       status: "stopped",
     });
@@ -1409,7 +1441,7 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(updateCalls).toContainEqual({
       task: "task-2",
-      session: "session-2",
+      session: agentSessionIdentityKey(sessionTwo),
       agent: "spec",
     });
 
@@ -1535,35 +1567,13 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
-  test("does not expose kickoff while selected session state is resolving", async () => {
-    const harness = createHookHarness({
-      ...createBaseArgs(),
-      role: "build",
-      launchActionId: "build_after_human_request_changes",
-      selectedTask: createTask({ status: "human_review" }),
-      activeSession: null,
-      sessionsForTask: [],
-      isSessionSelectionResolving: true,
-    });
-
-    await harness.mount();
-
-    expect(harness.getLatest().canKickoffNewSession).toBe(false);
-
-    await harness.unmount();
-  });
-
   test("selection actions ignore invalid session ids without mutating query state", async () => {
     const updateQuery = mock(() => {});
     const scheduleSelectionIntent = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeSessionExists: false,
-      agentStudioReady: true,
-      isActiveTaskReady: true,
-      isSessionWorking: false,
       sessionsForTask: [createSession({ externalSessionId: "session-1" })],
-      selectedTask: createTask(),
+      canPrepareMessageFirstSession: () => true,
       updateQuery,
       scheduleSelectionIntent,
     });
@@ -1584,12 +1594,8 @@ describe("useAgentStudioSessionActions", () => {
     const session = createSession({ externalSessionId: "session-1", role: "spec" });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      activeSessionExists: true,
-      agentStudioReady: true,
-      isActiveTaskReady: true,
-      isSessionWorking: false,
       sessionsForTask: [session],
-      selectedTask: createTask(),
+      canPrepareMessageFirstSession: () => true,
       updateQuery,
       scheduleSelectionIntent: undefined,
     });
@@ -1601,7 +1607,7 @@ describe("useAgentStudioSessionActions", () => {
 
     expect(updateQuery).toHaveBeenCalledWith({
       task: "task-1",
-      session: "session-1",
+      session: agentSessionIdentityKey(session),
       agent: "spec",
     });
 
@@ -1625,6 +1631,67 @@ describe("useAgentStudioSessionActions", () => {
     expect(answerAgentQuestion).not.toHaveBeenCalled();
     expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});
 
+    await harness.unmount();
+  });
+
+  test("question actions keep submitting state scoped by session identity", async () => {
+    const answerDeferred = createDeferred<void>();
+    const answerAgentQuestion = mock(async () => answerDeferred.promise);
+    const firstSession: NonNullable<
+      Parameters<typeof useAgentStudioQuestionActions>[0]["activeSession"]
+    > = {
+      externalSessionId: "shared-session",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/repo/opencode",
+    };
+    const secondSession: NonNullable<
+      Parameters<typeof useAgentStudioQuestionActions>[0]["activeSession"]
+    > = {
+      externalSessionId: "shared-session",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/codex",
+    };
+    const pendingQuestions = [
+      {
+        requestId: "req-1",
+        questions: [
+          {
+            header: "Confirm",
+            question: "Need answer",
+            options: [],
+            multiple: false,
+            custom: true,
+          },
+        ],
+      },
+    ];
+    const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
+      activeSession: firstSession,
+      agentStudioReady: true,
+      pendingQuestions,
+      answerAgentQuestion,
+    });
+
+    await harness.mount();
+    let submitPromise: Promise<void> | null = null;
+    await harness.run((state) => {
+      submitPromise = state.onSubmitQuestionAnswers("req-1", [["yes"]]);
+    });
+    await harness.waitFor((state) => state.isSubmittingQuestionByRequestId["req-1"] === true);
+
+    await harness.update({
+      activeSession: secondSession,
+      agentStudioReady: true,
+      pendingQuestions,
+      answerAgentQuestion,
+    });
+
+    expect(harness.getLatest().isSubmittingQuestionByRequestId).toEqual({});
+
+    await harness.run(async () => {
+      answerDeferred.resolve();
+      await submitPromise;
+    });
     await harness.unmount();
   });
 });

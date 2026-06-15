@@ -1,39 +1,31 @@
-import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
-  applyAgentStudioSelectionQuery,
-  canStartSessionForRole,
-  type QueryUpdate,
-} from "../use-agent-studio-session-action-helpers";
+  buildAgentStudioSelectionQueryUpdate,
+  type AgentStudioQueryUpdate as QueryUpdate,
+} from "../query-sync/agent-studio-navigation";
+import type { AgentStudioSelectionIntent } from "../shell/agent-studio-selection-intent";
 
-type SelectionIntentScheduler = (intent: {
-  taskId: string;
-  externalSessionId: string | null;
-  role: AgentRole;
-}) => void;
+type SelectionIntentScheduler = (intent: AgentStudioSelectionIntent) => void;
+type CanPrepareMessageFirstSession = (option: SessionCreateOption) => boolean;
 
 type UseAgentStudioSelectionActionsArgs = {
   taskId: string;
-  activeSessionExists: boolean;
-  agentStudioReady: boolean;
-  isActiveTaskReady: boolean;
-  isSessionWorking: boolean;
   sessionsForTask: AgentSessionSummary[];
-  selectedTask: TaskCard | null;
+  canPrepareMessageFirstSession: CanPrepareMessageFirstSession;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
 };
 
 type ApplySelectionIntentParams = {
   nextTaskId: string;
-  nextSessionRoute: AgentSessionSummary | null;
+  nextSessionIdentity: AgentSessionSummary | null;
   nextRole: AgentRole;
   updateQuery: (updates: QueryUpdate) => void;
   scheduleSelectionIntent: SelectionIntentScheduler | undefined;
@@ -41,31 +33,29 @@ type ApplySelectionIntentParams = {
 
 const applySelectionIntent = ({
   nextTaskId,
-  nextSessionRoute,
+  nextSessionIdentity,
   nextRole,
   updateQuery,
   scheduleSelectionIntent,
 }: ApplySelectionIntentParams): void => {
-  applyAgentStudioSelectionQuery(updateQuery, {
-    taskId: nextTaskId,
-    session: nextSessionRoute,
-    role: nextRole,
-  });
+  updateQuery(
+    buildAgentStudioSelectionQueryUpdate({
+      taskId: nextTaskId,
+      session: nextSessionIdentity,
+      role: nextRole,
+    }),
+  );
   scheduleSelectionIntent?.({
     taskId: nextTaskId,
-    externalSessionId: nextSessionRoute?.externalSessionId ?? null,
+    sessionIdentity: nextSessionIdentity ? toAgentSessionIdentity(nextSessionIdentity) : null,
     role: nextRole,
   });
 };
 
 export function useAgentStudioSelectionActions({
   taskId,
-  activeSessionExists,
-  agentStudioReady,
-  isActiveTaskReady,
-  isSessionWorking,
   sessionsForTask,
-  selectedTask,
+  canPrepareMessageFirstSession,
   updateQuery,
   scheduleSelectionIntent,
 }: UseAgentStudioSelectionActionsArgs): {
@@ -88,7 +78,7 @@ export function useAgentStudioSelectionActions({
       if (!sessionValue) {
         applySelectionIntent({
           nextTaskId: taskId,
-          nextSessionRoute: null,
+          nextSessionIdentity: null,
           nextRole,
           updateQuery,
           scheduleSelectionIntent,
@@ -103,7 +93,7 @@ export function useAgentStudioSelectionActions({
 
       applySelectionIntent({
         nextTaskId: session.taskId,
-        nextSessionRoute: session,
+        nextSessionIdentity: session,
         nextRole: session.role,
         updateQuery,
         scheduleSelectionIntent,
@@ -125,7 +115,7 @@ export function useAgentStudioSelectionActions({
 
       applySelectionIntent({
         nextTaskId: selectedSession.taskId,
-        nextSessionRoute: selectedSession,
+        nextSessionIdentity: selectedSession,
         nextRole: selectedSession.role,
         updateQuery,
         scheduleSelectionIntent,
@@ -136,34 +126,19 @@ export function useAgentStudioSelectionActions({
 
   const handlePrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): void => {
-      if (option.disabled || !taskId || !agentStudioReady || !isActiveTaskReady) {
-        return;
-      }
-      if (activeSessionExists && isSessionWorking) {
-        return;
-      }
-      if (!canStartSessionForRole(selectedTask, option.role)) {
+      if (!canPrepareMessageFirstSession(option)) {
         return;
       }
 
       applySelectionIntent({
         nextTaskId: taskId,
-        nextSessionRoute: null,
+        nextSessionIdentity: null,
         nextRole: option.role,
         updateQuery,
         scheduleSelectionIntent,
       });
     },
-    [
-      activeSessionExists,
-      agentStudioReady,
-      isActiveTaskReady,
-      isSessionWorking,
-      scheduleSelectionIntent,
-      selectedTask,
-      taskId,
-      updateQuery,
-    ],
+    [canPrepareMessageFirstSession, scheduleSelectionIntent, taskId, updateQuery],
   );
 
   return {

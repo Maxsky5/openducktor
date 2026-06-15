@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
@@ -50,7 +52,7 @@ const createSession = (
     ...overrides,
   });
 
-const externalSessionParam = (externalSessionId: string) => externalSessionId;
+const sessionKeyParam = (session: AgentSessionIdentity): string => agentSessionIdentityKey(session);
 
 const isFullSessionState = (entry: HookArgs["sessions"][number]): entry is AgentSessionState =>
   "messages" in entry;
@@ -59,7 +61,7 @@ const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
   const nextLookup: Record<string, AgentSessionState> = {};
   for (const session of sessions) {
     if (isFullSessionState(session)) {
-      nextLookup[session.externalSessionId] = session;
+      nextLookup[agentSessionIdentityKey(session)] = session;
     }
   }
   sessionByIdRef.current = nextLookup;
@@ -87,7 +89,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isLoadingSessionReadModel: false,
   sessionReadModelError: null,
   taskIdParam: "task-1",
-  sessionParam: null,
+  sessionKeyParam: null,
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
   selectionIntent: null,
@@ -100,6 +102,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     opencode: createRepoRuntimeHealthFixture(),
   },
   isLoadingChecks: false,
+  refreshChecks: async () => {},
   readSessionModelCatalog: async () => emptyCatalog,
   readSessionTodos: async () => [],
   ...overrides,
@@ -147,7 +150,7 @@ describe("useAgentStudioSelectionController", () => {
         if (!identity) {
           return null;
         }
-        const session = sessionByIdRef.current[identity.externalSessionId] ?? null;
+        const session = sessionByIdRef.current[agentSessionIdentityKey(identity)] ?? null;
         return matchesAgentSessionIdentity(session, identity) ? session : null;
       },
     }));
@@ -169,7 +172,7 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         sessions: [session],
         taskIdParam: "",
-        sessionParam: externalSessionParam("session-2"),
+        sessionKeyParam: sessionKeyParam(session),
       }),
     );
 
@@ -240,7 +243,7 @@ describe("useAgentStudioSelectionController", () => {
         isLoadingSessionReadModel: true,
         sessions: [],
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         hasExplicitRoleParam: false,
       }),
     );
@@ -278,7 +281,7 @@ describe("useAgentStudioSelectionController", () => {
         isLoadingSessionReadModel: true,
         sessions: [],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-reloaded"),
+        sessionKeyParam: "session-reloaded",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
@@ -297,6 +300,52 @@ describe("useAgentStudioSelectionController", () => {
     }
   });
 
+  test("scopes selected-session readiness to the selected runtime kind", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const codexSession = createSession("task-1", "codex-session", {
+      runtimeKind: "codex",
+      role: "build",
+      historyLoadState: "not_requested",
+      messages: createSessionMessagesState("codex-session"),
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspace,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture(),
+          codex: createRepoRuntimeHealthFixture({
+            status: "checking",
+            runtime: { status: "checking", stage: "waiting_for_runtime" },
+          }),
+        },
+        tasks: [task],
+        sessions: [codexSession],
+        taskIdParam: "task-1",
+        sessionKeyParam: sessionKeyParam(codexSession),
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.viewActiveSession?.runtimeKind).toBe("codex");
+      expect(latest.viewRuntimeReadiness.readinessState).toBe("checking");
+      expect(latest.viewSessionLifecycle.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("marks selected task failed when startup read model fails", async () => {
     const task = createTaskCardFixture({
       id: "task-1",
@@ -310,7 +359,7 @@ describe("useAgentStudioSelectionController", () => {
         sessions: [],
         sessionReadModelError: "Failed to load agent session read model",
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-reloaded"),
+        sessionKeyParam: "session-reloaded",
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
       }),
@@ -337,7 +386,7 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [session],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-live"),
+        sessionKeyParam: sessionKeyParam(session),
         loadAgentSessionHistory,
       }),
     );
@@ -370,12 +419,16 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         sessions: [specSession, plannerSession],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-spec"),
+        sessionKeyParam: sessionKeyParam(specSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "spec",
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: externalSessionParam("session-planner"),
+          sessionIdentity: {
+            externalSessionId: plannerSession.externalSessionId,
+            runtimeKind: plannerSession.runtimeKind,
+            workingDirectory: plannerSession.workingDirectory,
+          },
           role: "planner",
         },
       }),
@@ -404,12 +457,12 @@ describe("useAgentStudioSelectionController", () => {
       createBaseArgs({
         sessions: [buildSession],
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "spec",
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: null,
+          sessionIdentity: null,
           role: "build",
         },
       }),
@@ -439,12 +492,12 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [buildSession],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-build"),
+        sessionKeyParam: sessionKeyParam(buildSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         selectionIntent: {
           taskId: "task-1",
-          externalSessionId: null,
+          sessionIdentity: null,
           role: "build",
         },
       }),
@@ -483,7 +536,7 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [buildSession],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-build"),
+        sessionKeyParam: sessionKeyParam(buildSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         readSessionTodos,
@@ -527,7 +580,7 @@ describe("useAgentStudioSelectionController", () => {
         activeWorkspace,
         sessions: [activeSession, viewSession],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-build"),
+        sessionKeyParam: sessionKeyParam(activeSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         readSessionTodos,
@@ -581,7 +634,7 @@ describe("useAgentStudioSelectionController", () => {
         isRepoNavigationBoundaryPending: true,
         sessions: [staleSession],
         taskIdParam: "task-1",
-        sessionParam: externalSessionParam("session-1"),
+        sessionKeyParam: sessionKeyParam(staleSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "build",
         readSessionModelCatalog,
@@ -799,7 +852,7 @@ describe("useAgentStudioSelectionController", () => {
         tasks: [humanReviewTask, createTask("task-2")],
         sessions: [initialBuildSession],
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         hasExplicitRoleParam: false,
       }),
     );
@@ -815,7 +868,7 @@ describe("useAgentStudioSelectionController", () => {
           tasks: [humanReviewTask, createTask("task-2")],
           sessions: [newerQaSession, initialBuildSession],
           taskIdParam: "task-1",
-          sessionParam: null,
+          sessionKeyParam: null,
           hasExplicitRoleParam: false,
         }),
       );
@@ -850,7 +903,7 @@ describe("useAgentStudioSelectionController", () => {
         tasks: [humanReviewTask, createTask("task-2")],
         sessions: [qaSession, buildSession],
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "build",
       }),
@@ -866,7 +919,7 @@ describe("useAgentStudioSelectionController", () => {
           tasks: [humanReviewTask, createTask("task-2")],
           sessions: [qaSession, buildSession],
           taskIdParam: "task-1",
-          sessionParam: null,
+          sessionKeyParam: null,
           hasExplicitRoleParam: false,
           roleFromQuery: "qa",
         }),
@@ -904,7 +957,7 @@ describe("useAgentStudioSelectionController", () => {
         tasks: [taskOne, humanReviewTask],
         sessions: [buildSession, qaSession],
         taskIdParam: "task-1",
-        sessionParam: null,
+        sessionKeyParam: null,
         hasExplicitRoleParam: false,
         roleFromQuery: "qa",
         updateQuery,
@@ -932,7 +985,7 @@ describe("useAgentStudioSelectionController", () => {
           tasks: [taskOne, humanReviewTask],
           sessions: [buildSession, qaSession],
           taskIdParam: "task-2",
-          sessionParam: null,
+          sessionKeyParam: null,
           hasExplicitRoleParam: false,
           roleFromQuery: "qa",
           updateQuery,

@@ -3,11 +3,11 @@ import { useCallback, useMemo, useState } from "react";
 import type { AgentStudioTaskTabsModel } from "@/components/features/agents";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { ActiveWorkspace } from "@/types/state-slices";
+import { buildTaskTabs, getAvailableTabTasks } from "./agents-page-session-tabs";
 import {
   AGENT_STUDIO_QUERY_KEYS,
   type AgentStudioQueryUpdate as QueryUpdate,
-} from "./agent-studio-navigation";
-import { buildTaskTabs, getAvailableTabTasks } from "./agents-page-session-tabs";
+} from "./query-sync/agent-studio-navigation";
 import { useTaskTabActions } from "./use-agent-studio-task-tabs-actions";
 import { useTaskTabPersistence } from "./use-agent-studio-task-tabs-persistence";
 import { useTaskTabSelection } from "./use-agent-studio-task-tabs-selection";

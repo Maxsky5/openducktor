@@ -2,12 +2,11 @@ import {
   type AgentSessionRuntimeRef,
   type ForkAgentSessionInput,
   type ListAgentModelsInput,
-  type ListLiveAgentSessionsInput,
-  type ListSessionPresenceInput,
+  type ListSessionRuntimeSnapshotsInput,
   type LoadAgentSessionDiffInput,
   type LoadAgentSessionHistoryInput,
   type LoadAgentSessionTodosInput,
-  type ReadSessionPresenceInput,
+  type ReadSessionRuntimeSnapshotInput,
   type ResumeAgentSessionInput,
   requireRepoRuntimeRef,
   type SearchAgentFilesInput,
@@ -23,9 +22,8 @@ type RuntimeClientInput =
   | ResumeAgentSessionInput
   | AgentSessionRuntimeRef
   | ForkAgentSessionInput
-  | ListLiveAgentSessionsInput
-  | ListSessionPresenceInput
-  | ReadSessionPresenceInput
+  | ListSessionRuntimeSnapshotsInput
+  | ReadSessionRuntimeSnapshotInput
   | LoadAgentSessionHistoryInput
   | LoadAgentSessionDiffInput
   | LoadAgentSessionTodosInput

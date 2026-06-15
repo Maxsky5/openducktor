@@ -396,6 +396,9 @@ describe("useAgentStudioChatComposer", () => {
 
   test("keeps the selected session model while the full session object is still loading", async () => {
     const catalogLoad = createDeferred<AgentModelCatalog>();
+    const readSessionSlashCommands = mock(async () => ({
+      commands: [{ id: "review", trigger: "review", title: "review", hints: [] }],
+    }));
     const harness = createHookHarness(
       createBaseProps({
         activeSession: null,
@@ -417,11 +420,13 @@ describe("useAgentStudioChatComposer", () => {
           pendingQuestions: [],
         },
         loadCatalog: async () => catalogLoad.promise,
+        readSessionSlashCommands,
       }),
     );
 
     try {
       await harness.mount();
+      await harness.waitFor((state) => state.isSlashCommandsLoading === false);
 
       expect(harness.getLatest().isSelectionCatalogLoading).toBe(true);
       expect(harness.getLatest().selectedModelSelection).toEqual({
@@ -430,6 +435,7 @@ describe("useAgentStudioChatComposer", () => {
         modelId: "claude-sonnet",
         profileId: "build-agent",
       });
+      expect(readSessionSlashCommands).not.toHaveBeenCalled();
 
       await harness.run(async () => {
         catalogLoad.resolve(CATALOG);
@@ -438,6 +444,46 @@ describe("useAgentStudioChatComposer", () => {
       await harness.waitFor((state) => state.isSelectionCatalogLoading === false);
     } finally {
       catalogLoad.resolve(CATALOG);
+      await harness.unmount();
+    }
+  });
+
+  test("uses summary target runtime capabilities while the full session object is still loading", async () => {
+    const harness = createHookHarness(
+      createBaseProps({
+        activeSession: null,
+        activeSessionSummary: {
+          externalSessionId: "external-codex",
+          taskId: "task-1",
+          role: "spec",
+          status: "idle",
+          startedAt: "2026-02-20T10:00:00.000Z",
+          workingDirectory: "/repo",
+          runtimeKind: "codex",
+          selectedModel: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+            profileId: "build-agent",
+          },
+          pendingApprovals: [],
+          pendingQuestions: [],
+        },
+        repoSettings: createRepoSettings(null, "opencode"),
+        loadCatalog: async () => CODEX_CATALOG,
+      }),
+      {
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().supportsSlashCommands).toBe(false);
+      expect(harness.getLatest().supportsFileSearch).toBe(true);
+      expect(harness.getLatest().supportsSkillReferences).toBe(true);
+    } finally {
       await harness.unmount();
     }
   });
@@ -1596,7 +1642,7 @@ describe("useAgentStudioChatComposer", () => {
     }
   });
 
-  test("keeps live context usage stable when only session messages change", async () => {
+  test("keeps live context usage unchanged when only session messages change", async () => {
     const contextUsage = {
       totalTokens: 44,
       contextWindow: 150_000,
@@ -1640,13 +1686,13 @@ describe("useAgentStudioChatComposer", () => {
         }),
       );
 
-      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+      expect(harness.getLatest().activeSessionContextUsage).toEqual(previousUsage);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps fallback context usage stable when unrelated tail messages change", async () => {
+  test("keeps fallback context usage unchanged when unrelated tail messages change", async () => {
     const activeSession = createActiveSession({
       contextUsage: null,
       messages: [
@@ -1688,7 +1734,52 @@ describe("useAgentStudioChatComposer", () => {
         }),
       );
 
-      expect(harness.getLatest().activeSessionContextUsage).toBe(previousUsage);
+      expect(harness.getLatest().activeSessionContextUsage).toEqual(previousUsage);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("derives context usage from the selected session when identities share an external id", async () => {
+    const externalSessionId = "shared-external-session";
+    const firstMessages = createSessionMessagesState(externalSessionId, [
+      createAssistantMessage({
+        totalTokens: 21,
+        contextWindow: 48_000,
+      }),
+    ]);
+    const secondMessages = createSessionMessagesState(externalSessionId, [
+      createAssistantMessage({
+        totalTokens: 34,
+        contextWindow: 96_000,
+      }),
+    ]);
+    const firstSession = createActiveSession({
+      externalSessionId,
+      workingDirectory: "/repo/worktree-a",
+      messages: firstMessages,
+    });
+    const secondSession = createActiveSession({
+      externalSessionId,
+      workingDirectory: "/repo/worktree-b",
+      messages: secondMessages,
+    });
+    const harness = createHookHarness(createBaseProps({ activeSession: firstSession }));
+
+    try {
+      await harness.mount();
+      const firstUsage = harness.getLatest().activeSessionContextUsage;
+      expect(firstUsage).toEqual({
+        totalTokens: 21,
+        contextWindow: 48_000,
+      });
+
+      await harness.update(createBaseProps({ activeSession: secondSession }));
+
+      expect(harness.getLatest().activeSessionContextUsage).toEqual({
+        totalTokens: 34,
+        contextWindow: 96_000,
+      });
     } finally {
       await harness.unmount();
     }

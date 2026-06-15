@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { render } from "@testing-library/react";
+import { describe, expect, mock, test } from "bun:test";
+import { fireEvent, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import {
   createTaskCardFixture,
@@ -172,6 +172,95 @@ describe("KanbanTaskCard rerender behavior", () => {
 
     expect(container.innerHTML).toContain("kanban-waiting-input-card");
     expect(container.innerHTML).not.toContain("kanban-active-session-ray");
+    unmount();
+  });
+
+  test("updates open-session action when same-id session identity changes", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-5",
+      status: "in_progress",
+      availableActions: ["open_builder"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const onOpenSession = mock(() => {});
+
+    const { rerender, getByRole, unmount } = render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="active"
+          hasActiveSession
+          activeSessionRole="build"
+          taskSessions={[
+            {
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/build-a",
+              externalSessionId: "shared-session",
+              role: "build",
+              status: "running",
+              presentationState: "active",
+            },
+          ]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onOpenSession={onOpenSession}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
+
+    rerender(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="active"
+          hasActiveSession
+          activeSessionRole="build"
+          taskSessions={[
+            {
+              runtimeKind: "codex",
+              workingDirectory: "/repo/worktrees/build-b",
+              externalSessionId: "shared-session",
+              role: "build",
+              status: "running",
+              presentationState: "active",
+            },
+          ]}
+          onOpenDetails={noop}
+          onDelegate={noop}
+          onOpenSession={onOpenSession}
+          onPlan={noop}
+          onBuild={noop}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(getByRole("button", { name: /Builder/ }));
+
+    expect(onOpenSession).toHaveBeenCalledTimes(1);
+    expect(onOpenSession).toHaveBeenCalledWith(
+      "TASK-5",
+      "build",
+      expect.objectContaining({
+        session: expect.objectContaining({
+          externalSessionId: "shared-session",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/worktrees/build-b",
+        }),
+      }),
+    );
+    expect(onOpenSession).not.toHaveBeenCalledWith(
+      "TASK-5",
+      "build",
+      expect.objectContaining({
+        session: expect.objectContaining({
+          externalSessionId: "shared-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/worktrees/build-a",
+        }),
+      }),
+    );
     unmount();
   });
 

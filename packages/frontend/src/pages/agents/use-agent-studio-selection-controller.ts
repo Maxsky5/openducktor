@@ -12,17 +12,23 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { AgentStudioQueryUpdate as QueryUpdate } from "./agent-studio-navigation";
 import {
   findAgentStudioSessionSelectionCandidate,
   groupSessionsByTaskId,
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
 } from "./agents-page-selection";
+import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
 import {
   type AgentStudioSelectedSessionView,
   useAgentStudioSelectedSessionView,
 } from "./selected-session/use-agent-studio-selected-session-view";
+import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-intent";
+import {
+  resolveAgentStudioRouteSelectionParams,
+  resolveAgentStudioSelectionBaseParams,
+  resolveAgentStudioViewSelectionParams,
+} from "./shell/agent-studio-selection-route";
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
@@ -34,14 +40,10 @@ type UseAgentStudioSelectionControllerArgs = {
   isLoadingSessionReadModel: boolean;
   sessionReadModelError: string | null;
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionKeyParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
-  selectionIntent: {
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  } | null;
+  selectionIntent: AgentStudioSelectionIntent | null;
   updateQuery: (updates: QueryUpdate) => void;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -53,6 +55,7 @@ type UseAgentStudioSelectionControllerArgs = {
   >["runtimeDefinitionsError"];
   runtimeHealthByRuntime: ReturnType<typeof useChecksState>["runtimeHealthByRuntime"];
   isLoadingChecks: boolean;
+  refreshChecks: () => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: NonNullable<AgentSessionState["runtimeKind"]>,
@@ -86,6 +89,7 @@ export type AgentStudioSelectionControllerResult = {
   viewActiveSession: AgentSessionState | null;
   viewSessionRuntimeData: AgentStudioSelectedSessionView["runtimeData"];
   viewSessionRuntimeDataError?: AgentStudioSelectedSessionView["runtimeDataError"];
+  viewRuntimeReadiness: AgentStudioSelectedSessionView["runtimeReadiness"];
   viewRole: AgentRole;
   viewLaunchActionId: AgentStudioSelectedSessionView["launchActionId"];
   isActiveTaskReady: boolean;
@@ -101,7 +105,7 @@ export function useAgentStudioSelectionController({
   isLoadingSessionReadModel,
   sessionReadModelError,
   taskIdParam,
-  sessionParam,
+  sessionKeyParam,
   hasExplicitRoleParam,
   roleFromQuery,
   selectionIntent,
@@ -112,25 +116,19 @@ export function useAgentStudioSelectionController({
   runtimeDefinitionsError,
   runtimeHealthByRuntime,
   isLoadingChecks,
+  refreshChecks,
   readSessionModelCatalog,
   readSessionTodos,
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
-  const effectiveTaskIdParam = isRepoNavigationBoundaryPending ? "" : taskIdParam;
-  const effectiveSessionParam = isRepoNavigationBoundaryPending ? null : sessionParam;
-  const effectiveHasExplicitRoleParam = isRepoNavigationBoundaryPending
-    ? false
-    : hasExplicitRoleParam;
-  const effectiveRoleFromQuery: AgentRole = isRepoNavigationBoundaryPending
-    ? "spec"
-    : roleFromQuery;
-  const effectiveSelectionIntent = isRepoNavigationBoundaryPending ? null : selectionIntent;
-  const selectedTaskIdParam = effectiveSelectionIntent?.taskId ?? effectiveTaskIdParam;
-  const selectedSessionParam = effectiveSelectionIntent?.externalSessionId ?? effectiveSessionParam;
-  const selectedHasExplicitRoleParam =
-    effectiveSelectionIntent !== null ? true : effectiveHasExplicitRoleParam;
-  const selectedRoleFromQuery = effectiveSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const keepSelectedExplicitRoleSessionless =
-    effectiveSelectionIntent?.externalSessionId === null && effectiveSessionParam === null;
+  const selectionBaseParams = resolveAgentStudioSelectionBaseParams({
+    isRepoNavigationBoundaryPending,
+    taskIdParam,
+    sessionKeyParam,
+    hasExplicitRoleParam,
+    roleFromQuery,
+    selectionIntent,
+  });
+  const routeSelectionParams = resolveAgentStudioRouteSelectionParams(selectionBaseParams);
 
   const tasksById = useMemo(() => {
     return new Map(tasks.map((task) => [task.id, task]));
@@ -139,12 +137,12 @@ export function useAgentStudioSelectionController({
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
   const selectedSessionFromRoute = useMemo(
-    () => findAgentStudioSessionSelectionCandidate(sessions, selectedSessionParam),
-    [selectedSessionParam, sessions],
+    () => findAgentStudioSessionSelectionCandidate(sessions, routeSelectionParams.sessionKeyParam),
+    [routeSelectionParams.sessionKeyParam, sessions],
   );
 
   const taskId = resolveAgentStudioTaskId({
-    taskIdParam: selectedTaskIdParam,
+    taskIdParam: routeSelectionParams.taskIdParam,
     selectedSessionFromRoute,
   });
 
@@ -163,18 +161,18 @@ export function useAgentStudioSelectionController({
   const activeSessionSummary = useMemo(() => {
     return resolveAgentStudioSessionSelection({
       sessionsForTask,
-      externalSessionId: selectedSessionParam,
-      hasExplicitRoleParam: selectedHasExplicitRoleParam,
-      roleFromQuery: selectedRoleFromQuery,
+      sessionKey: routeSelectionParams.sessionKeyParam,
+      hasExplicitRoleParam: routeSelectionParams.hasExplicitRoleParam,
+      roleFromQuery: routeSelectionParams.roleFromQuery,
       selectedTask,
-      fallbackRole: selectedRoleFromQuery,
-      keepExplicitRoleSessionless: keepSelectedExplicitRoleSessionless,
+      fallbackRole: routeSelectionParams.roleFromQuery,
+      keepExplicitRoleSessionless: routeSelectionParams.keepExplicitRoleSessionless,
     }).activeSession;
   }, [
-    keepSelectedExplicitRoleSessionless,
-    selectedHasExplicitRoleParam,
-    selectedRoleFromQuery,
-    selectedSessionParam,
+    routeSelectionParams.hasExplicitRoleParam,
+    routeSelectionParams.keepExplicitRoleSessionless,
+    routeSelectionParams.roleFromQuery,
+    routeSelectionParams.sessionKeyParam,
     selectedTask,
     sessionsForTask,
   ]);
@@ -241,27 +239,23 @@ export function useAgentStudioSelectionController({
     return sessionsByTaskId.get(viewTaskId) ?? [];
   }, [sessionsByTaskId, viewTaskId]);
 
-  const isViewTaskDetachedFromQuery = Boolean(viewTaskId && taskId && viewTaskId !== taskId);
-  const hasViewRoleSelection = effectiveHasExplicitRoleParam && !isViewTaskDetachedFromQuery;
-  const viewSelectionIntent =
-    effectiveSelectionIntent && effectiveSelectionIntent.taskId === viewTaskId
-      ? effectiveSelectionIntent
-      : null;
-  const viewHasExplicitRoleSelection = viewSelectionIntent !== null ? true : hasViewRoleSelection;
-  const viewRoleFromSelection = viewSelectionIntent?.role ?? effectiveRoleFromQuery;
-  const viewSessionParamFromSelection =
-    viewSelectionIntent?.externalSessionId ?? effectiveSessionParam;
+  const viewSelectionParams = resolveAgentStudioViewSelectionParams({
+    baseParams: selectionBaseParams,
+    routeTaskId: taskId,
+    viewTaskId,
+  });
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     activeWorkspace,
     selectedTask: viewSelectedTask,
     sessionSummaries: viewSessionsForTask,
-    externalSessionId: viewSessionParamFromSelection,
-    hasExplicitRoleSelection: viewHasExplicitRoleSelection,
-    roleSelection: viewRoleFromSelection,
-    fallbackRole: isViewTaskDetachedFromQuery ? "spec" : viewRoleFromSelection,
-    keepExplicitRoleSessionless:
-      viewSelectionIntent?.externalSessionId === null && effectiveSessionParam === null,
+    sessionKey: viewSelectionParams.sessionKeyParam,
+    hasExplicitRoleSelection: viewSelectionParams.hasExplicitRoleSelection,
+    roleSelection: viewSelectionParams.roleSelection,
+    fallbackRole: viewSelectionParams.fallbackRole,
+    keepExplicitRoleSessionless: viewSelectionParams.keepExplicitRoleSessionless,
+    selectionIntent: viewSelectionParams.selectionIntent,
+    sessionIdentityFromRoute: viewSelectionParams.sessionIdentity,
     sessionReadModelError,
     isLoadingSessionReadModel,
     runtimeDefinitions,
@@ -269,6 +263,7 @@ export function useAgentStudioSelectionController({
     runtimeDefinitionsError,
     runtimeHealthByRuntime,
     isLoadingChecks,
+    refreshChecks,
     loadAgentSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
@@ -298,6 +293,7 @@ export function useAgentStudioSelectionController({
       viewActiveSession: selectedSessionView.session,
       viewSessionRuntimeData: selectedSessionView.runtimeData,
       viewSessionRuntimeDataError: selectedSessionView.runtimeDataError,
+      viewRuntimeReadiness: selectedSessionView.runtimeReadiness,
       viewRole: selectedSessionView.role,
       viewLaunchActionId: selectedSessionView.launchActionId,
       isActiveTaskReady,
@@ -318,6 +314,7 @@ export function useAgentStudioSelectionController({
       selectedSessionView.role,
       selectedSessionView.runtimeData,
       selectedSessionView.runtimeDataError,
+      selectedSessionView.runtimeReadiness,
       selectedSessionView.session,
       selectedSessionView.sessionSummary,
       selectedSessionFromRoute,

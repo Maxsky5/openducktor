@@ -1,6 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import { useEffect, useMemo } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionSummary,
   isWorkflowAgentSessionSummary,
@@ -12,7 +13,7 @@ type UseAgentStudioQuerySessionSyncArgs = {
   isLoadingTasks: boolean;
   tasks: TaskCard[];
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionKeyParam: string | null;
   sessionFromQuery: AgentSessionSummary | null;
   resolvedTaskId: string;
   resolvedSession: AgentSessionSummary | null;
@@ -30,7 +31,7 @@ const resolveAgentStudioQuerySessionUpdate = ({
   isLoadingTasks,
   tasks,
   taskIdParam,
-  sessionParam,
+  sessionKeyParam,
   sessionFromQuery,
   resolvedTaskId,
   resolvedSession,
@@ -43,7 +44,7 @@ const resolveAgentStudioQuerySessionUpdate = ({
   if (
     !isLoadingTasks &&
     taskIdParam &&
-    !sessionParam &&
+    !sessionKeyParam &&
     !sessionFromQuery &&
     !tasks.some((entry) => entry.id === taskIdParam)
   ) {
@@ -62,23 +63,24 @@ const resolveAgentStudioQuerySessionUpdate = ({
 
   const selectedTaskExists =
     resolvedTaskId.length > 0 && tasks.some((entry) => entry.id === resolvedTaskId);
-  const shouldClearSessionParam =
-    Boolean(sessionParam) && !isLoadingTasks && selectedTaskExists && !sessionFromQuery;
+  const shouldClearSessionKey =
+    Boolean(sessionKeyParam) && !isLoadingTasks && selectedTaskExists && !sessionFromQuery;
 
-  if (sessionParam) {
+  if (sessionKeyParam) {
     if (sessionFromQuery && resolvedTaskId && sessionFromQuery.taskId !== resolvedTaskId) {
       updates[AGENT_STUDIO_QUERY_KEYS.task] = sessionFromQuery.taskId;
-    } else if (shouldClearSessionParam) {
+    } else if (shouldClearSessionKey) {
       updates[AGENT_STUDIO_QUERY_KEYS.session] = undefined;
     }
   }
 
-  if (sessionParam && !shouldClearSessionParam && isWorkflowAgentSessionSummary(resolvedSession)) {
+  if (sessionKeyParam && !shouldClearSessionKey && isWorkflowAgentSessionSummary(resolvedSession)) {
     if (taskIdParam !== resolvedSession.taskId) {
       updates[AGENT_STUDIO_QUERY_KEYS.task] = resolvedSession.taskId;
     }
-    if (sessionParam !== resolvedSession.externalSessionId) {
-      updates[AGENT_STUDIO_QUERY_KEYS.session] = resolvedSession.externalSessionId;
+    const resolvedSessionKey = agentSessionIdentityKey(resolvedSession);
+    if (sessionKeyParam !== resolvedSessionKey) {
+      updates[AGENT_STUDIO_QUERY_KEYS.session] = resolvedSessionKey;
     }
     if (roleFromQuery !== resolvedSession.role) {
       updates[AGENT_STUDIO_QUERY_KEYS.agent] = resolvedSession.role;
@@ -93,7 +95,7 @@ export function useAgentStudioQuerySessionSync({
   isLoadingTasks,
   tasks,
   taskIdParam,
-  sessionParam,
+  sessionKeyParam,
   sessionFromQuery,
   resolvedTaskId,
   resolvedSession,
@@ -107,7 +109,7 @@ export function useAgentStudioQuerySessionSync({
         isLoadingTasks,
         tasks,
         taskIdParam,
-        sessionParam,
+        sessionKeyParam,
         sessionFromQuery,
         resolvedTaskId,
         resolvedSession,
@@ -120,7 +122,7 @@ export function useAgentStudioQuerySessionSync({
       resolvedSession,
       resolvedTaskId,
       sessionFromQuery,
-      sessionParam,
+      sessionKeyParam,
       taskIdParam,
       tasks,
     ],

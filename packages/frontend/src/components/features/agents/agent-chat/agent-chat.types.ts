@@ -22,8 +22,6 @@ export type AgentRoleOption = {
   disabled?: boolean;
 };
 
-export type AgentChatMode = "interactive" | "non_interactive";
-
 export type AgentChatEmptyStateModel = {
   title: string;
   actionLabel?: string;
@@ -71,8 +69,8 @@ export type AgentChatThreadModel = {
   isStarting: boolean;
   isSending: boolean;
   sessionAgentColors: Record<string, string>;
-  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
-  subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingApprovalCountBySessionKey?: Record<string, number>;
+  subagentPendingQuestionCountBySessionKey?: Record<string, number>;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
@@ -91,7 +89,7 @@ export type AgentChatThreadModel = {
 
 export type AgentChatComposerModel = {
   taskId: string;
-  displayedSessionId: string | null;
+  displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
   readOnlyReason: string | null;
@@ -144,13 +142,11 @@ export type AgentChatComposerModel = {
 };
 
 export type AgentChatSurfaceModel = {
-  mode: AgentChatMode;
   chatSettings: ChatSettings;
   thread: AgentChatThreadModel;
   composer?: AgentChatComposerModel;
 };
 
 export type AgentChatModel = AgentChatSurfaceModel & {
-  mode: "interactive";
   composer: AgentChatComposerModel;
 };

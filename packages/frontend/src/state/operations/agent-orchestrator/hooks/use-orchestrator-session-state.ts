@@ -2,53 +2,28 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { MutableRefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
-  type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
-  emptyAgentSessionCollection,
-} from "@/state/agent-session-collection";
+  createSessionStartGate,
+  type SessionStartGate,
+} from "@/features/session-start/session-start-gate";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
-import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { DraftChannelValueMap, DraftSource } from "../events/session-event-types";
-import type { AssistantTurnTimingState } from "../support/assistant-turn-duration";
+import { createSessionObservers, type SessionObservers } from "../support/session-observers";
 import {
-  clearSessionListenerRegistry,
-  createSessionListenerRegistry,
-  type SessionListenerRegistry,
-} from "../support/session-listener-registry";
+  clearAllSessionTransientState,
+  createSessionDraftBuffers,
+  createSessionTurnMetadata,
+  createSessionTurnTiming,
+  type SessionTransientState,
+} from "../support/session-transient-state";
 
-type OrchestratorMutableState = {
-  sessionCollection: AgentSessionCollection;
-  tasks: TaskCard[];
-  currentWorkspaceRepoPath: string | null;
-  repoEpoch: number;
-  inFlightStartsByWorkspaceTask: Map<string, Promise<AgentSessionRouteIdentity>>;
-  sessionListenerRegistry: SessionListenerRegistry;
-  draftRawBySession: Record<string, DraftChannelValueMap<string>>;
-  draftSourceBySession: Record<string, DraftChannelValueMap<DraftSource>>;
-  draftMessageIdBySession: Record<string, DraftChannelValueMap<string>>;
-  draftFlushTimeoutBySession: Record<string, ReturnType<typeof setTimeout> | undefined>;
-  assistantTurnTimingBySession: Record<string, AssistantTurnTimingState>;
-  turnModelBySession: Record<string, AgentSessionState["selectedModel"]>;
-};
-
-type OrchestratorRefBridges = {
-  sessionsRef: MutableRefObject<AgentSessionCollection>;
+type UseOrchestratorSessionStateRefs = {
   taskRef: MutableRefObject<TaskCard[]>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
-  inFlightStartsByWorkspaceTaskRef: MutableRefObject<
-    Map<string, Promise<AgentSessionRouteIdentity>>
-  >;
-  sessionListenerRegistryRef: MutableRefObject<SessionListenerRegistry>;
-  draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
-  draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
-  draftMessageIdBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
-  draftFlushTimeoutBySessionRef: MutableRefObject<
-    Record<string, ReturnType<typeof setTimeout> | undefined>
-  >;
-  assistantTurnTimingBySessionRef: MutableRefObject<Record<string, AssistantTurnTimingState>>;
-  turnModelBySessionRef: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
+  sessionStartGateRef: MutableRefObject<SessionStartGate<AgentSessionIdentity>>;
+  sessionObserversRef: MutableRefObject<SessionObservers>;
+  sessionTransientState: SessionTransientState;
 };
 
 type UseOrchestratorSessionStateArgs = {
@@ -57,24 +32,8 @@ type UseOrchestratorSessionStateArgs = {
 };
 
 type UseOrchestratorSessionStateResult = {
-  sessionCollection: AgentSessionCollection;
   sessionStore: AgentSessionsStore;
-  refBridges: OrchestratorRefBridges;
-  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
-};
-
-const createMutableBridge = <K extends keyof OrchestratorMutableState>(
-  stateRef: MutableRefObject<OrchestratorMutableState>,
-  key: K,
-): MutableRefObject<OrchestratorMutableState[K]> =>
-  ({
-    get current() {
-      return stateRef.current[key];
-    },
-    set current(value: OrchestratorMutableState[K]) {
-      stateRef.current[key] = value;
-    },
-  }) as MutableRefObject<OrchestratorMutableState[K]>;
+} & UseOrchestratorSessionStateRefs;
 
 export const useOrchestratorSessionState = ({
   activeWorkspace,
@@ -86,107 +45,58 @@ export const useOrchestratorSessionState = ({
     () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current),
     [],
   );
-  const mutableStateRef = useRef<OrchestratorMutableState>({
-    sessionCollection: emptyAgentSessionCollection(),
-    tasks,
-    currentWorkspaceRepoPath: workspaceRepoPath,
-    repoEpoch: 0,
-    inFlightStartsByWorkspaceTask: new Map<string, Promise<AgentSessionRouteIdentity>>(),
-    sessionListenerRegistry: createSessionListenerRegistry(),
-    draftRawBySession: {},
-    draftSourceBySession: {},
-    draftMessageIdBySession: {},
-    draftFlushTimeoutBySession: {},
-    assistantTurnTimingBySession: {},
-    turnModelBySession: {},
-  });
-  const refBridges = useMemo<OrchestratorRefBridges>(
+  const taskRef = useRef(tasks);
+  const currentWorkspaceRepoPathRef = useRef<string | null>(workspaceRepoPath);
+  const repoEpochRef = useRef(0);
+  const sessionStartGateRef = useRef(createSessionStartGate<AgentSessionIdentity>());
+  const sessionObserversRef = useRef(createSessionObservers());
+  const draftBuffers = useMemo(() => createSessionDraftBuffers(), []);
+  const assistantTurnTiming = useMemo(() => createSessionTurnTiming(), []);
+  const turnMetadata = useMemo(() => createSessionTurnMetadata(), []);
+  const sessionTransientState = useMemo<SessionTransientState>(
     () => ({
-      sessionsRef: createMutableBridge(mutableStateRef, "sessionCollection"),
-      taskRef: createMutableBridge(mutableStateRef, "tasks"),
-      currentWorkspaceRepoPathRef: createMutableBridge(mutableStateRef, "currentWorkspaceRepoPath"),
-      repoEpochRef: createMutableBridge(mutableStateRef, "repoEpoch"),
-      inFlightStartsByWorkspaceTaskRef: createMutableBridge(
-        mutableStateRef,
-        "inFlightStartsByWorkspaceTask",
-      ),
-      sessionListenerRegistryRef: createMutableBridge(mutableStateRef, "sessionListenerRegistry"),
-      draftRawBySessionRef: createMutableBridge(mutableStateRef, "draftRawBySession"),
-      draftSourceBySessionRef: createMutableBridge(mutableStateRef, "draftSourceBySession"),
-      draftMessageIdBySessionRef: createMutableBridge(mutableStateRef, "draftMessageIdBySession"),
-      draftFlushTimeoutBySessionRef: createMutableBridge(
-        mutableStateRef,
-        "draftFlushTimeoutBySession",
-      ),
-      assistantTurnTimingBySessionRef: createMutableBridge(
-        mutableStateRef,
-        "assistantTurnTimingBySession",
-      ),
-      turnModelBySessionRef: createMutableBridge(mutableStateRef, "turnModelBySession"),
+      draftBuffers,
+      assistantTurnTiming,
+      turnMetadata,
     }),
-    [],
-  );
-
-  const commitSessions = useCallback(
-    (updater: AgentSessionCollectionUpdater): void => {
-      const current = mutableStateRef.current.sessionCollection;
-      const next = typeof updater === "function" ? updater(current) : updater;
-      mutableStateRef.current.sessionCollection = next;
-
-      sessionStore.setSessionCollection(next);
-    },
-    [sessionStore],
+    [assistantTurnTiming, draftBuffers, turnMetadata],
   );
 
   useEffect(() => {
-    mutableStateRef.current.tasks = tasks;
+    taskRef.current = tasks;
   }, [tasks]);
 
   useLayoutEffect(() => {
-    if (mutableStateRef.current.currentWorkspaceRepoPath === workspaceRepoPath) {
+    if (currentWorkspaceRepoPathRef.current === workspaceRepoPath) {
       return;
     }
-    mutableStateRef.current.repoEpoch += 1;
-    mutableStateRef.current.currentWorkspaceRepoPath = workspaceRepoPath;
+    repoEpochRef.current += 1;
+    currentWorkspaceRepoPathRef.current = workspaceRepoPath;
 
-    clearSessionListenerRegistry(mutableStateRef.current.sessionListenerRegistry);
-    for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-    mutableStateRef.current.draftRawBySession = {};
-    mutableStateRef.current.draftSourceBySession = {};
-    mutableStateRef.current.draftMessageIdBySession = {};
-    mutableStateRef.current.draftFlushTimeoutBySession = {};
-    mutableStateRef.current.assistantTurnTimingBySession = {};
-    mutableStateRef.current.turnModelBySession = {};
-    mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
-    mutableStateRef.current.sessionCollection = emptyAgentSessionCollection();
+    sessionObserversRef.current.clear();
+    clearAllSessionTransientState(sessionTransientState);
+    sessionStartGateRef.current.clear();
     sessionStore.resetWorkspace(workspaceRepoPath);
-  }, [workspaceRepoPath, sessionStore]);
+  }, [sessionTransientState, workspaceRepoPath, sessionStore]);
 
   const clearMutableSessionState = useCallback(() => {
-    clearSessionListenerRegistry(mutableStateRef.current.sessionListenerRegistry);
-    for (const timeoutId of Object.values(mutableStateRef.current.draftFlushTimeoutBySession)) {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    }
-    mutableStateRef.current.inFlightStartsByWorkspaceTask.clear();
-  }, []);
+    sessionObserversRef.current.clear();
+    clearAllSessionTransientState(sessionTransientState);
+    sessionStartGateRef.current.clear();
+  }, [sessionTransientState]);
 
   useEffect(() => clearMutableSessionState, [clearMutableSessionState]);
 
   return useMemo(
     () => ({
-      get sessionCollection() {
-        return sessionStore.getSessionCollectionSnapshot();
-      },
       sessionStore,
-      refBridges,
-      commitSessions,
+      taskRef,
+      currentWorkspaceRepoPathRef,
+      repoEpochRef,
+      sessionStartGateRef,
+      sessionObserversRef,
+      sessionTransientState,
     }),
-    [commitSessions, refBridges, sessionStore],
+    [sessionTransientState, sessionStore],
   );
 };

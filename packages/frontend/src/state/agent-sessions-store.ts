@@ -1,9 +1,12 @@
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
   emptyAgentSessionCollection,
   getAgentSession,
+  hasAgentSessionStateChanges,
   listAgentSessions,
+  replaceAgentSessionByIdentity,
 } from "@/state/agent-session-collection";
 import type {
   AgentSessionIdentity,
@@ -70,7 +73,11 @@ export type AgentSessionsStore = {
   getActivitySnapshot: () => AgentActivitySessionsSnapshot;
   getSessionCollectionSnapshot: () => AgentSessionCollection;
   getSessionSnapshot: (identity: AgentSessionIdentity | null) => AgentSessionState | null;
-  setSessionCollection: (nextCollection: AgentSessionCollection) => void;
+  setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
+  updateSession: (
+    identity: AgentSessionIdentity,
+    updater: (current: AgentSessionState) => AgentSessionState,
+  ) => AgentSessionState | null;
   resetWorkspace: (workspaceRepoPath: string | null) => void;
 };
 
@@ -116,7 +123,8 @@ const areSummariesEquivalent = (
   right: AgentSessionSummary,
 ): boolean => {
   return (
-    left?.externalSessionId === right.externalSessionId &&
+    left !== undefined &&
+    agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
     left?.title === right.title &&
     left.taskId === right.taskId &&
     left.role === right.role &&
@@ -135,9 +143,8 @@ const areActivitySummariesEquivalent = (
   right: AgentActivitySessionSummary,
 ): boolean => {
   return (
-    left?.externalSessionId === right.externalSessionId &&
-    left.runtimeKind === right.runtimeKind &&
-    left.workingDirectory === right.workingDirectory &&
+    left !== undefined &&
+    agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
     left.taskId === right.taskId &&
     left.role === right.role &&
     left.status === right.status &&
@@ -184,6 +191,59 @@ export const createAgentSessionsStore = (
     }
   };
 
+  const setSessionCollection = (updater: AgentSessionCollectionUpdater): void => {
+    const nextCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+    if (nextCollection === sessionCollection) {
+      return;
+    }
+
+    const previousSummaryByIdentity = new Map(
+      sessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
+    );
+    const previousActivitySummaryByIdentity = new Map(
+      activitySessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
+    );
+    const nextSessions = listAgentSessions(nextCollection).sort(sortByStartedAtDesc);
+    const nextSessionSummaries = nextSessions.flatMap((session) => {
+      if (!shouldIncludeAgentSessionInActivity(session)) {
+        return [];
+      }
+      const nextSummary = toAgentSessionSummary(session);
+      const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
+      return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
+        ? [previousSummary]
+        : [nextSummary];
+    });
+    const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
+      if (!shouldIncludeAgentSessionInActivity(session)) {
+        return [];
+      }
+      const nextSummary = toAgentActivitySessionSummary(session);
+      const previousSummary = previousActivitySummaryByIdentity.get(
+        agentSessionIdentityKey(session),
+      );
+      return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
+        ? [previousSummary]
+        : [nextSummary];
+    });
+
+    sessionCollection = nextCollection;
+    sessions = nextSessions;
+    sessionSummaries = areArraysReferenceEqual(sessionSummaries, nextSessionSummaries)
+      ? sessionSummaries
+      : nextSessionSummaries;
+    activitySessionSummaries = areArraysReferenceEqual(
+      activitySessionSummaries,
+      nextActivitySessionSummaries,
+    )
+      ? activitySessionSummaries
+      : nextActivitySessionSummaries;
+    if (activitySnapshot.sessions !== activitySessionSummaries) {
+      activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
+    }
+    notifyListeners();
+  };
+
   return {
     subscribe: (listener) => {
       listeners.add(listener);
@@ -197,56 +257,20 @@ export const createAgentSessionsStore = (
     getActivitySnapshot: () => activitySnapshot,
     getSessionCollectionSnapshot: () => sessionCollection,
     getSessionSnapshot: (identity) => getAgentSession(sessionCollection, identity),
-    setSessionCollection: (nextCollection) => {
-      if (nextCollection === sessionCollection) {
-        return;
+    setSessionCollection,
+    updateSession: (identity, updater) => {
+      const current = getAgentSession(sessionCollection, identity);
+      if (!current) {
+        return null;
       }
 
-      const previousSummaryByIdentity = new Map(
-        sessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
-      );
-      const previousActivitySummaryByIdentity = new Map(
-        activitySessionSummaries.map((summary) => [agentSessionIdentityKey(summary), summary]),
-      );
-      const nextSessions = listAgentSessions(nextCollection).sort(sortByStartedAtDesc);
-      const nextSessionSummaries = nextSessions.flatMap((session) => {
-        if (!shouldIncludeAgentSessionInActivity(session)) {
-          return [];
-        }
-        const nextSummary = toAgentSessionSummary(session);
-        const previousSummary = previousSummaryByIdentity.get(agentSessionIdentityKey(session));
-        return areSummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? [previousSummary]
-          : [nextSummary];
-      });
-      const nextActivitySessionSummaries = nextSessions.flatMap((session) => {
-        if (!shouldIncludeAgentSessionInActivity(session)) {
-          return [];
-        }
-        const nextSummary = toAgentActivitySessionSummary(session);
-        const previousSummary = previousActivitySummaryByIdentity.get(
-          agentSessionIdentityKey(session),
-        );
-        return areActivitySummariesEquivalent(previousSummary, nextSummary) && previousSummary
-          ? [previousSummary]
-          : [nextSummary];
-      });
-
-      sessionCollection = nextCollection;
-      sessions = nextSessions;
-      sessionSummaries = areArraysReferenceEqual(sessionSummaries, nextSessionSummaries)
-        ? sessionSummaries
-        : nextSessionSummaries;
-      activitySessionSummaries = areArraysReferenceEqual(
-        activitySessionSummaries,
-        nextActivitySessionSummaries,
-      )
-        ? activitySessionSummaries
-        : nextActivitySessionSummaries;
-      if (activitySnapshot.sessions !== activitySessionSummaries) {
-        activitySnapshot = createActivitySnapshot(workspaceRepoPath, activitySessionSummaries);
+      const nextSession = updater(current);
+      if (nextSession === current || !hasAgentSessionStateChanges(current, nextSession)) {
+        return null;
       }
-      notifyListeners();
+
+      setSessionCollection(replaceAgentSessionByIdentity(sessionCollection, identity, nextSession));
+      return nextSession;
     },
     resetWorkspace: (nextWorkspaceRepoPath) => {
       workspaceRepoPath = nextWorkspaceRepoPath;

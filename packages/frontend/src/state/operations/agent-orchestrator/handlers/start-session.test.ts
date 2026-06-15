@@ -6,6 +6,7 @@ import type {
   AgentModelSelection,
   StartAgentSessionInput,
 } from "@openducktor/core";
+import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
 import {
@@ -169,8 +170,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: null },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -197,21 +197,20 @@ describe("agent-orchestrator/handlers/start-session", () => {
   });
 
   test("reuses an existing in-flight start promise", async () => {
-    const inFlight = Promise.resolve(sessionIdentity("session-in-flight", "/tmp/repo/worktree"));
-    const inFlightMap = new Map<string, Promise<ReturnType<typeof sessionIdentity>>>([
+    const inFlight = createDeferred<ReturnType<typeof sessionIdentity>>();
+    const sessionStartGate = createSessionStartGate<AgentSessionIdentity>();
+    void sessionStartGate.run(
       [
-        [
-          "/tmp/repo",
-          "task-1",
-          "build",
-          "reuse",
-          agentSessionIdentityKey(sessionIdentity("session-in-flight", "/tmp/repo/worktree")),
-          "",
-          "",
-        ].join("::"),
-        inFlight,
-      ],
-    ]);
+        "/tmp/repo",
+        "task-1",
+        "build",
+        "reuse",
+        agentSessionIdentityKey(sessionIdentity("session-in-flight", "/tmp/repo/worktree")),
+        "",
+        "",
+      ].join("::"),
+      () => inFlight.promise,
+    );
     const sessionsRef = createSessionsRef();
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
@@ -221,8 +220,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: inFlightMap },
-      listenToAgentSession: async () => {},
+      sessionStartGateRef: { current: sessionStartGate },
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -238,18 +237,21 @@ describe("agent-orchestrator/handlers/start-session", () => {
       sendAgentMessage: async () => {},
     });
 
-    await expect(
-      start({
-        taskId: "task-1",
-        role: "build",
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "session-in-flight",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      }),
-    ).resolves.toEqual(sessionIdentity("session-in-flight", "/tmp/repo/worktree"));
+    const startPromise = start({
+      taskId: "task-1",
+      role: "build",
+      startMode: "reuse",
+      sourceSession: {
+        externalSessionId: "session-in-flight",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+      },
+    });
+
+    inFlight.resolve(sessionIdentity("session-in-flight", "/tmp/repo/worktree"));
+    await expect(startPromise).resolves.toEqual(
+      sessionIdentity("session-in-flight", "/tmp/repo/worktree"),
+    );
   });
 
   test("does not dedupe in-flight starts across different roles", async () => {
@@ -289,8 +291,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -340,18 +341,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("does not dedupe fresh starts with different models", async () => {
-    const modelSession = Promise.resolve(sessionIdentity("session-model"));
-    const inFlightMap = new Map<string, Promise<ReturnType<typeof sessionIdentity>>>([
-      [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::build",
-        modelSession,
-      ],
-      [
-        "/tmp/repo::task-1::build::fresh::::/tmp/repo/worktree::opencode::openai::gpt-5::default::planner",
-        Promise.resolve(sessionIdentity("session-profile")),
-      ],
-    ]);
+  test("keys fresh starts by selected model", async () => {
+    const startKeys: string[] = [];
 
     const start = createStartAgentSessionWithFlatDeps({
       activeRepo: "/tmp/repo",
@@ -361,8 +352,22 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: inFlightMap },
-      listenToAgentSession: async () => {},
+      sessionStartGateRef: {
+        current: {
+          run: async (key, startSession) => {
+            startKeys.push(key);
+            if (key.endsWith("::build")) {
+              return sessionIdentity("session-model");
+            }
+            if (key.endsWith("::planner")) {
+              return sessionIdentity("session-profile");
+            }
+            return startSession();
+          },
+          clear: () => {},
+        },
+      },
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -399,6 +404,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
         },
       }),
     ).resolves.toEqual(expect.objectContaining({ externalSessionId: "session-profile" }));
+    expect(startKeys).toEqual([
+      expect.stringMatching(/::build$/),
+      expect.stringMatching(/::planner$/),
+    ]);
   });
 
   test("waits for the initial session snapshot to persist before resolving", async () => {
@@ -427,8 +436,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -471,7 +479,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("keeps fresh sessions starting after listener start", async () => {
+  test("keeps fresh sessions starting after observer start", async () => {
     let sessionCollection: AgentSessionCollection = emptyAgentSessionCollection();
     const lifecycleEvents: string[] = [];
     const sessionsRef = { current: sessionCollection };
@@ -500,9 +508,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {
-        lifecycleEvents.push("listener:started");
+      observeAgentSession: async () => {
+        lifecycleEvents.push("observer:started");
       },
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -530,7 +537,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       ).resolves.toEqual(expect.objectContaining({ externalSessionId: "planner-external" }));
 
       expect(getSession(sessionCollection, "planner-external")?.status).toBe("starting");
-      expect(lifecycleEvents).toContain("listener:started");
+      expect(lifecycleEvents).toContain("observer:started");
       expect(lifecycleEvents).not.toContain("status:idle");
     } finally {
       adapter.startSession = originalStartSession;
@@ -548,9 +555,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
         currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
         setSessionCollection: () => {},
         sessionsRef: createSessionsRef(),
-        inFlightStartsByWorkspaceTaskRef: { current: new Map() },
         loadAgentSessions: async () => {},
-        listenToAgentSession: async () => {},
+        observeAgentSession: async () => {},
         taskRef: { current: [createTaskCardFixture({ id: "task-1", status: "open" })] },
         adapter: {
           ...new OpencodeSdkAdapter(),
@@ -635,8 +641,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async (target) => {
+      observeAgentSession: async (target) => {
         listenedSessionIds.push(target.externalSessionId);
       },
       ensureRuntime: async () => ({
@@ -712,8 +717,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -802,8 +806,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -889,8 +892,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/new-worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -961,8 +963,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree/"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1044,8 +1045,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1145,8 +1145,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1244,8 +1243,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1345,8 +1343,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1429,8 +1426,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1508,8 +1504,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -1645,8 +1640,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1783,8 +1777,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -1930,8 +1923,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2024,8 +2016,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2135,8 +2126,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2227,8 +2217,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -2335,8 +2324,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -2421,8 +2409,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2480,8 +2467,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
@@ -2541,8 +2527,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => {
         qaTargetCalls += 1;
         return continuationTarget("/tmp/repo/worktree");
@@ -2611,8 +2596,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => {
         qaTargetCalls += 1;
         return continuationTarget("/tmp/repo/worktree");
@@ -2667,8 +2651,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/other" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2731,8 +2714,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2797,8 +2779,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -2830,7 +2811,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("rolls back started remote session when workspace becomes stale after listener start", async () => {
+  test("rolls back started remote session when workspace becomes stale after observer start", async () => {
     const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
     let stopCalls = 0;
 
@@ -2862,8 +2843,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         currentWorkspaceRepoPathRef.current = "/tmp/other";
       },
       ensureRuntime: async () => ({
@@ -2929,8 +2909,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef,
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
@@ -3005,8 +2984,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {
+      observeAgentSession: async () => {
         listenCalls += 1;
       },
       ensureRuntime: async () => ({
@@ -3081,8 +3059,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
@@ -3151,8 +3128,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
         taskRef: { current: [taskFixture] },
         repoEpochRef: { current: 1 },
         currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-        inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-        listenToAgentSession: async () => {},
+        observeAgentSession: async () => {},
         resolveTaskWorktree: async () => ({
           workingDirectory: "/tmp/repo/worktree",
           source: "active_build_run",
@@ -3233,8 +3209,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       taskRef: { current: [taskFixture] },
       repoEpochRef: { current: 1 },
       currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-      listenToAgentSession: async () => {},
+      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",

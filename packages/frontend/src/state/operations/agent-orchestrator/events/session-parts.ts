@@ -51,28 +51,11 @@ const updateDraftChannelBuffer = (
   messageId: string | undefined,
   source: "delta" | "part",
 ): void => {
-  const currentRaw =
-    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] ?? {};
-  context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] = {
-    ...currentRaw,
-    [channel]: raw,
-  };
-
-  const currentSource =
-    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] ?? {};
-  context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] = {
-    ...currentSource,
-    [channel]: source,
-  };
-
-  if (context.drafts.draftMessageIdBySessionRef) {
-    const currentMessageIds =
-      context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] ?? {};
-    context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] = {
-      ...currentMessageIds,
-      ...(messageId ? { [channel]: messageId } : {}),
-    };
-  }
+  context.drafts.buffers.writeChannel(context.store.sessionKey, channel, {
+    raw,
+    source,
+    ...(messageId ? { messageId } : {}),
+  });
 };
 
 const clearDraftChannelBuffer = (
@@ -81,42 +64,10 @@ const clearDraftChannelBuffer = (
   source?: "delta" | "part",
   messageId?: string,
 ): void => {
-  const timeoutId =
-    context.drafts.draftFlushTimeoutBySessionRef?.current[context.store.externalSessionId];
-  if (timeoutId !== undefined) {
-    clearTimeout(timeoutId);
-    if (context.drafts.draftFlushTimeoutBySessionRef) {
-      delete context.drafts.draftFlushTimeoutBySessionRef.current[context.store.externalSessionId];
-    }
-  }
-
-  const currentRaw =
-    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] ?? {};
-  const nextRaw = { ...currentRaw };
-  delete nextRaw[channel];
-  context.drafts.draftRawBySessionRef.current[context.store.externalSessionId] = nextRaw;
-
-  const currentSource =
-    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] ?? {};
-  context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId] =
-    source === undefined
-      ? Object.fromEntries(Object.entries(currentSource).filter(([key]) => key !== channel))
-      : {
-          ...currentSource,
-          [channel]: source,
-        };
-
-  if (context.drafts.draftMessageIdBySessionRef) {
-    const currentMessageIds =
-      context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] ?? {};
-    context.drafts.draftMessageIdBySessionRef.current[context.store.externalSessionId] =
-      messageId === undefined
-        ? Object.fromEntries(Object.entries(currentMessageIds).filter(([key]) => key !== channel))
-        : {
-            ...currentMessageIds,
-            [channel]: messageId,
-          };
-  }
+  context.drafts.buffers.clearChannel(context.store.sessionKey, channel, {
+    ...(source ? { source } : {}),
+    ...(messageId ? { messageId } : {}),
+  });
 };
 
 const resolvePartModelSelection = (
@@ -140,7 +91,7 @@ const resolvePartModelSelection = (
     };
   }
 
-  const turnModel = context.turn.turnModelBySessionRef?.current[context.store.externalSessionId];
+  const turnModel = context.turn.turnMetadata.readModel(context.store.sessionKey);
   return turnModel ?? current.selectedModel ?? null;
 };
 
@@ -193,7 +144,7 @@ export const handleAssistantDelta = (
   context: SessionPartEventContext,
   event: Extract<SessionEvent, { type: "assistant_delta" }>,
 ): void => {
-  context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, event.timestamp);
+  context.turn.recordTurnActivityTimestamp(context.store.sessionKey, event.timestamp);
   if (event.channel === "text") {
     if (!event.messageId || event.delta.length === 0) {
       return;
@@ -221,17 +172,11 @@ export const handleAssistantDelta = (
     return;
   }
 
-  if (
-    context.drafts.draftSourceBySessionRef.current[context.store.externalSessionId]?.[
-      event.channel
-    ] === "part"
-  ) {
+  const currentDraft = context.drafts.buffers.readChannel(context.store.sessionKey, event.channel);
+  if (currentDraft.source === "part") {
     return;
   }
-  const nextRaw = `${
-    context.drafts.draftRawBySessionRef.current[context.store.externalSessionId]?.[event.channel] ??
-    ""
-  }${event.delta}`;
+  const nextRaw = `${currentDraft.raw}${event.delta}`;
   updateDraftChannelBuffer(context, event.channel, nextRaw, event.messageId, "delta");
   markSessionRunning(context);
   scheduleDraftFlush(context);
@@ -472,10 +417,10 @@ const handleStepPart = (
             };
       }
 
-      if (context.turn.contextUsageMessageIdBySessionRef) {
-        context.turn.contextUsageMessageIdBySessionRef.current[context.store.externalSessionId] =
-          part.messageId;
-      }
+      context.turn.turnMetadata.recordContextUsageMessageId(
+        context.store.sessionKey,
+        part.messageId,
+      );
 
       return {
         ...prepared,
@@ -497,7 +442,7 @@ export const handleAssistantPart = (
       (part.kind === "tool" || part.kind === "subagent") && typeof part.startedAtMs === "number"
         ? part.startedAtMs
         : event.timestamp;
-    context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, activityTimestamp);
+    context.turn.recordTurnActivityTimestamp(context.store.sessionKey, activityTimestamp);
   }
   const prepareCurrent = createPrePartTodoSettlement(part, event.timestamp);
 

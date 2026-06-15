@@ -1,10 +1,10 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type {
-  AgentSessionPresenceSnapshot,
   AgentSessionRef,
-  LiveAgentSessionSnapshot,
+  AgentSessionRuntimeSnapshot,
+  AgentSessionRuntimeSnapshotSource,
 } from "@openducktor/core";
-import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
+import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import {
   type AgentSessionCollection,
   createAgentSessionCollection,
@@ -18,12 +18,7 @@ import {
   createTaskCardFixture as createSharedTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  createSessionListenerRegistry,
-  hasSessionListenerForExternalSessionId,
-  type SessionListenerRegistry,
-  setSessionListener,
-} from "./support/session-listener-registry";
+import { createSessionObservers, type SessionObservers } from "./support/session-observers";
 
 const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
   title: "Task",
@@ -33,7 +28,7 @@ const ORCHESTRATOR_TASK_CARD_DEFAULTS: Partial<TaskCard> = {
 
 export const createDeferred = createSharedDeferred;
 
-type SessionListenerRegistryFixture = {
+type SessionObserversFixture = {
   externalSessionId?: string;
   repoPath?: string;
   runtimeKind?: AgentSessionRef["runtimeKind"];
@@ -41,49 +36,45 @@ type SessionListenerRegistryFixture = {
   unsubscribe?: () => void;
 };
 
-const toSessionListenerFixtureRef = ({
+const toSessionObserverFixtureRef = ({
   externalSessionId = "external-1",
   repoPath = "/tmp/repo",
   runtimeKind = "opencode",
   workingDirectory = "/tmp/repo/worktree",
-}: SessionListenerRegistryFixture): AgentSessionRef => ({
+}: SessionObserversFixture): AgentSessionRef => ({
   externalSessionId,
   repoPath,
   runtimeKind,
   workingDirectory,
 });
 
-export const createSessionListenerRegistryFixture = (
-  listeners: SessionListenerRegistryFixture[] = [],
-): SessionListenerRegistry => {
-  const registry = createSessionListenerRegistry();
-  for (const listener of listeners) {
-    setSessionListenerFixture(registry, listener);
+export const createSessionObserversFixture = (
+  observers: SessionObserversFixture[] = [],
+): SessionObservers => {
+  const observersCollection = createSessionObservers();
+  for (const observer of observers) {
+    addSessionObserverFixture(observersCollection, observer);
   }
-  return registry;
+  return observersCollection;
 };
 
-export const setSessionListenerFixture = (
-  registry: SessionListenerRegistry,
-  listener: SessionListenerRegistryFixture,
+export const addSessionObserverFixture = (
+  observers: SessionObservers,
+  observer: SessionObserversFixture,
 ): void => {
-  setSessionListener(
-    registry,
-    toSessionListenerFixtureRef(listener),
-    listener.unsubscribe ?? (() => {}),
-  );
+  observers.add(toSessionObserverFixtureRef(observer), observer.unsubscribe ?? (() => {}));
 };
 
-export const createSessionListenerRegistryRefFixture = (
-  listeners: SessionListenerRegistryFixture[] = [],
-): { current: SessionListenerRegistry } => ({
-  current: createSessionListenerRegistryFixture(listeners),
+export const createSessionObserversRefFixture = (
+  observers: SessionObserversFixture[] = [],
+): { current: SessionObservers } => ({
+  current: createSessionObserversFixture(observers),
 });
 
-export const hasSessionListenerFixture = (
-  registry: SessionListenerRegistry,
-  externalSessionId: string,
-): boolean => hasSessionListenerForExternalSessionId(registry, externalSessionId);
+export const hasSessionObserverFixture = (
+  observers: SessionObservers,
+  observer: SessionObserversFixture,
+): boolean => observers.has(toSessionObserverFixtureRef(observer));
 
 export const withTimeout = async <T>(
   promise: Promise<T>,
@@ -136,42 +127,36 @@ export const updateAgentSessionFixture = (
   sessionsRef: AgentSessionCollectionRef,
   identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
-): void => {
+): AgentSessionState | null => {
   const current = getAgentSession(sessionsRef.current, identity);
   if (!current) {
-    return;
+    return null;
   }
-  sessionsRef.current = replaceAgentSessionByIdentity(
-    sessionsRef.current,
-    identity,
-    updater(current),
-  );
+  const nextSession = updater(current);
+  sessionsRef.current = replaceAgentSessionByIdentity(sessionsRef.current, identity, nextSession);
+  return nextSession;
 };
 
-const createLiveAgentSessionSnapshotFixture = (
-  overrides: Partial<LiveAgentSessionSnapshot> = {},
-): LiveAgentSessionSnapshot => {
-  const externalSessionId = overrides.externalSessionId ?? "external-1";
-
+const createRuntimeSnapshotSourceFixture = (
+  overrides: Partial<AgentSessionRuntimeSnapshotSource> = {},
+): AgentSessionRuntimeSnapshotSource => {
   return {
-    externalSessionId,
     title: overrides.title ?? "BUILD task-1",
-    workingDirectory: "/tmp/repo/worktree",
     startedAt: "2026-02-22T08:00:00.000Z",
-    status: { type: "idle" },
+    runtimeActivity: "idle",
     pendingApprovals: [],
     pendingQuestions: [],
     ...overrides,
   };
 };
 
-export const createAgentSessionPresenceSnapshotFixture = ({
+export const createAgentSessionRuntimeSnapshotFixture = ({
   ref: refOverrides = {},
   snapshot: snapshotOverrides = {},
 }: {
   ref?: Partial<AgentSessionRef>;
-  snapshot?: Partial<LiveAgentSessionSnapshot>;
-} = {}): AgentSessionPresenceSnapshot => {
+  snapshot?: Partial<AgentSessionRuntimeSnapshotSource>;
+} = {}): AgentSessionRuntimeSnapshot => {
   const ref: AgentSessionRef = {
     repoPath: "/tmp/repo",
     runtimeKind: "opencode",
@@ -180,12 +165,10 @@ export const createAgentSessionPresenceSnapshotFixture = ({
     ...refOverrides,
   };
 
-  return toAgentSessionPresenceSnapshotFromLiveSnapshot({
+  return toAgentSessionRuntimeSnapshot({
     ref,
-    snapshot: createLiveAgentSessionSnapshotFixture({
+    snapshot: createRuntimeSnapshotSourceFixture({
       ...snapshotOverrides,
-      externalSessionId: ref.externalSessionId,
-      workingDirectory: ref.workingDirectory,
     }),
   });
 };

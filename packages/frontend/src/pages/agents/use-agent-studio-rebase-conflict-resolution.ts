@@ -10,16 +10,16 @@ import type {
   SessionStartLaunchRequest,
   SessionStartWorkflowResult,
 } from "@/features/session-start";
-import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
 import type { ActiveWorkspace } from "../../types/state-slices";
-import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import {
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
 } from "./agents-page-selection";
+import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   viewTaskId: string;
@@ -105,7 +105,7 @@ export function useAgentStudioRebaseConflictResolution({
         taskId: viewTaskId,
         viewActiveSession,
         activeSession,
-        selectedSessionById: selectedSessionFromRoute,
+        selectedRouteSession: selectedSessionFromRoute,
         viewSessionsForTask,
         sessionsForTask,
       });
@@ -113,7 +113,7 @@ export function useAgentStudioRebaseConflictResolution({
         taskId: viewTaskId,
         viewActiveSession,
         activeSession,
-        selectedSessionById: selectedSessionFromRoute,
+        selectedRouteSession: selectedSessionFromRoute,
         viewSessionsForTask,
         sessionsForTask,
       });
@@ -128,7 +128,7 @@ export function useAgentStudioRebaseConflictResolution({
             builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
           scheduleQueryUpdate({
             task: viewTaskId,
-            session: session.externalSessionId,
+            session: agentSessionIdentityKey(session),
             agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
           });
         },

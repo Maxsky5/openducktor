@@ -1,4 +1,3 @@
-import { getAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { settleDanglingTodoToolMessages } from "../agent-tool-messages";
 import {
@@ -24,22 +23,14 @@ import type { SessionEvent, SessionLifecycleEventContext } from "./session-event
 import { clearDraftBuffers, flushDraftBuffers, settleDraftToIdle } from "./session-helpers";
 
 const clearTurnTracking = (context: Pick<SessionLifecycleEventContext, "turn" | "store">): void => {
-  if (context.turn.turnModelBySessionRef) {
-    delete context.turn.turnModelBySessionRef.current[context.store.externalSessionId];
-  }
-  if (context.turn.contextUsageMessageIdBySessionRef) {
-    delete context.turn.contextUsageMessageIdBySessionRef.current[context.store.externalSessionId];
-  }
+  context.turn.turnMetadata.clearSession(context.store.sessionKey);
 };
 
 const nextContextUsageWasEstablishedForMessage = (
   context: Pick<SessionLifecycleEventContext, "turn" | "store">,
   messageId: string,
 ): boolean => {
-  return (
-    context.turn.contextUsageMessageIdBySessionRef?.current[context.store.externalSessionId] ===
-    messageId
-  );
+  return context.turn.turnMetadata.hasContextUsageMessageId(context.store.sessionKey, messageId);
 };
 
 type AssistantMessageEvent = Extract<SessionEvent, { type: "assistant_message" }>;
@@ -132,6 +123,7 @@ export const handleAssistantMessage = (
   context.store.updateSession(context.store.sessionIdentity, (current) => {
     const settledMessages = settleDanglingTodoToolMessages(current, event.timestamp);
     const durationMs = context.turn.resolveTurnDurationMs(
+      context.store.sessionKey,
       context.store.externalSessionId,
       event.timestamp,
       settledMessages,
@@ -140,9 +132,7 @@ export const handleAssistantMessage = (
       nextContextUsageWasEstablishedForMessage(context, event.messageId) &&
       current.contextUsage !== null;
     const model =
-      event.model ??
-      context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ??
-      null;
+      event.model ?? context.turn.turnMetadata.readModel(context.store.sessionKey) ?? null;
     const nextSnapshot = resolveFinalAssistantSnapshot({
       current,
       durationMs,
@@ -167,7 +157,7 @@ export const handleAssistantMessage = (
       ),
     };
   });
-  context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
+  context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
   clearTurnTracking(context);
 };
 
@@ -175,7 +165,7 @@ export const handleUserMessage = (
   context: Pick<SessionLifecycleEventContext, "store" | "turn">,
   event: Extract<SessionEvent, { type: "user_message" }>,
 ): void => {
-  context.turn.recordTurnUserMessageTimestamp(context.store.externalSessionId, event.timestamp);
+  context.turn.recordTurnUserMessageTimestamp(context.store.sessionKey, event.timestamp);
   context.store.updateSession(
     context.store.sessionIdentity,
     (current) => {
@@ -201,7 +191,7 @@ export const handleSessionStatus = (
   const status = event.status;
 
   if (status.type === "busy") {
-    context.turn.recordTurnActivityTimestamp(context.store.externalSessionId, event.timestamp);
+    context.turn.recordTurnActivityTimestamp(context.store.sessionKey, event.timestamp);
     context.store.updateSession(
       context.store.sessionIdentity,
       (current) =>
@@ -239,7 +229,7 @@ export const handleSessionStatus = (
   }
 
   if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
+    context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -248,12 +238,12 @@ export const handleSessionTodosUpdated = (
   context: Pick<SessionLifecycleEventContext, "store" | "runtimeData">,
   event: Extract<SessionEvent, { type: "session_todos_updated" }>,
 ): void => {
-  const current = getAgentSession(context.store.sessionsRef.current, context.store.sessionIdentity);
+  const current = context.store.readSession(context.store.sessionIdentity);
   if (!current) {
     return;
   }
 
-  context.runtimeData.runtimeDataWriter.updateTodos(context.runtimeData.sessionRef, (todos) =>
+  context.runtimeData.updateSessionTodos((todos) =>
     mergeTodoListPreservingOrder(todos, event.todos),
   );
   context.store.updateSession(
@@ -340,12 +330,13 @@ export const handleSessionError = (
         current,
         event.timestamp,
         context.turn.resolveTurnDurationMs(
+          context.store.sessionKey,
           context.store.externalSessionId,
           event.timestamp,
           current.messages,
         ),
         undefined,
-        context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ?? undefined,
+        context.turn.turnMetadata.readModel(context.store.sessionKey) ?? undefined,
       );
       const appendUserStoppedNotice =
         Boolean(current.stopRequestedAt) && isStopAbortSessionErrorMessage(sessionErrorMessage);
@@ -376,7 +367,7 @@ export const handleSessionError = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
+  context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
   clearTurnTracking(context);
 };
 
@@ -387,7 +378,7 @@ export const handleSessionIdle = (
   flushDraftBuffers(context);
   clearDraftBuffers(context);
   if (settleDraftToIdle(context, event.timestamp)) {
-    context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
+    context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
     clearTurnTracking(context);
   }
 };
@@ -405,12 +396,13 @@ export const handleSessionFinished = (
         current,
         event.timestamp,
         context.turn.resolveTurnDurationMs(
+          context.store.sessionKey,
           context.store.externalSessionId,
           event.timestamp,
           current.messages,
         ),
         undefined,
-        context.turn.turnModelBySessionRef?.current[context.store.externalSessionId] ?? undefined,
+        context.turn.turnMetadata.readModel(context.store.sessionKey) ?? undefined,
       );
       const appendUserStoppedNotice = Boolean(current.stopRequestedAt);
       const terminalStatus: AgentSessionState["status"] = appendUserStoppedNotice
@@ -436,6 +428,6 @@ export const handleSessionFinished = (
     },
     { persist: true },
   );
-  context.turn.clearTurnDuration(context.store.externalSessionId, event.timestamp);
+  context.turn.clearTurnDuration(context.store.sessionKey, event.timestamp);
   clearTurnTracking(context);
 };

@@ -39,7 +39,6 @@ export const findLatestCleanupTarget = (
     const candidates: Array<{
       workingDirectory: string;
       startedAt: string;
-      externalSessionId: string;
     }> = [];
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
       repoPath,
@@ -49,7 +48,6 @@ export const findLatestCleanupTarget = (
       candidates.push({
         workingDirectory: taskWorktree.workingDirectory,
         startedAt: "\uffff",
-        externalSessionId: "task-worktree",
       });
     }
     const metadata = yield* taskStore.getTaskMetadata({ repoPath, taskId });
@@ -59,13 +57,12 @@ export const findLatestCleanupTarget = (
         .map((session) => ({
           workingDirectory: session.workingDirectory,
           startedAt: session.startedAt,
-          externalSessionId: session.externalSessionId,
         })),
     );
     candidates.sort((left, right) => {
       const startedAtComparison = right.startedAt.localeCompare(left.startedAt);
       return startedAtComparison === 0
-        ? right.externalSessionId.localeCompare(left.externalSessionId)
+        ? right.workingDirectory.localeCompare(left.workingDirectory)
         : startedAtComparison;
     });
     for (const candidate of candidates) {

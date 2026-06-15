@@ -1,5 +1,10 @@
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
-import { emptyAgentSessionCollection } from "@/state/agent-session-collection";
+import { createSessionStartGate } from "@/features/session-start/session-start-gate";
+import {
+  type AgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSession,
+} from "@/state/agent-session-collection";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type {
   RuntimeDependencies,
@@ -26,17 +31,23 @@ export const createStartSessionContextFixture = (
 });
 
 export const createSessionDependenciesFixture = (
-  overrides: Partial<SessionDependencies> = {},
-): SessionDependencies => ({
-  setSessionCollection: () => {},
-  sessionsRef: { current: emptyAgentSessionCollection() },
-  inFlightStartsByWorkspaceTaskRef: { current: new Map() },
-  loadAgentSessions: async () => {},
-  loadAgentSessionHistory: async () => {},
-  persistSessionRecord: async () => {},
-  listenToAgentSession: async () => {},
-  ...overrides,
-});
+  overrides: Partial<SessionDependencies> & {
+    sessionsRef?: { current: AgentSessionCollection };
+  } = {},
+): SessionDependencies => {
+  const { sessionsRef: overrideSessionsRef, ...sessionOverrides } = overrides;
+  const sessionsRef = overrideSessionsRef ?? { current: emptyAgentSessionCollection() };
+  return {
+    setSessionCollection: () => {},
+    readSessionSnapshot: (identity) => getAgentSession(sessionsRef.current, identity),
+    sessionStartGateRef: { current: createSessionStartGate() },
+    loadAgentSessions: async () => {},
+    loadAgentSessionHistory: async () => {},
+    persistSessionRecord: async () => {},
+    observeAgentSession: async () => {},
+    ...sessionOverrides,
+  };
+};
 
 export const createRuntimeDependenciesFixture = (
   overrides: Partial<RuntimeDependencies> = {},

@@ -161,8 +161,6 @@ export const startCodexTurnForSession = async (
   context.activeTurnsBySessionId.set(session.threadId, activeTurnState);
   context.setSessionLiveStatus(session, {
     classification: "running",
-    status: { type: "busy" },
-    agentSessionStatus: "running",
   });
 
   const client = context.clientForRuntime(session.runtimeId);

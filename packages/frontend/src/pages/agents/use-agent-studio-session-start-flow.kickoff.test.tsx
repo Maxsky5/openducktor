@@ -16,7 +16,7 @@ enableReactActEnvironment();
 const toastErrorMock = mock(() => {});
 
 type UseAgentStudioSessionStartFlowHook =
-  typeof import("./use-agent-studio-session-start-flow")["useAgentStudioSessionStartFlow"];
+  typeof import("./session-start/use-agent-studio-session-start-flow")["useAgentStudioSessionStartFlow"];
 
 let useAgentStudioSessionStartFlow: UseAgentStudioSessionStartFlowHook;
 
@@ -113,8 +113,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeSession: null,
   sessionsForTask: [],
   selectedTask: createTaskCardFixture(),
-  agentStudioReady: true,
-  isActiveTaskReady: true,
+  canStartRole: () => true,
   isSessionWorking: false,
   selectionForNewSession: {
     runtimeKind: "opencode",
@@ -141,7 +140,9 @@ beforeEach(async () => {
       dismiss: () => {},
     },
   }));
-  ({ useAgentStudioSessionStartFlow } = await import("./use-agent-studio-session-start-flow"));
+  ({ useAgentStudioSessionStartFlow } = await import(
+    "./session-start/use-agent-studio-session-start-flow"
+  ));
 });
 
 afterEach(async () => {

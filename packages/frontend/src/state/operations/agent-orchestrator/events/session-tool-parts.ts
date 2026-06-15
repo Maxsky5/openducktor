@@ -1,5 +1,4 @@
 import { isOdtWorkflowMutationToolName } from "@openducktor/core";
-import { getAgentSession } from "@/state/agent-session-collection";
 import type { AgentChatMessageMeta, AgentSessionState } from "@/types/agent-orchestrator";
 import { formatToolContent } from "../agent-tool-messages";
 import { runOrchestratorSideEffect } from "../support/async-side-effects";
@@ -217,10 +216,7 @@ export const handleToolPart = (
   const observedEventTimestampMs = eventTimestampMs(event.timestamp);
   const todoUpdateFromTool = resolveTodoUpdateFromTool(part, input, output);
   let shouldRefreshTaskData = false;
-  const activeSession = getAgentSession(
-    context.store.sessionsRef.current,
-    context.store.sessionIdentity,
-  );
+  const activeSession = context.store.readSession(context.store.sessionIdentity);
   const taskId = activeSession?.taskId;
   const runtimeDescriptor =
     activeSession?.runtimeKind && context.refresh.resolveRuntimeDefinition
@@ -229,7 +225,7 @@ export const handleToolPart = (
   const workflowToolAliasesByCanonical = runtimeDescriptor?.workflowToolAliasesByCanonical;
 
   if (todoUpdateFromTool && activeSession) {
-    context.runtimeData.runtimeDataWriter.updateTodos(context.runtimeData.sessionRef, (todos) =>
+    context.runtimeData.updateSessionTodos((todos) =>
       mergeTodoListPreservingOrder(todos, todoUpdateFromTool),
     );
   }

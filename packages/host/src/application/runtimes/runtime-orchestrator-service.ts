@@ -26,7 +26,6 @@ import {
   type RuntimeOrchestratorService,
   resolveRepoPath,
   resolveRuntimeDescriptor,
-  validateSessionStopTarget,
 } from "./runtime-orchestrator-model";
 
 export type {
@@ -175,13 +174,7 @@ export const createRuntimeOrchestratorService = ({
         const request = input;
         yield* resolveRuntimeDescriptor(runtimeDefinitionsService, request.runtimeKind);
         const repoPath = yield* resolveRepoPath(gitPort, request.repoPath);
-        const session = yield* loadTargetSession(
-          taskReader,
-          repoPath,
-          request.taskId,
-          request.externalSessionId,
-        );
-        yield* validateSessionStopTarget(request, session);
+        const session = yield* loadTargetSession(taskReader, repoPath, request.taskId, request);
         yield* runtimeRegistry.stopSession({
           runtimeKind: request.runtimeKind,
           repoPath,

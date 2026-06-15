@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { ReactElement } from "react";
 import type { SessionStartModalModel } from "@/components/features/agents/session-start-modal";
 import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feedback/human-review-feedback-types";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
@@ -30,6 +31,7 @@ const createSession = () =>
     runtimeKind: "opencode",
   });
 type SessionFixture = ReturnType<typeof createSession>;
+const selectedSessionKey = (): string => agentSessionIdentityKey(createSession());
 
 const retryNavigationPersistence = mock(() => {});
 const updateQuery = mock((_updates?: unknown) => {});
@@ -39,7 +41,7 @@ const handleResolveRebaseConflict = mock(async () => {});
 
 type QuerySyncState = {
   taskIdParam: string;
-  sessionParam: string;
+  sessionKeyParam: string;
   hasExplicitRoleParam: boolean;
   roleFromQuery: "planner";
   launchActionId: "planner_initial";
@@ -59,7 +61,6 @@ type SelectionState = {
   activeTaskTabId: string;
   taskTabs: [];
   availableTabTasks: (typeof task)[];
-  selectedSessionById: Record<string, SessionFixture>;
   taskId: string;
   isActiveTaskReady: boolean;
   viewSessionLifecycle: ReturnType<typeof createSelectedSessionLifecycleFixture>;
@@ -67,15 +68,6 @@ type SelectionState = {
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
   handleSelectTab: typeof handleSelectTab;
-};
-
-type ReadinessState = {
-  agentStudioReadinessState: "ready" | "checking" | "blocked";
-  agentStudioReady: boolean;
-  isRuntimeStarting: boolean;
-  agentStudioBlockedReason: string | null;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
 };
 
 type OrchestrationState = {
@@ -185,7 +177,7 @@ let agentOperations = {
 };
 let querySyncState: QuerySyncState = {
   taskIdParam: "task-1",
-  sessionParam: "session-1",
+  sessionKeyParam: selectedSessionKey(),
   hasExplicitRoleParam: false,
   roleFromQuery: "planner" as const,
   launchActionId: "planner_initial" as const,
@@ -205,7 +197,6 @@ let selectionState: SelectionState = {
   activeTaskTabId: "task-1",
   taskTabs: [],
   availableTabTasks: [task],
-  selectedSessionById: { "session-1": initialSelectionSession },
   taskId: "task-1",
   isActiveTaskReady: true,
   viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
@@ -213,14 +204,6 @@ let selectionState: SelectionState = {
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
   handleSelectTab,
-};
-let readinessState: ReadinessState = {
-  agentStudioReadinessState: "ready",
-  agentStudioReady: true,
-  isRuntimeStarting: false,
-  agentStudioBlockedReason: null,
-  isLoadingChecks: false,
-  refreshChecks: async () => undefined,
 };
 const rightPanelToggleModel = { label: "Toggle panel" };
 const baseHumanReviewFeedbackModal: HumanReviewFeedbackModalModel = {
@@ -286,16 +269,18 @@ const mockedModuleResets = [
   ["react-router-dom", async () => actualReactRouterDomModule],
   ["@/state/app-state-provider", () => import("../../../state/app-state-provider")],
   ["@/state/app-state-contexts", async () => actualAppStateContextsModule],
-  ["../use-agent-studio-query-sync", () => import("../use-agent-studio-query-sync")],
+  [
+    "../query-sync/use-agent-studio-query-sync",
+    () => import("../query-sync/use-agent-studio-query-sync"),
+  ],
   [
     "../use-agent-studio-selection-controller",
     () => import("../use-agent-studio-selection-controller"),
   ],
   [
-    "../use-agent-studio-query-session-sync",
-    () => import("../use-agent-studio-query-session-sync"),
+    "../query-sync/use-agent-studio-query-session-sync",
+    () => import("../query-sync/use-agent-studio-query-session-sync"),
   ],
-  ["../use-agents-page-readiness", () => import("../use-agents-page-readiness")],
   [
     "../use-agent-studio-orchestration-controller",
     () => import("../use-agent-studio-orchestration-controller"),
@@ -358,7 +343,7 @@ const registerModuleMocks = (): void => {
     }),
   }));
 
-  mock.module("../use-agent-studio-query-sync", () => ({
+  mock.module("../query-sync/use-agent-studio-query-sync", () => ({
     useAgentStudioQuerySync: () => querySyncState,
   }));
 
@@ -366,13 +351,8 @@ const registerModuleMocks = (): void => {
     useAgentStudioSelectionController: () => selectionState,
   }));
 
-  mock.module("../use-agent-studio-query-session-sync", () => ({
+  mock.module("../query-sync/use-agent-studio-query-session-sync", () => ({
     useAgentStudioQuerySessionSync: () => undefined,
-  }));
-
-  mock.module("../use-agents-page-readiness", () => ({
-    useAgentStudioReadiness: () => readinessState,
-    useRunCompletionRecoverySignal: () => "run-completion-signal",
   }));
 
   mock.module("../use-agent-studio-orchestration-controller", () => ({
@@ -464,7 +444,7 @@ beforeEach(async () => {
   };
   querySyncState = {
     taskIdParam: "task-1",
-    sessionParam: "session-1",
+    sessionKeyParam: selectedSessionKey(),
     hasExplicitRoleParam: false,
     roleFromQuery: "planner",
     launchActionId: "planner_initial",
@@ -483,7 +463,6 @@ beforeEach(async () => {
     activeTaskTabId: "task-1",
     taskTabs: [],
     availableTabTasks: [task],
-    selectedSessionById: { "session-1": session },
     taskId: "task-1",
     isActiveTaskReady: true,
     viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
@@ -491,14 +470,6 @@ beforeEach(async () => {
     handleCreateTab: mock((_taskId: string) => {}),
     handleCloseTab: mock((_taskId: string) => {}),
     handleSelectTab,
-  };
-  readinessState = {
-    agentStudioReadinessState: "ready",
-    agentStudioReady: true,
-    isRuntimeStarting: false,
-    agentStudioBlockedReason: null,
-    isLoadingChecks: false,
-    refreshChecks: async () => undefined,
   };
   orchestrationState = {
     repoSettings: null,
@@ -619,7 +590,6 @@ describe("useAgentsPageShellModel", () => {
       viewSelectedTask: null,
       viewActiveSession: null,
       taskId: "",
-      selectedSessionById: {},
       sessionsForTask: [],
       viewSessionsForTask: [],
     };
@@ -660,6 +630,20 @@ describe("useAgentsPageShellModel", () => {
       const thirdSelection = orchestrationControllerArgs.at(-1)?.selection;
       expect(thirdSelection).not.toBe(firstSelection);
       expect(thirdSelection?.isLoadingTasks).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keys composer drafts by full selected session identity", async () => {
+    const harness = createHookHarness();
+
+    try {
+      await harness.mount();
+
+      expect(orchestrationControllerArgs.at(-1)?.draftStateKey).toBe(
+        `task-1:planner:${selectedSessionKey()}`,
+      );
     } finally {
       await harness.unmount();
     }

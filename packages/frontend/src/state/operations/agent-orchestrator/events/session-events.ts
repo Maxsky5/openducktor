@@ -1,9 +1,14 @@
 import { toast } from "sonner";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
-import { getAgentSession, replaceAgentSessionByIdentity } from "@/state/agent-session-collection";
-import { createSessionEventBatcher, isImmediateSessionEvent } from "./session-event-batching";
+import { hasAgentSessionStateChanges } from "@/state/agent-session-collection";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
+import {
+  createSessionEventBatcher,
+  isImmediateSessionEvent,
+  type QueuedSessionEvent,
+} from "./session-event-batching";
 import type {
-  ListenToAgentSessionParams,
+  ObserveAgentSessionParams,
   SessionEvent,
   SessionEventHandlerContext,
 } from "./session-event-types";
@@ -29,16 +34,6 @@ import {
 } from "./session-pending-input";
 
 const SESSION_EVENT_BATCH_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 500;
-
-const hasSessionStateChanges = (current: object, next: object): boolean => {
-  for (const key of Object.keys(next) as Array<keyof typeof next>) {
-    if (next[key] !== current[key]) {
-      return true;
-    }
-  }
-
-  return false;
-};
 
 const handleMcpReconnectStarted = (
   event: Extract<SessionEvent, { type: "mcp_reconnect_started" }>,
@@ -102,32 +97,22 @@ const handleSessionEvent = (context: SessionEventHandlerContext, event: SessionE
     case "session_finished":
       handleSessionFinished(context.lifecycle, event);
       return;
-    case "tool_call":
-    case "tool_result":
-      return;
   }
 };
 
 const isObservedSessionMounted = ({
   sessionRef,
-  sessionsRef,
-}: Pick<ListenToAgentSessionParams, "sessionRef" | "sessionsRef">): boolean =>
-  getAgentSession(sessionsRef.current, sessionRef) !== null;
+  readSession,
+}: Pick<ObserveAgentSessionParams, "sessionRef" | "readSession">): boolean =>
+  readSession(sessionRef) !== null;
 
 export const listenToAgentSessionEvents = async (
-  context: ListenToAgentSessionParams,
+  context: ObserveAgentSessionParams,
 ): Promise<() => void> => {
-  const contextUsageMessageIdBySessionRef = context.contextUsageMessageIdBySessionRef ?? {
-    current: {} as Record<string, string>,
-  };
-  const eventContext = {
-    ...context,
-    contextUsageMessageIdBySessionRef,
-  };
-  const handlerContext = createSessionEventHandlerContext(eventContext);
+  const handlerContext = createSessionEventHandlerContext(context);
   const batchWindowMs = context.eventBatchWindowMs ?? SESSION_EVENT_BATCH_WINDOW_MS;
   const batcher = createSessionEventBatcher();
-  let queuedEvents: SessionEvent[] = [];
+  let queuedEvents: QueuedSessionEvent[] = [];
   let batchTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const flushQueuedEvents = (): void => {
@@ -140,7 +125,7 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    if (!isObservedSessionMounted(eventContext)) {
+    if (!isObservedSessionMounted(context)) {
       queuedEvents = [];
       return;
     }
@@ -156,39 +141,38 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    const batchedSessionsRef = {
-      current: context.sessionsRef.current,
-    };
+    let bufferedSession: AgentSessionState | null = context.readSession(context.sessionRef);
     let shouldPersistBufferedSession = false;
     let hasBufferedSessionUpdate = false;
     const batchedHandlerContext = createSessionEventHandlerContext({
-      ...eventContext,
-      sessionsRef: batchedSessionsRef,
+      ...context,
+      readSession: (identity) => {
+        if (matchesAgentSessionIdentity(identity, context.sessionRef)) {
+          return bufferedSession;
+        }
+        return context.readSession(identity);
+      },
       updateSession: (targetSessionIdentity, updater, options) => {
         if (!matchesAgentSessionIdentity(targetSessionIdentity, context.sessionRef)) {
-          context.updateSession(targetSessionIdentity, updater, options);
-          return;
+          return context.updateSession(targetSessionIdentity, updater, options);
         }
 
-        const current = getAgentSession(batchedSessionsRef.current, targetSessionIdentity);
+        const current = bufferedSession;
         if (!current) {
-          return;
+          return null;
         }
 
         const next = updater(current);
-        if (next === current || !hasSessionStateChanges(current, next)) {
-          return;
+        if (next === current || !hasAgentSessionStateChanges(current, next)) {
+          return null;
         }
 
         hasBufferedSessionUpdate = true;
         if (options?.persist === true) {
           shouldPersistBufferedSession = true;
         }
-        batchedSessionsRef.current = replaceAgentSessionByIdentity(
-          batchedSessionsRef.current,
-          targetSessionIdentity,
-          next,
-        );
+        bufferedSession = next;
+        return next;
       },
     });
 
@@ -203,7 +187,7 @@ export const listenToAgentSessionEvents = async (
       return;
     }
 
-    const nextSession = getAgentSession(batchedSessionsRef.current, context.sessionRef);
+    const nextSession = bufferedSession;
     if (!nextSession) {
       if (queuedEvents.length > 0) {
         scheduleQueuedFlush(nextDelayMs ?? batchWindowMs);
@@ -237,7 +221,7 @@ export const listenToAgentSessionEvents = async (
   };
 
   const unsubscribe = await context.adapter.subscribeEvents(context.sessionRef, (event) => {
-    if (!isObservedSessionMounted(eventContext)) {
+    if (!isObservedSessionMounted(context)) {
       queuedEvents = [];
       return;
     }

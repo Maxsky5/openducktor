@@ -17,6 +17,7 @@ const SESSION_IDENTITY = {
 };
 
 type SessionActions = Parameters<typeof createOrchestratorPublicOperations>[0]["sessionActions"];
+type PublicAgentEngine = Parameters<typeof createOrchestratorPublicOperations>[0]["agentEngine"];
 
 const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionActions => {
   return {
@@ -35,6 +36,22 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
   };
 };
 
+const createAgentEngine = (overrides: Partial<PublicAgentEngine> = {}): PublicAgentEngine => ({
+  listAvailableModels: async () => ({
+    providers: [],
+    models: [],
+    variants: [],
+    profiles: [],
+    defaultModelsByProvider: {},
+  }),
+  loadSessionTodos: async () => [],
+  loadSessionHistory: async () => [],
+  listAvailableSlashCommands: async () => ({ commands: [] }),
+  listAvailableSkills: async () => ({ skills: [] }),
+  searchFiles: async () => [],
+  ...overrides,
+});
+
 describe("agent-orchestrator-public-operations", () => {
   test("shows toast and rethrows load errors", async () => {
     const originalToastError = toast.error;
@@ -46,17 +63,7 @@ describe("agent-orchestrator-public-operations", () => {
         throw new Error("load failed");
       },
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
+      agentEngine: createAgentEngine(),
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
@@ -80,17 +87,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
+      agentEngine: createAgentEngine(),
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -123,17 +120,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
+      agentEngine: createAgentEngine(),
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -163,17 +150,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
+      agentEngine: createAgentEngine(),
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions({
@@ -198,25 +175,21 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
+      agentEngine: createAgentEngine(),
       removeAgentSession,
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),
     });
 
-    await operations.removeAgentSession("session-1");
+    const session = {
+      externalSessionId: "session-1",
+      runtimeKind: "opencode" as const,
+      workingDirectory: "/tmp/repo/worktree",
+    };
 
-    expect(removeAgentSession).toHaveBeenCalledWith("session-1");
+    await operations.removeAgentSession(session);
+
+    expect(removeAgentSession).toHaveBeenCalledWith(session);
   });
 
   test("forwards explicit session removals without toast wrapping", async () => {
@@ -224,17 +197,7 @@ describe("agent-orchestrator-public-operations", () => {
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
-      }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory: async () => [],
+      agentEngine: createAgentEngine(),
       removeAgentSession: async () => {},
       removeAgentSessions,
       sessionActions: createSessionActions(),
@@ -248,22 +211,69 @@ describe("agent-orchestrator-public-operations", () => {
     });
   });
 
+  test("delegates runtime reads directly to the agent engine", async () => {
+    const listAvailableModels = mock(createAgentEngine().listAvailableModels);
+    const loadSessionTodos = mock(async () => []);
+    const listAvailableSlashCommands = mock(async () => ({ commands: [] }));
+    const listAvailableSkills = mock(async () => ({ skills: [] }));
+    const searchFiles = mock(async () => []);
+    const operations = createOrchestratorPublicOperations({
+      loadAgentSessions: async () => {},
+      loadAgentSessionHistory: async () => {},
+      agentEngine: createAgentEngine({
+        listAvailableModels,
+        loadSessionTodos,
+        listAvailableSlashCommands,
+        listAvailableSkills,
+        searchFiles,
+      }),
+      removeAgentSession: async () => {},
+      removeAgentSessions: async () => {},
+      sessionActions: createSessionActions(),
+    });
+    const sessionRef = {
+      repoPath: "/repo",
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+
+    await operations.readSessionModelCatalog("/repo", "codex");
+    await operations.readSessionTodos(sessionRef);
+    await operations.readSessionSlashCommands("/repo", "codex");
+    await operations.readSessionSkills?.("/repo", "codex", "/repo/worktree");
+    await operations.readSessionFileSearch("/repo", "codex", "/repo/worktree", "src");
+
+    expect(listAvailableModels).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+    });
+    expect(loadSessionTodos).toHaveBeenCalledWith(sessionRef);
+    expect(listAvailableSlashCommands).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+    });
+    expect(listAvailableSkills).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+    });
+    expect(searchFiles).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/worktree",
+      query: "src",
+    });
+  });
+
   test("forwards full session history inputs without stripping transient context", async () => {
     const readSessionHistory = mock(async () => []);
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions: async () => {},
       loadAgentSessionHistory: async () => {},
-      readSessionModelCatalog: async () => ({
-        providers: [],
-        models: [],
-        variants: [],
-        profiles: [],
-        defaultModelsByProvider: {},
+      agentEngine: createAgentEngine({
+        loadSessionHistory: readSessionHistory,
       }),
-      readSessionSlashCommands: async () => ({ commands: [] }),
-      readSessionFileSearch: async () => [],
-      readSessionTodos: async () => [],
-      readSessionHistory,
       removeAgentSession: async () => {},
       removeAgentSessions: async () => {},
       sessionActions: createSessionActions(),

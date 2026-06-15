@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   buildSession,
+  createSessionDraftBuffers,
   createSessionsRef,
+  createSessionTurnMetadata,
   createSessionUpdater,
   findSession,
   getSession,
@@ -38,8 +41,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       recordTurnActivityTimestamp: (_externalSessionId, timestamp) => {
         recordedActivityTimestamps.push(timestamp);
@@ -127,8 +128,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => 300,
       clearTurnDuration: () => {
@@ -401,10 +400,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -456,25 +451,29 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
     const recordTurnActivityTimestamp = mock(() => {});
     const session = getSession(sessionsRef);
+    const sessionKey = agentSessionIdentityKey(session);
 
     const context: SessionPartEventContext = {
       store: {
         sessionIdentity: session,
+        sessionKey,
         externalSessionId: "session-1",
-        sessionsRef,
         updateSession: createSessionUpdater(sessionsRef),
+        readSession: (identity) => findSession(sessionsRef, identity.externalSessionId) ?? null,
+        hasSession: (identity) =>
+          findSession(sessionsRef, identity.externalSessionId) !== undefined,
       },
       drafts: {
         sessionIdentity: session,
+        sessionKey,
         externalSessionId: "session-1",
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
+        buffers: createSessionDraftBuffers(),
       },
       turn: {
         sessionIdentity: session,
+        sessionKey,
         externalSessionId: "session-1",
+        turnMetadata: createSessionTurnMetadata(),
         recordTurnActivityTimestamp,
         recordTurnUserMessageTimestamp: () => {},
         resolveTurnDurationMs: () => undefined,
@@ -486,13 +485,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       },
       runtimeData: {
-        sessionRef: {
-          repoPath: "/tmp/repo",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo",
-          externalSessionId: "session-1",
-        },
-        runtimeDataWriter: { updateTodos: () => {} },
+        updateSessionTodos: () => {},
       },
     };
 
@@ -513,7 +506,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       },
     });
 
-    expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
+    expect(recordTurnActivityTimestamp).toHaveBeenCalledWith(sessionKey, 100);
   });
 
   test("forwards turn timing callbacks to part handlers through listenToAgentSessionEvents", async () => {
@@ -531,24 +524,19 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
     const sessionsRef = createSessionsRef([buildSession({ role: "build" })]);
     const recordTurnActivityTimestamp = mock(() => {});
     const updateSession = createSessionUpdater(sessionsRef);
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
 
     await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       recordTurnActivityTimestamp,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -573,7 +561,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       },
     });
 
-    expect(recordTurnActivityTimestamp).toHaveBeenCalledWith("session-1", 100);
+    expect(recordTurnActivityTimestamp).toHaveBeenCalledWith(sessionKey, 100);
   });
 
   test("reuses the spawned subagent row when a later update adds externalSessionId", async () => {
@@ -596,17 +584,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -682,17 +664,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -753,17 +729,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -865,17 +835,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -953,17 +917,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -1043,17 +1001,11 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       sessionsRef,
       externalSessionId: "session-1",
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
       resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
-      contextUsageMessageIdBySessionRef: { current: {} },
-      turnModelBySessionRef: { current: {} },
     });
 
     const handleEvent = handlers[0];
@@ -1158,10 +1110,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},

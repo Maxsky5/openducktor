@@ -28,7 +28,7 @@ import { createChatComposerFileSearch } from "@/features/agent-chat-composer/pro
 import { resolveRuntimePromptInputSupport } from "@/features/agent-chat-composer/prompt-input/runtime-prompt-input-support";
 import { useChatComposerSkills } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-skills";
 import { useChatComposerSlashCommands } from "@/features/agent-chat-composer/prompt-input/use-chat-composer-slash-commands";
-import { resolveActiveSessionChatComposerContext } from "@/features/agent-chat-composer/session-context/active-session-chat-composer-context";
+import { resolveActiveSessionChatComposerTarget } from "@/features/agent-chat-composer/session-context/active-session-chat-composer-target";
 import { pickDefaultVisibleSelectionForCatalog } from "@/features/session-start";
 import { DEFAULT_RUNTIME_KIND, findRuntimeDefinition } from "@/lib/agent-runtime";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
@@ -150,21 +150,21 @@ export function useAgentStudioChatComposer({
       throw new Error("Runtime skill catalog loading is unavailable.");
     });
   const loadFileSearchForRepo = loadFileSearch ?? loadRepoRuntimeFileSearch;
-  const activeSessionChatComposerContext = useMemo(
-    () => resolveActiveSessionChatComposerContext(activeSession, activeSessionSummary),
+  const activeSessionChatComposerTarget = useMemo(
+    () => resolveActiveSessionChatComposerTarget(activeSession, activeSessionSummary),
     [activeSession, activeSessionSummary],
   );
   const activeLoadedSessionIdentity: AgentSessionIdentity | null = activeSession
     ? toAgentSessionIdentity(activeSession)
     : null;
-  const activeSessionStatus = activeSessionChatComposerContext.status;
-  const activeSessionSelectedModel = activeSessionChatComposerContext.selectedModel;
-  const activeSessionRuntimeKind = activeSessionChatComposerContext.runtimeKind;
-  const activeSessionWorkingDirectory = activeSessionChatComposerContext.workingDirectory;
-  const activeSessionLiveContextUsage = activeSessionChatComposerContext.liveContextUsage ?? null;
-  const activeSessionMessages = activeSessionChatComposerContext.messages;
-  const hasSessionTarget = activeSessionChatComposerContext.source !== "none";
-  const hasLoadedSessionTarget = activeSessionChatComposerContext.source === "loaded";
+  const activeSessionSelectedModel =
+    activeSession?.selectedModel ?? activeSessionChatComposerTarget.selectedModel;
+  const activeSessionIdentity = activeSessionChatComposerTarget.sessionIdentity;
+  const activeSessionRuntimeKind = activeSessionIdentity?.runtimeKind ?? null;
+  const hasSessionTarget = activeSessionChatComposerTarget.source !== "none";
+  const hasLoadedSessionTarget = activeSession !== null;
+  const canReadLoadedSessionRuntimePrompts =
+    activeSession !== null && activeSession.status !== "starting";
   const roleDefaultSelection = useMemo<AgentModelSelection | null>(() => {
     const selection = toRoleDefaultModelSelection(
       repoSettings?.agentDefaults[role],
@@ -212,32 +212,23 @@ export function useAgentStudioChatComposer({
     () =>
       resolveRuntimeWorkingDirectoryRefState({
         repoPath: workspaceRepoPath,
-        session: hasSessionTarget
-          ? {
-              runtimeKind: activeSessionRuntimeKind,
-              workingDirectory: activeSessionWorkingDirectory,
-            }
-          : null,
+        session: activeSessionIdentity,
       }),
-    [activeSessionRuntimeKind, activeSessionWorkingDirectory, hasSessionTarget, workspaceRepoPath],
+    [activeSessionIdentity, workspaceRepoPath],
   );
   const activeSessionRuntimeRef = activeSessionRuntimeRefState.runtimeRef;
   const activeSessionRuntimeRefError = activeSessionRuntimeRefState.runtimeRefError;
+  const promptInputRuntimeKind = hasSessionTarget ? activeSessionRuntimeKind : selectedRuntimeKind;
+  const promptInputRuntimeDefinitions = hasSessionTarget
+    ? allRuntimeDefinitions
+    : availableRuntimeDefinitions;
   const { runtimeSupportsSlashCommands, supportsFileSearch, supportsSkillReferences } = useMemo(
     () =>
       resolveRuntimePromptInputSupport({
-        runtimeDefinitions: hasSessionTarget ? allRuntimeDefinitions : availableRuntimeDefinitions,
-        hasSessionTarget,
-        activeSessionRuntimeKind: activeSessionRuntimeKind ?? null,
-        selectedRuntimeKind,
+        runtimeDefinitions: promptInputRuntimeDefinitions,
+        runtimeKind: promptInputRuntimeKind,
       }),
-    [
-      activeSessionRuntimeKind,
-      allRuntimeDefinitions,
-      availableRuntimeDefinitions,
-      hasSessionTarget,
-      selectedRuntimeKind,
-    ],
+    [promptInputRuntimeDefinitions, promptInputRuntimeKind],
   );
   const supportsProfiles = useMemo(() => {
     const runtimeKind = hasSessionTarget ? activeSessionRuntimeKind : selectedRuntimeKind;
@@ -277,7 +268,7 @@ export function useAgentStudioChatComposer({
     isSlashCommandsLoading,
   } = useChatComposerSlashCommands({
     hasSessionTarget,
-    activeSessionStatus,
+    canReadLoadedSessionRuntimePrompts,
     activeSessionRuntimeRef,
     activeSessionRuntimeRefError,
     runtimeSupportsSlashCommands,
@@ -289,7 +280,7 @@ export function useAgentStudioChatComposer({
   });
   const { skillCatalog, skills, skillsError, isSkillsLoading } = useChatComposerSkills({
     hasSessionTarget,
-    activeSessionStatus,
+    canReadLoadedSessionRuntimePrompts,
     activeSessionRuntimeRef,
     activeSessionRuntimeRefError,
     supportsSkillReferences,
@@ -405,10 +396,7 @@ export function useAgentStudioChatComposer({
 
   const activeSessionContextUsage = useActiveSessionContextUsage({
     activeSession,
-    activeSessionMessages,
-    activeSessionLiveContextUsage,
     activeSessionModelCatalog,
-    selectedModelSelection,
     selectedModelEntry,
   });
 

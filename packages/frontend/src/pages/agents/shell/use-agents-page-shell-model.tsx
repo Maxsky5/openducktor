@@ -107,12 +107,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const {
-    navigationPersistenceError,
-    retryNavigationPersistence,
-    selection,
-    worktreeRecoverySignal,
-  } = routeSession;
+  const { navigationPersistenceError, retryNavigationPersistence, selection, worktreeRecoveryKey } =
+    routeSession;
 
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
@@ -167,7 +163,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     panel: orchestration.rightPanel,
     documentsModel: orchestration.agentStudioWorkspaceSidebarModel,
     repoSettings: orchestration.repoSettings,
-    worktreeRecoverySignal,
+    worktreeRecoveryKey,
     setTaskTargetBranch,
     detectingPullRequestTaskId,
     onDetectPullRequest: taskActions.onDetectPullRequest,

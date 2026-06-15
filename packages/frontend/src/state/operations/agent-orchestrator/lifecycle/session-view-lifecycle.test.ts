@@ -6,9 +6,9 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
-  deriveAgentSessionTargetViewLifecycle,
-  deriveAgentSessionViewLifecycle,
+  deriveAgentSessionTranscriptLifecycle,
   deriveSelectedAgentSessionViewLifecycle,
+  type SessionRepoReadinessState,
 } from "./session-view-lifecycle";
 
 type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
@@ -41,9 +41,30 @@ const createSession = (overrides: CreateSessionOverrides = {}): AgentSessionStat
   };
 };
 
-describe("deriveAgentSessionViewLifecycle", () => {
+const selectedSessionIdentity = {
+  externalSessionId: "external-1",
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/tmp/repo/worktree",
+};
+
+const deriveSelectedSessionLifecycleForSession = ({
+  session,
+  repoReadinessState,
+}: {
+  session: AgentSessionState;
+  repoReadinessState: SessionRepoReadinessState;
+}) =>
+  deriveSelectedAgentSessionViewLifecycle({
+    selectedSessionIdentity,
+    session,
+    hasSelectedTask: true,
+    repoReadinessState,
+    sessionLoadError: null,
+  });
+
+describe("deriveSelectedAgentSessionViewLifecycle for loaded sessions", () => {
   test("keeps a partial transcript visible while history has not loaded", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         historyLoadState: "not_requested",
         messages: [
@@ -62,7 +83,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 
   test("keeps a transcript visible after a prior history failure", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         historyLoadState: "failed",
         messages: [
@@ -80,8 +101,20 @@ describe("deriveAgentSessionViewLifecycle", () => {
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
   });
 
+  test("surfaces cold history failures when there is no transcript to render", () => {
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
+      session: createSession({
+        historyLoadState: "failed",
+        messages: [],
+      }),
+      repoReadinessState: "ready",
+    });
+
+    expect(lifecycle.transcriptState).toEqual({ kind: "failed" });
+  });
+
   test("renders running sessions immediately without view readiness loading", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         status: "running",
         historyLoadState: "loaded",
@@ -103,7 +136,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 
   test("renders running planner sessions immediately when durable runtime context is available", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         role: "planner",
         status: "running",
@@ -125,7 +158,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 
   test("loads a cold running session transcript before rendering it", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         status: "running",
         historyLoadState: "not_requested",
@@ -143,7 +176,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 
   test("keeps a cold running session in loading state while history is in flight", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         status: "running",
         historyLoadState: "loading",
@@ -161,7 +194,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 
   test("keeps a renderable transcript stable while history is refreshing", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         status: "running",
         historyLoadState: "loading",
@@ -183,7 +216,7 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 
   test("keeps a local outbound send visible while pending", () => {
-    const lifecycle = deriveAgentSessionViewLifecycle({
+    const lifecycle = deriveSelectedSessionLifecycleForSession({
       session: createSession({
         status: "running",
         historyLoadState: "loaded",
@@ -206,10 +239,10 @@ describe("deriveAgentSessionViewLifecycle", () => {
   });
 });
 
-describe("deriveAgentSessionTargetViewLifecycle", () => {
-  test("uses history load state for a transcript target before a session exists", () => {
-    const lifecycle = deriveAgentSessionTargetViewLifecycle({
-      target: {
+describe("deriveAgentSessionTranscriptLifecycle", () => {
+  test("uses history load state for a transcript snapshot before a session exists", () => {
+    const lifecycle = deriveAgentSessionTranscriptLifecycle({
+      transcript: {
         historyLoadState: "loading",
         hasTranscript: false,
       },
@@ -221,8 +254,8 @@ describe("deriveAgentSessionTargetViewLifecycle", () => {
   });
 
   test("uses visible transcript messages when history is loaded", () => {
-    const lifecycle = deriveAgentSessionTargetViewLifecycle({
-      target: {
+    const lifecycle = deriveAgentSessionTranscriptLifecycle({
+      transcript: {
         historyLoadState: "loaded",
         hasTranscript: true,
       },
@@ -233,9 +266,9 @@ describe("deriveAgentSessionTargetViewLifecycle", () => {
     expect(lifecycle.transcriptState).toEqual({ kind: "visible" });
   });
 
-  test("stays inactive when there is no transcript target", () => {
-    const lifecycle = deriveAgentSessionTargetViewLifecycle({
-      target: null,
+  test("stays inactive when there is no transcript snapshot", () => {
+    const lifecycle = deriveAgentSessionTranscriptLifecycle({
+      transcript: null,
       repoReadinessState: "ready",
     });
 
@@ -244,15 +277,9 @@ describe("deriveAgentSessionTargetViewLifecycle", () => {
 });
 
 describe("deriveSelectedAgentSessionViewLifecycle", () => {
-  const selectedSessionRoute = {
-    externalSessionId: "external-1",
-    runtimeKind: "opencode" as const,
-    workingDirectory: "/tmp/repo/worktree",
-  };
-
   test("keeps a missing selected session loading while runtime readiness is checking", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute,
+      selectedSessionIdentity,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
@@ -266,7 +293,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
   test("surfaces selected session load failures without a second local state machine", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute,
+      selectedSessionIdentity,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",
@@ -278,7 +305,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
   test("delegates selected active session readiness to the session lifecycle", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute,
+      selectedSessionIdentity,
       session: createSession({ historyLoadState: "not_requested", messages: [] }),
       hasSelectedTask: true,
       repoReadinessState: "ready",
@@ -293,7 +320,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
   test("keeps a selected task in runtime loading instead of inactive while repo runtime is checking", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute: null,
+      selectedSessionIdentity: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
@@ -307,7 +334,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
   test("waits for runtime readiness before resolving the loading session read model", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute: null,
+      selectedSessionIdentity: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "checking",
@@ -322,7 +349,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
   test("resolves selected sessions through the lifecycle owner once runtime is ready", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute: null,
+      selectedSessionIdentity: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",
@@ -338,7 +365,7 @@ describe("deriveSelectedAgentSessionViewLifecycle", () => {
 
   test("keeps sessionless selection inactive once runtime is ready", () => {
     const lifecycle = deriveSelectedAgentSessionViewLifecycle({
-      selectedSessionRoute: null,
+      selectedSessionIdentity: null,
       session: null,
       hasSelectedTask: true,
       repoReadinessState: "ready",

@@ -1,3 +1,4 @@
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
 
@@ -28,10 +29,12 @@ const byNewestSession = (
   if (left.startedAt !== right.startedAt) {
     return left.startedAt > right.startedAt ? -1 : 1;
   }
-  if (left.externalSessionId === right.externalSessionId) {
+  const leftSessionKey = agentSessionIdentityKey(left);
+  const rightSessionKey = agentSessionIdentityKey(right);
+  if (leftSessionKey === rightSessionKey) {
     return 0;
   }
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
+  return leftSessionKey > rightSessionKey ? -1 : 1;
 };
 
 export const summarizeAgentActivity = ({

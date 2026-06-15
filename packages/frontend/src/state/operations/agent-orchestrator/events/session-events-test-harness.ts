@@ -24,6 +24,11 @@ import type {
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
 import {
+  createSessionDraftBuffers,
+  createSessionTurnMetadata,
+  type SessionDraftBuffers,
+} from "../support/session-transient-state";
+import {
   createAgentSessionCollectionRefFixture,
   findAgentSessionFixture,
   getAgentSessionFixture,
@@ -31,7 +36,7 @@ import {
 } from "../test-utils";
 import { createSessionEventBatcher } from "./session-event-batching";
 import type {
-  ListenToAgentSessionParams,
+  ObserveAgentSessionParams,
   SessionEvent,
   SessionPartEventContext,
 } from "./session-event-types";
@@ -41,22 +46,25 @@ import {
 } from "./session-events";
 import { handleAssistantPart } from "./session-parts";
 
-export const createRecordingRuntimeDataWriter = () => {
+export const createRecordingSessionTodosUpdater = () => {
   let todos: AgentSessionTodoItem[] = [];
-  let sessionRefs: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[0][] =
-    [];
   return {
-    writer: {
-      updateTodos: (
-        session: Parameters<ListenToAgentSessionParams["runtimeDataWriter"]["updateTodos"]>[0],
-        updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
-      ) => {
-        sessionRefs = [...sessionRefs, session];
-        todos = updater(todos);
-      },
+    updateSessionTodos: (
+      updater: Parameters<ObserveAgentSessionParams["updateSessionTodos"]>[0],
+    ) => {
+      todos = updater(todos);
     },
     getTodos: () => todos,
-    getSessionRefs: () => sessionRefs,
+  };
+};
+
+const createImmediateSessionDraftBuffers = (): SessionDraftBuffers => {
+  const buffers = createSessionDraftBuffers();
+  return {
+    ...buffers,
+    scheduleFlush: (_sessionKey, flush) => {
+      flush();
+    },
   };
 };
 
@@ -111,16 +119,14 @@ export const createSessionUpdater = (sessionsRef: { current: AgentSessionCollect
   return (
     identity: AgentSessionIdentity,
     updater: (current: AgentSessionState) => AgentSessionState,
-  ): void => {
+  ): AgentSessionState | null => {
     const current = getAgentSession(sessionsRef.current, identity);
     if (!current) {
-      return;
+      return null;
     }
-    sessionsRef.current = replaceAgentSessionByIdentity(
-      sessionsRef.current,
-      identity,
-      updater(current),
-    );
+    const nextSession = updater(current);
+    sessionsRef.current = replaceAgentSessionByIdentity(sessionsRef.current, identity, nextSession);
+    return nextSession;
   };
 };
 
@@ -129,36 +135,45 @@ export const getSessionMessages = (
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
-type ListenToAgentSessionEventsTestParams = Omit<
-  ListenToAgentSessionParams,
+type ObserveAgentSessionEventsTestParams = Omit<
+  ObserveAgentSessionParams,
   | "sessionRef"
-  | "runtimeDataWriter"
+  | "draftBuffers"
+  | "turnMetadata"
+  | "readSession"
+  | "updateSessionTodos"
   | "recordTurnActivityTimestamp"
   | "recordTurnUserMessageTimestamp"
   | "buildReadOnlyApprovalRejectionMessage"
 > &
   Partial<
     Pick<
-      ListenToAgentSessionParams,
+      ObserveAgentSessionParams,
       | "sessionRef"
-      | "runtimeDataWriter"
+      | "draftBuffers"
+      | "turnMetadata"
+      | "updateSessionTodos"
       | "recordTurnActivityTimestamp"
       | "recordTurnUserMessageTimestamp"
       | "buildReadOnlyApprovalRejectionMessage"
     >
   > & {
+    sessionsRef: { current: AgentSessionCollection };
     externalSessionId?: string;
     repoPath?: string;
   };
 
 export const listenToAgentSessionEvents = (
-  params: ListenToAgentSessionEventsTestParams,
+  params: ObserveAgentSessionEventsTestParams,
 ): Promise<() => void> => {
   const {
     externalSessionId,
     repoPath,
+    sessionsRef,
     sessionRef: providedSessionRef,
-    runtimeDataWriter,
+    draftBuffers,
+    turnMetadata,
+    updateSessionTodos,
     recordTurnActivityTimestamp,
     recordTurnUserMessageTimestamp,
     buildReadOnlyApprovalRejectionMessage,
@@ -166,10 +181,8 @@ export const listenToAgentSessionEvents = (
   } = params;
   const targetExternalSessionId =
     providedSessionRef?.externalSessionId ?? externalSessionId ?? "session-1";
-  params.sessionsRef.current = createAgentSessionCollection(
-    listAgentSessions(params.sessionsRef.current),
-  );
-  const session = getSession(params.sessionsRef, targetExternalSessionId);
+  sessionsRef.current = createAgentSessionCollection(listAgentSessions(sessionsRef.current));
+  const session = getSession(sessionsRef, targetExternalSessionId);
   const sessionRef = providedSessionRef ?? {
     externalSessionId: targetExternalSessionId,
     repoPath: repoPath ?? "/tmp/repo",
@@ -179,6 +192,8 @@ export const listenToAgentSessionEvents = (
 
   return listenToAgentSessionEventsImpl({
     ...eventParams,
+    draftBuffers: draftBuffers ?? createImmediateSessionDraftBuffers(),
+    turnMetadata: turnMetadata ?? createSessionTurnMetadata(),
     recordTurnActivityTimestamp: recordTurnActivityTimestamp ?? (() => {}),
     recordTurnUserMessageTimestamp: recordTurnUserMessageTimestamp ?? (() => {}),
     buildReadOnlyApprovalRejectionMessage:
@@ -190,9 +205,8 @@ export const listenToAgentSessionEvents = (
             overrides: {},
           }),
         )),
-    runtimeDataWriter: runtimeDataWriter ?? {
-      updateTodos: () => {},
-    },
+    updateSessionTodos: updateSessionTodos ?? (() => {}),
+    readSession: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionRef,
   });
 };
@@ -203,9 +217,11 @@ export const getLastSessionMessage = (
 ) => lastSessionMessageForTest(getSession(sessionsRef, externalSessionId));
 
 export type { AgentSessionState, SessionEvent, SessionEventAdapter, SessionPartEventContext };
-export type SessionUpdateFn = ListenToAgentSessionParams["updateSession"];
+export type SessionUpdateFn = ObserveAgentSessionParams["updateSession"];
 export {
+  createSessionDraftBuffers,
   createSessionEventBatcher,
+  createSessionTurnMetadata,
   handleAssistantPart,
   OPENCODE_RUNTIME_DESCRIPTOR,
   sessionMessageAt,

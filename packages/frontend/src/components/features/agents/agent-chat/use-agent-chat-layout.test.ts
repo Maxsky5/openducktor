@@ -323,16 +323,10 @@ describe("use-agent-chat-layout helpers", () => {
 
   test("returns stable refs for the layout hook", async () => {
     const harness = createSharedHookHarness(
-      ({
-        activeExternalSessionId,
-        input,
-      }: {
-        activeExternalSessionId: string | null;
-        input: string;
-      }) => {
-        return useAgentChatLayout({ activeExternalSessionId, input });
+      ({ activeSessionKey, input }: { activeSessionKey: string | null; input: string }) => {
+        return useAgentChatLayout({ activeSessionKey, input });
       },
-      { activeExternalSessionId: "session-1", input: "" },
+      { activeSessionKey: "session-1", input: "" },
     );
 
     await harness.mount();
@@ -344,7 +338,7 @@ describe("use-agent-chat-layout helpers", () => {
     expect(initialState.composerTextareaRef.current).toBeNull();
     expect(typeof initialState.resizeComposerTextarea).toBe("function");
 
-    await harness.update({ activeExternalSessionId: "session-2", input: "draft" });
+    await harness.update({ activeSessionKey: "session-2", input: "draft" });
 
     const updatedState = harness.getLatest() as LayoutHookState;
     expect(updatedState.messagesContainerRef).toBe(initialState.messagesContainerRef);
@@ -365,10 +359,10 @@ describe("use-agent-chat-layout helpers", () => {
       globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
 
       const harness = createSharedHookHarness(
-        ({ activeExternalSessionId }: { activeExternalSessionId: string | null }) => {
-          return useAgentChatLayout({ activeExternalSessionId });
+        ({ activeSessionKey }: { activeSessionKey: string | null }) => {
+          return useAgentChatLayout({ activeSessionKey });
         },
-        { activeExternalSessionId: "session-1" },
+        { activeSessionKey: "session-1" },
       );
 
       await harness.mount();
@@ -452,13 +446,13 @@ describe("use-agent-chat-layout helpers", () => {
         },
       } as { current: (() => void) | null };
       const harness = createSharedHookHarness(
-        ({ activeExternalSessionId }: { activeExternalSessionId: string | null }) => {
+        ({ activeSessionKey }: { activeSessionKey: string | null }) => {
           return useAgentChatLayout({
-            activeExternalSessionId,
+            activeSessionKey,
             syncBottomAfterComposerLayoutRef,
           });
         },
-        { activeExternalSessionId: "session-1" },
+        { activeSessionKey: "session-1" },
       );
 
       await harness.mount();
@@ -521,16 +515,10 @@ describe("use-agent-chat-layout helpers", () => {
       globalThis.cancelAnimationFrame = ((_id: number) => undefined) as typeof cancelAnimationFrame;
 
       const harness = createSharedHookHarness(
-        ({
-          activeExternalSessionId,
-          input,
-        }: {
-          activeExternalSessionId: string | null;
-          input: string;
-        }) => {
-          return useAgentChatLayout({ activeExternalSessionId, input });
+        ({ activeSessionKey, input }: { activeSessionKey: string | null; input: string }) => {
+          return useAgentChatLayout({ activeSessionKey, input });
         },
-        { activeExternalSessionId: "session-1", input: "" },
+        { activeSessionKey: "session-1", input: "" },
       );
 
       await harness.mount();

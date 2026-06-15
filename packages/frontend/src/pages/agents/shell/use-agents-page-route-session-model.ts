@@ -1,22 +1,18 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
-  AgentRole,
-  AgentSessionRef,
-  AgentSessionTodoItem,
-} from "@openducktor/core";
+import type { AgentModelCatalog, AgentSessionRef, AgentSessionTodoItem } from "@openducktor/core";
 import { useCallback } from "react";
 import { useNavigationType, useSearchParams } from "react-router-dom";
+import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import type { AgentStudioQueryUpdate } from "../agent-studio-navigation";
-import { useAgentStudioQuerySessionSync } from "../use-agent-studio-query-session-sync";
-import { useAgentStudioQuerySync } from "../use-agent-studio-query-sync";
+import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
+import { useAgentStudioQuerySessionSync } from "../query-sync/use-agent-studio-query-session-sync";
+import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
 import { useAgentStudioSelectionController } from "../use-agent-studio-selection-controller";
-import { useAgentStudioReadiness } from "../use-agents-page-readiness";
+import type { AgentStudioSelectionIntent } from "./agent-studio-selection-intent";
+import { buildAgentStudioWorktreeRecoveryKey } from "./agent-studio-worktree-recovery-key";
 import { useAgentStudioSelectionIntentState } from "./use-agent-studio-selection-intent-state";
-import { useAgentStudioWorktreeRecoverySignal } from "./use-agent-studio-worktree-recovery-signal";
 
 type UseAgentsPageRouteSessionModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
@@ -24,7 +20,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
-  runtimeHealthByRuntime: Parameters<typeof useAgentStudioReadiness>[0]["runtimeHealthByRuntime"];
+  runtimeHealthByRuntime: ReturnType<typeof useChecksState>["runtimeHealthByRuntime"];
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
@@ -45,14 +41,8 @@ export type AgentsPageRouteSessionModel = {
   retryNavigationPersistence: () => void;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   selection: ReturnType<typeof useAgentStudioSelectionController>;
-  readiness: ReturnType<typeof useAgentStudioReadiness>;
-  isSessionSelectionResolving: boolean;
-  worktreeRecoverySignal: number;
-  scheduleSelectionIntent: (intent: {
-    taskId: string;
-    externalSessionId: string | null;
-    role: AgentRole;
-  }) => void;
+  worktreeRecoveryKey: string;
+  scheduleSelectionIntent: (intent: AgentStudioSelectionIntent) => void;
 };
 
 export function useAgentsPageRouteSessionModel({
@@ -78,7 +68,7 @@ export function useAgentsPageRouteSessionModel({
 
   const {
     taskIdParam,
-    sessionParam,
+    sessionKeyParam,
     hasExplicitRoleParam,
     roleFromQuery,
     isRepoNavigationBoundaryPending,
@@ -99,23 +89,13 @@ export function useAgentsPageRouteSessionModel({
     [updateQuery],
   );
 
-  const { selectionIntentForController, isSessionSelectionResolving, scheduleSelectionIntent } =
+  const { selectionIntentForController, scheduleSelectionIntent } =
     useAgentStudioSelectionIntentState({
       isRepoNavigationBoundaryPending,
       taskIdParam,
-      sessionParam,
+      sessionKeyParam,
       roleFromQuery,
     });
-
-  const readiness = useAgentStudioReadiness({
-    activeWorkspace,
-    runtimeDefinitions,
-    isLoadingRuntimeDefinitions,
-    runtimeDefinitionsError,
-    runtimeHealthByRuntime,
-    isLoadingChecks,
-    refreshChecks,
-  });
 
   const selection = useAgentStudioSelectionController({
     activeWorkspace,
@@ -126,7 +106,7 @@ export function useAgentsPageRouteSessionModel({
     isLoadingSessionReadModel,
     sessionReadModelError,
     taskIdParam,
-    sessionParam,
+    sessionKeyParam,
     hasExplicitRoleParam,
     roleFromQuery,
     selectionIntent: selectionIntentForController,
@@ -137,10 +117,11 @@ export function useAgentsPageRouteSessionModel({
     runtimeDefinitionsError,
     runtimeHealthByRuntime,
     isLoadingChecks,
+    refreshChecks,
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const worktreeRecoverySignal = useAgentStudioWorktreeRecoverySignal({
+  const worktreeRecoveryKey = buildAgentStudioWorktreeRecoveryKey({
     workspaceRepoPath,
     selection,
     isForegroundLoadingTasks,
@@ -151,7 +132,7 @@ export function useAgentsPageRouteSessionModel({
     isLoadingTasks: isForegroundLoadingTasks,
     tasks,
     taskIdParam,
-    sessionParam,
+    sessionKeyParam,
     sessionFromQuery: selection.selectedSessionFromRoute,
     resolvedTaskId: selection.taskId,
     resolvedSession: selection.activeSessionSummary,
@@ -164,9 +145,7 @@ export function useAgentsPageRouteSessionModel({
     retryNavigationPersistence,
     scheduleQueryUpdate,
     selection,
-    readiness,
-    isSessionSelectionResolving,
-    worktreeRecoverySignal,
+    worktreeRecoveryKey,
     scheduleSelectionIntent,
   };
 }

@@ -11,7 +11,6 @@ import type {
 import { STALE_START_ERROR } from "./start-session-constants";
 import { buildInitialSession, persistInitialSession } from "./start-session-local-state";
 import { rollbackStartedSessionAfterPersistenceFailure } from "./start-session-rollback";
-import { createSessionStartTags } from "./start-session-support";
 
 export const registerStartedSession = async ({
   ctx,
@@ -51,7 +50,12 @@ export const registerStartedSession = async ({
     await persistInitialSession({
       initialSession,
       session: deps.session,
-      tags: createSessionStartTags(startedCtx),
+      tags: {
+        repoPath: startedCtx.repoPath,
+        taskId: startedCtx.taskId,
+        role: startedCtx.role,
+        externalSessionId: startedCtx.summary.externalSessionId,
+      },
     });
   } catch (error) {
     await rollbackStartedSessionAfterPersistenceFailure({

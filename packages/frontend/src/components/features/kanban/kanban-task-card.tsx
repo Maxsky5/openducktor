@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toDisplayTaskLabels } from "@/lib/task-labels";
 import { cn } from "@/lib/utils";
 import { AGENT_ROLE_LABELS } from "@/types";
@@ -113,7 +114,7 @@ const areHistoricalSessionsEqual = (
     }
 
     if (
-      leftSession.externalSessionId !== rightSession.externalSessionId ||
+      agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
       leftSession.startedAt !== rightSession.startedAt
     ) {
@@ -144,7 +145,7 @@ const areRunningTaskSessionsEqual = (
       return false;
     }
     if (
-      leftSession.externalSessionId !== rightSession.externalSessionId ||
+      agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
       leftSession.status !== rightSession.status ||
       leftSession.presentationState !== rightSession.presentationState

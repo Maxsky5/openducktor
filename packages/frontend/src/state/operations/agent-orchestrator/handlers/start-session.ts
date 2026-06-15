@@ -116,7 +116,7 @@ const resolveFreshStartTarget = async ({
   });
 };
 
-const listenToAgentSessionAndGuard = async ({
+const observeAgentSessionAndGuard = async ({
   startResult,
   session,
   runtime,
@@ -128,23 +128,23 @@ const listenToAgentSessionAndGuard = async ({
   const { ctx: startedCtx, runtimeInfo } = startResult;
   const runtimeKind = requireConfiguredRuntimeKind(
     runtimeInfo.runtimeKind,
-    `Runtime kind is required to listen to ${startedCtx.role} session '${startedCtx.summary.externalSessionId}'.`,
+    `Runtime kind is required to observe ${startedCtx.role} session '${startedCtx.summary.externalSessionId}'.`,
   );
-  const listenerTarget: AgentSessionRef = {
+  const observerTarget: AgentSessionRef = {
     externalSessionId: startedCtx.summary.externalSessionId,
     repoPath: startedCtx.repoPath,
     runtimeKind,
     workingDirectory: runtimeInfo.workingDirectory,
   };
 
-  await session.listenToAgentSession(listenerTarget);
+  await session.observeAgentSession(observerTarget);
 
   if (!startedCtx.isStaleRepoOperation()) {
     return;
   }
 
   await stopSessionOnStaleAndThrow({
-    reason: "start-session-stop-on-stale-after-listener-start",
+    reason: "start-session-stop-on-stale-after-observer-start",
     runtime,
     startedCtx,
   });
@@ -207,12 +207,8 @@ export const createStartAgentSession = ({
       selectedModelKey,
     ];
     const inFlightKey = inFlightKeyParts.join("::");
-    const existingInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
-    if (existingInFlight) {
-      return existingInFlight;
-    }
 
-    const startPromise = Promise.resolve().then(async (): Promise<StartAgentSessionResult> => {
+    return session.sessionStartGateRef.current.run(inFlightKey, async () => {
       let creationInput = toSessionCreationInput({ input });
       const resolvedWorkingDirectory = freshStartTarget?.targetWorkingDirectory;
       if (typeof resolvedWorkingDirectory === "string" || resolvedWorkingDirectory === null) {
@@ -241,7 +237,7 @@ export const createStartAgentSession = ({
         throw new Error("Started session is missing selected model metadata.");
       }
 
-      await listenToAgentSessionAndGuard({
+      await observeAgentSessionAndGuard({
         startResult,
         session,
         runtime,
@@ -256,15 +252,5 @@ export const createStartAgentSession = ({
         workingDirectory: startResult.runtimeInfo.workingDirectory,
       };
     });
-
-    session.inFlightStartsByWorkspaceTaskRef.current.set(inFlightKey, startPromise);
-    try {
-      return await startPromise;
-    } finally {
-      const currentInFlight = session.inFlightStartsByWorkspaceTaskRef.current.get(inFlightKey);
-      if (currentInFlight === startPromise) {
-        session.inFlightStartsByWorkspaceTaskRef.current.delete(inFlightKey);
-      }
-    }
   };
 };

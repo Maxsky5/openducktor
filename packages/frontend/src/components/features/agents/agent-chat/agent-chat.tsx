@@ -46,8 +46,7 @@ export function AgentChatSurface({
     (_current: boolean, next: boolean) => next,
     false,
   );
-  const supportsComposer =
-    (model.mode ?? "interactive") === "interactive" && model.composer !== undefined;
+  const supportsComposer = model.composer !== undefined;
   const composerModel = model.composer;
 
   const handleDragEnter = useEffectEvent((event: DragEvent): void => {

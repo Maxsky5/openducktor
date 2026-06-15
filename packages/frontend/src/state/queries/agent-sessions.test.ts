@@ -31,13 +31,13 @@ describe("agent session query cache helpers", () => {
     expect(sessions).toEqual([sessionFixture]);
   });
 
-  test("upsertAgentSessionRecordInQuery replaces an existing session record with the same id", () => {
+  test("upsertAgentSessionRecordInQuery replaces an existing session record with the same identity", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
 
     const updatedSession: AgentSessionRecord = {
       ...sessionFixture,
-      workingDirectory: "/tmp/repo/updated-worktree",
+      startedAt: "2026-03-22T12:30:00.000Z",
     };
 
     upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", updatedSession);
@@ -47,6 +47,25 @@ describe("agent session query cache helpers", () => {
     );
 
     expect(sessions).toEqual([updatedSession]);
+  });
+
+  test("upsertAgentSessionRecordInQuery keeps records distinct when only external id matches", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(agentSessionQueryKeys.list("/repo", "task-1"), [sessionFixture]);
+
+    const otherRuntimeSession: AgentSessionRecord = {
+      ...sessionFixture,
+      runtimeKind: "codex",
+      workingDirectory: "/tmp/repo/codex-worktree",
+    };
+
+    upsertAgentSessionRecordInQuery(queryClient, "/repo", "task-1", otherRuntimeSession);
+
+    const sessions = queryClient.getQueryData<AgentSessionRecord[]>(
+      agentSessionQueryKeys.list("/repo", "task-1"),
+    );
+
+    expect(sessions).toEqual([sessionFixture, otherRuntimeSession]);
   });
 
   test("loadAgentSessionListsFromQuery seeds per-task session caches from the bulk read", async () => {

@@ -1,7 +1,7 @@
 import { memo, type ReactElement } from "react";
 import { assertNever } from "@/lib/assert-never";
 import { cn } from "@/lib/utils";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { AgentChatMessageCard } from "./agent-chat-message-card";
 import type { AgentChatWindowRow } from "./agent-chat-thread-windowing";
 import { AgentTurnDurationSeparator } from "./agent-turn-duration-separator";
@@ -10,8 +10,7 @@ type AgentChatWindowRowProps = {
   row: AgentChatWindowRow;
   isStreamingAssistantMessage: boolean;
   sessionAgentColors: Record<string, string>;
-  sessionWorkingDirectory: AgentSessionState["workingDirectory"] | null;
-  sessionRuntimeKind?: AgentSessionState["runtimeKind"] | null | undefined;
+  sessionIdentity: AgentSessionIdentity | null;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
 };
@@ -20,8 +19,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
   row,
   isStreamingAssistantMessage,
   sessionAgentColors,
-  sessionWorkingDirectory,
-  sessionRuntimeKind,
+  sessionIdentity,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
 }: AgentChatWindowRowProps): ReactElement {
@@ -37,8 +35,7 @@ export const AgentChatThreadRow = memo(function AgentChatThreadRow({
             message={row.message}
             isStreamingAssistantMessage={isStreamingAssistantMessage}
             sessionAgentColors={sessionAgentColors}
-            sessionWorkingDirectory={sessionWorkingDirectory}
-            sessionRuntimeKind={sessionRuntimeKind}
+            sessionIdentity={sessionIdentity}
             subagentPendingApprovalCount={subagentPendingApprovalCount}
             subagentPendingQuestionCount={subagentPendingQuestionCount}
           />

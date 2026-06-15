@@ -85,15 +85,11 @@ export type SearchAgentFilesInput = RuntimeWorkingDirectoryRef & {
   query: string;
 };
 
-export type ListLiveAgentSessionsInput = RepoRuntimeRef & {
+export type ListSessionRuntimeSnapshotsInput = RepoRuntimeRef & {
   directories?: string[];
 };
 
-export type ListSessionPresenceInput = RepoRuntimeRef & {
-  directories?: string[];
-};
-
-export type ReadSessionPresenceInput = AgentSessionRef;
+export type ReadSessionRuntimeSnapshotInput = AgentSessionRef;
 
 export type LoadAgentSessionDiffInput = RuntimeWorkingDirectoryRef & {
   externalSessionId: ExternalSessionId;
@@ -145,33 +141,6 @@ export type AgentSessionHistoryMessage =
       parts: [];
     };
 
-export type LiveAgentSessionStatus =
-  | {
-      type: "busy";
-    }
-  | {
-      type: "idle";
-    }
-  | {
-      type: "retry";
-      attempt: number;
-      message: string;
-      nextEpochMs: number;
-    };
-
-export type LiveAgentSessionSummary = {
-  externalSessionId: ExternalSessionId;
-  title: string;
-  workingDirectory: string;
-  startedAt: string;
-  status: LiveAgentSessionStatus;
-};
-
-export type LiveAgentSessionSnapshot = LiveAgentSessionSummary & {
-  pendingApprovals: AgentPendingApprovalRequest[];
-  pendingQuestions: AgentPendingQuestionRequest[];
-};
-
 export type AgentSessionActivity =
   | "waiting_for_question"
   | "waiting_for_permission"
@@ -179,22 +148,20 @@ export type AgentSessionActivity =
   | "running"
   | "idle";
 
-export type AgentSessionPresence = "runtime" | "missing";
+export type AgentSessionRuntimeSnapshotAvailability = "runtime" | "missing";
 
-export type AgentSessionPresenceSnapshot =
+export type AgentSessionRuntimeSnapshot =
   | {
-      presence: "runtime";
+      availability: "runtime";
       classification: AgentSessionActivity;
       ref: AgentSessionRef;
       title: string;
       startedAt: string;
-      status: LiveAgentSessionStatus;
-      agentSessionStatus: "running" | "idle";
       pendingApprovals: AgentPendingApprovalRequest[];
       pendingQuestions: AgentPendingQuestionRequest[];
     }
   | {
-      presence: "missing";
+      availability: "missing";
       classification: "missing";
       ref: AgentSessionRef;
       pendingApprovals: [];
@@ -240,9 +207,12 @@ export interface AgentSessionPort {
   resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary>;
   releaseSession(input: AgentSessionRef): Promise<void>;
   forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary>;
-  listLiveAgentSessions(input: ListLiveAgentSessionsInput): Promise<LiveAgentSessionSummary[]>;
-  listSessionPresence(input: ListSessionPresenceInput): Promise<AgentSessionPresenceSnapshot[]>;
-  readSessionPresence(input: ReadSessionPresenceInput): Promise<AgentSessionPresenceSnapshot>;
+  listSessionRuntimeSnapshots(
+    input: ListSessionRuntimeSnapshotsInput,
+  ): Promise<AgentSessionRuntimeSnapshot[]>;
+  readSessionRuntimeSnapshot(
+    input: ReadSessionRuntimeSnapshotInput,
+  ): Promise<AgentSessionRuntimeSnapshot>;
   loadSessionHistory(input: LoadAgentSessionHistoryInput): Promise<AgentSessionHistoryMessage[]>;
   loadSessionTodos(input: LoadAgentSessionTodosInput): Promise<AgentSessionTodoItem[]>;
   updateSessionModel(input: UpdateAgentSessionModelInput): void;

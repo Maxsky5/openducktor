@@ -16,20 +16,15 @@ const runtimeSupportsPromptInput = (
 
 export const resolveRuntimePromptInputSupport = ({
   runtimeDefinitions,
-  hasSessionTarget,
-  activeSessionRuntimeKind,
-  selectedRuntimeKind,
+  runtimeKind,
 }: {
   runtimeDefinitions: RuntimeDescriptor[];
-  hasSessionTarget: boolean;
-  activeSessionRuntimeKind: RuntimeKind | null;
-  selectedRuntimeKind: RuntimeKind | null;
+  runtimeKind: RuntimeKind | null;
 }): {
   runtimeSupportsSlashCommands: boolean;
   supportsFileSearch: boolean;
   supportsSkillReferences: boolean;
 } => {
-  const runtimeKind = hasSessionTarget ? activeSessionRuntimeKind : selectedRuntimeKind;
   return {
     runtimeSupportsSlashCommands: runtimeSupportsPromptInput(
       runtimeDefinitions,

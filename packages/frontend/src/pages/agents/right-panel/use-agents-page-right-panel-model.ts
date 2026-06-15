@@ -8,7 +8,7 @@ import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
-import type { SelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {
@@ -33,10 +33,10 @@ export type UseAgentsPageRightPanelModelArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
-  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
+  viewSessionLifecycle: AgentSessionViewLifecycle;
   documentsModel: Parameters<typeof buildAgentStudioRightPanelModel>[0]["documentsModel"];
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  worktreeRecoverySignal: number;
+  worktreeRecoveryKey: string;
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;
@@ -171,7 +171,7 @@ export function useAgentsPageRightPanelModel({
   viewSessionLifecycle,
   documentsModel,
   repoSettings,
-  worktreeRecoverySignal,
+  worktreeRecoveryKey,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -193,7 +193,7 @@ export function useAgentsPageRightPanelModel({
     isPanelOpen,
     viewSessionLifecycle,
     repoSettings,
-    worktreeRecoverySignal,
+    worktreeRecoveryKey,
   });
   const { diffData, devServerModel, resolvedGitPanelBranch } = buildToolsSnapshot;
 

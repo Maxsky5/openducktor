@@ -1,7 +1,5 @@
-import type { ComponentType, ReactNode } from "react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, HashRouter } from "react-router-dom";
 import { App } from "./App";
 import { AppCrashShell } from "./components/errors/app-crash-shell";
 import { applyThemeToDocument } from "./components/layout/theme-dom";
@@ -19,26 +17,16 @@ const DEFAULT_ROUTER_MODE = "browser";
 export type { OpenDucktorShellBootstrapOptions };
 
 type ShellRouterMode = NonNullable<OpenDucktorShellBootstrapOptions["routerMode"]>;
-type ShellRouterComponent = ComponentType<{ children?: ReactNode }>;
-
-const ROUTERS: Record<ShellRouterMode, ShellRouterComponent> = {
-  browser: BrowserRouter,
-  hash: HashRouter,
-};
 
 const kanbanLocationForRouter = (routerMode: ShellRouterMode): string =>
   routerMode === "hash" ? "#/kanban" : "/kanban";
 
 const renderOpenDucktorShellApp = (rootElement: HTMLElement, routerMode: ShellRouterMode): void => {
-  const Router = ROUTERS[routerMode];
-
   createRoot(rootElement).render(
     <StrictMode>
-      <Router>
-        <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
-          <App />
-        </AppCrashShell>
-      </Router>
+      <AppCrashShell kanbanLocation={kanbanLocationForRouter(routerMode)}>
+        <App routerMode={routerMode} />
+      </AppCrashShell>
     </StrictMode>,
   );
 };

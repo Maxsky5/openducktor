@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
 import { buildMessage, buildModelSelection, buildSession } from "./agent-chat-test-fixtures";
@@ -54,13 +55,14 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
       pendingQuestions: [],
     });
+    const sessionKey = agentSessionIdentityKey(session);
 
     const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows.map((row) => row.key)).toEqual([
-      "ext-1:assistant-1:duration",
-      "ext-1:assistant-1",
-      "ext-1:user-1",
+      `${sessionKey}:assistant-1:duration`,
+      `${sessionKey}:assistant-1`,
+      `${sessionKey}:user-1`,
     ]);
     expect(rows.map((row) => row.kind)).toEqual(["turn_duration", "message", "message"]);
   });
@@ -76,23 +78,24 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
       pendingQuestions: [],
     });
+    const sessionKey = agentSessionIdentityKey(session);
 
     const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
     const turns = buildAgentChatWindowTurns(rows);
 
     expect(turns).toEqual([
       {
-        key: "ext-1:assistant-0:duration",
+        key: `${sessionKey}:assistant-0:duration`,
         start: 0,
         end: 1,
       },
       {
-        key: "ext-1:user-1",
+        key: `${sessionKey}:user-1`,
         start: 2,
         end: 4,
       },
       {
-        key: "ext-1:user-2",
+        key: `${sessionKey}:user-2`,
         start: 5,
         end: 7,
       },
@@ -202,10 +205,12 @@ describe("agent-chat-thread windowing helpers", () => {
     const secondKeys = buildAgentChatWindowRows(secondSession, { showThinkingMessages: true }).map(
       (row) => row.key,
     );
+    const firstSessionKey = agentSessionIdentityKey(firstSession);
+    const secondSessionKey = agentSessionIdentityKey(secondSession);
 
-    expect(firstKeys).toContain("session-a:message-1");
-    expect(secondKeys).toContain("session-b:message-1");
-    expect(firstKeys).not.toContain("session-b:message-1");
+    expect(firstKeys).toContain(`${firstSessionKey}:message-1`);
+    expect(secondKeys).toContain(`${secondSessionKey}:message-1`);
+    expect(firstKeys).not.toContain(`${secondSessionKey}:message-1`);
   });
 
   test("getAgentChatWindowRowsKey stays stable for non-row session updates", () => {
@@ -319,20 +324,21 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
       pendingQuestions: [],
     });
+    const sessionKey = agentSessionIdentityKey(session);
 
     const visibleRows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
     const hiddenRows = buildAgentChatWindowRows(session, { showThinkingMessages: false });
 
     expect(visibleRows.map((row) => row.key)).toEqual([
-      "ext-1:user-1",
-      "ext-1:thinking-1",
-      "ext-1:assistant-1:duration",
-      "ext-1:assistant-1",
+      `${sessionKey}:user-1`,
+      `${sessionKey}:thinking-1`,
+      `${sessionKey}:assistant-1:duration`,
+      `${sessionKey}:assistant-1`,
     ]);
     expect(hiddenRows.map((row) => row.key)).toEqual([
-      "ext-1:user-1",
-      "ext-1:assistant-1:duration",
-      "ext-1:assistant-1",
+      `${sessionKey}:user-1`,
+      `${sessionKey}:assistant-1:duration`,
+      `${sessionKey}:assistant-1`,
     ]);
     expect(
       hiddenRows.some((row) => row.kind === "message" && row.message.role === "thinking"),
@@ -383,11 +389,12 @@ describe("agent-chat-thread windowing helpers", () => {
       ],
       pendingQuestions: [],
     });
+    const sessionKey = agentSessionIdentityKey(session);
 
     const rows = buildAgentChatWindowRows(session, { showThinkingMessages: true });
 
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
-    expect(rows[0]?.key).toBe("ext-1:assistant-live");
+    expect(rows[0]?.key).toBe(`${sessionKey}:assistant-live`);
   });
 
   test("peekReusableAgentChatWindowRowsState clears cached streaming state when only session status changes", () => {

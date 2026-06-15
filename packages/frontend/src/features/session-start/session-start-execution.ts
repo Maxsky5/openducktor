@@ -1,5 +1,5 @@
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
-import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
 type StartAgentSessionInput = Parameters<AgentStateContextValue["startAgentSession"]>[0];
@@ -88,7 +88,7 @@ export const prepareSessionStartInput = (
 export const executeSessionStart = async ({
   startAgentSession,
   ...request
-}: ExecuteSessionStartArgs): Promise<AgentSessionRouteIdentity> => {
+}: ExecuteSessionStartArgs): Promise<AgentSessionIdentity> => {
   const input = prepareSessionStartInput(request);
   return startAgentSession(input);
 };

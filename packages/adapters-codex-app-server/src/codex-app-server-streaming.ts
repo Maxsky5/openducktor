@@ -362,8 +362,6 @@ export const handleCodexPendingNotifications = async (
     if (notification.method === "turn/started") {
       context.setSessionLiveStatus(session, {
         classification: "running",
-        status: { type: "busy" },
-        agentSessionStatus: "running",
       });
       const turn = isPlainObject(notification.params) ? notification.params.turn : null;
       const turnId = isPlainObject(turn) ? extractStringField(turn, ["id", "turnId"]) : null;
@@ -464,8 +462,6 @@ export const handleCodexPendingNotifications = async (
       if (!activeTurn || shouldSettleActiveTurn) {
         context.setSessionLiveStatus(session, {
           classification: "idle",
-          status: { type: "idle" },
-          agentSessionStatus: "idle",
         });
       }
       emitCanonicalEvents(

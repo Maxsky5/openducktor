@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
   buildSession,
-  createRecordingRuntimeDataWriter,
+  createRecordingSessionTodosUpdater,
   createSessionsRef,
   createSessionUpdater,
   findSession,
@@ -67,8 +67,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -150,8 +148,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       buildReadOnlyApprovalRejectionMessage: async () => {
         throw new Error("Unsupported prompt token {{unsupported.token}}");
@@ -256,8 +252,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -315,8 +309,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -406,8 +398,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -453,7 +443,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
 
   test("handles question/todo updates and terminal finish", async () => {
     const handlers: Array<(event: { type: string; [key: string]: unknown }) => void> = [];
-    const runtimeData = createRecordingRuntimeDataWriter();
+    const runtimeData = createRecordingSessionTodosUpdater();
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
         handlers.push(
@@ -470,7 +460,7 @@ describe("agent-orchestrator session errors and terminal state", () => {
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -478,10 +468,8 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
-      runtimeDataWriter: runtimeData.writer,
+      updateSessionTodos: runtimeData.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -598,8 +586,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -668,8 +654,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},

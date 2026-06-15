@@ -15,7 +15,7 @@ const SHARED_CALLBACKS = {
 
 const buildModel = () => ({
   taskId: "task-1",
-  displayedSessionId: "session-1",
+  displayedSessionKey: "session-1",
   isInteractionEnabled: true,
   isReadOnly: false,
   readOnlyReason: null,
@@ -263,7 +263,7 @@ describe("AgentChatComposer attachments", () => {
         model={{
           ...initialModel,
           draftStateKey: "draft-2",
-          displayedSessionId: "session-2",
+          displayedSessionKey: "session-2",
         }}
       />,
     );

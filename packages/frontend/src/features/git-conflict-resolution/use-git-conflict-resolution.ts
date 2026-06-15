@@ -9,7 +9,7 @@ import { matchesAgentSessionIdentity, toAgentSessionIdentity } from "@/lib/agent
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
-import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { getGitConflictCopy } from "./conflict-copy";
 import { BUILD_REBASE_CONFLICT_RESOLUTION_LAUNCH_ACTION } from "./constants";
@@ -21,7 +21,7 @@ export type StartGitConflictResolutionSessionInput = {
   message: string;
   existingSessionOptions: ReturnType<typeof buildReusableSessionOptions>;
   initialStartMode: "fresh" | "reuse";
-  initialSourceSession: AgentSessionRouteIdentity | null;
+  initialSourceSession: AgentSessionIdentity | null;
   targetWorkingDirectory: string;
 };
 
@@ -29,15 +29,15 @@ type GitConflictTaskContext = {
   taskId: string;
   task: TaskCard | null;
   builderSessions: AgentSessionSummary[];
-  currentViewSession: AgentSessionRouteIdentity | null;
-  onOpenSession: (session: AgentSessionRouteIdentity) => void;
+  currentViewSession: AgentSessionIdentity | null;
+  onOpenSession: (session: AgentSessionIdentity) => void;
 };
 
 type UseGitConflictResolutionArgs = {
   activeWorkspace: ActiveWorkspace | null;
   startConflictResolutionSession: (
     input: StartGitConflictResolutionSessionInput,
-  ) => Promise<AgentSessionRouteIdentity | undefined>;
+  ) => Promise<AgentSessionIdentity | undefined>;
   loadPromptOverrides?: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
@@ -64,7 +64,7 @@ const pickDefaultBuilderSession = ({
   currentViewSession,
 }: {
   builderSessions: AgentSessionSummary[];
-  currentViewSession: AgentSessionRouteIdentity | null;
+  currentViewSession: AgentSessionIdentity | null;
 }): AgentSessionSummary | null => {
   return (
     builderSessions.find((session) => matchesAgentSessionIdentity(session, currentViewSession)) ??

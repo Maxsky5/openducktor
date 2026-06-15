@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { AgentActivityCard } from "./agent-activity-card";
 
 const activeSession = {
@@ -26,6 +27,15 @@ const waitingSession = {
   startedAt: "2026-02-26T09:00:00.000Z",
 };
 
+const expectedSessionHref = (session: typeof activeSession | typeof waitingSession): string => {
+  const params = new URLSearchParams({
+    task: session.taskId,
+    session: agentSessionIdentityKey(session),
+    agent: session.role,
+  });
+  return `/agents?${params.toString()}`.replaceAll("&", "&amp;");
+};
+
 describe("AgentActivityCard", () => {
   test("renders active/waiting counters and session deep links", () => {
     const html = renderToStaticMarkup(
@@ -47,8 +57,8 @@ describe("AgentActivityCard", () => {
     expect(html).toContain(">1<");
     expect(html).toContain("Add SSO");
     expect(html).toContain("Validate QA flow");
-    expect(html).toContain('href="/agents?task=task-1&amp;session=session-1&amp;agent=build"');
-    expect(html).toContain('href="/agents?task=task-2&amp;session=session-2&amp;agent=qa"');
+    expect(html).toContain(`href="${expectedSessionHref(activeSession)}"`);
+    expect(html).toContain(`href="${expectedSessionHref(waitingSession)}"`);
   });
 
   test("does not render redundant empty waiting text when there are no waiting sessions", () => {

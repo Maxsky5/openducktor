@@ -12,11 +12,6 @@ export type AgentStudioContextUsage = {
   outputLimit?: number;
 } | null;
 
-export type AgentStudioContextUsageEntry = {
-  usage: NonNullable<AgentStudioContextUsage>;
-  sourceIndex: number;
-} | null;
-
 type ResolvedContextUsageParts = {
   contextWindow: number;
   outputLimit?: number;
@@ -66,7 +61,7 @@ const pickPositiveNumber = (...values: Array<number | undefined>): number | unde
   return undefined;
 };
 
-const extractFallbackSessionContextUsageEntry = ({
+const extractFallbackSessionContextUsage = ({
   session,
   modelDescriptorByKey,
   fallbackContextWindow,
@@ -76,12 +71,12 @@ const extractFallbackSessionContextUsageEntry = ({
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow: number | undefined;
   fallbackOutputLimit: number | undefined;
-}): AgentStudioContextUsageEntry => {
+}): AgentStudioContextUsage => {
   if (!session) {
     return null;
   }
 
-  return extractLatestSessionContextUsageEntry({
+  return extractLatestSessionContextUsageFromHistory({
     session,
     modelDescriptorByKey,
     ...(fallbackContextWindow !== undefined ? { fallbackContextWindow } : {}),
@@ -142,19 +137,19 @@ export const extractLatestSessionContextUsage = ({
   fallbackContextWindow?: number;
   fallbackOutputLimit?: number;
 }): AgentStudioContextUsage => {
-  let fallbackUsageEntry: AgentStudioContextUsageEntry | undefined;
-  const getFallbackUsageEntry = (): AgentStudioContextUsageEntry => {
-    if (fallbackUsageEntry !== undefined) {
-      return fallbackUsageEntry;
+  let fallbackUsage: AgentStudioContextUsage | undefined;
+  const getFallbackUsage = (): AgentStudioContextUsage => {
+    if (fallbackUsage !== undefined) {
+      return fallbackUsage;
     }
 
-    fallbackUsageEntry = extractFallbackSessionContextUsageEntry({
+    fallbackUsage = extractFallbackSessionContextUsage({
       session,
       modelDescriptorByKey,
       fallbackContextWindow,
       fallbackOutputLimit,
     });
-    return fallbackUsageEntry;
+    return fallbackUsage;
   };
 
   if (liveContextUsage && liveContextUsage.totalTokens > 0) {
@@ -162,7 +157,6 @@ export const extractLatestSessionContextUsage = ({
       liveContextUsage,
       modelDescriptorByKey,
     });
-    let fallbackUsage: AgentStudioContextUsage = null;
     const needsHistoryFallback =
       pickPositiveNumber(
         liveContextUsage.contextWindow,
@@ -174,13 +168,11 @@ export const extractLatestSessionContextUsage = ({
         modelDescriptor?.outputLimit,
         fallbackOutputLimit,
       ) === undefined;
-    if (needsHistoryFallback) {
-      fallbackUsage = getFallbackUsageEntry()?.usage ?? null;
-    }
+    const historyFallbackUsage = needsHistoryFallback ? getFallbackUsage() : null;
     const resolvedParts = resolveLiveContextUsageParts({
       liveContextUsage,
       modelDescriptor,
-      fallbackUsage,
+      fallbackUsage: historyFallbackUsage,
       fallbackContextWindow,
       fallbackOutputLimit,
     });
@@ -196,35 +188,26 @@ export const extractLatestSessionContextUsage = ({
     }
   }
 
-  return getFallbackUsageEntry()?.usage ?? null;
+  return getFallbackUsage();
 };
 
-export const extractLatestSessionContextUsageEntry = ({
+const extractLatestSessionContextUsageFromHistory = ({
   session,
   modelDescriptorByKey,
   fallbackContextWindow,
   fallbackOutputLimit,
-  startIndex = 0,
-  endIndex,
 }: {
   session: SessionMessageOwner | null | undefined;
   modelDescriptorByKey: ReadonlyMap<string, CatalogModelDescriptor>;
   fallbackContextWindow?: number;
   fallbackOutputLimit?: number;
-  startIndex?: number;
-  endIndex?: number;
-}): AgentStudioContextUsageEntry => {
+}): AgentStudioContextUsage => {
   if (!session) {
     return null;
   }
 
   const lastIndex = getSessionMessageCount(session) - 1;
-  const scanEndIndex = Math.min(typeof endIndex === "number" ? endIndex : lastIndex, lastIndex);
-  if (scanEndIndex < startIndex) {
-    return null;
-  }
-
-  for (let index = scanEndIndex; index >= startIndex; index -= 1) {
+  for (let index = lastIndex; index >= 0; index -= 1) {
     const message = getSessionMessageAt(session, index);
     if (message?.meta?.kind !== "assistant") {
       continue;
@@ -250,12 +233,9 @@ export const extractLatestSessionContextUsageEntry = ({
       message.meta.outputLimit ?? modelDescriptor?.outputLimit ?? fallbackOutputLimit;
 
     return {
-      usage: {
-        totalTokens,
-        contextWindow,
-        ...(typeof outputLimit === "number" ? { outputLimit } : {}),
-      },
-      sourceIndex: index,
+      totalTokens,
+      contextWindow,
+      ...(typeof outputLimit === "number" ? { outputLimit } : {}),
     };
   }
 

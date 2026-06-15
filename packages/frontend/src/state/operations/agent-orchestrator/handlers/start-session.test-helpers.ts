@@ -1,4 +1,6 @@
+import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
+import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
 import type { RuntimeInfo } from "../runtime/runtime";
 import type { StartSessionDependencies } from "./start-session";
 
@@ -30,8 +32,17 @@ export type FlatStartSessionDependencies = Omit<
   activeRepo?: string | null;
   activeWorkspaceId?: string | null;
   loadRepoDefaultModel?: unknown;
-} & Omit<StartSessionDependencies["session"], "loadAgentSessionHistory"> &
-  Partial<Pick<StartSessionDependencies["session"], "loadAgentSessionHistory">> &
+  sessionsRef: { current: AgentSessionCollection };
+} & Omit<
+    StartSessionDependencies["session"],
+    "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
+  > &
+  Partial<
+    Pick<
+      StartSessionDependencies["session"],
+      "loadAgentSessionHistory" | "sessionStartGateRef" | "readSessionSnapshot"
+    >
+  > &
   Omit<StartSessionDependencies["runtime"], "resolveTaskWorktree"> &
   Partial<Pick<StartSessionDependencies["runtime"], "resolveTaskWorktree">> &
   StartSessionDependencies["task"] &
@@ -55,12 +66,14 @@ export const toStartSessionDependencies = (
     },
     session: {
       setSessionCollection: deps.setSessionCollection,
-      sessionsRef: deps.sessionsRef,
-      inFlightStartsByWorkspaceTaskRef: deps.inFlightStartsByWorkspaceTaskRef,
+      readSessionSnapshot:
+        deps.readSessionSnapshot ??
+        ((identity) => getAgentSession(deps.sessionsRef.current, identity)),
+      sessionStartGateRef: deps.sessionStartGateRef ?? { current: createSessionStartGate() },
       loadAgentSessions: deps.loadAgentSessions,
       loadAgentSessionHistory: deps.loadAgentSessionHistory ?? (async () => undefined),
       persistSessionRecord: deps.persistSessionRecord,
-      listenToAgentSession: deps.listenToAgentSession,
+      observeAgentSession: deps.observeAgentSession,
     },
     runtime: {
       adapter: deps.adapter,

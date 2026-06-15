@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
@@ -18,7 +19,7 @@ export function useAgentStudioQuestionActions({
   isSubmittingQuestionByRequestId: Record<string, boolean>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
 } {
-  const [submittingQuestionBySessionId, setSubmittingQuestionBySessionId] = useState<
+  const [submittingQuestionBySessionKey, setSubmittingQuestionBySessionKey] = useState<
     Record<string, Record<string, boolean>>
   >({});
 
@@ -27,20 +28,20 @@ export function useAgentStudioQuestionActions({
       if (!activeSession || !agentStudioReady) {
         return;
       }
-      const sessionId = activeSession.externalSessionId;
+      const sessionKey = agentSessionIdentityKey(activeSession);
 
-      setSubmittingQuestionBySessionId((current) => ({
+      setSubmittingQuestionBySessionKey((current) => ({
         ...current,
-        [sessionId]: {
-          ...(current[sessionId] ?? {}),
+        [sessionKey]: {
+          ...(current[sessionKey] ?? {}),
           [requestId]: true,
         },
       }));
       try {
         await answerAgentQuestion(activeSession, requestId, answers);
       } finally {
-        setSubmittingQuestionBySessionId((current) => {
-          const sessionRequests = current[sessionId];
+        setSubmittingQuestionBySessionKey((current) => {
+          const sessionRequests = current[sessionKey];
           if (!sessionRequests?.[requestId]) {
             return current;
           }
@@ -48,9 +49,9 @@ export function useAgentStudioQuestionActions({
           delete nextSessionRequests[requestId];
           const next = { ...current };
           if (Object.keys(nextSessionRequests).length === 0) {
-            delete next[sessionId];
+            delete next[sessionKey];
           } else {
-            next[sessionId] = nextSessionRequests;
+            next[sessionKey] = nextSessionRequests;
           }
           return next;
         });
@@ -64,12 +65,13 @@ export function useAgentStudioQuestionActions({
       return {};
     }
 
-    const sessionRequests = submittingQuestionBySessionId[activeSession.externalSessionId] ?? {};
+    const sessionRequests =
+      submittingQuestionBySessionKey[agentSessionIdentityKey(activeSession)] ?? {};
     const activeRequestIds = new Set(pendingQuestions.map((entry) => entry.requestId));
     return Object.fromEntries(
       Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
     );
-  }, [activeSession, pendingQuestions, submittingQuestionBySessionId]);
+  }, [activeSession, pendingQuestions, submittingQuestionBySessionKey]);
 
   return {
     isSubmittingQuestionByRequestId,

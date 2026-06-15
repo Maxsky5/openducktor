@@ -25,7 +25,7 @@ describe("CodexSessionEventBus", () => {
     expect(secondEvents).toEqual([]);
   });
 
-  test("does not backlog pending input because presence owns its current state", () => {
+  test("does not backlog pending input because runtime snapshot owns its current state", () => {
     const bus = new CodexSessionEventBus();
     const events: AgentEvent[] = [];
 

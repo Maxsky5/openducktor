@@ -10,14 +10,12 @@ import type {
   AgentRole,
   AgentUserMessagePart,
 } from "@openducktor/core";
-import type {
-  AgentSessionCollection,
-  AgentSessionCollectionUpdater,
-} from "@/state/agent-session-collection";
-import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { SessionStartGate } from "@/features/session-start/session-start-gate";
+import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
-import type { ListenToAgentSession } from "../support/session-runtime-ref";
+import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
 export type StartAgentSessionInput =
   | {
@@ -42,16 +40,16 @@ export type StartAgentSessionInput =
       sourceSession: AgentSessionIdentity;
     };
 
-export type StartAgentSessionResult = AgentSessionRouteIdentity;
+export type StartAgentSessionResult = AgentSessionIdentity;
 
 export type SessionDependencies = {
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
-  sessionsRef: { current: AgentSessionCollection };
-  inFlightStartsByWorkspaceTaskRef: { current: Map<string, Promise<StartAgentSessionResult>> };
+  readSessionSnapshot: (identity: AgentSessionIdentity) => AgentSessionState | null;
+  sessionStartGateRef: { current: SessionStartGate<StartAgentSessionResult> };
   loadAgentSessions: (taskId: string) => Promise<void>;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<unknown>;
   persistSessionRecord: (taskId: string, record: AgentSessionRecord) => Promise<void>;
-  listenToAgentSession: ListenToAgentSession;
+  observeAgentSession: ObserveAgentSession;
 };
 
 export type RuntimeDependencies = {
@@ -143,7 +141,7 @@ export type ResolvedRuntimeAndModel = {
 export type StartOrReuseResult =
   | {
       kind: "reused";
-      session: AgentSessionRouteIdentity;
+      session: AgentSessionIdentity;
     }
   | {
       kind: "started";

@@ -8,6 +8,7 @@ import type {
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
 } from "@openducktor/core";
+import type { QueryClient } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
@@ -159,6 +160,18 @@ export const sessionTodosQueryOptions = (
     queryFn: (): Promise<AgentSessionTodoItem[]> => readSessionTodos(session),
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
+
+export type SessionTodosUpdater = (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[];
+
+export const updateSessionTodosQueryData = (
+  queryClient: QueryClient,
+  session: AgentSessionRef,
+  updater: SessionTodosUpdater,
+): void => {
+  const queryKey = agentSessionRuntimeQueryKeys.todos(session);
+  const current = queryClient.getQueryData<AgentSessionTodoItem[]>(queryKey) ?? [];
+  queryClient.setQueryData(queryKey, updater(current));
+};
 
 export const sessionHistoryQueryOptions = (
   session: AgentSessionRef,

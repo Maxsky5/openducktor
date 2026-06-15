@@ -1,4 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
+import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import {
   buildSession,
   createSessionsRef,
@@ -19,7 +21,7 @@ const flushAutoReject = async (): Promise<void> => {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 };
 
-const startTestSessionListener = async (input: {
+const startTestSessionObserver = async (input: {
   externalSessionId: string;
   sessionsRef: ReturnType<typeof createSessionsRef>;
 }): Promise<(event: SessionEvent) => void> => {
@@ -38,8 +40,6 @@ const startTestSessionListener = async (input: {
     repoPath: "/tmp/repo",
     externalSessionId: input.externalSessionId,
     sessionsRef: input.sessionsRef,
-    draftRawBySessionRef: { current: {} },
-    draftSourceBySessionRef: { current: {} },
     updateSession,
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
@@ -53,6 +53,19 @@ const startTestSessionListener = async (input: {
   }
   return handleEvent;
 };
+
+const opencodeSessionIdentity = (externalSessionId: string) => ({
+  externalSessionId,
+  runtimeKind: "opencode" as const,
+  workingDirectory: "/tmp/repo",
+});
+
+const listensToSessions =
+  (...externalSessionIds: string[]) =>
+  (session: AgentSessionIdentity): boolean =>
+    externalSessionIds.some((externalSessionId) =>
+      matchesAgentSessionIdentity(session, opencodeSessionIdentity(externalSessionId)),
+    );
 
 describe("agent-orchestrator session permissions and questions", () => {
   test("auto-rejects mutating permissions for read-only roles", async () => {
@@ -79,8 +92,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -167,8 +178,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-child-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -252,7 +261,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         pendingApprovals: [pendingApproval],
       }),
     ]);
-    const handleEvent = await startTestSessionListener({
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -292,7 +301,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         pendingQuestions: [pendingQuestion],
       }),
     ]);
-    const handleEvent = await startTestSessionListener({
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -353,8 +362,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -474,8 +481,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -539,7 +544,7 @@ describe("agent-orchestrator session permissions and questions", () => {
         ],
       }),
     ]);
-    const handleEvent = await startTestSessionListener({
+    const handleEvent = await startTestSessionObserver({
       externalSessionId: "external-parent-session",
       sessionsRef,
     });
@@ -610,7 +615,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -618,8 +623,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -664,7 +667,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("does not duplicate linked child permission when the child listener owns local pending state", async () => {
+  test("does not duplicate linked child permission when the child observer owns local pending state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -707,11 +710,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerActive: (externalSessionId) =>
-        externalSessionId === "external-child-session",
+      hasSessionObserver: listensToSessions("external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -793,8 +793,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -834,7 +832,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("does not duplicate linked child question when the child listener owns local pending state", async () => {
+  test("does not duplicate linked child question when the child observer owns local pending state", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const adapter: SessionEventAdapter = {
       subscribeEvents: async (_externalSessionId, handler) => {
@@ -877,11 +875,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerActive: (externalSessionId) =>
-        externalSessionId === "external-child-session",
+      hasSessionObserver: listensToSessions("external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -943,8 +938,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1017,8 +1010,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1072,7 +1063,7 @@ describe("agent-orchestrator session permissions and questions", () => {
     });
   });
 
-  test("auto-rejects mutating child permissions from parent context when local child state has no listener", async () => {
+  test("auto-rejects mutating child permissions from parent context when local child state has no observer", async () => {
     const handlers: Array<(event: SessionEvent) => void> = [];
     const replyApproval = mock(async () => {});
     const adapter: SessionEventAdapter = {
@@ -1116,11 +1107,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerActive: (externalSessionId) =>
-        externalSessionId === "external-parent-session",
+      hasSessionObserver: listensToSessions("external-parent-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1210,12 +1198,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerActive: (externalSessionId) =>
-        externalSessionId === "external-parent-session" ||
-        externalSessionId === "external-child-session",
+      hasSessionObserver: listensToSessions("external-parent-session", "external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1226,12 +1210,8 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-child-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
-      isSessionListenerActive: (externalSessionId) =>
-        externalSessionId === "external-parent-session" ||
-        externalSessionId === "external-child-session",
+      hasSessionObserver: listensToSessions("external-parent-session", "external-child-session"),
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -1324,8 +1304,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "external-parent-session",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},

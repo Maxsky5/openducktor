@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-branch";
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
-import type { AgentSessionIdentity, AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
 import { executeSessionStart } from "./session-start-execution";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
@@ -31,7 +31,7 @@ export type SessionStartWorkflowIntent = {
   beforeStartAction?: SessionStartBeforeAction;
 };
 
-export type SessionStartWorkflowResult = AgentSessionRouteIdentity & {
+export type SessionStartWorkflowResult = AgentSessionIdentity & {
   postStartActionError: Error | null;
 };
 
@@ -83,7 +83,7 @@ const startSessionFromIntent = ({
 }: Pick<
   StartSessionWorkflowArgs,
   "intent" | "selection" | "startAgentSession"
->): Promise<AgentSessionRouteIdentity> => {
+>): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
     return executeSessionStart({
       taskId: intent.taskId,

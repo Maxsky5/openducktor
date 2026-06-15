@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   BUILD_SELECTION,
   buildBootstrapFixture,
-  createAgentSessionPresenceSnapshotFixture,
+  createAgentSessionRuntimeSnapshotFixture,
   createDeferred,
   createHookHarness,
   createTestDependencies,
@@ -49,7 +49,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("restarts listener before send when adapter session exists", async () => {
+  test("restarts observer before send when adapter session exists", async () => {
     let subscribeCalls = 0;
     let sendCalls = 0;
 
@@ -131,7 +131,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
     }
   });
 
-  test("does not add a duplicate session listener when the same live session is loaded twice", async () => {
+  test("does not add a duplicate session observer when the same live session is loaded twice", async () => {
     let subscribeCalls = 0;
     const originalAgentSessionsList = host.agentSessionsList;
     const originalAgentSessionUpsert = host.agentSessionUpsert;
@@ -139,7 +139,8 @@ describe("use-agent-orchestrator-operations start and send", () => {
     const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
     const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
     const originalListAvailableModels = OpencodeSdkAdapter.prototype.listAvailableModels;
-    const originalListSessionPresence = opencodeSdkAdapterPrototype.listSessionPresence;
+    const originalListSessionRuntimeSnapshots =
+      opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots;
 
     host.agentSessionsList = async () => [persistedSessionFixture];
     host.agentSessionUpsert = async () => {};
@@ -154,12 +155,11 @@ describe("use-agent-orchestrator-operations start and send", () => {
       defaultModelsByProvider: {},
       profiles: [],
     });
-    opencodeSdkAdapterPrototype.listSessionPresence = async () => [
-      createAgentSessionPresenceSnapshotFixture({
+    opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = async () => [
+      createAgentSessionRuntimeSnapshotFixture({
         snapshot: {
           title: "PLANNER task-1",
-          workingDirectory: "/tmp/repo/worktree",
-          status: { type: "busy" },
+          runtimeActivity: "running",
         },
       }),
     ];
@@ -186,7 +186,7 @@ describe("use-agent-orchestrator-operations start and send", () => {
       OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;
       OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
       OpencodeSdkAdapter.prototype.listAvailableModels = originalListAvailableModels;
-      opencodeSdkAdapterPrototype.listSessionPresence = originalListSessionPresence;
+      opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
     }
   });
 

@@ -1,10 +1,6 @@
 import type { AgentSessionRecord, RuntimeKind } from "@openducktor/contracts";
-import type {
-  AgentEnginePort,
-  AgentSessionPresenceSnapshot,
-  AgentSessionRef,
-} from "@openducktor/core";
-import { toMissingAgentSessionPresenceSnapshot } from "@openducktor/core";
+import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
+import { toMissingAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -15,9 +11,10 @@ import {
 } from "@/state/agent-session-collection";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
-  applyAgentSessionPresenceSnapshotToSession,
-  shouldObserveAgentSessionPresenceSnapshot,
-} from "../lifecycle/session-presence";
+  type AgentSessionRuntimeSnapshot,
+  applyAgentSessionRuntimeSnapshotToSession,
+  shouldObserveAgentSessionRuntimeSnapshot,
+} from "../lifecycle/session-runtime-snapshot";
 import { normalizeWorkingDirectory } from "../support/core";
 import { fromPersistedSessionRecord } from "../support/persistence";
 import { toPersistedRuntimeSessionRef, toRuntimeSessionRef } from "../support/session-runtime-ref";
@@ -32,8 +29,8 @@ export type TaskSessionRecords = {
   agentSessions: AgentSessionRecord[];
 };
 
-export type RepoRuntimeSessionPresenceRead = {
-  snapshotsBySessionKey: Map<string, AgentSessionPresenceSnapshot>;
+export type RepoRuntimeSessionSnapshotRead = {
+  snapshotsBySessionKey: Map<string, AgentSessionRuntimeSnapshot>;
 };
 
 export type RepoSessionReadModel = {
@@ -101,15 +98,15 @@ const toPersistedSessionView = ({
   };
 };
 
-export const readRepoRuntimeSessionPresence = async ({
+export const readRepoRuntimeSessionSnapshots = async ({
   repoPath,
   tasks,
-  listSessionPresence,
+  listSessionRuntimeSnapshots,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
-  listSessionPresence: AgentEnginePort["listSessionPresence"];
-}): Promise<RepoRuntimeSessionPresenceRead> => {
+  listSessionRuntimeSnapshots: AgentEnginePort["listSessionRuntimeSnapshots"];
+}): Promise<RepoRuntimeSessionSnapshotRead> => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
   for (const { record } of taskSessionRecords) {
@@ -121,11 +118,11 @@ export const readRepoRuntimeSessionPresence = async ({
     directoriesByRuntimeKind.set(runtimeKind, directories);
   }
 
-  const snapshotsBySessionKey = new Map<string, AgentSessionPresenceSnapshot>();
+  const snapshotsBySessionKey = new Map<string, AgentSessionRuntimeSnapshot>();
   await Promise.all(
     Array.from(directoriesByRuntimeKind.entries()).map(async ([runtimeKind, directorySet]) => {
       const directories = Array.from(directorySet).sort();
-      const snapshots = await listSessionPresence({ repoPath, runtimeKind, directories });
+      const snapshots = await listSessionRuntimeSnapshots({ repoPath, runtimeKind, directories });
       for (const snapshot of snapshots) {
         if (
           snapshot.ref.runtimeKind !== runtimeKind ||
@@ -145,12 +142,12 @@ export const buildRepoSessionReadModel = ({
   repoPath,
   tasks,
   currentSessionCollection,
-  runtimePresence,
+  runtimeSnapshots,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionCollection?: AgentSessionCollection;
-  runtimePresence: RepoRuntimeSessionPresenceRead;
+  runtimeSnapshots: RepoRuntimeSessionSnapshotRead;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
@@ -162,17 +159,17 @@ export const buildRepoSessionReadModel = ({
     const sessionKey = agentSessionIdentityKey(ref);
     const current = getAgentSession(currentSessions, record) ?? undefined;
     const snapshot =
-      runtimePresence.snapshotsBySessionKey.get(sessionKey) ??
-      toMissingAgentSessionPresenceSnapshot(ref);
+      runtimeSnapshots.snapshotsBySessionKey.get(sessionKey) ??
+      toMissingAgentSessionRuntimeSnapshot(ref);
     const persistedSessionView = toPersistedSessionView({
       taskId,
       record,
       current,
     });
-    const session = applyAgentSessionPresenceSnapshotToSession(persistedSessionView, snapshot);
+    const session = applyAgentSessionRuntimeSnapshotToSession(persistedSessionView, snapshot);
     sessionCollection = replaceAgentSession(sessionCollection, session);
 
-    if (shouldObserveAgentSessionPresenceSnapshot(snapshot)) {
+    if (shouldObserveAgentSessionRuntimeSnapshot(snapshot)) {
       liveSessionRefs.push(toRuntimeSessionRef(repoPath, session));
     }
   }

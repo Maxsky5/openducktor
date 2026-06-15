@@ -33,7 +33,6 @@ type AgentRuntimeRegistry = {
   registeredRuntimeKinds: RuntimeKind[];
   getAdapter: (runtimeKind: RuntimeKind) => RegisteredRuntimeAdapter;
   getRuntimeDefinition: (runtimeKind: RuntimeKind) => AgentRuntimeDefinition;
-  startRepoRuntime: (ref: RepoRuntimeRef) => Promise<RuntimeInstanceSummary>;
   createAgentEngine: () => AgentEnginePort;
 };
 
@@ -150,7 +149,6 @@ export const createAgentRuntimeRegistry = (): AgentRuntimeRegistry => {
     registeredRuntimeKinds,
     getAdapter,
     getRuntimeDefinition,
-    startRepoRuntime: hostRepoRuntimeResolver.ensureRepoRuntime,
     createAgentEngine: () => createRuntimeRegistryAgentEngine(getAdapter, registeredRuntimeKinds),
   };
 };
@@ -198,12 +196,12 @@ const createRuntimeRegistryAgentEngine = (
     listAvailableSkills: (input) =>
       adapterFor(input.runtimeKind, "skill catalog").listAvailableSkills(input),
     searchFiles: (input) => adapterFor(input.runtimeKind, "file search").searchFiles(input),
-    listLiveAgentSessions: (input) =>
-      adapterFor(input.runtimeKind, "live agent session discovery").listLiveAgentSessions(input),
-    listSessionPresence: (input) =>
-      adapterFor(input.runtimeKind, "live session snapshot discovery").listSessionPresence(input),
-    readSessionPresence: (input) =>
-      adapterFor(input.runtimeKind, "live session snapshot read").readSessionPresence(input),
+    listSessionRuntimeSnapshots: (input) =>
+      adapterFor(input.runtimeKind, "live session snapshot discovery").listSessionRuntimeSnapshots(
+        input,
+      ),
+    readSessionRuntimeSnapshot: (input) =>
+      adapterFor(input.runtimeKind, "live session snapshot read").readSessionRuntimeSnapshot(input),
     loadSessionHistory: (input) =>
       adapterFor(input.runtimeKind, "session history").loadSessionHistory(input),
     loadSessionTodos: (input) =>

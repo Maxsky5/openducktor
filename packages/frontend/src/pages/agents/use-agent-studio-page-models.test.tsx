@@ -8,6 +8,7 @@ import { AgentChatSettingsProvider } from "@/components/features/agents/agent-ch
 import { createComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { AgentChatThread } from "@/components/features/agents/agent-chat/agent-chat-thread";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
@@ -40,12 +41,7 @@ const DEFAULT_SKILLS: HookArgs["modelSelection"]["skills"] = [];
 
 type SelectedSessionTestCore = Omit<
   AgentStudioSelectedSessionContextInput,
-  | "documents"
-  | "readiness"
-  | "sessionActions"
-  | "approvals"
-  | "activeSessionContextUsage"
-  | "roleLabelByRole"
+  "documents" | "runtimeReadiness" | "sessionActions" | "approvals" | "roleLabelByRole"
 > & {
   activeTabValue: string;
 };
@@ -54,11 +50,11 @@ type HookArgsOverrides = {
   selectedSessionCore?: Partial<SelectedSessionTestCore>;
   taskTabs?: Partial<HookArgs["taskTabs"]>;
   documents?: Partial<AgentStudioSelectedSessionContextInput["documents"]>;
-  readiness?: Partial<AgentStudioSelectedSessionContextInput["readiness"]>;
+  runtimeReadiness?: Partial<AgentStudioSelectedSessionContextInput["runtimeReadiness"]>;
   sessionActions?: Partial<HookArgs["sessionActions"]>;
   selectedSessionActions?: Partial<AgentStudioSelectedSessionContextInput["sessionActions"]>;
   modelSelection?: Partial<HookArgs["modelSelection"]>;
-  activeSessionContextUsage?: AgentStudioSelectedSessionContextInput["activeSessionContextUsage"];
+  activeSessionContextUsage?: HookArgs["modelSelection"]["activeSessionContextUsage"];
   approvals?: Partial<AgentStudioSelectedSessionContextInput["approvals"]>;
   chatSettings?: Partial<HookArgs["chatSettings"]>;
   composer?: Partial<HookArgs["composer"]>;
@@ -182,14 +178,14 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     qaDoc: createDocumentState(""),
     ...overrides.documents,
   };
-  const readiness: AgentStudioSelectedSessionContextInput["readiness"] = {
-    agentStudioReadinessState: "ready",
-    agentStudioReady: true,
+  const runtimeReadiness: AgentStudioSelectedSessionContextInput["runtimeReadiness"] = {
+    readinessState: "ready",
+    isReady: true,
     isRuntimeStarting: false,
-    agentStudioBlockedReason: "",
+    blockedReason: null,
     isLoadingChecks: false,
     refreshChecks: async () => {},
-    ...overrides.readiness,
+    ...overrides.runtimeReadiness,
   };
   const sessionActions: HookArgs["sessionActions"] = {
     handleWorkflowStepSelect: () => {},
@@ -202,17 +198,16 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     isSessionWorking: true,
     isWaitingInput: false,
     busySendBlockedReason: null,
+    canKickoffNewSession: false,
+    kickoffLabel: "Start Spec",
     canStopSession: true,
+    startLaunchKickoff: async () => {},
     onSend: async () => true,
     stopAgentSession: async () => {},
     ...overrides.sessionActions,
   };
   const selectedSessionActions: AgentStudioSelectedSessionContextInput["sessionActions"] = {
-    isStarting: sessionActions.isStarting,
     isSessionWorking: sessionActions.isSessionWorking,
-    canKickoffNewSession: false,
-    kickoffLabel: "Start Spec",
-    startLaunchKickoff: async () => {},
     onSubmitQuestionAnswers: async () => {},
     isSubmittingQuestionByRequestId: {},
     ...overrides.selectedSessionActions,
@@ -240,6 +235,10 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     onSelectModel: () => {},
     onSelectVariant: () => {},
     activeSessionAgentColors: {},
+    activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
+      totalTokens: 12,
+      contextWindow: 100,
+    },
     ...overrides.modelSelection,
   };
   const approvals: AgentStudioSelectedSessionContextInput["approvals"] = {
@@ -266,12 +265,8 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
       lifecycle: selectedSessionCore.lifecycle,
-      activeSessionContextUsage: overrides.activeSessionContextUsage ?? {
-        totalTokens: 12,
-        contextWindow: 100,
-      },
       documents,
-      readiness,
+      runtimeReadiness,
       sessionActions: selectedSessionActions,
       approvals,
       roleLabelByRole: buildRoleLabelByRole(ROLE_OPTIONS),
@@ -334,14 +329,12 @@ describe("useAgentStudioPageModels", () => {
         composer: {
           draftStateKey: "draft-message",
         },
-        readiness: {
+        runtimeReadiness: {
           refreshChecks: onRefreshChecks,
         },
         sessionActions: {
           onSend,
           stopAgentSession: onStopSession,
-        },
-        selectedSessionActions: {
           startLaunchKickoff: onKickoff,
         },
       }),
@@ -382,7 +375,6 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           activeSession: codexSession,
           activeSessionRuntimeData: {
-            modelCatalog: null,
             todos: [],
             isLoadingModelCatalog: true,
           },
@@ -493,9 +485,9 @@ describe("useAgentStudioPageModels", () => {
             transcriptState: { kind: "visible" },
           }),
         },
-        readiness: {
-          agentStudioReadinessState: "checking",
-          agentStudioReady: false,
+        runtimeReadiness: {
+          readinessState: "checking",
+          isReady: false,
           isRuntimeStarting: true,
         },
       }),
@@ -525,12 +517,12 @@ describe("useAgentStudioPageModels", () => {
             transcriptState: { kind: "runtime_waiting" },
           }),
         },
-        readiness: {
-          agentStudioReadinessState: "checking",
-          agentStudioReady: false,
+        runtimeReadiness: {
+          readinessState: "checking",
+          isReady: false,
           isRuntimeStarting: true,
         },
-        selectedSessionActions: {
+        sessionActions: {
           canKickoffNewSession: true,
           kickoffLabel: "Start Spec",
         },
@@ -559,12 +551,12 @@ describe("useAgentStudioPageModels", () => {
             transcriptState: { kind: "runtime_waiting" },
           }),
         },
-        readiness: {
-          agentStudioReadinessState: "checking",
-          agentStudioReady: false,
+        runtimeReadiness: {
+          readinessState: "checking",
+          isReady: false,
           isRuntimeStarting: true,
         },
-        selectedSessionActions: {
+        sessionActions: {
           canKickoffNewSession: true,
           kickoffLabel: "Start Spec",
         },
@@ -593,7 +585,7 @@ describe("useAgentStudioPageModels", () => {
             transcriptState: { kind: "session_loading", reason: "preparing" },
           }),
         },
-        selectedSessionActions: {
+        sessionActions: {
           canKickoffNewSession: true,
           kickoffLabel: "Start Spec",
         },
@@ -962,9 +954,15 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("tracks todo panel collapse state per active session", async () => {
-    const sessionA = createSession("session-a", "external-a");
-    const sessionB = createSession("session-b", "external-b");
+  test("tracks todo panel collapse state per active session identity", async () => {
+    const sessionA = createSession("external-shared", {
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/session-a",
+    });
+    const sessionB = createSession("external-shared", {
+      runtimeKind: "codex",
+      workingDirectory: "/repo/session-b",
+    });
     const sharedOverrides: HookArgsOverrides = {
       selectedSessionCore: {},
       sessionActions: {
@@ -1246,15 +1244,15 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountBySessionKey,
     ).toEqual({
-      "external-child-1": 2,
+      [agentSessionIdentityKey(childWithApproval)]: 2,
     });
 
     await harness.unmount();
   });
 
-  test("keys subagent pending approval counts by external session id", async () => {
+  test("keys subagent pending approval counts by session identity", async () => {
     const parentSession = createSession("session-parent", "external-parent");
     const childWithApproval = createSession("session-child-internal", "session-child-runtime", {
       taskId: "other-task",
@@ -1276,9 +1274,8 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const counts =
-      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId ??
-      {};
-    expect(counts["session-child-runtime"]).toBe(1);
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountBySessionKey ?? {};
+    expect(counts[agentSessionIdentityKey(childWithApproval)]).toBe(1);
 
     await harness.unmount();
   });
@@ -1304,14 +1301,13 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const counts =
-      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId ??
-      {};
-    expect(counts["external-child-session"]).toBe(1);
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountBySessionKey ?? {};
+    expect(counts[agentSessionIdentityKey(childSummary)]).toBe(1);
 
     await harness.unmount();
   });
 
-  test("keeps subagent pending approval count map stable when counts do not change", async () => {
+  test("keeps subagent pending approval counts unchanged when unrelated sessions change", async () => {
     const parentSession = createSession("session-parent", "external-parent");
     const childWithApproval = createSession("session-child-1", "external-child-1", {
       taskId: "other-task",
@@ -1332,7 +1328,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const initialCounts =
-      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId;
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountBySessionKey;
 
     await harness.update(
       createHookArgs({
@@ -1354,8 +1350,8 @@ describe("useAgentStudioPageModels", () => {
     );
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountByExternalSessionId,
-    ).toBe(initialCounts);
+      harness.getLatest().agentChatModel.thread.subagentPendingApprovalCountBySessionKey,
+    ).toEqual(initialCounts);
 
     await harness.unmount();
   });
@@ -1386,9 +1382,9 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountBySessionKey,
     ).toEqual({
-      "external-child-1": 2,
+      [agentSessionIdentityKey(childWithQuestion)]: 2,
     });
 
     await harness.unmount();
@@ -1415,15 +1411,15 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId,
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountBySessionKey,
     ).toEqual({
-      "external-child-session": 1,
+      [agentSessionIdentityKey(childSummary)]: 1,
     });
 
     await harness.unmount();
   });
 
-  test("keeps subagent pending question count map stable when counts do not change", async () => {
+  test("keeps subagent pending question counts unchanged when unrelated sessions change", async () => {
     const parentSession = createSession("session-parent", "external-parent");
     const childWithQuestion = createSession("session-child-1", "external-child-1", {
       taskId: "other-task",
@@ -1444,7 +1440,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const initialCounts =
-      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId;
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountBySessionKey;
 
     await harness.update(
       createHookArgs({
@@ -1466,13 +1462,13 @@ describe("useAgentStudioPageModels", () => {
     );
 
     expect(
-      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountByExternalSessionId,
-    ).toBe(initialCounts);
+      harness.getLatest().agentChatModel.thread.subagentPendingQuestionCountBySessionKey,
+    ).toEqual(initialCounts);
 
     await harness.unmount();
   });
 
-  test("keeps composer model stable when active session reference changes with same session id", async () => {
+  test("keeps composer session identity stable when active session reference changes", async () => {
     const initialSession = createSession("session-1", "external-1", {
       role: "spec",
       status: "running",
@@ -1493,6 +1489,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
     const initialComposerModel = harness.getLatest().agentChatModel.composer;
+    const initialDisplayedSessionKey = initialComposerModel.displayedSessionKey;
 
     const sameSessionIdNewRef = createSession("session-1", "external-1", {
       role: "spec",
@@ -1509,7 +1506,9 @@ describe("useAgentStudioPageModels", () => {
     );
 
     const nextComposerModel = harness.getLatest().agentChatModel.composer;
-    expect(nextComposerModel).toBe(initialComposerModel);
+    expect(nextComposerModel.displayedSessionKey).toBe(initialDisplayedSessionKey);
+    expect(nextComposerModel.isSessionWorking).toBe(initialComposerModel.isSessionWorking);
+    expect(nextComposerModel.isWaitingInput).toBe(initialComposerModel.isWaitingInput);
 
     await harness.unmount();
   });
@@ -1580,7 +1579,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("treats unavailable selected role as read-only and hides kickoff action", async () => {
+  test("treats unavailable selected role as read-only when no kickoff is available", async () => {
     const unavailablePlannerTask = createTaskCardFixture({
       status: "open",
       agentWorkflows: {
@@ -1599,10 +1598,8 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [],
         },
-        selectedSessionActions: {
-          canKickoffNewSession: true,
-        },
         sessionActions: {
+          canKickoffNewSession: false,
           isSessionWorking: false,
         },
       }),

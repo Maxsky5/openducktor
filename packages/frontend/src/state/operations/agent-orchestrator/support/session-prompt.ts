@@ -19,18 +19,16 @@ type SessionPromptContext = {
   systemPrompt: string;
 };
 
-type LoadSessionPromptInputsInput = {
-  workspaceId: string;
-  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
-};
-
-type CreateSessionPromptContextInput = SessionPromptInput;
-
 type SessionHeaderInput = {
   externalSessionId: string;
   systemPrompt: string;
   startedAt: string;
   includeSystemPrompt?: boolean;
+};
+
+type LoadSessionPromptContextInput = Pick<SessionPromptInput, "role" | "task"> & {
+  workspaceId: string;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
 export const SYSTEM_PROMPT_PREFIX = AGENT_SESSION_SYSTEM_PROMPT_PREFIX;
@@ -41,11 +39,7 @@ export const isSessionSystemPromptMessage = (message: AgentChatMessage): boolean
   (message.id.startsWith(SYSTEM_PROMPT_MESSAGE_ID_PREFIX) ||
     message.content.startsWith(SYSTEM_PROMPT_PREFIX));
 
-export const buildSessionSystemPrompt = ({
-  role,
-  task,
-  promptOverrides,
-}: SessionPromptInput): string =>
+const buildSessionSystemPrompt = ({ role, task, promptOverrides }: SessionPromptInput): string =>
   buildAgentSystemPrompt({
     role,
     task: {
@@ -59,22 +53,14 @@ export const buildSessionSystemPrompt = ({
     overrides: promptOverrides,
   });
 
-export const loadSessionPromptInputs = async ({
+export const loadSessionPromptContext = async ({
   workspaceId,
-  loadRepoPromptOverrides,
-}: LoadSessionPromptInputsInput): Promise<Pick<SessionPromptContext, "promptOverrides">> => {
-  const promptOverrides = await loadRepoPromptOverrides(workspaceId);
-
-  return {
-    promptOverrides,
-  };
-};
-
-export const createSessionPromptContext = ({
   role,
   task,
-  promptOverrides,
-}: CreateSessionPromptContextInput): SessionPromptContext => {
+  loadRepoPromptOverrides,
+}: LoadSessionPromptContextInput): Promise<SessionPromptContext> => {
+  const promptOverrides = await loadRepoPromptOverrides(workspaceId);
+
   return {
     promptOverrides,
     systemPrompt: buildSessionSystemPrompt({
@@ -83,27 +69,6 @@ export const createSessionPromptContext = ({
       promptOverrides,
     }),
   };
-};
-
-export const loadSessionPromptContext = async ({
-  workspaceId,
-  role,
-  task,
-  loadRepoPromptOverrides,
-}: LoadSessionPromptInputsInput & {
-  role: AgentRole;
-  task: SessionPromptTask;
-}): Promise<SessionPromptContext> => {
-  const { promptOverrides } = await loadSessionPromptInputs({
-    workspaceId,
-    loadRepoPromptOverrides,
-  });
-
-  return createSessionPromptContext({
-    role,
-    task,
-    promptOverrides,
-  });
 };
 
 export const buildSessionHeaderMessages = ({

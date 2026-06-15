@@ -156,7 +156,7 @@ describe("CodexThreadInventoryReader", () => {
     expect(historyLoad).toEqual(
       expect.objectContaining({
         id: "thread-idle",
-        status: expect.objectContaining({ agentSessionStatus: "idle" }),
+        status: expect.objectContaining({ classification: "idle" }),
       }),
     );
   });
@@ -206,9 +206,7 @@ describe("CodexThreadInventoryReader", () => {
     const refreshedInventory = await reader.refresh(client, "runtime-live");
 
     expect(refreshedInventory.threadsById.get("thread-idle")?.status).toMatchObject({
-      agentSessionStatus: "idle",
       classification: "idle",
-      status: { type: "idle" },
     });
   });
 

@@ -4,10 +4,10 @@ import { runOrchestratorTask } from "../support/async-side-effects";
 import type {
   RuntimeDependencies,
   SessionDependencies,
+  SessionStartTags,
   StartedSessionContext,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
-import { createSessionStartTags } from "./start-session-support";
 
 const readStartedSessionRuntimeKind = (startedCtx: StartedSessionContext) => {
   return startedCtx.summary.runtimeKind;
@@ -23,6 +23,13 @@ const toStartedSessionStopTarget = (startedCtx: StartedSessionContext) => {
   };
 };
 
+const toStartedSessionTags = (startedCtx: StartedSessionContext): SessionStartTags => ({
+  repoPath: startedCtx.repoPath,
+  taskId: startedCtx.taskId,
+  role: startedCtx.role,
+  externalSessionId: startedCtx.summary.externalSessionId,
+});
+
 export const stopSessionOnStaleAndThrow = async ({
   reason,
   runtime,
@@ -32,7 +39,7 @@ export const stopSessionOnStaleAndThrow = async ({
   runtime: RuntimeDependencies;
   startedCtx: StartedSessionContext;
 }): Promise<never> => {
-  const tags = createSessionStartTags(startedCtx);
+  const tags = toStartedSessionTags(startedCtx);
   try {
     await runOrchestratorTask(
       reason,
@@ -74,7 +81,7 @@ export const rollbackStartedSessionAfterPersistenceFailure = async ({
     await runOrchestratorTask(
       "start-session-stop-after-persist-failure",
       async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
-      { tags: createSessionStartTags(startedCtx) },
+      { tags: toStartedSessionTags(startedCtx) },
     );
   } catch (stopError) {
     throw new Error(
@@ -107,7 +114,7 @@ export const rollbackStartedSessionBeforeRegistration = async ({
       reason,
       async () => runtime.adapter.stopSession(toStartedSessionStopTarget(startedCtx)),
       {
-        tags: createSessionStartTags(startedCtx),
+        tags: toStartedSessionTags(startedCtx),
       },
     );
   } catch (stopError) {

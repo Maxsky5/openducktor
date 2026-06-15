@@ -1,4 +1,5 @@
 export { executeSessionStart } from "./session-start-execution";
+export { createSessionStartGate, type SessionStartGate } from "./session-start-gate";
 export {
   defaultSessionLaunchActionForRole,
   getSessionLaunchAction,

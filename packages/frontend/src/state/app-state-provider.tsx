@@ -43,7 +43,6 @@ import {
   WorkspaceStateContext,
 } from "./app-state-contexts";
 import { createHostRuntimeCatalogOperations } from "./operations/shared/runtime-catalog";
-import { ensureRuntimeAndInvalidateReadinessQueries } from "./operations/shared/runtime-readiness-publication";
 import { AgentStudioStateProvider } from "./providers/agent-studio-state-provider";
 import { AppLifecycleStateProvider } from "./providers/app-lifecycle-state-provider";
 import { AppRuntimeProvider } from "./providers/app-runtime-provider";
@@ -65,20 +64,6 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
       runtimeCatalogOperations.checkRepoRuntimeHealth(repoPath, runtimeKind),
     [runtimeCatalogOperations],
   );
-  const startRepoRuntime = useCallback(
-    async (repoPath: string, runtimeKind: RuntimeKind): Promise<void> => {
-      await ensureRuntimeAndInvalidateReadinessQueries({
-        repoPath,
-        runtimeKind,
-        ensureRuntime: (nextRepoPath, nextRuntimeKind) =>
-          runtimeRegistry.startRepoRuntime({
-            repoPath: nextRepoPath,
-            runtimeKind: nextRuntimeKind,
-          }),
-      });
-    },
-    [runtimeRegistry],
-  );
 
   return (
     <AppRuntimeProvider
@@ -93,7 +78,7 @@ export function AppStateProvider({ children }: PropsWithChildren): ReactElement 
             <WorkspaceStateProvider>
               <DelegationStateProvider>
                 <AgentStudioStateProvider agentEngine={agentEngine}>
-                  <AppLifecycleStateProvider startRepoRuntime={startRepoRuntime}>
+                  <AppLifecycleStateProvider>
                     <AutopilotProvider>{children}</AutopilotProvider>
                   </AppLifecycleStateProvider>
                 </AgentStudioStateProvider>

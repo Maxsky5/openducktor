@@ -1,3 +1,4 @@
+import { runtimeKindSchema } from "@openducktor/contracts";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
@@ -6,16 +7,28 @@ export type AgentSessionIdentityLike = Pick<
   "externalSessionId" | "runtimeKind" | "workingDirectory"
 >;
 
-const SESSION_IDENTITY_KEY_SEPARATOR = "\u0000";
+const SESSION_IDENTITY_KEY_SEPARATOR = "|";
+
+const encodeSessionIdentityPart = (value: string): string => encodeURIComponent(value);
+
+const decodeSessionIdentityPart = (value: string): string | null => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+};
 
 export const agentSessionIdentityKey = ({
   externalSessionId,
   runtimeKind,
   workingDirectory,
 }: AgentSessionIdentityLike): string =>
-  [externalSessionId, runtimeKind, normalizeWorkingDirectory(workingDirectory)].join(
-    SESSION_IDENTITY_KEY_SEPARATOR,
-  );
+  [
+    encodeSessionIdentityPart(externalSessionId),
+    encodeSessionIdentityPart(runtimeKind),
+    encodeSessionIdentityPart(normalizeWorkingDirectory(workingDirectory)),
+  ].join(SESSION_IDENTITY_KEY_SEPARATOR);
 
 export const matchesAgentSessionIdentity = (
   session: AgentSessionIdentityLike | null | undefined,
@@ -36,3 +49,35 @@ export const toAgentSessionIdentity = ({
   runtimeKind,
   workingDirectory,
 });
+
+export const parseAgentSessionIdentityKey = (
+  sessionKey: string | null | undefined,
+): AgentSessionIdentity | null => {
+  if (!sessionKey) {
+    return null;
+  }
+
+  const parts = sessionKey.split(SESSION_IDENTITY_KEY_SEPARATOR);
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [encodedExternalSessionId, encodedRuntimeKind, encodedWorkingDirectory] = parts;
+  const externalSessionId = decodeSessionIdentityPart(encodedExternalSessionId ?? "")?.trim();
+  const runtimeKind = runtimeKindSchema.safeParse(
+    decodeSessionIdentityPart(encodedRuntimeKind ?? "")?.trim(),
+  );
+  const workingDirectory = normalizeWorkingDirectory(
+    decodeSessionIdentityPart(encodedWorkingDirectory ?? "") ?? "",
+  );
+
+  if (!externalSessionId || !runtimeKind.success || !workingDirectory) {
+    return null;
+  }
+
+  return {
+    externalSessionId,
+    runtimeKind: runtimeKind.data,
+    workingDirectory,
+  };
+};

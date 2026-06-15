@@ -1,6 +1,6 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
-import type { AgentChatModel, AgentStudioWorkspaceDocument } from "@/components/features/agents";
+import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import type { ComboboxGroup } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -189,20 +189,4 @@ export const buildActiveDocumentForRole = ({
   }
 
   return null;
-};
-
-export const toChatContextUsage = (
-  activeSessionContextUsage: AgentStudioSessionContextUsage,
-): AgentChatModel["composer"]["contextUsage"] => {
-  if (activeSessionContextUsage === null) {
-    return null;
-  }
-
-  return {
-    totalTokens: activeSessionContextUsage.totalTokens,
-    contextWindow: activeSessionContextUsage.contextWindow,
-    ...(typeof activeSessionContextUsage.outputLimit === "number"
-      ? { outputLimit: activeSessionContextUsage.outputLimit }
-      : {}),
-  };
 };

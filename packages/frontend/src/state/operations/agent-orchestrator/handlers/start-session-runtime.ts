@@ -1,7 +1,7 @@
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
-import { createSessionPromptContext, loadSessionPromptInputs } from "../support/session-prompt";
+import { loadSessionPromptContext } from "../support/session-prompt";
 import type {
   ResolvedRuntimeAndModel,
   RuntimeDependencies,
@@ -19,17 +19,13 @@ export const resolvePromptContext = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "model">;
 }): Promise<Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">> => {
-  const { promptOverrides } = await loadSessionPromptInputs({
+  const { promptOverrides, systemPrompt } = await loadSessionPromptContext({
     workspaceId: ctx.workspaceId,
+    role: ctx.role,
+    task: taskCard,
     loadRepoPromptOverrides: deps.model.loadRepoPromptOverrides,
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
-
-  const { systemPrompt } = createSessionPromptContext({
-    role: ctx.role,
-    task: taskCard,
-    promptOverrides,
-  });
 
   return {
     systemPrompt,

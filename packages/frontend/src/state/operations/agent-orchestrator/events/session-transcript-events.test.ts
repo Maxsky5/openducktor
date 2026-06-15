@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildSession,
-  createRecordingRuntimeDataWriter,
+  createRecordingSessionTodosUpdater,
+  createSessionDraftBuffers,
   createSessionsRef,
   createSessionUpdater,
   findSession,
@@ -35,10 +36,6 @@ describe("agent-orchestrator session transcript events", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -79,7 +76,7 @@ describe("agent-orchestrator session transcript events", () => {
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater) => {
       updateCount += 1;
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -91,10 +88,6 @@ describe("agent-orchestrator session transcript events", () => {
         workingDirectory: "/tmp/repo",
       },
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -141,10 +134,6 @@ describe("agent-orchestrator session transcript events", () => {
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
         sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
         updateSession,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
@@ -265,11 +254,7 @@ describe("agent-orchestrator session transcript events", () => {
         repoPath: "/tmp/repo",
         externalSessionId: "session-1",
         sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
-        updateSession: () => {},
+        updateSession: () => null,
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: async () => {},
@@ -341,10 +326,6 @@ describe("agent-orchestrator session transcript events", () => {
           repoPath: "/tmp/repo",
           externalSessionId: "session-1",
           sessionsRef,
-          draftRawBySessionRef: { current: {} },
-          draftSourceBySessionRef: { current: {} },
-          draftMessageIdBySessionRef: { current: {} },
-          draftFlushTimeoutBySessionRef: { current: {} },
           updateSession,
           resolveTurnDurationMs: () => undefined,
           clearTurnDuration: () => {},
@@ -427,10 +408,6 @@ describe("agent-orchestrator session transcript events", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -549,18 +526,21 @@ describe("agent-orchestrator session transcript events", () => {
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater, options) => {
       updateSessionOptions.push(options);
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
+    const draftBuffers = createSessionDraftBuffers();
+    draftBuffers.writeChannel("session-1", "reasoning", {
+      raw: "draft reasoning",
+      source: "delta",
+      messageId: "draft-reasoning-1",
+    });
 
     await listenToAgentSessionEvents({
       adapter,
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: { "session-1": { reasoning: "draft reasoning" } } },
-      draftSourceBySessionRef: { current: { "session-1": { reasoning: "delta" } } },
-      draftMessageIdBySessionRef: { current: { "session-1": { reasoning: "draft-reasoning-1" } } },
-      draftFlushTimeoutBySessionRef: { current: {} },
+      draftBuffers,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -656,10 +636,6 @@ describe("agent-orchestrator session transcript events", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -722,13 +698,13 @@ describe("agent-orchestrator session transcript events", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession({ status: "starting" })]);
-    const runtimeData = createRecordingRuntimeDataWriter();
+    const runtimeData = createRecordingSessionTodosUpdater();
     let updateSessionCalls = 0;
 
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
 
     const unsubscribe = await listenToAgentSessionEvents({
@@ -737,12 +713,8 @@ describe("agent-orchestrator session transcript events", () => {
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
-      runtimeDataWriter: runtimeData.writer,
+      updateSessionTodos: runtimeData.updateSessionTodos,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
@@ -789,14 +761,6 @@ describe("agent-orchestrator session transcript events", () => {
         priority: "high",
       },
     ]);
-    expect(runtimeData.getSessionRefs()).toEqual([
-      {
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-        externalSessionId: "session-1",
-      },
-    ]);
   });
 
   test("flushes queued work before applying an immediate event", async () => {
@@ -817,7 +781,7 @@ describe("agent-orchestrator session transcript events", () => {
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -826,10 +790,6 @@ describe("agent-orchestrator session transcript events", () => {
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -889,7 +849,7 @@ describe("agent-orchestrator session transcript events", () => {
     const applySessionUpdate = createSessionUpdater(sessionsRef);
     const updateSession: SessionUpdateFn = (identity, updater) => {
       updateSessionCalls += 1;
-      applySessionUpdate(identity, updater);
+      return applySessionUpdate(identity, updater);
     };
 
     await listenToAgentSessionEvents({
@@ -898,10 +858,6 @@ describe("agent-orchestrator session transcript events", () => {
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -1004,10 +960,6 @@ describe("agent-orchestrator session transcript events", () => {
       externalSessionId: "session-1",
       eventBatchWindowMs: 25,
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},

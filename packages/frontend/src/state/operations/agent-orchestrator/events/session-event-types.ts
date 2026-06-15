@@ -1,28 +1,41 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentEnginePort, AgentEvent, AgentRole, AgentSessionRef } from "@openducktor/core";
-import type { MutableRefObject } from "react";
-import type { AgentSessionCollection } from "@/state/agent-session-collection";
+import type {
+  AgentEnginePort,
+  AgentEvent,
+  AgentRole,
+  AgentSessionRef,
+  AgentSessionTodoItem,
+} from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { SessionRuntimeDataWriter } from "../support/session-runtime-data-writer";
+import type { SessionDraftBuffers, SessionTurnMetadata } from "../support/session-transient-state";
 
-export type DraftChannel = "reasoning";
-export type DraftSource = "delta" | "part";
-export type DraftChannelValueMap<T> = Partial<Record<DraftChannel, T>>;
+export type {
+  DraftChannel,
+  DraftChannelValueMap,
+  DraftSource,
+} from "../support/session-transient-state";
 
 export type UpdateSession = (
   identity: AgentSessionIdentity,
   updater: (current: AgentSessionState) => AgentSessionState,
   options?: { persist?: boolean },
-) => void;
+) => AgentSessionState | null;
+
+export type ReadSession = (identity: AgentSessionIdentity) => AgentSessionState | null;
 
 export type ResolveTurnDuration = (
+  sessionKey: string,
   externalSessionId: string,
   timestamp: string,
   messages?: AgentSessionState["messages"],
 ) => number | undefined;
 
-export type RecordTurnTimestamp = (externalSessionId: string, timestamp: string | number) => void;
+export type RecordTurnTimestamp = (sessionKey: string, timestamp: string | number) => void;
 export type BuildReadOnlyApprovalRejectionMessage = (role: AgentRole) => Promise<string>;
+export type UpdateSessionTodos = (
+  updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
+) => void;
 
 export type SessionEventAdapter = Pick<AgentEnginePort, "subscribeEvents" | "replyApproval">;
 
@@ -30,26 +43,20 @@ export type SessionEvent = AgentEvent;
 export type SessionPartEvent = Extract<SessionEvent, { type: "assistant_part" }>;
 export type SessionPart = SessionPartEvent["part"];
 
-export type ListenToAgentSessionParams = {
+export type ObserveAgentSessionParams = {
   adapter: SessionEventAdapter;
   sessionRef: AgentSessionRef;
   eventBatchWindowMs?: number;
-  sessionsRef: MutableRefObject<AgentSessionCollection>;
-  draftRawBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
-  draftSourceBySessionRef: MutableRefObject<Record<string, DraftChannelValueMap<DraftSource>>>;
-  draftMessageIdBySessionRef?: MutableRefObject<Record<string, DraftChannelValueMap<string>>>;
-  draftFlushTimeoutBySessionRef?: MutableRefObject<
-    Record<string, ReturnType<typeof setTimeout> | undefined>
-  >;
-  turnModelBySessionRef?: MutableRefObject<Record<string, AgentSessionState["selectedModel"]>>;
-  contextUsageMessageIdBySessionRef?: MutableRefObject<Record<string, string>>;
+  draftBuffers: SessionDraftBuffers;
+  turnMetadata: SessionTurnMetadata;
+  readSession: ReadSession;
   updateSession: UpdateSession;
-  runtimeDataWriter: SessionRuntimeDataWriter;
-  isSessionListenerActive?: (externalSessionId: string) => boolean;
+  updateSessionTodos: UpdateSessionTodos;
+  hasSessionObserver?: (sessionIdentity: AgentSessionIdentity) => boolean;
   recordTurnActivityTimestamp: RecordTurnTimestamp;
   recordTurnUserMessageTimestamp: RecordTurnTimestamp;
   resolveTurnDurationMs: ResolveTurnDuration;
-  clearTurnDuration: (externalSessionId: string, completedTimestamp?: string) => void;
+  clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
   refreshTaskData: (
     repoPath: string,
@@ -61,44 +68,41 @@ export type ListenToAgentSessionParams = {
 
 type SessionEventTargetContext = {
   sessionIdentity: AgentSessionIdentity;
+  sessionKey: string;
   externalSessionId: string;
 };
 
 export type SessionStoreContext = SessionEventTargetContext &
-  Pick<ListenToAgentSessionParams, "sessionsRef" | "updateSession" | "isSessionListenerActive">;
+  Pick<ObserveAgentSessionParams, "updateSession" | "hasSessionObserver"> & {
+    readSession: ReadSession;
+    hasSession: (identity: AgentSessionIdentity) => boolean;
+  };
 
-export type SessionRuntimeDataContext = Pick<
-  ListenToAgentSessionParams,
-  "sessionRef" | "runtimeDataWriter"
->;
+export type SessionRuntimeDataContext = Pick<ObserveAgentSessionParams, "updateSessionTodos">;
 
-export type SessionDraftContext = SessionEventTargetContext &
-  Pick<
-    ListenToAgentSessionParams,
-    | "draftRawBySessionRef"
-    | "draftSourceBySessionRef"
-    | "draftMessageIdBySessionRef"
-    | "draftFlushTimeoutBySessionRef"
-  >;
+export type SessionDraftContext = SessionEventTargetContext & {
+  buffers: SessionDraftBuffers;
+};
 
 export type SessionTurnContext = SessionEventTargetContext &
   Pick<
-    ListenToAgentSessionParams,
-    | "turnModelBySessionRef"
-    | "contextUsageMessageIdBySessionRef"
+    ObserveAgentSessionParams,
+    | "turnMetadata"
     | "recordTurnActivityTimestamp"
     | "recordTurnUserMessageTimestamp"
     | "resolveTurnDurationMs"
     | "clearTurnDuration"
   >;
 
-export type SessionApprovalContext = Pick<
-  ListenToAgentSessionParams,
+export type SessionApprovalContext = {
+  repoPath: string;
+} & Pick<
+  ObserveAgentSessionParams,
   "adapter" | "resolveRuntimeDefinition" | "buildReadOnlyApprovalRejectionMessage"
 >;
 
 export type SessionRefreshContext = { repoPath: string } & Pick<
-  ListenToAgentSessionParams,
+  ObserveAgentSessionParams,
   "refreshTaskData" | "resolveRuntimeDefinition"
 >;
 
@@ -128,35 +132,36 @@ export type SessionEventHandlerContext = {
   parts: SessionPartEventContext;
 };
 
-const createStoreContext = (context: ListenToAgentSessionParams): SessionStoreContext => ({
+const createTargetContext = (context: ObserveAgentSessionParams): SessionEventTargetContext => ({
   sessionIdentity: context.sessionRef,
+  sessionKey: agentSessionIdentityKey(context.sessionRef),
   externalSessionId: context.sessionRef.externalSessionId,
-  sessionsRef: context.sessionsRef,
+});
+
+const createStoreContext = (
+  context: ObserveAgentSessionParams,
+  target: SessionEventTargetContext,
+): SessionStoreContext => ({
+  ...target,
   updateSession: context.updateSession,
+  readSession: context.readSession,
+  hasSession: (identity) => context.readSession(identity) !== null,
 });
 
-const createDraftContext = (context: ListenToAgentSessionParams): SessionDraftContext => ({
-  sessionIdentity: context.sessionRef,
-  externalSessionId: context.sessionRef.externalSessionId,
-  draftRawBySessionRef: context.draftRawBySessionRef,
-  draftSourceBySessionRef: context.draftSourceBySessionRef,
-  ...(context.draftMessageIdBySessionRef
-    ? { draftMessageIdBySessionRef: context.draftMessageIdBySessionRef }
-    : {}),
-  ...(context.draftFlushTimeoutBySessionRef
-    ? { draftFlushTimeoutBySessionRef: context.draftFlushTimeoutBySessionRef }
-    : {}),
+const createDraftContext = (
+  context: ObserveAgentSessionParams,
+  target: SessionEventTargetContext,
+): SessionDraftContext => ({
+  ...target,
+  buffers: context.draftBuffers,
 });
 
-const createTurnContext = (context: ListenToAgentSessionParams): SessionTurnContext => ({
-  sessionIdentity: context.sessionRef,
-  externalSessionId: context.sessionRef.externalSessionId,
-  ...(context.turnModelBySessionRef
-    ? { turnModelBySessionRef: context.turnModelBySessionRef }
-    : {}),
-  ...(context.contextUsageMessageIdBySessionRef
-    ? { contextUsageMessageIdBySessionRef: context.contextUsageMessageIdBySessionRef }
-    : {}),
+const createTurnContext = (
+  context: ObserveAgentSessionParams,
+  target: SessionEventTargetContext,
+): SessionTurnContext => ({
+  ...target,
+  turnMetadata: context.turnMetadata,
   recordTurnActivityTimestamp: context.recordTurnActivityTimestamp,
   recordTurnUserMessageTimestamp: context.recordTurnUserMessageTimestamp,
   resolveTurnDurationMs: context.resolveTurnDurationMs,
@@ -164,13 +169,12 @@ const createTurnContext = (context: ListenToAgentSessionParams): SessionTurnCont
 });
 
 const createRuntimeDataContext = (
-  context: ListenToAgentSessionParams,
+  context: ObserveAgentSessionParams,
 ): SessionRuntimeDataContext => ({
-  sessionRef: context.sessionRef,
-  runtimeDataWriter: context.runtimeDataWriter,
+  updateSessionTodos: context.updateSessionTodos,
 });
 
-const createRefreshContext = (context: ListenToAgentSessionParams): SessionRefreshContext => ({
+const createRefreshContext = (context: ObserveAgentSessionParams): SessionRefreshContext => ({
   repoPath: context.sessionRef.repoPath,
   refreshTaskData: context.refreshTaskData,
   ...(context.resolveRuntimeDefinition
@@ -179,14 +183,15 @@ const createRefreshContext = (context: ListenToAgentSessionParams): SessionRefre
 });
 
 export const createSessionEventHandlerContext = (
-  context: ListenToAgentSessionParams,
+  context: ObserveAgentSessionParams,
 ): SessionEventHandlerContext => {
-  const store = createStoreContext(context);
-  const lifecycleStore = context.isSessionListenerActive
-    ? { ...store, isSessionListenerActive: context.isSessionListenerActive }
+  const target = createTargetContext(context);
+  const store = createStoreContext(context, target);
+  const lifecycleStore = context.hasSessionObserver
+    ? { ...store, hasSessionObserver: context.hasSessionObserver }
     : store;
-  const drafts = createDraftContext(context);
-  const turn = createTurnContext(context);
+  const drafts = createDraftContext(context, target);
+  const turn = createTurnContext(context, target);
   const runtimeData = createRuntimeDataContext(context);
 
   return {
@@ -195,6 +200,7 @@ export const createSessionEventHandlerContext = (
       drafts,
       turn,
       approvals: {
+        repoPath: context.sessionRef.repoPath,
         adapter: context.adapter,
         buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
         ...(context.resolveRuntimeDefinition

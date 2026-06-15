@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentRole } from "@openducktor/core";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -47,7 +48,6 @@ const createInput = (
     allSessionSummaries: overrides.allSessionSummaries ?? sessionsForTask,
     activeSession: null,
     activeSessionRuntimeData: {
-      modelCatalog: null,
       todos: [],
       isLoadingModelCatalog: false,
     },
@@ -55,26 +55,21 @@ const createInput = (
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
     lifecycle: createSelectedSessionLifecycleFixture(),
-    activeSessionContextUsage: null,
     documents: {
       specDoc: createDoc("spec"),
       planDoc: createDoc("plan"),
       qaDoc: createDoc("qa"),
     },
-    readiness: {
-      agentStudioReadinessState: "ready",
-      agentStudioReady: true,
+    runtimeReadiness: {
+      readinessState: "ready",
+      isReady: true,
       isRuntimeStarting: false,
-      agentStudioBlockedReason: null,
+      blockedReason: null,
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },
     sessionActions: {
-      isStarting: false,
       isSessionWorking: false,
-      canKickoffNewSession: true,
-      kickoffLabel: "Start Spec",
-      startLaunchKickoff: async () => {},
       onSubmitQuestionAnswers: async () => {},
       isSubmittingQuestionByRequestId: {},
     },
@@ -97,18 +92,12 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         sessionsForTask: [],
         allSessionSummaries: [],
         activeSession: null,
-        sessionActions: {
-          ...createInput().sessionActions,
-          canKickoffNewSession: false,
-        },
       }),
     );
 
     expect(context.documents.activeDocument).toBeNull();
     expect(context.rightPanel.hasTaskContext).toBe(false);
     expect(context.rightPanel.hasDocumentPanel).toBe(false);
-    expect(context.chat.emptyState?.title).toBe("Select a task to begin.");
-    expect(context.chat.emptyState?.actionLabel).toBeUndefined();
     expect(context.runtime.sessionRuntimeDataError).toBeNull();
   });
 
@@ -159,9 +148,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
     expect(context.workflow.selectedInteractionRole).toBe("planner");
     expect(context.workflow.selectedRoleAvailable).toBe(false);
-    expect(context.chat.composerReadOnly).toBe(true);
-    expect(context.chat.composerReadOnlyReason).toContain("Planner is unavailable");
-    expect(context.chat.emptyState?.actionLabel).toBeUndefined();
+    expect(context.workflow.selectedRoleReadOnlyReason).toContain("Planner is unavailable");
   });
 
   test("keeps existing session composer writable when selected role is unavailable", () => {
@@ -186,44 +173,24 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.workflow.selectedRoleAvailable).toBe(false);
-    expect(context.chat.composerReadOnly).toBe(false);
-    expect(context.chat.composerReadOnlyReason).toBeNull();
+    expect(context.activeSession).toBe(qaSession);
   });
 
-  test("projects kickoff and starting empty-state affordances without stale pending flags", () => {
-    const startLaunchKickoff = mock(async () => {});
-    const readyContext = buildAgentStudioSelectedSessionContext(
+  test("projects selected runtime data for chat adaptation", () => {
+    const activeSession = createSession();
+    const context = buildAgentStudioSelectedSessionContext(
       createInput({
-        lifecycle: createSelectedSessionLifecycleFixture({
-          transcriptState: { kind: "empty" },
-        }),
-        sessionActions: {
-          ...createInput().sessionActions,
-          startLaunchKickoff,
+        activeSession,
+        activeSessionRuntimeData: {
+          todos: [],
+          isLoadingModelCatalog: true,
         },
       }),
     );
 
-    expect(readyContext.chat.emptyState).toMatchObject({
-      title: "Send a message to start a new session automatically.",
-      actionLabel: "Start Spec",
-    });
-    expect(readyContext.chat.emptyState?.isActionPending).toBeUndefined();
-
-    const startingContext = buildAgentStudioSelectedSessionContext(
-      createInput({
-        lifecycle: createSelectedSessionLifecycleFixture({
-          transcriptState: { kind: "empty" },
-        }),
-        sessionActions: {
-          ...createInput().sessionActions,
-          isStarting: true,
-          startLaunchKickoff,
-        },
-      }),
-    );
-
-    expect(startingContext.chat.emptyState).toEqual({ title: "Initializing session..." });
+    expect(context.activeSession).toBe(activeSession);
+    expect(context.runtime.isLoadingModelCatalog).toBe(true);
+    expect(context.runtime.sessionTodos).toEqual([]);
   });
 
   test("projects runtime readiness and runtime-data errors without masking", () => {
@@ -234,11 +201,11 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "runtime_waiting" },
         }),
-        readiness: {
-          agentStudioReadinessState: "blocked",
-          agentStudioReady: false,
+        runtimeReadiness: {
+          readinessState: "blocked",
+          isReady: false,
           isRuntimeStarting: false,
-          agentStudioBlockedReason: "Runtime unavailable",
+          blockedReason: "Runtime unavailable",
           isLoadingChecks: true,
           refreshChecks,
         },
@@ -265,11 +232,11 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         lifecycle: createSelectedSessionLifecycleFixture({
           transcriptState: { kind: "runtime_waiting" },
         }),
-        readiness: {
-          agentStudioReadinessState: "checking",
-          agentStudioReady: false,
+        runtimeReadiness: {
+          readinessState: "checking",
+          isReady: false,
           isRuntimeStarting: true,
-          agentStudioBlockedReason: null,
+          blockedReason: null,
           isLoadingChecks: true,
           refreshChecks: async () => {},
         },
@@ -277,7 +244,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
-    expect(context.chat.emptyState).toBeNull();
   });
 
   test("does not treat generic readiness checking as runtime startup", () => {
@@ -287,11 +253,11 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         sessionsForTask: [],
         allSessionSummaries: [],
         lifecycle: createSelectedSessionLifecycleFixture(),
-        readiness: {
-          agentStudioReadinessState: "checking",
-          agentStudioReady: false,
+        runtimeReadiness: {
+          readinessState: "checking",
+          isReady: false,
           isRuntimeStarting: false,
-          agentStudioBlockedReason: null,
+          blockedReason: null,
           isLoadingChecks: true,
           refreshChecks: async () => {},
         },
@@ -368,13 +334,13 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       errorByRequestId: { "approval-main": "failed" },
     });
     expect(context.pendingInput.approvals.onReply).toBe(approvalReply);
-    expect(context.pendingInput.subagentPendingApprovalCountByExternalSessionId).toEqual({
-      "session-main": 1,
-      "session-sub": 1,
+    expect(context.pendingInput.subagentPendingApprovalCountBySessionKey).toEqual({
+      [agentSessionIdentityKey(session)]: 1,
+      [agentSessionIdentityKey(subagentSession)]: 1,
     });
-    expect(context.pendingInput.subagentPendingQuestionCountByExternalSessionId).toEqual({
-      "session-main": 1,
-      "session-sub": 1,
+    expect(context.pendingInput.subagentPendingQuestionCountBySessionKey).toEqual({
+      [agentSessionIdentityKey(session)]: 1,
+      [agentSessionIdentityKey(subagentSession)]: 1,
     });
   });
 

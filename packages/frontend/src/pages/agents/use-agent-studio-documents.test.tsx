@@ -670,6 +670,55 @@ describe("useAgentStudioDocuments", () => {
     }
   });
 
+  test("resets processed tool-event context when same-id session identity changes", async () => {
+    setTaskDocumentsState({
+      specDoc: createDocumentState({
+        markdown: "# Old spec",
+        updatedAt: "2026-02-22T08:00:00.000Z",
+      }),
+    });
+
+    const toolMessage = createCompletedToolMessage({
+      id: "shared-message-id",
+      tool: "odt_set_spec",
+      toolType: "workflow",
+      input: { markdown: "# Session update" },
+      output: "completed 2026-02-22T08:45:00.000Z",
+    });
+
+    const baseArgs = createBaseArgs();
+    const harness = createHookHarness({
+      ...baseArgs,
+      selectedTask: null,
+      activeSession: createAgentSessionFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "shared-external-session",
+        workingDirectory: "/repo/worktree-a",
+        messages: [toolMessage],
+      }),
+    });
+
+    try {
+      await harness.mount();
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(1);
+
+      await harness.update({
+        ...baseArgs,
+        selectedTask: null,
+        activeSession: createAgentSessionFixture({
+          runtimeKind: "codex",
+          externalSessionId: "shared-external-session",
+          workingDirectory: "/repo/worktree-b",
+          messages: [toolMessage],
+        }),
+      });
+
+      expect(applyDocumentUpdateMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("processes same-id tool rows when they transition to completed", async () => {
     const pendingToolMessage = {
       ...createCompletedToolMessage({

@@ -115,7 +115,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isPanelOpen: true,
   viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
   repoSettings: null,
-  worktreeRecoverySignal: 0,
+  worktreeRecoveryKey: "recovery-key-a",
   ...overrides,
 });
 
@@ -160,7 +160,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
           workingDirectory: "/repo/.worktrees/task-24",
           hasActiveSession: true,
         },
-        worktreeRecoverySignal: 5,
+        worktreeRecoveryKey: "recovery-key-b",
       }),
     );
 
@@ -215,7 +215,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     const taskWorktreeFetch = createDeferred<{ workingDirectory: string } | null>();
     let didResolveTaskWorktreeFetch = false;
     queryClient.setQueryData(
-      taskWorktreeQueryKeys.taskWorktree("/repo", "task-25", 0),
+      taskWorktreeQueryKeys.taskWorktree("/repo", "task-25", "recovery-key-a"),
       { workingDirectory: "/repo/.worktrees/task-25" },
       { updatedAt: 1 },
     );

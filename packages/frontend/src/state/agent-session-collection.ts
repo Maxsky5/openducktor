@@ -15,6 +15,18 @@ export const emptyAgentSessionCollection = (): AgentSessionCollection => new Map
 export const listAgentSessions = (collection: AgentSessionCollection): AgentSessionState[] =>
   Array.from(collection.values());
 
+export const hasAgentSessionStateChanges = (
+  current: AgentSessionState,
+  nextSession: AgentSessionState,
+): boolean => {
+  for (const key of Object.keys(nextSession) as Array<keyof AgentSessionState>) {
+    if (nextSession[key] !== current[key]) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export const createAgentSessionCollection = (
   sessions: Iterable<AgentSessionState>,
 ): AgentSessionCollection => {
@@ -78,22 +90,23 @@ export const removeAgentSession = (
   return next;
 };
 
-export const removeAgentSessionsByExternalSessionIds = (
+export const removeAgentSessions = (
   collection: AgentSessionCollection,
-  externalSessionIds: readonly string[],
+  identities: readonly AgentSessionIdentity[],
 ): AgentSessionCollection => {
-  if (externalSessionIds.length === 0) {
+  if (identities.length === 0) {
     return collection;
   }
-  const idsToRemove = new Set(externalSessionIds);
+  const keysToRemove = new Set(identities.map(agentSessionCollectionKey));
   let changed = false;
   const next = new Map<string, AgentSessionState>();
   for (const session of listAgentSessions(collection)) {
-    if (idsToRemove.has(session.externalSessionId)) {
+    const key = agentSessionCollectionKey(session);
+    if (keysToRemove.has(key)) {
       changed = true;
       continue;
     }
-    next.set(agentSessionCollectionKey(session), session);
+    next.set(key, session);
   }
   return changed ? next : collection;
 };

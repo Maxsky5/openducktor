@@ -715,7 +715,7 @@ describe("CodexAppServerAdapter streaming", () => {
     ).resolves.toBeUndefined();
 
     await expect(
-      adapter.readSessionPresence({
+      adapter.readSessionRuntimeSnapshot({
         repoPath: "/repo",
         runtimeKind: "codex",
         workingDirectory: "/repo",

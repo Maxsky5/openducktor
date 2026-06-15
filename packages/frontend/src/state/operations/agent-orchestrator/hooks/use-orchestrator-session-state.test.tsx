@@ -5,10 +5,6 @@ import { createSessionMessagesState } from "@/state/operations/agent-orchestrato
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
-import {
-  removeSessionListenersByExternalSessionId,
-  setSessionListener,
-} from "../support/session-listener-registry";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -126,27 +122,31 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     try {
       await harness.mount();
       await harness.run((hook) => {
-        hook.commitSessions(createAgentSessionCollection([createSessionFixture()]));
+        hook.sessionStore.setSessionCollection(
+          createAgentSessionCollection([createSessionFixture()]),
+        );
 
-        const registry = hook.refBridges.sessionListenerRegistryRef.current;
-        setSessionListener(
-          registry,
+        const observers = hook.sessionObserversRef.current;
+        observers.add(
           {
             externalSessionId: "first",
-            repoPath: "/tmp/repo-a",
             runtimeKind: "opencode",
             workingDirectory: "/tmp/repo-a",
           },
           () => {
             unsubscribeCalls.push("first");
-            removeSessionListenersByExternalSessionId(registry, "second");
+            observers.removeMany([
+              {
+                externalSessionId: "second",
+                runtimeKind: "opencode",
+                workingDirectory: "/tmp/repo-a",
+              },
+            ]);
           },
         );
-        setSessionListener(
-          registry,
+        observers.add(
           {
             externalSessionId: "second",
-            repoPath: "/tmp/repo-a",
             runtimeKind: "opencode",
             workingDirectory: "/tmp/repo-a",
           },
@@ -162,8 +162,23 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       expect(unsubscribeCalls).toEqual(["first", "second"]);
-      expect(listAgentSessions(harness.getLatest().sessionCollection)).toEqual([]);
-      expect(harness.getLatest().refBridges.sessionListenerRegistryRef.current.size).toBe(0);
+      expect(
+        listAgentSessions(harness.getLatest().sessionStore.getSessionCollectionSnapshot()),
+      ).toEqual([]);
+      expect(
+        harness.getLatest().sessionObserversRef.current.has({
+          externalSessionId: "first",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo-a",
+        }),
+      ).toBe(false);
+      expect(
+        harness.getLatest().sessionObserversRef.current.has({
+          externalSessionId: "second",
+          runtimeKind: "opencode",
+          workingDirectory: "/tmp/repo-a",
+        }),
+      ).toBe(false);
     } finally {
       await harness.unmount();
     }
@@ -184,19 +199,20 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().refBridges.taskRef.current).toEqual([taskFixture]);
+      expect(harness.getLatest().taskRef.current).toEqual([taskFixture]);
       await harness.update({
         activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
         tasks: [nextTask],
       });
 
-      expect(harness.getLatest().refBridges.taskRef.current).toEqual([nextTask]);
+      expect(harness.getLatest().taskRef.current).toEqual([nextTask]);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("stores assistant turn timing in one workspace-scoped map", async () => {
+  test("keeps session state owned by the session store", async () => {
+    const session = createSessionFixture();
     const harness = createHookHarness({
       activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
       tasks: [taskFixture],
@@ -206,25 +222,61 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       await harness.mount();
 
       await harness.run((hook) => {
-        hook.refBridges.assistantTurnTimingBySessionRef.current["session-1"] = {
-          userAnchorAtMs: 111,
-          previousAssistantCompletedAtMs: 222,
-        };
+        hook.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
       });
 
-      expect(harness.getLatest().refBridges.assistantTurnTimingBySessionRef.current).toEqual({
-        "session-1": {
-          userAnchorAtMs: 111,
-          previousAssistantCompletedAtMs: 222,
-        },
+      expect(
+        listAgentSessions(harness.getLatest().sessionStore.getSessionCollectionSnapshot()),
+      ).toEqual([session]);
+      expect(harness.getLatest().sessionStore.getSessionSnapshot(session)).toEqual(session);
+
+      await harness.run((hook) => {
+        hook.sessionStore.setSessionCollection((current) => {
+          expect(listAgentSessions(current)).toEqual([session]);
+          return createAgentSessionCollection([]);
+        });
       });
+
+      expect(
+        listAgentSessions(harness.getLatest().sessionStore.getSessionCollectionSnapshot()),
+      ).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("clears assistant turn timing on workspace change", async () => {
+    const harness = createHookHarness({
+      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      tasks: [taskFixture],
+    });
+
+    try {
+      await harness.mount();
+
+      await harness.run((hook) => {
+        hook.sessionTransientState.assistantTurnTiming.recordTurnUserMessageTimestamp(
+          "session-1",
+          111,
+        );
+      });
+
+      expect(
+        harness
+          .getLatest()
+          .sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs("session-1"),
+      ).toBe(111);
 
       await harness.update({
         activeWorkspace: createActiveWorkspace("/tmp/repo-b"),
         tasks: [taskFixture],
       });
 
-      expect(harness.getLatest().refBridges.assistantTurnTimingBySessionRef.current).toEqual({});
+      expect(
+        harness
+          .getLatest()
+          .sessionTransientState.assistantTurnTiming.readTurnUserMessageStartedAtMs("session-1"),
+      ).toBeUndefined();
     } finally {
       await harness.unmount();
     }

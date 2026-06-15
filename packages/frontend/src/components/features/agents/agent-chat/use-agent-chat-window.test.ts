@@ -18,7 +18,7 @@ import { useAgentChatWindow } from "./use-agent-chat-window";
 
 type HarnessProps = {
   rows: AgentChatWindowRow[];
-  activeExternalSessionId: string | null;
+  activeSessionKey: string | null;
   isSessionViewLoading: boolean;
   isSessionWorking?: boolean;
   syncBottomAfterComposerLayoutRef?: { current: (() => void) | null };
@@ -303,7 +303,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeExternalSessionId: "session-1",
+      activeSessionKey: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -319,7 +319,7 @@ describe("useAgentChatWindow", () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows,
-      activeExternalSessionId: "session-1",
+      activeSessionKey: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -327,7 +327,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows,
-      activeExternalSessionId: "session-1",
+      activeSessionKey: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -341,7 +341,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       {
@@ -365,7 +365,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -394,7 +394,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       {
@@ -427,7 +427,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -457,7 +457,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -488,11 +488,11 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("keeps the latest turn window on the first populated render after a deferred empty frame", async () => {
+  test("keeps the latest turn window on the first populated render after an empty frame", async () => {
     const rows = createTurnRows(12);
     const harness = await mountHarness({
       rows: [],
-      activeExternalSessionId: "session-1",
+      activeSessionKey: "session-1",
       isSessionViewLoading: true,
     });
 
@@ -500,7 +500,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows,
-      activeExternalSessionId: "session-1",
+      activeSessionKey: "session-1",
       isSessionViewLoading: false,
     });
 
@@ -514,8 +514,8 @@ describe("useAgentChatWindow", () => {
   test("resolves the latest turn window immediately when the active session changes", () => {
     expect(
       resolveAgentChatEffectiveTurnStart({
-        activeExternalSessionId: "session-2",
-        previousSessionId: "session-1",
+        activeSessionKey: "session-2",
+        previousSessionKey: "session-1",
         turnStart: 0,
         latestTurnStart: 12,
         rowsLength: 40,
@@ -530,7 +530,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -546,7 +546,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: secondSessionRows,
-      activeExternalSessionId: "session-2",
+      activeSessionKey: "session-2",
       isSessionViewLoading: false,
     });
 
@@ -564,7 +564,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true, extraContentHeightPx },
@@ -586,7 +586,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: secondSessionRows,
-      activeExternalSessionId: "session-2",
+      activeSessionKey: "session-2",
       isSessionViewLoading: false,
     });
 
@@ -604,14 +604,14 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("deferred session hydration after a switch stays pinned through late content growth", async () => {
+  test("late session content after a switch stays pinned through content growth", async () => {
     const firstSessionRows = createTurnRows(12, "session-1");
     const secondSessionRows = createTurnRows(12, "session-2");
     const extraContentHeightPx = { current: 0 };
     const harness = await mountHarness(
       {
         rows: firstSessionRows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true, extraContentHeightPx },
@@ -633,13 +633,13 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: [],
-      activeExternalSessionId: "session-2",
+      activeSessionKey: "session-2",
       isSessionViewLoading: true,
     });
 
     await harness.update({
       rows: secondSessionRows,
-      activeExternalSessionId: "session-2",
+      activeSessionKey: "session-2",
       isSessionViewLoading: false,
     });
 
@@ -662,7 +662,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -698,7 +698,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
       },
       { attachDom: true },
@@ -726,7 +726,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -758,90 +758,13 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("preserves the visible anchor when staged history prepends while scrolled", async () => {
-    const rows = createTurnRows(8);
-    const extraContentHeightPx = { current: 0 };
-    const harness = await mountHarness(
-      {
-        rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
-        isSessionWorking: false,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = 120;
-    await act(async () => {
-      await dispatchWheelUp(container);
-      await dispatchScroll(container);
-    });
-    await flushAnimationFrames();
-
-    harness.getLatestResult().preserveScrollBeforeStagedPrepend();
-    extraContentHeightPx.current = 200;
-    await harness.update({
-      rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: false,
-    });
-
-    expect(container.scrollTop).toBe(320);
-    expect(harness.getLatestResult().isNearBottom).toBe(false);
-
-    await harness.unmount();
-  });
-
-  test("does not delta-preserve staged prepends while following the transcript", async () => {
-    const rows = createTurnRows(8);
-    const extraContentHeightPx = { current: 0 };
-    const harness = await mountHarness(
-      {
-        rows,
-        activeExternalSessionId: "session-1",
-        isSessionViewLoading: false,
-        isSessionWorking: false,
-      },
-      { attachDom: true, extraContentHeightPx },
-    );
-
-    const container = harness.messagesContainerRef.current;
-    if (!container) {
-      throw new Error("Expected messages container");
-    }
-
-    container.scrollTop = getMaxScrollTop(container);
-    await act(async () => {
-      await dispatchScroll(container);
-    });
-
-    harness.getLatestResult().preserveScrollBeforeStagedPrepend();
-    extraContentHeightPx.current = 200;
-    await harness.update({
-      rows,
-      activeExternalSessionId: "session-1",
-      isSessionViewLoading: false,
-      isSessionWorking: false,
-    });
-
-    expect(container.scrollTop).toBe(getMaxScrollTop(container) - 200);
-
-    await harness.unmount();
-  });
-
   test("keeps the bottom locked while streaming when the user stays pinned", async () => {
     const rows = createTurnRows(4);
     const extraContentHeightPx = { current: 0 };
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -874,7 +797,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows: initialRows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -900,7 +823,7 @@ describe("useAgentChatWindow", () => {
 
     await harness.update({
       rows: nextRows,
-      activeExternalSessionId: "session-1",
+      activeSessionKey: "session-1",
       isSessionViewLoading: false,
       isSessionWorking: true,
     });
@@ -922,7 +845,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -960,7 +883,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
       },
@@ -1005,7 +928,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,
@@ -1047,7 +970,7 @@ describe("useAgentChatWindow", () => {
     const harness = await mountHarness(
       {
         rows,
-        activeExternalSessionId: "session-1",
+        activeSessionKey: "session-1",
         isSessionViewLoading: false,
         isSessionWorking: true,
         syncBottomAfterComposerLayoutRef,

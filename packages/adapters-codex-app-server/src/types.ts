@@ -17,7 +17,6 @@ import type {
   AgentSessionSummary,
   AgentSkillCatalog,
   ForkAgentSessionInput,
-  LiveAgentSessionStatus,
   ResumeAgentSessionInput,
   SendAgentUserMessageInput,
   StartAgentSessionInput,
@@ -252,8 +251,6 @@ export type CodexSessionState = {
   taskId: string;
   liveStatus?: {
     classification: AgentSessionActivity;
-    status: LiveAgentSessionStatus;
-    agentSessionStatus: "running" | "idle";
   };
 };
 

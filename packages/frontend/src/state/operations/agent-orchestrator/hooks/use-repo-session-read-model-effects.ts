@@ -4,20 +4,21 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useEffect } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
+import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { loadRepoAgentSessionsForTasks } from "../lifecycle/load-sessions";
 import { createRepoStaleGuard } from "../support/core";
-import type { ListenToAgentSession } from "../support/session-runtime-ref";
+import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
 type UseRepoSessionReadModelEffectsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   tasks: TaskCard[];
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
   repoEpochRef: MutableRefObject<number>;
-  commitSessions: (updater: AgentSessionCollectionUpdater) => void;
-  agentEngine: Pick<AgentEnginePort, "listSessionPresence">;
-  listenToAgentSession: ListenToAgentSession;
+  readSessionCollection: () => AgentSessionCollection;
+  setSessionCollection: (sessionCollection: AgentSessionCollection) => void;
+  agentEngine: Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
+  observeAgentSession: ObserveAgentSession;
   setIsLoadingSessionReadModel: Dispatch<SetStateAction<boolean>>;
   setSessionReadModelError: Dispatch<SetStateAction<string | null>>;
   queryClient: QueryClient;
@@ -28,9 +29,10 @@ export const useRepoSessionReadModelEffects = ({
   tasks,
   currentWorkspaceRepoPathRef,
   repoEpochRef,
-  commitSessions,
+  readSessionCollection,
+  setSessionCollection,
   agentEngine,
-  listenToAgentSession,
+  observeAgentSession,
   setIsLoadingSessionReadModel,
   setSessionReadModelError,
   queryClient,
@@ -64,10 +66,11 @@ export const useRepoSessionReadModelEffects = ({
           repoPath: workspaceRepoPath,
           tasks,
           adapter: agentEngine,
-          commitSessions,
-          listenToAgentSession,
+          setSessionCollection,
+          observeAgentSession,
           queryClient,
           isStaleRepoOperation,
+          readSessionCollection,
         });
       } catch (error) {
         if (!isStaleRepoOperation()) {
@@ -92,12 +95,13 @@ export const useRepoSessionReadModelEffects = ({
   }, [
     agentEngine,
     queryClient,
-    listenToAgentSession,
-    commitSessions,
+    observeAgentSession,
+    setSessionCollection,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
     setIsLoadingSessionReadModel,
     setSessionReadModelError,
+    readSessionCollection,
     tasks,
     workspaceRepoPath,
     activeWorkspace,

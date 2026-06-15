@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { GitDiffRefresh } from "@/features/agent-studio-git";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { findFirstChangedMessageIndex } from "@/pages/agents/agent-session-message-diff";
 import {
   forEachSessionMessage,
@@ -18,19 +19,21 @@ type UseAgentStudioBuildWorktreeRefreshArgs = {
 
 const seedProcessedToolMessageKeys = (session: AgentSessionState): Set<string> => {
   const keys = new Set<string>();
+  const sessionKey = agentSessionIdentityKey(session);
   forEachSessionMessage(session, (message) => {
     const meta = message.meta;
     if (meta?.kind !== "tool" || meta.status !== "completed") {
       return;
     }
 
-    keys.add(`${session.externalSessionId}:${message.id}`);
+    keys.add(`${sessionKey}:${message.id}`);
   });
   return keys;
 };
 
 const collectCompletedGitPanelRefreshToolKeys = (session: AgentSessionState): Set<string> => {
   const keys = new Set<string>();
+  const sessionKey = agentSessionIdentityKey(session);
   forEachSessionMessage(session, (message) => {
     const meta = message.meta;
     if (meta?.kind !== "tool" || meta.status !== "completed") {
@@ -38,7 +41,7 @@ const collectCompletedGitPanelRefreshToolKeys = (session: AgentSessionState): Se
     }
 
     if (shouldRefreshGitPanelAfterToolCompletion(meta)) {
-      keys.add(`${session.externalSessionId}:${message.id}`);
+      keys.add(`${sessionKey}:${message.id}`);
     }
   });
   return keys;
@@ -62,7 +65,7 @@ export function useAgentStudioBuildWorktreeRefresh({
     processedToolMessageKeysRef.current = new Set<string>();
   }
   const processedToolMessageKeys = processedToolMessageKeysRef.current;
-  const previousSessionIdRef = useRef<string | null>(null);
+  const previousSessionKeyRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const wasSessionViewLoadingRef = useRef(false);
   const completedToolKeysBeforeViewLoadRef = useRef<Set<string> | null>(null);
@@ -71,6 +74,8 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (viewRole !== "build" || activeSession?.role !== "build") {
       return;
     }
+
+    const activeSessionKey = agentSessionIdentityKey(activeSession);
 
     if (isSessionViewLoading) {
       if (!wasSessionViewLoadingRef.current) {
@@ -81,8 +86,8 @@ export function useAgentStudioBuildWorktreeRefresh({
       return;
     }
 
-    if (previousSessionIdRef.current !== activeSession.externalSessionId) {
-      previousSessionIdRef.current = activeSession.externalSessionId;
+    if (previousSessionKeyRef.current !== activeSessionKey) {
+      previousSessionKeyRef.current = activeSessionKey;
       previousMessagesRef.current = activeSession.messages;
       replaceSetContents(processedToolMessageKeys, seedProcessedToolMessageKeys(activeSession));
       return;
@@ -116,7 +121,7 @@ export function useAgentStudioBuildWorktreeRefresh({
         return;
       }
 
-      const messageKey = `${activeSession.externalSessionId}:${message.id}`;
+      const messageKey = `${activeSessionKey}:${message.id}`;
       if (processedToolMessageKeys.has(messageKey)) {
         return;
       }

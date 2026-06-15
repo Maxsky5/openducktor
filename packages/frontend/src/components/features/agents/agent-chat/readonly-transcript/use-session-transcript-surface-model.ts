@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
+import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
 import { isAgentSessionTranscriptLoading } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
@@ -7,7 +8,6 @@ import { useWorkspaceChatSettings } from "@/state/queries/use-workspace-chat-set
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentChatSurfaceModel } from "../use-agent-chat-surface-model";
-import { useRepoRuntimeReadiness } from "../use-repo-runtime-readiness";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 import { useRuntimeTranscriptInteractions } from "./use-runtime-transcript-interactions";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
@@ -95,7 +95,6 @@ export function useSessionTranscriptSurfaceModel({
   }, [activeWorkspace, isResolvingTranscript, loadError, target]);
 
   const model = useAgentChatSurfaceModel({
-    mode: "non_interactive",
     session: transcriptInteractions.session,
     sessionLifecycle,
     chatSettings,

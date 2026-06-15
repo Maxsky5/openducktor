@@ -4,12 +4,12 @@ import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toast } from "sonner";
 import { resolveBuildContinuationLaunchAction } from "@/features/session-start";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoSettingsInput } from "@/types/state-slices";
-import { toTabsStorageKey } from "../agents/agent-studio-navigation";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -18,6 +18,7 @@ import {
   enableReactActEnvironment,
 } from "../agents/agent-studio-test-utils";
 import { parsePersistedTaskTabs } from "../agents/agents-page-session-tabs";
+import { toTabsStorageKey } from "../agents/query-sync/agent-studio-navigation";
 import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
 
 enableReactActEnvironment();
@@ -29,6 +30,19 @@ const sessionIdentity = (externalSessionId: string) => ({
   runtimeKind: "opencode" as const,
   workingDirectory: `/repo/worktrees/${externalSessionId}`,
 });
+
+const agentStudioSessionUrl = (
+  taskId: string,
+  role: string,
+  session: Parameters<typeof agentSessionIdentityKey>[0],
+): string => {
+  const search = new URLSearchParams({
+    task: taskId,
+    session: agentSessionIdentityKey(session),
+    agent: role,
+  });
+  return `/agents?${search.toString()}`;
+};
 
 const createModalCatalog = (): AgentModelCatalog => ({
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -904,7 +918,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-1&agent=build",
+      agentStudioSessionUrl("TASK-1", "build", sessionIdentity("builder-session-1")),
     );
 
     await harness.unmount();
@@ -922,7 +936,7 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-archived&agent=build",
+      agentStudioSessionUrl("TASK-1", "build", sessionIdentity("builder-session-archived")),
     );
 
     await harness.unmount();
@@ -938,7 +952,45 @@ describe("useKanbanSessionStartFlow", () => {
     });
 
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-2&agent=build",
+      agentStudioSessionUrl("TASK-1", "build", sessionIdentity("builder-session-2")),
+    );
+
+    await harness.unmount();
+  });
+
+  test("onOpenSession follows the updated session render snapshot", async () => {
+    const args = createBaseArgs();
+    args.sessions = [
+      createAgentSessionFixture({
+        externalSessionId: "builder-session-before-refresh",
+        taskId: "TASK-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/builder-session-before-refresh",
+        role: "build",
+        startedAt: "2026-03-19T12:00:00.000Z",
+      }),
+    ];
+    const nextSession = createAgentSessionFixture({
+      externalSessionId: "builder-session-after-refresh",
+      taskId: "TASK-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/builder-session-after-refresh",
+      role: "build",
+      startedAt: "2026-03-20T12:00:00.000Z",
+    });
+    const harness = createHookHarness(args);
+
+    await harness.mount();
+    await harness.update({
+      ...args,
+      sessions: [nextSession],
+    });
+    await harness.run((state) => {
+      state.onOpenSession("TASK-1", "build");
+    });
+
+    expect(args.navigate).toHaveBeenCalledWith(
+      agentStudioSessionUrl("TASK-1", "build", nextSession),
     );
 
     await harness.unmount();
@@ -1003,8 +1055,12 @@ describe("useKanbanSessionStartFlow", () => {
       state.onOpenSession("TASK-1", "build");
     });
 
+    const waitingSession = args.sessions[1];
+    if (!waitingSession) {
+      throw new Error("Expected waiting-input fixture session");
+    }
     expect(args.navigate).toHaveBeenCalledWith(
-      "/agents?task=TASK-1&session=builder-session-old-waiting&agent=build",
+      agentStudioSessionUrl("TASK-1", "build", waitingSession),
     );
 
     await harness.unmount();

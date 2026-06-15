@@ -4,6 +4,10 @@ import type { SubagentMeta } from "./agent-chat-message-card-model.types";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const runtimeKind = "opencode" as const;
+const parentSession = {
+  runtimeKind,
+  workingDirectory: "/repo-a",
+};
 
 const createSubagentMeta = (overrides: Partial<SubagentMeta> = {}): SubagentMeta => ({
   kind: "subagent",
@@ -22,8 +26,7 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
-        sessionWorkingDirectory="/repo-a"
+        parentSession={parentSession}
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -51,8 +54,7 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
-        sessionWorkingDirectory="/repo-a"
+        parentSession={parentSession}
         meta={createSubagentMeta()}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -76,8 +78,7 @@ describe("SubagentTranscriptButton", () => {
 
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
-        sessionWorkingDirectory="/repo-a"
+        parentSession={parentSession}
         meta={createSubagentMeta({ status: "running" })}
         onOpenTranscript={onOpenTranscript}
       />,
@@ -99,8 +100,7 @@ describe("SubagentTranscriptButton", () => {
   test("does not render when subagent session id is unavailable", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
-        sessionWorkingDirectory="/repo-a"
+        parentSession={parentSession}
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
@@ -111,8 +111,7 @@ describe("SubagentTranscriptButton", () => {
 
     rerender(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
-        sessionWorkingDirectory="/repo-a"
+        parentSession={parentSession}
         meta={metaWithoutSessionId}
         onOpenTranscript={() => {}}
       />,
@@ -122,15 +121,21 @@ describe("SubagentTranscriptButton", () => {
   });
 
   test("does not downgrade subagent cards to workflow transcripts when runtime context is unavailable", () => {
-    render(<SubagentTranscriptButton meta={createSubagentMeta()} onOpenTranscript={() => {}} />);
+    render(
+      <SubagentTranscriptButton
+        parentSession={null}
+        meta={createSubagentMeta()}
+        onOpenTranscript={() => {}}
+      />,
+    );
 
     expect(screen.queryByRole("button", { name: "View subagent session" })).toBeNull();
   });
 
-  test("does not render when runtime kind or working directory is unavailable", () => {
+  test("does not render when working directory is unavailable", () => {
     const { rerender } = render(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
+        parentSession={null}
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
@@ -140,7 +145,7 @@ describe("SubagentTranscriptButton", () => {
 
     rerender(
       <SubagentTranscriptButton
-        sessionWorkingDirectory="/repo-a"
+        parentSession={{ runtimeKind, workingDirectory: "   " }}
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,
@@ -157,8 +162,7 @@ describe("SubagentTranscriptButton", () => {
     try {
       render(
         <SubagentTranscriptButton
-          sessionRuntimeKind={runtimeKind}
-          sessionWorkingDirectory="/repo-a"
+          parentSession={parentSession}
           meta={createSubagentMeta()}
           onOpenTranscript={onOpenTranscript}
         />,
@@ -176,8 +180,7 @@ describe("SubagentTranscriptButton", () => {
   test("renders the transcript action as a labeled outline button", () => {
     render(
       <SubagentTranscriptButton
-        sessionRuntimeKind={runtimeKind}
-        sessionWorkingDirectory="/repo-a"
+        parentSession={parentSession}
         meta={createSubagentMeta()}
         onOpenTranscript={() => {}}
       />,

@@ -3,6 +3,7 @@ import type {
   AgentSessionTodoItem,
   AgentUserMessagePart,
 } from "@openducktor/core";
+import { agentSessionStatusFromActivity } from "@openducktor/core";
 import {
   codexTurnKey,
   extractThreadIdFromParams,
@@ -151,7 +152,7 @@ export class CodexRuntimeSessionEvents {
     session.liveStatus = liveStatus;
     session.summary = {
       ...session.summary,
-      status: liveStatus.agentSessionStatus,
+      status: agentSessionStatusFromActivity(liveStatus.classification),
     };
   }
 

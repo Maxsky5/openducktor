@@ -105,13 +105,13 @@ function ChatScrollRegressionHarness(): ReactElement {
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerTextareaRef, resizeComposerTextarea } = useAgentChatLayout({
     input,
-    activeExternalSessionId: "session-1",
+    activeSessionKey: "session-1",
     syncBottomAfterComposerLayoutRef,
   });
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const { isNearBottom } = useAgentChatWindow({
     rows: createRows(80),
-    activeExternalSessionId: "session-1",
+    activeSessionKey: "session-1",
     isSessionViewLoading: false,
     messagesContainerRef,
     messagesContentRef,
@@ -148,13 +148,13 @@ function ChatEditorScrollRegressionHarness(): ReactElement {
   const [input, setInput] = useState("");
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerEditorRef, resizeComposerEditor } = useAgentChatLayout({
-    activeExternalSessionId: "session-1",
+    activeSessionKey: "session-1",
     syncBottomAfterComposerLayoutRef,
   });
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const { isNearBottom } = useAgentChatWindow({
     rows: createRows(80),
-    activeExternalSessionId: "session-1",
+    activeSessionKey: "session-1",
     isSessionViewLoading: false,
     messagesContainerRef,
     messagesContentRef,

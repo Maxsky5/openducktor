@@ -7,7 +7,6 @@ import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio
 import {
   buildActiveDocumentForRole,
   buildWorkflowModelContext,
-  toChatContextUsage,
 } from "./use-agent-studio-page-model-builders";
 
 const createDoc = (markdown: string): TaskDocumentState => ({
@@ -64,25 +63,6 @@ describe("use-agent-studio-page-model-builders", () => {
         qaDoc,
       }),
     ).toBeNull();
-  });
-
-  test("toChatContextUsage preserves optional output limit", () => {
-    expect(toChatContextUsage(null)).toBeNull();
-    expect(toChatContextUsage({ totalTokens: 120, contextWindow: 4096 })).toEqual({
-      totalTokens: 120,
-      contextWindow: 4096,
-    });
-    expect(
-      toChatContextUsage({
-        totalTokens: 120,
-        contextWindow: 4096,
-        outputLimit: 1024,
-      }),
-    ).toEqual({
-      totalTokens: 120,
-      contextWindow: 4096,
-      outputLimit: 1024,
-    });
   });
 
   test("buildWorkflowModelContext derives role availability and fallback session selector", () => {

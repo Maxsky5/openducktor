@@ -10,7 +10,6 @@ import { toReusablePromptSlashCommand } from "@/components/features/agents/agent
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { sessionSlashCommandsQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeSlashCommandsQueryOptions } from "@/state/queries/runtime-catalog";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
 
 export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
@@ -29,7 +28,7 @@ export const mergeSlashCommands = (
 
 export const useChatComposerSlashCommands = ({
   hasSessionTarget,
-  activeSessionStatus,
+  canReadLoadedSessionRuntimePrompts,
   activeSessionRuntimeRef,
   activeSessionRuntimeRefError,
   runtimeSupportsSlashCommands,
@@ -40,7 +39,7 @@ export const useChatComposerSlashCommands = ({
   readSessionSlashCommands,
 }: {
   hasSessionTarget: boolean;
-  activeSessionStatus: AgentSessionState["status"] | null;
+  canReadLoadedSessionRuntimePrompts: boolean;
   activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
   activeSessionRuntimeRefError: string | null;
   runtimeSupportsSlashCommands: boolean;
@@ -78,7 +77,7 @@ export const useChatComposerSlashCommands = ({
     enabled:
       runtimeSupportsSlashCommands &&
       hasSessionTarget &&
-      activeSessionStatus !== "starting" &&
+      canReadLoadedSessionRuntimePrompts &&
       activeSessionRuntimeRef !== null &&
       activeSessionRuntimeRefError === null &&
       readSessionSlashCommands !== undefined,

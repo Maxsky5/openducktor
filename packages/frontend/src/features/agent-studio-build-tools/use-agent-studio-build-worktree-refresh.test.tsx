@@ -195,6 +195,37 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
     }
   });
 
+  test("does not refresh historical completions when same-id session identity changes", async () => {
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createAgentSessionFixture({
+        externalSessionId: "shared-build-session",
+        workingDirectory: "/repo/worktree-a",
+        role: "build",
+        messages: [],
+      }),
+    });
+
+    try {
+      await harness.mount();
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+
+      await harness.update({
+        ...createBaseArgs(),
+        activeSession: createAgentSessionFixture({
+          externalSessionId: "shared-build-session",
+          workingDirectory: "/repo/worktree-b",
+          role: "build",
+          messages: sessionMessagesToArray(createCompletedToolSession("apply_patch", "tool-1")),
+        }),
+      });
+
+      expect(refreshWorktreeMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("ignores non-edit tools and non-build sessions", async () => {
     const harness = createHookHarness({
       ...createBaseArgs(),

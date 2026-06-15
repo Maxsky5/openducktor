@@ -1,4 +1,3 @@
-import type { RuntimeKind } from "@openducktor/contracts";
 import { Eye } from "lucide-react";
 import type { MouseEvent, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,19 +8,16 @@ import {
   type OpenAgentSessionTranscriptRequest,
   useOptionalAgentSessionTranscriptDialog,
 } from "./agent-session-transcript-dialog-context";
+import {
+  type ParentSessionRuntimeIdentity,
+  toSubagentSessionIdentity,
+} from "./subagent-session-key";
 
 type SubagentTranscriptButtonProps = {
-  sessionRuntimeKind?: RuntimeKind | null;
-  sessionWorkingDirectory?: string | null | undefined;
+  parentSession: ParentSessionRuntimeIdentity | null;
   meta: SubagentMeta;
   className?: string;
   onOpenTranscript?: (request: OpenAgentSessionTranscriptRequest) => void;
-};
-
-type TranscriptTargetInput = {
-  externalSessionId: string | null | undefined;
-  sessionRuntimeKind: RuntimeKind | null | undefined;
-  sessionWorkingDirectory: string | null | undefined;
 };
 
 const buildTranscriptRequest = (
@@ -34,38 +30,17 @@ const buildTranscriptRequest = (
   };
 };
 
-const buildTranscriptTarget = ({
-  externalSessionId,
-  sessionRuntimeKind,
-  sessionWorkingDirectory,
-}: TranscriptTargetInput): AgentSessionIdentity | null => {
-  const resolvedExternalSessionId = externalSessionId?.trim() || null;
-  const workingDirectory = sessionWorkingDirectory?.trim() || null;
-
-  if (!resolvedExternalSessionId || !sessionRuntimeKind || !workingDirectory) {
-    return null;
-  }
-
-  return {
-    externalSessionId: resolvedExternalSessionId,
-    runtimeKind: sessionRuntimeKind,
-    workingDirectory,
-  };
-};
-
 export function SubagentTranscriptButton({
-  sessionRuntimeKind,
-  sessionWorkingDirectory,
+  parentSession,
   meta,
   className,
   onOpenTranscript,
 }: SubagentTranscriptButtonProps): ReactElement | null {
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
-  const transcriptTarget = buildTranscriptTarget({
+  const transcriptTarget = toSubagentSessionIdentity({
     externalSessionId: meta.externalSessionId,
-    sessionRuntimeKind,
-    sessionWorkingDirectory,
+    parentSession,
   });
 
   if (!openTranscript || !transcriptTarget) {

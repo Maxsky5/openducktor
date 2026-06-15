@@ -3,6 +3,7 @@ import { normalizeOdtWorkflowToolName } from "@openducktor/core";
 import { useEffect, useRef } from "react";
 import { useTaskDocuments } from "@/components/features/task-details/use-task-documents";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { forEachSessionMessageFrom } from "@/state/operations/agent-orchestrator/support/messages";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
@@ -98,7 +99,8 @@ export function useAgentStudioDocuments({
         ?.workflowToolAliasesByCanonical
     : undefined;
 
-  const documentContextKey = `${taskId}:${activeSession?.externalSessionId ?? ""}`;
+  const activeSessionKey = activeSession ? agentSessionIdentityKey(activeSession) : null;
+  const documentContextKey = `${taskId}:${activeSessionKey ?? ""}`;
   const processedDocumentToolEventsRef = useRef<Set<string> | null>(null);
   if (processedDocumentToolEventsRef.current === null) {
     processedDocumentToolEventsRef.current = new Set<string>();
@@ -109,7 +111,7 @@ export function useAgentStudioDocuments({
     refreshedTaskVersionsRef.current = new Set<string>();
   }
   const refreshedTaskVersions = refreshedTaskVersionsRef.current;
-  const previousSessionIdRef = useRef<string | null>(null);
+  const previousSessionKeyRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<AgentSessionState["messages"] | null>(null);
   const previousWorkflowAliasMetadataReadyRef = useRef(false);
   const workflowAliasMetadataReady = workflowToolAliasesByCanonical !== undefined;
@@ -141,7 +143,7 @@ export function useAgentStudioDocuments({
 
     documentToolEvents.clear();
     taskVersions.clear();
-    previousSessionIdRef.current = null;
+    previousSessionKeyRef.current = null;
     previousMessagesRef.current = null;
     previousWorkflowAliasMetadataReadyRef.current = workflowAliasMetadataReadyRef.current;
   }, [documentContextKey]);
@@ -182,24 +184,24 @@ export function useAgentStudioDocuments({
     }
 
     if (activeSession.role === "build") {
-      previousSessionIdRef.current = activeSession.externalSessionId;
+      previousSessionKeyRef.current = activeSessionKey;
       previousMessagesRef.current = activeSession.messages;
       return;
     }
 
     const firstChangedMessageIndex =
-      previousSessionIdRef.current !== activeSession.externalSessionId
+      previousSessionKeyRef.current !== activeSessionKey
         ? 0
         : findFirstChangedMessageIndex(previousMessagesRef.current, activeSession);
 
     if (firstChangedMessageIndex < 0) {
-      previousSessionIdRef.current = activeSession.externalSessionId;
+      previousSessionKeyRef.current = activeSessionKey;
       previousMessagesRef.current = activeSession.messages;
       return;
     }
 
     forEachSessionMessageFrom(activeSession, firstChangedMessageIndex, (message) => {
-      const eventKey = `${activeSession.externalSessionId}:${message.id}`;
+      const eventKey = `${activeSessionKey}:${message.id}`;
       if (processedDocumentToolEvents.has(eventKey)) {
         return;
       }
@@ -253,11 +255,12 @@ export function useAgentStudioDocuments({
       }
     });
 
-    previousSessionIdRef.current = activeSession.externalSessionId;
+    previousSessionKeyRef.current = activeSessionKey;
     previousMessagesRef.current = activeSession.messages;
   }, [
     workspaceRepoPath,
     activeSession,
+    activeSessionKey,
     applyDocumentUpdate,
     processedDocumentToolEvents,
     planDoc,

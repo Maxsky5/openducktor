@@ -118,17 +118,41 @@ describe("summarizeAgentActivity", () => {
     });
   });
 
-  test("breaks identical timestamps by session id in descending order", () => {
+  test("breaks identical timestamps by session identity in descending order", () => {
     const summary = summarizeAgentActivity({
       sessions: [
-        buildSession({ externalSessionId: "session-a", status: "running" }),
-        buildSession({ externalSessionId: "session-z", status: "running" }),
+        buildSession({
+          externalSessionId: "shared-session",
+          runtimeKind: "codex",
+          workingDirectory: "/repo/codex",
+          status: "running",
+        }),
+        buildSession({
+          externalSessionId: "shared-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo/opencode",
+          status: "running",
+        }),
       ],
     });
 
-    expect(summary.activeSessions.map((session) => session.externalSessionId)).toEqual([
-      "session-z",
-      "session-a",
+    expect(
+      summary.activeSessions.map((session) => ({
+        externalSessionId: session.externalSessionId,
+        runtimeKind: session.runtimeKind,
+        workingDirectory: session.workingDirectory,
+      })),
+    ).toEqual([
+      {
+        externalSessionId: "shared-session",
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/opencode",
+      },
+      {
+        externalSessionId: "shared-session",
+        runtimeKind: "codex",
+        workingDirectory: "/repo/codex",
+      },
     ]);
   });
 

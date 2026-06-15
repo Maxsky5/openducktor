@@ -76,6 +76,9 @@ const createActivityStore = (
     setSessionCollection: (): void => {
       throw new Error("setSessionCollection is not used in this test");
     },
+    updateSession: (): AgentSessionState | null => {
+      throw new Error("updateSession is not used in this test");
+    },
     resetWorkspace: (workspaceRepoPath): void => {
       activityWorkspaceRepoPath = workspaceRepoPath;
       activitySessions = [];

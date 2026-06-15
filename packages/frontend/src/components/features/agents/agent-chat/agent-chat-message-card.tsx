@@ -1,10 +1,10 @@
-import type { RuntimeKind } from "@openducktor/contracts";
 import { memo, type ReactElement, use } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentChatMessage } from "@/types/agent-orchestrator";
+import type { AgentChatMessage, AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { MessageBody, MessageHeader } from "./agent-chat-message-card-content";
 import { buildAgentChatMessageCardViewModel } from "./agent-chat-message-card-view-model";
+import { getSubagentMessageSessionKey } from "./subagent-session-key";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
 const EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -13,27 +13,27 @@ type AgentChatMessageCardProps = {
   message: AgentChatMessage;
   isStreamingAssistantMessage?: boolean;
   sessionAgentColors?: Record<string, string>;
-  sessionWorkingDirectory?: string | null | undefined;
-  sessionRuntimeKind?: RuntimeKind | null | undefined;
+  sessionIdentity: AgentSessionIdentity | null;
   subagentPendingApprovalCount?: number;
-  subagentPendingApprovalCountByExternalSessionId?: Record<string, number>;
+  subagentPendingApprovalCountBySessionKey?: Record<string, number>;
   subagentPendingQuestionCount?: number;
-  subagentPendingQuestionCountByExternalSessionId?: Record<string, number>;
+  subagentPendingQuestionCountBySessionKey?: Record<string, number>;
 };
 
 export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   message,
   isStreamingAssistantMessage = false,
   sessionAgentColors,
-  sessionWorkingDirectory,
-  sessionRuntimeKind,
+  sessionIdentity,
   subagentPendingApprovalCount,
-  subagentPendingApprovalCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
+  subagentPendingApprovalCountBySessionKey = EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
   subagentPendingQuestionCount,
-  subagentPendingQuestionCountByExternalSessionId = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
+  subagentPendingQuestionCountBySessionKey = EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
 }: AgentChatMessageCardProps): ReactElement | null {
   const runtimeDefinitionsContext = use(RuntimeDefinitionsContext);
   const runtimeDefinitions = runtimeDefinitionsContext?.runtimeDefinitions ?? [];
+  const sessionRuntimeKind = sessionIdentity?.runtimeKind ?? null;
+  const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
   const workflowToolAliasesByCanonical = sessionRuntimeKind
     ? findRuntimeDefinition(runtimeDefinitions, sessionRuntimeKind)?.workflowToolAliasesByCanonical
     : undefined;
@@ -43,16 +43,16 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
     sessionRuntimeKind: sessionRuntimeKind ?? null,
     workflowToolAliasesByCanonical,
   });
+  const subagentSessionKey = getSubagentMessageSessionKey({
+    message,
+    parentSession: sessionIdentity,
+  });
   const resolvedSubagentPendingApprovalCount =
     subagentPendingApprovalCount ??
-    (message.meta?.kind === "subagent" && message.meta.externalSessionId
-      ? (subagentPendingApprovalCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
-      : 0);
+    (subagentSessionKey ? (subagentPendingApprovalCountBySessionKey[subagentSessionKey] ?? 0) : 0);
   const resolvedSubagentPendingQuestionCount =
     subagentPendingQuestionCount ??
-    (message.meta?.kind === "subagent" && message.meta.externalSessionId
-      ? (subagentPendingQuestionCountByExternalSessionId[message.meta.externalSessionId] ?? 0)
-      : 0);
+    (subagentSessionKey ? (subagentPendingQuestionCountBySessionKey[subagentSessionKey] ?? 0) : 0);
 
   return (
     <article className={vm.articleClassName} style={vm.articleStyle}>
@@ -65,7 +65,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
-        sessionRuntimeKind={sessionRuntimeKind ?? null}
+        parentSession={sessionIdentity}
         assistantAccentColor={vm.assistantAccentColor}
         isStreamingAssistantMessage={isStreamingAssistantMessage}
         timeLabel={vm.timeLabel}

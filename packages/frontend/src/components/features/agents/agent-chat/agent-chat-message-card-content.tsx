@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
   type AgentRole,
   type AgentUserMessageDisplayPart,
@@ -34,6 +34,7 @@ import { RegularToolMessage, WorkflowToolMessage } from "./agent-chat-message-ca
 import { AgentChatSkillReferenceChip } from "./agent-chat-skill-reference-chip";
 import { AssistantRoleIcon } from "./agent-role-icon";
 import { formatAgentDuration } from "./format-agent-duration";
+import type { ParentSessionRuntimeIdentity } from "./subagent-session-key";
 import { SubagentTranscriptButton } from "./subagent-transcript-button";
 
 const TEXT_RENDER_PACE_MS = 24;
@@ -542,8 +543,7 @@ const readSubagentSummary = (meta: SubagentMeta): string | null => {
 
 type SubagentMessageProps = {
   meta: SubagentMeta;
-  sessionRuntimeKind?: RuntimeKind | null;
-  sessionWorkingDirectory?: string | null | undefined;
+  parentSession: ParentSessionRuntimeIdentity | null;
   timeLabel: string;
   subagentPendingApprovalCount?: number;
   subagentPendingQuestionCount?: number;
@@ -551,8 +551,7 @@ type SubagentMessageProps = {
 
 const SubagentMessage = ({
   meta,
-  sessionRuntimeKind,
-  sessionWorkingDirectory,
+  parentSession,
   timeLabel,
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
@@ -616,11 +615,7 @@ const SubagentMessage = ({
                 <p className="whitespace-pre-wrap text-sm font-medium text-destructive">{error}</p>
               ) : null}
             </div>
-            <SubagentTranscriptButton
-              sessionRuntimeKind={sessionRuntimeKind ?? null}
-              sessionWorkingDirectory={sessionWorkingDirectory}
-              meta={meta}
-            />
+            <SubagentTranscriptButton parentSession={parentSession} meta={meta} />
           </div>
         </div>
       </div>
@@ -650,7 +645,7 @@ const SessionNoticeMessage = ({ message, timeLabel }: SessionNoticeMessageProps)
 
 type MessageBodyProps = {
   message: AgentChatMessage;
-  sessionRuntimeKind?: RuntimeKind | null;
+  parentSession: ParentSessionRuntimeIdentity | null;
   assistantAccentColor: string | undefined;
   isStreamingAssistantMessage: boolean;
   timeLabel: string;
@@ -663,7 +658,7 @@ type MessageBodyProps = {
 
 export const MessageBody = ({
   message,
-  sessionRuntimeKind,
+  parentSession,
   assistantAccentColor,
   isStreamingAssistantMessage,
   timeLabel,
@@ -707,8 +702,7 @@ export const MessageBody = ({
     return (
       <SubagentMessage
         meta={meta}
-        sessionRuntimeKind={sessionRuntimeKind ?? null}
-        sessionWorkingDirectory={sessionWorkingDirectory}
+        parentSession={parentSession}
         timeLabel={timeLabel}
         subagentPendingApprovalCount={subagentPendingApprovalCount}
         subagentPendingQuestionCount={subagentPendingQuestionCount}

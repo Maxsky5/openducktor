@@ -149,6 +149,68 @@ describe("createRuntimeOrchestratorService agentSessionStop", () => {
     ]);
   });
 
+  test("stops the exact persisted session when external ids collide", async () => {
+    const calls: unknown[] = [];
+    const registry = createRegistry([createRuntime()], {
+      stopSession(input) {
+        return Effect.sync(() => {
+          calls.push(input);
+        });
+      },
+      probeSessionStatus() {
+        return Effect.fail(
+          new HostOperationError({
+            operation: "test.effect",
+            message: "unexpected session probe",
+          }),
+        );
+      },
+    });
+    const service = createRuntimeOrchestratorService({
+      gitPort: createGitPort(),
+      runtimeDefinitionsService: createRuntimeDefinitionsService(),
+      runtimeRegistry: registry,
+      taskReader: createTaskStore(
+        {
+          externalSessionId: "shared-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/canonical/repo/old-worktree",
+        },
+        [
+          {
+            externalSessionId: "shared-session",
+            role: "build",
+            startedAt: "2026-05-10T11:00:00.000Z",
+            runtimeKind: "opencode",
+            workingDirectory: "/canonical/repo/target-worktree",
+            selectedModel: null,
+          },
+        ],
+      ),
+    });
+
+    await expect(
+      Effect.runPromise(
+        service.agentSessionStop({
+          repoPath: "/repo",
+          taskId: "task-1",
+          externalSessionId: "shared-session",
+          runtimeKind: "opencode",
+          workingDirectory: "/canonical/repo/target-worktree",
+        }),
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    expect(calls).toEqual([
+      {
+        runtimeKind: "opencode",
+        repoPath: "/canonical/repo",
+        externalSessionId: "shared-session",
+        workingDirectory: "/canonical/repo/target-worktree",
+      },
+    ]);
+  });
+
   test("rejects agent session stop when persisted session identity mismatches the request", async () => {
     const service = createRuntimeOrchestratorService({
       gitPort: createGitPort(),
@@ -166,9 +228,7 @@ describe("createRuntimeOrchestratorService agentSessionStop", () => {
           workingDirectory: "/canonical/repo/worktree",
         }),
       ),
-    ).rejects.toThrow(
-      "Agent session with externalSessionId external-session-1 runtime kind mismatch",
-    );
+    ).rejects.toThrow("Agent session external-session-1 (codex, /canonical/repo/worktree)");
   });
 
   test("propagates runtime registry stop failures", async () => {

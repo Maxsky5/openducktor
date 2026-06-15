@@ -1,7 +1,6 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient } from "@/lib/query-client";
-import { getAgentSession } from "@/state/agent-session-collection";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
@@ -42,13 +41,13 @@ const loadSessionForReuse = async ({
   mode: "reuse" | "fork";
   forceReload?: boolean;
 }): Promise<AgentSessionState> => {
-  const currentSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
+  const currentSession = deps.session.readSessionSnapshot(sourceSession);
   if (forceReload || !currentSession) {
     await deps.session.loadAgentSessions(ctx.taskId);
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const loadedSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
+  const loadedSession = deps.session.readSessionSnapshot(sourceSession);
   if (!loadedSession) {
     throw new Error(
       `Failed to load session "${sourceSession.externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
@@ -60,7 +59,7 @@ const loadSessionForReuse = async ({
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
 
-  const historyLoadedSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
+  const historyLoadedSession = deps.session.readSessionSnapshot(sourceSession);
   if (!historyLoadedSession) {
     throw new Error(
       `Failed to load session "${sourceSession.externalSessionId}" for ${mode === "reuse" ? "reuse" : "forking"}.`,
@@ -176,7 +175,7 @@ export const resolveLoadedSourceSession = async ({
   deps: StartSessionExecutionDependencies;
   sourceSession: AgentSessionIdentity;
 }): Promise<AgentSessionState> => {
-  const existingSourceSession = getAgentSession(deps.session.sessionsRef.current, sourceSession);
+  const existingSourceSession = deps.session.readSessionSnapshot(sourceSession);
   if (existingSourceSession) {
     if (!matchesLoadedSourceSession(existingSourceSession, ctx, sourceSession)) {
       throw new Error(
@@ -224,7 +223,7 @@ export const executeReuseStart = async ({
   }
   const { matchesQaTarget, matchesBuildTarget } = createWorkingDirectoryMatchers({ ctx, deps });
 
-  const existingSession = getAgentSession(deps.session.sessionsRef.current, input.sourceSession);
+  const existingSession = deps.session.readSessionSnapshot(input.sourceSession);
   if (existingSession) {
     if (!matchesLoadedSourceSession(existingSession, ctx, input.sourceSession)) {
       throw new Error(

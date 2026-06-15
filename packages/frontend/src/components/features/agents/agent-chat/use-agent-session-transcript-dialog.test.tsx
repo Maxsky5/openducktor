@@ -217,8 +217,11 @@ describe("AgentSessionTranscriptDialogHost", () => {
           },
         })}
         sessionAgentColors={{}}
-        sessionRuntimeKind="opencode"
-        sessionWorkingDirectory="/repo-a"
+        sessionIdentity={{
+          externalSessionId: "session-parent",
+          runtimeKind: "opencode",
+          workingDirectory: "/repo-a",
+        }}
         subagentPendingApprovalCount={1}
         subagentPendingQuestionCount={1}
       />,

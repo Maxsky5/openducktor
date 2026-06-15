@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import {
+  type AgentSessionViewLifecycle,
   isAgentSessionTranscriptLoading,
-  type SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 
 export type BuildToolsSessionDescriptor = {
@@ -27,7 +27,7 @@ type UseAgentStudioBuildToolsBootstrapArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
+  viewSessionLifecycle: AgentSessionViewLifecycle;
 };
 
 type BuildToolsBootstrapContext = {

@@ -2,12 +2,11 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
-import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
+import type { AgentSessionCollection } from "@/state/agent-session-collection";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
-  type RepoSessionReadModel,
-  readRepoRuntimeSessionPresence,
+  readRepoRuntimeSessionSnapshots,
   type TaskSessionRecords,
 } from "../session-read-model/repo-session-read-model";
 import {
@@ -15,18 +14,20 @@ import {
   loadTaskSessionRecordsForTasks,
 } from "../session-read-model/task-session-records";
 import { createRepoStaleGuard } from "../support/core";
-import type { ListenToAgentSession } from "../support/session-runtime-ref";
+import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
-type CommitSessions = (updater: AgentSessionCollectionUpdater) => void;
-type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionPresence">;
+type SetSessionCollection = (sessionCollection: AgentSessionCollection) => void;
+type ReadSessionCollection = () => AgentSessionCollection;
+type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
 
 type CreateLoadAgentSessionsArgs = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: SessionLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  setSessionCollection: CommitSessions;
-  listenToAgentSession: ListenToAgentSession;
+  readSessionCollection: ReadSessionCollection;
+  setSessionCollection: SetSessionCollection;
+  observeAgentSession: ObserveAgentSession;
   queryClient: QueryClient;
 };
 
@@ -34,54 +35,48 @@ export const loadRepoAgentSessions = async ({
   repoPath,
   tasks,
   adapter,
-  commitSessions,
-  listenToAgentSession,
+  setSessionCollection,
+  observeAgentSession,
   isStaleRepoOperation,
+  readSessionCollection,
 }: {
   repoPath: string;
   tasks: TaskSessionRecords[];
   adapter: SessionLoaderAdapter;
-  commitSessions: CommitSessions;
-  listenToAgentSession: ListenToAgentSession;
+  setSessionCollection: SetSessionCollection;
+  observeAgentSession: ObserveAgentSession;
   isStaleRepoOperation: () => boolean;
+  readSessionCollection: ReadSessionCollection;
 }): Promise<void> => {
   if (isStaleRepoOperation()) {
     return;
   }
 
-  const runtimePresence = await readRepoRuntimeSessionPresence({
+  const runtimeSnapshots = await readRepoRuntimeSessionSnapshots({
     repoPath,
     tasks,
-    listSessionPresence: (input) => adapter.listSessionPresence(input),
+    listSessionRuntimeSnapshots: (input) => adapter.listSessionRuntimeSnapshots(input),
   });
   if (isStaleRepoOperation()) {
     return;
   }
 
-  const readModelRef: { current: RepoSessionReadModel | null } = { current: null };
-  commitSessions((currentSessionCollection) => {
-    const nextReadModel = buildRepoSessionReadModel({
-      repoPath,
-      tasks,
-      currentSessionCollection,
-      runtimePresence,
-    });
-    readModelRef.current = nextReadModel;
-    return nextReadModel.sessionCollection;
+  const readModel = buildRepoSessionReadModel({
+    repoPath,
+    tasks,
+    currentSessionCollection: readSessionCollection(),
+    runtimeSnapshots,
   });
+  setSessionCollection(readModel.sessionCollection);
 
   if (isStaleRepoOperation()) {
-    return;
-  }
-  const readModel = readModelRef.current;
-  if (!readModel) {
     return;
   }
 
   await Promise.all(
     readModel.liveSessionRefs.map(async (session) => {
       if (!isStaleRepoOperation()) {
-        await listenToAgentSession(session);
+        await observeAgentSession(session);
       }
     }),
   );
@@ -91,18 +86,20 @@ export const loadRepoAgentSessionsForTasks = async ({
   repoPath,
   tasks,
   adapter,
-  commitSessions,
-  listenToAgentSession,
+  setSessionCollection,
+  observeAgentSession,
   queryClient,
   isStaleRepoOperation,
+  readSessionCollection,
 }: {
   repoPath: string;
   tasks: TaskCard[];
   adapter: SessionLoaderAdapter;
-  commitSessions: CommitSessions;
-  listenToAgentSession: ListenToAgentSession;
+  setSessionCollection: SetSessionCollection;
+  observeAgentSession: ObserveAgentSession;
   queryClient: QueryClient;
   isStaleRepoOperation: () => boolean;
+  readSessionCollection: ReadSessionCollection;
 }): Promise<void> => {
   if (isStaleRepoOperation()) {
     return;
@@ -121,9 +118,10 @@ export const loadRepoAgentSessionsForTasks = async ({
     repoPath,
     tasks: taskSessionRecords,
     adapter,
-    commitSessions,
-    listenToAgentSession,
+    setSessionCollection,
+    observeAgentSession,
     isStaleRepoOperation,
+    readSessionCollection,
   });
 };
 
@@ -132,8 +130,9 @@ export const createLoadAgentSessions = ({
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
+  readSessionCollection,
   setSessionCollection,
-  listenToAgentSession,
+  observeAgentSession,
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
   return async (taskId: string): Promise<void> => {
@@ -165,9 +164,10 @@ export const createLoadAgentSessions = ({
       repoPath,
       tasks: [task],
       adapter,
-      commitSessions: setSessionCollection,
-      listenToAgentSession,
+      setSessionCollection,
+      observeAgentSession,
       isStaleRepoOperation,
+      readSessionCollection,
     });
   };
 };

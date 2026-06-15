@@ -1,17 +1,13 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionHistorySystemPromptContext } from "@openducktor/core";
 import type { MutableRefObject } from "react";
-import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { createRepoStaleGuard } from "../support/core";
 import { mergeHistoryMessages } from "../support/history-message-merge";
-import { createSessionMessagesState, getSessionMessageCount } from "../support/messages";
+import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages, historyToSessionContextUsage } from "../support/persistence";
-import {
-  buildHistoryRuntimeContext,
-  withSessionHistoryRuntimeContext,
-} from "./session-history-runtime-context";
+import { loadSessionPromptContext } from "../support/session-prompt";
 import type { SessionRepoReadinessState } from "./session-view-lifecycle";
 
 type UpdateSession = (
@@ -20,7 +16,7 @@ type UpdateSession = (
   options?: { persist?: boolean },
 ) => void;
 
-type SessionsSnapshotRef = { readonly current: AgentSessionCollection };
+type ReadSessionSnapshot = (identity: AgentSessionIdentity) => AgentSessionState | null;
 
 export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 
@@ -34,12 +30,17 @@ type AgentSessionHistoryTarget = AgentSessionIdentity & {
   systemPromptContext?: AgentSessionHistorySystemPromptContext;
 };
 
+type SessionHistoryPromptTarget = Pick<
+  AgentSessionState,
+  "externalSessionId" | "taskId" | "role" | "startedAt"
+>;
+
 type CreateLoadAgentSessionHistoryArgs = {
   activeWorkspace: ActiveWorkspace | null;
   adapter: SessionHistoryLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
-  sessionsRef: SessionsSnapshotRef;
+  readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   taskRef: MutableRefObject<TaskCard[]>;
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
@@ -47,11 +48,45 @@ type CreateLoadAgentSessionHistoryArgs = {
 
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
-const shouldLoadSessionHistory = (session: AgentSessionState): boolean => {
-  if (session.historyLoadState === "not_requested") {
-    return true;
+const shouldAutoLoadSelectedSessionHistory = (session: AgentSessionState): boolean =>
+  session.historyLoadState === "not_requested";
+
+const canStartSessionHistoryLoad = (session: AgentSessionState): boolean =>
+  session.historyLoadState === "not_requested" || session.historyLoadState === "failed";
+
+const buildSessionHistorySystemPromptContext = async ({
+  workspaceId,
+  tasks,
+  session,
+  loadRepoPromptOverrides,
+}: {
+  workspaceId: string;
+  tasks: readonly TaskCard[];
+  session: SessionHistoryPromptTarget;
+  loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
+}): Promise<AgentSessionHistorySystemPromptContext | undefined> => {
+  if (session.role === null) {
+    return undefined;
   }
-  return session.historyLoadState === "failed" && getSessionMessageCount(session) > 0;
+
+  const task = tasks.find((task) => task.id === session.taskId);
+  if (!task) {
+    throw new Error(
+      `Cannot load history for '${session.externalSessionId}': task '${session.taskId}' is unavailable.`,
+    );
+  }
+
+  const { systemPrompt } = await loadSessionPromptContext({
+    workspaceId,
+    role: session.role,
+    task,
+    loadRepoPromptOverrides,
+  });
+
+  return {
+    systemPrompt,
+    startedAt: session.startedAt,
+  };
 };
 
 const releaseStaleHistoryLoad = ({
@@ -81,20 +116,20 @@ export const shouldLoadSelectedSessionHistory = ({
   if (repoReadinessState !== "ready" || !session) {
     return false;
   }
-  return shouldLoadSessionHistory(session);
+  return shouldAutoLoadSelectedSessionHistory(session);
 };
 
 export const loadSessionHistoryIntoStore = async ({
   repoPath,
   adapter,
-  sessionsRef,
+  readSessionSnapshot,
   updateSession,
   target,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
-  sessionsRef: SessionsSnapshotRef;
+  readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
   target: AgentSessionHistoryTarget;
   isStaleRepoOperation: () => boolean;
@@ -103,15 +138,15 @@ export const loadSessionHistoryIntoStore = async ({
     return { externalSessionId: target.externalSessionId, status: "stale" };
   }
 
-  const currentSession = getAgentSession(sessionsRef.current, target);
-  if (!currentSession || !shouldLoadSessionHistory(currentSession)) {
+  const currentSession = readSessionSnapshot(target);
+  if (!currentSession || !canStartSessionHistoryLoad(currentSession)) {
     return { externalSessionId: target.externalSessionId, status: "skipped" };
   }
 
   updateSession(
     currentSession,
     (current) => {
-      if (!shouldLoadSessionHistory(current)) {
+      if (!canStartSessionHistoryLoad(current)) {
         return current;
       }
       return { ...current, historyLoadState: "loading" };
@@ -121,7 +156,7 @@ export const loadSessionHistoryIntoStore = async ({
     },
   );
 
-  const claimedSession = getAgentSession(sessionsRef.current, currentSession);
+  const claimedSession = readSessionSnapshot(currentSession);
   if (claimedSession?.historyLoadState !== "loading") {
     return { externalSessionId: target.externalSessionId, status: "skipped" };
   }
@@ -187,7 +222,7 @@ export const createLoadAgentSessionHistory = ({
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
-  sessionsRef,
+  readSessionSnapshot,
   updateSession,
   taskRef,
   loadRepoPromptOverrides,
@@ -209,31 +244,32 @@ export const createLoadAgentSessionHistory = ({
       return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
     }
 
-    const session = getAgentSession(sessionsRef.current, sessionIdentity);
+    const session = readSessionSnapshot(sessionIdentity);
     if (!session) {
       throw new Error(
         `Cannot load history for unknown session '${sessionIdentity.externalSessionId}'.`,
       );
     }
 
-    const [historySession] = await withSessionHistoryRuntimeContext({
-      sessions: [session],
-      context: buildHistoryRuntimeContext({
-        activeWorkspace,
-        tasks: taskRef.current,
-        loadRepoPromptOverrides,
-      }),
+    const systemPromptContext = await buildSessionHistorySystemPromptContext({
+      workspaceId: activeWorkspace.workspaceId,
+      tasks: taskRef.current,
+      session,
+      loadRepoPromptOverrides,
     });
-    if (!historySession || isStaleRepoOperation()) {
+    if (isStaleRepoOperation()) {
       return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
     }
 
     return loadSessionHistoryIntoStore({
       repoPath,
       adapter,
-      sessionsRef,
+      readSessionSnapshot,
       updateSession,
-      target: historySession,
+      target: {
+        ...session,
+        ...(systemPromptContext ? { systemPromptContext } : {}),
+      },
       isStaleRepoOperation,
     });
   };

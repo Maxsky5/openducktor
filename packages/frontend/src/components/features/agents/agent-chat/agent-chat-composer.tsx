@@ -430,12 +430,12 @@ function AgentChatComposerFormView({
 
 function useAgentChatComposerFocus({
   composerEditorRef,
-  displayedSessionId,
+  displayedSessionKey,
   isComposerInputDisabled,
   isSubmitting,
 }: {
   composerEditorRef: AgentChatComposerModel["composerEditorRef"];
-  displayedSessionId: string | null;
+  displayedSessionKey: string | null;
   isComposerInputDisabled: boolean;
   isSubmitting: boolean;
 }): () => void {
@@ -495,7 +495,7 @@ function useAgentChatComposerFocus({
     const focusInsideComposer = isFocusInsideComposer(activeElement);
 
     const autofocusResult = resolveComposerAutofocus(composerAutofocusState, {
-      displayedSessionId,
+      displayedSessionKey,
       isComposerInteractive,
       activeElement,
       focusInsideComposer,
@@ -505,7 +505,7 @@ function useAgentChatComposerFocus({
       scheduleComposerFocus();
     }
   }, [
-    displayedSessionId,
+    displayedSessionKey,
     isComposerInputDisabled,
     isFocusInsideComposer,
     isSubmitting,
@@ -525,7 +525,7 @@ export function AgentChatComposer({
 }): ReactElement {
   const {
     taskId,
-    displayedSessionId,
+    displayedSessionKey,
     isInteractionEnabled,
     isReadOnly,
     readOnlyReason,
@@ -690,7 +690,7 @@ export function AgentChatComposer({
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,
-    displayedSessionId,
+    displayedSessionKey,
     isComposerInputDisabled,
     isSubmitting,
   });

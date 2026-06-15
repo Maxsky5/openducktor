@@ -7,6 +7,7 @@ import { useTaskDocuments } from "@/components/features/task-details/use-task-do
 import { createQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
 import { isKanbanForegroundLoading } from "@/pages/kanban/use-kanban-page-models";
+import { getAgentSession } from "@/state/agent-session-collection";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createSettingsSnapshotFixture as createSharedSettingsSnapshotFixture,
@@ -24,6 +25,10 @@ import {
   type SessionEventAdapter,
 } from "../agent-orchestrator/events/session-events";
 import { createSessionMessagesState } from "../agent-orchestrator/support/messages";
+import {
+  createSessionDraftBuffers,
+  createSessionTurnMetadata,
+} from "../agent-orchestrator/support/session-transient-state";
 import {
   createAgentSessionCollectionRefFixture,
   updateAgentSessionFixture,
@@ -1858,7 +1863,7 @@ describe("use-task-operations", () => {
       identity: AgentSessionIdentity,
       updater: (current: AgentSessionState) => AgentSessionState,
     ) => {
-      updateAgentSessionFixture(sessionsRef, identity, updater);
+      return updateAgentSessionFixture(sessionsRef, identity, updater);
     };
 
     try {
@@ -1879,13 +1884,11 @@ describe("use-task-operations", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo",
         },
-        sessionsRef,
-        draftRawBySessionRef: { current: {} },
-        draftSourceBySessionRef: { current: {} },
-        draftMessageIdBySessionRef: { current: {} },
-        draftFlushTimeoutBySessionRef: { current: {} },
+        draftBuffers: createSessionDraftBuffers(),
+        turnMetadata: createSessionTurnMetadata(),
+        readSession: (identity) => getAgentSession(sessionsRef.current, identity),
         updateSession,
-        runtimeDataWriter: { updateTodos: () => {} },
+        updateSessionTodos: () => {},
         buildReadOnlyApprovalRejectionMessage: async () => "Rejected by read-only policy.",
         recordTurnActivityTimestamp: () => {},
         recordTurnUserMessageTimestamp: () => {},

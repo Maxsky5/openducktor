@@ -1,6 +1,7 @@
 import { type AgentSessionRecord, agentSessionRecordSchema } from "@openducktor/contracts";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
+import { normalizePathForComparison } from "../../domain/path-comparison";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
 import { agentSessionsFromRow, encodeJson } from "./sqlite-json-codecs";
 import { requireTaskRow } from "./sqlite-task-queries";
@@ -66,6 +67,15 @@ const compactAgentSessionForStorage = (
     });
   });
 
+const isSameAgentSessionRecordIdentity = (
+  left: AgentSessionRecord,
+  right: AgentSessionRecord,
+): boolean =>
+  left.externalSessionId.trim() === right.externalSessionId.trim() &&
+  left.runtimeKind.trim() === right.runtimeKind.trim() &&
+  normalizePathForComparison(left.workingDirectory) ===
+    normalizePathForComparison(right.workingDirectory);
+
 export const clearAgentSessionsByRoles = (
   session: TaskStoreSession,
   input: Parameters<TaskStorePort["clearAgentSessionsByRoles"]>[0],
@@ -102,8 +112,8 @@ export const upsertAgentSession = (
     const compactSession = yield* compactAgentSessionForStorage(input.session);
     const row = yield* requireTaskRow(session, input.taskId, input.repoPath);
     const sessions = yield* agentSessionsFromRow(row);
-    const existingIndex = sessions.findIndex(
-      (entry) => entry.externalSessionId === compactSession.externalSessionId,
+    const existingIndex = sessions.findIndex((entry) =>
+      isSameAgentSessionRecordIdentity(entry, compactSession),
     );
     if (existingIndex >= 0) {
       sessions[existingIndex] = compactSession;

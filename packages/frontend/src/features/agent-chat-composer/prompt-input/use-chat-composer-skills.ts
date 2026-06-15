@@ -9,7 +9,7 @@ const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
 type UseChatComposerSkillsArgs = {
   hasSessionTarget: boolean;
-  activeSessionStatus: string | null;
+  canReadLoadedSessionRuntimePrompts: boolean;
   activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
   activeSessionRuntimeRefError: string | null;
   supportsSkillReferences: boolean;
@@ -29,7 +29,7 @@ type UseChatComposerSkillsArgs = {
 
 export const useChatComposerSkills = ({
   hasSessionTarget,
-  activeSessionStatus,
+  canReadLoadedSessionRuntimePrompts,
   activeSessionRuntimeRef,
   activeSessionRuntimeRefError,
   supportsSkillReferences,
@@ -60,7 +60,7 @@ export const useChatComposerSkills = ({
     enabled:
       supportsSkillReferences &&
       hasSessionTarget &&
-      activeSessionStatus !== "starting" &&
+      canReadLoadedSessionRuntimePrompts &&
       activeSessionRuntimeRef !== null &&
       activeSessionRuntimeRefError === null &&
       readSessionSkills !== undefined,

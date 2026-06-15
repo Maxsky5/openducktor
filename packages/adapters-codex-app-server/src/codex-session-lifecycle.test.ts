@@ -59,8 +59,6 @@ describe("codex session lifecycle", () => {
       },
       liveStatus: {
         classification: "running",
-        status: { type: "busy" },
-        agentSessionStatus: "running",
       },
     });
     expect(restored).toMatchObject({

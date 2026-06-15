@@ -164,12 +164,18 @@ describe("session-event-batching", () => {
         message: "First",
       },
       {
-        type: "tool_call",
+        type: "assistant_part",
         externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.000Z",
-        call: {
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
           tool: "odt_set_plan",
-          args: { taskId: "task-1", markdown: "# Plan" },
+          toolType: "workflow",
+          status: "running",
+          input: { taskId: "task-1", markdown: "# Plan" },
         },
       },
     ] satisfies SessionEvent[]);
@@ -186,12 +192,18 @@ describe("session-event-batching", () => {
         message: "Second",
       },
       {
-        type: "tool_call",
+        type: "assistant_part",
         externalSessionId: "session-1",
         timestamp: "2026-02-22T08:00:01.150Z",
-        call: {
+        part: {
+          kind: "tool",
+          messageId: "assistant-1",
+          partId: "tool-1",
+          callId: "call-1",
           tool: "odt_set_plan",
-          args: { taskId: "task-1", markdown: "# Plan" },
+          toolType: "workflow",
+          status: "running",
+          input: { taskId: "task-1", markdown: "# Plan" },
         },
       },
     ] satisfies SessionEvent[]);

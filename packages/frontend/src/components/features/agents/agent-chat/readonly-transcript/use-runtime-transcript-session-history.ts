@@ -5,7 +5,7 @@ import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import {
   type AgentSessionHistoryLoadState,
   type AgentSessionViewLifecycle,
-  deriveAgentSessionTargetViewLifecycle,
+  deriveAgentSessionTranscriptLifecycle,
   type SessionRepoReadinessState,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/support/messages";
@@ -106,8 +106,8 @@ export function useRuntimeTranscriptSessionHistory({
   })();
   const lifecycle = useMemo(
     () =>
-      deriveAgentSessionTargetViewLifecycle({
-        target:
+      deriveAgentSessionTranscriptLifecycle({
+        transcript:
           target && historyLoadState
             ? {
                 historyLoadState,

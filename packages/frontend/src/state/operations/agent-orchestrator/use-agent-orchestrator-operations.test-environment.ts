@@ -4,16 +4,16 @@ import type { AgentEnginePort } from "@openducktor/core";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { host } from "../shared/host";
-import { createAgentSessionPresenceSnapshotFixture } from "./test-utils";
+import { createAgentSessionRuntimeSnapshotFixture } from "./test-utils";
 import { createWorktreeRuntimeFixture } from "./use-agent-orchestrator-operations.test-fixtures";
 
-export type ReadSessionPresenceInput = Parameters<
-  NonNullable<AgentEnginePort["readSessionPresence"]>
+export type ReadSessionRuntimeSnapshotInput = Parameters<
+  NonNullable<AgentEnginePort["readSessionRuntimeSnapshot"]>
 >[0];
 
 export type OpencodeSdkAdapterPrototype = Pick<
   OpencodeSdkAdapter,
-  "listSessionPresence" | "readSessionPresence"
+  "listSessionRuntimeSnapshots" | "readSessionRuntimeSnapshot"
 >;
 
 export const opencodeSdkAdapterPrototype =
@@ -29,8 +29,10 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
   const originalRuntimeList = host.runtimeList;
   const originalRuntimeEnsure = host.runtimeEnsure;
   const originalRuntimeRequire = host.runtimeRequire;
-  const originalListLiveAgentSessionSnapshots = OpencodeSdkAdapter.prototype.listSessionPresence;
-  const originalReadAgentSessionPresenceSnapshot = OpencodeSdkAdapter.prototype.readSessionPresence;
+  const originalListSessionRuntimeSnapshots =
+    OpencodeSdkAdapter.prototype.listSessionRuntimeSnapshots;
+  const originalReadAgentSessionRuntimeSnapshot =
+    OpencodeSdkAdapter.prototype.readSessionRuntimeSnapshot;
   const originalSubscribeEvents = OpencodeSdkAdapter.prototype.subscribeEvents;
   const originalLoadSessionHistory = OpencodeSdkAdapter.prototype.loadSessionHistory;
   const originalLoadSessionTodos = OpencodeSdkAdapter.prototype.loadSessionTodos;
@@ -80,25 +82,25 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     },
   });
   host.runtimeRequire = host.runtimeEnsure;
-  opencodeSdkAdapterPrototype.listSessionPresence = async () => [
-    createAgentSessionPresenceSnapshotFixture(),
+  opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = async () => [
+    createAgentSessionRuntimeSnapshotFixture(),
   ];
-  opencodeSdkAdapterPrototype.readSessionPresence = async (
-    input: ReadSessionPresenceInput,
-  ): ReturnType<NonNullable<OpencodeSdkAdapterPrototype["readSessionPresence"]>> => {
-    const snapshots = await opencodeSdkAdapterPrototype.listSessionPresence({
+  opencodeSdkAdapterPrototype.readSessionRuntimeSnapshot = async (
+    input: ReadSessionRuntimeSnapshotInput,
+  ): ReturnType<NonNullable<OpencodeSdkAdapterPrototype["readSessionRuntimeSnapshot"]>> => {
+    const snapshots = await opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots({
       repoPath: input.repoPath ?? "/tmp/repo",
       runtimeKind: input.runtimeKind ?? "opencode",
       directories: [input.workingDirectory ?? "/tmp/repo/worktree"],
     });
     const match = snapshots.find(
-      (snapshot: ReturnType<typeof createAgentSessionPresenceSnapshotFixture>) =>
+      (snapshot: ReturnType<typeof createAgentSessionRuntimeSnapshotFixture>) =>
         snapshot.ref.externalSessionId === input.externalSessionId,
     );
     if (match) {
       return match;
     }
-    return createAgentSessionPresenceSnapshotFixture({
+    return createAgentSessionRuntimeSnapshotFixture({
       ref: {
         repoPath: input.repoPath ?? "/tmp/repo",
         runtimeKind: input.runtimeKind ?? "opencode",
@@ -119,8 +121,9 @@ export const setupOrchestratorOperationsTestEnvironment = async () => {
     host.runtimeList = originalRuntimeList;
     host.runtimeEnsure = originalRuntimeEnsure;
     host.runtimeRequire = originalRuntimeRequire;
-    opencodeSdkAdapterPrototype.listSessionPresence = originalListLiveAgentSessionSnapshots;
-    opencodeSdkAdapterPrototype.readSessionPresence = originalReadAgentSessionPresenceSnapshot;
+    opencodeSdkAdapterPrototype.listSessionRuntimeSnapshots = originalListSessionRuntimeSnapshots;
+    opencodeSdkAdapterPrototype.readSessionRuntimeSnapshot =
+      originalReadAgentSessionRuntimeSnapshot;
     OpencodeSdkAdapter.prototype.subscribeEvents = originalSubscribeEvents;
     OpencodeSdkAdapter.prototype.loadSessionHistory = originalLoadSessionHistory;
     OpencodeSdkAdapter.prototype.loadSessionTodos = originalLoadSessionTodos;

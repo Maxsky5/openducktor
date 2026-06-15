@@ -39,7 +39,7 @@ let settingsSnapshotError: Error | null = null;
 let actualAppStateProvider: Awaited<typeof import("@/state/app-state-provider")>;
 let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>;
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
-let actualRepoRuntimeReadiness: Awaited<typeof import("../use-repo-runtime-readiness")>;
+let actualRepoRuntimeReadiness: Awaited<typeof import("@/lib/use-repo-runtime-readiness")>;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
 let runtimeReadiness: AgentChatThreadRuntimeReadiness = {
   readinessState: "ready",
@@ -136,7 +136,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       import("@/state/app-state-provider"),
       import("@/state/app-state-contexts"),
       import("@/state/operations/host"),
-      import("../use-repo-runtime-readiness"),
+      import("@/lib/use-repo-runtime-readiness"),
     ]);
     originalWorkspaceGetSettingsSnapshot = actualHostOperations.host.workspaceGetSettingsSnapshot;
   });
@@ -210,7 +210,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       }),
     }));
 
-    mock.module("../use-repo-runtime-readiness", () => ({
+    mock.module("@/lib/use-repo-runtime-readiness", () => ({
       useRepoRuntimeReadiness: () => runtimeReadiness,
     }));
   });
@@ -219,7 +219,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     await restoreMockedModules([
       ["@/state/app-state-provider", () => Promise.resolve(actualAppStateProvider)],
       ["@/state/app-state-contexts", () => Promise.resolve(actualAppStateContexts)],
-      ["../use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
+      ["@/lib/use-repo-runtime-readiness", () => Promise.resolve(actualRepoRuntimeReadiness)],
     ]);
     actualHostOperations.host.workspaceGetSettingsSnapshot = originalWorkspaceGetSettingsSnapshot;
   });

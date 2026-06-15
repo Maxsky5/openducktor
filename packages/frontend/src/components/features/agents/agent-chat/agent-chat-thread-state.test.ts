@@ -23,12 +23,10 @@ describe("getAgentChatThreadState", () => {
         ...readyRuntimeReadiness,
       },
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
 
     expect(state.transcriptNotice?.kind).toBe("runtime_waiting");
     expect(state.transcriptNotice?.title).toBe("Runtime is starting");
-    expect(state.hideTranscriptRows).toBe(false);
   });
 
   test("treats history load as conversation-loading state", () => {
@@ -38,10 +36,8 @@ describe("getAgentChatThreadState", () => {
       }),
       runtimeReadiness: readyRuntimeReadiness,
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
 
-    expect(state.hideTranscriptRows).toBe(false);
     expect(state.shouldResetTranscriptWindow).toBe(true);
     expect(state.transcriptNotice?.kind).toBe("session_loading");
     expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
@@ -52,7 +48,6 @@ describe("getAgentChatThreadState", () => {
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: readyRuntimeReadiness,
       isTranscriptPending: true,
-      isTranscriptRenderDeferred: false,
     });
 
     expect(state.shouldResetTranscriptWindow).toBe(true);
@@ -64,11 +59,9 @@ describe("getAgentChatThreadState", () => {
       sessionLifecycle: readyLifecycle,
       runtimeReadiness: readyRuntimeReadiness,
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
       isTranscriptRowsMissing: true,
     });
 
-    expect(state.hideTranscriptRows).toBe(false);
     expect(state.shouldResetTranscriptWindow).toBe(true);
     expect(state.transcriptNotice).toBeNull();
   });
@@ -80,7 +73,6 @@ describe("getAgentChatThreadState", () => {
       }),
       runtimeReadiness: readyRuntimeReadiness,
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
 
     expect(state.transcriptNotice).toEqual({
@@ -102,11 +94,9 @@ describe("getAgentChatThreadState", () => {
         blockedReason: "Runtime unavailable",
       },
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
 
     expect(state.transcriptNotice).toBe(null);
-    expect(state.hideTranscriptRows).toBe(false);
     expect(state.shouldResetTranscriptWindow).toBe(false);
   });
 
@@ -122,7 +112,6 @@ describe("getAgentChatThreadState", () => {
         blockedReason: "Runtime unavailable",
       },
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
 
     expect(state.transcriptNotice).toEqual({
@@ -144,7 +133,6 @@ describe("getAgentChatThreadState", () => {
         blockedReason: "Runtime unavailable",
       },
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
     const hidden = getAgentChatThreadState({
       sessionLifecycle: buildThreadLifecycle({
@@ -157,7 +145,6 @@ describe("getAgentChatThreadState", () => {
         blockedReason: "",
       },
       isTranscriptPending: false,
-      isTranscriptRenderDeferred: false,
     });
 
     expect(visible.transcriptNotice).toEqual({

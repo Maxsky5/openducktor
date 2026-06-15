@@ -13,7 +13,6 @@ type UseAgentStudioSessionActionStateArgs = {
 };
 
 type UseAgentStudioSessionActionStateResult = {
-  activeExternalSessionId: string | null;
   activeSessionRole: AgentRole;
   activeSessionStatus: AgentSessionState["status"] | "stopped";
   activeSessionSelectedModel: AgentSessionState["selectedModel"] | null;
@@ -23,8 +22,7 @@ type UseAgentStudioSessionActionStateResult = {
   isSessionBusy: boolean;
   isWaitingInput: boolean;
   canQueueBusyFollowups: boolean;
-  supportsQueuedUserMessages: boolean;
-  activeRuntimeLabel: string;
+  busySendBlockedReason: string | null;
 };
 
 export function useAgentStudioSessionActionState({
@@ -36,7 +34,6 @@ export function useAgentStudioSessionActionState({
 }: UseAgentStudioSessionActionStateArgs): UseAgentStudioSessionActionStateResult {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
-  const activeExternalSessionId = activeSession?.externalSessionId ?? null;
   const activeSessionRole = activeSession?.role ?? role;
   const activeSessionStatus = activeSession?.status ?? "stopped";
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
@@ -65,9 +62,12 @@ export function useAgentStudioSessionActionState({
   const canQueueBusyFollowups =
     activeSessionStatus === "running" && !isWaitingInput && supportsQueuedUserMessages;
   const activeRuntimeLabel = activeRuntimeDescriptor?.label ?? "Current runtime";
+  const busySendBlockedReason =
+    hasActiveSession && isSessionBusy && !isWaitingInput && !supportsQueuedUserMessages
+      ? `${activeRuntimeLabel} does not support queued messages while the session is working.`
+      : null;
 
   return {
-    activeExternalSessionId,
     activeSessionRole,
     activeSessionStatus,
     activeSessionSelectedModel,
@@ -77,7 +77,6 @@ export function useAgentStudioSessionActionState({
     isSessionBusy,
     isWaitingInput,
     canQueueBusyFollowups,
-    supportsQueuedUserMessages,
-    activeRuntimeLabel,
+    busySendBlockedReason,
   };
 }

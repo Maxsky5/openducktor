@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
-  type AgentSessionState,
   buildSession,
   createSessionsRef,
+  createSessionTurnMetadata,
   createSessionUpdater,
   findSession,
   getSession,
@@ -38,6 +39,14 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         },
       }),
     ]);
+    const turnMetadata = createSessionTurnMetadata();
+    turnMetadata.recordModel("session-1", {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    });
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -46,21 +55,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnModelBySessionRef: {
-        current: {
-          "session-1": {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Hephaestus",
-          },
-        },
-      },
+      turnMetadata,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -111,7 +106,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     };
 
     const sessionsRef = createSessionsRef([buildSession()]);
-    const contextUsageMessageIdBySessionRef = { current: {} as Record<string, string> };
+    const turnMetadata = createSessionTurnMetadata();
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -120,11 +115,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      contextUsageMessageIdBySessionRef,
+      turnMetadata,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -152,7 +143,12 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
     });
 
     expect(findSession(sessionsRef, "session-1")?.contextUsage).toBeNull();
-    expect(contextUsageMessageIdBySessionRef.current["session-1"]).toBeUndefined();
+    expect(
+      turnMetadata.hasContextUsageMessageId(
+        agentSessionIdentityKey(getSession(sessionsRef)),
+        "assistant-live-1",
+      ),
+    ).toBe(false);
   });
 
   test("keeps live context usage bound to the in-flight turn model after selection changes", async () => {
@@ -177,18 +173,15 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
         },
       }),
     ]);
-
-    const turnModelBySessionRef = {
-      current: {
-        "session-1": {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          variant: "high",
-          profileId: "Hephaestus",
-        },
-      } as Record<string, AgentSessionState["selectedModel"]>,
-    };
+    const sessionKey = agentSessionIdentityKey(getSession(sessionsRef));
+    const turnMetadata = createSessionTurnMetadata();
+    turnMetadata.recordModel(sessionKey, {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      profileId: "Hephaestus",
+    });
 
     const updateSession = createSessionUpdater(sessionsRef);
 
@@ -197,11 +190,7 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
-      turnModelBySessionRef,
+      turnMetadata,
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -270,10 +259,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -368,10 +353,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -462,10 +443,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -537,8 +514,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -598,8 +573,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -648,8 +621,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
@@ -693,10 +664,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},
@@ -777,10 +744,6 @@ describe("agent-orchestrator session context usage and idle settlement", () => {
       repoPath: "/tmp/repo",
       externalSessionId: "session-1",
       sessionsRef,
-      draftRawBySessionRef: { current: {} },
-      draftSourceBySessionRef: { current: {} },
-      draftMessageIdBySessionRef: { current: {} },
-      draftFlushTimeoutBySessionRef: { current: {} },
       updateSession,
       resolveTurnDurationMs: () => 120,
       clearTurnDuration: () => {},

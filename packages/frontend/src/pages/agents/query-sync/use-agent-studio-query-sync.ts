@@ -19,7 +19,7 @@ export function useAgentStudioQuerySync({
   setSearchParams,
 }: UseAgentStudioQuerySyncArgs): {
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionKeyParam: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   isRepoNavigationBoundaryPending: boolean;
@@ -45,7 +45,7 @@ export function useAgentStudioQuerySync({
 
   return {
     taskIdParam: navigation.taskId,
-    sessionParam: navigation.externalSessionId,
+    sessionKeyParam: navigation.sessionKey,
     hasExplicitRoleParam,
     roleFromQuery,
     isRepoNavigationBoundaryPending,

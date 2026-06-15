@@ -139,7 +139,6 @@ const createBaseArgs = (): HookArgs => ({
   selectedTask: createTaskCardFixture(),
   agentStudioReady: true,
   isActiveTaskReady: true,
-  isSessionSelectionResolving: false,
   selectionForNewSession: {
     runtimeKind: "opencode",
     providerId: "openai",

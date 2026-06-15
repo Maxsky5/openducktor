@@ -1,21 +1,27 @@
 import type { AgentRole } from "@openducktor/core";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type AgentStudioSelectionIntent = {
   taskId: string;
-  externalSessionId: string | null;
+  sessionIdentity: AgentSessionIdentity | null;
   role: AgentRole;
 };
 
 export const isSelectionIntentResolved = (params: {
   selectionIntent: AgentStudioSelectionIntent;
   taskIdParam: string;
-  sessionParam: string | null;
+  sessionKeyParam: string | null;
   roleFromQuery: AgentRole;
 }): boolean => {
-  const { selectionIntent, taskIdParam, sessionParam, roleFromQuery } = params;
+  const { selectionIntent, taskIdParam, sessionKeyParam, roleFromQuery } = params;
   if (selectionIntent.taskId !== taskIdParam || selectionIntent.role !== roleFromQuery) {
     return false;
   }
 
-  return selectionIntent.externalSessionId === sessionParam;
+  return (
+    (selectionIntent.sessionIdentity
+      ? agentSessionIdentityKey(selectionIntent.sessionIdentity)
+      : null) === sessionKeyParam
+  );
 };

@@ -8,11 +8,7 @@ import {
 import { hostClient } from "@/lib/host-client";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import {
-  createDeferred,
-  createTaskCardFixture,
-  enableReactActEnvironment,
-} from "../agent-studio-test-utils";
+import { createDeferred, enableReactActEnvironment } from "../agent-studio-test-utils";
 import { useAgentStudioSendAction } from "./use-agent-studio-send-action";
 
 enableReactActEnvironment();
@@ -82,12 +78,12 @@ const createBaseArgs = (): HookArgs => ({
   activeSessionIsLoadingModelCatalog: false,
   activeSessionSelectedModel: null,
   agentStudioReady: true,
+  canStartNewSession: true,
   canQueueBusyFollowups: false,
   reusablePrompts: [],
   isStarting: false,
   isWaitingInput: false,
   busySendBlockedReason: null,
-  selectedTask: createTaskCardFixture(),
   selectedModelDescriptor,
   sendAgentMessage: async () => {},
   startSession: async () => sessionWorkflowResult("session-new"),
@@ -126,29 +122,21 @@ describe("useAgentStudioSendAction", () => {
     await harness.unmount();
   });
 
-  test("blocks unavailable roles only when a new session would be started", async () => {
+  test("uses parent start policy only when a new session would be started", async () => {
     const startSession = mock(async () => sessionWorkflowResult("session-new"));
     const sendAgentMessage = mock(async () => {});
-    const unavailableQaTask = createTaskCardFixture({
-      agentWorkflows: {
-        spec: { required: true, canSkip: false, available: true, completed: true },
-        planner: { required: true, canSkip: false, available: true, completed: true },
-        builder: { required: true, canSkip: false, available: true, completed: true },
-        qa: { required: true, canSkip: false, available: false, completed: false },
-      },
-    });
-    const harness = createHookHarness(useAgentStudioSendAction, {
+    const initialArgs: HookArgs = {
       ...createBaseArgs(),
-      role: "qa",
       activeSession: null,
-      selectedTask: unavailableQaTask,
+      canStartNewSession: false,
       startSession,
       sendAgentMessage,
-    });
+    };
+    const harness = createHookHarness(useAgentStudioSendAction, initialArgs);
 
     await harness.mount();
     await harness.run(async (state) => {
-      await expect(state.onSend(createDraft("start qa"))).resolves.toBe(false);
+      await expect(state.onSend(createDraft("start"))).resolves.toBe(false);
     });
 
     expect(startSession).not.toHaveBeenCalled();
@@ -156,9 +144,8 @@ describe("useAgentStudioSendAction", () => {
 
     await harness.update({
       ...createBaseArgs(),
-      role: "qa",
       activeSession: sessionIdentity("session-existing"),
-      selectedTask: unavailableQaTask,
+      canStartNewSession: false,
       startSession,
       sendAgentMessage,
     });

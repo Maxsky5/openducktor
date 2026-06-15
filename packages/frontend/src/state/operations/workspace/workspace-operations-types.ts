@@ -12,12 +12,7 @@ export type WorkspaceBranchProbeHostClient = Pick<typeof host, "gitGetCurrentBra
 
 export type WorkspaceSelectionOperationsHostClient = Pick<
   typeof host,
-  | "runtimeEnsure"
-  | "workspaceAdd"
-  | "workspaceGetRepoConfig"
-  | "workspaceList"
-  | "workspaceReorder"
-  | "workspaceSelect"
+  "workspaceAdd" | "workspaceList" | "workspaceReorder" | "workspaceSelect"
 >;
 
 export type WorkspaceOperationsHostClient = WorkspaceBranchOperationsHostClient &

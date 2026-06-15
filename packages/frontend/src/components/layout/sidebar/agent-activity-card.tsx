@@ -14,7 +14,7 @@ type AgentActivityCardProps = {
 const toSessionHref = (session: AgentActivitySessionItem): string => {
   const params = new URLSearchParams({
     task: session.taskId,
-    session: session.externalSessionId,
+    session: agentSessionIdentityKey(session),
     agent: session.role,
   });
   return `/agents?${params.toString()}`;

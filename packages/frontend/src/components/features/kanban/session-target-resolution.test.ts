@@ -64,6 +64,34 @@ describe("session-target-resolution", () => {
     expect(resolvePreferredActiveSession(sessions, "build")?.externalSessionId).toBe("build-newer");
   });
 
+  test("uses the full session identity as deterministic tie-breaker", () => {
+    const sessions: KanbanTaskSession[] = [
+      {
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/shared-a",
+        externalSessionId: "build-shared",
+        role: "build",
+        status: "running",
+        startedAt: "2026-03-20T10:00:00.000Z",
+        presentationState: "active",
+      },
+      {
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/shared-b",
+        externalSessionId: "build-shared",
+        role: "build",
+        status: "running",
+        startedAt: "2026-03-20T10:00:00.000Z",
+        presentationState: "active",
+      },
+    ];
+
+    expect(resolvePreferredActiveSession(sessions, "build")).toMatchObject({
+      externalSessionId: "build-shared",
+      workingDirectory: "/repo/worktrees/shared-b",
+    });
+  });
+
   test("prefers waiting-input session over running/starting sessions", () => {
     const sessions: KanbanTaskSession[] = [
       {
@@ -120,6 +148,35 @@ describe("session-target-resolution", () => {
       externalSessionId: "spec-active",
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktrees/spec-active",
+    });
+  });
+
+  test("keeps session target options identity-distinct when external ids repeat", () => {
+    const sessions: KanbanTaskSession[] = [
+      {
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/shared-a",
+        externalSessionId: "spec-shared",
+        role: "spec",
+        status: "running",
+        startedAt: "2026-03-21T10:00:00.000Z",
+        presentationState: "active",
+      },
+      {
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/shared-b",
+        externalSessionId: "spec-shared",
+        role: "spec",
+        status: "running",
+        startedAt: "2026-03-21T10:00:00.000Z",
+        presentationState: "active",
+      },
+    ];
+
+    expect(resolveSessionTargetOptions([], sessions, "spec")?.session).toMatchObject({
+      externalSessionId: "spec-shared",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/worktrees/shared-b",
     });
   });
 

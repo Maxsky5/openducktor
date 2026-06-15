@@ -45,7 +45,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
     activeDocument: null,
   },
   repoSettings: null,
-  worktreeRecoverySignal: 3,
+  worktreeRecoveryKey: "recovery-key",
   setTaskTargetBranch: mock(async () => undefined),
   detectingPullRequestTaskId: null,
   onDetectPullRequest: mock((_taskId: string) => {}),

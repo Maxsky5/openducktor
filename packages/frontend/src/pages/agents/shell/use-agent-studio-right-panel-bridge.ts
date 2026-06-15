@@ -24,7 +24,7 @@ type UseAgentStudioRightPanelBridgeArgs = {
   panel: AgentStudioRightPanelPanelState;
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
-  worktreeRecoverySignal: number;
+  worktreeRecoveryKey: string;
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
@@ -47,7 +47,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   viewSessionLifecycle: UseAgentsPageRightPanelModelArgs["viewSessionLifecycle"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
-  worktreeRecoverySignal: UseAgentsPageRightPanelModelArgs["worktreeRecoverySignal"];
+  worktreeRecoveryKey: UseAgentsPageRightPanelModelArgs["worktreeRecoveryKey"];
   setTaskTargetBranch: NonNullable<UseAgentsPageRightPanelModelArgs["setTaskTargetBranch"]>;
   detectingPullRequestTaskId: UseAgentsPageRightPanelModelArgs["detectingPullRequestTaskId"];
   onDetectPullRequest: UseAgentsPageRightPanelModelArgs["onDetectPullRequest"];
@@ -113,7 +113,7 @@ function buildAgentStudioRightPanelBridgeModel({
   session,
   documentsModel,
   repoSettings,
-  worktreeRecoverySignal,
+  worktreeRecoveryKey,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -141,7 +141,7 @@ function buildAgentStudioRightPanelBridgeModel({
       viewSessionLifecycle: selection.viewSessionLifecycle,
       documentsModel,
       repoSettings,
-      worktreeRecoverySignal,
+      worktreeRecoveryKey,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
@@ -159,7 +159,7 @@ export function useAgentStudioRightPanelBridge({
   panel,
   documentsModel,
   repoSettings,
-  worktreeRecoverySignal,
+  worktreeRecoveryKey,
   setTaskTargetBranch,
   detectingPullRequestTaskId,
   onDetectPullRequest,
@@ -186,7 +186,7 @@ export function useAgentStudioRightPanelBridge({
       session,
       documentsModel,
       repoSettings,
-      worktreeRecoverySignal,
+      worktreeRecoveryKey,
       setTaskTargetBranch,
       detectingPullRequestTaskId,
       onDetectPullRequest,
@@ -209,7 +209,7 @@ export function useAgentStudioRightPanelBridge({
     selection,
     session,
     setTaskTargetBranch,
-    worktreeRecoverySignal,
+    worktreeRecoveryKey,
   ]);
 
   return {

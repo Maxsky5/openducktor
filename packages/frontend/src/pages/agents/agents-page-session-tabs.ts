@@ -21,7 +21,7 @@ import type {
   AgentWorkflowStepLiveSession,
   AgentWorkflowStepState,
 } from "@/types/agent-workflow";
-import { toTabsStorageKey } from "./agent-studio-navigation";
+import { toTabsStorageKey } from "./query-sync/agent-studio-navigation";
 
 type PersistedTaskTabsPayload = {
   tabs: string[];

@@ -4,14 +4,17 @@ import type {
   KanbanSessionPresentationState,
   KanbanTaskSession,
 } from "@/components/features/kanban/kanban-task-activity";
-import type { AgentSessionRouteIdentity } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 
 export type SessionTargetOptions = {
-  session: AgentSessionRouteIdentity;
+  session: AgentSessionIdentity;
 };
 
 type PrimarySessionOrderingCandidate = {
   externalSessionId: string;
+  runtimeKind: AgentSessionIdentity["runtimeKind"];
+  workingDirectory: AgentSessionIdentity["workingDirectory"];
   status: KanbanTaskSession["status"];
   presentationState: KanbanSessionPresentationState;
   startedAt?: string;
@@ -50,11 +53,13 @@ export const compareActiveSessionForPrimary = (
     return left.startedAt > right.startedAt ? -1 : 1;
   }
 
-  if (left.externalSessionId === right.externalSessionId) {
+  const leftIdentityKey = agentSessionIdentityKey(left);
+  const rightIdentityKey = agentSessionIdentityKey(right);
+  if (leftIdentityKey === rightIdentityKey) {
     return 0;
   }
 
-  return left.externalSessionId > right.externalSessionId ? -1 : 1;
+  return leftIdentityKey > rightIdentityKey ? -1 : 1;
 };
 
 export const resolvePreferredActiveSession = (

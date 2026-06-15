@@ -13,8 +13,8 @@ import type {
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
 import {
+  type AgentSessionViewLifecycle,
   isAgentSessionTranscriptLoading,
-  type SelectedAgentSessionViewLifecycle,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
   type TaskWorktreeQueryHost,
@@ -46,9 +46,9 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  viewSessionLifecycle: SelectedAgentSessionViewLifecycle;
+  viewSessionLifecycle: AgentSessionViewLifecycle;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
-  worktreeRecoverySignal: number;
+  worktreeRecoveryKey: string;
 };
 
 type AgentStudioBuildToolsWorktreeSnapshotDependencies = {
@@ -137,7 +137,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     isPanelOpen,
     viewSessionLifecycle,
     repoSettings,
-    worktreeRecoverySignal,
+    worktreeRecoveryKey,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
@@ -207,7 +207,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     repoPath ?? "",
     taskId ?? "",
     dependencies.taskWorktreeHost,
-    shouldQueryTaskWorktree && !directWorktreePath ? worktreeRecoverySignal : null,
+    shouldQueryTaskWorktree && !directWorktreePath ? worktreeRecoveryKey : null,
   );
   const taskWorktreeQuery = useQuery({
     ...taskWorktreeOptions,

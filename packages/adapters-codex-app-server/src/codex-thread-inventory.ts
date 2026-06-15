@@ -122,7 +122,7 @@ export class CodexThreadInventoryReader {
     if (!thread || thread.cwd !== input.workingDirectory) {
       return false;
     }
-    if (thread.status.status.type === "idle") {
+    if (thread.status.classification === "idle") {
       try {
         await client.threadRead({
           threadId: input.externalSessionId,
@@ -207,7 +207,7 @@ export class CodexThreadInventoryReader {
   }
 
   private rememberReadOnlyIdleHistoryLoad(thread: CodexThreadSnapshot): void {
-    if (thread.status.agentSessionStatus !== "idle") {
+    if (thread.status.classification !== "idle") {
       this.clearReadOnlyHistoryLoad(thread.id);
       return;
     }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord, TaskCard } from "@openducktor/contracts";
 import type { AgentSessionRef } from "@openducktor/core";
-import { toAgentSessionPresenceSnapshotFromLiveSnapshot } from "@openducktor/core";
+import { toAgentSessionRuntimeSnapshot } from "@openducktor/core";
 import { QueryClient } from "@tanstack/react-query";
 import {
   type AgentSessionCollection,
@@ -51,18 +51,18 @@ const taskFixture: TaskCard = {
 
 const createLoaderHarness = ({
   initialSessionCollection = emptyAgentSessionCollection(),
-  listSessionPresence,
+  listSessionRuntimeSnapshots,
   tasks = [taskFixture],
   sessionRecordsByTaskId = { [taskFixture.id]: [record] },
 }: {
   initialSessionCollection?: AgentSessionCollection;
-  listSessionPresence: Parameters<
+  listSessionRuntimeSnapshots: Parameters<
     typeof createLoadAgentSessions
-  >[0]["adapter"]["listSessionPresence"];
+  >[0]["adapter"]["listSessionRuntimeSnapshots"];
   tasks?: TaskCard[];
   sessionRecordsByTaskId?: Record<string, AgentSessionRecord[]>;
 }) => {
-  let sessionCollection: AgentSessionCollection = initialSessionCollection;
+  let sessionCollection = initialSessionCollection;
   const listenedSessions: AgentSessionRef[] = [];
   const queryClient = new QueryClient();
   for (const task of tasks) {
@@ -78,14 +78,15 @@ const createLoaderHarness = ({
       repoPath: "/repo",
     },
     adapter: {
-      listSessionPresence,
+      listSessionRuntimeSnapshots,
     },
     repoEpochRef: { current: 0 },
     currentWorkspaceRepoPathRef: { current: "/repo" },
-    setSessionCollection: (updater) => {
-      sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+    readSessionCollection: () => sessionCollection,
+    setSessionCollection: (nextCollection) => {
+      sessionCollection = nextCollection;
     },
-    listenToAgentSession: async (session) => {
+    observeAgentSession: async (session) => {
       listenedSessions.push(session);
     },
     queryClient,
@@ -108,28 +109,29 @@ describe("createLoadAgentSessions", () => {
       "task-1": [record],
     });
     let sessionCollection = emptyAgentSessionCollection();
-    let presenceReads = 0;
+    let runtimeSnapshotReads = 0;
 
     await loadRepoAgentSessionsForTasks({
       repoPath: "/repo",
       tasks: [taskFixture],
       adapter: {
-        listSessionPresence: async () => {
-          presenceReads += 1;
+        listSessionRuntimeSnapshots: async () => {
+          runtimeSnapshotReads += 1;
           return [];
         },
       },
-      commitSessions: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
+      setSessionCollection: (nextCollection) => {
+        sessionCollection = nextCollection;
       },
-      listenToAgentSession: async () => {
-        throw new Error("No runtime sessions should be observed for missing presence.");
+      observeAgentSession: async () => {
+        throw new Error("No runtime sessions should be observed for missing runtime snapshot.");
       },
       queryClient,
       isStaleRepoOperation: () => false,
+      readSessionCollection: () => sessionCollection,
     });
 
-    expect(presenceReads).toBe(1);
+    expect(runtimeSnapshotReads).toBe(1);
     expect(
       listAgentSessions(sessionCollection).find(
         (session) => session.externalSessionId === record.externalSessionId,
@@ -144,10 +146,10 @@ describe("createLoadAgentSessions", () => {
     );
   });
 
-  test("commits the repo session read model from one runtime presence scan", async () => {
+  test("commits the repo session read model from one runtime snapshot scan", async () => {
     const harness = createLoaderHarness({
-      listSessionPresence: async () => [
-        toAgentSessionPresenceSnapshotFromLiveSnapshot({
+      listSessionRuntimeSnapshots: async () => [
+        toAgentSessionRuntimeSnapshot({
           ref: {
             repoPath: "/repo",
             runtimeKind: "opencode",
@@ -155,11 +157,9 @@ describe("createLoadAgentSessions", () => {
             externalSessionId: "external-1",
           },
           snapshot: {
-            externalSessionId: "external-1",
             title: "Builder",
             startedAt: "2026-06-12T08:00:00.000Z",
-            status: { type: "busy" },
-            workingDirectory: "/repo/worktree",
+            runtimeActivity: "running",
             pendingApprovals: [],
             pendingQuestions: [],
           },
@@ -181,11 +181,11 @@ describe("createLoadAgentSessions", () => {
     ]);
   });
 
-  test("waits for runtime presence before committing persisted session state", async () => {
-    const presenceReady = createDeferred<void>();
+  test("waits for runtime snapshot before committing persisted session state", async () => {
+    const runtimeSnapshotReady = createDeferred<void>();
     const harness = createLoaderHarness({
-      listSessionPresence: async () => {
-        await presenceReady.promise;
+      listSessionRuntimeSnapshots: async () => {
+        await runtimeSnapshotReady.promise;
         return [];
       },
     });
@@ -194,7 +194,7 @@ describe("createLoadAgentSessions", () => {
 
     expect(harness.getSession(record.externalSessionId)).toBeNull();
 
-    presenceReady.resolve(undefined);
+    runtimeSnapshotReady.resolve(undefined);
     await loading;
 
     const session = harness.getSession(record.externalSessionId);
@@ -205,7 +205,7 @@ describe("createLoadAgentSessions", () => {
   });
 
   test("commits an empty persisted read model after task session records are removed", async () => {
-    let presenceReads = 0;
+    let runtimeSnapshotReads = 0;
     const harness = createLoaderHarness({
       initialSessionCollection: createAgentSessionCollection([
         createAgentSessionFixture({
@@ -218,8 +218,8 @@ describe("createLoadAgentSessions", () => {
           workingDirectory: record.workingDirectory,
         }),
       ]),
-      listSessionPresence: async () => {
-        presenceReads += 1;
+      listSessionRuntimeSnapshots: async () => {
+        runtimeSnapshotReads += 1;
         return [];
       },
       sessionRecordsByTaskId: { [taskFixture.id]: [] },
@@ -228,10 +228,10 @@ describe("createLoadAgentSessions", () => {
     await harness.loadAgentSessions("task-1");
 
     expect(harness.getSession(record.externalSessionId)).toBeNull();
-    expect(presenceReads).toBe(0);
+    expect(runtimeSnapshotReads).toBe(0);
   });
 
-  test("keeps mounted transcript but clears runtime state when presence is missing during repo reloads", async () => {
+  test("keeps mounted transcript but clears runtime state when runtime snapshot is missing during repo reloads", async () => {
     const mountedSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -254,7 +254,7 @@ describe("createLoadAgentSessions", () => {
     };
     const harness = createLoaderHarness({
       initialSessionCollection: createAgentSessionCollection([mountedSession]),
-      listSessionPresence: async () => [],
+      listSessionRuntimeSnapshots: async () => [],
     });
 
     await harness.loadAgentSessions("task-1");

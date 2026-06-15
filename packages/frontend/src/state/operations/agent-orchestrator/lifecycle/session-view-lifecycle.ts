@@ -1,14 +1,10 @@
-import type { AgentSessionRouteIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { getSessionMessageCount } from "../support/messages";
 
 export type SessionRepoReadinessState = "ready" | "checking" | "blocked";
 
-export type AgentSessionLifecycleSource = Pick<
-  AgentSessionState,
-  "externalSessionId" | "historyLoadState" | "messages"
->;
-export type AgentSessionHistoryLoadState = AgentSessionLifecycleSource["historyLoadState"];
-export type AgentSessionLifecycleTarget = {
+export type AgentSessionHistoryLoadState = AgentSessionState["historyLoadState"];
+type AgentSessionTranscriptSnapshot = {
   historyLoadState: AgentSessionHistoryLoadState;
   hasTranscript: boolean;
 };
@@ -24,8 +20,6 @@ export type AgentSessionViewLifecycle = {
   repoReadinessState: SessionRepoReadinessState;
   transcriptState: AgentSessionTranscriptState;
 };
-
-export type SelectedAgentSessionViewLifecycle = AgentSessionViewLifecycle;
 
 const lifecycle = ({
   repoReadinessState,
@@ -47,7 +41,7 @@ export const isAgentSessionTranscriptVisible = (
   transcriptState: AgentSessionTranscriptState,
 ): boolean => transcriptState.kind === "visible";
 
-const inactiveSelectedSessionViewLifecycle: SelectedAgentSessionViewLifecycle = lifecycle({
+const inactiveSelectedSessionViewLifecycle: AgentSessionViewLifecycle = lifecycle({
   repoReadinessState: "ready",
   transcriptState: { kind: "empty" },
 });
@@ -61,49 +55,83 @@ const deriveLoadedSessionLifecycle = ({
   hasTranscript: boolean;
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
-  if (repoReadinessState !== "ready" && historyLoadState !== "loaded" && !hasTranscript) {
+  if (hasTranscript || historyLoadState === "loaded") {
+    return lifecycle({
+      repoReadinessState,
+      transcriptState: { kind: "visible" },
+    });
+  }
+
+  if (repoReadinessState !== "ready") {
     return lifecycle({
       repoReadinessState,
       transcriptState: { kind: "runtime_waiting" },
     });
   }
 
-  switch (historyLoadState) {
-    case "loaded":
-      return lifecycle({
-        repoReadinessState,
-        transcriptState: { kind: "visible" },
-      });
-    case "loading":
-      return lifecycle({
-        repoReadinessState,
-        transcriptState: hasTranscript
-          ? { kind: "visible" }
-          : { kind: "session_loading", reason: "history" },
-      });
-    case "not_requested":
-      return lifecycle({
-        repoReadinessState,
-        transcriptState: hasTranscript
-          ? { kind: "visible" }
-          : { kind: "session_loading", reason: "history" },
-      });
-    case "failed":
-      return lifecycle({
-        repoReadinessState,
-        transcriptState: hasTranscript ? { kind: "visible" } : { kind: "failed" },
-      });
+  if (historyLoadState === "failed") {
+    return lifecycle({
+      repoReadinessState,
+      transcriptState: { kind: "failed" },
+    });
   }
+
+  return lifecycle({
+    repoReadinessState,
+    transcriptState: { kind: "session_loading", reason: "history" },
+  });
 };
 
-export const deriveAgentSessionTargetViewLifecycle = ({
-  target,
+const deriveMissingSelectedSessionLifecycle = ({
+  hasSelectedTask,
+  hasSelectedSessionIdentity,
+  repoReadinessState,
+  sessionLoadError,
+  isLoadingSessionReadModel,
+}: {
+  hasSelectedTask: boolean;
+  hasSelectedSessionIdentity: boolean;
+  repoReadinessState: SessionRepoReadinessState;
+  sessionLoadError: string | null | undefined;
+  isLoadingSessionReadModel: boolean;
+}): AgentSessionViewLifecycle => {
+  const hasSelectionContext = hasSelectedTask || hasSelectedSessionIdentity;
+  if (!hasSelectionContext) {
+    return inactiveSelectedSessionViewLifecycle;
+  }
+
+  if (sessionLoadError) {
+    return lifecycle({
+      repoReadinessState,
+      transcriptState: { kind: "failed" },
+    });
+  }
+
+  if (repoReadinessState !== "ready") {
+    return lifecycle({
+      repoReadinessState,
+      transcriptState: { kind: "runtime_waiting" },
+    });
+  }
+
+  if (hasSelectedSessionIdentity || isLoadingSessionReadModel) {
+    return lifecycle({
+      repoReadinessState,
+      transcriptState: { kind: "session_loading", reason: "preparing" },
+    });
+  }
+
+  return inactiveSelectedSessionViewLifecycle;
+};
+
+export const deriveAgentSessionTranscriptLifecycle = ({
+  transcript,
   repoReadinessState,
 }: {
-  target: AgentSessionLifecycleTarget | null;
+  transcript: AgentSessionTranscriptSnapshot | null;
   repoReadinessState: SessionRepoReadinessState;
 }): AgentSessionViewLifecycle => {
-  if (!target) {
+  if (!transcript) {
     return lifecycle({
       repoReadinessState,
       transcriptState: { kind: "empty" },
@@ -111,87 +139,47 @@ export const deriveAgentSessionTargetViewLifecycle = ({
   }
 
   return deriveLoadedSessionLifecycle({
-    historyLoadState: target.historyLoadState,
-    hasTranscript: target.hasTranscript,
+    historyLoadState: transcript.historyLoadState,
+    hasTranscript: transcript.hasTranscript,
     repoReadinessState,
   });
 };
 
-export const deriveAgentSessionViewLifecycle = ({
-  session,
-  repoReadinessState,
-}: {
-  session: AgentSessionLifecycleSource | null;
-  repoReadinessState: SessionRepoReadinessState;
-}): AgentSessionViewLifecycle => {
-  return deriveAgentSessionTargetViewLifecycle({
-    target: session
-      ? {
-          historyLoadState: session.historyLoadState,
-          hasTranscript: getSessionMessageCount(session) > 0,
-        }
-      : null,
-    repoReadinessState,
-  });
-};
+const toSessionTranscriptSnapshot = (
+  session: Pick<AgentSessionState, "externalSessionId" | "historyLoadState" | "messages"> | null,
+): AgentSessionTranscriptSnapshot | null =>
+  session
+    ? {
+        historyLoadState: session.historyLoadState,
+        hasTranscript: getSessionMessageCount(session) > 0,
+      }
+    : null;
 
 export const deriveSelectedAgentSessionViewLifecycle = ({
-  selectedSessionRoute,
+  selectedSessionIdentity,
   session,
   hasSelectedTask,
   repoReadinessState,
   sessionLoadError,
   isLoadingSessionReadModel = false,
 }: {
-  selectedSessionRoute: AgentSessionRouteIdentity | null;
+  selectedSessionIdentity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
   hasSelectedTask: boolean;
   repoReadinessState: SessionRepoReadinessState;
   sessionLoadError?: string | null;
   isLoadingSessionReadModel?: boolean;
-}): SelectedAgentSessionViewLifecycle => {
-  if (sessionLoadError && selectedSessionRoute === null && hasSelectedTask) {
-    return lifecycle({
-      repoReadinessState,
-      transcriptState: { kind: "failed" },
-    });
-  }
-
-  if (!selectedSessionRoute) {
-    if (hasSelectedTask && repoReadinessState !== "ready") {
-      return lifecycle({
+}): AgentSessionViewLifecycle => {
+  return session
+    ? deriveAgentSessionTranscriptLifecycle({
+        transcript: toSessionTranscriptSnapshot(session),
         repoReadinessState,
-        transcriptState: { kind: "runtime_waiting" },
-      });
-    }
-    if (hasSelectedTask && isLoadingSessionReadModel) {
-      return lifecycle({
+      })
+    : deriveMissingSelectedSessionLifecycle({
+        hasSelectedTask,
+        hasSelectedSessionIdentity: selectedSessionIdentity !== null,
         repoReadinessState,
-        transcriptState: { kind: "session_loading", reason: "preparing" },
+        sessionLoadError,
+        isLoadingSessionReadModel,
       });
-    }
-    return inactiveSelectedSessionViewLifecycle;
-  }
-
-  if (!session) {
-    const hasLoadFailed = sessionLoadError !== null && sessionLoadError !== undefined;
-    if (hasLoadFailed) {
-      return lifecycle({
-        repoReadinessState,
-        transcriptState: { kind: "failed" },
-      });
-    }
-    if (repoReadinessState !== "ready") {
-      return lifecycle({
-        repoReadinessState,
-        transcriptState: { kind: "runtime_waiting" },
-      });
-    }
-    return lifecycle({
-      repoReadinessState,
-      transcriptState: { kind: "session_loading", reason: "preparing" },
-    });
-  }
-
-  return deriveAgentSessionViewLifecycle({ session, repoReadinessState });
 };
