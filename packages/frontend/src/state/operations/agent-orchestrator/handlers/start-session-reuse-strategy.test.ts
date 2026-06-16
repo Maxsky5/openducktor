@@ -72,7 +72,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
         executeReuseStart({
           ctx: createStartSessionContextFixture(),
           input: {
-            startMode: "reuse",
             sourceSession: {
               externalSessionId: "ext-build",
               runtimeKind: "opencode",
@@ -119,7 +118,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       executeReuseStart({
         ctx: createStartSessionContextFixture(),
         input: {
-          startMode: "reuse",
           sourceSession: {
             externalSessionId: "ext-build",
             runtimeKind: "opencode",
@@ -155,7 +153,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       executeReuseStart({
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
-          startMode: "reuse",
           sourceSession: {
             externalSessionId: "ext-qa",
             runtimeKind: "opencode",
@@ -224,7 +221,6 @@ describe("agent-orchestrator/handlers/start-session-reuse-strategy", () => {
       executeReuseStart({
         ctx: createStartSessionContextFixture({ role: "qa" }),
         input: {
-          startMode: "reuse",
           sourceSession: {
             externalSessionId: "ext-qa",
             runtimeKind: "opencode",

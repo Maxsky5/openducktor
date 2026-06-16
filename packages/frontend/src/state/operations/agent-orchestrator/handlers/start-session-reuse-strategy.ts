@@ -16,10 +16,7 @@ import { resolveReuseValidationError, resolveStartTask } from "./start-session-p
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;
-  input: Pick<
-    Extract<StartAgentSessionInput, { startMode: "reuse" }>,
-    "startMode" | "sourceSession"
-  >;
+  input: Pick<Extract<StartAgentSessionInput, { startMode: "reuse" }>, "sourceSession">;
   deps: StartSessionExecutionDependencies;
 };
 

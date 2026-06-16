@@ -10,7 +10,7 @@ import type {
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
 
-export const resolvePromptContext = async ({
+export const loadStartSystemPrompt = async ({
   ctx,
   taskCard,
   deps,
@@ -18,7 +18,7 @@ export const resolvePromptContext = async ({
   ctx: StartSessionContext;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "model">;
-}): Promise<Pick<FreshStartRuntimeContext, "systemPrompt">> => {
+}): Promise<string> => {
   const { systemPrompt } = await loadSessionPromptContext({
     workspaceId: ctx.workspaceId,
     role: ctx.role,
@@ -27,9 +27,7 @@ export const resolvePromptContext = async ({
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
-  return {
-    systemPrompt,
-  };
+  return systemPrompt;
 };
 
 export const resolveFreshStartRuntimeContext = async ({
@@ -45,7 +43,7 @@ export const resolveFreshStartRuntimeContext = async ({
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "runtime" | "model">;
 }): Promise<FreshStartRuntimeContext> => {
-  const promptContext = await resolvePromptContext({
+  const systemPrompt = await loadStartSystemPrompt({
     ctx,
     taskCard,
     deps,
@@ -58,9 +56,8 @@ export const resolveFreshStartRuntimeContext = async ({
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   return {
-    taskCard,
     runtime,
-    systemPrompt: promptContext.systemPrompt,
+    systemPrompt,
   };
 };
 

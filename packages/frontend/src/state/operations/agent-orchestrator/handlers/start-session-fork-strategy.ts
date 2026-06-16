@@ -17,7 +17,7 @@ import {
   rollbackStartedSessionBeforeRegistration,
   stopSessionOnStaleAndThrow,
 } from "./start-session-rollback";
-import { resolvePromptContext } from "./start-session-runtime";
+import { loadStartSystemPrompt } from "./start-session-runtime";
 
 // Match the requested-history loading cap so newly forked child sessions load
 // enough history to render immediately without pulling an unbounded transcript.
@@ -27,7 +27,7 @@ type ForkStrategyInput = {
   ctx: StartSessionContext;
   input: Pick<
     Extract<StartAgentSessionInput, { startMode: "fork" }>,
-    "startMode" | "selectedModel" | "sourceSession"
+    "selectedModel" | "sourceSession"
   >;
   deps: StartSessionExecutionDependencies;
 };
@@ -76,7 +76,7 @@ export const executeForkStart = async ({
     );
   }
 
-  const promptContext = await resolvePromptContext({
+  const systemPrompt = await loadStartSystemPrompt({
     ctx,
     taskCard,
     deps,
@@ -90,7 +90,7 @@ export const executeForkStart = async ({
     workingDirectory,
     taskId: ctx.taskId,
     role: ctx.role,
-    systemPrompt: promptContext.systemPrompt,
+    systemPrompt,
     ...(selectedModel ? { model: selectedModel } : {}),
     parentExternalSessionId: sourceSession.externalSessionId,
   });
@@ -139,7 +139,7 @@ export const executeForkStart = async ({
     [
       ...buildSessionHeaderMessages({
         externalSessionId: summary.externalSessionId,
-        systemPrompt: promptContext.systemPrompt,
+        systemPrompt,
         startedAt: summary.startedAt,
       }),
       ...historyToChatMessages(forkHistory, {
@@ -158,7 +158,7 @@ export const executeForkStart = async ({
     ctx,
     startedCtx,
     runtimeInfo: forkedRuntime,
-    systemPrompt: promptContext.systemPrompt,
+    systemPrompt,
     selectedModel,
     initialMessages,
     deps,

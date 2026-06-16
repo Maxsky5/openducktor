@@ -115,7 +115,6 @@ export type StartSessionExecutionDependencies = Pick<
 >;
 
 export type FreshStartRuntimeContext = {
-  taskCard: TaskCard;
   runtime: RuntimeInfo;
   systemPrompt: string;
 };

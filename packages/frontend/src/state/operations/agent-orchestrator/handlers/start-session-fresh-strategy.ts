@@ -12,10 +12,7 @@ import { resolveFreshStartRuntimeContext } from "./start-session-runtime";
 
 type FreshStrategyInput = {
   ctx: StartSessionContext;
-  input: Pick<
-    Extract<StartAgentSessionInput, { startMode: "fresh" }>,
-    "startMode" | "selectedModel"
-  >;
+  input: Pick<Extract<StartAgentSessionInput, { startMode: "fresh" }>, "selectedModel">;
   targetWorkingDirectory: string | null | undefined;
   deps: StartSessionExecutionDependencies;
 };
@@ -72,6 +69,6 @@ export const executeFreshStart = async ({
     systemPrompt: resolved.systemPrompt,
     selectedModel: selectedModelWithRuntime,
     deps,
-    taskCard: resolved.taskCard,
+    taskCard,
   });
 };
