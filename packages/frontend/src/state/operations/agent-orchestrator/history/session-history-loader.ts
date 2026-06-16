@@ -29,9 +29,9 @@ export type SessionHistoryLoadResult =
   | { externalSessionId: string; status: "skipped" }
   | { externalSessionId: string; status: "failed"; error: unknown };
 
-type AgentSessionHistoryTarget = AgentSessionIdentity & {
-  systemPromptContext?: AgentSessionHistorySystemPromptContext;
-};
+type LoadSessionHistorySystemPromptContext = (
+  session: AgentSessionState,
+) => Promise<AgentSessionHistorySystemPromptContext | undefined>;
 
 type SessionHistoryPromptTarget = Pick<
   AgentSessionState,
@@ -219,42 +219,51 @@ export const loadSessionHistoryIntoStore = async ({
   adapter,
   readSessionSnapshot,
   updateSession,
-  target,
+  identity,
+  loadSystemPromptContext,
   isStaleRepoOperation,
 }: {
   repoPath: string;
   adapter: SessionHistoryLoaderAdapter;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-  target: AgentSessionHistoryTarget;
+  identity: AgentSessionIdentity;
+  loadSystemPromptContext?: LoadSessionHistorySystemPromptContext;
   isStaleRepoOperation: () => boolean;
 }): Promise<SessionHistoryLoadResult> => {
   if (isStaleRepoOperation()) {
-    return { externalSessionId: target.externalSessionId, status: "stale" };
+    return { externalSessionId: identity.externalSessionId, status: "stale" };
   }
 
   const claimedSession = claimSessionHistoryLoad({
-    identity: target,
+    identity,
     readSessionSnapshot,
     updateSession,
   });
   if (!claimedSession) {
-    return { externalSessionId: target.externalSessionId, status: "skipped" };
+    return { externalSessionId: identity.externalSessionId, status: "skipped" };
   }
 
   try {
+    const systemPromptContext = await loadSystemPromptContext?.(claimedSession);
+
+    if (isStaleRepoOperation()) {
+      releaseSessionHistoryLoad({ session: claimedSession, updateSession });
+      return { externalSessionId: identity.externalSessionId, status: "stale" };
+    }
+
     const history = await adapter.loadSessionHistory({
       repoPath,
       runtimeKind: claimedSession.runtimeKind,
       workingDirectory: claimedSession.workingDirectory,
       externalSessionId: claimedSession.externalSessionId,
-      ...(target.systemPromptContext ? { systemPromptContext: target.systemPromptContext } : {}),
+      ...(systemPromptContext ? { systemPromptContext } : {}),
       limit: INITIAL_SESSION_HISTORY_LIMIT,
     });
 
     if (isStaleRepoOperation()) {
       releaseSessionHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: target.externalSessionId, status: "stale" };
+      return { externalSessionId: identity.externalSessionId, status: "stale" };
     }
 
     applySessionHistoryLoad({ session: claimedSession, history, updateSession });
@@ -262,10 +271,10 @@ export const loadSessionHistoryIntoStore = async ({
   } catch (error) {
     if (isStaleRepoOperation()) {
       releaseSessionHistoryLoad({ session: claimedSession, updateSession });
-      return { externalSessionId: target.externalSessionId, status: "stale" };
+      return { externalSessionId: identity.externalSessionId, status: "stale" };
     }
     failSessionHistoryLoad({ session: claimedSession, updateSession });
-    return { externalSessionId: target.externalSessionId, status: "failed", error };
+    return { externalSessionId: identity.externalSessionId, status: "failed", error };
   }
 };
 
@@ -297,21 +306,10 @@ export const createLoadAgentSessionHistory = ({
       return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
     }
 
-    const session = readSessionSnapshot(sessionIdentity);
-    if (!session) {
+    if (!readSessionSnapshot(sessionIdentity)) {
       throw new Error(
         `Cannot load history for unknown session '${sessionIdentity.externalSessionId}'.`,
       );
-    }
-
-    const systemPromptContext = await buildSessionHistorySystemPromptContext({
-      workspaceId,
-      tasks: taskRef.current,
-      session,
-      loadRepoPromptOverrides,
-    });
-    if (isStaleRepoOperation()) {
-      return { externalSessionId: sessionIdentity.externalSessionId, status: "stale" };
     }
 
     return loadSessionHistoryIntoStore({
@@ -319,10 +317,14 @@ export const createLoadAgentSessionHistory = ({
       adapter,
       readSessionSnapshot,
       updateSession,
-      target: {
-        ...session,
-        ...(systemPromptContext ? { systemPromptContext } : {}),
-      },
+      identity: sessionIdentity,
+      loadSystemPromptContext: (session) =>
+        buildSessionHistorySystemPromptContext({
+          workspaceId,
+          tasks: taskRef.current,
+          session,
+          loadRepoPromptOverrides,
+        }),
       isStaleRepoOperation,
     });
   };

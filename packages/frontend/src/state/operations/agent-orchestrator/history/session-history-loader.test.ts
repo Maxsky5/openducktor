@@ -49,7 +49,7 @@ const sessionTarget = {
   externalSessionId: "external-1",
   runtimeKind: "opencode",
   workingDirectory: "/repo/worktree",
-} satisfies Parameters<typeof loadSessionHistoryIntoStore>[0]["target"];
+} satisfies AgentSessionIdentity;
 
 const createSession = (): AgentSessionState =>
   createAgentSessionFixture({
@@ -126,7 +126,7 @@ describe("session history loader", () => {
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => true,
     });
 
@@ -152,7 +152,7 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => stale,
     });
 
@@ -175,7 +175,7 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -203,7 +203,7 @@ describe("session history loader", () => {
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -339,7 +339,7 @@ describe("session history loader", () => {
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -353,6 +353,10 @@ describe("session history loader", () => {
 
   test("does not reset a loaded session when a stale caller asks for history again", async () => {
     const loadSessionHistory = mock(async () => []);
+    const loadSystemPromptContext = mock(async () => ({
+      systemPrompt: "Should not be prepared.",
+      startedAt: "2026-06-12T08:00:00.000Z",
+    }));
     const harness = createHistoryLoadHarness({
       ...createSession(),
       historyLoadState: "loaded",
@@ -363,7 +367,8 @@ describe("session history loader", () => {
       adapter: { loadSessionHistory },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
+      loadSystemPromptContext,
       isStaleRepoOperation: () => false,
     });
 
@@ -372,6 +377,7 @@ describe("session history loader", () => {
       status: "skipped",
     });
     expect(loadSessionHistory).not.toHaveBeenCalled();
+    expect(loadSystemPromptContext).not.toHaveBeenCalled();
     expect(harness.session.historyLoadState).toBe("loaded");
   });
 
@@ -400,7 +406,7 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -442,7 +448,7 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -489,7 +495,7 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: sessionTarget,
+      identity: sessionTarget,
       isStaleRepoOperation: () => false,
     });
 
@@ -523,13 +529,11 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: {
-        ...sessionTarget,
-        systemPromptContext: {
-          systemPrompt: "Build from current task context.",
-          startedAt: "2026-06-12T08:00:00.000Z",
-        },
-      },
+      identity: sessionTarget,
+      loadSystemPromptContext: async () => ({
+        systemPrompt: "Build from current task context.",
+        startedAt: "2026-06-12T08:00:00.000Z",
+      }),
       isStaleRepoOperation: () => false,
     });
 
@@ -564,13 +568,11 @@ describe("session history loader", () => {
       },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      target: {
-        ...sessionTarget,
-        systemPromptContext: {
-          systemPrompt: "Computed display prompt.",
-          startedAt: "2026-06-12T08:00:00.000Z",
-        },
-      },
+      identity: sessionTarget,
+      loadSystemPromptContext: async () => ({
+        systemPrompt: "Computed display prompt.",
+        startedAt: "2026-06-12T08:00:00.000Z",
+      }),
       isStaleRepoOperation: () => false,
     });
 
