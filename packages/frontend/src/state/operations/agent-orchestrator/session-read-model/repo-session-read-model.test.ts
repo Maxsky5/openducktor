@@ -293,7 +293,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("preserves a mounted active session when runtime snapshot is missing", async () => {
+  test("demotes a mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
@@ -325,11 +325,11 @@ describe("repo session read model", () => {
       runtimeSnapshots: runtimeSnapshots,
     });
 
-    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("keeps mounted transcript and status when runtime snapshot is missing", async () => {
+  test("keeps mounted transcript but clears runtime-owned state when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -343,6 +343,9 @@ describe("repo session read model", () => {
         workingDirectory: record.workingDirectory,
         historyLoadState: "loaded",
       }),
+      pendingUserMessageStartedAt: 123,
+      draftAssistantText: "partial assistant",
+      draftAssistantMessageId: "assistant-draft",
       messages: createSessionMessagesState(record.externalSessionId, [
         {
           id: "existing-message",
@@ -369,8 +372,11 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("running");
+    expect(session?.status).toBe("idle");
     expect(session?.historyLoadState).toBe("loaded");
+    expect(session?.pendingUserMessageStartedAt).toBeUndefined();
+    expect(session?.draftAssistantText).toBe("");
+    expect(session?.draftAssistantMessageId).toBeNull();
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
     ]);
@@ -425,7 +431,7 @@ describe("repo session read model", () => {
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("preserves mounted transcript for an equivalent normalized working directory", async () => {
+  test("preserves mounted transcript for an equivalent normalized working directory without preserving running state", async () => {
     const record = createRecord({ workingDirectory: "/repo/worktree" });
     const tasks = [createTask([record])];
     const currentSession = {
@@ -465,7 +471,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session.status).toBe("running");
+    expect(session.status).toBe("idle");
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Mounted transcript",

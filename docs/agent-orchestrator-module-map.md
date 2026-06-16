@@ -503,7 +503,7 @@ session history has one frontend read boundary.
    `loadRepoAgentSessions`.
 3. Persisted session records remain route candidates while runtime snapshots are checked.
 4. `readRepoRuntimeSessionSnapshots` scans each runtime kind and working directory once.
-5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence is `missing`.
+5. `buildRepoSessionReadModel` commits session state once runtime snapshots are known; missing runtime evidence is `missing` and clears runtime-owned activity while preserving mounted transcript/history state.
 6. Live sessions are observed by route ref. The session observer asks the runtime
    adapter to subscribe; the adapter owns any runtime-side state preparation
    needed before events can flow.
@@ -521,6 +521,7 @@ Use these compact tests as the first-line safety net:
 | --- | --- |
 | Active and waiting-input sessions after reload | `session-read-model/repo-session-read-model.test.ts` |
 | Runtime snapshot classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
+| Missing runtime evidence cannot preserve stale running state | `session-read-model/session-runtime-snapshot.test.ts`, `session-read-model/repo-session-read-model.test.ts`, and `session-read-model/load-sessions.test.ts` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
 | Running-session history baseline after reload | `session-read-model/load-sessions.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
@@ -554,6 +555,8 @@ Use these compact tests as the first-line safety net:
   sessions. They must share the same transient prompt-context boundary.
 - Do not add fallback runtime routing. Persisted sessions carry `runtimeKind` and
   `workingDirectory`; missing data is an actionable error.
+- Do not preserve a mounted `running` status, pending input, or draft assistant
+  turn when the runtime snapshot is missing. Preserve transcript/history only.
 - Keep runtime ids and runtime routes in low-level adapters/registry code. UI and
   page modules should carry runtime kind plus working directory, not live routes.
 - Do not store live runtime routes, pending permissions, pending questions, or

@@ -35,16 +35,17 @@ const statusFromRuntimeSnapshot = (
   return agentSessionStatusFromActivity(snapshot.classification);
 };
 
+const statusWithoutRuntimeSnapshot = (current: AgentSessionState): AgentSessionState["status"] => {
+  if (current.status === "starting" || current.status === "stopped" || current.status === "error") {
+    return current.status;
+  }
+  return "idle";
+};
+
 export const shouldObserveAgentSessionRuntimeSnapshot = (
   snapshot: CoreAgentSessionRuntimeSnapshot,
 ): boolean => {
   return snapshot.availability === "runtime" && snapshot.classification !== "idle";
-};
-
-export const sessionRuntimeSnapshotHasPendingInput = (
-  snapshot: CoreAgentSessionRuntimeSnapshot,
-): boolean => {
-  return snapshot.pendingApprovals.length > 0 || snapshot.pendingQuestions.length > 0;
 };
 
 export const applyAgentSessionRuntimeSnapshotToSession = (
@@ -71,5 +72,9 @@ export const applyAgentSessionRuntimeSnapshotToSession = (
     ...current,
     runtimeKind: snapshot.ref.runtimeKind,
     workingDirectory: snapshot.ref.workingDirectory,
+    status: statusWithoutRuntimeSnapshot(current),
+    pendingApprovals: [],
+    pendingQuestions: [],
+    ...clearLiveTurnFields(),
   };
 };
