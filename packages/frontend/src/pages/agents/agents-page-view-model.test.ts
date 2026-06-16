@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { TaskCard } from "@openducktor/contracts";
 import { Sparkles } from "lucide-react";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type {
   AgentChatMessage,
@@ -145,6 +146,7 @@ describe("agents-page-view-model", () => {
       pendingQuestions: [{ requestId: "q-1", questions: [] }],
       messages: [{ id: "m-1", role: "assistant", content: "ok", timestamp: "now" }],
     });
+    const activeSessionSummary = toAgentSessionSummary(activeSession);
 
     const model = buildAgentStudioHeaderModel({
       selectedTask: createTaskCard("task-1"),
@@ -182,7 +184,7 @@ describe("agents-page-view-model", () => {
       },
       selectedRole: "spec",
       workflowSessionByRole: {
-        spec: activeSession,
+        spec: activeSessionSummary,
         planner: null,
         build: null,
         qa: null,

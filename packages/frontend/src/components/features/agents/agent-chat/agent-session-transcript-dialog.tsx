@@ -7,13 +7,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { AgentChatSurface } from "./agent-chat";
 import { resolveAgentSessionDialogTitle } from "./agent-session-dialog-title";
 import { useSessionTranscriptSurfaceModel } from "./readonly-transcript/use-session-transcript-surface-model";
 
 type AgentSessionTranscriptDialogProps = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
   target: AgentSessionIdentity | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,7 +21,7 @@ type AgentSessionTranscriptDialogProps = {
 };
 
 export function AgentSessionTranscriptDialog({
-  activeWorkspace,
+  workspaceRepoPath,
   target,
   open,
   onOpenChange,
@@ -31,7 +30,7 @@ export function AgentSessionTranscriptDialog({
 }: AgentSessionTranscriptDialogProps): ReactElement {
   const { model } = useSessionTranscriptSurfaceModel({
     isOpen: open,
-    activeWorkspace,
+    workspaceRepoPath,
     target,
   });
   const resolvedTitle = resolveAgentSessionDialogTitle(title, model.thread.session?.title);

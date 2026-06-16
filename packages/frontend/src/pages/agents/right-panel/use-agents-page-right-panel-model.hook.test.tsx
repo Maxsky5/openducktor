@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import {
   createHookHarness,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
@@ -14,6 +14,7 @@ type UseAgentsPageRightPanelModel =
 type BuildToolsSnapshotModule =
   typeof import("@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot");
 type GitActionsModule = typeof import("../use-agent-studio-git-actions");
+type GitActionsArgs = Parameters<GitActionsModule["useAgentStudioGitActions"]>[0];
 type HookArgs = Parameters<UseAgentsPageRightPanelModel>[0];
 
 let useAgentsPageRightPanelModel: UseAgentsPageRightPanelModel;
@@ -162,14 +163,14 @@ describe("useAgentsPageRightPanelModel", () => {
       viewTaskId: "task-1",
       session: {
         role: "build",
-        status: "running",
+        activityState: "running",
         workingDirectory: "/repo",
         hasActiveSession: true,
       },
       viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
       panelKind: "documents",
       isPanelOpen: false,
-      viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
       documentsModel: { activeDocument: null },
       repoSettings: { defaultTargetBranch: null } as never,
       worktreeRecoveryKey: "recovery-key-a",
@@ -196,14 +197,14 @@ describe("useAgentsPageRightPanelModel", () => {
       viewTaskId: "task-1",
       session: {
         role: "build",
-        status: "running",
+        activityState: "running",
         workingDirectory: "/repo",
         hasActiveSession: true,
       },
       viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
       panelKind: "documents",
       isPanelOpen: false,
-      viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
       documentsModel: { activeDocument: null },
       repoSettings: { defaultTargetBranch: null } as never,
       worktreeRecoveryKey: "recovery-key-b",
@@ -220,5 +221,40 @@ describe("useAgentsPageRightPanelModel", () => {
     await harness.unmount();
 
     expect(events).toEqual(["A", "B", null]);
+  });
+
+  test("does not lock git actions for a builder session waiting for input", async () => {
+    const harness = createHookHarness(useAgentsPageRightPanelModel, {
+      activeWorkspace: { repoPath: "/repo" } as never,
+      branches: [],
+      activeBranch: null,
+      viewRole: "build",
+      viewTaskId: "task-1",
+      session: {
+        role: "build",
+        activityState: "waiting_input",
+        workingDirectory: "/repo",
+        hasActiveSession: true,
+      },
+      viewSelectedTask: createTaskCardFixture({ id: "task-1" }),
+      panelKind: "build_tools",
+      isPanelOpen: true,
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
+      documentsModel: { activeDocument: null },
+      repoSettings: { defaultTargetBranch: null } as never,
+      worktreeRecoveryKey: "recovery-key",
+      detectingPullRequestTaskId: null,
+      onDetectPullRequest: () => {},
+      onResolveGitConflict: undefined as HookArgs["onResolveGitConflict"],
+      onGitConflictQuickActionContextChange: () => {},
+    } as HookArgs);
+
+    await harness.mount();
+
+    const gitActionCalls = gitActionsMock.mock.calls as unknown as Array<[GitActionsArgs]>;
+    const latestGitActionArgs = gitActionCalls.at(-1)?.[0];
+    expect(latestGitActionArgs?.isBuilderSessionWorking).toBe(false);
+
+    await harness.unmount();
   });
 });

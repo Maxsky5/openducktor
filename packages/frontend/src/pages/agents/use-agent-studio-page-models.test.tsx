@@ -19,7 +19,7 @@ import type {
 } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -95,6 +95,8 @@ const createSession = (
   });
 };
 
+const summarizeSessions = (sessions: AgentSessionState[]) => sessions.map(toAgentSessionSummary);
+
 const emptyRuntimeData = {
   modelCatalog: null,
   todos: [],
@@ -153,7 +155,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     selectedTask: createTask(),
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
-    lifecycle: createSelectedSessionLifecycleFixture(),
+    transcriptState: createSelectedSessionTranscriptStateFixture(),
     activeSessionRuntimeData: emptyRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     ...overrides.selectedSessionCore,
@@ -264,7 +266,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
       runtimeDefinitions: selectedSessionCore.runtimeDefinitions,
       sessionRuntimeDataError: selectedSessionCore.sessionRuntimeDataError,
       hasActiveGitConflict: selectedSessionCore.hasActiveGitConflict,
-      lifecycle: selectedSessionCore.lifecycle,
+      transcriptState: selectedSessionCore.transcriptState,
       documents,
       runtimeReadiness,
       sessionActions: selectedSessionActions,
@@ -479,11 +481,8 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionCore: {
           activeSession: cachedSession,
-          sessionsForTask: [cachedSession],
-          lifecycle: createSelectedSessionLifecycleFixture({
-            repoReadinessState: "checking",
-            transcriptState: { kind: "visible" },
-          }),
+          sessionsForTask: [toAgentSessionSummary(cachedSession)],
+          transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "visible" }),
         },
         runtimeReadiness: {
           readinessState: "checking",
@@ -496,7 +495,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
+    expect(thread.transcriptState).toEqual({ kind: "visible" });
     expect(thread.runtimeReadiness.readinessState).toBe("checking");
     expect(thread.session ? sessionMessageAt(thread.session, 0)?.content : null).toBe(
       "Cached transcript",
@@ -513,9 +512,7 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [selectedSummary],
           allSessionSummaries: [selectedSummary],
-          lifecycle: createSelectedSessionLifecycleFixture({
-            transcriptState: { kind: "runtime_waiting" },
-          }),
+          transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         },
         runtimeReadiness: {
           readinessState: "checking",
@@ -547,9 +544,7 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [],
           allSessionSummaries: [],
-          lifecycle: createSelectedSessionLifecycleFixture({
-            transcriptState: { kind: "runtime_waiting" },
-          }),
+          transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         },
         runtimeReadiness: {
           readinessState: "checking",
@@ -581,8 +576,9 @@ describe("useAgentStudioPageModels", () => {
           activeSession: null,
           sessionsForTask: [],
           allSessionSummaries: [],
-          lifecycle: createSelectedSessionLifecycleFixture({
-            transcriptState: { kind: "session_loading", reason: "preparing" },
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "session_loading",
+            reason: "preparing",
           }),
         },
         sessionActions: {
@@ -618,10 +614,8 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionCore: {
           activeSession: cachedSession,
-          sessionsForTask: [cachedSession],
-          lifecycle: createSelectedSessionLifecycleFixture({
-            transcriptState: { kind: "visible" },
-          }),
+          sessionsForTask: summarizeSessions([cachedSession]),
+          transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "visible" }),
         },
       }),
     );
@@ -629,7 +623,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.mount();
 
     const thread = harness.getLatest().agentChatModel.thread;
-    expect(thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
+    expect(thread.transcriptState).toEqual({ kind: "visible" });
     const html = renderToStaticMarkup(
       createAgentChatThreadElement(harness.getLatest().agentChatModel),
     );
@@ -701,9 +695,10 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionCore: {
           activeSession: pendingSession,
-          sessionsForTask: [pendingSession],
-          lifecycle: createSelectedSessionLifecycleFixture({
-            transcriptState: { kind: "session_loading", reason: "history" },
+          sessionsForTask: summarizeSessions([pendingSession]),
+          transcriptState: createSelectedSessionTranscriptStateFixture({
+            kind: "session_loading",
+            reason: "history",
           }),
         },
       }),
@@ -711,7 +706,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.sessionLifecycle.transcriptState).toEqual({
+    expect(harness.getLatest().agentChatModel.thread.transcriptState).toEqual({
       kind: "session_loading",
       reason: "history",
     });
@@ -730,7 +725,7 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           role: "spec",
           activeSession: specSession,
-          sessionsForTask: [specSession],
+          sessionsForTask: summarizeSessions([specSession]),
         },
         documents: {
           specDoc: createDocumentState("spec"),
@@ -753,7 +748,7 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           role: "planner",
           activeSession: plannerSession,
-          sessionsForTask: [plannerSession],
+          sessionsForTask: summarizeSessions([plannerSession]),
         },
         documents: {
           specDoc: createDocumentState(""),
@@ -776,7 +771,7 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           role: "qa",
           activeSession: qaSession,
-          sessionsForTask: [qaSession],
+          sessionsForTask: summarizeSessions([qaSession]),
         },
         documents: {
           specDoc: createDocumentState(""),
@@ -797,7 +792,7 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           role: "build",
           activeSession: buildSession,
-          sessionsForTask: [buildSession],
+          sessionsForTask: summarizeSessions([buildSession]),
         },
         documents: {
           specDoc: createDocumentState(""),
@@ -820,7 +815,7 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           role: "spec",
           activeSession: plannerSession,
-          sessionsForTask: [plannerSession],
+          sessionsForTask: summarizeSessions([plannerSession]),
         },
         documents: {
           specDoc: createDocumentState("spec"),
@@ -846,7 +841,7 @@ describe("useAgentStudioPageModels", () => {
         selectedSessionCore: {
           role: "qa",
           activeSession: buildSession,
-          sessionsForTask: [buildSession],
+          sessionsForTask: summarizeSessions([buildSession]),
         },
         documents: {
           specDoc: createDocumentState("spec"),
@@ -885,7 +880,7 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionCore: {
           activeSession: approvalSession,
-          sessionsForTask: [approvalSession],
+          sessionsForTask: summarizeSessions([approvalSession]),
         },
       }),
     );
@@ -902,7 +897,7 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionCore: {
           activeSession: approvalSessionWithoutRequests,
-          sessionsForTask: [approvalSessionWithoutRequests],
+          sessionsForTask: summarizeSessions([approvalSessionWithoutRequests]),
         },
       }),
     );
@@ -936,7 +931,7 @@ describe("useAgentStudioPageModels", () => {
       createHookArgs({
         selectedSessionCore: {
           activeSession: approvalSession,
-          sessionsForTask: [approvalSession],
+          sessionsForTask: summarizeSessions([approvalSession]),
           runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         },
       }),
@@ -976,7 +971,7 @@ describe("useAgentStudioPageModels", () => {
         ...sharedOverrides,
         selectedSessionCore: {
           ...sharedOverrides.selectedSessionCore,
-          sessionsForTask: [sessionA, sessionB],
+          sessionsForTask: summarizeSessions([sessionA, sessionB]),
           activeSession: sessionA,
         },
       }),
@@ -995,7 +990,7 @@ describe("useAgentStudioPageModels", () => {
         ...sharedOverrides,
         selectedSessionCore: {
           ...sharedOverrides.selectedSessionCore,
-          sessionsForTask: [sessionA, sessionB],
+          sessionsForTask: summarizeSessions([sessionA, sessionB]),
           activeSession: sessionB,
         },
       }),
@@ -1012,7 +1007,7 @@ describe("useAgentStudioPageModels", () => {
         ...sharedOverrides,
         selectedSessionCore: {
           ...sharedOverrides.selectedSessionCore,
-          sessionsForTask: [sessionA, sessionB],
+          sessionsForTask: summarizeSessions([sessionA, sessionB]),
           activeSession: sessionA,
         },
       }),
@@ -1027,7 +1022,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: session,
-        sessionsForTask: [session],
+        sessionsForTask: summarizeSessions([session]),
       },
       composer: {
         draftStateKey: "draft-empty",
@@ -1061,7 +1056,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: session,
-        sessionsForTask: [session],
+        sessionsForTask: summarizeSessions([session]),
       },
       composer: {
         draftStateKey: "draft-thread-stable",
@@ -1091,7 +1086,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: session,
-        sessionsForTask: [session],
+        sessionsForTask: summarizeSessions([session]),
       },
       composer: {
         draftStateKey: "draft-thinking-toggle",
@@ -1123,7 +1118,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: session,
-        sessionsForTask: [session],
+        sessionsForTask: summarizeSessions([session]),
       },
       composer: {
         draftStateKey: "draft-diff-toggle",
@@ -1155,7 +1150,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: session,
-        sessionsForTask: [session],
+        sessionsForTask: summarizeSessions([session]),
       },
       composer: {
         draftStateKey: "draft-pending-maps",
@@ -1476,7 +1471,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: initialSession,
-        sessionsForTask: [initialSession],
+        sessionsForTask: summarizeSessions([initialSession]),
       },
       composer: {
         draftStateKey: "draft-same-session",
@@ -1500,7 +1495,7 @@ describe("useAgentStudioPageModels", () => {
         ...baseProps,
         selectedSessionCore: {
           activeSession: sameSessionIdNewRef,
-          sessionsForTask: [sameSessionIdNewRef],
+          sessionsForTask: summarizeSessions([sameSessionIdNewRef]),
         },
       }),
     );
@@ -1522,7 +1517,7 @@ describe("useAgentStudioPageModels", () => {
     const baseProps = createHookArgs({
       selectedSessionCore: {
         activeSession: initialSession,
-        sessionsForTask: [initialSession],
+        sessionsForTask: summarizeSessions([initialSession]),
       },
       composer: {
         draftStateKey: "draft-waiting-input",
@@ -1559,7 +1554,7 @@ describe("useAgentStudioPageModels", () => {
         ...baseProps,
         selectedSessionCore: {
           activeSession: waitingSession,
-          sessionsForTask: [waitingSession],
+          sessionsForTask: summarizeSessions([waitingSession]),
         },
         sessionActions: {
           ...baseProps.sessionActions,
@@ -1636,7 +1631,7 @@ describe("useAgentStudioPageModels", () => {
           role: "planner",
           selectedTask: unavailablePlannerTask,
           activeSession: runningPlannerSession,
-          sessionsForTask: [runningPlannerSession],
+          sessionsForTask: summarizeSessions([runningPlannerSession]),
         },
         sessionActions: {
           canStopSession: true,

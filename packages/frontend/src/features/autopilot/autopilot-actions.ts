@@ -249,7 +249,6 @@ export const executeAutopilotAction = async ({
     }
 
     await startSessionWorkflow({
-      activeWorkspace,
       queryClient,
       intent: {
         taskId: task.id,
@@ -262,6 +261,7 @@ export const executeAutopilotAction = async ({
           : {}),
         postStartAction: "kickoff",
       },
+      workspaceId: activeWorkspace.workspaceId,
       selection:
         startResolution.startMode === "reuse"
           ? null

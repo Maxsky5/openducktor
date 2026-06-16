@@ -208,8 +208,38 @@ describe("createAgentSessionsStore activity snapshots", () => {
       externalSessionId: "session-1",
       runtimeKind: session.runtimeKind,
       workingDirectory: session.workingDirectory,
-      hasPendingApprovals: true,
-      hasPendingQuestions: false,
+      activityState: "waiting_input",
+    });
+  });
+
+  test("publishes a new activity snapshot when runtime identity changes", () => {
+    const store = createAgentSessionsStore();
+    const session = createAgentSessionFixture({
+      externalSessionId: "session-1",
+      taskId: "task-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo/opencode",
+      status: "running",
+    });
+
+    store.setSessionCollection(createAgentSessionCollection([session]));
+
+    const initialSnapshot = store.getActivitySessionsSnapshot();
+    const movedSession = {
+      ...session,
+      runtimeKind: "codex" as const,
+      workingDirectory: "/repo/codex",
+    };
+
+    store.setSessionCollection(createAgentSessionCollection([movedSession]));
+
+    const nextSnapshot = store.getActivitySessionsSnapshot();
+    expect(nextSnapshot).not.toBe(initialSnapshot);
+    expect(nextSnapshot[0]).toMatchObject({
+      externalSessionId: "session-1",
+      runtimeKind: "codex",
+      workingDirectory: "/repo/codex",
+      activityState: "running",
     });
   });
 

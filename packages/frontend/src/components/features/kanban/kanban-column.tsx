@@ -119,8 +119,7 @@ const MeasuredTaskCard = memo(function MeasuredTaskCard({
   const taskSessionsMeasurementKey =
     taskSessions
       ?.map(
-        (session) =>
-          `${session.externalSessionId}:${session.role}:${session.status}:${session.presentationState}`,
+        (session) => `${session.externalSessionId}:${session.role}:${session.presentationState}`,
       )
       .join("|") ?? "";
   const historicalSessionsMeasurementKey =

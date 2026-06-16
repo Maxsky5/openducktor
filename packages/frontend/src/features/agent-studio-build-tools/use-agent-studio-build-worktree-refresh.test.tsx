@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   createAgentSessionFixture,
+  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
@@ -65,7 +66,7 @@ const createCompletedToolSession = (tool: string, id = tool, input?: Record<stri
 const createBaseArgs = (): HookArgs => ({
   viewRole: "build",
   activeSession: null,
-  isSessionViewLoading: false,
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
   refreshWorktree: refreshWorktreeMock,
 });
 
@@ -144,7 +145,10 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
         role: "build",
         messages: [],
       }),
-      isSessionViewLoading: true,
+      transcriptState: createSelectedSessionTranscriptStateFixture({
+        kind: "session_loading",
+        reason: "history",
+      }),
     });
 
     try {
@@ -154,14 +158,16 @@ describe("useAgentStudioBuildWorktreeRefresh", () => {
       await harness.update({
         ...createBaseArgs(),
         activeSession: createCompletedToolSession("apply_patch", "tool-1"),
-        isSessionViewLoading: true,
+        transcriptState: createSelectedSessionTranscriptStateFixture({
+          kind: "session_loading",
+          reason: "history",
+        }),
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
 
       await harness.update({
         ...createBaseArgs(),
         activeSession: createCompletedToolSession("apply_patch", "tool-1"),
-        isSessionViewLoading: false,
       });
       expect(refreshWorktreeMock).not.toHaveBeenCalled();
     } finally {

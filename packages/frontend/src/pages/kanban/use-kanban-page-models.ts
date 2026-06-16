@@ -73,9 +73,10 @@ export function useKanbanPageModels({
   onOpenDetails,
   onCloseDetails,
 }: UseKanbanPageModelsArgs): KanbanPageModels {
-  const { activeWorkspace, branches, isSwitchingWorkspace, loadRepoSettings } = useWorkspaceState();
+  const { activeWorkspace, branches, isSwitchingWorkspace } = useWorkspaceState();
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspace });
+  const { repoSettings } = useAgentStudioRepoSettings({ activeWorkspaceId });
   const {
     loadAgentSessions,
     removeAgentSessions,
@@ -167,15 +168,14 @@ export function useKanbanPageModels({
   const navigate = useNavigate();
 
   const sessionStartFlow = useKanbanSessionStartFlow({
-    activeWorkspace,
+    activeWorkspaceId,
     branches,
     repoSettings,
     openAgentStudioTabOnBackgroundSessionStart,
     tasks: kanbanTasks,
     sessions,
     navigate,
-    loadRepoSettings,
-    loadAgentSessions,
+    workspaceRepoPath,
     humanRequestChangesTask,
     setTaskTargetBranch,
     startAgentSession,
@@ -228,7 +228,7 @@ export function useKanbanPageModels({
     [loadAgentSessions, removeAgentSessions, resetTask],
   );
   const { handleResolveGitConflict } = useGitConflictResolution({
-    activeWorkspace,
+    workspaceId: activeWorkspaceId,
     startConflictResolutionSession: async (request) =>
       startSessionIntent({
         taskId: request.taskId,

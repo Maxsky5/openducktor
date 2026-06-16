@@ -11,7 +11,6 @@ import {
   getSessionMessages,
   handleAssistantPart,
   listenToAgentSessionEvents,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEventAdapter,
   type SessionPartEventContext,
   sessionMessageAt,
@@ -50,7 +49,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
         clearTurnDurationCalls += 1;
       },
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -404,7 +402,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -482,7 +479,7 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       refresh: {
         repoPath: "/tmp/repo",
         refreshTaskData: async () => {},
-        resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
+        resolveWorkflowToolAliasesByCanonical: () => undefined,
       },
       runtimeData: {
         updateSessionTodos: () => {},
@@ -536,7 +533,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -588,7 +584,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -668,7 +663,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -733,7 +727,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -839,7 +832,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -921,7 +913,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1005,7 +996,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1114,7 +1104,6 @@ describe("agent-orchestrator session assistant and subagent updates", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

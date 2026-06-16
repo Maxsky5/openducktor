@@ -13,7 +13,6 @@ import type {
 import type { SessionStartGate } from "@/features/session-start/session-start-gate";
 import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EnsureRuntime, RuntimeInfo, TaskDocuments } from "../runtime/runtime";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 
@@ -74,7 +73,8 @@ export type ModelDependencies = {
 };
 
 export type RepoDependencies = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
+  workspaceId: string | null;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
 };
@@ -113,23 +113,6 @@ export type StartSessionExecutionDependencies = Pick<
   StartSessionDependencies,
   "session" | "runtime" | "task" | "model"
 >;
-
-export type StartSessionCreationInput =
-  | {
-      startMode: "reuse";
-      selectedModel?: never;
-      sourceSession: AgentSessionIdentity;
-    }
-  | {
-      startMode: "fresh";
-      selectedModel: AgentModelSelection;
-      targetWorkingDirectory?: string | null;
-    }
-  | {
-      startMode: "fork";
-      selectedModel: AgentModelSelection;
-      sourceSession: AgentSessionIdentity;
-    };
 
 export type ResolvedRuntimeAndModel = {
   taskCard: TaskCard;

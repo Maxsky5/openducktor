@@ -8,6 +8,7 @@ import { mapToKanbanColumns } from "@openducktor/core";
 import { useMemo } from "react";
 import {
   type ActiveTaskSessionContext,
+  isKanbanActiveTaskSession,
   type KanbanTaskActivityState,
   type KanbanTaskSession,
   toKanbanSessionPresentationState,
@@ -17,28 +18,11 @@ import {
   compareActiveSessionForPrimary,
   type SessionTargetOptions,
 } from "@/components/features/kanban/session-target-resolution";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
-import {
-  type AgentSessionSummary,
-  isWorkflowAgentSessionSummary,
-  type WorkflowAgentSessionSummary,
+import type {
+  AgentSessionSummary,
+  WorkflowAgentSessionSummary,
 } from "@/state/agent-sessions-store";
 import type { KanbanPageContentModel } from "./kanban-page-model-types";
-
-const shouldDisplayKanbanTaskSession = (
-  session: AgentSessionSummary,
-): session is WorkflowAgentSessionSummary => {
-  if (!isWorkflowAgentSessionSummary(session)) {
-    return false;
-  }
-
-  if (isAgentSessionWaitingInput(session)) {
-    return true;
-  }
-
-  return isAgentSessionWorkingStatus(session.status);
-};
 
 const comparePrimaryTaskSession = (
   left: WorkflowAgentSessionSummary,
@@ -49,7 +33,6 @@ const comparePrimaryTaskSession = (
       externalSessionId: left.externalSessionId,
       runtimeKind: left.runtimeKind,
       workingDirectory: left.workingDirectory,
-      status: left.status,
       presentationState: toKanbanSessionPresentationState(left),
       startedAt: left.startedAt,
     },
@@ -57,7 +40,6 @@ const comparePrimaryTaskSession = (
       externalSessionId: right.externalSessionId,
       runtimeKind: right.runtimeKind,
       workingDirectory: right.workingDirectory,
-      status: right.status,
       presentationState: toKanbanSessionPresentationState(right),
       startedAt: right.startedAt,
     },
@@ -70,7 +52,7 @@ export const buildActiveTaskSessionContextByTaskId = (
   const activeTaskSessionContextByTaskId = new Map<string, WorkflowAgentSessionSummary>();
 
   for (const session of sessions) {
-    if (!shouldDisplayKanbanTaskSession(session)) {
+    if (!isKanbanActiveTaskSession(session)) {
       continue;
     }
 
@@ -146,7 +128,7 @@ export const buildTaskSessionsByTaskId = (
 ): Map<string, KanbanTaskSession[]> => {
   const sessionsByTaskId = new Map<string, WorkflowAgentSessionSummary[]>();
   for (const session of sessions) {
-    if (!shouldDisplayKanbanTaskSession(session)) {
+    if (!isKanbanActiveTaskSession(session)) {
       continue;
     }
 
@@ -170,7 +152,6 @@ export const buildTaskSessionsByTaskId = (
         workingDirectory: session.workingDirectory,
         externalSessionId: session.externalSessionId,
         role: session.role,
-        status: session.status,
         startedAt: session.startedAt,
         presentationState: toKanbanSessionPresentationState(session),
       })),

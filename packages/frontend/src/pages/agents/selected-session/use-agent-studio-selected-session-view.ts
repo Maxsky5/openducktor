@@ -18,17 +18,20 @@ import { useAgentSession } from "@/state/app-state-provider";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { shouldLoadSelectedSessionHistory } from "@/state/operations/agent-orchestrator/lifecycle/session-history-loader";
-import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import { deriveSelectedAgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
+  type AgentSessionTranscriptState,
+  deriveSelectedAgentSessionTranscriptState,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, ChecksStateContextValue } from "@/types/state-slices";
+import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { ChecksStateContextValue } from "@/types/state-slices";
 import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
 
 type UseAgentStudioSelectedSessionViewArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
   selectedTask: TaskCard | null;
   sessionSummaries: AgentSessionSummary[];
   sessionKey: string | null;
@@ -38,8 +41,7 @@ type UseAgentStudioSelectedSessionViewArgs = {
   keepExplicitRoleSessionless: boolean;
   selectionIntent: AgentStudioViewSessionSelectionIntent | null;
   sessionIdentityFromRoute: AgentSessionIdentity | null;
-  sessionReadModelError: string | null;
-  isLoadingSessionReadModel: boolean;
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
@@ -62,11 +64,11 @@ export type AgentStudioSelectedSessionView = {
   runtimeReadiness: RepoRuntimeReadiness;
   role: AgentRole;
   launchActionId: SessionLaunchActionId;
-  lifecycle: AgentSessionViewLifecycle;
+  transcriptState: AgentSessionTranscriptState;
 };
 
 export function useAgentStudioSelectedSessionView({
-  activeWorkspace,
+  workspaceRepoPath,
   selectedTask,
   sessionSummaries,
   sessionKey,
@@ -76,8 +78,7 @@ export function useAgentStudioSelectedSessionView({
   keepExplicitRoleSessionless,
   selectionIntent,
   sessionIdentityFromRoute,
-  sessionReadModelError,
-  isLoadingSessionReadModel,
+  sessionReadModelLoadState,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -115,7 +116,7 @@ export function useAgentStudioSelectedSessionView({
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
   const runtimeReadiness = useRepoRuntimeReadiness({
-    activeWorkspace,
+    hasWorkspace: workspaceRepoPath !== null,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
@@ -131,26 +132,23 @@ export function useAgentStudioSelectedSessionView({
       ? resolveBuildContinuationLaunchAction(selectedTask)
       : firstLaunchAction(selection.role);
 
-  const lifecycle = useMemo(() => {
-    return deriveSelectedAgentSessionViewLifecycle({
+  const transcriptState = useMemo(() => {
+    return deriveSelectedAgentSessionTranscriptState({
       selectedSessionIdentity,
       session,
       hasSelectedTask: selectedTask !== null,
       repoReadinessState,
-      sessionLoadError: sessionReadModelError,
-      isLoadingSessionReadModel,
+      sessionReadModelLoadState,
     });
   }, [
-    isLoadingSessionReadModel,
     repoReadinessState,
     selectedTask,
     session,
-    sessionReadModelError,
+    sessionReadModelLoadState,
     selectedSessionIdentity,
   ]);
-
   const runtimeData = useSessionRuntimeData({
-    repoPath: activeWorkspace?.repoPath ?? null,
+    repoPath: workspaceRepoPath,
     session,
     runtimeDefinitions,
     repoReadinessState,
@@ -162,14 +160,13 @@ export function useAgentStudioSelectedSessionView({
     repoReadinessState,
     session,
   });
-  const hasSession = session !== null;
   useEffect(() => {
-    if (selectedSessionIdentity === null || !shouldLoadHistory || !hasSession) {
+    if (selectedSessionIdentity === null || !shouldLoadHistory) {
       return;
     }
 
     void loadAgentSessionHistory(selectedSessionIdentity);
-  }, [hasSession, loadAgentSessionHistory, selectedSessionIdentity, shouldLoadHistory]);
+  }, [loadAgentSessionHistory, selectedSessionIdentity, shouldLoadHistory]);
 
   return useMemo<AgentStudioSelectedSessionView>(
     () => ({
@@ -180,11 +177,11 @@ export function useAgentStudioSelectedSessionView({
       runtimeReadiness,
       role: selection.role,
       launchActionId,
-      lifecycle,
+      transcriptState,
     }),
     [
       launchActionId,
-      lifecycle,
+      transcriptState,
       runtimeReadiness,
       runtimeData.runtimeData,
       runtimeData.runtimeDataError,

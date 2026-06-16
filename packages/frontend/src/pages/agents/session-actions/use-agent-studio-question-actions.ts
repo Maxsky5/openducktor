@@ -1,19 +1,22 @@
 import { useCallback, useMemo, useState } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
+import type { AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentStateContextValue } from "@/types/state-slices";
 
+type AgentStudioQuestionSession = Pick<
+  AgentSessionState,
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "pendingQuestions"
+>;
+
 type UseAgentStudioQuestionActionsArgs = {
-  activeSession: AgentSessionIdentity | null;
+  activeSession: AgentStudioQuestionSession | null;
   agentStudioReady: boolean;
-  pendingQuestions: AgentSessionState["pendingQuestions"];
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 
 export function useAgentStudioQuestionActions({
   activeSession,
   agentStudioReady,
-  pendingQuestions,
   answerAgentQuestion,
 }: UseAgentStudioQuestionActionsArgs): {
   isSubmittingQuestionByRequestId: Record<string, boolean>;
@@ -28,7 +31,8 @@ export function useAgentStudioQuestionActions({
       if (!activeSession || !agentStudioReady) {
         return;
       }
-      const sessionKey = agentSessionIdentityKey(activeSession);
+      const sessionIdentity = toAgentSessionIdentity(activeSession);
+      const sessionKey = agentSessionIdentityKey(sessionIdentity);
 
       setSubmittingQuestionBySessionKey((current) => ({
         ...current,
@@ -38,7 +42,7 @@ export function useAgentStudioQuestionActions({
         },
       }));
       try {
-        await answerAgentQuestion(activeSession, requestId, answers);
+        await answerAgentQuestion(sessionIdentity, requestId, answers);
       } finally {
         setSubmittingQuestionBySessionKey((current) => {
           const sessionRequests = current[sessionKey];
@@ -67,11 +71,13 @@ export function useAgentStudioQuestionActions({
 
     const sessionRequests =
       submittingQuestionBySessionKey[agentSessionIdentityKey(activeSession)] ?? {};
-    const activeRequestIds = new Set(pendingQuestions.map((entry) => entry.requestId));
+    const activeRequestIds = new Set(
+      activeSession.pendingQuestions.map((entry) => entry.requestId),
+    );
     return Object.fromEntries(
       Object.entries(sessionRequests).filter(([requestId]) => activeRequestIds.has(requestId)),
     );
-  }, [activeSession, pendingQuestions, submittingQuestionBySessionKey]);
+  }, [activeSession, submittingQuestionBySessionKey]);
 
   return {
     isSubmittingQuestionByRequestId,

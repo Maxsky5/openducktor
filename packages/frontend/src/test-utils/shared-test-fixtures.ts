@@ -8,6 +8,7 @@ import {
   type TaskCard,
   type TaskStoreCheck,
 } from "@openducktor/contracts";
+import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import type {
@@ -306,6 +307,11 @@ export const createAgentSessionFixture = (
     messages,
   };
 };
+
+export const createAgentSessionSummaryFixture = (
+  defaults: LegacyAgentSessionOverrides = {},
+  overrides: LegacyAgentSessionOverrides = {},
+): AgentSessionSummary => toAgentSessionSummary(createAgentSessionFixture(defaults, overrides));
 
 export const createRepoRuntimeHealthFixture = (
   defaults: RepoRuntimeHealthFixtureOverrides = {},

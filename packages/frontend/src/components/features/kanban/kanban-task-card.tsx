@@ -125,7 +125,7 @@ const areHistoricalSessionsEqual = (
   return true;
 };
 
-const areRunningTaskSessionsEqual = (
+const areTaskSessionsEqual = (
   left: KanbanTaskSession[] | undefined,
   right: KanbanTaskSession[] | undefined,
 ): boolean => {
@@ -147,7 +147,6 @@ const areRunningTaskSessionsEqual = (
     if (
       agentSessionIdentityKey(leftSession) !== agentSessionIdentityKey(rightSession) ||
       leftSession.role !== rightSession.role ||
-      leftSession.status !== rightSession.status ||
       leftSession.presentationState !== rightSession.presentationState
     ) {
       return false;
@@ -161,7 +160,7 @@ const areKanbanTaskCardPropsEqual = (
   next: KanbanTaskCardProps,
 ): boolean =>
   areTaskCardsEquivalent(previous.task, next.task) &&
-  areRunningTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
+  areTaskSessionsEqual(previous.taskSessions, next.taskSessions) &&
   areHistoricalSessionsEqual(previous.historicalSessions, next.historicalSessions) &&
   previous.hasActiveSession === next.hasActiveSession &&
   previous.activeSessionRole === next.activeSessionRole &&
@@ -196,7 +195,7 @@ const getSessionStatusLabel = ({
     return "Waiting input";
   }
 
-  if (session.status === "starting") {
+  if (session.presentationState === "starting") {
     return "Starting";
   }
 

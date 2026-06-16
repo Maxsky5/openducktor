@@ -1,10 +1,7 @@
 import type { ChatSettings } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { useMemo } from "react";
-import type {
-  AgentChatEmptyStateModel,
-  AgentChatModel,
-} from "@/components/features/agents/agent-chat/agent-chat.types";
+import type { AgentChatModel } from "@/components/features/agents/agent-chat/agent-chat.types";
 import type { AgentChatComposerDraft } from "@/components/features/agents/agent-chat/agent-chat-composer-draft";
 import { toAgentChatThreadSession } from "@/components/features/agents/agent-chat/agent-chat-thread-session";
 import type { AgentChatComposerConfig } from "@/components/features/agents/agent-chat/use-agent-chat-composer-model";
@@ -12,6 +9,7 @@ import { useAgentChatSurfaceModel } from "@/components/features/agents/agent-cha
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentStudioContextUsage } from "@/features/agent-chat-composer/context-usage/context-usage-resolution";
 import type { AgentStateContextValue } from "@/types/state-slices";
+import { deriveAgentStudioChatSurfaceState } from "./agent-studio-chat-surface-state";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 
 export type AgentStudioChatSessionActionsContext = {
@@ -84,52 +82,6 @@ const toChatContextUsage = (
   };
 };
 
-const buildAgentStudioChatEmptyState = ({
-  taskId,
-  transcriptStateKind,
-  isStarting,
-  canKickoff,
-  kickoffLabel,
-  startLaunchKickoff,
-}: {
-  taskId: string;
-  transcriptStateKind: AgentStudioSelectedSessionContext["runtime"]["lifecycle"]["transcriptState"]["kind"];
-  isStarting: boolean;
-  canKickoff: boolean;
-  kickoffLabel: string;
-  startLaunchKickoff: () => Promise<void>;
-}): AgentChatEmptyStateModel | null => {
-  if (!taskId) {
-    return {
-      title: "Select a task to begin.",
-    };
-  }
-
-  if (transcriptStateKind !== "empty") {
-    return null;
-  }
-
-  if (isStarting) {
-    return {
-      title: "Initializing session...",
-    };
-  }
-
-  if (canKickoff) {
-    return {
-      title: "Send a message to start a new session automatically.",
-      actionLabel: kickoffLabel,
-      onAction: (): void => {
-        void startLaunchKickoff();
-      },
-    };
-  }
-
-  return {
-    title: "Send a message to start a new session automatically.",
-  };
-};
-
 export function useAgentStudioChatModel({
   selectedSession,
   sessionActions,
@@ -152,8 +104,6 @@ export function useAgentStudioChatModel({
       workingDirectory: selectedSession.activeSession.workingDirectory,
       selectedModel: selectedSession.activeSession.selectedModel,
       isLoadingModelCatalog: selectedSession.runtime.isLoadingModelCatalog,
-      pendingApprovals: selectedSession.activeSession.pendingApprovals,
-      pendingQuestions: selectedSession.activeSession.pendingQuestions,
     };
   }, [selectedSession.activeSession, selectedSession.runtime.isLoadingModelCatalog]);
   const activeThreadSession = useMemo(
@@ -170,28 +120,35 @@ export function useAgentStudioChatModel({
     () => toChatContextUsage(modelSelection.activeSessionContextUsage),
     [modelSelection.activeSessionContextUsage],
   );
-  const selectedSessionLifecycle = selectedSession.runtime.lifecycle;
+  const selectedSessionTranscriptState = selectedSession.runtime.transcriptState;
   const runtimeReadiness = selectedSession.runtime.runtimeReadiness;
   const pendingQuestions = selectedSession.pendingInput.pendingQuestions;
   const approvals = selectedSession.pendingInput.approvals;
-  const composerReadOnly =
-    !selectedSession.activeSession && !selectedSession.workflow.selectedRoleAvailable;
-  const composerReadOnlyReason = composerReadOnly
-    ? selectedSession.workflow.selectedRoleReadOnlyReason
-    : null;
-  const emptyState = useMemo(
+  const surfaceState = useMemo(
     () =>
-      buildAgentStudioChatEmptyState({
-        taskId: selectedSession.taskId,
-        transcriptStateKind: selectedSessionLifecycle.transcriptState.kind,
-        isStarting: sessionActions.isStarting,
-        canKickoff: sessionActions.canKickoffNewSession,
-        kickoffLabel: sessionActions.kickoffLabel,
-        startLaunchKickoff: sessionActions.startLaunchKickoff,
+      deriveAgentStudioChatSurfaceState({
+        selectedSession: {
+          taskId: selectedSession.taskId,
+          activeSession: selectedSession.activeSession,
+          workflow: {
+            selectedRoleAvailable: selectedSession.workflow.selectedRoleAvailable,
+            selectedRoleReadOnlyReason: selectedSession.workflow.selectedRoleReadOnlyReason,
+          },
+        },
+        transcriptState: selectedSessionTranscriptState,
+        sessionActions: {
+          isStarting: sessionActions.isStarting,
+          canKickoffNewSession: sessionActions.canKickoffNewSession,
+          kickoffLabel: sessionActions.kickoffLabel,
+          startLaunchKickoff: sessionActions.startLaunchKickoff,
+        },
       }),
     [
+      selectedSession.activeSession,
       selectedSession.taskId,
-      selectedSessionLifecycle.transcriptState.kind,
+      selectedSession.workflow.selectedRoleAvailable,
+      selectedSession.workflow.selectedRoleReadOnlyReason,
+      selectedSessionTranscriptState,
       sessionActions.canKickoffNewSession,
       sessionActions.isStarting,
       sessionActions.kickoffLabel,
@@ -205,11 +162,12 @@ export function useAgentStudioChatModel({
       activeSession: activeComposerSession,
       isSessionWorking: sessionActions.isSessionWorking,
       isWaitingInput: sessionActions.isWaitingInput,
+      waitingInputPlaceholder: selectedSession.pendingInput.waitingInputPlaceholder,
       busySendBlockedReason: sessionActions.busySendBlockedReason,
       canStopSession: sessionActions.canStopSession,
       stopAgentSession: sessionActions.stopAgentSession,
-      isReadOnly: composerReadOnly,
-      readOnlyReason: composerReadOnlyReason,
+      isReadOnly: surfaceState.composerReadOnly,
+      readOnlyReason: surfaceState.composerReadOnlyReason,
       draftStateKey: composer.draftStateKey,
       onSend: sessionActions.onSend,
       isSending: sessionActions.isSending,
@@ -266,9 +224,10 @@ export function useAgentStudioChatModel({
       modelSelection.supportsSkillReferences,
       modelSelection.supportsSlashCommands,
       modelSelection.variantOptions,
-      composerReadOnly,
-      composerReadOnlyReason,
+      selectedSession.pendingInput.waitingInputPlaceholder,
       selectedSession.taskId,
+      surfaceState.composerReadOnly,
+      surfaceState.composerReadOnlyReason,
       sessionActions.busySendBlockedReason,
       sessionActions.canStopSession,
       sessionActions.isSending,
@@ -282,13 +241,13 @@ export function useAgentStudioChatModel({
 
   const surfaceModel = useAgentChatSurfaceModel({
     session: activeThreadSession,
-    sessionLifecycle: selectedSessionLifecycle,
+    transcriptState: selectedSessionTranscriptState,
     chatSettings,
     isSessionWorking: sessionActions.isSessionWorking,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
     sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,
     runtimeReadiness,
-    emptyState,
+    emptyState: surfaceState.emptyState,
     pendingQuestions,
     approvals,
     composer: composerConfig,

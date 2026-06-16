@@ -6,7 +6,6 @@ import { getSessionMessageCount } from "@/state/operations/agent-orchestrator/su
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
 import { useRuntimeTranscriptSessionHistory } from "./use-runtime-transcript-session-history";
 
@@ -22,12 +21,6 @@ const wrapper = ({ children }: PropsWithChildren): ReactElement => (
 
 const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useRuntimeTranscriptSessionHistory, initialProps, { wrapper });
-
-const activeWorkspace: ActiveWorkspace = {
-  workspaceId: "workspace-a",
-  workspaceName: "Workspace A",
-  repoPath: "/repo-a",
-};
 
 const createTarget = (overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity => ({
   externalSessionId: "session-1",
@@ -48,7 +41,7 @@ const createHistoryMessage = (): AgentSessionHistoryMessage => ({
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   isOpen: true,
-  activeWorkspace,
+  repoPath: "/repo-a",
   target: createTarget(),
   repoReadinessState: "ready",
   liveSession: null,
@@ -75,11 +68,9 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(session?.externalSessionId).toBe("session-1");
       expect(session?.runtimeKind).toBe("opencode");
       expect(session?.workingDirectory).toBe("/repo-a/worktree");
-      expect(session?.status).toBe("idle");
+      expect(session?.activityState).toBe("idle");
       expect(session ? getSessionMessageCount(session) : 0).toBeGreaterThan(0);
-      expect(harness.getLatest().lifecycle).toMatchObject({
-        repoReadinessState: "ready",
-      });
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
       expect(harness.getLatest().historyError).toBeNull();
     } finally {
       await harness.unmount();
@@ -106,9 +97,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(harness.getLatest().session).toEqual(toAgentChatThreadSession(liveSession, []));
-      expect(harness.getLatest().lifecycle).toMatchObject({
-        repoReadinessState: "ready",
-      });
+      expect(harness.getLatest().transcriptState).toEqual({ kind: "visible" });
     } finally {
       await harness.unmount();
     }
@@ -138,7 +127,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
       });
-      expect(harness.getLatest().session?.status).toBe("idle");
+      expect(harness.getLatest().session?.activityState).toBe("idle");
       expect(harness.getLatest().session?.workingDirectory).toBe("/repo-a/worktree");
     } finally {
       await harness.unmount();
@@ -160,9 +149,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
       expect(readSessionHistory).not.toHaveBeenCalled();
       expect(harness.getLatest()).toMatchObject({
         session: null,
-        lifecycle: {
-          repoReadinessState: "checking",
-        },
+        transcriptState: { kind: "runtime_waiting" },
         historyError: null,
       });
     } finally {
@@ -182,9 +169,7 @@ describe("useRuntimeTranscriptSessionHistory", () => {
 
       expect(harness.getLatest()).toMatchObject({
         session: null,
-        lifecycle: {
-          repoReadinessState: "ready",
-        },
+        transcriptState: { kind: "failed" },
         historyError: "history unavailable",
       });
     } finally {

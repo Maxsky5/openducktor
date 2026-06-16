@@ -3,6 +3,7 @@ import type { AgentSkillCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren } from "react";
 import { QueryProvider } from "@/lib/query-provider";
 import { createHookHarness } from "@/test-utils/react-hook-harness";
+import type { ChatComposerPromptInputTarget } from "./chat-composer-prompt-input-target";
 import { useChatComposerSkills } from "./use-chat-composer-skills";
 
 (
@@ -14,6 +15,15 @@ const wrapper = ({ children }: PropsWithChildren) =>
 
 const EMPTY_CATALOG: AgentSkillCatalog = { skills: [] };
 
+const sessionTarget: ChatComposerPromptInputTarget = {
+  kind: "session",
+  runtimeRef: {
+    repoPath: "/repo",
+    runtimeKind: "codex",
+    workingDirectory: "/repo/worktree",
+  },
+};
+
 describe("useChatComposerSkills", () => {
   test("surfaces active-session runtime context errors without querying skills", async () => {
     const loadSkillsForRepo = mock(async () => EMPTY_CATALOG);
@@ -21,14 +31,12 @@ describe("useChatComposerSkills", () => {
     const harness = createHookHarness(
       useChatComposerSkills,
       {
-        hasSessionTarget: true,
-        canReadLoadedSessionRuntimePrompts: true,
-        activeSessionRuntimeRef: null,
-        activeSessionRuntimeRefError:
-          "Active session runtime context is missing working directory.",
+        promptInputTarget: {
+          kind: "unavailable",
+          runtimeKind: "codex",
+          error: "Active session runtime context is missing working directory.",
+        },
         supportsSkillReferences: true,
-        workspaceRepoPath: "/repo",
-        selectedRuntimeKind: "codex",
         loadSkillsForRepo,
         readSessionSkills,
       },
@@ -64,17 +72,8 @@ describe("useChatComposerSkills", () => {
     const harness = createHookHarness(
       useChatComposerSkills,
       {
-        hasSessionTarget: true,
-        canReadLoadedSessionRuntimePrompts: true,
-        activeSessionRuntimeRef: {
-          repoPath: "/repo",
-          runtimeKind: "codex",
-          workingDirectory: "/repo/worktree",
-        },
-        activeSessionRuntimeRefError: null,
+        promptInputTarget: sessionTarget,
         supportsSkillReferences: true,
-        workspaceRepoPath: "/repo",
-        selectedRuntimeKind: "codex",
         loadSkillsForRepo,
         readSessionSkills,
       },

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
+import { type AgentSessionSummary, toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
@@ -23,6 +24,7 @@ let useAgentStudioSelectionController: UseAgentStudioSelectionControllerHook;
 const sessionByIdRef: { current: Record<string, AgentSessionState> } = {
   current: {},
 };
+const createdSessionStateByKey = new Map<string, AgentSessionState>();
 
 type HookArgs = Parameters<UseAgentStudioSelectionControllerHook>[0];
 const emptyCatalog = {
@@ -35,33 +37,31 @@ const emptyCatalog = {
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
-const activeWorkspace = {
-  repoPath: "/repo",
-  workspaceId: "workspace-1",
-  workspaceName: "Workspace",
-};
+const activeWorkspaceId = "workspace-1";
+const workspaceRepoPath = "/repo";
 
 const createSession = (
   taskId: string,
   externalSessionId: string,
   overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {},
-) =>
-  createAgentSessionFixture({
+): AgentSessionSummary => {
+  const session = createAgentSessionFixture({
     externalSessionId,
     taskId,
     ...overrides,
   });
+  createdSessionStateByKey.set(agentSessionIdentityKey(session), session);
+  return toAgentSessionSummary(session);
+};
 
 const sessionKeyParam = (session: AgentSessionIdentity): string => agentSessionIdentityKey(session);
-
-const isFullSessionState = (entry: HookArgs["sessions"][number]): entry is AgentSessionState =>
-  "messages" in entry;
 
 const syncSessionLookup = (sessions: HookArgs["sessions"]): void => {
   const nextLookup: Record<string, AgentSessionState> = {};
   for (const session of sessions) {
-    if (isFullSessionState(session)) {
-      nextLookup[agentSessionIdentityKey(session)] = session;
+    const fullSession = createdSessionStateByKey.get(agentSessionIdentityKey(session));
+    if (fullSession) {
+      nextLookup[agentSessionIdentityKey(session)] = fullSession;
     }
   }
   sessionByIdRef.current = nextLookup;
@@ -81,13 +81,13 @@ const createHookHarness = (initialProps: HookArgs) => {
 };
 
 const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace: null,
+  activeWorkspaceId: null,
+  workspaceRepoPath: null,
   isRepoNavigationBoundaryPending: false,
   tasks: [createTask("task-1"), createTask("task-2")],
   isLoadingTasks: false,
   sessions: [],
-  isLoadingSessionReadModel: false,
-  sessionReadModelError: null,
+  sessionReadModelLoadState: { kind: "idle" },
   taskIdParam: "task-1",
   sessionKeyParam: null,
   hasExplicitRoleParam: false,
@@ -110,6 +110,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
 
 describe("useAgentStudioSelectionController", () => {
   beforeEach(async () => {
+    createdSessionStateByKey.clear();
+    sessionByIdRef.current = {};
     mock.module("@/state/app-state-provider", () => ({
       AppStateProvider: ({ children }: { children: unknown }) => children,
       useActiveWorkspace: () => null,
@@ -193,9 +195,10 @@ describe("useAgentStudioSelectionController", () => {
   test("marks selected task session read model loading until a session summary is available", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         tasks: [createTask("task-1"), createTask("task-2")],
-        isLoadingSessionReadModel: true,
+        sessionReadModelLoadState: { kind: "loading" },
         sessions: [],
         taskIdParam: "task-1",
         hasExplicitRoleParam: false,
@@ -205,7 +208,7 @@ describe("useAgentStudioSelectionController", () => {
     try {
       await harness.mount();
 
-      expect(harness.getLatest().viewSessionLifecycle.transcriptState).toEqual({
+      expect(harness.getLatest().viewTranscriptState).toEqual({
         kind: "session_loading",
         reason: "preparing",
       });
@@ -218,7 +221,8 @@ describe("useAgentStudioSelectionController", () => {
       });
       await harness.update(
         createBaseArgs({
-          activeWorkspace,
+          activeWorkspaceId,
+          workspaceRepoPath,
           tasks: [createTask("task-1"), createTask("task-2")],
           sessions: [loadedSession],
           taskIdParam: "task-1",
@@ -226,7 +230,7 @@ describe("useAgentStudioSelectionController", () => {
         }),
       );
 
-      expect(harness.getLatest().viewSessionLifecycle.transcriptState).toEqual({
+      expect(harness.getLatest().viewTranscriptState).toEqual({
         kind: "visible",
       });
       expect(harness.getLatest().viewActiveSession?.externalSessionId).toBe("session-reloaded");
@@ -238,9 +242,10 @@ describe("useAgentStudioSelectionController", () => {
   test("keeps the selected task resolving while the session read model is loading", async () => {
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         tasks: [createTask("task-1")],
-        isLoadingSessionReadModel: true,
+        sessionReadModelLoadState: { kind: "loading" },
         sessions: [],
         taskIdParam: "task-1",
         sessionKeyParam: null,
@@ -252,7 +257,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.viewSessionLifecycle.transcriptState).toEqual({
+      expect(latest.viewTranscriptState).toEqual({
         kind: "session_loading",
         reason: "preparing",
       });
@@ -270,7 +275,8 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         runtimeHealthByRuntime: {
           opencode: createRepoRuntimeHealthFixture({
             status: "checking",
@@ -278,7 +284,7 @@ describe("useAgentStudioSelectionController", () => {
           }),
         },
         tasks: [task],
-        isLoadingSessionReadModel: true,
+        sessionReadModelLoadState: { kind: "loading" },
         sessions: [],
         taskIdParam: "task-1",
         sessionKeyParam: "session-reloaded",
@@ -291,7 +297,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.viewSessionLifecycle.transcriptState).toEqual({
+      expect(latest.viewTranscriptState).toEqual({
         kind: "runtime_waiting",
       });
       expect(latest.viewActiveSession).toBeNull();
@@ -314,7 +320,8 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
         runtimeHealthByRuntime: {
           opencode: createRepoRuntimeHealthFixture(),
@@ -338,7 +345,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.viewActiveSession?.runtimeKind).toBe("codex");
       expect(latest.viewRuntimeReadiness.readinessState).toBe("checking");
-      expect(latest.viewSessionLifecycle.transcriptState).toEqual({
+      expect(latest.viewTranscriptState).toEqual({
         kind: "runtime_waiting",
       });
     } finally {
@@ -354,10 +361,14 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         tasks: [task],
         sessions: [],
-        sessionReadModelError: "Failed to load agent session read model",
+        sessionReadModelLoadState: {
+          kind: "failed",
+          message: "Failed to load agent session read model",
+        },
         taskIdParam: "task-1",
         sessionKeyParam: "session-reloaded",
         hasExplicitRoleParam: true,
@@ -369,7 +380,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.viewSessionLifecycle.transcriptState).toEqual({ kind: "failed" });
+      expect(latest.viewTranscriptState).toEqual({ kind: "failed" });
       expect(latest.viewActiveSession).toBeNull();
     } finally {
       await harness.unmount();
@@ -383,7 +394,8 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         sessions: [session],
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(session),
@@ -489,7 +501,8 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         sessions: [buildSession],
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(buildSession),
@@ -533,7 +546,8 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         sessions: [buildSession],
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(buildSession),
@@ -577,7 +591,8 @@ describe("useAgentStudioSelectionController", () => {
     });
     const harness = createHookHarness(
       createBaseArgs({
-        activeWorkspace,
+        activeWorkspaceId,
+        workspaceRepoPath,
         sessions: [activeSession, viewSession],
         taskIdParam: "task-1",
         sessionKeyParam: sessionKeyParam(activeSession),
@@ -594,7 +609,7 @@ describe("useAgentStudioSelectionController", () => {
       );
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledWith({
-        repoPath: activeWorkspace.repoPath,
+        repoPath: workspaceRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-1",
         externalSessionId: "session-build",
@@ -610,7 +625,7 @@ describe("useAgentStudioSelectionController", () => {
 
       expect(readSessionTodos).toHaveBeenCalledTimes(1);
       expect(readSessionTodos).toHaveBeenCalledWith({
-        repoPath: activeWorkspace.repoPath,
+        repoPath: workspaceRepoPath,
         runtimeKind: "opencode",
         workingDirectory: "/repo/task-2",
         externalSessionId: "session-qa",
@@ -758,6 +773,49 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       const task1Tab = latest.taskTabs.find((tab) => tab.taskId === "task-1");
       expect(task1Tab?.status).toBe("working");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("tab shows waiting-input status when a session is idle with pending input", async () => {
+    const waitingSession = createSession("task-1", "session-waiting", {
+      role: "build",
+      startedAt: "2026-02-22T10:00:00.000Z",
+      status: "idle",
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Decision",
+              question: "Which path should the agent take?",
+              options: [{ label: "Continue", description: "Continue the session" }],
+            },
+          ],
+        },
+      ],
+    });
+    const newerIdleSession = createSession("task-1", "session-new", {
+      role: "build",
+      startedAt: "2026-02-22T11:00:00.000Z",
+      status: "idle",
+    });
+
+    const harness = createHookHarness(
+      createBaseArgs({
+        sessions: [waitingSession, newerIdleSession],
+        taskIdParam: "task-1",
+        hasExplicitRoleParam: false,
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      const task1Tab = latest.taskTabs.find((tab) => tab.taskId === "task-1");
+      expect(task1Tab?.status).toBe("waiting_input");
     } finally {
       await harness.unmount();
     }

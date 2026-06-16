@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import {
   createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
 } from "@/pages/agents/agent-studio-test-utils";
@@ -21,7 +22,7 @@ const toBuildToolsSession = (
   session: ReturnType<typeof createAgentSessionFixture> | null,
 ): BuildToolsSessionDescriptor => ({
   role: session?.role ?? null,
-  status: session?.status ?? null,
+  activityState: session ? getAgentSessionActivityStateFromSession(session) : null,
   workingDirectory: session?.workingDirectory ?? null,
   hasActiveSession: session != null,
 });
@@ -33,7 +34,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   viewSelectedTask: null,
   panelKind: "build_tools",
   isPanelOpen: true,
-  viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
   ...overrides,
 });
 
@@ -47,8 +48,9 @@ describe("useAgentStudioBuildToolsBootstrap", () => {
             workingDirectory: "/repo/worktree",
           }),
         ),
-        viewSessionLifecycle: createSelectedSessionLifecycleFixture({
-          transcriptState: { kind: "session_loading", reason: "history" },
+        transcriptState: createSelectedSessionTranscriptStateFixture({
+          kind: "session_loading",
+          reason: "history",
         }),
       }),
     );

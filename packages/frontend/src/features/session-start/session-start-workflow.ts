@@ -5,8 +5,7 @@ import { canonicalTargetBranch, effectiveTaskTargetBranch } from "@/lib/target-b
 import { loadEffectivePromptOverrides } from "@/state/operations/prompt-overrides";
 import { loadRepoConfigFromQuery } from "@/state/queries/workspace";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
-import { executeSessionStart } from "./session-start-execution";
+import type { AgentStateContextValue } from "@/types/state-slices";
 import type { SessionLaunchActionId } from "./session-start-launch-options";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import { kickoffPromptForTemplate } from "./session-start-prompts";
@@ -36,11 +35,11 @@ export type SessionStartWorkflowResult = AgentSessionIdentity & {
 };
 
 type StartSessionWorkflowArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   queryClient: QueryClient;
   intent: SessionStartWorkflowIntent;
   selection: AgentModelSelection | null;
   task: TaskCard | null;
+  workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
@@ -51,18 +50,18 @@ type StartSessionWorkflowArgs = {
 };
 
 const requirePostStartMessage = async ({
-  activeWorkspace,
   queryClient,
   intent,
   task,
-}: Pick<StartSessionWorkflowArgs, "activeWorkspace" | "queryClient" | "task"> & {
+  workspaceId,
+}: Pick<StartSessionWorkflowArgs, "queryClient" | "task" | "workspaceId"> & {
   intent: SessionStartWorkflowIntent;
 }): Promise<string> => {
   return buildPostStartMessage({
-    activeWorkspace,
     queryClient,
     intent,
     task,
+    workspaceId,
   });
 };
 
@@ -85,23 +84,21 @@ const startSessionFromIntent = ({
   "intent" | "selection" | "startAgentSession"
 >): Promise<AgentSessionIdentity> => {
   if (intent.startMode === "reuse") {
-    return executeSessionStart({
+    return startAgentSession({
       taskId: intent.taskId,
       role: intent.role,
       startMode: "reuse",
       sourceSession: requireSourceSession(intent.sourceSession, "reuse"),
-      startAgentSession,
     });
   }
 
   if (intent.startMode === "fork") {
-    return executeSessionStart({
+    return startAgentSession({
       taskId: intent.taskId,
       role: intent.role,
       startMode: "fork",
       selectedModel: requireSelectedModel(selection, "fork"),
       sourceSession: requireSourceSession(intent.sourceSession, "fork"),
-      startAgentSession,
     });
   }
 
@@ -110,17 +107,16 @@ const startSessionFromIntent = ({
     role: intent.role,
     startMode: "fresh" as const,
     selectedModel: requireSelectedModel(selection, "fresh"),
-    startAgentSession,
   };
 
   if (intent.targetWorkingDirectory !== undefined) {
-    return executeSessionStart({
+    return startAgentSession({
       ...freshRequest,
       targetWorkingDirectory: intent.targetWorkingDirectory,
     });
   }
 
-  return executeSessionStart(freshRequest);
+  return startAgentSession(freshRequest);
 };
 
 const requireSelectedModel = (
@@ -154,11 +150,11 @@ const toError = (error: unknown): Error => {
 const FEEDBACK_MESSAGE_REQUIRED_ERROR = "Feedback message is required before sending.";
 
 const buildPostStartMessage = async ({
-  activeWorkspace,
   queryClient,
   intent,
   task,
-}: Pick<StartSessionWorkflowArgs, "activeWorkspace" | "queryClient" | "task"> & {
+  workspaceId,
+}: Pick<StartSessionWorkflowArgs, "queryClient" | "task" | "workspaceId"> & {
   intent: SessionStartWorkflowIntent;
 }): Promise<string> => {
   if (intent.postStartAction === "send_message") {
@@ -181,11 +177,11 @@ const buildPostStartMessage = async ({
   if (kickoffTemplateId === "kickoff.build_after_human_request_changes" && !humanFeedback) {
     throw new Error(FEEDBACK_MESSAGE_REQUIRED_ERROR);
   }
-  const promptOverrides = activeWorkspace?.workspaceId
-    ? await loadEffectivePromptOverrides(activeWorkspace.workspaceId, queryClient)
+  const promptOverrides = workspaceId
+    ? await loadEffectivePromptOverrides(workspaceId, queryClient)
     : undefined;
-  const repoDefaultTargetBranch = activeWorkspace?.workspaceId
-    ? (await loadRepoConfigFromQuery(queryClient, activeWorkspace.workspaceId)).defaultTargetBranch
+  const repoDefaultTargetBranch = workspaceId
+    ? (await loadRepoConfigFromQuery(queryClient, workspaceId)).defaultTargetBranch
     : null;
   const git =
     kickoffTemplateId === "kickoff.build_pull_request_generation"
@@ -251,11 +247,11 @@ const runBeforeStartAction = async ({
 };
 
 export const startSessionWorkflow = async ({
-  activeWorkspace,
   queryClient,
   intent,
   selection,
   task,
+  workspaceId,
   persistTaskTargetBranch,
   startAgentSession,
   settleStartedAgentSession,
@@ -296,10 +292,10 @@ export const startSessionWorkflow = async ({
     let postStartMessage: string;
     try {
       postStartMessage = await requirePostStartMessage({
-        activeWorkspace,
         queryClient,
         intent,
         task,
+        workspaceId,
       });
     } catch (error) {
       settleStartedAgentSession(session);

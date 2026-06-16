@@ -11,11 +11,13 @@ import { act, isValidElement, type ReactElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
+  createAgentSessionSummaryFixture,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
@@ -23,6 +25,7 @@ import {
 
 enableReactActEnvironment();
 
+const actualAppStateProviderModule = await import("@/state/app-state-provider");
 const actualHostClientModule = await import("@/lib/host-client");
 const originalConsoleError = console.error;
 
@@ -112,40 +115,31 @@ let currentLinkingMergedPullRequestTaskId: string | null = null;
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR] as const;
 
 let currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
-let currentSessionsFixture = [
-  {
+let currentSessionsFixture: AgentSessionSummary[] = [
+  createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-spec",
     taskId: "TASK-123",
     role: "spec",
     status: "running",
     startedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-    pendingApprovals: 0,
-    pendingQuestions: 0,
-  },
-  {
+  }),
+  createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-build-older",
     taskId: "TASK-123",
     role: "build",
     status: "running",
     startedAt: "2026-01-01T12:00:00.000Z",
-    updatedAt: "2026-01-01T12:00:00.000Z",
-    pendingApprovals: 0,
-    pendingQuestions: 0,
-  },
-  {
+  }),
+  createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     externalSessionId: "session-build-latest",
     taskId: "TASK-123",
     role: "build",
     status: "idle",
     startedAt: "2026-01-02T00:00:00.000Z",
-    updatedAt: "2026-01-02T00:00:00.000Z",
-    pendingApprovals: 0,
-    pendingQuestions: 0,
-  },
+  }),
 ];
 
 const createRepoSettingsFixture = (): RepoSettingsInput => ({
@@ -482,6 +476,9 @@ describe("KanbanPage session start modal flow", () => {
         settleStartedAgentSession: () => {},
         sendAgentMessage: sendAgentMessageMock,
       }),
+      useAgentSessionReadModelState: () => ({
+        sessionReadModelLoadState: { kind: "idle" },
+      }),
       useTasksState: () => ({
         isForegroundLoadingTasks: false,
         isRefreshingTasksInBackground: false,
@@ -535,39 +532,30 @@ describe("KanbanPage session start modal flow", () => {
     await clearAppQueryClient();
     currentTaskFixture = createTaskCardFixture({ id: "TASK-123", status: "open" });
     currentSessionsFixture = [
-      {
+      createAgentSessionSummaryFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-spec",
         taskId: "TASK-123",
         role: "spec",
         status: "running",
         startedAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        pendingApprovals: 0,
-        pendingQuestions: 0,
-      },
-      {
+      }),
+      createAgentSessionSummaryFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-older",
         taskId: "TASK-123",
         role: "build",
         status: "running",
         startedAt: "2026-01-01T12:00:00.000Z",
-        updatedAt: "2026-01-01T12:00:00.000Z",
-        pendingApprovals: 0,
-        pendingQuestions: 0,
-      },
-      {
+      }),
+      createAgentSessionSummaryFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-latest",
         taskId: "TASK-123",
         role: "build",
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
-        updatedAt: "2026-01-02T00:00:00.000Z",
-        pendingApprovals: 0,
-        pendingQuestions: 0,
-      },
+      }),
     ];
     latestKanbanColumnProps = null;
     latestKanbanColumnPropsList = [];
@@ -620,7 +608,7 @@ describe("KanbanPage session start modal flow", () => {
         () => import("@/features/human-review-feedback/human-review-feedback-modal"),
       ],
       ["@/lib/host-client", async () => actualHostClientModule],
-      ["@/state/app-state-provider", () => import("../../state/app-state-provider")],
+      ["@/state/app-state-provider", async () => actualAppStateProviderModule],
     ]);
   });
 
@@ -1158,28 +1146,22 @@ describe("KanbanPage session start modal flow", () => {
       availableActions: ["reset_implementation"],
     });
     currentSessionsFixture = [
-      {
+      createAgentSessionSummaryFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-idle",
         taskId: "TASK-123",
         role: "build",
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
-        updatedAt: "2026-01-02T00:00:00.000Z",
-        pendingApprovals: 0,
-        pendingQuestions: 0,
-      },
-      {
+      }),
+      createAgentSessionSummaryFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-qa-stopped",
         taskId: "TASK-123",
         role: "qa",
         status: "stopped",
         startedAt: "2026-01-03T00:00:00.000Z",
-        updatedAt: "2026-01-03T00:00:00.000Z",
-        pendingApprovals: 0,
-        pendingQuestions: 0,
-      },
+      }),
     ];
     const renderer = await renderPage();
 
@@ -1219,6 +1201,55 @@ describe("KanbanPage session start modal flow", () => {
     });
   });
 
+  test("reset implementation is blocked while build or qa is waiting for input", async () => {
+    currentTaskFixture = createTaskCardFixture({
+      id: "TASK-123",
+      status: "in_progress",
+      availableActions: ["reset_implementation"],
+    });
+    currentSessionsFixture = [
+      createAgentSessionSummaryFixture({
+        runtimeKind: "opencode",
+        externalSessionId: "session-build-waiting",
+        taskId: "TASK-123",
+        role: "build",
+        status: "idle",
+        startedAt: "2026-01-02T00:00:00.000Z",
+        pendingApprovals: [],
+        pendingQuestions: [
+          {
+            requestId: "question-1",
+            questions: [
+              {
+                header: "Decision",
+                question: "Can reset continue?",
+                options: [{ label: "No", description: "Keep waiting" }],
+              },
+            ],
+          },
+        ],
+      }),
+    ];
+    const renderer = await renderPage();
+
+    await act(async () => {
+      (latestKanbanColumnProps?.onResetImplementation as (taskId: string) => void)("TASK-123");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latestResetImplementationModalModel).toBeNull();
+    expect(toastErrorMock).toHaveBeenCalledWith("Stop active work first", {
+      description:
+        "Builder or QA is still active for TASK-123. Stop the active session before resetting the implementation.",
+    });
+    expect(resetTaskImplementationMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   test("reset implementation reports session refresh failures after a successful reset", async () => {
     currentTaskFixture = createTaskCardFixture({
       id: "TASK-123",
@@ -1226,17 +1257,14 @@ describe("KanbanPage session start modal flow", () => {
       availableActions: ["reset_implementation"],
     });
     currentSessionsFixture = [
-      {
+      createAgentSessionSummaryFixture({
         runtimeKind: "opencode",
         externalSessionId: "session-build-idle",
         taskId: "TASK-123",
         role: "build",
         status: "idle",
         startedAt: "2026-01-02T00:00:00.000Z",
-        updatedAt: "2026-01-02T00:00:00.000Z",
-        pendingApprovals: 0,
-        pendingQuestions: 0,
-      },
+      }),
     ];
     const renderer = await renderPage();
 

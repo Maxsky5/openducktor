@@ -35,13 +35,6 @@ const statusFromRuntimeSnapshot = (
   return agentSessionStatusFromActivity(snapshot.classification);
 };
 
-const statusWithoutRuntimeSnapshot = (current: AgentSessionState): AgentSessionState["status"] => {
-  if (current.status === "error" || current.status === "stopped" || current.status === "starting") {
-    return current.status;
-  }
-  return "idle";
-};
-
 export const shouldObserveAgentSessionRuntimeSnapshot = (
   snapshot: CoreAgentSessionRuntimeSnapshot,
 ): boolean => {
@@ -78,9 +71,5 @@ export const applyAgentSessionRuntimeSnapshotToSession = (
     ...current,
     runtimeKind: snapshot.ref.runtimeKind,
     workingDirectory: snapshot.ref.workingDirectory,
-    status: statusWithoutRuntimeSnapshot(current),
-    pendingApprovals: [],
-    pendingQuestions: [],
-    ...clearLiveTurnFields(),
   };
 };

@@ -3,11 +3,12 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { appQueryClient } from "@/lib/query-client";
 import { agentSessionListQueryOptions } from "@/state/queries/agent-sessions";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import { isSessionHistoryLoaded } from "../lifecycle/session-history-loader";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import type {
+  StartAgentSessionInput,
   StartOrReuseResult,
   StartSessionContext,
-  StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { requireBuildContinuationTarget, STALE_START_ERROR } from "./start-session-constants";
@@ -15,7 +16,10 @@ import { resolveReuseValidationError, resolveStartTask } from "./start-session-p
 
 type ReuseStrategyInput = {
   ctx: StartSessionContext;
-  input: Extract<StartSessionCreationInput, { startMode: "reuse" }>;
+  input: Pick<
+    Extract<StartAgentSessionInput, { startMode: "reuse" }>,
+    "startMode" | "sourceSession"
+  >;
   deps: StartSessionExecutionDependencies;
 };
 
@@ -54,7 +58,7 @@ const loadSessionForReuse = async ({
     );
   }
 
-  if (loadedSession.historyLoadState !== "loaded") {
+  if (!isSessionHistoryLoaded(loadedSession)) {
     await deps.session.loadAgentSessionHistory(sourceSession);
     throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
   }
@@ -182,7 +186,7 @@ export const resolveLoadedSourceSession = async ({
         `Session "${sourceSession.externalSessionId}" is not available for task "${ctx.taskId}" and role "${ctx.role}".`,
       );
     }
-    if (existingSourceSession.historyLoadState !== "loaded") {
+    if (!isSessionHistoryLoaded(existingSourceSession)) {
       return loadSessionForReuse({
         ctx,
         deps,

@@ -19,11 +19,7 @@ describe("useAgentSessionObservers", () => {
     const queryClient = new QueryClient();
     const Harness = () => {
       const state = useOrchestratorSessionState({
-        activeWorkspace: {
-          workspaceId: "workspace",
-          workspaceName: "Workspace",
-          repoPath: "/tmp/repo",
-        },
+        workspaceRepoPath: "/tmp/repo",
         tasks: [createTaskFixture()],
       });
       const observers = useAgentSessionObservers({
@@ -74,11 +70,7 @@ describe("useAgentSessionObservers", () => {
     const queryClient = new QueryClient();
     const Harness = () => {
       const state = useOrchestratorSessionState({
-        activeWorkspace: {
-          workspaceId: "workspace",
-          workspaceName: "Workspace",
-          repoPath: "/tmp/repo",
-        },
+        workspaceRepoPath: "/tmp/repo",
         tasks: [createTaskFixture()],
       });
       const observers = useAgentSessionObservers({
@@ -132,11 +124,7 @@ describe("useAgentSessionObservers", () => {
     const queryClient = new QueryClient();
     const Harness = () => {
       const state = useOrchestratorSessionState({
-        activeWorkspace: {
-          workspaceId: "workspace",
-          workspaceName: "Workspace",
-          repoPath: "/tmp/repo",
-        },
+        workspaceRepoPath: "/tmp/repo",
         tasks: [createTaskFixture()],
       });
       const observers = useAgentSessionObservers({
@@ -218,11 +206,7 @@ describe("useAgentSessionObservers", () => {
     const queryClient = new QueryClient();
     const Harness = () => {
       const state = useOrchestratorSessionState({
-        activeWorkspace: {
-          workspaceId: "workspace",
-          workspaceName: "Workspace",
-          repoPath: "/tmp/repo",
-        },
+        workspaceRepoPath: "/tmp/repo",
         tasks: [createTaskFixture()],
       });
       const observers = useAgentSessionObservers({

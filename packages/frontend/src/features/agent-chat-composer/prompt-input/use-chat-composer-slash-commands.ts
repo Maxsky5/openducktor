@@ -1,15 +1,12 @@
 import type { ReusablePrompt, RuntimeKind } from "@openducktor/contracts";
-import type {
-  AgentSlashCommand,
-  AgentSlashCommandCatalog,
-  RuntimeWorkingDirectoryRef,
-} from "@openducktor/core";
+import type { AgentSlashCommand, AgentSlashCommandCatalog } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { toReusablePromptSlashCommand } from "@/components/features/agents/agent-chat/agent-chat-reusable-prompts";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { sessionSlashCommandsQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeSlashCommandsQueryOptions } from "@/state/queries/runtime-catalog";
+import type { ChatComposerPromptInputTarget } from "./chat-composer-prompt-input-target";
 
 export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
@@ -27,24 +24,14 @@ export const mergeSlashCommands = (
 };
 
 export const useChatComposerSlashCommands = ({
-  hasSessionTarget,
-  canReadLoadedSessionRuntimePrompts,
-  activeSessionRuntimeRef,
-  activeSessionRuntimeRefError,
+  promptInputTarget,
   runtimeSupportsSlashCommands,
-  workspaceRepoPath,
-  selectedRuntimeKind,
   reusablePrompts,
   loadSlashCommandsForRepo,
   readSessionSlashCommands,
 }: {
-  hasSessionTarget: boolean;
-  canReadLoadedSessionRuntimePrompts: boolean;
-  activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
-  activeSessionRuntimeRefError: string | null;
+  promptInputTarget: ChatComposerPromptInputTarget;
   runtimeSupportsSlashCommands: boolean;
-  workspaceRepoPath: string | null;
-  selectedRuntimeKind: RuntimeKind | null;
   reusablePrompts: ReusablePrompt[];
   loadSlashCommandsForRepo: (
     repoPath: string,
@@ -62,10 +49,10 @@ export const useChatComposerSlashCommands = ({
   isSlashCommandsLoading: boolean;
 } => {
   const activeSessionSlashCommandsQuery = useQuery({
-    ...(activeSessionRuntimeRef && readSessionSlashCommands
+    ...(promptInputTarget.kind === "session" && readSessionSlashCommands
       ? sessionSlashCommandsQueryOptions(
-          activeSessionRuntimeRef.repoPath,
-          activeSessionRuntimeRef.runtimeKind,
+          promptInputTarget.runtimeRef.repoPath,
+          promptInputTarget.runtimeRef.runtimeKind,
           readSessionSlashCommands,
         )
       : {
@@ -76,27 +63,21 @@ export const useChatComposerSlashCommands = ({
         }),
     enabled:
       runtimeSupportsSlashCommands &&
-      hasSessionTarget &&
-      canReadLoadedSessionRuntimePrompts &&
-      activeSessionRuntimeRef !== null &&
-      activeSessionRuntimeRefError === null &&
+      promptInputTarget.kind === "session" &&
       readSessionSlashCommands !== undefined,
   });
   const repoSlashCommandsQuery = useQuery({
     ...repoRuntimeSlashCommandsQueryOptions(
-      workspaceRepoPath ?? "",
-      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
+      promptInputTarget.kind === "repo" ? promptInputTarget.repoPath : "",
+      promptInputTarget.kind === "repo" ? promptInputTarget.runtimeKind : DEFAULT_RUNTIME_KIND,
       loadSlashCommandsForRepo,
     ),
-    enabled:
-      runtimeSupportsSlashCommands &&
-      workspaceRepoPath !== null &&
-      !hasSessionTarget &&
-      selectedRuntimeKind !== null,
+    enabled: runtimeSupportsSlashCommands && promptInputTarget.kind === "repo",
   });
-  const runtimeSlashCommandCatalog = hasSessionTarget
-    ? (activeSessionSlashCommandsQuery.data ?? null)
-    : (repoSlashCommandsQuery.data ?? null);
+  const runtimeSlashCommandCatalog =
+    promptInputTarget.kind === "session"
+      ? (activeSessionSlashCommandsQuery.data ?? null)
+      : (repoSlashCommandsQuery.data ?? null);
   const reusablePromptSlashCommands = useMemo(
     () => reusablePrompts.map(toReusablePromptSlashCommand),
     [reusablePrompts],
@@ -113,20 +94,21 @@ export const useChatComposerSlashCommands = ({
     () => ({ commands: slashCommands }),
     [slashCommands],
   );
-  const slashCommandsError = runtimeSupportsSlashCommands
-    ? hasSessionTarget
-      ? activeSessionSlashCommandsQuery.error instanceof Error
+  let slashCommandsError: string | null = null;
+  let isSlashCommandsLoading = false;
+  if (runtimeSupportsSlashCommands && promptInputTarget.kind === "unavailable") {
+    slashCommandsError = promptInputTarget.error;
+  } else if (runtimeSupportsSlashCommands && promptInputTarget.kind === "session") {
+    slashCommandsError =
+      activeSessionSlashCommandsQuery.error instanceof Error
         ? activeSessionSlashCommandsQuery.error.message
-        : null
-      : repoSlashCommandsQuery.error instanceof Error
-        ? repoSlashCommandsQuery.error.message
-        : null
-    : null;
-  const isSlashCommandsLoading = runtimeSupportsSlashCommands
-    ? hasSessionTarget
-      ? activeSessionSlashCommandsQuery.isLoading
-      : repoSlashCommandsQuery.isLoading
-    : false;
+        : null;
+    isSlashCommandsLoading = activeSessionSlashCommandsQuery.isLoading;
+  } else if (runtimeSupportsSlashCommands && promptInputTarget.kind === "repo") {
+    slashCommandsError =
+      repoSlashCommandsQuery.error instanceof Error ? repoSlashCommandsQuery.error.message : null;
+    isSlashCommandsLoading = repoSlashCommandsQuery.isLoading;
+  }
 
   return {
     supportsSlashCommands: runtimeSupportsSlashCommands || reusablePrompts.length > 0,

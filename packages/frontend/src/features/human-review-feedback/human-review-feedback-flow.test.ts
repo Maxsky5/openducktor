@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { toast } from "sonner";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createAgentSessionFixture } from "@/test-utils/shared-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import { createAgentSessionSummaryFixture } from "@/test-utils/shared-test-fixtures";
 import {
   HUMAN_REVIEW_FEEDBACK_REQUIRED_MESSAGE,
   prepareHumanReviewFeedback,
@@ -10,8 +9,10 @@ import {
 } from "./human-review-feedback-flow";
 import type { HumanReviewFeedbackState } from "./human-review-feedback-types";
 
-const createBuilderSession = (overrides: Partial<AgentSessionState> = {}) =>
-  createAgentSessionFixture({
+const createBuilderSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+) =>
+  createAgentSessionSummaryFixture({
     role: "build",
     taskId: "TASK-1",
     ...overrides,

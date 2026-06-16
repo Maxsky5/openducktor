@@ -3,7 +3,6 @@ import type {
   GitBranch,
   GitTargetBranch,
   RuntimeDescriptor,
-  WorkspaceRecord,
 } from "@openducktor/contracts";
 import { useMemo } from "react";
 import type {
@@ -53,9 +52,10 @@ type AgentStudioOrchestrationActionsContext = {
   answerAgentQuestion: AgentStateContextValue["answerAgentQuestion"];
 };
 type UseAgentStudioOrchestrationControllerArgs = {
-  activeWorkspace: WorkspaceRecord | null;
+  activeWorkspaceId: string | null;
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
+  workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   hasActiveGitConflict: boolean;
   draftStateKey: string;
@@ -190,9 +190,10 @@ export const buildAgentStudioPageModelsArgs = ({
 };
 
 export function useAgentStudioOrchestrationController({
-  activeWorkspace,
+  activeWorkspaceId,
   branches,
   runtimeDefinitions,
+  workspaceRepoPath,
   selection,
   hasActiveGitConflict,
   draftStateKey,
@@ -236,15 +237,14 @@ export function useAgentStudioOrchestrationController({
     answerAgentQuestion,
     scheduleSelectionIntent,
   } = actions;
-
   const { repoSettings } = useAgentStudioRepoSettings({
-    activeWorkspace,
+    activeWorkspaceId,
   });
   const { chatSettings, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
-    useAgentStudioChatSettings({ activeWorkspace });
+    useAgentStudioChatSettings({ workspaceRepoPath });
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
-    activeWorkspace,
+    workspaceRepoPath,
     taskId: viewTaskId,
     activeSession: viewActiveSession,
     selectedTask: viewSelectedTask,
@@ -278,7 +278,7 @@ export function useAgentStudioOrchestrationController({
     handleSelectModel,
     handleSelectVariant,
   } = useAgentStudioChatComposer({
-    activeWorkspace,
+    workspaceRepoPath,
     activeSession: viewActiveSession,
     activeSessionSummary: viewActiveSessionSummary,
     activeSessionModelCatalog: viewSessionRuntimeData.modelCatalog,
@@ -313,7 +313,7 @@ export function useAgentStudioOrchestrationController({
     handlePrepareMessageFirstSession,
     handleQuickAction,
   } = useAgentStudioSessionActions({
-    activeWorkspace,
+    activeWorkspaceId,
     branches,
     taskId: viewTaskId,
     role: viewRole,
@@ -330,6 +330,7 @@ export function useAgentStudioOrchestrationController({
     selectionForNewSession,
     reusablePrompts,
     repoSettings,
+    workspaceRepoPath,
     startAgentSession,
     settleStartedAgentSession,
     sendAgentMessage,
@@ -365,7 +366,7 @@ export function useAgentStudioOrchestrationController({
         runtimeDefinitions,
         sessionRuntimeDataError: viewSessionRuntimeDataError,
         hasActiveGitConflict,
-        lifecycle: selection.viewSessionLifecycle,
+        transcriptState: selection.viewTranscriptState,
         runtimeReadiness: viewRuntimeReadiness,
         documents: {
           specDoc,
@@ -397,7 +398,7 @@ export function useAgentStudioOrchestrationController({
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
-      selection.viewSessionLifecycle,
+      selection.viewTranscriptState,
       specDoc,
       viewActiveSession,
       viewSessionRuntimeData.isLoadingModelCatalog,

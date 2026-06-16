@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
+  type AgentSessionWorkflowSummary,
   addTaskToPersistedTaskTabs,
   buildLatestSessionByRoleMap,
   buildLatestSessionByTaskMap,
@@ -25,25 +27,32 @@ import {
   toPersistedTaskTabs,
 } from "./agents-page-session-tabs";
 
-const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState => ({
-  runtimeKind: "opencode",
-  externalSessionId: "ext-session-1",
-  taskId: "task-1",
-  role: "spec",
-  status: "idle",
-  startedAt: "2026-02-20T10:00:00.000Z",
-  workingDirectory: "/tmp/work",
-  messages: createSessionMessagesState(overrides.externalSessionId ?? "ext-session-1"),
-  draftAssistantText: "",
-  draftAssistantMessageId: null,
-  draftReasoningText: "",
-  draftReasoningMessageId: null,
-  pendingApprovals: [],
-  pendingQuestions: [],
-  selectedModel: null,
-  ...overrides,
-  historyLoadState: overrides.historyLoadState ?? "not_requested",
-});
+const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionWorkflowSummary => {
+  const session: AgentSessionState = {
+    runtimeKind: "opencode",
+    externalSessionId: "ext-session-1",
+    taskId: "task-1",
+    role: "spec",
+    status: "idle",
+    startedAt: "2026-02-20T10:00:00.000Z",
+    workingDirectory: "/tmp/work",
+    messages: createSessionMessagesState(overrides.externalSessionId ?? "ext-session-1"),
+    draftAssistantText: "",
+    draftAssistantMessageId: null,
+    draftReasoningText: "",
+    draftReasoningMessageId: null,
+    pendingApprovals: [],
+    pendingQuestions: [],
+    selectedModel: null,
+    ...overrides,
+    historyLoadState: overrides.historyLoadState ?? "not_requested",
+  };
+  const summary = toAgentSessionSummary(session);
+  if (summary.role === null) {
+    throw new Error("Workflow summary fixtures require a role.");
+  }
+  return summary;
+};
 
 describe("agents-page-session-tabs", () => {
   test("selects latest session per task", () => {
@@ -268,7 +277,7 @@ describe("agents-page-session-tabs", () => {
     ).toBe("task-1");
   });
 
-  test("persists tabs only after hydration for the active repo", () => {
+  test("persists tabs only after storage is loaded for the active repo", () => {
     expect(canPersistTaskTabs(null, null)).toBe(false);
     expect(canPersistTaskTabs("/repo-a", null)).toBe(false);
     expect(canPersistTaskTabs("/repo-a", "/repo-b")).toBe(false);
@@ -736,6 +745,11 @@ describe("agents-page-session-tabs", () => {
   });
 
   test.each([
+    {
+      name: "starting",
+      session: buildSession({ role: "qa", status: "starting" }),
+      expected: { tone: "in_progress" as const, liveSession: "starting" as const },
+    },
     {
       name: "running",
       session: buildSession({ role: "qa", status: "running" }),

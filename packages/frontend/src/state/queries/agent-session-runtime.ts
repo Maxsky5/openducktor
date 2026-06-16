@@ -7,17 +7,18 @@ import type {
   AgentSessionTodoItem,
   AgentSkillCatalog,
   AgentSlashCommandCatalog,
+  RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "@/lib/working-directory";
 
-export const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
+const SESSION_MODEL_CATALOG_STALE_TIME_MS = 5 * 60_000;
 const SESSION_SLASH_COMMANDS_STALE_TIME_MS = 5 * 60_000;
 const SESSION_SKILLS_STALE_TIME_MS = 5 * 60_000;
 const SESSION_FILE_SEARCH_STALE_TIME_MS = 15_000;
 export const SESSION_HISTORY_STALE_TIME_MS = 0;
-export const SESSION_TODOS_STALE_TIME_MS = 30_000;
+const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 export const agentSessionRuntimeQueryKeys = {
   all: ["agent-session-runtime"] as const,
@@ -82,16 +83,22 @@ export const agentSessionRuntimeQueryKeys = {
 };
 
 export const sessionModelCatalogQueryOptions = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
+  runtime: RuntimeWorkingDirectoryRef | null,
   readSessionModelCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentModelCatalog>,
 ) =>
   queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.modelCatalog(repoPath, runtimeKind),
-    queryFn: (): Promise<AgentModelCatalog> => readSessionModelCatalog(repoPath, runtimeKind),
+    queryKey: runtime
+      ? agentSessionRuntimeQueryKeys.modelCatalog(runtime.repoPath, runtime.runtimeKind)
+      : agentSessionRuntimeQueryKeys.modelCatalogUnavailable(),
+    queryFn: (): Promise<AgentModelCatalog> => {
+      if (!runtime) {
+        throw new Error("Cannot load session model catalog without a runtime ref.");
+      }
+      return readSessionModelCatalog(runtime.repoPath, runtime.runtimeKind);
+    },
     staleTime: SESSION_MODEL_CATALOG_STALE_TIME_MS,
   });
 
@@ -152,12 +159,19 @@ export const sessionFileSearchQueryOptions = (
   });
 
 export const sessionTodosQueryOptions = (
-  session: AgentSessionRef,
+  session: AgentSessionRef | null,
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>,
 ) =>
   queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.todos(session),
-    queryFn: (): Promise<AgentSessionTodoItem[]> => readSessionTodos(session),
+    queryKey: session
+      ? agentSessionRuntimeQueryKeys.todos(session)
+      : agentSessionRuntimeQueryKeys.todosUnavailable(),
+    queryFn: (): Promise<AgentSessionTodoItem[]> => {
+      if (!session) {
+        throw new Error("Cannot load session todos without a session ref.");
+      }
+      return readSessionTodos(session);
+    },
     staleTime: SESSION_TODOS_STALE_TIME_MS,
   });
 
@@ -174,12 +188,19 @@ export const updateSessionTodosQueryData = (
 };
 
 export const sessionHistoryQueryOptions = (
-  session: AgentSessionRef,
+  session: AgentSessionRef | null,
   readSessionHistory: (session: AgentSessionRef) => Promise<AgentSessionHistoryMessage[]>,
 ) =>
   queryOptions({
-    queryKey: agentSessionRuntimeQueryKeys.history(session),
-    queryFn: (): Promise<AgentSessionHistoryMessage[]> => readSessionHistory(session),
+    queryKey: session
+      ? agentSessionRuntimeQueryKeys.history(session)
+      : agentSessionRuntimeQueryKeys.historyUnavailable(),
+    queryFn: (): Promise<AgentSessionHistoryMessage[]> => {
+      if (!session) {
+        throw new Error("Cannot load session history without a session ref.");
+      }
+      return readSessionHistory(session);
+    },
     staleTime: SESSION_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: false,
   });

@@ -1,12 +1,12 @@
 import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openducktor/contracts";
 import { type MutableRefObject, type RefObject, useCallback, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
   AgentChatEmptyStateModel,
   AgentChatThreadModel,
-  AgentChatThreadRuntimeReadiness,
   AgentChatThreadSession,
-  AgentChatThreadSessionLifecycle,
 } from "./agent-chat.types";
 
 const EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS = Object.freeze({}) as Record<string, number>;
@@ -33,9 +33,8 @@ type AgentChatThreadComposerActivity = {
 type UseAgentChatThreadModelArgs = {
   threadSession: AgentChatThreadSession | null;
   activeSessionKey: string | null;
-  sessionLifecycle: AgentChatThreadSessionLifecycle;
-  runtimeReadiness: AgentChatThreadRuntimeReadiness;
-  isTranscriptPending: boolean;
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
   isSessionWorking: boolean;
   hasComposer: boolean;
   composerActivity: AgentChatThreadComposerActivity;
@@ -55,9 +54,8 @@ type UseAgentChatThreadModelArgs = {
 export function useAgentChatThreadModel({
   threadSession,
   activeSessionKey,
-  sessionLifecycle,
+  transcriptState,
   runtimeReadiness,
-  isTranscriptPending,
   isSessionWorking,
   hasComposer,
   composerActivity,
@@ -106,9 +104,8 @@ export function useAgentChatThreadModel({
   return useMemo(
     () => ({
       session: threadSession,
-      sessionLifecycle,
+      transcriptState,
       runtimeReadiness,
-      isTranscriptPending,
       isSessionWorking,
       isInteractionEnabled: hasComposer && runtimeReadiness.isReady,
       emptyState,
@@ -144,14 +141,13 @@ export function useAgentChatThreadModel({
       handleToggleTodoPanel,
       hasComposer,
       isSessionWorking,
-      isTranscriptPending,
       messagesContainerRef,
       pendingQuestions,
       runtimeReadiness,
       runtimeSupportedApprovalReplyOutcomes,
       scrollToBottomOnSendRef,
       sessionAgentColors,
-      sessionLifecycle,
+      transcriptState,
       sessionRuntimeDataError,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,

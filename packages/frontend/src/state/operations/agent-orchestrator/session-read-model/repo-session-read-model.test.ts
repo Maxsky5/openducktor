@@ -293,7 +293,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(idleRead, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("demotes a mounted active session when runtime snapshot is missing", async () => {
+  test("preserves a mounted active session when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const busyRuntimeSnapshot = await readRepoRuntimeSessionSnapshots({
@@ -325,11 +325,11 @@ describe("repo session read model", () => {
       runtimeSnapshots: runtimeSnapshots,
     });
 
-    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
+    expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("running");
     expect(readModel.liveSessionRefs).toEqual([]);
   });
 
-  test("keeps mounted transcript but clears runtime-owned state when runtime snapshot is missing", async () => {
+  test("keeps mounted transcript and status when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = {
@@ -369,7 +369,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session?.status).toBe("idle");
+    expect(session?.status).toBe("running");
     expect(session?.historyLoadState).toBe("loaded");
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Streaming output",
@@ -465,7 +465,7 @@ describe("repo session read model", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to be present.`);
     }
-    expect(session.status).toBe("idle");
+    expect(session.status).toBe("running");
     expect(session.workingDirectory).toBe(record.workingDirectory);
     expect(sessionMessagesToArray(session).map((message) => message.content)).toEqual([
       "Mounted transcript",
@@ -601,7 +601,7 @@ describe("repo session read model", () => {
     expect(getReadModelSession(readModel, record.externalSessionId)?.status).toBe("idle");
   });
 
-  test("lets missing runtime snapshot demote mounted idle session state", async () => {
+  test("keeps mounted idle state when runtime snapshot is missing", async () => {
     const record = createRecord();
     const tasks = [createTask([record])];
     const currentSession = createAgentSessionFixture({

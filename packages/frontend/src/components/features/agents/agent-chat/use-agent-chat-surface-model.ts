@@ -1,17 +1,13 @@
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import { useMemo, useRef } from "react";
-import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import {
-  isAgentSessionTranscriptLoading,
-  isAgentSessionTranscriptVisible,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type {
   AgentChatEmptyStateModel,
   AgentChatSurfaceModel,
-  AgentChatThreadRuntimeReadiness,
   AgentChatThreadSession,
-  AgentChatThreadSessionLifecycle,
 } from "./agent-chat.types";
+import { deriveAgentChatThreadProjection } from "./agent-chat-thread-state";
 import {
   type AgentChatComposerConfig,
   invokeStopAgentSession,
@@ -30,12 +26,12 @@ const EMPTY_SESSION_AGENT_COLORS = Object.freeze({}) as Record<string, string>;
 
 type UseAgentChatSurfaceModelArgs = {
   session: AgentChatThreadSession | null;
-  sessionLifecycle: AgentChatThreadSessionLifecycle;
+  transcriptState: AgentSessionTranscriptState;
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
-  runtimeReadiness: AgentChatThreadRuntimeReadiness;
+  runtimeReadiness: RepoRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
@@ -47,7 +43,7 @@ type UseAgentChatSurfaceModelArgs = {
 
 export function useAgentChatSurfaceModel({
   session,
-  sessionLifecycle,
+  transcriptState,
   chatSettings,
   isSessionWorking,
   runtimeDefinitions = [],
@@ -61,11 +57,10 @@ export function useAgentChatSurfaceModel({
   subagentPendingApprovalCountBySessionKey,
   subagentPendingQuestionCountBySessionKey,
 }: UseAgentChatSurfaceModelArgs): AgentChatSurfaceModel {
-  const threadSession = isAgentSessionTranscriptVisible(sessionLifecycle.transcriptState)
-    ? session
-    : null;
-  const activeSessionKey = threadSession ? agentSessionIdentityKey(threadSession) : null;
-  const isTranscriptPending = isAgentSessionTranscriptLoading(sessionLifecycle.transcriptState);
+  const { threadSession, activeSessionKey } = deriveAgentChatThreadProjection({
+    session,
+    transcriptState,
+  });
   const syncBottomAfterComposerLayoutRef = useRef<(() => void) | null>(null);
   const { messagesContainerRef, composerFormRef, composerEditorRef, resizeComposerEditor } =
     useAgentChatLayout({
@@ -101,9 +96,8 @@ export function useAgentChatSurfaceModel({
   const threadModel = useAgentChatThreadModel({
     threadSession,
     activeSessionKey,
-    sessionLifecycle,
+    transcriptState,
     runtimeReadiness,
-    isTranscriptPending,
     isSessionWorking,
     hasComposer,
     composerActivity,

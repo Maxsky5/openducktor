@@ -13,11 +13,11 @@ import {
 } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { getAgentSessionWaitingInputPlaceholder } from "@/lib/agent-session-waiting-input";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useInlineCommentDraftStore } from "@/state/use-inline-comment-draft-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { resolveAgentSessionAccentColor } from "../agent-accent-color";
-import type { AgentChatComposerModel, AgentChatThreadRuntimeReadiness } from "./agent-chat.types";
+import type { AgentChatComposerModel } from "./agent-chat.types";
 import { type AgentChatComposerDraft, appendTextToDraft } from "./agent-chat-composer-draft";
 
 const parseDraftStateKey = (draftStateKey: string) => {
@@ -38,7 +38,7 @@ const isSessionOnlyDraftStateTransition = (previousKey: string, nextKey: string)
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
 
 type ComposerActiveSession = AgentSessionIdentity &
-  Pick<AgentSessionState, "selectedModel" | "pendingApprovals" | "pendingQuestions"> & {
+  Pick<AgentSessionState, "selectedModel"> & {
     isLoadingModelCatalog: boolean;
   };
 
@@ -57,6 +57,7 @@ export type AgentChatComposerConfig = {
   activeSession: ComposerActiveSession | null;
   isSessionWorking: boolean;
   isWaitingInput: boolean;
+  waitingInputPlaceholder: string | null;
   busySendBlockedReason: string | null;
   canStopSession: boolean;
   stopAgentSession: StopAgentSession;
@@ -98,7 +99,7 @@ export type AgentChatComposerConfig = {
 
 type UseAgentChatComposerModelArgs = {
   composer: AgentChatComposerConfig | undefined;
-  runtimeReadiness: AgentChatThreadRuntimeReadiness;
+  runtimeReadiness: RepoRuntimeReadiness;
   sessionAgentColors: Record<string, string>;
   composerFormRef: RefObject<HTMLFormElement | null>;
   composerEditorRef: RefObject<HTMLDivElement | null>;
@@ -185,9 +186,6 @@ export function useAgentChatComposerModel({
     [scrollToBottomOnSendRef],
   );
 
-  const waitingInputPlaceholder = composer?.activeSession
-    ? getAgentSessionWaitingInputPlaceholder(composer.activeSession)
-    : null;
   const composerRuntimeKind =
     composer?.activeSession?.runtimeKind ?? composer?.selectedModelSelection?.runtimeKind ?? null;
   const composerAccentAgentName = composer?.activeSession
@@ -230,7 +228,7 @@ export function useAgentChatComposerModel({
       isStarting: composer.isStarting,
       isSessionWorking: composer.isSessionWorking,
       isWaitingInput: composer.isWaitingInput,
-      waitingInputPlaceholder,
+      waitingInputPlaceholder: composer.waitingInputPlaceholder,
       isModelSelectionPending,
       selectedModelSelection: composer.selectedModelSelection,
       ...(composer.selectedModelDescriptor !== undefined
@@ -281,6 +279,5 @@ export function useAgentChatComposerModel({
     scrollToBottomOnSendRef,
     submitComposerDraft,
     syncBottomAfterComposerLayoutRef,
-    waitingInputPlaceholder,
   ]);
 }

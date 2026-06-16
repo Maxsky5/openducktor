@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
   enableReactActEnvironment,
 } from "../agent-studio-test-utils";
@@ -38,7 +38,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
       status: "running",
       workingDirectory: "/repo/worktrees/task-1",
     }),
-    viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+    viewTranscriptState: createSelectedSessionTranscriptStateFixture(),
   },
   panel: createPanelState(),
   documentsModel: {
@@ -75,9 +75,46 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(
         args.selection.viewActiveSession,
       );
+      expect(state.rightPanelBridge?.buildWorktreeRefresh.transcriptState).toBe(
+        args.selection.viewTranscriptState,
+      );
+      expect(state.rightPanelBridge?.rightPanel.transcriptState).toBe(
+        args.selection.viewTranscriptState,
+      );
       expect(state.rightPanelBridge?.rightPanel.session).toEqual({
         role: "build",
-        status: "running",
+        activityState: "running",
+        workingDirectory: "/repo/worktrees/task-1",
+        hasActiveSession: true,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("projects waiting-input activity into the right-panel session descriptor", async () => {
+    const harness = createHookHarness(
+      createArgs({
+        selection: {
+          ...createArgs().selection,
+          viewActiveSession: createAgentSessionFixture({
+            externalSessionId: "session-1",
+            taskId: "task-1",
+            role: "build",
+            status: "running",
+            workingDirectory: "/repo/worktrees/task-1",
+            pendingQuestions: [{ requestId: "question-1", questions: [] }],
+          }),
+        },
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      expect(harness.getLatest().rightPanelBridge?.rightPanel.session).toMatchObject({
+        role: "build",
+        activityState: "waiting_input",
         workingDirectory: "/repo/worktrees/task-1",
         hasActiveSession: true,
       });

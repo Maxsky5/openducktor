@@ -11,6 +11,7 @@ const DEFAULT_DESCRIPTION = "Read-only conversation.";
 
 function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): ReactElement {
   const activeWorkspace = useActiveWorkspace();
+  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [request, setRequest] = useState<OpenAgentSessionTranscriptRequest | null>(null);
   const open = request !== null;
 
@@ -34,7 +35,7 @@ function AgentSessionTranscriptDialogProvider({ children }: PropsWithChildren): 
     <AgentSessionTranscriptDialogContext.Provider value={contextValue}>
       {children}
       <AgentSessionTranscriptDialog
-        activeWorkspace={activeWorkspace}
+        workspaceRepoPath={workspaceRepoPath}
         target={request?.target ?? null}
         open={open}
         onOpenChange={(nextOpen) => {

@@ -145,6 +145,8 @@ type ObserveAgentSessionEventsTestParams = Omit<
   | "recordTurnActivityTimestamp"
   | "recordTurnUserMessageTimestamp"
   | "buildReadOnlyApprovalRejectionMessage"
+  | "canAutoRejectReadOnlyApproval"
+  | "resolveWorkflowToolAliasesByCanonical"
 > &
   Partial<
     Pick<
@@ -156,6 +158,8 @@ type ObserveAgentSessionEventsTestParams = Omit<
       | "recordTurnActivityTimestamp"
       | "recordTurnUserMessageTimestamp"
       | "buildReadOnlyApprovalRejectionMessage"
+      | "canAutoRejectReadOnlyApproval"
+      | "resolveWorkflowToolAliasesByCanonical"
     >
   > & {
     sessionsRef: { current: AgentSessionCollection };
@@ -177,6 +181,8 @@ export const listenToAgentSessionEvents = (
     recordTurnActivityTimestamp,
     recordTurnUserMessageTimestamp,
     buildReadOnlyApprovalRejectionMessage,
+    canAutoRejectReadOnlyApproval,
+    resolveWorkflowToolAliasesByCanonical,
     ...eventParams
   } = params;
   const targetExternalSessionId =
@@ -205,6 +211,12 @@ export const listenToAgentSessionEvents = (
             overrides: {},
           }),
         )),
+    canAutoRejectReadOnlyApproval:
+      canAutoRejectReadOnlyApproval ??
+      (() => OPENCODE_RUNTIME_DESCRIPTOR.capabilities.approvals.readOnlyAutoRejectSafe),
+    resolveWorkflowToolAliasesByCanonical:
+      resolveWorkflowToolAliasesByCanonical ??
+      (() => OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical),
     updateSessionTodos: updateSessionTodos ?? (() => {}),
     readSession: (identity) => getAgentSession(sessionsRef.current, identity),
     sessionRef,

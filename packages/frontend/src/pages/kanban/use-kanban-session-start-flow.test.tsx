@@ -11,7 +11,7 @@ import { host } from "@/state/operations/shared/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
 import type { RepoSettingsInput } from "@/types/state-slices";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createDeferred,
   createTaskCardFixture,
   createTaskStoreCheckFixture,
@@ -156,11 +156,8 @@ const createDefaultRepoSettings = (): RepoSettingsInput => ({
 });
 
 const createBaseArgs = (): HookArgs => ({
-  activeWorkspace: {
-    repoPath: "/repo",
-    workspaceId: "workspace-1",
-    workspaceName: "Active Workspace",
-  },
+  activeWorkspaceId: "workspace-1",
+  workspaceRepoPath: "/repo",
   branches: [
     { name: "main", isCurrent: true, isRemote: false },
     { name: "origin/main", isCurrent: false, isRemote: true },
@@ -170,7 +167,7 @@ const createBaseArgs = (): HookArgs => ({
   openAgentStudioTabOnBackgroundSessionStart: true,
   tasks: [createTaskCardFixture({ id: "TASK-1", status: "human_review" })],
   sessions: [
-    createAgentSessionFixture({
+    createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       runtimeKind: "opencode",
@@ -185,7 +182,7 @@ const createBaseArgs = (): HookArgs => ({
       },
       startedAt: "2026-03-20T12:00:00.000Z",
     }),
-    createAgentSessionFixture({
+    createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       runtimeKind: "opencode",
@@ -202,8 +199,6 @@ const createBaseArgs = (): HookArgs => ({
     }),
   ],
   navigate: mock(() => {}),
-  loadRepoSettings: async () => createDefaultRepoSettings(),
-  loadAgentSessions: async () => {},
   humanRequestChangesTask: async () => {},
   setTaskTargetBranch: async () => {},
   startAgentSession: async () => sessionIdentity("session-new"),
@@ -663,34 +658,14 @@ describe("useKanbanSessionStartFlow", () => {
     await harness.unmount();
   });
 
-  test("reuse confirm does not wait for repo settings when the reused session has no saved model", async () => {
+  test("reuse confirm starts directly from the source session when the reused session has no saved model", async () => {
     const originalBuildContinuationTargetGet = host.taskWorktreeGet;
-    const loadRepoSettings = mock(
-      async () =>
-        ({
-          defaultRuntimeKind: "opencode",
-          worktreeBasePath: ".worktrees",
-          branchPrefix: "odt",
-          defaultTargetBranch: { remote: "origin", branch: "main" },
-          preStartHooks: [],
-          postCompleteHooks: [],
-          devServers: [],
-          worktreeCopyPaths: [],
-          agentDefaults: {
-            spec: null,
-            planner: null,
-            build: null,
-            qa: null,
-          },
-        }) satisfies RepoSettingsInput,
-    );
     const startSessionDeferred = createDeferred<ReturnType<typeof sessionIdentity>>();
     const startAgentSession = mock(() => startSessionDeferred.promise);
     const baseArgs = createBaseArgs();
     const harness = createHookHarness({
       ...baseArgs,
       sessions: baseArgs.sessions.map((session) => ({ ...session, selectedModel: null })),
-      loadRepoSettings,
       startAgentSession,
     });
 
@@ -723,7 +698,6 @@ describe("useKanbanSessionStartFlow", () => {
         await Promise.resolve();
       });
 
-      expect(loadRepoSettings).not.toHaveBeenCalled();
       expect(taskWorktreeGet).not.toHaveBeenCalled();
       expect(startAgentSession).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -961,7 +935,7 @@ describe("useKanbanSessionStartFlow", () => {
   test("onOpenSession follows the updated session render snapshot", async () => {
     const args = createBaseArgs();
     args.sessions = [
-      createAgentSessionFixture({
+      createAgentSessionSummaryFixture({
         externalSessionId: "builder-session-before-refresh",
         taskId: "TASK-1",
         runtimeKind: "opencode",
@@ -970,7 +944,7 @@ describe("useKanbanSessionStartFlow", () => {
         startedAt: "2026-03-19T12:00:00.000Z",
       }),
     ];
-    const nextSession = createAgentSessionFixture({
+    const nextSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-after-refresh",
       taskId: "TASK-1",
       runtimeKind: "opencode",
@@ -1014,7 +988,7 @@ describe("useKanbanSessionStartFlow", () => {
   test("onOpenSession prefers waiting-input session before latest-by-time fallback", async () => {
     const args = createBaseArgs();
     args.sessions = [
-      createAgentSessionFixture({
+      createAgentSessionSummaryFixture({
         externalSessionId: "builder-session-new-running",
         taskId: "TASK-1",
         runtimeKind: "opencode",
@@ -1025,7 +999,7 @@ describe("useKanbanSessionStartFlow", () => {
         pendingQuestions: [],
         startedAt: "2026-03-20T12:00:00.000Z",
       }),
-      createAgentSessionFixture({
+      createAgentSessionSummaryFixture({
         externalSessionId: "builder-session-old-waiting",
         taskId: "TASK-1",
         runtimeKind: "opencode",

@@ -13,8 +13,11 @@ import type {
 import type { LucideIcon } from "lucide-react";
 import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
+import type { AgentSessionActivityState } from "@/lib/agent-session-activity-state";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState, SessionMessagesState } from "@/types/agent-orchestrator";
+
 export type AgentRoleOption = {
   role: AgentRole;
   label: string;
@@ -34,35 +37,21 @@ export type AgentChatThreadSession = Pick<
   AgentSessionState,
   | "externalSessionId"
   | "title"
-  | "status"
   | "runtimeKind"
   | "workingDirectory"
   | "pendingApprovals"
   | "pendingQuestions"
   | "selectedModel"
 > & {
+  activityState: AgentSessionActivityState;
   messages: SessionMessagesState;
   todos: AgentSessionTodoItem[];
 };
 
-export type AgentChatThreadSessionLifecycle = {
-  transcriptState: AgentSessionTranscriptState;
-};
-
-export type AgentChatThreadRuntimeReadiness = {
-  readinessState: "ready" | "checking" | "blocked";
-  isReady: boolean;
-  isRuntimeStarting: boolean;
-  blockedReason: string | null;
-  isLoadingChecks: boolean;
-  refreshChecks: () => Promise<void>;
-};
-
 export type AgentChatThreadModel = {
   session: AgentChatThreadSession | null;
-  sessionLifecycle: AgentChatThreadSessionLifecycle;
-  runtimeReadiness: AgentChatThreadRuntimeReadiness;
-  isTranscriptPending: boolean;
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
   isSessionWorking: boolean;
   isInteractionEnabled: boolean;
   emptyState: AgentChatEmptyStateModel | null;

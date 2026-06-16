@@ -19,6 +19,7 @@ export const createAppStateProviderModuleMock = (
   useDelegationState: unused("useDelegationState"),
   useSpecState: unused("useSpecState"),
   useAgentOperations: unused("useAgentOperations"),
+  useAgentSessionReadModelState: unused("useAgentSessionReadModelState"),
   useAgentSessions: unused("useAgentSessions"),
   useAgentSessionSummaries: unused("useAgentSessionSummaries"),
   useAgentActivitySessions: unused("useAgentActivitySessions"),

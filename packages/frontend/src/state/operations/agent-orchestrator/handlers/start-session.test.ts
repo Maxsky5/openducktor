@@ -8,66 +8,28 @@ import type {
 } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { appQueryClient, clearAppQueryClient } from "@/lib/query-client";
+import { clearAppQueryClient } from "@/lib/query-client";
 import {
   type AgentSessionCollection,
-  type AgentSessionCollectionUpdater,
-  createAgentSessionCollection as createStrictAgentSessionCollection,
   emptyAgentSessionCollection,
   listAgentSessions,
-  replaceAgentSession,
 } from "@/state/agent-session-collection";
-import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
 import { withCapturedConsole } from "@/test-utils/console-capture";
-import {
-  sessionMessageAt,
-  sessionMessagesToArray,
-} from "@/test-utils/session-message-test-helpers";
-import type {
-  AgentChatMessage,
-  AgentSessionIdentity,
-  AgentSessionState as BaseAgentSessionState,
-  SessionMessagesState,
-} from "@/types/agent-orchestrator";
+import { sessionMessageAt } from "@/test-utils/session-message-test-helpers";
+import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { host } from "../../shared/host";
-import { createSessionMessagesState } from "../support/messages";
 import { createDeferred, createTaskCardFixture, withTimeout } from "../test-utils";
-import { createStartAgentSession } from "./start-session";
 import {
-  type FlatStartSessionDependencies,
-  toStartSessionDependencies,
+  BUILD_SELECTION,
+  continuationTarget,
+  createSessionsRef,
+  createStartSessionTestHarness,
+  getSession,
+  PLANNER_SELECTION,
+  QA_SELECTION,
+  sessionIdentity,
+  taskFixture,
 } from "./start-session.test-helpers";
-
-type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
-type TestAgentSessionState = Omit<AgentSessionState, "messages"> & {
-  messages: AgentChatMessage[] | SessionMessagesState;
-};
-
-const toAgentSessionStateFixture = (session: TestAgentSessionState): AgentSessionState => ({
-  ...session,
-  messages: Array.isArray(session.messages)
-    ? createSessionMessagesState(session.externalSessionId, session.messages)
-    : session.messages,
-});
-
-const createAgentSessionCollection = (sessions: Iterable<TestAgentSessionState>) =>
-  createStrictAgentSessionCollection(Array.from(sessions, toAgentSessionStateFixture));
-
-const getSession = (
-  sessionCollection: AgentSessionCollection,
-  externalSessionId: string,
-): AgentSessionState | undefined =>
-  listAgentSessions(sessionCollection).find(
-    (session): session is AgentSessionState => session.externalSessionId === externalSessionId,
-  );
-
-const createSessionsRef = (sessions: TestAgentSessionState[] = []) => ({
-  current: createAgentSessionCollection(sessions),
-});
-
-const createStartAgentSessionWithFlatDeps = (deps: FlatStartSessionDependencies) => {
-  return createStartAgentSession(toStartSessionDependencies(deps));
-};
 
 const waitForSessionCount = async (
   getCount: () => number,
@@ -85,105 +47,16 @@ const waitForSessionCount = async (
   await waitForSessionCount(getCount, expectedCount, remainingAttempts - 1);
 };
 
-const persistedSessionRecord = (
-  input: {
-    externalSessionId: string;
-    role: AgentSessionRecord["role"];
-    startedAt: string;
-    workingDirectory: string;
-    runtimeKind?: AgentSessionRecord["runtimeKind"];
-    selectedModel?: AgentSessionRecord["selectedModel"];
-  } & Record<string, unknown>,
-): AgentSessionRecord => ({
-  runtimeKind: input.runtimeKind ?? "opencode",
-  externalSessionId: input.externalSessionId,
-  role: input.role,
-  startedAt: input.startedAt,
-  workingDirectory: input.workingDirectory,
-  selectedModel: input.selectedModel ?? null,
-});
-
-const continuationTarget = (
-  workingDirectory: string,
-  source: "active_build_run" | "builder_session" = "active_build_run",
-) => ({
-  workingDirectory,
-  source,
-});
-
-const setPersistedSessionListFixture = (
-  repoPath: string,
-  taskId: string,
-  sessions: AgentSessionRecord[],
-): void => {
-  appQueryClient.setQueryData(agentSessionQueryKeys.list(repoPath, taskId), sessions);
-};
-
-const taskFixture = createTaskCardFixture({
-  title: "Implement feature",
-  description: "desc",
-  status: "in_progress",
-  priority: 1,
-});
-
-const BUILD_SELECTION: AgentModelSelection = {
-  runtimeKind: "opencode",
-  providerId: "openai",
-  modelId: "gpt-5",
-  variant: "default",
-  profileId: "build",
-};
-
-const PLANNER_SELECTION: AgentModelSelection = {
-  runtimeKind: "opencode",
-  providerId: "openai",
-  modelId: "gpt-5",
-  variant: "default",
-  profileId: "planner",
-};
-
-const QA_SELECTION: AgentModelSelection = {
-  runtimeKind: "opencode",
-  providerId: "openai",
-  modelId: "gpt-5",
-  variant: "default",
-  profileId: "qa",
-};
-
-const sessionIdentity = (externalSessionId: string, workingDirectory = "/tmp/repo") => ({
-  externalSessionId,
-  runtimeKind: "opencode" as const,
-  workingDirectory,
-});
-
 describe("agent-orchestrator/handlers/start-session", () => {
   beforeEach(async () => {
     await clearAppQueryClient();
   });
 
   test("throws when no active repo is selected", () => {
-    const start = createStartAgentSessionWithFlatDeps({
+    const { start } = createStartSessionTestHarness({
       activeRepo: null,
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [] },
       repoEpochRef: { current: 0 },
       currentWorkspaceRepoPathRef: { current: null },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     expect(
@@ -212,29 +85,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       () => inFlight.promise,
     );
     const sessionsRef = createSessionsRef();
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
+    const { start } = createStartSessionTestHarness({
       sessionsRef,
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       sessionStartGateRef: { current: sessionStartGate },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     const startPromise = start({
@@ -283,28 +136,15 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -344,14 +184,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("keys fresh starts by selected model", async () => {
     const startKeys: string[] = [];
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
+    const { start } = createStartSessionTestHarness({
       sessionStartGateRef: {
         current: {
           run: async (key, startSession) => {
@@ -367,7 +200,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           clear: () => {},
         },
       },
-      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -375,13 +207,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo/worktree",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     await expect(
@@ -425,8 +250,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       status: "idle",
     });
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
       setSessionCollection: (updater) => {
         sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
@@ -434,24 +258,15 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
       ensureRuntime: async () => ({
         kind: "opencode",
         runtimeKind: "opencode",
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
       persistSessionRecord: async () => {
         await persistDeferred.promise;
       },
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -494,8 +309,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       status: "idle",
     });
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
       setSessionCollection: (updater) => {
         sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
@@ -506,8 +320,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       sessionsRef,
       taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       observeAgentSession: async () => {
         lifecycleEvents.push("observer:started");
       },
@@ -517,13 +329,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -547,46 +352,31 @@ describe("agent-orchestrator/handlers/start-session", () => {
   test("persists only durable session record fields during start", async () => {
     let persistedTaskId: string | null = null;
     let persistedRecord: AgentSessionRecord | null = null;
-    const start = createStartAgentSession(
-      toStartSessionDependencies({
-        activeRepo: "/tmp/repo",
-        activeWorkspaceId: "workspace-1",
-        repoEpochRef: { current: 1 },
-        currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-        setSessionCollection: () => {},
-        sessionsRef: createSessionsRef(),
-        loadAgentSessions: async () => {},
-        observeAgentSession: async () => {},
-        taskRef: { current: [createTaskCardFixture({ id: "task-1", status: "open" })] },
-        adapter: {
-          ...new OpencodeSdkAdapter(),
-          startSession: async (input: StartAgentSessionInput) => ({
-            externalSessionId: "external-1",
-            runtimeKind: input.runtimeKind,
-            workingDirectory: input.workingDirectory,
-            role: "planner",
-            startedAt: "2026-03-21T10:00:00.000Z",
-            status: "running",
-          }),
-        } as unknown as AgentEnginePort,
-        resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-        ensureRuntime: async () => ({
-          kind: "opencode",
-          runtimeKind: "opencode",
-          runtimeId: "runtime-1",
-          workingDirectory: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
+      taskRef: { current: [createTaskCardFixture({ id: "task-1", status: "open" })] },
+      adapter: {
+        ...new OpencodeSdkAdapter(),
+        startSession: async (input: StartAgentSessionInput) => ({
+          externalSessionId: "external-1",
+          runtimeKind: input.runtimeKind,
+          workingDirectory: input.workingDirectory,
+          role: "planner",
+          startedAt: "2026-03-21T10:00:00.000Z",
+          status: "running",
         }),
-        loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-        loadRepoDefaultModel: async () => null,
-        loadRepoPromptOverrides: async () => ({}),
-        refreshTaskData: async () => {},
-        persistSessionRecord: async (taskId, record) => {
-          persistedTaskId = taskId;
-          persistedRecord = record;
-        },
-        sendAgentMessage: async () => {},
+      } as unknown as AgentEnginePort,
+      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
+      ensureRuntime: async () => ({
+        kind: "opencode",
+        runtimeKind: "opencode",
+        runtimeId: "runtime-1",
+        workingDirectory: "/tmp/repo",
       }),
-    );
+      persistSessionRecord: async (taskId, record) => {
+        persistedTaskId = taskId;
+        persistedRecord = record;
+      },
+    });
 
     await start({
       taskId: "task-1",
@@ -630,8 +420,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
       );
     };
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
       setSessionCollection: (updater) => {
         sessionsRef.current =
@@ -639,8 +428,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
       },
       sessionsRef,
       taskRef: { current: [{ ...taskFixture, id: "task-1" }] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       observeAgentSession: async (target) => {
         listenedSessionIds.push(target.externalSessionId);
       },
@@ -650,15 +437,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         runtimeId: "runtime-1",
         workingDirectory: "/tmp/repo",
       }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
       persistSessionRecord: async () => {
         throw new Error("persist failed");
       },
-      sendAgentMessage: async () => {},
     });
 
     await withCapturedConsole("error", async (calls) => {
@@ -682,1713 +463,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
     expect(getSession(sessionsRef.current, "external-session-persist-fail")).toBeUndefined();
   });
 
-  test("reuses most recent in-memory session for same task and role", async () => {
-    let persistedListCalls = 0;
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return [];
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-newer",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-        },
-      ]),
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-newer",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-newer" }));
-      expect(persistedListCalls).toBe(0);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("reuses the explicitly selected in-memory session instead of the latest one", async () => {
-    let persistedListCalls = 0;
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return [];
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-latest",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-        },
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-chosen",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:00:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-        },
-      ]),
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-chosen",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-chosen" }));
-      expect(persistedListCalls).toBe(0);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("starts a fresh build session instead of reusing an in-memory session when the continuation target changed", async () => {
-    let persistedListCalls = 0;
-    let startCalls = 0;
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return [];
-    };
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-fresh-build-session",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        role: input.role,
-        status: "idle",
-      };
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-stale",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/old-worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-        },
-      ]),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/new-worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo/new-worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).resolves.toEqual(
-        expect.objectContaining({ externalSessionId: "external-fresh-build-session" }),
-      );
-      expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(0);
-    } finally {
-      adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("reuses an in-memory build session when the continuation target only differs by trailing slash", async () => {
-    let persistedListCalls = 0;
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return [];
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-chosen",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: BUILD_SELECTION,
-        },
-      ]),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree/"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-chosen",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-chosen" }));
-      expect(persistedListCalls).toBe(0);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("keeps existing selected model when reusing an in-memory session", async () => {
-    let persistedSessions = 0;
-    const existingSelectedModel: AgentModelSelection = {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "medium",
-      profileId: "Sisyphus",
-    };
-    const sessionsRef: { current: AgentSessionCollection } = {
-      current: createAgentSessionCollection([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-reused",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: existingSelectedModel,
-        },
-      ]),
-    };
-    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
-      sessionsRef.current = typeof updater === "function" ? updater(sessionsRef.current) : updater;
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection,
-      sessionsRef,
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {
-        persistedSessions += 1;
-      },
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-reused",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
-      expect(getSession(sessionsRef.current, "external-reused")?.selectedModel).toEqual(
-        existingSelectedModel,
-      );
-      expect(persistedSessions).toBe(0);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("reuses in-memory session even when selected runtime differs", async () => {
-    const selectedModel: AgentModelSelection = {
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-3-7-sonnet",
-      profileId: "Hephaestus",
-    };
-    let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      expect(input.model).toEqual(selectedModel);
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "fresh-runtime-external",
-        startedAt: "2026-02-22T08:30:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-reused",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            profileId: "Ares",
-          },
-        },
-      ]),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-claude",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-reused",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
-      expect(startCalls).toBe(0);
-    } finally {
-      adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("reuses in-memory session even when selected agent profile differs", async () => {
-    const selectedModel: AgentModelSelection = {
-      runtimeKind: "opencode",
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "high",
-      profileId: "Hephaestus",
-    };
-    let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      expect(input.model).toEqual(selectedModel);
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "fresh-profile-external",
-        startedAt: "2026-02-22T08:35:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "external-reused",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: {
-            runtimeKind: "opencode",
-            providerId: "openai",
-            modelId: "gpt-5",
-            variant: "high",
-            profileId: "Sisyphus",
-          },
-        },
-      ]),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-2",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-reused",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-reused" }));
-      expect(startCalls).toBe(0);
-    } finally {
-      adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("startMode fresh bypasses same-role reuse and starts a new session", async () => {
-    let startCalls = 0;
-    let persistedListCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "fresh-ext",
-        startedAt: "2026-02-22T09:00:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return [
-        persistedSessionRecord({
-          runtimeKind: "opencode",
-          externalSessionId: "persisted-build-ext",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:20:00.000Z",
-          updatedAt: "2026-02-22T08:20:00.000Z",
-          runtimeId: "runtime-1",
-          workingDirectory: "/tmp/repo/worktree",
-        }),
-      ];
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "existing-build-ext",
-          taskId: "task-1",
-          role: "build",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-        },
-      ]),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "fresh-ext" }));
-      expect(startCalls).toBe(1);
-      expect(persistedListCalls).toBe(0);
-    } finally {
-      adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("does not reuse in-memory session from a different role", async () => {
-    let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "planner-ext",
-        startedAt: "2026-02-22T08:30:00.000Z",
-        role: "planner",
-        status: "idle",
-      };
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const sessionsRef: { current: AgentSessionCollection } = {
-      current: createAgentSessionCollection([
-        {
-          runtimeKind: "opencode",
-          externalSessionId: "existing-spec-ext",
-          taskId: "task-1",
-          role: "spec",
-          status: "idle",
-          startedAt: "2026-02-22T08:10:00.000Z",
-          workingDirectory: "/tmp/repo/worktree",
-          historyLoadState: "not_requested",
-          messages: [],
-          draftAssistantText: "",
-          draftAssistantMessageId: null,
-          draftReasoningText: "",
-          draftReasoningMessageId: null,
-          pendingApprovals: [],
-          pendingQuestions: [],
-          selectedModel: null,
-        },
-      ]),
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      const externalSessionId = await start({
-        taskId: "task-1",
-        role: "planner",
-        startMode: "fresh",
-        selectedModel: PLANNER_SELECTION,
-      });
-      expect(externalSessionId).toEqual(
-        expect.objectContaining({ externalSessionId: "planner-ext" }),
-      );
-      expect(startCalls).toBe(1);
-    } finally {
-      adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("returns the requested persisted session for the same role and loads it when missing from memory", async () => {
-    let loadAgentSessionsCalls = 0;
-
-    setPersistedSessionListFixture("/tmp/repo", "task-1", [
-      persistedSessionRecord({
-        runtimeKind: "opencode",
-        externalSessionId: "external-2",
-        taskId: "task-1",
-        role: "build",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      persistedSessionRecord({
-        runtimeKind: "opencode",
-        externalSessionId: "external-1",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        updatedAt: "2026-02-22T08:10:00.000Z",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      persistedSessionRecord({
-        runtimeKind: "opencode",
-        externalSessionId: "external-build-newer",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:30:00.000Z",
-        updatedAt: "2026-02-22T08:30:00.000Z",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-    ]);
-
-    const sessionsRef = createSessionsRef();
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef,
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
-        sessionsRef.current = createAgentSessionCollection([
-          {
-            runtimeKind: "opencode",
-            externalSessionId: "external-build-newer",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:30:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: null,
-          },
-        ]);
-      },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    const externalSessionId = await start({
-      taskId: "task-1",
-      role: "build",
-      startMode: "reuse",
-      sourceSession: {
-        externalSessionId: "external-build-newer",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      },
-    });
-    expect(externalSessionId).toEqual(
-      expect.objectContaining({ externalSessionId: "external-build-newer" }),
-    );
-    expect(loadAgentSessionsCalls).toBe(1);
-  });
-
-  test("forks from the selected source session for pull request generation", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalForkSession = adapter.forkSession;
-    const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const persistedSnapshots: AgentSessionRecord[] = [];
-    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
-      {
-        runtimeKind: "opencode",
-        externalSessionId: "external-source-build",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        historyLoadState: "not_requested",
-        messages: [],
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          profileId: "builder",
-        },
-      },
-    ]);
-
-    adapter.forkSession = async (input) => {
-      expect(input.taskId).toBe("task-1");
-      expect(input.role).toBe("build");
-      expect(input.parentExternalSessionId).toBe("external-source-build");
-      expect(input.repoPath).toBe("/tmp/repo");
-      expect(input.runtimeKind).toBe("opencode");
-      expect(input.workingDirectory).toBe("/tmp/repo/worktree");
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-forked-pr-session",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-    adapter.loadSessionHistory = async (input) => {
-      expect(input.repoPath).toBe("/tmp/repo");
-      expect(input.runtimeKind).toBe("opencode");
-      expect(input.workingDirectory).toBe("/tmp/repo/worktree");
-      expect(input.externalSessionId).toBe("external-forked-pr-session");
-      return [
-        {
-          messageId: "fork-user-1",
-          role: "user",
-          state: "read",
-          timestamp: "2026-02-22T08:21:00.000Z",
-          text: "Generate the PR summary.",
-          displayParts: [],
-          parts: [],
-        },
-        {
-          messageId: "fork-assistant-1",
-          role: "assistant",
-          timestamp: "2026-02-22T08:22:00.000Z",
-          text: "I drafted the summary.",
-          parts: [],
-        },
-      ];
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
-      },
-      sessionsRef: { current: sessionCollection },
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async (_taskId, record) => {
-        persistedSnapshots.push(record);
-      },
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      const externalSessionId = await start({
-        taskId: "task-1",
-        role: "build",
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSession: {
-          externalSessionId: "external-source-build",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      });
-
-      expect(externalSessionId).toEqual(
-        expect.objectContaining({ externalSessionId: "external-forked-pr-session" }),
-      );
-      expect(getSession(sessionCollection, "external-forked-pr-session")?.workingDirectory).toBe(
-        "/tmp/repo/worktree",
-      );
-      const forkedSession = getSession(sessionCollection, "external-forked-pr-session");
-      const forkedMessages = forkedSession ? sessionMessagesToArray(forkedSession) : [];
-      expect(forkedMessages.slice(0, 3)).toEqual([
-        {
-          id: "history:system-prompt:external-forked-pr-session",
-          role: "system",
-          content: forkedMessages[0]?.content ?? "",
-          timestamp: "2026-02-22T08:20:00.000Z",
-        },
-        {
-          id: "fork-user-1",
-          role: "user",
-          content: "Generate the PR summary.",
-          timestamp: "2026-02-22T08:21:00.000Z",
-          meta: {
-            kind: "user",
-            state: "read",
-          },
-        },
-        {
-          id: "fork-assistant-1",
-          role: "assistant",
-          content: "I drafted the summary.",
-          timestamp: "2026-02-22T08:22:00.000Z",
-          meta: {
-            kind: "assistant",
-            agentRole: "build",
-            isFinal: false,
-          },
-        },
-      ]);
-      expect(forkedMessages[0]?.content).toContain("System prompt:");
-      expect(persistedSnapshots).toHaveLength(1);
-      expect(persistedSnapshots[0]?.externalSessionId).toBe("external-forked-pr-session");
-    } finally {
-      adapter.forkSession = originalForkSession;
-      adapter.loadSessionHistory = originalLoadSessionHistory;
-    }
-  });
-
-  test("loads a stopped source session before forking so inherited history is available immediately", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalForkSession = adapter.forkSession;
-    const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const loadAgentSessionsCalls: string[] = [];
-    const loadAgentSessionHistoryCalls: AgentSessionIdentity[] = [];
-    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
-      {
-        runtimeKind: "opencode",
-        externalSessionId: "external-source-build",
-        taskId: "task-1",
-        role: "build",
-        status: "stopped",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        historyLoadState: "not_requested",
-        messages: [],
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        contextUsage: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        selectedModel: BUILD_SELECTION,
-      },
-    ]);
-
-    adapter.forkSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-forked-from-loaded-source",
-      startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
-      status: "idle",
-    });
-    adapter.loadSessionHistory = async () => [
-      {
-        messageId: "child-user-1",
-        role: "user",
-        state: "read",
-        timestamp: "2026-02-22T08:21:00.000Z",
-        text: "Loaded child history",
-        displayParts: [],
-        parts: [],
-      },
-    ];
-
-    const sessionsRef = { current: sessionCollection };
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
-        sessionsRef.current = sessionCollection;
-      },
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async (taskId) => {
-        loadAgentSessionsCalls.push(taskId);
-        const sourceBuild = getSession(sessionCollection, "external-source-build");
-        if (!sourceBuild) {
-          throw new Error("Missing external-source-build session");
-        }
-        sessionCollection = replaceAgentSession(sessionCollection, {
-          ...sourceBuild,
-          status: "idle",
-          messages: createSessionMessagesState(sourceBuild.externalSessionId),
-        });
-        sessionsRef.current = sessionCollection;
-      },
-      loadAgentSessionHistory: async (session) => {
-        loadAgentSessionHistoryCalls.push(session);
-        const sourceBuild = getSession(sessionCollection, "external-source-build");
-        if (!sourceBuild) {
-          throw new Error("Missing external-source-build session");
-        }
-        sessionCollection = replaceAgentSession(sessionCollection, {
-          ...sourceBuild,
-          historyLoadState: "loaded",
-        });
-        sessionsRef.current = sessionCollection;
-      },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      const externalSessionId = await start({
-        taskId: "task-1",
-        role: "build",
-        startMode: "fork",
-        selectedModel: BUILD_SELECTION,
-        sourceSession: {
-          externalSessionId: "external-source-build",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      });
-
-      expect(externalSessionId).toEqual(
-        expect.objectContaining({ externalSessionId: "external-forked-from-loaded-source" }),
-      );
-      expect(loadAgentSessionsCalls).toEqual(["task-1"]);
-      expect(loadAgentSessionHistoryCalls).toEqual([
-        {
-          externalSessionId: "external-source-build",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      ]);
-      const forkedSession = getSession(sessionCollection, "external-forked-from-loaded-source");
-      const forkedMessages = forkedSession ? sessionMessagesToArray(forkedSession) : [];
-      expect(forkedMessages.slice(0, 2)).toEqual([
-        {
-          id: "history:system-prompt:external-forked-from-loaded-source",
-          role: "system",
-          content: forkedMessages[0]?.content ?? "",
-          timestamp: "2026-02-22T08:20:00.000Z",
-        },
-        {
-          id: "child-user-1",
-          role: "user",
-          content: "Loaded child history",
-          timestamp: "2026-02-22T08:21:00.000Z",
-          meta: {
-            kind: "user",
-            state: "read",
-          },
-        },
-      ]);
-      expect(forkedMessages[0]?.content).toContain("System prompt:");
-    } finally {
-      adapter.forkSession = originalForkSession;
-      adapter.loadSessionHistory = originalLoadSessionHistory;
-    }
-  });
-
-  test("forks from a loaded source session without live runtime transport", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalForkSession = adapter.forkSession;
-    const forkCalls: unknown[] = [];
-    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
-      {
-        runtimeKind: "opencode",
-        externalSessionId: "external-source-build",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        historyLoadState: "not_requested",
-        messages: [],
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        selectedModel: BUILD_SELECTION,
-      },
-    ]);
-
-    adapter.forkSession = async (input) => {
-      forkCalls.push(input);
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-forked-from-runtime-connection",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-    adapter.loadSessionHistory = async (input) => {
-      expect(input.repoPath).toBe("/tmp/repo");
-      expect(input.runtimeKind).toBe("opencode");
-      expect(input.workingDirectory).toBe("/tmp/repo/worktree");
-      return [];
-    };
-
-    const sessionsRef = { current: sessionCollection };
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
-        sessionsRef.current = sessionCollection;
-      },
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fork",
-          selectedModel: BUILD_SELECTION,
-          sourceSession: {
-            externalSessionId: "external-source-build",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(
-        expect.objectContaining({ externalSessionId: "external-forked-from-runtime-connection" }),
-      );
-      expect(forkCalls).toHaveLength(1);
-    } finally {
-      adapter.forkSession = originalForkSession;
-    }
-  });
-
-  test("stops the forked session when child history load fails", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalForkSession = adapter.forkSession;
-    const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const originalStopSession = adapter.stopSession;
-    const stoppedSessionIds: string[] = [];
-    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
-      {
-        runtimeKind: "opencode",
-        externalSessionId: "external-source-build",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        historyLoadState: "not_requested",
-        messages: [],
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        contextUsage: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        selectedModel: BUILD_SELECTION,
-      },
-    ]);
-
-    adapter.forkSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-fork-history-failure",
-      startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
-      status: "idle",
-    });
-    adapter.loadSessionHistory = async () => {
-      throw new Error("history unavailable");
-    };
-    adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
-      },
-      sessionsRef: { current: sessionCollection },
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fork",
-          selectedModel: BUILD_SELECTION,
-          sourceSession: {
-            externalSessionId: "external-source-build",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).rejects.toThrow(
-        'Failed to initialize started session "external-fork-history-failure": history unavailable. The started session was stopped before local registration.',
-      );
-      expect(stoppedSessionIds).toEqual(["external-fork-history-failure"]);
-      expect(getSession(sessionCollection, "external-fork-history-failure")).toBeUndefined();
-    } finally {
-      adapter.forkSession = originalForkSession;
-      adapter.loadSessionHistory = originalLoadSessionHistory;
-      adapter.stopSession = originalStopSession;
-    }
-  });
-
-  test("stops the forked session when the repo becomes stale after child history load", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    const adapter = new OpencodeSdkAdapter();
-    const originalForkSession = adapter.forkSession;
-    const originalLoadSessionHistory = adapter.loadSessionHistory;
-    const originalStopSession = adapter.stopSession;
-    const stoppedSessionIds: string[] = [];
-    let sessionCollection: AgentSessionCollection = createAgentSessionCollection([
-      {
-        runtimeKind: "opencode",
-        externalSessionId: "external-source-build",
-        taskId: "task-1",
-        role: "build",
-        status: "idle",
-        startedAt: "2026-02-22T08:10:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        historyLoadState: "not_requested",
-        messages: [],
-        draftAssistantText: "",
-        draftAssistantMessageId: null,
-        draftReasoningText: "",
-        draftReasoningMessageId: null,
-        contextUsage: null,
-        pendingApprovals: [],
-        pendingQuestions: [],
-        selectedModel: BUILD_SELECTION,
-      },
-    ]);
-    const sessionsRef = { current: sessionCollection };
-
-    adapter.forkSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-forked-stale-after-history",
-      startedAt: "2026-02-22T08:20:00.000Z",
-      role: "build",
-      status: "idle",
-    });
-    adapter.loadSessionHistory = async () => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return [
-        {
-          messageId: "child-user-1",
-          role: "user",
-          state: "read",
-          timestamp: "2026-02-22T08:21:00.000Z",
-          text: "Hydrated child history",
-          displayParts: [],
-          parts: [],
-        },
-      ];
-    };
-    adapter.stopSession = async (sessionRef) => {
-      stoppedSessionIds.push(
-        typeof sessionRef === "string" ? sessionRef : sessionRef.externalSessionId,
-      );
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: (updater) => {
-        sessionCollection = typeof updater === "function" ? updater(sessionCollection) : updater;
-        sessionsRef.current = sessionCollection;
-      },
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef,
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fork",
-          selectedModel: BUILD_SELECTION,
-          sourceSession: {
-            externalSessionId: "external-source-build",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).rejects.toThrow("Workspace changed while starting session.");
-      expect(stoppedSessionIds).toEqual(["external-forked-stale-after-history"]);
-      expect(getSession(sessionCollection, "external-forked-stale-after-history")).toBeUndefined();
-    } finally {
-      adapter.forkSession = originalForkSession;
-      adapter.loadSessionHistory = originalLoadSessionHistory;
-      adapter.stopSession = originalStopSession;
-    }
-  });
-
-  test("reuses persisted session when selected model differs", async () => {
-    const selectedModel: AgentModelSelection = {
-      runtimeKind: "opencode",
-      providerId: "anthropic",
-      modelId: "claude-3-7-sonnet",
-      profileId: "Hephaestus",
-    };
-    let loadAgentSessionsCalls = 0;
-    let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      expect(input.model).toEqual(selectedModel);
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "fresh-runtime-external",
-        startedAt: "2026-02-22T08:40:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-
-    setPersistedSessionListFixture("/tmp/repo", "task-1", [
-      persistedSessionRecord({
-        runtimeKind: "opencode",
-        externalSessionId: "external-opencode",
-        taskId: "task-1",
-        role: "build",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        runtimeId: "runtime-1",
-        workingDirectory: "/tmp/repo/worktree",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "openai",
-          modelId: "gpt-5",
-          profileId: "Ares",
-        },
-      }),
-    ]);
-
-    const sessionsRef = createSessionsRef();
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-claude",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
-        sessionsRef.current = createAgentSessionCollection([
-          {
-            runtimeKind: "opencode",
-            externalSessionId: "external-opencode",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:20:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              profileId: "Ares",
-            },
-          },
-        ]);
-      },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "reuse",
-          sourceSession: {
-            externalSessionId: "external-opencode",
-            runtimeKind: "opencode",
-            workingDirectory: "/tmp/repo/worktree",
-          },
-        }),
-      ).resolves.toEqual(expect.objectContaining({ externalSessionId: "external-opencode" }));
-      expect(loadAgentSessionsCalls).toBe(1);
-      expect(startCalls).toBe(0);
-    } finally {
-      adapter.startSession = originalStartSession;
-    }
-  });
-
-  test("reuses the requested persisted session when runtime kind is only present on selected model", async () => {
-    let loadAgentSessionsCalls = 0;
-    let startCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => {
-      startCalls += 1;
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "fresh-runtime-external",
-        startedAt: "2026-02-22T08:40:00.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-
-    setPersistedSessionListFixture("/tmp/repo", "task-1", [
-      {
-        externalSessionId: "external-claude",
-        runtimeKind: "opencode",
-        role: "build",
-        startedAt: "2026-02-22T08:20:00.000Z",
-        workingDirectory: "/tmp/repo/worktree",
-        selectedModel: {
-          runtimeKind: "opencode",
-          providerId: "anthropic",
-          modelId: "claude-3-7-sonnet",
-          profileId: "Hephaestus",
-        },
-      },
-    ]);
-
-    const sessionsRef = createSessionsRef();
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef,
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      resolveTaskWorktree: async () => continuationTarget("/tmp/repo/worktree"),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        runtimeId: "runtime-claude",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {
-        loadAgentSessionsCalls += 1;
-        sessionsRef.current = createAgentSessionCollection([
-          {
-            runtimeKind: "opencode",
-            externalSessionId: "external-claude",
-            taskId: "task-1",
-            role: "build",
-            status: "idle",
-            startedAt: "2026-02-22T08:20:00.000Z",
-            workingDirectory: "/tmp/repo/worktree",
-            historyLoadState: "not_requested",
-            messages: [],
-            draftAssistantText: "",
-            draftAssistantMessageId: null,
-            draftReasoningText: "",
-            draftReasoningMessageId: null,
-            pendingApprovals: [],
-            pendingQuestions: [],
-            selectedModel: {
-              runtimeKind: "opencode",
-              providerId: "anthropic",
-              modelId: "claude-3-7-sonnet",
-              profileId: "Hephaestus",
-            },
-          },
-        ]);
-      },
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      const externalSessionId = await start({
-        taskId: "task-1",
-        role: "build",
-        startMode: "reuse",
-        sourceSession: {
-          externalSessionId: "external-claude",
-          runtimeKind: "opencode",
-          workingDirectory: "/tmp/repo/worktree",
-        },
-      });
-      expect(externalSessionId).toEqual(
-        expect.objectContaining({ externalSessionId: "external-claude" }),
-      );
-      expect(loadAgentSessionsCalls).toBe(1);
-      expect(startCalls).toBe(0);
-    } finally {
-      adapter.startSession = originalStartSession;
-    }
-  });
-
   test("throws when task is missing after reuse checks", async () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
@@ -2401,27 +475,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       return originalStartSession(input);
     };
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -2446,11 +501,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
+    const { start } = createStartSessionTestHarness({
       taskRef: {
         current: [
           createTaskCardFixture({
@@ -2465,9 +516,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
@@ -2476,13 +524,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           workingDirectory: "/tmp/repo",
         };
       },
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -2506,11 +547,7 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
+    const { start } = createStartSessionTestHarness({
       taskRef: {
         current: [
           createTaskCardFixture({
@@ -2525,25 +562,10 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => {
         qaTargetCalls += 1;
         return continuationTarget("/tmp/repo/worktree");
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -2575,11 +597,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       runtimeKind: input.runtimeKind,
     });
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
       taskRef: {
         current: [
           createTaskCardFixture({
@@ -2594,9 +613,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           }),
         ],
       },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
       resolveTaskWorktree: async () => {
         qaTargetCalls += 1;
         return continuationTarget("/tmp/repo/worktree");
@@ -2609,13 +625,6 @@ describe("agent-orchestrator/handlers/start-session", () => {
           workingDirectory: options?.targetWorkingDirectory ?? "/tmp/repo",
         };
       },
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -2634,329 +643,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
     }
   });
 
-  test("fails fast on stale repo before any side effects", async () => {
-    let persistedListCalls = 0;
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => {
-      persistedListCalls += 1;
-      return [];
-    };
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter: new OpencodeSdkAdapter(),
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/other" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).rejects.toThrow("Workspace changed while starting session.");
-      expect(persistedListCalls).toBe(0);
-    } finally {
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("does not diverge ref/state when workspace becomes stale during initial session commit", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    let sessionsState: AgentSessionCollection = emptyAgentSessionCollection();
-    const sessionsRef: { current: AgentSessionCollection } = {
-      current: emptyAgentSessionCollection(),
-    };
-    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
-    };
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    adapter.startSession = async (input) => ({
-      runtimeKind: "opencode",
-      workingDirectory: input.workingDirectory,
-      externalSessionId: "external-created",
-      startedAt: "2026-02-22T08:00:10.000Z",
-      role: "build",
-      status: "idle",
-    });
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection,
-      sessionsRef,
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef,
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).rejects.toThrow("Workspace changed while starting session.");
-      expect(listAgentSessions(sessionsRef.current)).toEqual([]);
-      expect(listAgentSessions(sessionsState)).toEqual([]);
-    } finally {
-      adapter.startSession = originalStartSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("rolls back started remote session when workspace becomes stale after start", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    let stopCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-    adapter.stopSession = async () => {
-      stopCalls += 1;
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef,
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).rejects.toThrow("Workspace changed while starting session.");
-      expect(stopCalls).toBe(1);
-    } finally {
-      adapter.startSession = originalStartSession;
-      adapter.stopSession = originalStopSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("rolls back started remote session when workspace becomes stale after observer start", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-    let stopCalls = 0;
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => {
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-    adapter.stopSession = async () => {
-      stopCalls += 1;
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef,
-      observeAgentSession: async () => {
-        currentWorkspaceRepoPathRef.current = "/tmp/other";
-      },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await expect(
-        start({
-          taskId: "task-1",
-          role: "build",
-          startMode: "fresh",
-          selectedModel: BUILD_SELECTION,
-        }),
-      ).rejects.toThrow("Workspace changed while starting session.");
-      expect(stopCalls).toBe(1);
-    } finally {
-      adapter.startSession = originalStartSession;
-      adapter.stopSession = originalStopSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
-  test("surfaces stale-start cleanup failures instead of masking them", async () => {
-    const currentWorkspaceRepoPathRef = { current: "/tmp/repo" as string | null };
-
-    const adapter = new OpencodeSdkAdapter();
-    const originalStartSession = adapter.startSession;
-    const originalStopSession = adapter.stopSession;
-    adapter.startSession = async (input) => {
-      currentWorkspaceRepoPathRef.current = "/tmp/other";
-      return {
-        runtimeKind: "opencode",
-        workingDirectory: input.workingDirectory,
-        externalSessionId: "external-created",
-        startedAt: "2026-02-22T08:00:10.000Z",
-        role: "build",
-        status: "idle",
-      };
-    };
-    adapter.stopSession = async () => {
-      throw new Error("stop boom");
-    };
-
-    const originalAgentSessionsList = host.agentSessionsList;
-    host.agentSessionsList = async () => [];
-
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
-      adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
-      taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef,
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
-    });
-
-    try {
-      await withCapturedConsole("error", async (calls) => {
-        await expect(
-          start({
-            taskId: "task-1",
-            role: "build",
-            startMode: "fresh",
-            selectedModel: BUILD_SELECTION,
-          }),
-        ).rejects.toThrow(
-          "Workspace changed while starting session. Failed to stop stale started session 'external-created': stop boom",
-        );
-        expect(calls).toHaveLength(1);
-        expect(String(calls[0]?.[1] ?? "")).toBe("start-session-stop-on-stale-after-start");
-      });
-    } finally {
-      adapter.startSession = originalStartSession;
-      adapter.stopSession = originalStopSession;
-      host.agentSessionsList = originalAgentSessionsList;
-    }
-  });
-
   test("creates a fresh session without sending a kickoff", async () => {
     let listenCalls = 0;
     let persistCalls = 0;
     let kickoffCalls = 0;
     let refreshCalls = 0;
     let startCalls = 0;
-
-    let sessionsState: AgentSessionCollection = emptyAgentSessionCollection();
-    const setSessionCollection = (updater: AgentSessionCollectionUpdater) => {
-      sessionsState = typeof updater === "function" ? updater(sessionsState) : updater;
-    };
 
     const adapter = new OpencodeSdkAdapter();
     const originalStartSession = adapter.startSession;
@@ -2975,27 +667,12 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const sessionsRef = { current: emptyAgentSessionCollection() };
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { sessionsRef, start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection,
-      sessionsRef,
       taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
       observeAgentSession: async () => {
         listenCalls += 1;
       },
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
       refreshTaskData: async () => {
         refreshCalls += 1;
       },
@@ -3022,8 +699,8 @@ describe("agent-orchestrator/handlers/start-session", () => {
       expect(persistCalls).toBe(1);
       expect(kickoffCalls).toBe(0);
       expect(refreshCalls).toBe(0);
-      expect(getSession(sessionsState, "external-created")).toBeDefined();
-      const createdSession = getSession(sessionsState, "external-created");
+      expect(getSession(sessionsRef.current, "external-created")).toBeDefined();
+      const createdSession = getSession(sessionsRef.current, "external-created");
       expect(createdSession).toBeDefined();
       const createdHeaderMessage = createdSession ? sessionMessageAt(createdSession, 0) : undefined;
       expect(createdHeaderMessage).toEqual({
@@ -3051,15 +728,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
       ensureRuntime: async () => {
         runtimeCalls += 1;
         return {
@@ -3071,14 +742,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
       loadTaskDocuments: async () => {
         throw new Error("prompt load failed");
       },
-      loadRepoDefaultModel: async () => null,
       loadRepoPromptOverrides: async () => {
         throw new Error("prompt override load failed");
       },
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {
@@ -3120,15 +786,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
         return { ...BUILD_SELECTION, runtimeKind } as unknown as AgentModelSelection;
       })();
 
-      const start = createStartAgentSessionWithFlatDeps({
-        activeRepo: "/tmp/repo",
+      const { start } = createStartSessionTestHarness({
         adapter,
-        setSessionCollection: () => {},
-        sessionsRef: createSessionsRef(),
         taskRef: { current: [taskFixture] },
-        repoEpochRef: { current: 1 },
-        currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-        observeAgentSession: async () => {},
         resolveTaskWorktree: async () => ({
           workingDirectory: "/tmp/repo/worktree",
           source: "active_build_run",
@@ -3141,15 +801,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
             workingDirectory: "/tmp/repo/worktree",
           };
         },
-        loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-        loadRepoDefaultModel: async () => null,
-        loadRepoPromptOverrides: async () => ({}),
-        loadAgentSessions: async () => {},
-        refreshTaskData: async () => {},
         persistSessionRecord: async () => {
           persistCalls += 1;
         },
-        sendAgentMessage: async () => {},
       });
 
       try {
@@ -3201,27 +855,9 @@ describe("agent-orchestrator/handlers/start-session", () => {
     const originalAgentSessionsList = host.agentSessionsList;
     host.agentSessionsList = async () => [];
 
-    const start = createStartAgentSessionWithFlatDeps({
-      activeRepo: "/tmp/repo",
+    const { start } = createStartSessionTestHarness({
       adapter,
-      setSessionCollection: () => {},
-      sessionsRef: createSessionsRef(),
       taskRef: { current: [taskFixture] },
-      repoEpochRef: { current: 1 },
-      currentWorkspaceRepoPathRef: { current: "/tmp/repo" },
-      observeAgentSession: async () => {},
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-      }),
-      loadTaskDocuments: async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
-      loadRepoDefaultModel: async () => null,
-      loadRepoPromptOverrides: async () => ({}),
-      loadAgentSessions: async () => {},
-      refreshTaskData: async () => {},
-      persistSessionRecord: async () => {},
-      sendAgentMessage: async () => {},
     });
 
     try {

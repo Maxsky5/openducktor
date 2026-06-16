@@ -159,7 +159,7 @@ A runtime conversation bound to a **Repository** and run by a **Runtime Instance
 _Avoid_: runtime, chat, thread
 
 **Task-bound Session**:
-An **Agent Session** attached to exactly one **Task** and, when it participates in the **Task Workflow**, one **Workflow Role**. Current **Spec Agent**, **Planner Agent**, **Builder Agent**, and **QA Agent** sessions are **Task-bound Sessions**.
+An **Agent Session** that belongs to exactly one **Task** and, when it participates in the **Task Workflow**, one **Workflow Role**. Current **Spec Agent**, **Planner Agent**, **Builder Agent**, and **QA Agent** sessions are **Task-bound Sessions**.
 _Avoid_: task session, workflow run
 
 **Repository Session**:
@@ -257,7 +257,7 @@ An **Idle Session** whose last interaction failed. An **Errored Session** is ses
 _Avoid_: Blocked, failed Task, QA Rejection
 
 **Task Session History**:
-The history of **Agent Sessions** attached to a specific **Task**, used to inspect or resume prior task-bound work. **Task Session History** is not the same thing as the **Transcript**.
+The history of **Agent Sessions** that belong to a specific **Task**, used to inspect or resume prior task-bound work. **Task Session History** is not the same thing as the **Transcript**.
 _Avoid_: Transcript, runtime history, browser history
 
 **Task Session Records Query**:
@@ -553,16 +553,17 @@ _Avoid_: tool entry
 ## Flagged Ambiguities
 
 **Session vs Runtime Instance**:
-Use **Agent Session** for a runtime conversation. Use **Task-bound Session** when the session is attached to one **Task**, and **Repository Session** when it is scoped to the **Repository**. Use **Runtime Instance** for the live local runtime process that can run sessions.
+Use **Agent Session** for a runtime conversation. Use **Task-bound Session** when the session belongs to one **Task**, and **Repository Session** when it is scoped to the **Repository**. Use **Runtime Instance** for the live local runtime process that can run sessions.
 
 **Agent Session vs Thread**:
 Use **Agent Session** in OpenDucktor product language. **Thread** is runtime/provider-specific language and should appear only when discussing a runtime-native conversation or history object.
 
 **Transcript vs Task Session History**:
-Use **Transcript** for the ordered messages and events of one **Agent Session**. Use **Task Session History** for the history of **Agent Sessions** attached to a specific **Task**.
+Use **Transcript** for the ordered messages and events of one **Agent Session**. Use **Task Session History** for the history of **Agent Sessions** that belong to a specific **Task**.
 
 **Repo Session Read Model vs Session History Load**:
 Use **Repo Session Read Model** for the startup session list built from persisted records plus runtime snapshots. Use **Session History Load** for loading the selected session's runtime-owned transcript and session details.
+Expose Repo Session Read Model loading as one load state, not as separate loading and error facts; selected-session lifecycle owns how that state is rendered.
 
 **Session Runtime Snapshot vs Session Status**:
 Use **Session Runtime Snapshot** for the startup runtime signal. Use **Session Status** for OpenDucktor's interaction classification, such as **Running Session**, **Idle Session**, **Stopped Session**, or **Errored Session**.

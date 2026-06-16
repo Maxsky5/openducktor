@@ -1,32 +1,22 @@
 import type { AgentRole } from "@openducktor/core";
 import { isReadOnlyAgentRole } from "@openducktor/core";
 import { errorMessage } from "@/lib/errors";
-import type {
-  AgentApprovalRequest,
-  AgentSessionIdentity,
-  AgentSessionState,
-} from "@/types/agent-orchestrator";
-import {
-  appendSessionMessage,
-  findLastSessionMessageByRole,
-  upsertSessionMessage,
-} from "../support/messages";
+import type { AgentApprovalRequest, AgentSessionIdentity } from "@/types/agent-orchestrator";
+import { appendSessionMessage } from "../support/messages";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
-import { formatSubagentContent } from "../support/subagent-messages";
+import { readSessionInEventRuntime } from "./session-event-sessions";
 import type { SessionEvent, SessionLifecycleEventContext } from "./session-event-types";
 import { flushDraftBuffers } from "./session-helpers";
+import {
+  resolvePendingInputRoute,
+  resolveResolvedPendingInputSession,
+} from "./session-pending-input-routing";
+import { patchParentSubagentSessionLink } from "./session-subagent-links";
 
 type ApprovalRequiredEvent = Extract<SessionEvent, { type: "approval_required" }>;
 type ApprovalResolvedEvent = Extract<SessionEvent, { type: "approval_resolved" }>;
 type QuestionRequiredEvent = Extract<SessionEvent, { type: "question_required" }>;
 type QuestionResolvedEvent = Extract<SessionEvent, { type: "question_resolved" }>;
-type PendingInputRequiredEvent = ApprovalRequiredEvent | QuestionRequiredEvent;
-type PendingInputResolvedEvent = ApprovalResolvedEvent | QuestionResolvedEvent;
-type PendingInputRoute = {
-  shouldPatchParentLink: boolean;
-  pendingSession: AgentSessionIdentity | null;
-  approvalReplySession: AgentSessionIdentity | null;
-};
 
 const toPendingApproval = (event: ApprovalRequiredEvent): AgentApprovalRequest => {
   const {
@@ -56,109 +46,18 @@ const removePendingInput = <Entry extends { requestId: string }>(
   requestId: string,
 ): Entry[] => entries.filter((entry) => entry.requestId !== requestId);
 
-const normalizeSessionId = (externalSessionId: string | undefined): string | null => {
-  const trimmed = externalSessionId?.trim();
-  return trimmed ? trimmed : null;
-};
-
-const resolveLoadedSessionInEventRuntime = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  externalSessionId: string,
-): AgentSessionState | null =>
-  context.store.readSession({
-    externalSessionId,
-    runtimeKind: context.store.sessionIdentity.runtimeKind,
-    workingDirectory: context.store.sessionIdentity.workingDirectory,
-  });
-
 const resolvePermissionPolicyRole = (
   context: Pick<SessionLifecycleEventContext, "store">,
   event: ApprovalRequiredEvent,
 ): AgentRole | undefined => {
   if (event.parentExternalSessionId) {
-    const parentRole = resolveLoadedSessionInEventRuntime(
-      context,
-      event.parentExternalSessionId,
-    )?.role;
+    const parentRole = readSessionInEventRuntime(context, event.parentExternalSessionId)?.role;
     if (parentRole) {
       return parentRole;
     }
   }
 
   return context.store.readSession(context.store.sessionIdentity)?.role ?? undefined;
-};
-
-const resolveSubagentMessageForSessionLink = (
-  current: AgentSessionState,
-  event: PendingInputRequiredEvent,
-) => {
-  if (event.subagentCorrelationKey) {
-    return findLastSessionMessageByRole(
-      current,
-      "system",
-      (message) =>
-        message.meta?.kind === "subagent" &&
-        message.meta.correlationKey === event.subagentCorrelationKey,
-    );
-  }
-
-  return undefined;
-};
-
-const patchParentSubagentSessionLink = (
-  context: SessionLifecycleEventContext,
-  event: PendingInputRequiredEvent,
-): void => {
-  if (!event.parentExternalSessionId) {
-    return;
-  }
-  const childExternalSessionId = event.childExternalSessionId?.trim();
-  if (!childExternalSessionId) {
-    return;
-  }
-  const parentSession = resolveLoadedSessionInEventRuntime(context, event.parentExternalSessionId);
-  if (!parentSession) {
-    return;
-  }
-
-  context.store.updateSession(
-    parentSession,
-    (current) => {
-      const subagentMessage = resolveSubagentMessageForSessionLink(current, event);
-      if (subagentMessage?.meta?.kind !== "subagent") {
-        return current;
-      }
-      if (subagentMessage.meta.externalSessionId === childExternalSessionId) {
-        return current;
-      }
-
-      const nextMeta = {
-        ...subagentMessage.meta,
-        externalSessionId: childExternalSessionId,
-      };
-      return {
-        ...current,
-        messages: upsertSessionMessage(current, {
-          ...subagentMessage,
-          content: formatSubagentContent(nextMeta),
-          meta: nextMeta,
-        }),
-      };
-    },
-    { persist: false },
-  );
-};
-
-const isLinkedChildObservedByParent = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  event: PendingInputRequiredEvent,
-): boolean => {
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  return Boolean(
-    childExternalSessionId &&
-      event.parentExternalSessionId === context.store.externalSessionId &&
-      childExternalSessionId !== context.store.externalSessionId,
-  );
 };
 
 const recordSessionPendingApproval = (
@@ -207,65 +106,10 @@ const shouldAutoRejectApproval = (
   }
 
   const session = context.store.readSession(context.store.sessionIdentity);
-  if (!session?.runtimeKind || !context.approvals.resolveRuntimeDefinition) {
+  if (!session) {
     return false;
   }
-  const runtimeDefinition = context.approvals.resolveRuntimeDefinition(session.runtimeKind);
-  return runtimeDefinition?.capabilities.approvals.readOnlyAutoRejectSafe === true;
-};
-
-const isLinkedChildOwnedByActiveObserver = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  event: PendingInputRequiredEvent,
-): boolean => {
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  if (!childExternalSessionId || !context.store.hasSessionObserver) {
-    return false;
-  }
-
-  const childSession = resolveLoadedSessionInEventRuntime(context, childExternalSessionId);
-  return childSession ? context.store.hasSessionObserver(childSession) : false;
-};
-
-const resolvePendingInputRoute = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  event: PendingInputRequiredEvent,
-): PendingInputRoute => {
-  const childExternalSessionId = normalizeSessionId(event.childExternalSessionId);
-  const shouldPatchParentLink = Boolean(event.parentExternalSessionId && childExternalSessionId);
-
-  if (!isLinkedChildObservedByParent(context, event)) {
-    return {
-      shouldPatchParentLink,
-      pendingSession: context.store.sessionIdentity,
-      approvalReplySession: context.store.sessionIdentity,
-    };
-  }
-
-  if (isLinkedChildOwnedByActiveObserver(context, event)) {
-    return {
-      shouldPatchParentLink,
-      pendingSession: null,
-      approvalReplySession: null,
-    };
-  }
-
-  return {
-    shouldPatchParentLink,
-    pendingSession: childExternalSessionId
-      ? resolveLoadedSessionInEventRuntime(context, childExternalSessionId)
-      : null,
-    approvalReplySession: context.store.sessionIdentity,
-  };
-};
-
-const resolveResolvedPendingInputSession = (
-  context: Pick<SessionLifecycleEventContext, "store">,
-  event: PendingInputResolvedEvent,
-): AgentSessionState | null => {
-  const targetSessionId =
-    normalizeSessionId(event.childExternalSessionId) ?? normalizeSessionId(event.externalSessionId);
-  return targetSessionId ? resolveLoadedSessionInEventRuntime(context, targetSessionId) : null;
+  return context.approvals.canAutoRejectReadOnlyApproval(session.runtimeKind);
 };
 
 const autoRejectMutatingApproval = (

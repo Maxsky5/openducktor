@@ -1,5 +1,5 @@
 import {
-  type AgentSessionViewLifecycle,
+  type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 
@@ -14,7 +14,7 @@ type WorktreeRecoverySelection = {
     status: string;
     workingDirectory: string | null;
   } | null;
-  viewSessionLifecycle: AgentSessionViewLifecycle;
+  viewTranscriptState: AgentSessionTranscriptState;
 };
 
 type BuildAgentStudioWorktreeRecoveryKeyArgs = {
@@ -36,6 +36,6 @@ export const buildAgentStudioWorktreeRecoveryKey = ({
     selection.viewActiveSession?.externalSessionId ?? "",
     selection.viewActiveSession?.status ?? "",
     selection.viewActiveSession?.workingDirectory ?? "",
-    isAgentSessionTranscriptLoading(selection.viewSessionLifecycle.transcriptState) ? "1" : "0",
+    isAgentSessionTranscriptLoading(selection.viewTranscriptState) ? "1" : "0",
     isForegroundLoadingTasks ? "1" : "0",
   ].join(":");

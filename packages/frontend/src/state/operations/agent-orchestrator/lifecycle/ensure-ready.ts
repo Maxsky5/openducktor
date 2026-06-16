@@ -1,7 +1,6 @@
 import type { RepoPromptOverrides, TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort, AgentSessionRef } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { requireActiveRepo } from "../../tasks/task-operations-model";
 import type { EnsureRuntime } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
@@ -17,7 +16,8 @@ import {
 } from "./session-runtime-snapshot";
 
 type EnsureSessionReadyDependencies = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
+  workspaceId: string | null;
   adapter: AgentEnginePort;
   repoEpochRef: { current: number };
   currentWorkspaceRepoPathRef: { current: string | null };
@@ -38,7 +38,8 @@ const STALE_PREPARE_ERROR = "Workspace changed while preparing session.";
 const PENDING_INPUT_NOT_READY_ERROR = "Session is waiting for pending runtime input.";
 
 export const createEnsureSessionReady = ({
-  activeWorkspace,
+  workspaceRepoPath,
+  workspaceId,
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
@@ -51,8 +52,7 @@ export const createEnsureSessionReady = ({
   loadRepoPromptOverrides,
 }: EnsureSessionReadyDependencies) => {
   return async (sessionIdentity: AgentSessionIdentity): Promise<AgentSessionIdentity> => {
-    const repoPath = requireActiveRepo(activeWorkspace?.repoPath ?? null);
-    const workspaceId = activeWorkspace?.workspaceId;
+    const repoPath = requireActiveRepo(workspaceRepoPath);
     const externalSessionId = sessionIdentity.externalSessionId;
     if (!workspaceId) {
       throw new Error("Active workspace is required.");

@@ -1,8 +1,150 @@
+import { OpencodeSdkAdapter } from "@openducktor/adapters-opencode-sdk";
+import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentModelSelection } from "@openducktor/core";
 import { createSessionStartGate } from "@/features/session-start/session-start-gate";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
-import { type AgentSessionCollection, getAgentSession } from "@/state/agent-session-collection";
+import { appQueryClient } from "@/lib/query-client";
+import {
+  type AgentSessionCollection,
+  type AgentSessionCollectionUpdater,
+  createAgentSessionCollection as createStrictAgentSessionCollection,
+  emptyAgentSessionCollection,
+  getAgentSession,
+  listAgentSessions,
+} from "@/state/agent-session-collection";
+import { agentSessionQueryKeys } from "@/state/queries/agent-sessions";
+import type {
+  AgentChatMessage,
+  AgentSessionIdentity,
+  AgentSessionState as BaseAgentSessionState,
+  SessionMessagesState,
+} from "@/types/agent-orchestrator";
 import type { RuntimeInfo } from "../runtime/runtime";
-import type { StartSessionDependencies } from "./start-session";
+import { createSessionMessagesState } from "../support/messages";
+import { createTaskCardFixture } from "../test-utils";
+import { createStartAgentSession, type StartSessionDependencies } from "./start-session";
+
+type AgentSessionState = BaseAgentSessionState & { runId?: string | null };
+export type TestAgentSessionState = Omit<AgentSessionState, "messages"> & {
+  messages: AgentChatMessage[] | SessionMessagesState;
+};
+
+const toAgentSessionStateFixture = (session: TestAgentSessionState): AgentSessionState => ({
+  ...session,
+  messages: Array.isArray(session.messages)
+    ? createSessionMessagesState(session.externalSessionId, session.messages)
+    : session.messages,
+});
+
+export const createAgentSessionCollection = (sessions: Iterable<TestAgentSessionState>) =>
+  createStrictAgentSessionCollection(Array.from(sessions, toAgentSessionStateFixture));
+
+export const getSession = (
+  sessionCollection: AgentSessionCollection,
+  externalSessionId: string,
+): AgentSessionState | undefined =>
+  listAgentSessions(sessionCollection).find(
+    (session): session is AgentSessionState => session.externalSessionId === externalSessionId,
+  );
+
+export const createSessionsRef = (sessions: TestAgentSessionState[] = []) => ({
+  current: createAgentSessionCollection(sessions),
+});
+
+export const persistedSessionRecord = (
+  input: {
+    externalSessionId: string;
+    role: AgentSessionRecord["role"];
+    startedAt: string;
+    workingDirectory: string;
+    runtimeKind?: AgentSessionRecord["runtimeKind"];
+    selectedModel?: AgentSessionRecord["selectedModel"];
+  } & Record<string, unknown>,
+): AgentSessionRecord => ({
+  runtimeKind: input.runtimeKind ?? "opencode",
+  externalSessionId: input.externalSessionId,
+  role: input.role,
+  startedAt: input.startedAt,
+  workingDirectory: input.workingDirectory,
+  selectedModel: input.selectedModel ?? null,
+});
+
+export const continuationTarget = (
+  workingDirectory: string,
+  source: "active_build_run" | "builder_session" = "active_build_run",
+) => ({
+  workingDirectory,
+  source,
+});
+
+export const setPersistedSessionListFixture = (
+  repoPath: string,
+  taskId: string,
+  sessions: AgentSessionRecord[],
+): void => {
+  appQueryClient.setQueryData(agentSessionQueryKeys.list(repoPath, taskId), sessions);
+};
+
+export const taskFixture = createTaskCardFixture({
+  title: "Implement feature",
+  description: "desc",
+  status: "in_progress",
+  priority: 1,
+});
+
+export const BUILD_SELECTION: AgentModelSelection = {
+  runtimeKind: "opencode",
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "build",
+};
+
+export const PLANNER_SELECTION: AgentModelSelection = {
+  runtimeKind: "opencode",
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "planner",
+};
+
+export const QA_SELECTION: AgentModelSelection = {
+  runtimeKind: "opencode",
+  providerId: "openai",
+  modelId: "gpt-5",
+  variant: "default",
+  profileId: "qa",
+};
+
+export const sessionIdentity = (
+  externalSessionId: string,
+  workingDirectory = "/tmp/repo",
+): AgentSessionIdentity => ({
+  externalSessionId,
+  runtimeKind: "opencode",
+  workingDirectory,
+});
+
+export const sessionFixture = (
+  overrides: Partial<TestAgentSessionState> & { externalSessionId: string },
+): TestAgentSessionState => ({
+  runtimeKind: "opencode",
+  taskId: "task-1",
+  role: "build",
+  status: "idle",
+  startedAt: "2026-02-22T08:10:00.000Z",
+  workingDirectory: "/tmp/repo/worktree",
+  historyLoadState: "not_requested",
+  messages: [],
+  draftAssistantText: "",
+  draftAssistantMessageId: null,
+  draftReasoningText: "",
+  draftReasoningMessageId: null,
+  pendingApprovals: [],
+  pendingQuestions: [],
+  selectedModel: null,
+  ...overrides,
+});
 
 const ensureRuntimeWithKind = async (
   ...args: Parameters<StartSessionDependencies["runtime"]["ensureRuntime"]>
@@ -27,10 +169,10 @@ const withRuntimeKind = async (
 
 export type FlatStartSessionDependencies = Omit<
   StartSessionDependencies["repo"],
-  "activeWorkspace"
+  "workspaceRepoPath" | "workspaceId"
 > & {
   activeRepo?: string | null;
-  activeWorkspaceId?: string | null;
+  workspaceId?: string | null;
   loadRepoDefaultModel?: unknown;
   sessionsRef: { current: AgentSessionCollection };
 } & Omit<
@@ -53,14 +195,8 @@ export const toStartSessionDependencies = (
 ): StartSessionDependencies => {
   return {
     repo: {
-      activeWorkspace:
-        deps.activeRepo == null
-          ? null
-          : {
-              repoPath: deps.activeRepo,
-              workspaceId: deps.activeWorkspaceId ?? "workspace-1",
-              workspaceName: "Active Workspace",
-            },
+      workspaceRepoPath: deps.activeRepo ?? null,
+      workspaceId: deps.activeRepo == null ? null : (deps.workspaceId ?? "workspace-1"),
       repoEpochRef: deps.repoEpochRef,
       currentWorkspaceRepoPathRef: deps.currentWorkspaceRepoPathRef,
     },
@@ -95,5 +231,78 @@ export const toStartSessionDependencies = (
     model: {
       loadRepoPromptOverrides: deps.loadRepoPromptOverrides,
     },
+  };
+};
+
+type StartSessionHarnessOptions = Omit<
+  Partial<FlatStartSessionDependencies>,
+  "setSessionCollection"
+> & {
+  sessionsRef?: { current: AgentSessionCollection };
+  setSessionCollection?: StartSessionDependencies["session"]["setSessionCollection"];
+};
+
+export const createStartSessionTestHarness = (options: StartSessionHarnessOptions = {}) => {
+  const {
+    activeRepo = "/tmp/repo",
+    workspaceId = "workspace-1",
+    adapter = new OpencodeSdkAdapter(),
+    sessionsRef = { current: emptyAgentSessionCollection() },
+    taskRef = { current: [] },
+    repoEpochRef = { current: 1 },
+    currentWorkspaceRepoPathRef = { current: "/tmp/repo" },
+    observeAgentSession = async () => {},
+    loadAgentSessions = async () => {},
+    loadAgentSessionHistory = async () => undefined,
+    persistSessionRecord = async () => {},
+    resolveTaskWorktree = async () => ({
+      workingDirectory: "/tmp/repo/worktree",
+      source: "active_build_run" as const,
+    }),
+    ensureRuntime = ensureRuntimeWithKind,
+    loadTaskDocuments = async () => ({ specMarkdown: "", planMarkdown: "", qaMarkdown: "" }),
+    refreshTaskData = async () => {},
+    sendAgentMessage = async () => {},
+    loadRepoPromptOverrides = async () => ({}),
+    sessionStartGateRef,
+    readSessionSnapshot,
+  } = options;
+  const setSessionCollection =
+    options.setSessionCollection ??
+    ((updater: AgentSessionCollectionUpdater) => {
+      sessionsRef.current = typeof updater === "function" ? updater(sessionsRef.current) : updater;
+    });
+
+  const start = createStartAgentSession(
+    toStartSessionDependencies({
+      activeRepo,
+      workspaceId,
+      adapter,
+      sessionsRef,
+      setSessionCollection,
+      taskRef,
+      repoEpochRef,
+      currentWorkspaceRepoPathRef,
+      observeAgentSession,
+      loadAgentSessions,
+      loadAgentSessionHistory,
+      persistSessionRecord,
+      resolveTaskWorktree,
+      ensureRuntime,
+      loadTaskDocuments,
+      refreshTaskData,
+      sendAgentMessage,
+      loadRepoPromptOverrides,
+      ...(sessionStartGateRef ? { sessionStartGateRef } : {}),
+      ...(readSessionSnapshot ? { readSessionSnapshot } : {}),
+    }),
+  );
+
+  return {
+    adapter,
+    currentWorkspaceRepoPathRef,
+    repoEpochRef,
+    sessionsRef,
+    start,
   };
 };

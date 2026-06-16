@@ -3,7 +3,7 @@ import type { AgentRole } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTaskDeleteImpact } from "@/components/features/task-details/use-task-delete-impact";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
+import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import { errorMessage } from "@/lib/errors";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { KanbanPageModels } from "./kanban-page-model-types";
@@ -22,9 +22,13 @@ type UseTaskResetFlowArgs = {
   closeTaskDetails: () => void;
 };
 
-const isActiveImplementationSession = (session: AgentSessionSummary): boolean =>
-  (session.role === "build" || session.role === "qa") &&
-  isAgentSessionWorkingStatus(session.status);
+const isActiveImplementationSession = (session: AgentSessionSummary): boolean => {
+  if (session.role !== "build" && session.role !== "qa") {
+    return false;
+  }
+
+  return isAgentSessionActivityActive(session.activityState);
+};
 
 const deriveRollbackLabel = (task: TaskCard): string => {
   if (task.documentSummary.plan.has) {
@@ -84,7 +88,7 @@ export function useTaskResetFlow({
       );
       if (hasActiveSession) {
         toast.error("Stop active work first", {
-          description: `Builder or QA is still running for ${nextTaskId}. Stop the active session before resetting the implementation.`,
+          description: `Builder or QA is still active for ${nextTaskId}. Stop the active session before resetting the implementation.`,
         });
         return false;
       }

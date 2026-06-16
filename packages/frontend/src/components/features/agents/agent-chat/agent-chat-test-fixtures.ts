@@ -5,6 +5,7 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
@@ -16,12 +17,9 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type {
-  AgentChatThreadSession,
-  AgentChatThreadSessionLifecycle,
-  AgentRoleOption,
-} from "./agent-chat.types";
+import type { AgentChatThreadSession, AgentRoleOption } from "./agent-chat.types";
 import { createTextSegment } from "./agent-chat-composer-draft";
+import { toAgentChatThreadSession } from "./agent-chat-thread-session";
 
 const baseTask: TaskCard = {
   id: "task-1",
@@ -122,20 +120,18 @@ export const buildSession = (
   const sourceMessages = overrideMessages ?? baseSession.messages;
   const messages = createSessionMessagesFixture(session.externalSessionId, sourceMessages);
 
-  return {
-    ...session,
-    messages,
+  return toAgentChatThreadSession(
+    {
+      ...session,
+      messages,
+    },
     todos,
-  };
+  );
 };
 
-export const buildThreadLifecycle = (
-  overrides: Partial<AgentChatThreadSessionLifecycle> = {},
-): AgentChatThreadSessionLifecycle => {
-  return {
-    transcriptState: overrides.transcriptState ?? { kind: "visible" },
-  };
-};
+export const buildThreadTranscriptState = (
+  transcriptState: AgentSessionTranscriptState = { kind: "visible" },
+): AgentSessionTranscriptState => transcriptState;
 
 export const buildMessage = (
   role: AgentChatMessage["role"],

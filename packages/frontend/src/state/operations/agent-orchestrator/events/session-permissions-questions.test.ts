@@ -8,7 +8,6 @@ import {
   findSession,
   getSessionMessages,
   listenToAgentSessionEvents,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEvent,
   type SessionEventAdapter,
   type SessionUpdateFn,
@@ -44,7 +43,6 @@ const startTestSessionObserver = async (input: {
     resolveTurnDurationMs: () => undefined,
     clearTurnDuration: () => {},
     refreshTaskData: async () => {},
-    resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
   });
 
   const handleEvent = handlers[0];
@@ -96,7 +94,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -182,7 +179,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -366,7 +362,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -485,7 +480,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -627,7 +621,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -715,7 +708,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -797,7 +789,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -880,7 +871,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -942,7 +932,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1014,7 +1003,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -1112,7 +1100,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleParentEvent = handlers[0];
@@ -1203,7 +1190,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
     await listenToAgentSessionEvents({
       adapter,
@@ -1215,7 +1201,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const [handleParentEvent, handleChildEvent] = handlers;
@@ -1308,7 +1293,6 @@ describe("agent-orchestrator session permissions and questions", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

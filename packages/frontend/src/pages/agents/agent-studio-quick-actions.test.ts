@@ -1,16 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskAction } from "@openducktor/contracts";
 import { buildTask } from "@/components/features/agents/agent-chat/agent-chat-test-fixtures";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   buildAgentStudioQuickActions,
   selectPrimaryAgentStudioQuickAction,
 } from "./agent-studio-quick-actions";
-import { createAgentSessionFixture } from "./agent-studio-test-utils";
+import { createAgentSessionSummaryFixture } from "./agent-studio-test-utils";
 import { buildRoleEnabledMapForTask } from "./agents-page-session-tabs";
 
-const buildSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
-  createAgentSessionFixture(overrides);
+const buildSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+): AgentSessionSummary => createAgentSessionSummaryFixture(overrides);
 
 const buildPullRequest = () => ({
   providerId: "github",

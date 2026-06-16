@@ -8,7 +8,7 @@ type UseAgentChatWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
   activeSessionKey: string | null;
-  isSessionViewLoading: boolean;
+  shouldResetForTranscriptLoad: boolean;
   isSessionWorking?: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
@@ -30,7 +30,7 @@ export function useAgentChatWindow({
   rows,
   turns,
   activeSessionKey,
-  isSessionViewLoading,
+  shouldResetForTranscriptLoad,
   isSessionWorking = false,
   messagesContainerRef,
   messagesContentRef,
@@ -40,7 +40,7 @@ export function useAgentChatWindow({
   const composerLayoutSyncSettleFrameRef = useRef<number | null>(null);
   const composerLayoutSyncTokenRef = useRef(0);
   const prevSessionKeyRef = useRef<string | null>(null);
-  const prevIsSessionViewLoadingRef = useRef(isSessionViewLoading);
+  const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
   const {
     isNearBottom,
     isNearTop,
@@ -64,7 +64,7 @@ export function useAgentChatWindow({
     revealAllHistory,
   } = useAgentChatHistoryWindow({
     rows,
-    isSessionViewLoading,
+    shouldResetForTranscriptLoad,
     activeSessionKey,
     messagesContainerRef,
     userScrolledRef,
@@ -96,14 +96,15 @@ export function useAgentChatWindow({
   }, [activeSessionKey, resetLatestTurnsAndPinBottom]);
 
   useLayoutEffect(() => {
-    const finishedLoading = prevIsSessionViewLoadingRef.current && !isSessionViewLoading;
-    prevIsSessionViewLoadingRef.current = isSessionViewLoading;
-    if (!finishedLoading) {
+    const finishedTranscriptLoad =
+      prevShouldResetForTranscriptLoadRef.current && !shouldResetForTranscriptLoad;
+    prevShouldResetForTranscriptLoadRef.current = shouldResetForTranscriptLoad;
+    if (!finishedTranscriptLoad) {
       return;
     }
 
     resetLatestTurnsAndPinBottom();
-  }, [isSessionViewLoading, resetLatestTurnsAndPinBottom]);
+  }, [resetLatestTurnsAndPinBottom, shouldResetForTranscriptLoad]);
 
   useEffect(() => {
     if (!syncBottomAfterComposerLayoutRef) {

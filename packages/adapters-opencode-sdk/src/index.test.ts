@@ -60,6 +60,7 @@ describe("OpencodeSdkAdapter index", () => {
     expect(createClientCalls).toEqual([
       {
         runtimeEndpoint: "http://127.0.0.1:12345",
+        runtimeId: "runtime-opencode-1",
         workingDirectory: "/repo",
       },
       {
@@ -67,6 +68,7 @@ describe("OpencodeSdkAdapter index", () => {
       },
       {
         runtimeEndpoint: "http://127.0.0.1:12345",
+        runtimeId: "runtime-opencode-1",
         workingDirectory: "/other",
       },
     ]);

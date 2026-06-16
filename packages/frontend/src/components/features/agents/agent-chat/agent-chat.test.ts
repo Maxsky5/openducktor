@@ -6,7 +6,7 @@ import { AgentChat, AgentChatSurface } from "./agent-chat";
 import {
   buildModelSelection,
   buildSession,
-  buildThreadLifecycle,
+  buildThreadTranscriptState,
   buildTodoItem,
 } from "./agent-chat-test-fixtures";
 
@@ -18,7 +18,7 @@ const buildModel = () => ({
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    sessionLifecycle: buildThreadLifecycle(),
+    transcriptState: buildThreadTranscriptState(),
     runtimeReadiness: {
       readinessState: "ready" as const,
       isReady: true,
@@ -27,7 +27,6 @@ const buildModel = () => ({
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },
-    isTranscriptPending: false,
     isInteractionEnabled: true,
     emptyState: {
       title: "Send a message to start a new session automatically.",

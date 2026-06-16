@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import {
@@ -37,13 +37,13 @@ const sessionIdentity = (
 
 describe("session-start-orchestration", () => {
   test("prefers the active reusable session and task defaults when building a modal request", () => {
-    const latestSession = createAgentSessionFixture({
+    const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
-    const activeSession = createAgentSessionFixture({
+    const activeSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
@@ -85,13 +85,13 @@ describe("session-start-orchestration", () => {
   });
 
   test("falls back to the latest reusable session when no active session matches", () => {
-    const latestSession = createAgentSessionFixture({
+    const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
-    const olderSession = createAgentSessionFixture({
+    const olderSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
@@ -126,7 +126,7 @@ describe("session-start-orchestration", () => {
       },
       selectedModel: BUILD_SELECTION,
       taskSessions: [
-        createAgentSessionFixture({
+        createAgentSessionSummaryFixture({
           externalSessionId: "spec-session-1",
           taskId: "TASK-1",
           role: "spec",
@@ -141,13 +141,13 @@ describe("session-start-orchestration", () => {
   });
 
   test("keeps an explicit initial source session override even when another active session matches", () => {
-    const latestSession = createAgentSessionFixture({
+    const latestSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-2",
       taskId: "TASK-1",
       role: "build",
       startedAt: "2026-03-20T12:00:00.000Z",
     });
-    const activeSession = createAgentSessionFixture({
+    const activeSession = createAgentSessionSummaryFixture({
       externalSessionId: "builder-session-1",
       taskId: "TASK-1",
       role: "build",
@@ -208,7 +208,7 @@ describe("session-start-orchestration", () => {
     const startAgentSession = mock(async () => sessionIdentity("builder-session-2"));
 
     const result = await executeSessionStartFromDecision({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       request: {
         taskId: "TASK-1",
@@ -253,7 +253,7 @@ describe("session-start-orchestration", () => {
     const sendAgentMessage = mock(async () => undefined);
 
     const result = await executeSessionStartFromDecision({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       request: {
         taskId: "TASK-1",
@@ -316,7 +316,7 @@ describe("session-start-orchestration", () => {
     const startAgentSession = mock(async () => sessionIdentity("builder-session-fork"));
 
     await executeSessionStartFromDecision({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       request: {
         taskId: "TASK-1",
@@ -359,7 +359,7 @@ describe("session-start-orchestration", () => {
     const onPostStartActionError = mock(() => {});
 
     const result = await executeSessionStartFromDecision({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       request: {
         taskId: "TASK-1",

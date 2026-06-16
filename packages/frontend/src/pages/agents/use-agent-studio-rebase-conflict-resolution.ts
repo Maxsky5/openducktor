@@ -14,7 +14,6 @@ import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agen
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
-import type { ActiveWorkspace } from "../../types/state-slices";
 import {
   resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
@@ -32,7 +31,7 @@ type AgentStudioRebaseConflictResolutionSelectionContext = {
 };
 
 type UseAgentStudioRebaseConflictResolutionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceId: string | null;
   selection: AgentStudioRebaseConflictResolutionSelectionContext;
   scheduleQueryUpdate: (updates: AgentStudioQueryUpdate) => void;
   startSessionRequest: (
@@ -54,7 +53,7 @@ type UseAgentStudioRebaseConflictResolutionResult = {
 };
 
 export function useAgentStudioRebaseConflictResolution({
-  activeWorkspace,
+  workspaceId,
   selection,
   scheduleQueryUpdate,
   startSessionRequest,
@@ -81,7 +80,7 @@ export function useAgentStudioRebaseConflictResolution({
   );
 
   const { handleResolveGitConflict } = useGitConflictResolution({
-    activeWorkspace,
+    workspaceId,
     startConflictResolutionSession,
     loadPromptOverrides,
   });

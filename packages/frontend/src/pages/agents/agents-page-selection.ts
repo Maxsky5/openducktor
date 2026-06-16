@@ -6,13 +6,13 @@ export {
 
 import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection, AgentRole } from "@openducktor/core";
+import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import {
   agentSessionIdentityKey,
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
 } from "@/lib/agent-session-identity";
 import { compareAgentSessionRecency } from "@/lib/agent-session-options";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { buildRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
@@ -109,14 +109,8 @@ export const resolveAgentStudioDefaultRoleForTask = (task: TaskCard | null): Age
   return null;
 };
 
-export type AgentStudioSessionSelectionCandidate = AgentSessionIdentity & {
-  role: AgentRole | null;
-  startedAt: string;
-  status?: AgentSessionSummary["status"];
-};
-
-type AgentStudioSessionSelectionInput<TSession extends AgentStudioSessionSelectionCandidate> = {
-  sessionsForTask: TSession[];
+type AgentStudioSessionSelectionInput = {
+  sessionsForTask: AgentSessionSummary[];
   sessionKey: string | null;
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
@@ -125,9 +119,15 @@ type AgentStudioSessionSelectionInput<TSession extends AgentStudioSessionSelecti
   keepExplicitRoleSessionless?: boolean;
 };
 
-export const resolveAgentStudioSessionSelectionFromCandidates = <
-  TSession extends AgentStudioSessionSelectionCandidate,
->({
+const isActiveSessionSelectionCandidate = (session: AgentSessionSummary): boolean => {
+  if (session.role === null) {
+    return false;
+  }
+
+  return isAgentSessionActivityActive(session.activityState);
+};
+
+export const resolveAgentStudioSessionSelection = ({
   sessionsForTask,
   sessionKey,
   hasExplicitRoleParam,
@@ -135,13 +135,13 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
   selectedTask,
   fallbackRole,
   keepExplicitRoleSessionless = false,
-}: AgentStudioSessionSelectionInput<TSession>): {
-  activeSession: TSession | null;
+}: AgentStudioSessionSelectionInput): {
+  activeSession: AgentSessionSummary | null;
   role: AgentRole;
 } => {
-  const runningSession =
-    sessionsForTask.reduce<TSession | null>((latest, session) => {
-      if (session.role === null || !isAgentSessionWorkingStatus(session.status ?? "idle")) {
+  const activeSession =
+    sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
+      if (!isActiveSessionSelectionCandidate(session)) {
         return latest;
       }
       if (!latest || compareAgentSessionRecency(session, latest) < 0) {
@@ -150,8 +150,8 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
       return latest;
     }, null) ?? null;
 
-  const latestSessionByRole = (role: AgentRole): TSession | null => {
-    return sessionsForTask.reduce<TSession | null>((latest, session) => {
+  const latestSessionByRole = (role: AgentRole): AgentSessionSummary | null => {
+    return sessionsForTask.reduce<AgentSessionSummary | null>((latest, session) => {
       if (session.role !== role) {
         return latest;
       }
@@ -162,7 +162,7 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
     }, null);
   };
 
-  const toSelection = (role: AgentRole, session: TSession | null) => {
+  const toSelection = (role: AgentRole, session: AgentSessionSummary | null) => {
     return {
       activeSession: session,
       role,
@@ -170,7 +170,7 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
   };
 
   if (sessionKey) {
-    const explicitSession = findAgentStudioSessionSelectionCandidate(sessionsForTask, sessionKey);
+    const explicitSession = findAgentStudioSessionSummaryByKey(sessionsForTask, sessionKey);
     if (explicitSession?.role) {
       return toSelection(explicitSession.role, explicitSession);
     }
@@ -184,8 +184,8 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
     return toSelection(roleFromQuery, latestSessionByRole(roleFromQuery));
   }
 
-  if (runningSession?.role) {
-    return toSelection(runningSession.role, runningSession);
+  if (activeSession?.role) {
+    return toSelection(activeSession.role, activeSession);
   }
 
   if (!selectedTask) {
@@ -193,17 +193,20 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
   }
 
   const defaultRole = resolveAgentStudioDefaultRoleForTask(selectedTask);
-  const mostRecentSession = sessionsForTask.reduce<TSession | null>((latest, session) => {
-    if (session.role === null) {
+  const mostRecentSession = sessionsForTask.reduce<AgentSessionSummary | null>(
+    (latest, session) => {
+      if (session.role === null) {
+        return latest;
+      }
+      if (!latest || compareAgentSessionRecency(session, latest) < 0) {
+        return session;
+      }
       return latest;
-    }
-    if (!latest || compareAgentSessionRecency(session, latest) < 0) {
-      return session;
-    }
-    return latest;
-  }, null);
+    },
+    null,
+  );
 
-  const withRoleFallback = (session: TSession | null) =>
+  const withRoleFallback = (session: AgentSessionSummary | null) =>
     toSelection(session?.role ?? defaultRole ?? fallbackRole, session);
 
   switch (selectedTask.status) {
@@ -226,12 +229,10 @@ export const resolveAgentStudioSessionSelectionFromCandidates = <
   }
 };
 
-export const findAgentStudioSessionSelectionCandidate = <
-  TSession extends AgentStudioSessionSelectionCandidate,
->(
-  sessions: TSession[],
+export const findAgentStudioSessionSummaryByKey = (
+  sessions: AgentSessionSummary[],
   sessionKey: string | null,
-): TSession | null => {
+): AgentSessionSummary | null => {
   if (!sessionKey) {
     return null;
   }
@@ -239,11 +240,6 @@ export const findAgentStudioSessionSelectionCandidate = <
   const matches = sessions.filter((entry) => agentSessionIdentityKey(entry) === sessionKey);
   return matches.length === 1 ? (matches[0] ?? null) : null;
 };
-
-export const resolveAgentStudioSessionSelection = (
-  input: AgentStudioSessionSelectionInput<AgentSessionSummary>,
-): { activeSession: AgentSessionSummary | null; role: AgentRole } =>
-  resolveAgentStudioSessionSelectionFromCandidates(input);
 
 export const groupSessionsByTaskId = (
   sessions: AgentSessionSummary[],
@@ -289,7 +285,7 @@ const resolveViewSessionKey = ({
   if (!sessionKey) {
     return null;
   }
-  const belongsToVisibleSession = findAgentStudioSessionSelectionCandidate(candidates, sessionKey);
+  const belongsToVisibleSession = findAgentStudioSessionSummaryByKey(candidates, sessionKey);
   return belongsToVisibleSession ? sessionKey : null;
 };
 
@@ -350,7 +346,7 @@ export const resolveAgentStudioViewSessionSelection = ({
     sessionKey,
     candidates: sessionSummaries,
   });
-  const selection = resolveAgentStudioSessionSelectionFromCandidates({
+  const selection = resolveAgentStudioSessionSelection({
     sessionsForTask: sessionSummaries,
     sessionKey: resolvedSessionKey,
     hasExplicitRoleParam,

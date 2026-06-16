@@ -13,8 +13,9 @@ import {
 } from "react";
 import { getAvailableRuntimeDefinitions } from "@/lib/agent-runtime";
 import { QueryProvider } from "@/lib/query-provider";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
-import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import {
   createAgentSessionFixture as createSharedAgentSessionFixture,
@@ -62,13 +63,9 @@ const PAGE_SESSION_DEFAULTS: PageAgentSessionOverrides = {
   workingDirectory: "/repo",
 };
 
-export const createSelectedSessionLifecycleFixture = (
-  overrides: Partial<AgentSessionViewLifecycle> = {},
-): AgentSessionViewLifecycle => ({
-  repoReadinessState: "ready",
-  transcriptState: { kind: "visible" },
-  ...overrides,
-});
+export const createSelectedSessionTranscriptStateFixture = (
+  transcriptState: AgentSessionTranscriptState = { kind: "visible" },
+): AgentSessionTranscriptState => transcriptState;
 
 const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => ({
   ...descriptor,
@@ -188,6 +185,9 @@ export const createTaskCardFixture = (overrides: Partial<TaskCard> = {}): TaskCa
 export const createAgentSessionFixture = (
   overrides: PageAgentSessionOverrides = {},
 ): AgentSessionState => createSharedAgentSessionFixture(PAGE_SESSION_DEFAULTS, overrides);
+
+export const createAgentSessionSummaryFixture = (overrides: PageAgentSessionOverrides = {}) =>
+  toAgentSessionSummary(createAgentSessionFixture(overrides));
 
 export const createHookHarness = <Props, State>(
   useHook: (props: Props) => State,

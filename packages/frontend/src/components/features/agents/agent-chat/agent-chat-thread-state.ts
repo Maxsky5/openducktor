@@ -1,74 +1,111 @@
-import type { AgentChatThreadModel } from "./agent-chat.types";
+import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
+import {
+  type AgentSessionTranscriptState,
+  isAgentSessionTranscriptLoading,
+  isAgentSessionTranscriptVisible,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentChatThreadModel, AgentChatThreadSession } from "./agent-chat.types";
 
-type BuildAgentChatThreadStateArgs = Pick<
+export type AgentChatTranscriptNotice = {
+  kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
+  severity: "loading" | "error";
+  title: string;
+  description: string;
+};
+
+export type AgentChatThreadProjection = {
+  threadSession: AgentChatThreadSession | null;
+  activeSessionKey: string | null;
+};
+
+export const deriveAgentChatThreadProjection = ({
+  session,
+  transcriptState,
+}: {
+  session: AgentChatThreadSession | null;
+  transcriptState: AgentSessionTranscriptState;
+}): AgentChatThreadProjection => {
+  const threadSession = isAgentSessionTranscriptVisible(transcriptState) ? session : null;
+
+  return {
+    threadSession,
+    activeSessionKey: threadSession ? agentSessionIdentityKey(threadSession) : null,
+  };
+};
+
+const deriveAgentChatTranscriptNotice = ({
+  transcriptState,
+  runtimeReadiness,
+}: Pick<
   AgentChatThreadModel,
-  "sessionLifecycle" | "runtimeReadiness"
-> & {
-  isTranscriptPending: boolean;
-  isTranscriptRowsMissing?: boolean;
+  "transcriptState" | "runtimeReadiness"
+>): AgentChatTranscriptNotice | null => {
+  if (
+    transcriptState.kind === "runtime_waiting" &&
+    runtimeReadiness.readinessState === "blocked" &&
+    runtimeReadiness.blockedReason
+  ) {
+    return {
+      kind: "runtime_blocked",
+      severity: "error",
+      title: "Runtime unavailable",
+      description: runtimeReadiness.blockedReason,
+    };
+  }
+
+  if (transcriptState.kind === "runtime_waiting") {
+    return {
+      kind: "runtime_waiting",
+      severity: "loading",
+      title: "Runtime is starting",
+      description: "Waiting for runtime and MCP health before loading this session.",
+    };
+  }
+
+  if (transcriptState.kind === "session_loading") {
+    return {
+      kind: "session_loading",
+      severity: "loading",
+      title: "Loading session",
+      description:
+        transcriptState.reason === "history"
+          ? "Loading the selected conversation."
+          : "Preparing the selected session view.",
+    };
+  }
+
+  if (transcriptState.kind === "failed") {
+    return {
+      kind: "session_failed",
+      severity: "error",
+      title: "Failed to load session",
+      description: "The selected conversation could not be loaded.",
+    };
+  }
+
+  return null;
+};
+
+type BuildAgentChatThreadStateArgs = {
+  transcriptState: AgentSessionTranscriptState;
+  runtimeReadiness: RepoRuntimeReadiness;
 };
 
 export type AgentChatThreadState = {
   shouldResetTranscriptWindow: boolean;
-  transcriptNotice: {
-    kind: "runtime_waiting" | "session_loading" | "session_failed" | "runtime_blocked";
-    title: string;
-    description: string;
-  } | null;
+  transcriptNotice: AgentChatTranscriptNotice | null;
 };
 
 export const getAgentChatThreadState = ({
-  sessionLifecycle,
+  transcriptState,
   runtimeReadiness,
-  isTranscriptPending,
-  isTranscriptRowsMissing = false,
 }: BuildAgentChatThreadStateArgs): AgentChatThreadState => {
-  const isRenderLocallyLoading = isTranscriptPending || isTranscriptRowsMissing;
-  const transcriptState = sessionLifecycle.transcriptState;
-  const shouldResetTranscriptWindow =
-    isRenderLocallyLoading || transcriptState.kind === "session_loading";
-  const transcriptNotice = (() => {
-    if (
-      transcriptState.kind === "runtime_waiting" &&
-      runtimeReadiness.readinessState === "blocked" &&
-      runtimeReadiness.blockedReason
-    ) {
-      return {
-        kind: "runtime_blocked" as const,
-        title: "Runtime unavailable",
-        description: runtimeReadiness.blockedReason,
-      };
-    }
-
-    if (transcriptState.kind === "runtime_waiting") {
-      return {
-        kind: "runtime_waiting" as const,
-        title: "Runtime is starting",
-        description: "Waiting for runtime and MCP health before loading this session.",
-      };
-    }
-
-    if (transcriptState.kind === "session_loading") {
-      return {
-        kind: "session_loading" as const,
-        title: "Loading session",
-        description:
-          transcriptState.reason === "history"
-            ? "Loading the selected conversation."
-            : "Preparing the selected session view.",
-      };
-    }
-
-    if (transcriptState.kind === "failed") {
-      return {
-        kind: "session_failed" as const,
-        title: "Failed to load session",
-        description: "The selected conversation could not be loaded.",
-      };
-    }
-
-    return null;
-  })();
+  const shouldResetTranscriptWindow = isAgentSessionTranscriptLoading(transcriptState);
+  const transcriptNotice = deriveAgentChatTranscriptNotice({
+    transcriptState,
+    runtimeReadiness,
+  });
 
   return {
     shouldResetTranscriptWindow,

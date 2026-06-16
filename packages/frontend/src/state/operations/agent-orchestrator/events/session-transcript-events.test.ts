@@ -9,7 +9,6 @@ import {
   getSession,
   getSessionMessages,
   listenToAgentSessionEvents,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEvent,
   type SessionEventAdapter,
   type SessionUpdateFn,
@@ -40,7 +39,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -92,7 +90,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -138,7 +135,6 @@ describe("agent-orchestrator session transcript events", () => {
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: async () => {},
-        resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
       });
 
       const handleEvent = handlers[0];
@@ -412,7 +408,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -545,7 +540,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -640,7 +634,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -718,7 +711,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -794,7 +786,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -862,7 +853,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -964,7 +954,6 @@ describe("agent-orchestrator session transcript events", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

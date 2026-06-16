@@ -5,7 +5,10 @@ import { useCallback, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { toast } from "sonner";
 import type { SessionStartModalModel } from "@/components/features/agents";
-import { toKanbanSessionPresentationState } from "@/components/features/kanban/kanban-task-activity";
+import {
+  isKanbanActiveTaskSession,
+  toKanbanSessionPresentationState,
+} from "@/components/features/kanban/kanban-task-activity";
 import type { SessionTargetOptions } from "@/components/features/kanban/session-target-resolution";
 import { resolvePreferredActiveSession } from "@/components/features/kanban/session-target-resolution";
 import { submitHumanReviewFeedback } from "@/features/human-review-feedback/human-review-feedback-flow";
@@ -34,26 +37,21 @@ import {
 } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type {
-  ActiveWorkspace,
-  AgentStateContextValue,
-  RepoSettingsInput,
-} from "@/types/state-slices";
+import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
 const ROLE_LABELS = AGENT_ROLE_LABELS as Record<AgentRole, string>;
 
 type UseKanbanSessionStartFlowArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   openAgentStudioTabOnBackgroundSessionStart: boolean | null;
   tasks: TaskCard[];
   sessions: AgentSessionSummary[];
   navigate: NavigateFunction;
-  loadRepoSettings: () => Promise<RepoSettingsInput>;
-  loadAgentSessions: AgentStateContextValue["loadAgentSessions"];
+  workspaceRepoPath: string | null;
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
   setTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
@@ -90,7 +88,9 @@ const findPreferredSessionByRoleForTask = (
   taskId: string,
   role: AgentRole,
 ): WorkflowAgentSessionSummary | null => {
-  const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role);
+  const matchingSessions = findSessionsByRoleForTask(sessions, taskId, role).filter(
+    isKanbanActiveTaskSession,
+  );
   if (matchingSessions.length === 0) {
     return null;
   }
@@ -101,7 +101,6 @@ const findPreferredSessionByRoleForTask = (
       runtimeKind: session.runtimeKind,
       workingDirectory: session.workingDirectory,
       role: session.role,
-      status: session.status,
       startedAt: session.startedAt,
       presentationState: toKanbanSessionPresentationState(session),
     })),
@@ -146,15 +145,14 @@ const resolveKanbanPlanningStartPreference = (
 };
 
 export function useKanbanSessionStartFlow({
-  activeWorkspace,
+  activeWorkspaceId,
   branches = [],
   repoSettings,
   openAgentStudioTabOnBackgroundSessionStart,
   tasks,
   sessions,
   navigate,
-  loadRepoSettings: _loadRepoSettings,
-  loadAgentSessions: _loadAgentSessions,
+  workspaceRepoPath,
   humanRequestChangesTask,
   setTaskTargetBranch,
   startAgentSession,
@@ -165,9 +163,9 @@ export function useKanbanSessionStartFlow({
   const [isSubmittingHumanReviewFeedback, setIsSubmittingHumanReviewFeedback] = useState(false);
 
   const { sessionStartModal, runSessionStartRequest } = useSessionStartModalRunner({
-    activeWorkspace,
     branches,
     repoSettings,
+    workspaceRepoPath,
   });
 
   const {
@@ -220,7 +218,7 @@ export function useKanbanSessionStartFlow({
         }),
         async ({ decision, runInBackground }) => {
           const session = await startKanbanSessionFlow({
-            activeWorkspace,
+            workspaceId: activeWorkspaceId,
             request: intent,
             decision,
             startInBackground: runInBackground,
@@ -240,7 +238,6 @@ export function useKanbanSessionStartFlow({
       );
     },
     [
-      activeWorkspace,
       humanRequestChangesTask,
       openAgentStudioTabOnBackgroundSessionStart,
       openSessionInAgentStudio,
@@ -252,6 +249,7 @@ export function useKanbanSessionStartFlow({
       sessions,
       startAgentSession,
       tasks,
+      activeWorkspaceId,
     ],
   );
 

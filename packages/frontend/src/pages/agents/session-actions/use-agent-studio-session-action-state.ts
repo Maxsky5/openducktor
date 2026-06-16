@@ -1,6 +1,8 @@
 import type { AgentModelCatalog, AgentModelSelection, AgentRole } from "@openducktor/core";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
-import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
+import {
+  getAgentSessionActivityStateFromSession,
+  isAgentSessionActivityWorking,
+} from "@/lib/agent-session-activity-state";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -14,10 +16,8 @@ type UseAgentStudioSessionActionStateArgs = {
 
 type UseAgentStudioSessionActionStateResult = {
   activeSessionRole: AgentRole;
-  activeSessionStatus: AgentSessionState["status"] | "stopped";
   activeSessionSelectedModel: AgentSessionState["selectedModel"] | null;
   activeSessionIsLoadingModelCatalog: boolean;
-  activeSessionPendingQuestions: AgentSessionState["pendingQuestions"];
   hasActiveSession: boolean;
   isSessionBusy: boolean;
   isWaitingInput: boolean;
@@ -35,19 +35,14 @@ export function useAgentStudioSessionActionState({
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
 
   const activeSessionRole = activeSession?.role ?? role;
-  const activeSessionStatus = activeSession?.status ?? "stopped";
   const activeSessionSelectedModel = activeSession?.selectedModel ?? null;
-  const activeSessionPendingApprovals = activeSession?.pendingApprovals ?? [];
-  const activeSessionPendingQuestions = activeSession?.pendingQuestions ?? [];
   const activeSessionRuntimeKind = activeSession?.runtimeKind ?? null;
   const hasActiveSession = activeSession != null;
-  const isSessionBusy = hasActiveSession && isAgentSessionWorkingStatus(activeSessionStatus);
-  const isWaitingInput =
-    hasActiveSession &&
-    isAgentSessionWaitingInput({
-      pendingApprovals: activeSessionPendingApprovals,
-      pendingQuestions: activeSessionPendingQuestions,
-    });
+  const activeSessionActivityState = activeSession
+    ? getAgentSessionActivityStateFromSession(activeSession)
+    : null;
+  const isSessionBusy = isAgentSessionActivityWorking(activeSessionActivityState);
+  const isWaitingInput = activeSessionActivityState === "waiting_input";
   const selectedRuntimeKind =
     selectedModelSelection?.runtimeKind ?? activeSessionSelectedModel?.runtimeKind ?? null;
   const activeRuntimeDescriptor =
@@ -59,8 +54,7 @@ export function useAgentStudioSessionActionState({
     null;
   const supportsQueuedUserMessages =
     activeRuntimeDescriptor?.capabilities.sessionLifecycle.supportsQueuedUserMessages !== false;
-  const canQueueBusyFollowups =
-    activeSessionStatus === "running" && !isWaitingInput && supportsQueuedUserMessages;
+  const canQueueBusyFollowups = isSessionBusy && !isWaitingInput && supportsQueuedUserMessages;
   const activeRuntimeLabel = activeRuntimeDescriptor?.label ?? "Current runtime";
   const busySendBlockedReason =
     hasActiveSession && isSessionBusy && !isWaitingInput && !supportsQueuedUserMessages
@@ -69,10 +63,8 @@ export function useAgentStudioSessionActionState({
 
   return {
     activeSessionRole,
-    activeSessionStatus,
     activeSessionSelectedModel,
     activeSessionIsLoadingModelCatalog,
-    activeSessionPendingQuestions,
     hasActiveSession,
     isSessionBusy,
     isWaitingInput,

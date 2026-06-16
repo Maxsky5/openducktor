@@ -12,10 +12,7 @@ import type {
   useAgentStudioOrchestrationController,
 } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import type { useWorkspaceState } from "@/state/app-state-provider";
-import {
-  type AgentSessionViewLifecycle,
-  isAgentSessionTranscriptLoading,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import {
   type TaskWorktreeQueryHost,
   taskWorktreeQueryOptions,
@@ -34,6 +31,7 @@ import {
 } from "./agent-studio-build-tools-worktree-snapshot";
 import {
   type BuildToolsSessionDescriptor,
+  isBuildToolsSessionContextStable,
   useAgentStudioBuildToolsBootstrap,
 } from "./use-agent-studio-build-tools-bootstrap";
 
@@ -46,7 +44,7 @@ type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  viewSessionLifecycle: AgentSessionViewLifecycle;
+  transcriptState: AgentSessionTranscriptState;
   repoSettings: ReturnType<typeof useAgentStudioOrchestrationController>["repoSettings"];
   worktreeRecoveryKey: string;
 };
@@ -135,16 +133,13 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewSelectedTask,
     panelKind,
     isPanelOpen,
-    viewSessionLifecycle,
+    transcriptState,
     repoSettings,
     worktreeRecoveryKey,
   }: UseAgentStudioBuildToolsWorktreeSnapshotArgs,
   dependencies: AgentStudioBuildToolsWorktreeSnapshotDependencies,
 ): AgentStudioBuildToolsWorktreeSnapshot {
   const sessionRole = session.role;
-  const isSessionViewLoading = isAgentSessionTranscriptLoading(
-    viewSessionLifecycle.transcriptState,
-  );
   const gitPanelContextMode: AgentStudioGitPanelContextMode =
     sessionRole === "build" ? "worktree" : "repository";
   const repositoryBranchIdentityKey =
@@ -155,7 +150,10 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewTaskId,
     viewSelectedTaskId: viewSelectedTask?.id ?? null,
   });
-  const isSessionContextStable = sessionRole !== "build" || !isSessionViewLoading;
+  const isSessionContextStable = isBuildToolsSessionContextStable({
+    sessionRole,
+    transcriptState,
+  });
   const hasSelectedTask = selectedTaskId != null;
   const taskTargetBranchState = useMemo(
     () =>
@@ -186,7 +184,7 @@ function useAgentStudioBuildToolsWorktreeSnapshotWithDependencies(
     viewSelectedTask,
     panelKind,
     isPanelOpen,
-    viewSessionLifecycle,
+    transcriptState,
   });
   const isEnabled = buildToolsBootstrap.isEnabled && hasSelectedTask;
   const repoPath = isEnabled ? buildToolsBootstrap.repoPath : null;

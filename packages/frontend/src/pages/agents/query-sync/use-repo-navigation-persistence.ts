@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { errorMessage } from "@/lib/errors";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   type AgentStudioNavigationState,
   clearAgentStudioNavigationState,
@@ -14,7 +13,7 @@ import {
 } from "./agent-studio-navigation";
 
 type UseRepoNavigationPersistenceArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   navigation: AgentStudioNavigationState;
   setNavigation: Dispatch<SetStateAction<AgentStudioNavigationState>>;
 };
@@ -99,11 +98,10 @@ const writePersistedContextPayload = (storageKey: string, payload: string): void
 };
 
 export function useRepoNavigationPersistence({
-  activeWorkspace,
+  activeWorkspaceId,
   navigation,
   setNavigation,
 }: UseRepoNavigationPersistenceArgs): UseRepoNavigationPersistenceResult {
-  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const lastWorkspaceIdRef = useRef<string | null>(activeWorkspaceId);
   const restoredContextWorkspaceIdRef = useRef<string | null>(null);
   const persistedContextPayloadRef = useRef<string | null>(null);
@@ -201,7 +199,7 @@ export function useRepoNavigationPersistence({
   }, [activeWorkspaceId, tryFlushPendingContextPersist]);
 
   useEffect(() => {
-    if (!activeWorkspace || repoNavigationBoundaryPhase !== "clearing") {
+    if (!activeWorkspaceId || repoNavigationBoundaryPhase !== "clearing") {
       return;
     }
 
@@ -211,7 +209,7 @@ export function useRepoNavigationPersistence({
     }
 
     setNavigation((current) => clearAgentStudioNavigationState(current));
-  }, [activeWorkspace, navigation, repoNavigationBoundaryPhase, setNavigation]);
+  }, [activeWorkspaceId, navigation, repoNavigationBoundaryPhase, setNavigation]);
 
   useEffect(() => {
     if (!activeWorkspaceId) {

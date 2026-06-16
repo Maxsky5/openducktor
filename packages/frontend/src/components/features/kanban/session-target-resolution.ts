@@ -15,7 +15,6 @@ type PrimarySessionOrderingCandidate = {
   externalSessionId: string;
   runtimeKind: AgentSessionIdentity["runtimeKind"];
   workingDirectory: AgentSessionIdentity["workingDirectory"];
-  status: KanbanTaskSession["status"];
   presentationState: KanbanSessionPresentationState;
   startedAt?: string;
 };
@@ -24,10 +23,10 @@ const rankActiveSessionForPrimary = (session: PrimarySessionOrderingCandidate): 
   if (session.presentationState === "waiting_input") {
     return 0;
   }
-  if (session.status === "running") {
+  if (session.presentationState === "running") {
     return 1;
   }
-  if (session.status === "starting") {
+  if (session.presentationState === "starting") {
     return 2;
   }
   return 3;

@@ -1,18 +1,17 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef } from "react";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import type { NavigateToTaskIntent } from "./agent-studio-types";
 import { ensureActiveTaskTab, resolveFallbackTaskId } from "./agents-page-session-tabs";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type UseTaskTabSelectionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   isRepoNavigationBoundaryPending: boolean;
   taskId: string;
   openTaskTabs: string[];
   persistedActiveTaskId: string | null;
   intentActiveTaskId: string | null;
-  tabsStorageHydratedWorkspaceId: string | null;
+  loadedTabsStorageWorkspaceId: string | null;
   navigateToTaskIntent: NavigateToTaskIntent;
   setOpenTaskTabs: SetState<string[]>;
   setPersistedActiveTaskId: SetState<string | null>;
@@ -27,19 +26,18 @@ type UseTaskTabSelectionResult = {
 
 export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSelectionResult {
   const {
-    activeWorkspace,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId,
     openTaskTabs,
     persistedActiveTaskId,
     intentActiveTaskId,
-    tabsStorageHydratedWorkspaceId,
+    loadedTabsStorageWorkspaceId,
     navigateToTaskIntent,
     setOpenTaskTabs,
     setPersistedActiveTaskId,
     setIntentActiveTaskId,
   } = args;
-  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
 
   const tabTaskIds = useMemo(
     () => ensureActiveTaskTab(openTaskTabs, taskId),
@@ -72,7 +70,7 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
   useEffect(() => {
     if (
       !activeWorkspaceId ||
-      tabsStorageHydratedWorkspaceId !== activeWorkspaceId ||
+      loadedTabsStorageWorkspaceId !== activeWorkspaceId ||
       isRepoNavigationBoundaryPending
     ) {
       return;
@@ -99,15 +97,15 @@ export function useTaskTabSelection(args: UseTaskTabSelectionArgs): UseTaskTabSe
     navigateToTaskIntent,
     persistedActiveTaskId,
     tabTaskIds,
-    tabsStorageHydratedWorkspaceId,
+    loadedTabsStorageWorkspaceId,
     taskId,
   ]);
 
   useEffect(() => {
-    if (!activeWorkspace || taskId || isRepoNavigationBoundaryPending) {
+    if (!activeWorkspaceId || taskId || isRepoNavigationBoundaryPending) {
       appliedFallbackKeyRef.current = null;
     }
-  }, [activeWorkspace, isRepoNavigationBoundaryPending, taskId]);
+  }, [activeWorkspaceId, isRepoNavigationBoundaryPending, taskId]);
 
   const handleSelectTab = useCallback(
     (nextTaskId: string): void => {

@@ -39,7 +39,7 @@ export const createReadonlyTranscriptSession = ({
 }: ReadonlyTranscriptSessionInput): AgentChatThreadSession => ({
   externalSessionId,
   runtimeKind,
-  status: "idle",
+  activityState: "idle",
   workingDirectory,
   messages: createSessionMessagesState(
     externalSessionId,

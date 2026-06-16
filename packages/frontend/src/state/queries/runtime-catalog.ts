@@ -15,6 +15,7 @@ export const runtimeCatalogQueryKeys = {
   all: ["runtime-catalog"] as const,
   repo: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, repoPath, runtimeKind] as const,
+  repoUnavailable: () => [...runtimeCatalogQueryKeys.all, "repo-unavailable"] as const,
   repoSlashCommands: (repoPath: string, runtimeKind: RuntimeKind) =>
     [...runtimeCatalogQueryKeys.all, "slash-commands", repoPath, runtimeKind] as const,
   repoSkills: (repoPath: string, runtimeKind: RuntimeKind, workingDirectory: string) =>
@@ -30,16 +31,24 @@ export const runtimeCatalogQueryKeys = {
 };
 
 export const repoRuntimeCatalogQueryOptions = (
-  repoPath: string,
-  runtimeKind: RuntimeKind,
+  repoPath: string | null,
+  runtimeKind: RuntimeKind | null,
   loadRepoRuntimeCatalog: (
     repoPath: string,
     runtimeKind: RuntimeKind,
   ) => Promise<AgentModelCatalog>,
 ) =>
   queryOptions({
-    queryKey: runtimeCatalogQueryKeys.repo(repoPath, runtimeKind),
-    queryFn: (): Promise<AgentModelCatalog> => loadRepoRuntimeCatalog(repoPath, runtimeKind),
+    queryKey:
+      repoPath && runtimeKind
+        ? runtimeCatalogQueryKeys.repo(repoPath, runtimeKind)
+        : runtimeCatalogQueryKeys.repoUnavailable(),
+    queryFn: (): Promise<AgentModelCatalog> => {
+      if (!repoPath || !runtimeKind) {
+        throw new Error("Cannot load runtime catalog without a repository and runtime kind.");
+      }
+      return loadRepoRuntimeCatalog(repoPath, runtimeKind);
+    },
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
 

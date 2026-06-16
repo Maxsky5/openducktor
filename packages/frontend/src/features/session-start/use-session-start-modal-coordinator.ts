@@ -3,7 +3,7 @@ import type { AgentModelCatalog, AgentRole } from "@openducktor/core";
 import { useCallback } from "react";
 import { useRuntimeAvailabilityContext } from "@/state/app-state-contexts";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { orderStartModesForDisplay } from "./session-start-display";
 import { getSessionLaunchAction, type SessionLaunchActionId } from "./session-start-launch-options";
 import type { SessionStartModalIntent } from "./session-start-modal-types";
@@ -57,10 +57,10 @@ export type SessionStartModalOpenRequest = Omit<
 };
 
 type UseSessionStartModalCoordinatorArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
   initialCatalog?: AgentModelCatalog | null;
+  workspaceRepoPath: string | null;
 };
 
 type UseSessionStartModalCoordinatorResult = Omit<
@@ -71,18 +71,18 @@ type UseSessionStartModalCoordinatorResult = Omit<
 };
 
 export function useSessionStartModalCoordinator({
-  activeWorkspace,
   branches = [],
   repoSettings,
   initialCatalog,
+  workspaceRepoPath,
 }: UseSessionStartModalCoordinatorArgs): UseSessionStartModalCoordinatorResult {
   const { availableRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
   const { openStartModal: openRawStartModal, ...modalState } = useSessionStartModalState({
-    activeWorkspace,
     branches,
     repoSettings,
     runtimeDefinitions,
     ...(initialCatalog !== undefined ? { initialCatalog } : {}),
+    workspaceRepoPath,
   });
 
   const openStartModal = useCallback(

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import {
   createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
 } from "./agent-studio-test-utils";
 import { ROLE_OPTIONS } from "./agents-page-constants";
@@ -27,6 +28,7 @@ const session = createAgentSessionFixture({
   taskId: "task-1",
   role: "planner",
 });
+const sessionSummary = toAgentSessionSummary(session);
 const onSelectTab = () => {};
 const onCreateTab = () => {};
 const onCloseTab = () => {};
@@ -87,14 +89,14 @@ const baseArgs: BuildArgs = {
     taskId: "task-1",
     role: "planner",
     selectedTask: task,
-    sessionsForTask: [session],
-    allSessionSummaries: [session],
+    sessionsForTask: [sessionSummary],
+    allSessionSummaries: [sessionSummary],
     activeSession: session,
     activeSessionRuntimeData: baseActiveSessionRuntimeData,
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
-    lifecycle: createSelectedSessionLifecycleFixture(),
+    transcriptState: createSelectedSessionTranscriptStateFixture(),
     documents: baseDocuments,
     runtimeReadiness: baseRuntimeReadiness,
     sessionActions: baseSessionActions,
@@ -156,7 +158,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
     expect(mapped.selectedSession.runtime.runtimeDefinitions).toEqual([
       OPENCODE_RUNTIME_DESCRIPTOR,
     ]);
-    expect(mapped.selectedSession.runtime.lifecycle.transcriptState).toEqual({
+    expect(mapped.selectedSession.runtime.transcriptState).toEqual({
       kind: "visible",
     });
     expect(mapped.taskTabs.onSelectTab).toBe(onSelectTab);
@@ -215,13 +217,11 @@ describe("buildAgentStudioPageModelsArgs", () => {
         ...baseArgs.selectedSession,
         runtime: {
           ...baseArgs.selectedSession.runtime,
-          lifecycle: createSelectedSessionLifecycleFixture({
-            transcriptState: { kind: "failed" },
-          }),
+          transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "failed" }),
         },
       },
     });
 
-    expect(failed.selectedSession.runtime.lifecycle.transcriptState).toEqual({ kind: "failed" });
+    expect(failed.selectedSession.runtime.transcriptState).toEqual({ kind: "failed" });
   });
 });

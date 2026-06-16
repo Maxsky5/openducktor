@@ -4,7 +4,6 @@ import {
   type AgentSessionIdentityLike,
   agentSessionIdentityKey,
 } from "@/lib/agent-session-identity";
-import type { ActiveWorkspace } from "@/types/state-slices";
 
 type ActivityCountByKey = Record<string, number>;
 
@@ -20,7 +19,7 @@ export type AgentStudioAsyncActivityTracker = {
 };
 
 export type AgentStudioSessionActivityKeyParams = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceId: string | null;
   taskId: string;
   role: AgentRole;
   session: AgentSessionIdentityLike | null | undefined;
@@ -107,7 +106,7 @@ export const useAgentStudioAsyncActivityTracker = (): AgentStudioAsyncActivityTr
 export const buildAgentStudioSessionActivityKey = (
   params: AgentStudioSessionActivityKeyParams,
 ): string => {
-  const workspaceId = params.activeWorkspace?.workspaceId ?? "__no_workspace__";
+  const workspaceId = params.workspaceId ?? "__no_workspace__";
   const sessionKey = params.session ? agentSessionIdentityKey(params.session) : "__draft__";
   return `${workspaceId}:${params.taskId}:${params.role}:${sessionKey}`;
 };

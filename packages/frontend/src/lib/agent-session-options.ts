@@ -1,4 +1,8 @@
 import type { AgentRole } from "@openducktor/core";
+import {
+  type AgentSessionActivityState,
+  formatAgentSessionActivityStateLabel,
+} from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 
@@ -8,7 +12,9 @@ export type AgentSessionRecencySummary = Pick<
 >;
 
 export type AgentSessionOptionSummary = AgentSessionRecencySummary &
-  Pick<AgentSessionState, "runtimeKind" | "workingDirectory" | "role" | "status">;
+  Pick<AgentSessionState, "role"> & {
+    activityState: AgentSessionActivityState;
+  };
 
 export const compareAgentSessionRecency = (
   a: AgentSessionRecencySummary,
@@ -62,5 +68,7 @@ export const formatAgentSessionOptionDescription = (session: AgentSessionOptionS
   const startedAtLabel = Number.isNaN(startedAt.getTime())
     ? session.startedAt
     : startedAt.toLocaleString();
-  return `${startedAtLabel} · ${session.status} · ${session.externalSessionId.slice(0, 8)}`;
+  return `${startedAtLabel} · ${formatAgentSessionActivityStateLabel(
+    session.activityState,
+  )} · ${session.externalSessionId.slice(0, 8)}`;
 };

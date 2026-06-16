@@ -7,13 +7,12 @@ import {
   type ResolvedSessionStartDecision,
 } from "@/features/session-start";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+import type { AgentStateContextValue } from "@/types/state-slices";
 import { addTaskToPersistedAgentStudioTabs } from "../agents/agents-page-session-tabs";
 import type { KanbanSessionStartIntent } from "./kanban-page-model-types";
 import { renderSessionStartedToastAction } from "./session-started-toast-action";
 
 type StartKanbanSessionFlowInput = {
-  activeWorkspace: ActiveWorkspace | null;
   request: KanbanSessionStartIntent;
   decision: ResolvedSessionStartDecision;
   startInBackground: boolean;
@@ -21,6 +20,7 @@ type StartKanbanSessionFlowInput = {
   tasks: TaskCard[];
   roleLabels: Record<AgentRole, string>;
   queryClient: QueryClient;
+  workspaceId: string | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   humanRequestChangesTask: (taskId: string, note?: string) => Promise<void>;
@@ -33,7 +33,6 @@ type StartKanbanSessionFlowInput = {
 };
 
 export const startKanbanSessionFlow = async ({
-  activeWorkspace,
   request,
   decision,
   startInBackground,
@@ -41,6 +40,7 @@ export const startKanbanSessionFlow = async ({
   tasks,
   roleLabels,
   queryClient,
+  workspaceId,
   startAgentSession,
   settleStartedAgentSession,
   humanRequestChangesTask,
@@ -52,7 +52,6 @@ export const startKanbanSessionFlow = async ({
     startInBackground && request.postStartAction === "none" ? "kickoff" : request.postStartAction;
   const task = tasks.find((entry) => entry.id === request.taskId) ?? null;
   const workflow = await executeSessionStartFromDecision({
-    activeWorkspace,
     queryClient,
     request: {
       ...request,
@@ -60,6 +59,7 @@ export const startKanbanSessionFlow = async ({
     },
     decision,
     task,
+    workspaceId,
     ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
     startAgentSession,
     settleStartedAgentSession,
@@ -78,7 +78,6 @@ export const startKanbanSessionFlow = async ({
 
   if (startInBackground) {
     if (openAgentStudioTabOnBackgroundSessionStart) {
-      const workspaceId = activeWorkspace?.workspaceId;
       if (!workspaceId) {
         toast.warning("Session started, but Agent Studio tab could not be saved.", {
           description: "No active workspace is selected.",

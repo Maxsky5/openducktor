@@ -13,7 +13,7 @@ type UseAgentChatHistoryWindowInput = {
   rows: AgentChatWindowRow[];
   turns?: AgentChatWindowTurn[];
   activeSessionKey: string | null;
-  isSessionViewLoading: boolean;
+  shouldResetForTranscriptLoad: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   userScrolledRef: RefObject<boolean>;
 };
@@ -61,7 +61,7 @@ export function useAgentChatHistoryWindow({
   rows,
   turns: providedTurns,
   activeSessionKey,
-  isSessionViewLoading,
+  shouldResetForTranscriptLoad,
   messagesContainerRef,
   userScrolledRef,
 }: UseAgentChatHistoryWindowInput): UseAgentChatHistoryWindowResult {
@@ -77,7 +77,7 @@ export function useAgentChatHistoryWindow({
   const turnStartRef = useRef(turnStart);
   const fillFrameRef = useRef<number | null>(null);
   const continuationFrameRef = useRef<number | null>(null);
-  const pendingLatestResetRef = useRef(isSessionViewLoading && rows.length === 0);
+  const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
   const previousSessionKeyRef = useRef<string | null>(activeSessionKey);
   const pendingScrollRestoreRef = useRef<{
     beforeScrollHeight: number;
@@ -86,7 +86,7 @@ export function useAgentChatHistoryWindow({
   const latestTurnStart = getLatestTurnStart();
   const shouldUsePendingLatestTurnStart = pendingLatestResetRef.current && rows.length > 0;
   const didSessionChange = previousSessionKeyRef.current !== activeSessionKey;
-  const shouldFlagPendingLatestReset = isSessionViewLoading && rows.length === 0;
+  const shouldFlagPendingLatestReset = shouldResetForTranscriptLoad && rows.length === 0;
   const shouldClampToLatestTurnStart = rows.length > 0 && turnStartRef.current > latestTurnStart;
   const effectiveTurnStart = resolveAgentChatEffectiveTurnStart({
     activeSessionKey,
@@ -297,7 +297,7 @@ export function useAgentChatHistoryWindow({
   // Intentionally runs after every commit so an underfilled viewport can keep
   // backfilling until the rendered transcript is tall enough to scroll.
   useEffect(() => {
-    if (isSessionViewLoading) {
+    if (shouldResetForTranscriptLoad) {
       return;
     }
 
@@ -325,7 +325,7 @@ export function useAgentChatHistoryWindow({
     windowedRows,
     windowedTurns,
     resetToLatestTurns: () => {
-      if (isSessionViewLoading && rows.length === 0) {
+      if (shouldResetForTranscriptLoad && rows.length === 0) {
         pendingLatestResetRef.current = true;
         return;
       }

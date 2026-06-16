@@ -33,6 +33,39 @@ describe("use-agent-orchestrator-operations session state", () => {
     restoreEnvironment = null;
   });
 
+  test("exposes startup read-model failures as one load state", async () => {
+    const originalAgentSessionsListBulk = host.agentSessionsListBulk;
+
+    host.agentSessionsListBulk = async () => {
+      throw new Error("session store unavailable");
+    };
+
+    const harness = createHookHarness({
+      activeRepo: "/tmp/repo",
+      tasks: [taskFixture],
+      refreshTaskData: async () => {},
+    });
+
+    try {
+      await harness.mount();
+      const latest = await harness.waitFor(
+        (state) => state.sessionReadModelLoadState.kind === "failed",
+      );
+
+      expect(latest.sessionReadModelLoadState.kind).toBe("failed");
+      if (latest.sessionReadModelLoadState.kind !== "failed") {
+        throw new Error("Expected failed session read-model load state.");
+      }
+      expect(latest.sessionReadModelLoadState.message).toContain("session store unavailable");
+      expect(latest.readModelState.sessionReadModelLoadState).toEqual(
+        latest.sessionReadModelLoadState,
+      );
+    } finally {
+      await harness.unmount();
+      host.agentSessionsListBulk = originalAgentSessionsListBulk;
+    }
+  });
+
   test("blocks free-form sends while a runtime error session is waiting for input", async () => {
     let subscribeCalls = 0;
     let unsubscribeCalls = 0;

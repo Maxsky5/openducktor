@@ -45,6 +45,7 @@ type AgentsPageShellModel = {
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
   const { activeBranch, branches, activeWorkspace } = useWorkspaceState();
+  const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const {
     availableRuntimeDefinitions: runtimeDefinitions,
@@ -66,7 +67,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     unlinkingPullRequestTaskId,
     setTaskTargetBranch,
   } = useTasksState();
-  const { isLoadingSessionReadModel, sessionReadModelError } = useAgentSessionReadModelState();
+  const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const {
     loadAgentSessionHistory,
     readSessionFileSearch,
@@ -90,7 +91,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onGitConflictQuickActionContextChange,
   } = useAgentStudioGitConflictQuickActionState();
   const routeSession = useAgentsPageRouteSessionModel({
-    activeWorkspace,
+    activeWorkspaceId,
     workspaceRepoPath,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
@@ -101,8 +102,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     tasks,
     isForegroundLoadingTasks,
     sessions,
-    isLoadingSessionReadModel,
-    sessionReadModelError,
+    sessionReadModelLoadState,
     loadAgentSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
@@ -130,9 +130,10 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     handleResolveRebaseConflict,
     agentStudioHeaderModel,
   } = useAgentsPageOrchestrationShellModel({
-    activeWorkspace,
+    activeWorkspaceId,
     branches: branches ?? [],
     runtimeDefinitions,
+    workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,
     hasActiveGitConflict: gitConflictQuickActionContext !== null,

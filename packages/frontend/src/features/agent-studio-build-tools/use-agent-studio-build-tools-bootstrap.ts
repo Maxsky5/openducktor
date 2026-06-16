@@ -1,7 +1,8 @@
 import { useMemo } from "react";
+import type { AgentSessionActivityState } from "@/lib/agent-session-activity-state";
 import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/use-agent-studio-orchestration-controller";
 import {
-  type AgentSessionViewLifecycle,
+  type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
 } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 
@@ -11,11 +12,7 @@ export type BuildToolsSessionDescriptor = {
       ? TRole | null
       : null
     : null;
-  status: AgentStudioOrchestrationSelectionContext["viewActiveSession"] extends infer T
-    ? T extends { status: infer TStatus | null }
-      ? TStatus | null
-      : null
-    : null;
+  activityState: AgentSessionActivityState | null;
   workingDirectory: string | null;
   hasActiveSession: boolean;
 };
@@ -27,7 +24,7 @@ type UseAgentStudioBuildToolsBootstrapArgs = {
   viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
-  viewSessionLifecycle: AgentSessionViewLifecycle;
+  transcriptState: AgentSessionTranscriptState;
 };
 
 type BuildToolsBootstrapContext = {
@@ -39,6 +36,14 @@ type BuildToolsBootstrapContext = {
   hasSelectedTask: boolean;
 };
 
+export const isBuildToolsSessionContextStable = ({
+  sessionRole,
+  transcriptState,
+}: {
+  sessionRole: BuildToolsSessionDescriptor["role"];
+  transcriptState: AgentSessionTranscriptState;
+}): boolean => sessionRole !== "build" || !isAgentSessionTranscriptLoading(transcriptState);
+
 export function useAgentStudioBuildToolsBootstrap({
   workspaceRepoPath,
   viewRole,
@@ -46,14 +51,11 @@ export function useAgentStudioBuildToolsBootstrap({
   viewSelectedTask,
   panelKind,
   isPanelOpen,
-  viewSessionLifecycle,
+  transcriptState,
 }: UseAgentStudioBuildToolsBootstrapArgs): BuildToolsBootstrapContext {
   const sessionRole = session.role;
   const sessionWorkingDirectory = session.workingDirectory;
   const hasActiveSession = session.hasActiveSession;
-  const isSessionViewLoading = isAgentSessionTranscriptLoading(
-    viewSessionLifecycle.transcriptState,
-  );
 
   return useMemo(() => {
     const isVisibleBuildToolsPanel =
@@ -69,7 +71,10 @@ export function useAgentStudioBuildToolsBootstrap({
       };
     }
 
-    const isBuildSessionContextStable = sessionRole !== "build" || !isSessionViewLoading;
+    const isBuildSessionContextStable = isBuildToolsSessionContextStable({
+      sessionRole,
+      transcriptState,
+    });
 
     return {
       isEnabled: Boolean(workspaceRepoPath) && isBuildSessionContextStable,
@@ -84,10 +89,10 @@ export function useAgentStudioBuildToolsBootstrap({
     workspaceRepoPath,
     hasActiveSession,
     isPanelOpen,
-    isSessionViewLoading,
     panelKind,
     sessionRole,
     sessionWorkingDirectory,
+    transcriptState,
     viewRole,
     viewSelectedTask,
   ]);

@@ -21,11 +21,7 @@ import {
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { isWorkflowAgentSession } from "@/state/operations/agent-orchestrator/support/workflow-session";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type {
-  ActiveWorkspace,
-  AgentStateContextValue,
-  RepoSettingsInput,
-} from "@/types/state-slices";
+import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "../agent-studio-quick-actions";
 import type { SessionCreateOption } from "../agents-page-session-tabs";
 import {
@@ -45,7 +41,6 @@ import {
 type CanStartRole = (role: AgentRole) => boolean;
 
 type UseAgentStudioSessionStartFlowArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
@@ -57,6 +52,8 @@ type UseAgentStudioSessionStartFlowArgs = {
   isSessionWorking: boolean;
   selectionForNewSession: AgentModelSelection | null;
   repoSettings: RepoSettingsInput | null;
+  workspaceId: string | null;
+  workspaceRepoPath: string | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
@@ -83,7 +80,6 @@ const showPostStartActionError = (action: SessionStartPostAction, error: Error):
 };
 
 export function useAgentStudioSessionStartFlow({
-  activeWorkspace,
   branches = [],
   taskId,
   role,
@@ -95,6 +91,8 @@ export function useAgentStudioSessionStartFlow({
   isSessionWorking,
   selectionForNewSession,
   repoSettings,
+  workspaceId,
+  workspaceRepoPath,
   startAgentSession,
   settleStartedAgentSession,
   sendAgentMessage,
@@ -114,12 +112,12 @@ export function useAgentStudioSessionStartFlow({
   handleQuickAction: (option: AgentStudioQuickActionOption) => void;
 } {
   const queryClient = useQueryClient();
-  const sessionStartGate = useAgentStudioSessionStartGate(activeWorkspace?.workspaceId ?? null);
+  const sessionStartGate = useAgentStudioSessionStartGate(workspaceId);
   const { begin: beginStartingActivity, isActive: isStartingActivityActive } =
     useAgentStudioAsyncActivityTracker();
   const isStarting = isStartingActivityActive(
     buildAgentStudioSessionActivityKey({
-      activeWorkspace,
+      workspaceId,
       taskId,
       role,
       session: activeSession,
@@ -128,9 +126,9 @@ export function useAgentStudioSessionStartFlow({
 
   const { sessionStartModal, runSessionStartRequest: runInternalSessionStartRequest } =
     useSessionStartModalRunner({
-      activeWorkspace,
       branches,
       repoSettings,
+      workspaceRepoPath,
     });
 
   const executeRequestedSessionStart = useCallback(
@@ -174,11 +172,11 @@ export function useAgentStudioSessionStartFlow({
       ): Promise<SessionStartWorkflowResult | undefined> => {
         const execute = async (): Promise<SessionStartWorkflowResult> => {
           const workflow = await executeSessionStartFromDecision({
-            activeWorkspace,
             queryClient,
             request,
             decision,
             task: request.taskId === taskId ? selectedTask : null,
+            workspaceId,
             ...(setTaskTargetBranch ? { persistTaskTargetBranch: setTaskTargetBranch } : {}),
             startAgentSession,
             settleStartedAgentSession,
@@ -206,7 +204,7 @@ export function useAgentStudioSessionStartFlow({
 
         const activity = beginStartingActivity(
           buildAgentStudioSessionActivityKey({
-            activeWorkspace,
+            workspaceId,
             taskId: request.taskId,
             role: request.role,
             session: null,
@@ -222,7 +220,6 @@ export function useAgentStudioSessionStartFlow({
       return executeRequestedSessionStart(request, executeWithDecision);
     },
     [
-      activeWorkspace,
       beginStartingActivity,
       executeRequestedSessionStart,
       humanRequestChangesTask,
@@ -234,6 +231,7 @@ export function useAgentStudioSessionStartFlow({
       startAgentSession,
       taskId,
       updateQuery,
+      workspaceId,
     ],
   );
 

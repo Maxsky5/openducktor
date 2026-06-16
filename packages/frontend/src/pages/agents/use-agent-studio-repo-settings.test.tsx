@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoConfig, WorkspaceRecord } from "@openducktor/contracts";
+import type { RepoConfig } from "@openducktor/contracts";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -10,18 +10,6 @@ enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
 type RepoConfigHost = NonNullable<HookArgs["hostClient"]>;
-
-const createWorkspace = (overrides: Partial<WorkspaceRecord> = {}): WorkspaceRecord => ({
-  workspaceId: "workspace-repo",
-  workspaceName: "Repo",
-  repoPath: "/repo",
-  isActive: true,
-  hasConfig: true,
-  configuredWorktreeBasePath: null,
-  defaultWorktreeBasePath: "/worktrees/default",
-  effectiveWorktreeBasePath: "/worktrees/default",
-  ...overrides,
-});
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
@@ -53,7 +41,7 @@ describe("useAgentStudioRepoSettings", () => {
   test("loads repo settings from the canonical repo config query", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({
-      activeWorkspace: createWorkspace(),
+      activeWorkspaceId: "workspace-repo",
       hostClient,
     });
 
@@ -84,14 +72,14 @@ describe("useAgentStudioRepoSettings", () => {
   test("resets settings when active repo becomes null", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({
-      activeWorkspace: createWorkspace(),
+      activeWorkspaceId: "workspace-repo",
       hostClient,
     });
 
     await harness.mount();
     await harness.waitFor((state) => state.repoSettings !== null);
 
-    await harness.update({ activeWorkspace: null, hostClient });
+    await harness.update({ activeWorkspaceId: null, hostClient });
 
     expect(harness.getLatest().repoSettings).toBeNull();
 
@@ -110,13 +98,7 @@ describe("useAgentStudioRepoSettings", () => {
     );
 
     const harness = createHookHarness({
-      activeWorkspace: createWorkspace({
-        workspaceId: "workspace-a",
-        workspaceName: "Repo A",
-        repoPath: "/repo-a",
-        defaultWorktreeBasePath: "/worktrees/a",
-        effectiveWorktreeBasePath: "/worktrees/a",
-      }),
+      activeWorkspaceId: "workspace-a",
       hostClient,
     });
 
@@ -124,13 +106,7 @@ describe("useAgentStudioRepoSettings", () => {
     await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-a/");
 
     await harness.update({
-      activeWorkspace: createWorkspace({
-        workspaceId: "workspace-b",
-        workspaceName: "Repo B",
-        repoPath: "/repo-b",
-        defaultWorktreeBasePath: "/worktrees/b",
-        effectiveWorktreeBasePath: "/worktrees/b",
-      }),
+      activeWorkspaceId: "workspace-b",
       hostClient,
     });
     await harness.waitFor((state) => state.repoSettings?.branchPrefix === "feature-b/");

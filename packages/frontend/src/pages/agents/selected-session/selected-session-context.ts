@@ -6,9 +6,14 @@ import type {
 import type { AgentRole, AgentSessionTodoItem } from "@openducktor/core";
 import type { AgentStudioWorkspaceDocument } from "@/components/features/agents";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import {
+  getAgentSessionWaitingInputPlaceholder,
+  hasAgentSessionPendingApprovals,
+  hasAgentSessionPendingQuestions,
+} from "@/lib/agent-session-waiting-input";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionViewLifecycle } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,
@@ -57,10 +62,11 @@ export type SelectedSessionRuntimeContext = {
   sessionRuntimeDataError: string | null;
   sessionTodos: AgentSessionTodoItem[];
   isLoadingModelCatalog: boolean;
-  lifecycle: AgentSessionViewLifecycle;
+  transcriptState: AgentSessionTranscriptState;
 };
 
 export type SelectedSessionPendingInputContext = {
+  waitingInputPlaceholder: string | null;
   pendingQuestions: SelectedSessionPendingQuestionsContext;
   approvals: SelectedSessionApprovalsContext;
   subagentPendingApprovalCountBySessionKey: Record<string, number>;
@@ -92,7 +98,7 @@ export type AgentStudioSelectedSessionContextInput = {
   runtimeDefinitions: RuntimeDescriptor[];
   sessionRuntimeDataError: string | null;
   hasActiveGitConflict: boolean;
-  lifecycle: AgentSessionViewLifecycle;
+  transcriptState: AgentSessionTranscriptState;
   documents: AgentStudioDocumentsContext;
   runtimeReadiness: RepoRuntimeReadiness;
   sessionActions: {
@@ -135,7 +141,7 @@ export const buildAgentStudioSelectedSessionContext = ({
   runtimeDefinitions,
   sessionRuntimeDataError,
   hasActiveGitConflict,
-  lifecycle,
+  transcriptState,
   documents,
   runtimeReadiness,
   sessionActions,
@@ -168,8 +174,15 @@ export const buildAgentStudioSelectedSessionContext = ({
         qaDoc: documents.qaDoc,
       })
     : null;
-  const hasPendingQuestions = (activeSession?.pendingQuestions ?? []).length > 0;
-  const hasPendingApprovals = (activeSession?.pendingApprovals ?? []).length > 0;
+  const hasPendingQuestions = activeSession
+    ? hasAgentSessionPendingQuestions(activeSession)
+    : false;
+  const hasPendingApprovals = activeSession
+    ? hasAgentSessionPendingApprovals(activeSession)
+    : false;
+  const waitingInputPlaceholder = activeSession
+    ? getAgentSessionWaitingInputPlaceholder(activeSession)
+    : null;
 
   return {
     taskId,
@@ -196,9 +209,10 @@ export const buildAgentStudioSelectedSessionContext = ({
       sessionRuntimeDataError,
       sessionTodos: activeSessionRuntimeData.todos,
       isLoadingModelCatalog: activeSessionRuntimeData.isLoadingModelCatalog,
-      lifecycle,
+      transcriptState,
     },
     pendingInput: {
+      waitingInputPlaceholder,
       pendingQuestions: {
         canSubmit: hasPendingQuestions,
         isSubmittingByRequestId: sessionActions.isSubmittingQuestionByRequestId,
@@ -212,12 +226,12 @@ export const buildAgentStudioSelectedSessionContext = ({
       },
       subagentPendingApprovalCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
         allSessionSummaries,
-        (session) => session.pendingApprovals.length,
+        (session) => session.pendingApprovalCount,
         EMPTY_SUBAGENT_PENDING_APPROVAL_COUNTS,
       ),
       subagentPendingQuestionCountBySessionKey: buildSubagentPendingInputCountBySessionKey(
         allSessionSummaries,
-        (session) => session.pendingQuestions.length,
+        (session) => session.pendingQuestionCount,
         EMPTY_SUBAGENT_PENDING_QUESTION_COUNTS,
       ),
     },

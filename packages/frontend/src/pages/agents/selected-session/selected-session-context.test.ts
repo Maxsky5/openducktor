@@ -8,7 +8,7 @@ import { AGENT_ROLE_LABELS } from "@/types";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createTaskCardFixture,
 } from "../agent-studio-test-utils";
 import {
@@ -54,7 +54,7 @@ const createInput = (
     runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
     sessionRuntimeDataError: null,
     hasActiveGitConflict: false,
-    lifecycle: createSelectedSessionLifecycleFixture(),
+    transcriptState: createSelectedSessionTranscriptStateFixture(),
     documents: {
       specDoc: createDoc("spec"),
       planDoc: createDoc("plan"),
@@ -198,9 +198,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     const context = buildAgentStudioSelectedSessionContext(
       createInput({
         sessionRuntimeDataError: "session todos unavailable",
-        lifecycle: createSelectedSessionLifecycleFixture({
-          transcriptState: { kind: "runtime_waiting" },
-        }),
+        transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         runtimeReadiness: {
           readinessState: "blocked",
           isReady: false,
@@ -213,7 +211,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
     );
 
     expect(context.runtime.sessionRuntimeDataError).toBe("session todos unavailable");
-    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(context.runtime.transcriptState).toEqual({ kind: "runtime_waiting" });
     expect(context.runtime.runtimeReadiness).toMatchObject({
       readinessState: "blocked",
       isReady: false,
@@ -229,9 +227,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         activeSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        lifecycle: createSelectedSessionLifecycleFixture({
-          transcriptState: { kind: "runtime_waiting" },
-        }),
+        transcriptState: createSelectedSessionTranscriptStateFixture({ kind: "runtime_waiting" }),
         runtimeReadiness: {
           readinessState: "checking",
           isReady: false,
@@ -243,7 +239,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "runtime_waiting" });
+    expect(context.runtime.transcriptState).toEqual({ kind: "runtime_waiting" });
   });
 
   test("does not treat generic readiness checking as runtime startup", () => {
@@ -252,7 +248,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
         activeSession: null,
         sessionsForTask: [],
         allSessionSummaries: [],
-        lifecycle: createSelectedSessionLifecycleFixture(),
+        transcriptState: createSelectedSessionTranscriptStateFixture(),
         runtimeReadiness: {
           readinessState: "checking",
           isReady: false,
@@ -264,7 +260,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       }),
     );
 
-    expect(context.runtime.lifecycle.transcriptState).toEqual({ kind: "visible" });
+    expect(context.runtime.transcriptState).toEqual({ kind: "visible" });
   });
 
   test("propagates selected-session and subagent pending input affordances", () => {
@@ -328,6 +324,9 @@ describe("buildAgentStudioSelectedSessionContext", () => {
       isSubmittingByRequestId: { "question-main": true },
     });
     expect(context.pendingInput.pendingQuestions.onSubmit).toBe(questionReply);
+    expect(context.pendingInput.waitingInputPlaceholder).toBe(
+      "Resolve the pending questions and approval requests above to continue",
+    );
     expect(context.pendingInput.approvals).toMatchObject({
       canReply: true,
       isSubmittingByRequestId: { "approval-main": true },
@@ -351,6 +350,7 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
     expect(noActiveSessionContext.pendingInput.pendingQuestions.canSubmit).toBe(false);
     expect(noActiveSessionContext.pendingInput.approvals.canReply).toBe(false);
+    expect(noActiveSessionContext.pendingInput.waitingInputPlaceholder).toBeNull();
 
     const idleSession = createSession({ pendingApprovals: [], pendingQuestions: [] });
     const idleContext = buildAgentStudioSelectedSessionContext(
@@ -363,5 +363,6 @@ describe("buildAgentStudioSelectedSessionContext", () => {
 
     expect(idleContext.pendingInput.pendingQuestions.canSubmit).toBe(false);
     expect(idleContext.pendingInput.approvals.canReply).toBe(false);
+    expect(idleContext.pendingInput.waitingInputPlaceholder).toBeNull();
   });
 });

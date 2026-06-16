@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+import type { AgentStateContextValue } from "@/types/state-slices";
 import { getSessionLaunchAction } from "./session-start-launch-options";
 import type { SessionStartModalSource } from "./session-start-modal-types";
 import { buildReusableSessionOptions } from "./session-start-reuse-options";
@@ -50,11 +50,11 @@ type BuildSessionStartModalRequestArgs = {
 };
 
 type ExecuteSessionStartFromDecisionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   queryClient: QueryClient;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;
   task: TaskCard | null;
+  workspaceId: string | null;
   persistTaskTargetBranch?: (taskId: string, targetBranch: GitTargetBranch) => Promise<void>;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
@@ -156,11 +156,11 @@ export const buildSessionStartModalRequest = ({
 };
 
 export const executeSessionStartFromDecision = async ({
-  activeWorkspace,
   queryClient,
   request,
   decision,
   task,
+  workspaceId,
   persistTaskTargetBranch,
   startAgentSession,
   settleStartedAgentSession,
@@ -173,7 +173,6 @@ export const executeSessionStartFromDecision = async ({
     postStartExecution ?? (request.postStartAction === "none" ? "await" : "detached");
 
   return startSessionWorkflow({
-    activeWorkspace,
     queryClient,
     intent: {
       taskId: request.taskId,
@@ -193,6 +192,7 @@ export const executeSessionStartFromDecision = async ({
     },
     selection: decision.startMode === "reuse" ? null : decision.selectedModel,
     task,
+    workspaceId,
     ...(persistTaskTargetBranch ? { persistTaskTargetBranch } : {}),
     startAgentSession,
     settleStartedAgentSession,

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { BuildToolsSessionDescriptor } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
 import type {
   AgentStudioGitConflictQuickActionContext,
@@ -8,7 +9,7 @@ import type {
 
 type AgentStudioRightPanelBridgeSelection = Pick<
   AgentStudioOrchestrationSelectionContext,
-  "viewActiveSession" | "viewRole" | "viewTaskId" | "viewSelectedTask" | "viewSessionLifecycle"
+  "viewActiveSession" | "viewRole" | "viewTaskId" | "viewSelectedTask" | "viewTranscriptState"
 >;
 
 type AgentStudioRightPanelPanelState = Pick<
@@ -44,7 +45,7 @@ export type AgentStudioRightPanelRuntimeModel = {
   viewSelectedTask: UseAgentsPageRightPanelModelArgs["viewSelectedTask"];
   panelKind: UseAgentsPageRightPanelModelArgs["panelKind"];
   isPanelOpen: UseAgentsPageRightPanelModelArgs["isPanelOpen"];
-  viewSessionLifecycle: UseAgentsPageRightPanelModelArgs["viewSessionLifecycle"];
+  transcriptState: UseAgentsPageRightPanelModelArgs["transcriptState"];
   documentsModel: UseAgentsPageRightPanelModelArgs["documentsModel"];
   repoSettings: UseAgentsPageRightPanelModelArgs["repoSettings"];
   worktreeRecoveryKey: UseAgentsPageRightPanelModelArgs["worktreeRecoveryKey"];
@@ -62,7 +63,7 @@ export type AgentStudioBuildWorktreeRefreshModel = Pick<
   "panelKind" | "isPanelOpen" | "viewRole"
 > & {
   activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
-  viewSessionLifecycle: AgentStudioRightPanelRuntimeModel["viewSessionLifecycle"];
+  transcriptState: AgentStudioRightPanelRuntimeModel["transcriptState"];
 };
 
 export type AgentStudioRightPanelBridgeModel = {
@@ -88,18 +89,20 @@ function useRightPanelSessionDescriptor(
   activeSession: AgentStudioRightPanelBridgeSelection["viewActiveSession"],
 ): BuildToolsSessionDescriptor {
   const role = activeSession?.role ?? null;
-  const status = activeSession?.status ?? null;
+  const activityState = activeSession
+    ? getAgentSessionActivityStateFromSession(activeSession)
+    : null;
   const workingDirectory = activeSession?.workingDirectory ?? null;
   const hasActiveSession = activeSession != null;
 
   return useMemo(
     () => ({
       role,
-      status,
+      activityState,
       workingDirectory,
       hasActiveSession,
     }),
-    [hasActiveSession, role, status, workingDirectory],
+    [activityState, hasActiveSession, role, workingDirectory],
   );
 }
 
@@ -126,7 +129,7 @@ function buildAgentStudioRightPanelBridgeModel({
       isPanelOpen,
       viewRole: selection.viewRole,
       activeSession: selection.viewActiveSession,
-      viewSessionLifecycle: selection.viewSessionLifecycle,
+      transcriptState: selection.viewTranscriptState,
     },
     rightPanel: {
       activeWorkspace,
@@ -138,7 +141,7 @@ function buildAgentStudioRightPanelBridgeModel({
       viewSelectedTask: selection.viewSelectedTask,
       panelKind,
       isPanelOpen,
-      viewSessionLifecycle: selection.viewSessionLifecycle,
+      transcriptState: selection.viewTranscriptState,
       documentsModel,
       repoSettings,
       worktreeRecoveryKey,

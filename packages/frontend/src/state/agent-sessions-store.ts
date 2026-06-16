@@ -1,3 +1,7 @@
+import {
+  type AgentSessionActivityState,
+  getAgentSessionActivityStateFromSession,
+} from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionCollection,
@@ -17,16 +21,11 @@ import { shouldIncludeAgentSessionInActivity } from "./operations/agent-orchestr
 
 export type AgentSessionSummary = Pick<
   AgentSessionState,
-  | "externalSessionId"
-  | "title"
-  | "taskId"
-  | "role"
-  | "status"
-  | "startedAt"
-  | "workingDirectory"
-  | "pendingApprovals"
-  | "pendingQuestions"
+  "externalSessionId" | "title" | "taskId" | "role" | "status" | "startedAt" | "workingDirectory"
 > & {
+  activityState: AgentSessionActivityState;
+  pendingApprovalCount: number;
+  pendingQuestionCount: number;
   selectedModel: AgentSessionState["selectedModel"];
   runtimeKind: AgentSessionState["runtimeKind"];
 };
@@ -46,16 +45,9 @@ export const isWorkflowAgentSessionSummary = (
 
 export type AgentActivitySessionSummary = Pick<
   WorkflowAgentSessionState,
-  | "externalSessionId"
-  | "runtimeKind"
-  | "workingDirectory"
-  | "taskId"
-  | "role"
-  | "status"
-  | "startedAt"
+  "externalSessionId" | "runtimeKind" | "workingDirectory" | "taskId" | "role" | "startedAt"
 > & {
-  hasPendingApprovals: boolean;
-  hasPendingQuestions: boolean;
+  activityState: AgentSessionActivityState;
 };
 
 export type AgentActivitySessionsSnapshot = {
@@ -90,12 +82,13 @@ export const toAgentSessionSummary = (session: AgentSessionState): AgentSessionS
   taskId: session.taskId,
   role: session.role,
   status: session.status,
+  activityState: getAgentSessionActivityStateFromSession(session),
   startedAt: session.startedAt,
   workingDirectory: session.workingDirectory,
   selectedModel: session.selectedModel,
   runtimeKind: session.runtimeKind,
-  pendingApprovals: session.pendingApprovals,
-  pendingQuestions: session.pendingQuestions,
+  pendingApprovalCount: session.pendingApprovals.length,
+  pendingQuestionCount: session.pendingQuestions.length,
 });
 
 export const toAgentActivitySessionSummary = (
@@ -111,10 +104,8 @@ export const toAgentActivitySessionSummary = (
     workingDirectory: session.workingDirectory,
     taskId: session.taskId,
     role: session.role,
-    status: session.status,
     startedAt: session.startedAt,
-    hasPendingApprovals: session.pendingApprovals.length > 0,
-    hasPendingQuestions: session.pendingQuestions.length > 0,
+    activityState: getAgentSessionActivityStateFromSession(session),
   };
 };
 
@@ -129,12 +120,13 @@ const areSummariesEquivalent = (
     left.taskId === right.taskId &&
     left.role === right.role &&
     left.status === right.status &&
+    left.activityState === right.activityState &&
     left.startedAt === right.startedAt &&
     left.workingDirectory === right.workingDirectory &&
     left.selectedModel === right.selectedModel &&
     left.runtimeKind === right.runtimeKind &&
-    left.pendingApprovals === right.pendingApprovals &&
-    left.pendingQuestions === right.pendingQuestions
+    left.pendingApprovalCount === right.pendingApprovalCount &&
+    left.pendingQuestionCount === right.pendingQuestionCount
   );
 };
 
@@ -147,10 +139,10 @@ const areActivitySummariesEquivalent = (
     agentSessionIdentityKey(left) === agentSessionIdentityKey(right) &&
     left.taskId === right.taskId &&
     left.role === right.role &&
-    left.status === right.status &&
+    left.runtimeKind === right.runtimeKind &&
+    left.workingDirectory === right.workingDirectory &&
     left.startedAt === right.startedAt &&
-    left.hasPendingApprovals === right.hasPendingApprovals &&
-    left.hasPendingQuestions === right.hasPendingQuestions
+    left.activityState === right.activityState
   );
 };
 

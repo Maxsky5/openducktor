@@ -15,6 +15,7 @@ export type AgentWorkflowStepCompletion = "not_started" | "in_progress" | "done"
 export type AgentWorkflowStepLiveSession =
   | "none"
   | "idle"
+  | "starting"
   | "running"
   | "waiting_input"
   | "stopped"

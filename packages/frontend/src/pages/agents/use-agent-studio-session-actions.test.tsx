@@ -11,6 +11,7 @@ import {
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { clearAppQueryClient } from "@/lib/query-client";
 import { QueryProvider } from "@/lib/query-provider";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { createHookHarness as createCoreHookHarness } from "@/test-utils/react-hook-harness";
@@ -82,6 +83,8 @@ const createAttachmentDraft = (input: {
 });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+const summarizeSessions = (sessions: ReturnType<typeof createSession>[]) =>
+  sessions.map(toAgentSessionSummary);
 
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -232,11 +235,8 @@ const confirmSessionStartModal = async (
 
 const createBaseArgs = (): HookArgs => {
   return {
-    activeWorkspace: {
-      repoPath: "/repo",
-      workspaceId: "workspace-1",
-      workspaceName: "Active Workspace",
-    },
+    activeWorkspaceId: "workspace-1",
+    workspaceRepoPath: "/repo",
     taskId: "task-1",
     role: "spec",
     launchActionId: "spec_initial",
@@ -778,6 +778,41 @@ describe("useAgentStudioSessionActions", () => {
     await harness.unmount();
   });
 
+  test("onSend allows queued follow-ups while a starting active session is being prepared", async () => {
+    const sendAgentMessage = mock(async () => {});
+
+    const harness = createHookHarness({
+      ...createBaseArgs(),
+      activeSession: createSession({
+        externalSessionId: "session-existing",
+        status: "starting",
+      }),
+      activeSessionRuntimeDescriptor: {
+        ...OPENCODE_RUNTIME_DESCRIPTOR,
+        capabilities: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities,
+          sessionLifecycle: {
+            ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+            supportsQueuedUserMessages: true,
+          },
+        },
+      },
+      sendAgentMessage,
+    });
+
+    await harness.mount();
+    expect(harness.getLatest().busySendBlockedReason).toBeNull();
+    await harness.run(async (state) => {
+      await expect(state.onSend(createComposerDraft("hello while starting"))).resolves.toBe(true);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledWith(localSessionIdentity("session-existing"), [
+      { kind: "text", text: "hello while starting" },
+    ]);
+
+    await harness.unmount();
+  });
+
   test("onSend blocks busy follow-ups when the runtime does not support queued user messages", async () => {
     const sendAgentMessage = mock(async () => {});
 
@@ -1146,7 +1181,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1164,7 +1199,7 @@ describe("useAgentStudioSessionActions", () => {
       ...createBaseArgs(),
       taskId: "task-2",
       activeSession: taskTwoSession,
-      sessionsForTask: [taskTwoSession],
+      sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
 
@@ -1197,7 +1232,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1213,7 +1248,7 @@ describe("useAgentStudioSessionActions", () => {
       ...createBaseArgs(),
       taskId: "task-2",
       activeSession: taskTwoSession,
-      sessionsForTask: [taskTwoSession],
+      sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
     expect(harness.getLatest().isSending).toBe(false);
@@ -1221,7 +1256,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1255,7 +1290,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
 
@@ -1271,7 +1306,7 @@ describe("useAgentStudioSessionActions", () => {
       ...createBaseArgs(),
       taskId: "task-2",
       activeSession: taskTwoSession,
-      sessionsForTask: [taskTwoSession],
+      sessionsForTask: summarizeSessions([taskTwoSession]),
       sendAgentMessage,
     });
     expect(harness.getLatest().isSending).toBe(false);
@@ -1279,7 +1314,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       activeSession: taskOneSession,
-      sessionsForTask: [taskOneSession],
+      sessionsForTask: summarizeSessions([taskOneSession]),
       sendAgentMessage,
     });
     await harness.waitFor((state) => state.isSending);
@@ -1309,7 +1344,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession,
-      sessionsForTask: [activeSession],
+      sessionsForTask: summarizeSessions([activeSession]),
       sendAgentMessage,
       startAgentSession,
     });
@@ -1372,7 +1407,7 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       ...createBaseArgs(),
       activeSession: nextSession,
-      sessionsForTask: [nextSession],
+      sessionsForTask: summarizeSessions([nextSession]),
       startAgentSession,
       sendAgentMessage,
     });
@@ -1400,7 +1435,7 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createHookHarness({
       ...createBaseArgs(),
       activeSession: existingSpecSession,
-      sessionsForTask: [existingSpecSession],
+      sessionsForTask: summarizeSessions([existingSpecSession]),
       sendAgentMessage,
       updateQuery: (updates) => {
         updateCalls.push(updates);
@@ -1425,7 +1460,7 @@ describe("useAgentStudioSessionActions", () => {
 
     const harness = createHookHarness({
       ...createBaseArgs(),
-      sessionsForTask: [sessionTwo],
+      sessionsForTask: summarizeSessions([sessionTwo]),
       taskId: "task-2",
       updateQuery: (updates) => {
         updateCalls.push(updates);
@@ -1572,7 +1607,7 @@ describe("useAgentStudioSessionActions", () => {
     const scheduleSelectionIntent = mock(() => {});
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      sessionsForTask: [createSession({ externalSessionId: "session-1" })],
+      sessionsForTask: summarizeSessions([createSession({ externalSessionId: "session-1" })]),
       canPrepareMessageFirstSession: () => true,
       updateQuery,
       scheduleSelectionIntent,
@@ -1594,7 +1629,7 @@ describe("useAgentStudioSessionActions", () => {
     const session = createSession({ externalSessionId: "session-1", role: "spec" });
     const harness = createCoreHookHarness(useAgentStudioSelectionActions, {
       taskId: "task-1",
-      sessionsForTask: [session],
+      sessionsForTask: summarizeSessions([session]),
       canPrepareMessageFirstSession: () => true,
       updateQuery,
       scheduleSelectionIntent: undefined,
@@ -1619,7 +1654,6 @@ describe("useAgentStudioSessionActions", () => {
     const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
       activeSession: null,
       agentStudioReady: true,
-      pendingQuestions: [],
       answerAgentQuestion,
     });
 
@@ -1643,6 +1677,20 @@ describe("useAgentStudioSessionActions", () => {
       externalSessionId: "shared-session",
       runtimeKind: "opencode" as const,
       workingDirectory: "/repo/opencode",
+      pendingQuestions: [
+        {
+          requestId: "req-1",
+          questions: [
+            {
+              header: "Confirm",
+              question: "Need answer",
+              options: [],
+              multiple: false,
+              custom: true,
+            },
+          ],
+        },
+      ],
     };
     const secondSession: NonNullable<
       Parameters<typeof useAgentStudioQuestionActions>[0]["activeSession"]
@@ -1650,25 +1698,11 @@ describe("useAgentStudioSessionActions", () => {
       externalSessionId: "shared-session",
       runtimeKind: "codex" as const,
       workingDirectory: "/repo/codex",
+      pendingQuestions: firstSession.pendingQuestions,
     };
-    const pendingQuestions = [
-      {
-        requestId: "req-1",
-        questions: [
-          {
-            header: "Confirm",
-            question: "Need answer",
-            options: [],
-            multiple: false,
-            custom: true,
-          },
-        ],
-      },
-    ];
     const harness = createCoreHookHarness(useAgentStudioQuestionActions, {
       activeSession: firstSession,
       agentStudioReady: true,
-      pendingQuestions,
       answerAgentQuestion,
     });
 
@@ -1682,7 +1716,6 @@ describe("useAgentStudioSessionActions", () => {
     await harness.update({
       activeSession: secondSession,
       agentStudioReady: true,
-      pendingQuestions,
       answerAgentQuestion,
     });
 

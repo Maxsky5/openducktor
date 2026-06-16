@@ -109,4 +109,34 @@ describe("useAgentStudioSessionStartGate", () => {
 
     await harness.unmount();
   });
+
+  test("clears failed starts without replacing the rejection", async () => {
+    const startKey = "task-1:spec:spec_initial";
+    const failure = new Error("start failed");
+    const failedStart = mock(() => Promise.reject(failure));
+    const retryStart = mock(() => Promise.resolve(workflowResult("retry-session")));
+    const harness = createHookHarness("workspace-1");
+
+    await harness.mount();
+
+    let failedPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
+    await harness.run((state: HookState) => {
+      failedPromise = state.run(startKey, failedStart);
+    });
+
+    expect(failedStart).toHaveBeenCalledTimes(1);
+    await expect(failedPromise).rejects.toBe(failure);
+
+    let retryPromise: Promise<SessionStartWorkflowResult | undefined> | undefined;
+    await harness.run((state: HookState) => {
+      retryPromise = state.run(startKey, retryStart);
+    });
+
+    expect(retryStart).toHaveBeenCalledTimes(1);
+    await expect(retryPromise).resolves.toMatchObject({
+      externalSessionId: "retry-session",
+    });
+
+    await harness.unmount();
+  });
 });

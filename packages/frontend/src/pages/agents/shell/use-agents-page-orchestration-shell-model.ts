@@ -1,22 +1,19 @@
 import { type RefObject, useCallback, useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { toAgentSessionSummary } from "@/state/agent-sessions-store";
-import type {
-  useAgentOperations,
-  useTasksState,
-  useWorkspaceState,
-} from "@/state/app-state-provider";
+import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
 import type { AgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
 
 type UseAgentsPageOrchestrationShellModelArgs = {
-  activeWorkspace: ReturnType<typeof useWorkspaceState>["activeWorkspace"];
-  branches: ReturnType<typeof useWorkspaceState>["branches"];
+  activeWorkspaceId: string | null;
+  branches: Parameters<typeof useAgentStudioOrchestrationController>[0]["branches"];
   runtimeDefinitions: Parameters<
     typeof useAgentStudioOrchestrationController
   >[0]["runtimeDefinitions"];
+  workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
   hasActiveGitConflict: boolean;
@@ -52,9 +49,10 @@ export type AgentsPageOrchestrationShellModel = {
 };
 
 export function useAgentsPageOrchestrationShellModel({
-  activeWorkspace,
+  activeWorkspaceId,
   branches,
   runtimeDefinitions,
+  workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
   hasActiveGitConflict,
@@ -88,9 +86,10 @@ export function useAgentsPageOrchestrationShellModel({
   );
 
   const orchestration = useAgentStudioOrchestrationController({
-    activeWorkspace,
+    activeWorkspaceId,
     branches,
     runtimeDefinitions,
+    workspaceRepoPath,
     selection: orchestrationSelection,
     hasActiveGitConflict,
     draftStateKey,
@@ -142,7 +141,7 @@ export function useAgentsPageOrchestrationShellModel({
   );
 
   const { handleResolveRebaseConflict } = useAgentStudioRebaseConflictResolution({
-    activeWorkspace,
+    workspaceId: activeWorkspaceId,
     selection: rebaseConflictSelection,
     scheduleQueryUpdate,
     startSessionRequest: orchestration.startSessionRequest,

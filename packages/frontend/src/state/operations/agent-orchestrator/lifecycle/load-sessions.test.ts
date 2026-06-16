@@ -72,11 +72,7 @@ const createLoaderHarness = ({
     );
   }
   const loadAgentSessions = createLoadAgentSessions({
-    activeWorkspace: {
-      workspaceId: "workspace-1",
-      workspaceName: "Workspace",
-      repoPath: "/repo",
-    },
+    workspaceRepoPath: "/repo",
     adapter: {
       listSessionRuntimeSnapshots,
     },
@@ -231,7 +227,7 @@ describe("createLoadAgentSessions", () => {
     expect(runtimeSnapshotReads).toBe(0);
   });
 
-  test("keeps mounted transcript but clears runtime state when runtime snapshot is missing during repo reloads", async () => {
+  test("keeps mounted transcript and status when runtime snapshot is missing during repo reloads", async () => {
     const mountedSession = {
       ...createAgentSessionFixture({
         externalSessionId: record.externalSessionId,
@@ -263,7 +259,7 @@ describe("createLoadAgentSessions", () => {
     if (!session) {
       throw new Error(`Expected ${record.externalSessionId} to stay mounted.`);
     }
-    expect(session.status).toBe("idle");
+    expect(session.status).toBe("running");
     expect(session.historyLoadState).toBe("loaded");
     expect(session.messages).toBe(mountedSession.messages);
     expect(harness.listenedSessions).toEqual([]);

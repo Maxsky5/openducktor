@@ -172,11 +172,7 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useSessionStartModalState, initialProps);
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace: {
-    workspaceId: "workspace-repo",
-    workspaceName: "Repo",
-    repoPath: "/repo",
-  },
+  workspaceRepoPath: "/repo",
   branches: [
     { name: "main", isCurrent: true, isRemote: false },
     { name: "origin/main", isCurrent: false, isRemote: true },

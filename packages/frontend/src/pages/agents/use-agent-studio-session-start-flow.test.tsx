@@ -6,6 +6,7 @@ import * as sonnerActual from "sonner";
 import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
+import { toAgentSessionSummary } from "@/state/agent-sessions-store";
 import { ChecksOperationsContext, RuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { host } from "@/state/operations/host";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
@@ -39,6 +40,8 @@ const createPromptTask = (overrides = {}) =>
   });
 
 const createSession = (overrides = {}) => createAgentSessionFixture(overrides);
+const summarizeSessions = (sessions: ReturnType<typeof createSession>[]) =>
+  sessions.map(toAgentSessionSummary);
 
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -179,11 +182,8 @@ const REPO_SETTINGS = {
 } satisfies HookArgs["repoSettings"];
 
 const createBaseArgs = (): HookArgs => ({
-  activeWorkspace: {
-    repoPath: "/repo",
-    workspaceId: "workspace-1",
-    workspaceName: "Active Workspace",
-  },
+  workspaceId: "workspace-1",
+  workspaceRepoPath: "/repo",
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",
@@ -756,7 +756,7 @@ describe("useAgentStudioSessionStartFlow", () => {
           qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
         },
       }),
-      sessionsForTask: [existingSession],
+      sessionsForTask: summarizeSessions([existingSession]),
       startAgentSession,
       sendAgentMessage,
       updateQuery: (updates) => {
@@ -837,7 +837,7 @@ describe("useAgentStudioSessionStartFlow", () => {
           qaReport: { has: true, updatedAt: "2026-02-22T10:00:00.000Z", verdict: "rejected" },
         },
       }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-existing",
           role: "build",
@@ -845,7 +845,7 @@ describe("useAgentStudioSessionStartFlow", () => {
           startedAt: "2026-02-22T12:00:00.000Z",
           workingDirectory: "/repo/worktrees/session-existing",
         }),
-      ],
+      ]),
       startAgentSession,
       updateQuery: (updates) => {
         updateCalls.push(updates);
@@ -892,13 +892,13 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       startAgentSession,
       selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
           role: "build",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
-      ],
+      ]),
     });
 
     await harness.mount();
@@ -932,13 +932,13 @@ describe("useAgentStudioSessionStartFlow", () => {
       canStartRole: () => false,
       startAgentSession,
       selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
           role: "build",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
-      ],
+      ]),
     });
 
     await harness.mount();
@@ -973,13 +973,13 @@ describe("useAgentStudioSessionStartFlow", () => {
       startAgentSession,
       sendAgentMessage,
       selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
           role: "build",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
-      ],
+      ]),
     });
 
     await harness.mount();
@@ -1008,13 +1008,13 @@ describe("useAgentStudioSessionStartFlow", () => {
       startAgentSession,
       sendAgentMessage,
       selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-existing",
           role: "build",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
-      ],
+      ]),
     });
 
     await harness.mount();
@@ -1037,7 +1037,7 @@ describe("useAgentStudioSessionStartFlow", () => {
       role: "spec",
       startAgentSession,
       selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
           role: "build",
@@ -1048,7 +1048,7 @@ describe("useAgentStudioSessionStartFlow", () => {
           role: "build",
           startedAt: "2026-02-22T11:00:00.000Z",
         }),
-      ],
+      ]),
     });
 
     await harness.mount();
@@ -1098,13 +1098,13 @@ describe("useAgentStudioSessionStartFlow", () => {
       ...createBaseArgs(),
       role: "spec",
       selectedTask: createTask({ status: "human_review" }),
-      sessionsForTask: [
+      sessionsForTask: summarizeSessions([
         createSession({
           externalSessionId: "session-build-latest",
           role: "build",
           startedAt: "2026-02-22T12:00:00.000Z",
         }),
-      ],
+      ]),
     });
 
     await harness.mount();

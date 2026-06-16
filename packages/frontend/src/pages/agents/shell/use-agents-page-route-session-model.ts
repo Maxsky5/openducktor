@@ -5,7 +5,7 @@ import { useNavigationType, useSearchParams } from "react-router-dom";
 import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import { useAgentStudioQuerySessionSync } from "../query-sync/use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
@@ -15,7 +15,7 @@ import { buildAgentStudioWorktreeRecoveryKey } from "./agent-studio-worktree-rec
 import { useAgentStudioSelectionIntentState } from "./use-agent-studio-selection-intent-state";
 
 type UseAgentsPageRouteSessionModelArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   workspaceRepoPath: string | null;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
@@ -26,8 +26,7 @@ type UseAgentsPageRouteSessionModelArgs = {
   tasks: Parameters<typeof useAgentStudioSelectionController>[0]["tasks"];
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
-  isLoadingSessionReadModel: boolean;
-  sessionReadModelError: string | null;
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -46,7 +45,7 @@ export type AgentsPageRouteSessionModel = {
 };
 
 export function useAgentsPageRouteSessionModel({
-  activeWorkspace,
+  activeWorkspaceId,
   workspaceRepoPath,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
@@ -57,8 +56,7 @@ export function useAgentsPageRouteSessionModel({
   tasks,
   isForegroundLoadingTasks,
   sessions,
-  isLoadingSessionReadModel,
-  sessionReadModelError,
+  sessionReadModelLoadState,
   loadAgentSessionHistory,
   readSessionModelCatalog,
   readSessionTodos,
@@ -76,7 +74,7 @@ export function useAgentsPageRouteSessionModel({
     retryNavigationPersistence,
     updateQuery,
   } = useAgentStudioQuerySync({
-    activeWorkspace,
+    activeWorkspaceId,
     navigationType,
     searchParams,
     setSearchParams,
@@ -98,13 +96,13 @@ export function useAgentsPageRouteSessionModel({
     });
 
   const selection = useAgentStudioSelectionController({
-    activeWorkspace,
+    activeWorkspaceId,
+    workspaceRepoPath,
     isRepoNavigationBoundaryPending,
     tasks,
     isLoadingTasks: isForegroundLoadingTasks,
     sessions,
-    isLoadingSessionReadModel,
-    sessionReadModelError,
+    sessionReadModelLoadState,
     taskIdParam,
     sessionKeyParam,
     hasExplicitRoleParam,

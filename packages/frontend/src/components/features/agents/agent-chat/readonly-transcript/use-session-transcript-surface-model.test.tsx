@@ -4,6 +4,7 @@ import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { matchesAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { QueryProvider } from "@/lib/query-provider";
+import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
@@ -13,8 +14,12 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { AgentChatThreadRuntimeReadiness, AgentChatThreadSession } from "../agent-chat.types";
+import type { AgentChatThreadSession } from "../agent-chat.types";
 import { toAgentChatThreadSession } from "../agent-chat-thread-session";
+
+type RepoRuntimeReadinessArgs = Parameters<
+  typeof import("@/lib/use-repo-runtime-readiness").useRepoRuntimeReadiness
+>[0];
 
 const readSessionHistory = mock(
   async (): Promise<AgentSessionHistoryMessage[]> => [
@@ -41,7 +46,7 @@ let actualAppStateContexts: Awaited<typeof import("@/state/app-state-contexts")>
 let actualHostOperations: Awaited<typeof import("@/state/operations/host")>;
 let actualRepoRuntimeReadiness: Awaited<typeof import("@/lib/use-repo-runtime-readiness")>;
 let originalWorkspaceGetSettingsSnapshot: typeof import("@/state/operations/host").host.workspaceGetSettingsSnapshot;
-let runtimeReadiness: AgentChatThreadRuntimeReadiness = {
+let runtimeReadiness: RepoRuntimeReadiness = {
   readinessState: "ready",
   isReady: true,
   isRuntimeStarting: false,
@@ -49,6 +54,7 @@ let runtimeReadiness: AgentChatThreadRuntimeReadiness = {
   isLoadingChecks: false,
   refreshChecks: async () => {},
 };
+let runtimeReadinessCalls: RepoRuntimeReadinessArgs[] = [];
 
 function makeTranscriptTarget(overrides: Partial<AgentSessionIdentity> = {}): AgentSessionIdentity {
   return {
@@ -172,6 +178,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       isLoadingChecks: false,
       refreshChecks: async () => {},
     };
+    runtimeReadinessCalls = [];
     actualHostOperations.host.workspaceGetSettingsSnapshot = async () => {
       if (settingsSnapshotError) {
         throw settingsSnapshotError;
@@ -180,11 +187,6 @@ describe("useSessionTranscriptSurfaceModel", () => {
     };
 
     mock.module("@/state/app-state-provider", () => ({
-      useActiveWorkspace: () => ({
-        workspaceId: "workspace-a",
-        workspaceName: "Workspace A",
-        repoPath: "/repo-a",
-      }),
       useAgentOperations: () => ({
         readSessionHistory,
         replyAgentApproval,
@@ -211,7 +213,10 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }));
 
     mock.module("@/lib/use-repo-runtime-readiness", () => ({
-      useRepoRuntimeReadiness: () => runtimeReadiness,
+      useRepoRuntimeReadiness: (args: RepoRuntimeReadinessArgs) => {
+        runtimeReadinessCalls.push(args);
+        return runtimeReadiness;
+      },
     }));
   });
 
@@ -234,11 +239,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: transcriptTarget,
       },
@@ -275,11 +276,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -305,11 +302,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget({ externalSessionId: "session-requested" }),
       },
@@ -336,6 +329,29 @@ describe("useSessionTranscriptSurfaceModel", () => {
     }
   });
 
+  test("scopes runtime readiness to the transcript target runtime", async () => {
+    const { useSessionTranscriptSurfaceModel } = await import(
+      "./use-session-transcript-surface-model"
+    );
+    const harness = createSharedHookHarness(
+      useSessionTranscriptSurfaceModel,
+      {
+        workspaceRepoPath: "/repo-a",
+        isOpen: true,
+        target: makeTranscriptTarget({ runtimeKind: "codex" }),
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+
+      expect(runtimeReadinessCalls.at(-1)?.runtimeKind).toBe("codex");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("does not load history while the dialog is closed", async () => {
     const transcriptTarget = makeTranscriptTarget();
     const { useSessionTranscriptSurfaceModel } = await import(
@@ -344,11 +360,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: false,
         target: transcriptTarget,
       },
@@ -371,11 +383,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: null,
       },
@@ -403,11 +411,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -418,7 +422,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
       await harness.waitFor(() => readSessionHistory.mock.calls.length === 1);
 
-      expect(harness.getLatest().model.thread.sessionLifecycle.transcriptState).toEqual({
+      expect(harness.getLatest().model.thread.transcriptState).toEqual({
         kind: "session_loading",
         reason: "history",
       });
@@ -438,16 +442,14 @@ describe("useSessionTranscriptSurfaceModel", () => {
         ]);
         await deferredHistory.promise;
       });
-      await harness.waitFor(
-        (state) => state.model.thread.sessionLifecycle.transcriptState.kind === "visible",
-      );
+      await harness.waitFor((state) => state.model.thread.transcriptState.kind === "visible");
     } finally {
       deferredHistory.resolve([]);
       await harness.unmount();
     }
   });
 
-  test("uses the canonical runtime waiting lifecycle while runtime readiness is checking", async () => {
+  test("uses the canonical runtime waiting transcript state while runtime readiness is checking", async () => {
     runtimeReadiness = {
       readinessState: "checking",
       isReady: false,
@@ -462,11 +464,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -477,8 +475,8 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.mount();
 
       expect(readSessionHistory).not.toHaveBeenCalled();
-      expect(harness.getLatest().model.thread.sessionLifecycle).toMatchObject({
-        repoReadinessState: "checking",
+      expect(harness.getLatest().model.thread.transcriptState).toMatchObject({
+        kind: "runtime_waiting",
       });
       expect(harness.getLatest().model.thread.emptyState).toBe(null);
     } finally {
@@ -494,11 +492,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: transcriptTarget,
       },
@@ -517,7 +511,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor(
         (state) => state.model.thread.session?.externalSessionId === "session-subagent-1",
       );
-      expect(harness.getLatest().model.thread.session?.status).toBe("idle");
+      expect(harness.getLatest().model.thread.session?.activityState).toBe("idle");
       expect(harness.getLatest().model.thread.session?.pendingApprovals).toEqual([]);
       expect(harness.getLatest().model.thread.session?.pendingQuestions).toEqual([]);
     } finally {
@@ -534,11 +528,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -550,7 +540,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
 
       const model = harness.getLatest().model;
       expect(model.thread.session).toEqual(toAgentChatThreadSession(liveSession, []));
-      expect(model.thread.sessionLifecycle.transcriptState).toEqual({ kind: "visible" });
+      expect(model.thread.transcriptState).toEqual({ kind: "visible" });
       expect(model.thread.canReplyToApprovals).toBe(true);
       expect(readSessionHistory).not.toHaveBeenCalled();
     } finally {
@@ -567,11 +557,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -598,11 +584,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -636,11 +618,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },
@@ -676,11 +654,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget({ externalSessionId: "session-requested" }),
       },
@@ -708,11 +682,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: transcriptTarget,
       },
@@ -724,7 +694,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
       await harness.waitFor((state) => state.model.thread.emptyState !== null);
 
       expect(readSessionHistory).toHaveBeenCalledTimes(1);
-      expect(harness.getLatest().model.thread.sessionLifecycle.transcriptState).toEqual({
+      expect(harness.getLatest().model.thread.transcriptState).toEqual({
         kind: "failed",
       });
       expect(harness.getLatest().model.thread.emptyState).toEqual({
@@ -743,11 +713,7 @@ describe("useSessionTranscriptSurfaceModel", () => {
     const harness = createSharedHookHarness(
       useSessionTranscriptSurfaceModel,
       {
-        activeWorkspace: {
-          workspaceId: "workspace-a",
-          workspaceName: "Workspace A",
-          repoPath: "/repo-a",
-        },
+        workspaceRepoPath: "/repo-a",
         isOpen: true,
         target: makeTranscriptTarget(),
       },

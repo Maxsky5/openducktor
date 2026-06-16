@@ -108,11 +108,8 @@ const createHookHarness = (initialProps: HookArgs) => {
 };
 
 const createBaseArgs = (): HookArgs => ({
-  activeWorkspace: {
-    repoPath: "/repo",
-    workspaceId: "workspace-1",
-    workspaceName: "Active Workspace",
-  },
+  activeWorkspaceId: "workspace-1",
+  workspaceRepoPath: "/repo",
   taskId: "task-1",
   role: "spec",
   launchActionId: "spec_initial",

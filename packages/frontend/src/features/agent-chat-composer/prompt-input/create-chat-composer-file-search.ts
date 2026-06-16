@@ -1,25 +1,18 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentFileSearchResult, RuntimeWorkingDirectoryRef } from "@openducktor/core";
+import type { AgentFileSearchResult } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { sessionFileSearchQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeFileSearchQueryOptions } from "@/state/queries/runtime-catalog";
+import type { ChatComposerPromptInputTarget } from "./chat-composer-prompt-input-target";
 
 export const createChatComposerFileSearch = ({
-  hasSessionTarget,
-  activeSessionRuntimeRef,
-  activeSessionRuntimeRefError,
-  workspaceRepoPath,
-  selectedRuntimeKind,
+  promptInputTarget,
   supportsFileSearch,
   queryClient,
   loadFileSearchForRepo,
   readSessionFileSearch,
 }: {
-  hasSessionTarget: boolean;
-  activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
-  activeSessionRuntimeRefError: string | null;
-  workspaceRepoPath: string | null;
-  selectedRuntimeKind: RuntimeKind | null;
+  promptInputTarget: ChatComposerPromptInputTarget;
   supportsFileSearch: boolean;
   queryClient: QueryClient;
   loadFileSearchForRepo: (
@@ -35,15 +28,15 @@ export const createChatComposerFileSearch = ({
   ) => Promise<AgentFileSearchResult[]>;
 }): ((query: string) => Promise<AgentFileSearchResult[]>) => {
   return async (query: string): Promise<AgentFileSearchResult[]> => {
-    if (hasSessionTarget) {
-      if (activeSessionRuntimeRefError) {
-        throw new Error(activeSessionRuntimeRefError);
-      }
-      if (activeSessionRuntimeRef == null) {
-        throw new Error(
-          "Active session file search is unavailable until the session runtime is ready.",
-        );
-      }
+    if (promptInputTarget.kind === "sessionLoading") {
+      throw new Error(
+        "Active session file search is unavailable until the session runtime is ready.",
+      );
+    }
+    if (promptInputTarget.kind === "unavailable") {
+      throw new Error(promptInputTarget.error);
+    }
+    if (promptInputTarget.kind === "session") {
       if (!supportsFileSearch) {
         return [];
       }
@@ -52,19 +45,19 @@ export const createChatComposerFileSearch = ({
       }
       return queryClient.fetchQuery(
         sessionFileSearchQueryOptions(
-          activeSessionRuntimeRef.repoPath,
-          activeSessionRuntimeRef.runtimeKind,
-          activeSessionRuntimeRef.workingDirectory,
+          promptInputTarget.runtimeRef.repoPath,
+          promptInputTarget.runtimeRef.runtimeKind,
+          promptInputTarget.runtimeRef.workingDirectory,
           query,
           readSessionFileSearch,
         ),
       );
     }
 
-    if (!workspaceRepoPath) {
+    if (promptInputTarget.kind === "noRepo") {
       throw new Error("No repository selected.");
     }
-    if (!selectedRuntimeKind) {
+    if (promptInputTarget.kind === "noRuntime") {
       throw new Error("Select a runtime before searching files.");
     }
     if (!supportsFileSearch) {
@@ -72,8 +65,8 @@ export const createChatComposerFileSearch = ({
     }
     return queryClient.fetchQuery(
       repoRuntimeFileSearchQueryOptions(
-        workspaceRepoPath,
-        selectedRuntimeKind,
+        promptInputTarget.repoPath,
+        promptInputTarget.runtimeKind,
         query,
         loadFileSearchForRepo,
       ),

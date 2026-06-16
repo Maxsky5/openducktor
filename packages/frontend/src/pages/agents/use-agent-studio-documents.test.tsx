@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { AgentChatMessage } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,
@@ -99,20 +98,10 @@ type UseAgentStudioDocumentsHook =
 let useAgentStudioDocuments: UseAgentStudioDocumentsHook;
 
 type HookArgs = Parameters<UseAgentStudioDocumentsHook>[0];
-type LegacyHookArgs = Omit<HookArgs, "activeWorkspace"> & {
-  activeWorkspace?: ActiveWorkspace | null;
-  workspaceRepoPath?: string | null;
-};
 type AgentMessage = AgentChatMessage;
 
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
-
 const createHookHarness = (
-  initialProps: LegacyHookArgs,
+  initialProps: HookArgs,
   options?: {
     runtimeDefinitionsContext?: ReturnType<typeof createRuntimeDefinitionsContextValue>;
     runtimeDefinitionsContextRef?: {
@@ -121,22 +110,13 @@ const createHookHarness = (
   },
 ) =>
   createSharedHookHarness(
-    (props: LegacyHookArgs) =>
-      useAgentStudioDocuments({
-        ...props,
-        activeWorkspace:
-          "workspaceRepoPath" in props
-            ? props.workspaceRepoPath
-              ? createActiveWorkspace(props.workspaceRepoPath)
-              : null
-            : (props.activeWorkspace ?? null),
-      }),
+    (props: HookArgs) => useAgentStudioDocuments(props),
     initialProps,
     options,
   );
 
 const createBaseArgs = (): HookArgs => ({
-  activeWorkspace: createActiveWorkspace("/repo"),
+  workspaceRepoPath: "/repo",
   taskId: "task-1",
   activeSession: null,
   selectedTask: createTaskCardFixture({ id: "task-1", updatedAt: "2026-02-22T08:00:00.000Z" }),

@@ -13,14 +13,14 @@ import type { SessionStartWorkflowResult } from "@/features/session-start";
 import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import { stageLocalAttachmentFile } from "@/lib/local-attachment-files";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, AgentStateContextValue } from "@/types/state-slices";
+import type { AgentStateContextValue } from "@/types/state-slices";
 import {
   buildAgentStudioSessionActivityKey,
   useAgentStudioAsyncActivityTracker,
 } from "../use-agent-studio-async-activity";
 
 type UseAgentStudioSendActionArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceId: string | null;
   taskId: string;
   role: AgentRole;
   activeSession: AgentSessionIdentity | null;
@@ -39,7 +39,7 @@ type UseAgentStudioSendActionArgs = {
 };
 
 export function useAgentStudioSendAction({
-  activeWorkspace,
+  workspaceId,
   taskId,
   role,
   activeSession,
@@ -69,7 +69,7 @@ export function useAgentStudioSendAction({
     [activeSession],
   );
   const activeComposerContextKey = buildAgentStudioSessionActivityKey({
-    activeWorkspace,
+    workspaceId,
     taskId,
     role,
     session: activeSessionIdentity,
@@ -136,7 +136,7 @@ export function useAgentStudioSendAction({
         }
 
         const targetComposerContextKey = buildAgentStudioSessionActivityKey({
-          activeWorkspace,
+          workspaceId,
           taskId,
           role,
           session: targetSession,
@@ -161,7 +161,6 @@ export function useAgentStudioSendAction({
       }
     },
     [
-      activeWorkspace,
       activeComposerContextKey,
       activeSessionIdentity,
       activeSessionIsLoadingModelCatalog,
@@ -181,6 +180,7 @@ export function useAgentStudioSendAction({
       sendAgentMessage,
       startSession,
       taskId,
+      workspaceId,
     ],
   );
 

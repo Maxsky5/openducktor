@@ -1,14 +1,9 @@
 import { type ChatSettings, DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { readChatSettingsFromSnapshot, settingsSnapshotQueryOptions } from "./workspace";
 
-export function useWorkspaceChatSettings({
-  activeWorkspace,
-}: {
-  activeWorkspace: ActiveWorkspace | null;
-}): {
+export function useWorkspaceChatSettings({ hasWorkspace }: { hasWorkspace: boolean }): {
   chatSettings: ChatSettings;
   chatSettingsError: Error | null;
   retryChatSettingsLoad: () => void;
@@ -19,21 +14,21 @@ export function useWorkspaceChatSettings({
     refetch,
   } = useQuery({
     ...settingsSnapshotQueryOptions(),
-    enabled: activeWorkspace !== null,
+    enabled: hasWorkspace,
     select: readChatSettingsFromSnapshot,
   });
 
   const retryChatSettingsLoad = useCallback((): void => {
-    if (!activeWorkspace) {
+    if (!hasWorkspace) {
       return;
     }
 
     void refetch();
-  }, [activeWorkspace, refetch]);
+  }, [hasWorkspace, refetch]);
 
   return {
-    chatSettings: activeWorkspace ? (chatSettings ?? DEFAULT_CHAT_SETTINGS) : DEFAULT_CHAT_SETTINGS,
-    chatSettingsError: activeWorkspace ? error : null,
+    chatSettings: hasWorkspace ? (chatSettings ?? DEFAULT_CHAT_SETTINGS) : DEFAULT_CHAT_SETTINGS,
+    chatSettingsError: hasWorkspace ? error : null,
     retryChatSettingsLoad,
   };
 }

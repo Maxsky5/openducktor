@@ -6,14 +6,7 @@ import {
   type RepoRuntimeHealthFixtureOverrides,
 } from "@/test-utils/shared-test-fixtures";
 import type { RepoRuntimeHealthCheck } from "@/types/diagnostics";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { useRepoRuntimeReadiness } from "./use-repo-runtime-readiness";
-
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
 
 const makeRepoHealth = (
   overrides: RepoRuntimeHealthFixtureOverrides = {},
@@ -37,7 +30,7 @@ describe("useRepoRuntimeReadiness", () => {
 
     const harness = createSharedHookHarness(Harness, {
       args: {
-        activeWorkspace: createActiveWorkspace("/repo"),
+        hasWorkspace: true,
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
@@ -98,7 +91,7 @@ describe("useRepoRuntimeReadiness", () => {
 
     const harness = createSharedHookHarness(Harness, {
       args: {
-        activeWorkspace: createActiveWorkspace("/repo"),
+        hasWorkspace: true,
         runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
@@ -158,7 +151,7 @@ describe("useRepoRuntimeReadiness", () => {
 
     const harness = createSharedHookHarness(Harness, {
       args: {
-        activeWorkspace: createActiveWorkspace("/repo"),
+        hasWorkspace: true,
         runtimeDefinitions: [SECOND_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
         isLoadingRuntimeDefinitions: false,
         runtimeDefinitionsError: null,
@@ -237,7 +230,7 @@ describe("useRepoRuntimeReadiness", () => {
     };
 
     const baseArgs: Parameters<typeof useRepoRuntimeReadiness>[0] = {
-      activeWorkspace: createActiveWorkspace("/repo"),
+      hasWorkspace: true,
       runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,

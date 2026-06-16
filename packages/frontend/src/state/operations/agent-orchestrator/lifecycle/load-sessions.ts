@@ -3,7 +3,6 @@ import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import type { AgentSessionCollection } from "@/state/agent-session-collection";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionSnapshots,
@@ -21,7 +20,7 @@ type ReadSessionCollection = () => AgentSessionCollection;
 type SessionLoaderAdapter = Pick<AgentEnginePort, "listSessionRuntimeSnapshots">;
 
 type CreateLoadAgentSessionsArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
   adapter: SessionLoaderAdapter;
   repoEpochRef: MutableRefObject<number>;
   currentWorkspaceRepoPathRef: MutableRefObject<string | null>;
@@ -126,7 +125,7 @@ export const loadRepoAgentSessionsForTasks = async ({
 };
 
 export const createLoadAgentSessions = ({
-  activeWorkspace,
+  workspaceRepoPath,
   adapter,
   repoEpochRef,
   currentWorkspaceRepoPathRef,
@@ -136,11 +135,11 @@ export const createLoadAgentSessions = ({
   queryClient,
 }: CreateLoadAgentSessionsArgs): ((taskId: string) => Promise<void>) => {
   return async (taskId: string): Promise<void> => {
-    if (!activeWorkspace?.repoPath || taskId.trim().length === 0) {
+    if (!workspaceRepoPath || taskId.trim().length === 0) {
       return;
     }
 
-    const repoPath = activeWorkspace.repoPath;
+    const repoPath = workspaceRepoPath;
     const isStaleRepoOperation = createRepoStaleGuard({
       repoPath,
       repoEpochRef,

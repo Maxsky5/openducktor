@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { cn } from "@/lib/utils";
 import type { AgentWorkflowStepState } from "@/types/agent-workflow";
 import type { AgentWorkflowStep } from "./agent-studio-header.types";
@@ -111,7 +112,7 @@ const workflowStepHint = (entry: AgentWorkflowStep): string => {
   if (attentionVariant === "blocked_task") {
     return "Task is blocked and waiting for user action";
   }
-  if (entry.state.liveSession === "running") {
+  if (isAgentSessionActivityWorking(entry.state.liveSession)) {
     return "Step in progress";
   }
   if (entry.state.liveSession === "error") {
@@ -150,7 +151,7 @@ function WorkflowStepButton({
   onSelect: (role: AgentRole, sessionValue: string | null) => void;
 }): ReactElement {
   const Icon = step.icon;
-  const shouldSpinInProgress = step.state.liveSession === "running";
+  const shouldSpinInProgress = isAgentSessionActivityWorking(step.state.liveSession);
   const attentionVariant = getWorkflowStepAttentionVariant(step);
 
   return (

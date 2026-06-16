@@ -10,9 +10,7 @@ const buildSession = (
     taskId?: string;
     role?: AgentActivitySessionSummary["role"];
     startedAt?: string;
-    status?: AgentActivitySessionSummary["status"];
-    hasPendingApprovals?: boolean;
-    hasPendingQuestions?: boolean;
+    activityState?: AgentActivitySessionSummary["activityState"];
   } = {},
 ): AgentActivitySessionSummary => ({
   externalSessionId: overrides.externalSessionId ?? "session-1",
@@ -20,25 +18,27 @@ const buildSession = (
   workingDirectory: overrides.workingDirectory ?? "/repo/worktree",
   taskId: overrides.taskId ?? "task-1",
   role: overrides.role ?? ("spec" as const),
-  status: overrides.status ?? "idle",
   startedAt: overrides.startedAt ?? "2026-02-26T09:00:00.000Z",
-  hasPendingApprovals: overrides.hasPendingApprovals ?? false,
-  hasPendingQuestions: overrides.hasPendingQuestions ?? false,
+  activityState: overrides.activityState ?? "idle",
 });
 
 describe("summarizeAgentActivity", () => {
-  test("counts active sessions from starting/running statuses", () => {
+  test("counts active sessions from published activity state", () => {
     const summary = summarizeAgentActivity({
       sessions: [
-        buildSession({ externalSessionId: "session-1", taskId: "task-1", status: "starting" }),
+        buildSession({
+          externalSessionId: "session-1",
+          taskId: "task-1",
+          activityState: "running",
+        }),
         buildSession({
           externalSessionId: "session-2",
           taskId: "task-2",
-          status: "running",
+          activityState: "starting",
           startedAt: "2026-02-26T10:00:00.000Z",
         }),
-        buildSession({ externalSessionId: "session-3", taskId: "task-3", status: "idle" }),
-        buildSession({ externalSessionId: "session-4", taskId: "task-4", status: "error" }),
+        buildSession({ externalSessionId: "session-3", taskId: "task-3", activityState: "idle" }),
+        buildSession({ externalSessionId: "session-4", taskId: "task-4", activityState: "error" }),
       ],
       taskTitleById: {
         "task-1": "One",
@@ -55,29 +55,29 @@ describe("summarizeAgentActivity", () => {
       workingDirectory: "/repo/worktree",
       taskId: "task-2",
       taskTitle: "Two",
+      activityState: "starting",
     });
     expect(summary.activeSessions[1]).toMatchObject({
       externalSessionId: "session-1",
       taskId: "task-1",
       taskTitle: "One",
+      activityState: "running",
     });
   });
 
-  test("counts waiting sessions from permissions or questions", () => {
+  test("counts waiting sessions from published activity state", () => {
     const summary = summarizeAgentActivity({
       sessions: [
         buildSession({
           externalSessionId: "session-1",
-          status: "running",
-          hasPendingApprovals: true,
+          activityState: "waiting_input",
         }),
         buildSession({
           externalSessionId: "session-2",
-          status: "idle",
-          hasPendingQuestions: true,
+          activityState: "waiting_input",
           startedAt: "2026-02-26T10:00:00.000Z",
         }),
-        buildSession({ externalSessionId: "session-3", status: "stopped" }),
+        buildSession({ externalSessionId: "session-3", activityState: "stopped" }),
       ],
     });
 
@@ -88,26 +88,32 @@ describe("summarizeAgentActivity", () => {
     expect(summary.waitingForInputSessions[1]?.externalSessionId).toBe("session-1");
   });
 
-  test("prioritizes waiting for input over active status", () => {
+  test("publishes waiting-input activity on waiting session items", () => {
     const summary = summarizeAgentActivity({
       sessions: [
         buildSession({
           externalSessionId: "session-1",
-          status: "running",
-          hasPendingApprovals: true,
+          activityState: "waiting_input",
         }),
       ],
     });
 
     expect(summary.activeSessionCount).toBe(0);
     expect(summary.waitingForInputCount).toBe(1);
-    expect(summary.waitingForInputSessions[0]?.externalSessionId).toBe("session-1");
+    expect(summary.waitingForInputSessions[0]).toMatchObject({
+      externalSessionId: "session-1",
+      activityState: "waiting_input",
+    });
   });
 
   test("falls back to the task id when the title is unavailable", () => {
     const summary = summarizeAgentActivity({
       sessions: [
-        buildSession({ externalSessionId: "session-1", taskId: "task-missing", status: "running" }),
+        buildSession({
+          externalSessionId: "session-1",
+          taskId: "task-missing",
+          activityState: "running",
+        }),
       ],
       taskTitleById: {},
     });
@@ -125,13 +131,13 @@ describe("summarizeAgentActivity", () => {
           externalSessionId: "shared-session",
           runtimeKind: "codex",
           workingDirectory: "/repo/codex",
-          status: "running",
+          activityState: "running",
         }),
         buildSession({
           externalSessionId: "shared-session",
           runtimeKind: "opencode",
           workingDirectory: "/repo/opencode",
-          status: "running",
+          activityState: "running",
         }),
       ],
     });
@@ -156,12 +162,12 @@ describe("summarizeAgentActivity", () => {
     ]);
   });
 
-  test("ignores non-active statuses without pending input", () => {
+  test("ignores inactive activity states", () => {
     const summary = summarizeAgentActivity({
       sessions: [
-        buildSession({ externalSessionId: "session-1", status: "idle" }),
-        buildSession({ externalSessionId: "session-2", status: "error" }),
-        buildSession({ externalSessionId: "session-3", status: "stopped" }),
+        buildSession({ externalSessionId: "session-1", activityState: "idle" }),
+        buildSession({ externalSessionId: "session-2", activityState: "error" }),
+        buildSession({ externalSessionId: "session-3", activityState: "stopped" }),
       ],
     });
 

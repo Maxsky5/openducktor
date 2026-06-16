@@ -12,7 +12,7 @@ const activeSession = {
   taskId: "task-1",
   taskTitle: "Add SSO",
   role: "build" as const,
-  status: "running" as const,
+  activityState: "starting" as const,
   startedAt: "2026-02-26T10:00:00.000Z",
 };
 
@@ -23,7 +23,7 @@ const waitingSession = {
   taskId: "task-2",
   taskTitle: "Validate QA flow",
   role: "qa" as const,
-  status: "idle" as const,
+  activityState: "waiting_input" as const,
   startedAt: "2026-02-26T09:00:00.000Z",
 };
 
@@ -57,6 +57,8 @@ describe("AgentActivityCard", () => {
     expect(html).toContain(">1<");
     expect(html).toContain("Add SSO");
     expect(html).toContain("Validate QA flow");
+    expect(html).toContain("BUILD · starting");
+    expect(html).toContain("QA · waiting input");
     expect(html).toContain(`href="${expectedSessionHref(activeSession)}"`);
     expect(html).toContain(`href="${expectedSessionHref(waitingSession)}"`);
   });

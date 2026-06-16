@@ -15,13 +15,12 @@ export const createSessionStartGate = <Result>(): SessionStartGate<Result> => {
 
       const startPromise = start();
       startsByKey.set(key, startPromise);
-      void startPromise
-        .finally(() => {
-          if (startsByKey.get(key) === startPromise) {
-            startsByKey.delete(key);
-          }
-        })
-        .catch(() => {});
+      const clearStart = (): void => {
+        if (startsByKey.get(key) === startPromise) {
+          startsByKey.delete(key);
+        }
+      };
+      void startPromise.then(clearStart, clearStart);
 
       return startPromise;
     },

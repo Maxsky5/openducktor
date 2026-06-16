@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createMemoryStorage,
   seedWorkspaceNavigationContexts,
@@ -21,108 +20,68 @@ type SearchParamsCall = Parameters<SetURLSearchParams>;
 
 const sessionKeyParam = (sessionKey: string) => sessionKey;
 
-type LegacyHookArgs = {
-  activeWorkspace?: ActiveWorkspace | null;
-  workspaceRepoPath?: string | null;
-  persistenceWorkspaceId?: string | null;
+type StatefulQuerySyncArgs = {
+  activeWorkspaceId: string | null;
+  initialSearchParams: string;
+};
+
+type HookArgsWithDefaults = {
+  activeWorkspaceId: string | null;
   navigationType: HookArgs["navigationType"];
   searchParams: HookArgs["searchParams"];
   setSearchParams: HookArgs["setSearchParams"];
 };
 
-const createActiveWorkspace = (
-  repoPath: string,
-  workspaceId = repoPath.replace(/^\//, "").replaceAll("/", "-"),
-): ActiveWorkspace => ({
-  workspaceId,
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
-
 const normalizeHookArgs = ({
-  activeWorkspace,
-  workspaceRepoPath,
-  persistenceWorkspaceId,
+  activeWorkspaceId,
   navigationType,
   searchParams,
   setSearchParams,
-}: LegacyHookArgs): HookArgs => ({
-  activeWorkspace:
-    activeWorkspace ??
-    (workspaceRepoPath
-      ? createActiveWorkspace(workspaceRepoPath, persistenceWorkspaceId ?? undefined)
-      : null),
+}: HookArgsWithDefaults): HookArgs => ({
+  activeWorkspaceId,
   navigationType,
   searchParams,
   setSearchParams,
 });
 
-const createHookHarness = (initialProps: LegacyHookArgs) =>
+const createHookHarness = (initialProps: HookArgsWithDefaults) =>
   createSharedHookHarness(
-    (props: LegacyHookArgs) => useAgentStudioQuerySync(normalizeHookArgs(props)),
+    (props: HookArgsWithDefaults) => useAgentStudioQuerySync(normalizeHookArgs(props)),
     initialProps,
   );
 
-const createStatefulQuerySyncHarness = (
-  initialProps: Pick<
-    LegacyHookArgs,
-    "activeWorkspace" | "workspaceRepoPath" | "persistenceWorkspaceId"
-  > & {
-    initialSearchParams: string;
-  },
-) =>
-  createSharedHookHarness(
-    ({
-      activeWorkspace,
-      workspaceRepoPath,
-      persistenceWorkspaceId,
-      initialSearchParams,
-    }: Pick<LegacyHookArgs, "activeWorkspace" | "workspaceRepoPath" | "persistenceWorkspaceId"> & {
-      initialSearchParams: string;
-    }) => {
-      const [searchParams, setSearchParamsState] = useState(
-        () => new URLSearchParams(initialSearchParams),
-      );
-      const setSearchParams: SetURLSearchParams = (nextInit) => {
-        if (nextInit instanceof URLSearchParams) {
-          setSearchParamsState(new URLSearchParams(nextInit));
-          return;
-        }
+const createStatefulQuerySyncHarness = (initialProps: StatefulQuerySyncArgs) =>
+  createSharedHookHarness(({ activeWorkspaceId, initialSearchParams }: StatefulQuerySyncArgs) => {
+    const [searchParams, setSearchParamsState] = useState(
+      () => new URLSearchParams(initialSearchParams),
+    );
+    const setSearchParams: SetURLSearchParams = (nextInit) => {
+      if (nextInit instanceof URLSearchParams) {
+        setSearchParamsState(new URLSearchParams(nextInit));
+        return;
+      }
 
-        throw new Error("Expected URLSearchParams update in test harness");
-      };
+      throw new Error("Expected URLSearchParams update in test harness");
+    };
 
-      return useAgentStudioQuerySync(
-        normalizeHookArgs({
-          ...(activeWorkspace === undefined ? {} : { activeWorkspace }),
-          ...(workspaceRepoPath === undefined ? {} : { workspaceRepoPath }),
-          ...(persistenceWorkspaceId === undefined ? {} : { persistenceWorkspaceId }),
-          navigationType: "REPLACE",
-          searchParams,
-          setSearchParams,
-        }),
-      );
-    },
-    initialProps,
-  );
+    return useAgentStudioQuerySync(
+      normalizeHookArgs({
+        activeWorkspaceId,
+        navigationType: "REPLACE",
+        searchParams,
+        setSearchParams,
+      }),
+    );
+  }, initialProps);
 
-const withActiveWorkspace = (
-  overrides: Partial<LegacyHookArgs> & Pick<LegacyHookArgs, "activeWorkspace">,
-): LegacyHookArgs => ({
+const withQuerySyncDefaults = (
+  overrides: Partial<HookArgsWithDefaults> & Pick<HookArgsWithDefaults, "activeWorkspaceId">,
+): HookArgsWithDefaults => ({
   navigationType: "REPLACE",
   searchParams: new URLSearchParams(""),
   setSearchParams: () => {},
   ...overrides,
 });
-
-const withPersistenceWorkspaceId = (
-  overrides: Partial<LegacyHookArgs> & Pick<LegacyHookArgs, "workspaceRepoPath">,
-): LegacyHookArgs =>
-  withActiveWorkspace({
-    activeWorkspace: null,
-    persistenceWorkspaceId: overrides.workspaceRepoPath ? "workspace-repo" : null,
-    ...overrides,
-  });
 
 describe("useAgentStudioQuerySync", () => {
   test("parses initial search params and syncs updates through a root-owned URL effect", async () => {
@@ -132,8 +91,7 @@ describe("useAgentStudioQuerySync", () => {
     };
 
     const harness = createHookHarness({
-      workspaceRepoPath: null,
-      persistenceWorkspaceId: null,
+      activeWorkspaceId: null,
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=build"),
       setSearchParams,
@@ -174,8 +132,7 @@ describe("useAgentStudioQuerySync", () => {
     };
 
     const harness = createHookHarness({
-      workspaceRepoPath: null,
-      persistenceWorkspaceId: null,
+      activeWorkspaceId: null,
       navigationType: "REPLACE",
       searchParams: new URLSearchParams("task=task-1&agent=spec"),
       setSearchParams,
@@ -187,8 +144,7 @@ describe("useAgentStudioQuerySync", () => {
     expect(calls).toHaveLength(0);
 
     await harness.update({
-      workspaceRepoPath: null,
-      persistenceWorkspaceId: null,
+      activeWorkspaceId: null,
       navigationType: "POP",
       searchParams: new URLSearchParams("task=task-2&session=session-2&agent=planner"),
       setSearchParams,
@@ -228,8 +184,8 @@ describe("useAgentStudioQuerySync", () => {
       );
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withQuerySyncDefaults({
+          activeWorkspaceId: "workspace-repo",
           navigationType: "REPLACE",
           searchParams: new URLSearchParams(""),
           setSearchParams,
@@ -265,8 +221,8 @@ describe("useAgentStudioQuerySync", () => {
       memoryStorage.setItem(toContextStorageKey("workspace-repo"), "{not-json");
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withQuerySyncDefaults({
+          activeWorkspaceId: "workspace-repo",
           navigationType: "REPLACE",
           searchParams: new URLSearchParams(""),
           setSearchParams: () => {},
@@ -326,8 +282,8 @@ describe("useAgentStudioQuerySync", () => {
       );
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withQuerySyncDefaults({
+          activeWorkspaceId: "workspace-repo",
           navigationType: "REPLACE",
           searchParams: new URLSearchParams(
             "task=task-from-url&session=session-from-url&agent=spec",
@@ -364,16 +320,14 @@ describe("useAgentStudioQuerySync", () => {
       );
 
       const harness = createStatefulQuerySyncHarness({
-        workspaceRepoPath: "/repo-a",
-        persistenceWorkspaceId: "workspace-repo-a",
+        activeWorkspaceId: "workspace-repo-a",
         initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
       });
 
       await harness.mount();
 
       await harness.update({
-        workspaceRepoPath: "/repo-b",
-        persistenceWorkspaceId: "workspace-repo-b",
+        activeWorkspaceId: "workspace-repo-b",
         initialSearchParams: "task=task-from-repo-a&session=session-from-repo-a&agent=build",
       });
 
@@ -398,8 +352,7 @@ describe("useAgentStudioQuerySync", () => {
       });
 
       const harness = createStatefulQuerySyncHarness({
-        workspaceRepoPath: "/repo-a",
-        persistenceWorkspaceId: "workspace-repo-a",
+        activeWorkspaceId: "workspace-repo-a",
         initialSearchParams: "",
       });
 
@@ -407,15 +360,13 @@ describe("useAgentStudioQuerySync", () => {
       await harness.waitFor((state) => state.taskIdParam === "task-a");
 
       await harness.update({
-        workspaceRepoPath: "/repo-b",
-        persistenceWorkspaceId: "workspace-repo-b",
+        activeWorkspaceId: "workspace-repo-b",
         initialSearchParams: "",
       });
       await harness.waitFor((state) => state.taskIdParam === "task-b");
 
       await harness.update({
-        workspaceRepoPath: "/repo-a",
-        persistenceWorkspaceId: "workspace-repo-a",
+        activeWorkspaceId: "workspace-repo-a",
         initialSearchParams: "",
       });
       await harness.waitFor((state) => state.taskIdParam === "task-a");
@@ -438,8 +389,7 @@ describe("useAgentStudioQuerySync", () => {
       });
 
       const harness = createStatefulQuerySyncHarness({
-        workspaceRepoPath: "/repo-a",
-        persistenceWorkspaceId: "workspace-repo-a",
+        activeWorkspaceId: "workspace-repo-a",
         initialSearchParams: "",
       });
 
@@ -447,13 +397,11 @@ describe("useAgentStudioQuerySync", () => {
       await harness.waitFor((state) => state.taskIdParam === "task-a");
 
       await harness.update({
-        workspaceRepoPath: "/repo-b",
-        persistenceWorkspaceId: "workspace-repo-b",
+        activeWorkspaceId: "workspace-repo-b",
         initialSearchParams: "",
       });
       await harness.update({
-        workspaceRepoPath: "/repo-a",
-        persistenceWorkspaceId: "workspace-repo-a",
+        activeWorkspaceId: "workspace-repo-a",
         initialSearchParams: "",
       });
       await harness.waitFor((state) => state.taskIdParam === "task-a");
@@ -477,8 +425,8 @@ describe("useAgentStudioQuerySync", () => {
 
     try {
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withQuerySyncDefaults({
+          activeWorkspaceId: "workspace-repo",
           navigationType: "REPLACE",
           searchParams: new URLSearchParams("agent=spec"),
           setSearchParams: () => {},

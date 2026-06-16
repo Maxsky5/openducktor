@@ -16,7 +16,7 @@ import {
   taskTargetBranchValidationError,
 } from "@/lib/target-branch";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { supportsTaskTargetBranchSelection } from "./constants";
 import type { SessionStartExistingSessionOption } from "./session-start-types";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
@@ -192,13 +192,13 @@ export const assertRuntimeSupportsSelectedStartMode = ({
 };
 
 export function useSessionStartModalRunner({
-  activeWorkspace,
   branches = [],
   repoSettings,
+  workspaceRepoPath,
 }: {
-  activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   repoSettings: RepoSettingsInput | null;
+  workspaceRepoPath: string | null;
 }): {
   sessionStartModal: SessionStartModalModel | null;
   runSessionStartRequest: <T>(
@@ -242,9 +242,9 @@ export function useSessionStartModalRunner({
     handleSelectModel,
     handleSelectVariant,
   } = useSessionStartModalCoordinator({
-    activeWorkspace,
     branches,
     repoSettings,
+    workspaceRepoPath,
   });
 
   selectionRef.current = selection;

@@ -6,7 +6,7 @@ import { AgentChat } from "./agent-chat";
 import {
   buildModelSelection,
   buildSession,
-  buildThreadLifecycle,
+  buildThreadTranscriptState,
 } from "./agent-chat-test-fixtures";
 
 const buildModel = () => ({
@@ -17,7 +17,7 @@ const buildModel = () => ({
       draftAssistantText: "",
     }),
     isSessionWorking: true,
-    sessionLifecycle: buildThreadLifecycle(),
+    transcriptState: buildThreadTranscriptState(),
     runtimeReadiness: {
       readinessState: "ready" as const,
       isReady: true,
@@ -26,7 +26,6 @@ const buildModel = () => ({
       isLoadingChecks: false,
       refreshChecks: async () => {},
     },
-    isTranscriptPending: false,
     isInteractionEnabled: true,
     emptyState: null,
     isStarting: false,

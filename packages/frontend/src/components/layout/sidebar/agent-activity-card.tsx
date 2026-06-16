@@ -1,6 +1,7 @@
 import { Activity, ChevronRight, CircleAlert } from "lucide-react";
 import type { ReactElement } from "react";
 import { Link } from "react-router-dom";
+import { formatAgentSessionActivityStateLabel } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { AgentActivitySessionItem } from "@/state/read-models/agent-activity-read-model";
 
@@ -37,7 +38,9 @@ function SessionList({
           >
             <p className="truncate text-xs font-medium text-foreground">{session.taskTitle}</p>
             <p className={`truncate text-[11px] ${accentClassName}`}>
-              {session.role.toUpperCase()} · {session.status}
+              {session.role.toUpperCase()}
+              {" · "}
+              {formatAgentSessionActivityStateLabel(session.activityState)}
             </p>
           </Link>
         </li>

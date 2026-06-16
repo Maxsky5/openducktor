@@ -5,6 +5,10 @@ import {
   matchesAgentSessionIdentity,
   toAgentSessionIdentity,
 } from "@/lib/agent-session-identity";
+import {
+  hasAgentSessionPendingApprovals,
+  hasAgentSessionPendingQuestions,
+} from "@/lib/agent-session-waiting-input";
 import type {
   AgentApprovalRequest,
   AgentQuestionRequest,
@@ -172,12 +176,16 @@ export function useRuntimeTranscriptInteractions({
   return {
     session,
     pendingQuestions: {
-      canSubmit: canReplyToRuntimeRequest && pendingQuestionRequests.length > 0,
+      canSubmit:
+        canReplyToRuntimeRequest &&
+        hasAgentSessionPendingQuestions({ pendingQuestions: pendingQuestionRequests }),
       isSubmittingByRequestId: isSubmittingQuestionByRequestId,
       onSubmit: replyTranscriptQuestion,
     },
     approvals: {
-      canReply: canReplyToRuntimeRequest && pendingApprovalRequests.length > 0,
+      canReply:
+        canReplyToRuntimeRequest &&
+        hasAgentSessionPendingApprovals({ pendingApprovals: pendingApprovalRequests }),
       isSubmittingByRequestId: isSubmittingApprovalByRequestId,
       errorByRequestId: approvalReplyErrorByRequestId,
       onReply: onReplyApproval,

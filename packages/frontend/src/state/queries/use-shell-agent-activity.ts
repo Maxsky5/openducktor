@@ -5,7 +5,6 @@ import {
   type AgentActivityTaskTitleLookup,
   summarizeAgentActivity,
 } from "@/state/read-models/agent-activity-read-model";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentActivitySnapshot, useTasksState } from "../app-state-provider";
 
 const EMPTY_AGENT_ACTIVITY_SUMMARY: AgentActivitySummary = {
@@ -26,19 +25,19 @@ const collectActivityTaskIds = (sessions: AgentActivitySessionSummary[]): string
 };
 
 const selectVisibleActivitySessions = ({
-  activeWorkspace,
+  activeWorkspaceRepoPath,
   workspaceRepoPath,
   sessions,
 }: {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceRepoPath: string | null;
   workspaceRepoPath: string | null;
   sessions: AgentActivitySessionSummary[];
 }): AgentActivitySessionSummary[] => {
-  if (activeWorkspace === null) {
+  if (activeWorkspaceRepoPath === null) {
     return [];
   }
 
-  return workspaceRepoPath === activeWorkspace.repoPath ? sessions : [];
+  return workspaceRepoPath === activeWorkspaceRepoPath ? sessions : [];
 };
 
 const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
@@ -60,18 +59,18 @@ const selectTaskTitlesForActivity = (taskIds: readonly string[]) => {
 };
 
 export const useShellAgentActivity = (
-  activeWorkspace: ActiveWorkspace | null,
+  activeWorkspaceRepoPath: string | null,
 ): AgentActivitySummary => {
   const activitySnapshot = useAgentActivitySnapshot();
   const { tasks } = useTasksState();
   const visibleSessions = useMemo(
     () =>
       selectVisibleActivitySessions({
-        activeWorkspace,
+        activeWorkspaceRepoPath,
         workspaceRepoPath: activitySnapshot.workspaceRepoPath,
         sessions: activitySnapshot.sessions,
       }),
-    [activeWorkspace, activitySnapshot],
+    [activeWorkspaceRepoPath, activitySnapshot],
   );
   const activityTaskIds = useMemo(() => collectActivityTaskIds(visibleSessions), [visibleSessions]);
   const selectTaskTitles = useMemo(
@@ -81,7 +80,7 @@ export const useShellAgentActivity = (
   const taskTitleById = useMemo(() => selectTaskTitles(tasks), [selectTaskTitles, tasks]);
 
   return useMemo(() => {
-    if (activeWorkspace === null || visibleSessions.length === 0) {
+    if (activeWorkspaceRepoPath === null || visibleSessions.length === 0) {
       return EMPTY_AGENT_ACTIVITY_SUMMARY;
     }
 
@@ -89,5 +88,5 @@ export const useShellAgentActivity = (
       sessions: visibleSessions,
       taskTitleById,
     });
-  }, [activeWorkspace, taskTitleById, visibleSessions]);
+  }, [activeWorkspaceRepoPath, taskTitleById, visibleSessions]);
 };

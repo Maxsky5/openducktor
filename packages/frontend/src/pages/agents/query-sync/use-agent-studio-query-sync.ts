@@ -1,19 +1,18 @@
 import type { AgentRole } from "@openducktor/core";
 import type { SetURLSearchParams } from "react-router-dom";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "./agent-studio-navigation";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
 import { useRepoNavigationPersistence } from "./use-repo-navigation-persistence";
 
 type UseAgentStudioQuerySyncArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   navigationType: "POP" | "PUSH" | "REPLACE";
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
 };
 
 export function useAgentStudioQuerySync({
-  activeWorkspace,
+  activeWorkspaceId,
   navigationType,
   searchParams,
   setSearchParams,
@@ -35,7 +34,7 @@ export function useAgentStudioQuerySync({
 
   const { isRepoNavigationBoundaryPending, persistenceError, retryPersistenceRestore } =
     useRepoNavigationPersistence({
-      activeWorkspace,
+      activeWorkspaceId,
       navigation,
       setNavigation,
     });

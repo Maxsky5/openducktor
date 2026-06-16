@@ -9,14 +9,9 @@ import type {
   SessionStartWorkflowResult,
 } from "@/features/session-start";
 import { LAUNCH_ACTION_LABELS, type SessionLaunchActionId } from "@/features/session-start";
-import { toAgentSessionIdentity } from "@/lib/agent-session-identity";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type {
-  ActiveWorkspace,
-  AgentStateContextValue,
-  RepoSettingsInput,
-} from "@/types/state-slices";
+import type { AgentStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQuickActionOption } from "./agent-studio-quick-actions";
 import type { SessionCreateOption } from "./agents-page-session-tabs";
 import type { AgentStudioQueryUpdate as QueryUpdate } from "./query-sync/agent-studio-navigation";
@@ -45,7 +40,7 @@ export type AgentSessionActionState = Pick<
 >;
 
 type UseAgentStudioSessionActionsArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
   branches?: GitBranch[];
   taskId: string;
   role: AgentRole;
@@ -62,6 +57,7 @@ type UseAgentStudioSessionActionsArgs = {
   selectionForNewSession: AgentModelSelection | null;
   reusablePrompts: ReusablePrompt[];
   repoSettings: RepoSettingsInput | null;
+  workspaceRepoPath: string | null;
   startAgentSession: AgentStateContextValue["startAgentSession"];
   settleStartedAgentSession: AgentStateContextValue["settleStartedAgentSession"];
   sendAgentMessage: AgentStateContextValue["sendAgentMessage"];
@@ -98,7 +94,7 @@ export type UseAgentStudioSessionActionsResult = {
 };
 
 export function useAgentStudioSessionActions({
-  activeWorkspace,
+  activeWorkspaceId,
   branches = [],
   taskId,
   role,
@@ -115,6 +111,7 @@ export function useAgentStudioSessionActions({
   selectionForNewSession,
   reusablePrompts,
   repoSettings,
+  workspaceRepoPath,
   startAgentSession,
   settleStartedAgentSession,
   sendAgentMessage,
@@ -151,10 +148,9 @@ export function useAgentStudioSessionActions({
     startSessionRequest,
     startSession,
     startLaunchKickoff,
-    handleCreateSession: startFlowHandleCreateSession,
-    handleQuickAction: startFlowHandleQuickAction,
+    handleCreateSession,
+    handleQuickAction,
   } = useAgentStudioSessionStartFlow({
-    activeWorkspace,
     branches,
     taskId,
     role,
@@ -166,6 +162,8 @@ export function useAgentStudioSessionActions({
     isSessionWorking: sessionState.isSessionBusy,
     selectionForNewSession,
     repoSettings,
+    workspaceId: activeWorkspaceId,
+    workspaceRepoPath,
     startAgentSession,
     settleStartedAgentSession,
     sendAgentMessage,
@@ -175,7 +173,7 @@ export function useAgentStudioSessionActions({
   });
 
   const { isSending, onSend } = useAgentStudioSendAction({
-    activeWorkspace,
+    workspaceId: activeWorkspaceId,
     taskId,
     role,
     activeSession,
@@ -196,26 +194,6 @@ export function useAgentStudioSessionActions({
   const isSessionWorking = sessionState.isSessionBusy || isSending;
   const busySendBlockedReason = sessionState.busySendBlockedReason;
 
-  const handleQuickAction = useCallback(
-    (option: AgentStudioQuickActionOption): void => {
-      if (isSessionWorking) {
-        return;
-      }
-      startFlowHandleQuickAction(option);
-    },
-    [isSessionWorking, startFlowHandleQuickAction],
-  );
-
-  const handleCreateSession = useCallback(
-    (option: SessionCreateOption): void => {
-      if (sessionState.hasActiveSession && isSessionWorking) {
-        return;
-      }
-      startFlowHandleCreateSession(option);
-    },
-    [sessionState.hasActiveSession, isSessionWorking, startFlowHandleCreateSession],
-  );
-
   const canPrepareMessageFirstSession = useCallback(
     (option: SessionCreateOption): boolean => {
       if (option.disabled || (sessionState.hasActiveSession && isSessionWorking)) {
@@ -228,9 +206,8 @@ export function useAgentStudioSessionActions({
 
   const { isSubmittingQuestionByRequestId, onSubmitQuestionAnswers } =
     useAgentStudioQuestionActions({
-      activeSession: activeSession ? toAgentSessionIdentity(activeSession) : null,
+      activeSession,
       agentStudioReady,
-      pendingQuestions: sessionState.activeSessionPendingQuestions,
       answerAgentQuestion,
     });
 

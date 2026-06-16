@@ -360,6 +360,73 @@ describe("agent-orchestrator/support/history-message-merge", () => {
     expect(merged.map((message) => message.id)).toEqual(["assistant-1", "assistant-2"]);
   });
 
+  test("preserves the local system prompt header when runtime history has not emitted it yet", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "Runtime history answer",
+          timestamp: "2026-03-01T09:00:02.000Z",
+          meta: {
+            kind: "assistant",
+            agentRole: "build",
+            isFinal: true,
+          },
+        },
+      ],
+      [
+        {
+          id: "history:system-prompt:session-1",
+          role: "system",
+          content: "System prompt:\n\nBuild the task from repo rules.",
+          timestamp: "2026-03-01T09:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "assistant-1",
+      "history:system-prompt:session-1",
+    ]);
+  });
+
+  test("keeps runtime user messages that arrived after the loaded history snapshot", () => {
+    const merged = mergedMessages(
+      [
+        {
+          id: "runtime-user-older",
+          role: "user",
+          content: "Earlier request",
+          timestamp: "2026-03-01T09:00:00.000Z",
+          meta: {
+            kind: "user",
+            state: "read",
+            parts: [{ kind: "text", text: "Earlier request" }],
+          },
+        },
+      ],
+      [
+        {
+          id: "runtime-user-kickoff",
+          role: "user",
+          content: "Resume the builder after QA rejection",
+          timestamp: "2026-03-01T09:00:05.000Z",
+          meta: {
+            kind: "user",
+            state: "queued",
+            parts: [{ kind: "text", text: "Resume the builder after QA rejection" }],
+          },
+        },
+      ],
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      "runtime-user-older",
+      "runtime-user-kickoff",
+    ]);
+  });
+
   test("keeps subagent terminal status and description consistent", () => {
     const merged = mergedMessages(
       [

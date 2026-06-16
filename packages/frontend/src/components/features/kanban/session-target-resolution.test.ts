@@ -39,25 +39,23 @@ describe("session-target-resolution", () => {
     expect(resolveHistoricalSessionRoles(historicalSessions)).toEqual(["build", "spec"]);
   });
 
-  test("prefers newest active session when statuses are equally ranked", () => {
+  test("prefers newest active session when presentation states are equally ranked", () => {
     const sessions: KanbanTaskSession[] = [
       {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/build-older",
         externalSessionId: "build-older",
         role: "build",
-        status: "running",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
       {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/build-newer",
         externalSessionId: "build-newer",
         role: "build",
-        status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
     ];
 
@@ -71,18 +69,16 @@ describe("session-target-resolution", () => {
         workingDirectory: "/repo/worktrees/shared-a",
         externalSessionId: "build-shared",
         role: "build",
-        status: "running",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
       {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/shared-b",
         externalSessionId: "build-shared",
         role: "build",
-        status: "running",
         startedAt: "2026-03-20T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
     ];
 
@@ -99,16 +95,22 @@ describe("session-target-resolution", () => {
         workingDirectory: "/repo/worktrees/build-running",
         externalSessionId: "build-running",
         role: "build",
-        status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
+      },
+      {
+        runtimeKind: "opencode",
+        workingDirectory: "/repo/worktrees/build-starting",
+        externalSessionId: "build-starting",
+        role: "build",
+        startedAt: "2026-03-22T10:00:00.000Z",
+        presentationState: "starting",
       },
       {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/build-waiting",
         externalSessionId: "build-waiting",
         role: "build",
-        status: "idle",
         startedAt: "2026-03-20T10:00:00.000Z",
         presentationState: "waiting_input",
       },
@@ -136,9 +138,8 @@ describe("session-target-resolution", () => {
         workingDirectory: "/repo/worktrees/spec-active",
         externalSessionId: "spec-active",
         role: "spec",
-        status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
     ];
 
@@ -158,18 +159,16 @@ describe("session-target-resolution", () => {
         workingDirectory: "/repo/worktrees/shared-a",
         externalSessionId: "spec-shared",
         role: "spec",
-        status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
       {
         runtimeKind: "opencode",
         workingDirectory: "/repo/worktrees/shared-b",
         externalSessionId: "spec-shared",
         role: "spec",
-        status: "running",
         startedAt: "2026-03-21T10:00:00.000Z",
-        presentationState: "active",
+        presentationState: "running",
       },
     ];
 

@@ -1895,6 +1895,8 @@ describe("use-task-operations", () => {
         resolveTurnDurationMs: () => undefined,
         clearTurnDuration: () => {},
         refreshTaskData: harness.getLatest().operations.refreshTaskData,
+        canAutoRejectReadOnlyApproval: () => false,
+        resolveWorkflowToolAliasesByCanonical: () => undefined,
       });
 
       try {

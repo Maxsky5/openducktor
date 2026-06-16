@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -15,12 +15,12 @@ type HookArgs = Parameters<typeof useAgentStudioQuerySessionSync>[0];
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
 const createSession = (taskId: string, externalSessionId: string) =>
-  createAgentSessionFixture({
+  createAgentSessionSummaryFixture({
     externalSessionId: `ext-${externalSessionId}`,
     taskId,
   });
 
-const sessionKeyParam = (session: ReturnType<typeof createAgentSessionFixture>): string =>
+const sessionKeyParam = (session: ReturnType<typeof createAgentSessionSummaryFixture>): string =>
   agentSessionIdentityKey(session);
 
 const useHookHarness = (props: HookArgs) => {
@@ -192,7 +192,7 @@ describe("useAgentStudioQuerySessionSync", () => {
 
   test("aligns the role param with the resolved session when a session param is present", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const resolvedSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -226,7 +226,7 @@ describe("useAgentStudioQuerySessionSync", () => {
 
   test("aligns missing task and stale role in one query update", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const resolvedSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -261,7 +261,7 @@ describe("useAgentStudioQuerySessionSync", () => {
 
   test("does not repin session when query intentionally omits session", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const resolvedSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-1",
       taskId: "task-1",
@@ -288,7 +288,7 @@ describe("useAgentStudioQuerySessionSync", () => {
 
   test("does not repin build selection for review tasks during task-only navigation", async () => {
     const scheduleQueryUpdate = mock((_updates: Record<string, string | undefined>) => {});
-    const resolvedSession = createAgentSessionFixture({
+    const resolvedSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "ext-session-build",
       taskId: "task-1",

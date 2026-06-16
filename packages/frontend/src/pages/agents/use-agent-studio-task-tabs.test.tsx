@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import {
   createMemoryStorage,
   seedWorkspaceTaskTabs,
@@ -7,7 +6,7 @@ import {
   withMockedLocalStorage,
 } from "./agent-studio-repo-persistence-test-utils";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -19,20 +18,6 @@ import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 enableReactActEnvironment();
 
 type HookArgs = Parameters<typeof useAgentStudioTaskTabs>[0];
-type LegacyHookArgs = Omit<HookArgs, "activeWorkspace"> & {
-  activeWorkspace?: ActiveWorkspace | null;
-  workspaceRepoPath?: string | null;
-  persistenceWorkspaceId?: string | null;
-};
-
-const createActiveWorkspace = (
-  repoPath: string,
-  workspaceId = "workspace-repo",
-): ActiveWorkspace => ({
-  workspaceId,
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
 
 const createThrowingStorage = (args: {
   throwOnGetItem?: boolean;
@@ -70,32 +55,19 @@ const createThrowingStorage = (args: {
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
 const createSession = (taskId: string, externalSessionId: string) =>
-  createAgentSessionFixture({
+  createAgentSessionSummaryFixture({
     externalSessionId: `ext-${externalSessionId}`,
     taskId,
   });
 
-const useTaskTabsHarness = (props: LegacyHookArgs) =>
-  useAgentStudioTaskTabs({
-    ...props,
-    activeWorkspace:
-      "workspaceRepoPath" in props
-        ? props.workspaceRepoPath
-          ? createActiveWorkspace(
-              props.workspaceRepoPath,
-              props.persistenceWorkspaceId ?? props.workspaceRepoPath,
-            )
-          : null
-        : (props.activeWorkspace ?? null),
-  });
+const useTaskTabsHarness = (props: HookArgs) => useAgentStudioTaskTabs(props);
 
-const createHookHarness = (initialProps: LegacyHookArgs) =>
+const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useTaskTabsHarness, initialProps);
 
-const withPersistenceWorkspaceId = (
-  overrides: Partial<LegacyHookArgs> & Pick<LegacyHookArgs, "workspaceRepoPath">,
-): LegacyHookArgs => ({
-  persistenceWorkspaceId: "workspace-repo",
+const withWorkspaceId = (
+  overrides: Partial<HookArgs> & Pick<HookArgs, "activeWorkspaceId">,
+): HookArgs => ({
   taskId: "",
   selectedTask: null,
   tasks: [],
@@ -106,7 +78,7 @@ const withPersistenceWorkspaceId = (
 });
 
 describe("useAgentStudioTaskTabs", () => {
-  test("hydrates persisted task tabs from localStorage", async () => {
+  test("loads persisted task tabs from localStorage", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -123,8 +95,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-1",
           selectedTask: createTask("task-1"),
           tasks: [createTask("task-1"), createTask("task-2")],
@@ -166,8 +138,8 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-1",
           selectedTask: taskOne,
           tasks: [taskOne, taskTwo],
@@ -211,14 +183,14 @@ describe("useAgentStudioTaskTabs", () => {
     try {
       const taskOne = createTask("task-1");
       const taskTwo = createTask("task-2");
-      const runningBuildSession = createAgentSessionFixture({
+      const runningBuildSession = createAgentSessionSummaryFixture({
         externalSessionId: "ext-session-build",
         taskId: "task-2",
         role: "build",
         status: "running",
         startedAt: "2026-02-22T09:00:00.000Z",
       });
-      const newerIdleSession = createAgentSessionFixture({
+      const newerIdleSession = createAgentSessionSummaryFixture({
         externalSessionId: "ext-session-newer",
         taskId: "task-2",
         role: "qa",
@@ -228,8 +200,8 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-1",
           selectedTask: taskOne,
           tasks: [taskOne, taskTwo],
@@ -280,8 +252,8 @@ describe("useAgentStudioTaskTabs", () => {
       );
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-1",
           selectedTask: createTask("task-1"),
           tasks: [createTask("task-1"), createTask("task-2")],
@@ -324,8 +296,8 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-1",
           selectedTask: taskOne,
           tasks: [taskOne, taskTwo],
@@ -377,8 +349,8 @@ describe("useAgentStudioTaskTabs", () => {
       });
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-2",
           selectedTask: createTask("task-2"),
           tasks: [createTask("task-1"), createTask("task-2"), createTask("task-3")],
@@ -406,7 +378,7 @@ describe("useAgentStudioTaskTabs", () => {
     });
   });
 
-  test("routes fallback tab after hydration when URL task is empty", async () => {
+  test("routes fallback tab after storage is loaded when URL task is empty", async () => {
     const memoryStorage = createMemoryStorage();
     const originalStorage = globalThis.localStorage;
     Object.defineProperty(globalThis, "localStorage", {
@@ -427,8 +399,8 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
 
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "",
           selectedTask: null,
           tasks: [createTask("task-1"), createTask("task-2")],
@@ -479,8 +451,8 @@ describe("useAgentStudioTaskTabs", () => {
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const latestSession = createSession("task-2", "session-2");
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "",
           selectedTask: null,
           tasks: [createTask("task-2")],
@@ -496,8 +468,7 @@ describe("useAgentStudioTaskTabs", () => {
       await harness.waitFor(() => updateCalls.length === 1);
 
       await harness.update({
-        workspaceRepoPath: "/repo",
-        persistenceWorkspaceId: "workspace-repo",
+        activeWorkspaceId: "workspace-repo",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-2")],
@@ -509,8 +480,7 @@ describe("useAgentStudioTaskTabs", () => {
       });
 
       await harness.update({
-        workspaceRepoPath: "/repo",
-        persistenceWorkspaceId: "workspace-repo",
+        activeWorkspaceId: "workspace-repo",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-2")],
@@ -551,9 +521,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo-a",
-          persistenceWorkspaceId: "workspace-repo-a",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo-a",
           taskId: "task-a",
           selectedTask: createTask("task-a"),
           tasks: [createTask("task-a")],
@@ -570,8 +539,7 @@ describe("useAgentStudioTaskTabs", () => {
 
       const repoBSession = createSession("task-b", "session-b");
       await harness.update({
-        workspaceRepoPath: "/repo-b",
-        persistenceWorkspaceId: "workspace-repo-b",
+        activeWorkspaceId: "workspace-repo-b",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-b")],
@@ -613,9 +581,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo-b",
-          persistenceWorkspaceId: "workspace-repo-b",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo-b",
           isRepoNavigationBoundaryPending: true,
           taskId: "",
           selectedTask: null,
@@ -647,9 +614,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo-a",
-          persistenceWorkspaceId: "workspace-repo-a",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo-a",
           taskId: "",
           selectedTask: null,
           tasks: [createTask("task-a")],
@@ -665,8 +631,7 @@ describe("useAgentStudioTaskTabs", () => {
       await harness.waitFor(() => updateCalls.length === 1);
 
       await harness.update({
-        workspaceRepoPath: "/repo-b",
-        persistenceWorkspaceId: "workspace-repo-b",
+        activeWorkspaceId: "workspace-repo-b",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-b")],
@@ -679,8 +644,7 @@ describe("useAgentStudioTaskTabs", () => {
       await harness.waitFor(() => updateCalls.length === 2);
 
       await harness.update({
-        workspaceRepoPath: "/repo-a",
-        persistenceWorkspaceId: "workspace-repo-a",
+        activeWorkspaceId: "workspace-repo-a",
         taskId: "",
         selectedTask: null,
         tasks: [createTask("task-a")],
@@ -720,8 +684,8 @@ describe("useAgentStudioTaskTabs", () => {
       const latestSession = createSession("task-1", "session-1");
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-2",
           selectedTask: taskTwo,
           tasks: [taskOne, taskTwo],
@@ -737,8 +701,7 @@ describe("useAgentStudioTaskTabs", () => {
       expect(harness.getLatest().tabTaskIds).toEqual(["task-1", "task-2"]);
 
       await harness.update({
-        workspaceRepoPath: "/repo",
-        persistenceWorkspaceId: "workspace-repo",
+        activeWorkspaceId: "workspace-repo",
         taskId: "task-2",
         selectedTask: createTaskCardFixture({
           id: "task-2",
@@ -798,8 +761,8 @@ describe("useAgentStudioTaskTabs", () => {
 
       const updateCalls: Array<Record<string, string | undefined>> = [];
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "",
           selectedTask: null,
           tasks: [createTask("task-1")],
@@ -816,8 +779,7 @@ describe("useAgentStudioTaskTabs", () => {
       updateCalls.length = 0;
 
       await harness.update({
-        workspaceRepoPath: null,
-        persistenceWorkspaceId: null,
+        activeWorkspaceId: null,
         taskId: "",
         selectedTask: null,
         tasks: [],
@@ -853,8 +815,8 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "",
           selectedTask: null,
           tasks: [createTask("task-1")],
@@ -888,8 +850,8 @@ describe("useAgentStudioTaskTabs", () => {
 
     try {
       const harness = createHookHarness(
-        withPersistenceWorkspaceId({
-          workspaceRepoPath: "/repo",
+        withWorkspaceId({
+          activeWorkspaceId: "workspace-repo",
           taskId: "task-1",
           selectedTask: createTask("task-1"),
           tasks: [createTask("task-1")],

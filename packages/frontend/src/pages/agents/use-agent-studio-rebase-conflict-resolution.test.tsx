@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -22,8 +22,8 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
   postStartActionError: null,
 });
 
-const buildSession = (overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {}) =>
-  createAgentSessionFixture({
+const buildSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
+  createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     taskId: "task-1",
     role: "build",
@@ -51,7 +51,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
       modelId: "gpt-5",
     },
   });
-  const plannerSession = createAgentSessionFixture({
+  const plannerSession = createAgentSessionSummaryFixture({
     runtimeKind: "opencode",
     externalSessionId: "planner-1",
     taskId: "task-1",
@@ -60,11 +60,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   });
 
   return {
-    activeWorkspace: {
-      workspaceId: "workspace-repo",
-      workspaceName: "Repo",
-      repoPath: "/repo",
-    },
+    workspaceId: "workspace-repo",
     selection: {
       viewTaskId: "task-1",
       viewSelectedTask: createTaskCardFixture({

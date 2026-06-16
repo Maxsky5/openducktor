@@ -6,14 +6,14 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { useMemo } from "react";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
+import { isAgentSessionActivityActive } from "@/lib/agent-session-activity-state";
 import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
+import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import {
-  findAgentStudioSessionSelectionCandidate,
+  findAgentStudioSessionSummaryByKey,
   groupSessionsByTaskId,
   resolveAgentStudioSessionSelection,
   resolveAgentStudioTaskId,
@@ -32,13 +32,13 @@ import {
 import { useAgentStudioTaskTabs } from "./use-agent-studio-task-tabs";
 
 type UseAgentStudioSelectionControllerArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  activeWorkspaceId: string | null;
+  workspaceRepoPath: string | null;
   isRepoNavigationBoundaryPending: boolean;
   tasks: TaskCard[];
   isLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
-  isLoadingSessionReadModel: boolean;
-  sessionReadModelError: string | null;
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
   taskIdParam: string;
   sessionKeyParam: string | null;
   hasExplicitRoleParam: boolean;
@@ -93,17 +93,17 @@ export type AgentStudioSelectionControllerResult = {
   viewRole: AgentRole;
   viewLaunchActionId: AgentStudioSelectedSessionView["launchActionId"];
   isActiveTaskReady: boolean;
-  viewSessionLifecycle: AgentStudioSelectedSessionView["lifecycle"];
+  viewTranscriptState: AgentStudioSelectedSessionView["transcriptState"];
 };
 
 export function useAgentStudioSelectionController({
-  activeWorkspace,
+  activeWorkspaceId,
+  workspaceRepoPath,
   isRepoNavigationBoundaryPending,
   tasks,
   isLoadingTasks,
   sessions,
-  isLoadingSessionReadModel,
-  sessionReadModelError,
+  sessionReadModelLoadState,
   taskIdParam,
   sessionKeyParam,
   hasExplicitRoleParam,
@@ -137,7 +137,7 @@ export function useAgentStudioSelectionController({
   const sessionsByTaskId = useMemo(() => groupSessionsByTaskId(sessions), [sessions]);
 
   const selectedSessionFromRoute = useMemo(
-    () => findAgentStudioSessionSelectionCandidate(sessions, routeSelectionParams.sessionKeyParam),
+    () => findAgentStudioSessionSummaryByKey(sessions, routeSelectionParams.sessionKeyParam),
     [routeSelectionParams.sessionKeyParam, sessions],
   );
 
@@ -193,7 +193,7 @@ export function useAgentStudioSelectionController({
     for (const [taskKey, taskSessions] of sessionsByTaskId) {
       let activeSession: AgentSessionSummary | null = null;
       for (const session of taskSessions) {
-        if (isAgentSessionWorkingStatus(session.status)) {
+        if (isAgentSessionActivityActive(session.activityState)) {
           activeSession = session;
           break;
         }
@@ -214,7 +214,7 @@ export function useAgentStudioSelectionController({
     handleCloseTab,
     handleReorderTab,
   } = useAgentStudioTaskTabs({
-    activeWorkspace,
+    activeWorkspaceId,
     isRepoNavigationBoundaryPending,
     taskId,
     selectedTask,
@@ -246,7 +246,7 @@ export function useAgentStudioSelectionController({
   });
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
-    activeWorkspace,
+    workspaceRepoPath,
     selectedTask: viewSelectedTask,
     sessionSummaries: viewSessionsForTask,
     sessionKey: viewSelectionParams.sessionKeyParam,
@@ -256,8 +256,7 @@ export function useAgentStudioSelectionController({
     keepExplicitRoleSessionless: viewSelectionParams.keepExplicitRoleSessionless,
     selectionIntent: viewSelectionParams.selectionIntent,
     sessionIdentityFromRoute: viewSelectionParams.sessionIdentity,
-    sessionReadModelError,
-    isLoadingSessionReadModel,
+    sessionReadModelLoadState,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,
@@ -268,7 +267,7 @@ export function useAgentStudioSelectionController({
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const isActiveTaskReady = Boolean(activeWorkspace && viewTaskId);
+  const isActiveTaskReady = Boolean(activeWorkspaceId && viewTaskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
@@ -297,7 +296,7 @@ export function useAgentStudioSelectionController({
       viewRole: selectedSessionView.role,
       viewLaunchActionId: selectedSessionView.launchActionId,
       isActiveTaskReady,
-      viewSessionLifecycle: selectedSessionView.lifecycle,
+      viewTranscriptState: selectedSessionView.transcriptState,
     }),
     [
       activeSessionSummary,
@@ -310,7 +309,7 @@ export function useAgentStudioSelectionController({
       isActiveTaskReady,
       isLoadingTasks,
       selectedSessionView.launchActionId,
-      selectedSessionView.lifecycle,
+      selectedSessionView.transcriptState,
       selectedSessionView.role,
       selectedSessionView.runtimeData,
       selectedSessionView.runtimeDataError,

@@ -38,11 +38,7 @@ describe("session-start-workflow", () => {
 
     await expect(
       startSessionWorkflow({
-        activeWorkspace: {
-          repoPath: "/repo",
-          workspaceId: "workspace-1",
-          workspaceName: "Active Workspace",
-        },
+        workspaceId: "workspace-1",
         queryClient: new QueryClient(),
         intent: {
           taskId: "TASK-1",
@@ -71,11 +67,7 @@ describe("session-start-workflow", () => {
     const settleStartedAgentSession = mock(() => undefined);
 
     const result = await startSessionWorkflow({
-      activeWorkspace: {
-        repoPath: "/repo",
-        workspaceId: "workspace-1",
-        workspaceName: "Active Workspace",
-      },
+      workspaceId: "workspace-1",
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-1",
@@ -109,7 +101,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-pr"));
 
     const result = await startSessionWorkflow({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-2",
@@ -166,7 +158,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     const result = await startSessionWorkflow({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-3",
@@ -213,7 +205,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     await startSessionWorkflow({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-4",
@@ -249,7 +241,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-build-new"));
 
     const result = await startSessionWorkflow({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-5",
@@ -284,7 +276,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-codex", "codex"));
 
     const result = await startSessionWorkflow({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-4",
@@ -329,7 +321,7 @@ describe("session-start-workflow", () => {
     const startAgentSession = mock(async () => sessionIdentity("session-codex-reuse", "codex"));
 
     const result = await startSessionWorkflow({
-      activeWorkspace: null,
+      workspaceId: null,
       queryClient: new QueryClient(),
       intent: {
         taskId: "TASK-5",

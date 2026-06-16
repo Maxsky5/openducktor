@@ -1,6 +1,11 @@
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import type { AgentActivitySessionSummary } from "@/state/agent-sessions-store";
+
+type VisibleAgentActivityState = Extract<
+  AgentActivitySessionSummary["activityState"],
+  "starting" | "running" | "waiting_input"
+>;
 
 export type AgentActivitySessionItem = {
   externalSessionId: string;
@@ -9,7 +14,7 @@ export type AgentActivitySessionItem = {
   taskId: string;
   taskTitle: string;
   role: AgentActivitySessionSummary["role"];
-  status: AgentActivitySessionSummary["status"];
+  activityState: VisibleAgentActivityState;
   startedAt: string;
 };
 
@@ -48,23 +53,12 @@ export const summarizeAgentActivity = ({
   const waitingForInputSessions: AgentActivitySessionItem[] = [];
 
   for (const session of sessions) {
-    const sessionItem: AgentActivitySessionItem = {
-      externalSessionId: session.externalSessionId,
-      runtimeKind: session.runtimeKind,
-      workingDirectory: session.workingDirectory,
-      taskId: session.taskId,
-      taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
-      role: session.role,
-      status: session.status,
-      startedAt: session.startedAt,
-    };
-
-    const isWaiting = session.hasPendingApprovals || session.hasPendingQuestions;
-
-    if (isWaiting) {
-      waitingForInputSessions.push(sessionItem);
-    } else if (isAgentSessionWorkingStatus(session.status)) {
-      activeSessions.push(sessionItem);
+    if (session.activityState === "waiting_input") {
+      waitingForInputSessions.push(toActivitySessionItem(session, taskTitleById, "waiting_input"));
+      continue;
+    }
+    if (isAgentSessionActivityWorking(session.activityState)) {
+      activeSessions.push(toActivitySessionItem(session, taskTitleById, session.activityState));
     }
   }
 
@@ -78,3 +72,18 @@ export const summarizeAgentActivity = ({
     waitingForInputSessions,
   };
 };
+
+const toActivitySessionItem = (
+  session: AgentActivitySessionSummary,
+  taskTitleById: AgentActivityTaskTitleLookup | undefined,
+  activityState: VisibleAgentActivityState,
+): AgentActivitySessionItem => ({
+  externalSessionId: session.externalSessionId,
+  runtimeKind: session.runtimeKind,
+  workingDirectory: session.workingDirectory,
+  taskId: session.taskId,
+  taskTitle: taskTitleById?.[session.taskId] ?? session.taskId,
+  role: session.role,
+  activityState,
+  startedAt: session.startedAt,
+});

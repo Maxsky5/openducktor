@@ -85,9 +85,8 @@ export const fromPersistedSessionRecord = (
     title: formatWorkflowAgentSessionTitle(session.role, fallbackTaskId),
     taskId: fallbackTaskId,
     role: session.role,
-    // Persisted task-store records are durable session metadata only.
-    // Absence from the live runtime means idle unless local state already knows
-    // the user stopped the session.
+    // Persisted task-store records are durable session metadata only. Cold reads
+    // start idle; mounted refreshes may preserve current live state separately.
     status: "idle",
     startedAt: session.startedAt,
     runtimeKind,

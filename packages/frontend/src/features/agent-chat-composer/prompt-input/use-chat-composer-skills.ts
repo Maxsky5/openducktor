@@ -1,20 +1,16 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentSkillCatalog, RuntimeWorkingDirectoryRef } from "@openducktor/core";
+import type { AgentSkillCatalog } from "@openducktor/core";
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_RUNTIME_KIND } from "@/lib/agent-runtime";
 import { sessionSkillsQueryOptions } from "@/state/queries/agent-session-runtime";
 import { repoRuntimeSkillsQueryOptions } from "@/state/queries/runtime-catalog";
+import type { ChatComposerPromptInputTarget } from "./chat-composer-prompt-input-target";
 
 const EMPTY_SKILL_CATALOG: AgentSkillCatalog = { skills: [] };
 
 type UseChatComposerSkillsArgs = {
-  hasSessionTarget: boolean;
-  canReadLoadedSessionRuntimePrompts: boolean;
-  activeSessionRuntimeRef: RuntimeWorkingDirectoryRef | null;
-  activeSessionRuntimeRefError: string | null;
+  promptInputTarget: ChatComposerPromptInputTarget;
   supportsSkillReferences: boolean;
-  workspaceRepoPath: string | null;
-  selectedRuntimeKind: RuntimeKind | null;
   loadSkillsForRepo: (
     repoPath: string,
     runtimeKind: RuntimeKind,
@@ -28,13 +24,8 @@ type UseChatComposerSkillsArgs = {
 };
 
 export const useChatComposerSkills = ({
-  hasSessionTarget,
-  canReadLoadedSessionRuntimePrompts,
-  activeSessionRuntimeRef,
-  activeSessionRuntimeRefError,
+  promptInputTarget,
   supportsSkillReferences,
-  workspaceRepoPath,
-  selectedRuntimeKind,
   loadSkillsForRepo,
   readSessionSkills,
 }: UseChatComposerSkillsArgs): {
@@ -44,11 +35,11 @@ export const useChatComposerSkills = ({
   isSkillsLoading: boolean;
 } => {
   const activeSessionSkillsQuery = useQuery({
-    ...(activeSessionRuntimeRef && readSessionSkills
+    ...(promptInputTarget.kind === "session" && readSessionSkills
       ? sessionSkillsQueryOptions(
-          activeSessionRuntimeRef.repoPath,
-          activeSessionRuntimeRef.runtimeKind,
-          activeSessionRuntimeRef.workingDirectory,
+          promptInputTarget.runtimeRef.repoPath,
+          promptInputTarget.runtimeRef.runtimeKind,
+          promptInputTarget.runtimeRef.workingDirectory,
           readSessionSkills,
         )
       : {
@@ -59,39 +50,33 @@ export const useChatComposerSkills = ({
         }),
     enabled:
       supportsSkillReferences &&
-      hasSessionTarget &&
-      canReadLoadedSessionRuntimePrompts &&
-      activeSessionRuntimeRef !== null &&
-      activeSessionRuntimeRefError === null &&
+      promptInputTarget.kind === "session" &&
       readSessionSkills !== undefined,
   });
 
   const repoSkillsQuery = useQuery({
     ...repoRuntimeSkillsQueryOptions(
-      workspaceRepoPath ?? "",
-      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-      workspaceRepoPath ?? "",
+      promptInputTarget.kind === "repo" ? promptInputTarget.repoPath : "",
+      promptInputTarget.kind === "repo" ? promptInputTarget.runtimeKind : DEFAULT_RUNTIME_KIND,
+      promptInputTarget.kind === "repo" ? promptInputTarget.repoPath : "",
       loadSkillsForRepo,
     ),
-    enabled:
-      supportsSkillReferences &&
-      !hasSessionTarget &&
-      workspaceRepoPath !== null &&
-      selectedRuntimeKind !== null,
+    enabled: supportsSkillReferences && promptInputTarget.kind === "repo",
   });
 
   let catalog = EMPTY_SKILL_CATALOG;
   let error: string | null = null;
   let isLoading = false;
-  if (supportsSkillReferences && hasSessionTarget) {
+  if (supportsSkillReferences && promptInputTarget.kind === "unavailable") {
+    error = promptInputTarget.error;
+  } else if (supportsSkillReferences && promptInputTarget.kind === "session") {
     catalog = activeSessionSkillsQuery.data ?? EMPTY_SKILL_CATALOG;
     error =
-      activeSessionRuntimeRefError ??
-      (activeSessionSkillsQuery.error instanceof Error
+      activeSessionSkillsQuery.error instanceof Error
         ? activeSessionSkillsQuery.error.message
-        : null);
+        : null;
     isLoading = activeSessionSkillsQuery.isLoading;
-  } else if (supportsSkillReferences) {
+  } else if (supportsSkillReferences && promptInputTarget.kind === "repo") {
     catalog = repoSkillsQuery.data ?? EMPTY_SKILL_CATALOG;
     error = repoSkillsQuery.error instanceof Error ? repoSkillsQuery.error.message : null;
     isLoading = repoSkillsQuery.isLoading;

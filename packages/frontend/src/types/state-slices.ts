@@ -31,6 +31,7 @@ import type {
   LoadAgentSessionHistoryInput,
 } from "@openducktor/core";
 import type { AgentSessionIdentity, AgentSessionState } from "./agent-orchestrator";
+import type { AgentSessionReadModelLoadState } from "./agent-session-read-model";
 import type { RepoRuntimeFailureKind, RepoRuntimeHealthMap } from "./diagnostics";
 
 export type WorkspaceSelectionOperationsInput = {
@@ -159,8 +160,7 @@ export type SpecStateContextValue = {
 };
 
 export type AgentSessionReadModelStateContextValue = {
-  isLoadingSessionReadModel: boolean;
-  sessionReadModelError: string | null;
+  sessionReadModelLoadState: AgentSessionReadModelLoadState;
 };
 
 export type AgentOperationsContextValue = {

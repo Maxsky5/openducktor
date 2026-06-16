@@ -3,6 +3,10 @@ import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { findFirstChangedMessageIndex } from "@/pages/agents/agent-session-message-diff";
 import {
+  type AgentSessionTranscriptState,
+  isAgentSessionTranscriptLoading,
+} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import {
   forEachSessionMessage,
   forEachSessionMessageFrom,
 } from "@/state/operations/agent-orchestrator/support/messages";
@@ -13,7 +17,7 @@ import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-po
 type UseAgentStudioBuildWorktreeRefreshArgs = {
   viewRole: string | null;
   activeSession: AgentSessionState | null;
-  isSessionViewLoading: boolean;
+  transcriptState: AgentSessionTranscriptState;
   refreshWorktree: GitDiffRefresh;
 };
 
@@ -57,9 +61,10 @@ const replaceSetContents = (target: Set<string>, source: Set<string>): void => {
 export function useAgentStudioBuildWorktreeRefresh({
   viewRole,
   activeSession,
-  isSessionViewLoading,
+  transcriptState,
   refreshWorktree,
 }: UseAgentStudioBuildWorktreeRefreshArgs): void {
+  const isTranscriptLoading = isAgentSessionTranscriptLoading(transcriptState);
   const processedToolMessageKeysRef = useRef<Set<string> | null>(null);
   if (processedToolMessageKeysRef.current === null) {
     processedToolMessageKeysRef.current = new Set<string>();
@@ -77,7 +82,7 @@ export function useAgentStudioBuildWorktreeRefresh({
 
     const activeSessionKey = agentSessionIdentityKey(activeSession);
 
-    if (isSessionViewLoading) {
+    if (isTranscriptLoading) {
       if (!wasSessionViewLoadingRef.current) {
         completedToolKeysBeforeViewLoadRef.current =
           collectCompletedGitPanelRefreshToolKeys(activeSession);
@@ -137,5 +142,5 @@ export function useAgentStudioBuildWorktreeRefresh({
     if (shouldRefresh) {
       void refreshWorktree("soft");
     }
-  }, [activeSession, isSessionViewLoading, processedToolMessageKeys, refreshWorktree, viewRole]);
+  }, [activeSession, isTranscriptLoading, processedToolMessageKeys, refreshWorktree, viewRole]);
 }

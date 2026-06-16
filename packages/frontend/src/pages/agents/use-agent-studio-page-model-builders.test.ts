@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { TaskDocumentState } from "@/components/features/task-details/use-task-documents";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
+import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { AGENT_ROLE_LABELS } from "@/types";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
-import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   buildActiveDocumentForRole,
   buildWorkflowModelContext,
@@ -17,8 +17,10 @@ const createDoc = (markdown: string): TaskDocumentState => ({
   loaded: true,
 });
 
-const createSession = (overrides: Partial<AgentSessionState> = {}): AgentSessionState =>
-  createAgentSessionFixture({
+const createSession = (
+  overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {},
+): AgentSessionSummary =>
+  createAgentSessionSummaryFixture({
     status: "idle",
     ...overrides,
   });

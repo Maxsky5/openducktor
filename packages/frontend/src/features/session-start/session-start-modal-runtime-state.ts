@@ -4,22 +4,20 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import {
-  DEFAULT_RUNTIME_KIND,
   filterRuntimeDefinitionsForStartMode,
   findRuntimeDefinition,
   resolveRuntimeKindSelection,
   toAgentRuntimeOptions,
 } from "@/lib/agent-runtime";
 import { repoRuntimeCatalogQueryOptions } from "@/state/queries/runtime-catalog";
-import type { ActiveWorkspace } from "@/types/state-slices";
 
 type UseSessionStartModalRuntimeStateArgs = {
-  activeWorkspace: ActiveWorkspace | null;
   initialCatalog: AgentModelCatalog | null | undefined;
   isOpen: boolean;
   loadCatalog: (repoPath: string, runtimeKind: RuntimeKind) => Promise<AgentModelCatalog>;
   runtimeDefinitions: RuntimeDescriptor[];
   selectedStartMode: AgentSessionStartMode;
+  workspaceRepoPath: string | null;
 };
 
 type UseSessionStartModalRuntimeStateResult = {
@@ -33,14 +31,13 @@ type UseSessionStartModalRuntimeStateResult = {
 };
 
 export function useSessionStartModalRuntimeState({
-  activeWorkspace,
   initialCatalog,
   isOpen,
   loadCatalog,
   runtimeDefinitions,
   selectedStartMode,
+  workspaceRepoPath,
 }: UseSessionStartModalRuntimeStateArgs): UseSessionStartModalRuntimeStateResult {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const [requestedRuntimeKind, setRequestedRuntimeKindState] = useState<RuntimeKind | null>(null);
 
   const eligibleRuntimeDefinitions = useMemo(
@@ -79,11 +76,7 @@ export function useSessionStartModalRuntimeState({
     (initialCatalog === null || initialCatalog.runtime?.kind === selectedRuntimeKind);
 
   const catalogQuery = useQuery({
-    ...repoRuntimeCatalogQueryOptions(
-      workspaceRepoPath ?? "",
-      selectedRuntimeKind ?? DEFAULT_RUNTIME_KIND,
-      loadCatalog,
-    ),
+    ...repoRuntimeCatalogQueryOptions(workspaceRepoPath, selectedRuntimeKind, loadCatalog),
     enabled:
       !usesInitialCatalog && Boolean(workspaceRepoPath) && isOpen && selectedRuntimeKind !== null,
     queryFn: async (): Promise<AgentModelCatalog> => {

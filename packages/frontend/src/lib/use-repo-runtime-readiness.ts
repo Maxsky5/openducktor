@@ -5,10 +5,9 @@ import {
   type RepoRuntimeReadinessSnapshot,
 } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
-import type { ActiveWorkspace } from "@/types/state-slices";
 
 type UseRepoRuntimeReadinessArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  hasWorkspace: boolean;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
@@ -23,7 +22,7 @@ export type RepoRuntimeReadiness = RepoRuntimeReadinessSnapshot & {
 };
 
 export function useRepoRuntimeReadiness({
-  activeWorkspace,
+  hasWorkspace,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -35,7 +34,7 @@ export function useRepoRuntimeReadiness({
   const readiness = useMemo(
     () =>
       deriveRepoRuntimeReadiness({
-        hasActiveWorkspace: activeWorkspace !== null,
+        hasActiveWorkspace: hasWorkspace,
         runtimeDefinitions,
         isLoadingRuntimeDefinitions,
         runtimeDefinitionsError,
@@ -44,7 +43,7 @@ export function useRepoRuntimeReadiness({
         runtimeKind,
       }),
     [
-      activeWorkspace,
+      hasWorkspace,
       isLoadingChecks,
       isLoadingRuntimeDefinitions,
       runtimeDefinitions,

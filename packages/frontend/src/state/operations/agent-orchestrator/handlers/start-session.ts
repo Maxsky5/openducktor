@@ -11,7 +11,6 @@ import type {
   StartAgentSessionResult,
   StartOrReuseResult,
   StartSessionContext,
-  StartSessionCreationInput,
   StartSessionDependencies,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
@@ -30,65 +29,6 @@ export type {
   StartSessionDependencies,
 } from "./start-session.types";
 
-const createOrReuseSession = async ({
-  ctx,
-  input,
-  deps,
-}: {
-  ctx: StartSessionContext;
-  input: StartSessionCreationInput;
-  deps: Pick<StartSessionDependencies, "session" | "runtime" | "task" | "model">;
-}): Promise<StartOrReuseResult> => {
-  if (input.startMode === "reuse") {
-    return executeReuseStart({ ctx, input, deps });
-  }
-
-  if (input.startMode === "fork") {
-    return executeForkStart({ ctx, input, deps });
-  }
-
-  return executeFreshStart({ ctx, input, deps });
-};
-
-const toSessionCreationInput = ({
-  input,
-  targetWorkingDirectoryOverride,
-}: {
-  input: StartAgentSessionInput;
-  targetWorkingDirectoryOverride?: { value: string | null };
-}): StartSessionCreationInput => {
-  if (input.startMode === "reuse") {
-    return {
-      startMode: "reuse",
-      sourceSession: input.sourceSession,
-    };
-  }
-
-  if (input.startMode === "fork") {
-    return {
-      startMode: "fork",
-      selectedModel: input.selectedModel,
-      sourceSession: input.sourceSession,
-    };
-  }
-
-  const freshInput: StartSessionCreationInput = {
-    startMode: "fresh",
-    selectedModel: input.selectedModel,
-  };
-
-  if (targetWorkingDirectoryOverride) {
-    freshInput.targetWorkingDirectory = targetWorkingDirectoryOverride.value;
-    return freshInput;
-  }
-
-  if ("targetWorkingDirectory" in input) {
-    freshInput.targetWorkingDirectory = input.targetWorkingDirectory;
-  }
-
-  return freshInput;
-};
-
 const resolveFreshStartTarget = async ({
   input,
   ctx,
@@ -102,17 +42,12 @@ const resolveFreshStartTarget = async ({
     return null;
   }
 
-  if (!("targetWorkingDirectory" in input)) {
-    return resolveFreshStartTargetWorkingDirectoryForStart({
-      ctx,
-      runtime,
-    });
-  }
-
   return resolveFreshStartTargetWorkingDirectoryForStart({
     ctx,
     runtime,
-    targetWorkingDirectory: input.targetWorkingDirectory,
+    ...(input.targetWorkingDirectory !== undefined
+      ? { targetWorkingDirectory: input.targetWorkingDirectory }
+      : {}),
   });
 };
 
@@ -159,8 +94,8 @@ export const createStartAgentSession = ({
 }: StartSessionDependencies) => {
   return async (input: StartAgentSessionInput): Promise<StartAgentSessionResult> => {
     const { taskId, role, startMode } = input;
-    const repoPath = requireActiveRepo(repo.activeWorkspace?.repoPath ?? null);
-    const workspaceId = repo.activeWorkspace?.workspaceId.trim();
+    const repoPath = requireActiveRepo(repo.workspaceRepoPath);
+    const workspaceId = repo.workspaceId?.trim();
     if (!workspaceId) {
       throw new Error("Active workspace is required.");
     }
@@ -209,32 +144,27 @@ export const createStartAgentSession = ({
     const inFlightKey = inFlightKeyParts.join("::");
 
     return session.sessionStartGateRef.current.run(inFlightKey, async () => {
-      let creationInput = toSessionCreationInput({ input });
-      const resolvedWorkingDirectory = freshStartTarget?.targetWorkingDirectory;
-      if (typeof resolvedWorkingDirectory === "string" || resolvedWorkingDirectory === null) {
-        creationInput = toSessionCreationInput({
+      const deps = {
+        session,
+        runtime,
+        task,
+        model,
+      };
+      let startResult: StartOrReuseResult;
+      if (input.startMode === "reuse") {
+        startResult = await executeReuseStart({ ctx: startCtx, input, deps });
+      } else if (input.startMode === "fork") {
+        startResult = await executeForkStart({ ctx: startCtx, input, deps });
+      } else {
+        startResult = await executeFreshStart({
+          ctx: startCtx,
           input,
-          targetWorkingDirectoryOverride: {
-            value: resolvedWorkingDirectory,
-          },
+          targetWorkingDirectory: freshStartTarget?.targetWorkingDirectory,
+          deps,
         });
       }
-      const startResult = await createOrReuseSession({
-        ctx: startCtx,
-        input: creationInput,
-        deps: {
-          session,
-          runtime,
-          task,
-          model,
-        },
-      });
       if (startResult.kind === "reused") {
         return startResult.session;
-      }
-
-      if (creationInput.startMode === "reuse") {
-        throw new Error("Started session is missing selected model metadata.");
       }
 
       await observeAgentSessionAndGuard({

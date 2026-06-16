@@ -100,8 +100,7 @@ export const buildWorkflowModelContext = ({
       agentSessionIdentityKey(session),
       session.role !== null &&
         roleWorkflowsByTask[session.role].available &&
-        session.pendingApprovals.length === 0 &&
-        session.pendingQuestions.length === 0,
+        session.activityState !== "waiting_input",
     ]),
   );
   const fallbackSessionForSelectedRole = latestSessionByRole[selectedInteractionRole];

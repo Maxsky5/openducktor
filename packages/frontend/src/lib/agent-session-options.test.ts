@@ -4,6 +4,7 @@ import {
   type AgentSessionOptionSummary,
   buildRoleSessionSequenceByIdentity,
   compareAgentSessionRecency,
+  formatAgentSessionOptionDescription,
 } from "./agent-session-options";
 
 const createSession = (
@@ -14,7 +15,7 @@ const createSession = (
   workingDirectory: "/repo/worktree-a",
   startedAt: "2026-06-10T10:00:00.000Z",
   role: "build",
-  status: "idle",
+  activityState: "idle",
   ...overrides,
 });
 
@@ -35,5 +36,13 @@ describe("agent session options", () => {
     expect(sequenceByIdentity.size).toBe(2);
     expect(sequenceByIdentity.has(agentSessionIdentityKey(first))).toBe(true);
     expect(sequenceByIdentity.has(agentSessionIdentityKey(second))).toBe(true);
+  });
+
+  test("formats option descriptions from activity state", () => {
+    expect(
+      formatAgentSessionOptionDescription(
+        createSession({ activityState: "starting", startedAt: "not-a-date" }),
+      ),
+    ).toBe("not-a-date · starting · shared-s");
   });
 });

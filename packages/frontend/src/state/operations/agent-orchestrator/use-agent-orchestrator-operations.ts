@@ -2,6 +2,10 @@ import type { TaskCard } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import type { AgentSessionsStore } from "@/state/agent-sessions-store";
+import {
+  type AgentSessionReadModelLoadState,
+  idleAgentSessionReadModelLoadState,
+} from "@/types/agent-session-read-model";
 import type {
   ActiveWorkspace,
   AgentOperationsContextValue,
@@ -55,8 +59,9 @@ export function useAgentOrchestratorOperations({
   dependencies,
 }: UseAgentOrchestratorOperationsArgs): UseAgentOrchestratorOperationsResult {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const [isLoadingSessionReadModel, setIsLoadingSessionReadModel] = useState(false);
-  const [sessionReadModelError, setSessionReadModelError] = useState<string | null>(null);
+  const workspaceId = activeWorkspace?.workspaceId ?? null;
+  const [sessionReadModelLoadState, setSessionReadModelLoadState] =
+    useState<AgentSessionReadModelLoadState>(idleAgentSessionReadModelLoadState);
   const resolvedDependencies = useMemo(
     () => dependencies ?? createDefaultAgentOrchestratorDependencies(),
     [dependencies],
@@ -71,7 +76,7 @@ export function useAgentOrchestratorOperations({
     sessionObserversRef,
     sessionTransientState,
   } = useOrchestratorSessionState({
-    activeWorkspace,
+    workspaceRepoPath,
     tasks,
   });
   const sessionCacheEffects = useMemo(
@@ -120,7 +125,7 @@ export function useAgentOrchestratorOperations({
   const { observeAgentSession, removeAgentSession, removeAgentSessions } = useAgentSessionObservers(
     {
       agentEngine,
-      workspaceId: activeWorkspace?.workspaceId ?? null,
+      workspaceId,
       loadRepoPromptOverrides: queryBackedPromptOverrides,
       sessionObserversRef,
       sessionTransientState,
@@ -139,7 +144,7 @@ export function useAgentOrchestratorOperations({
   const loadAgentSessions = useMemo(
     () =>
       createLoadAgentSessions({
-        activeWorkspace,
+        workspaceRepoPath,
         adapter: agentEngine,
         repoEpochRef,
         currentWorkspaceRepoPathRef,
@@ -149,19 +154,20 @@ export function useAgentOrchestratorOperations({
         queryClient,
       }),
     [
-      activeWorkspace,
       agentEngine,
       currentWorkspaceRepoPathRef,
       observeAgentSession,
       queryClient,
       repoEpochRef,
       sessionStore,
+      workspaceRepoPath,
     ],
   );
   const loadAgentSessionHistory = useMemo(
     () =>
       createLoadAgentSessionHistory({
-        activeWorkspace,
+        workspaceRepoPath,
+        workspaceId,
         adapter: agentEngine,
         repoEpochRef,
         currentWorkspaceRepoPathRef,
@@ -171,7 +177,6 @@ export function useAgentOrchestratorOperations({
         loadRepoPromptOverrides: queryBackedPromptOverrides,
       }),
     [
-      activeWorkspace,
       agentEngine,
       currentWorkspaceRepoPathRef,
       queryBackedPromptOverrides,
@@ -179,10 +184,12 @@ export function useAgentOrchestratorOperations({
       sessionStore,
       taskRef,
       updateSession,
+      workspaceId,
+      workspaceRepoPath,
     ],
   );
   useRepoSessionReadModelEffects({
-    activeWorkspace,
+    workspaceRepoPath,
     tasks,
     currentWorkspaceRepoPathRef,
     repoEpochRef,
@@ -190,8 +197,7 @@ export function useAgentOrchestratorOperations({
     setSessionCollection: sessionStore.setSessionCollection,
     agentEngine,
     observeAgentSession,
-    setIsLoadingSessionReadModel,
-    setSessionReadModelError,
+    setSessionReadModelLoadState,
     queryClient,
   });
   const ensureRuntime = useMemo(
@@ -209,7 +215,8 @@ export function useAgentOrchestratorOperations({
   const sessionActions = useMemo(
     () =>
       createAgentSessionActions({
-        activeWorkspace,
+        workspaceRepoPath,
+        workspaceId,
         adapter: agentEngine,
         setSessionCollection: sessionStore.setSessionCollection,
         readSessionSnapshot: sessionStore.getSessionSnapshot,
@@ -235,7 +242,6 @@ export function useAgentOrchestratorOperations({
         invalidateSessionStopQueries,
       }),
     [
-      activeWorkspace,
       agentEngine,
       currentWorkspaceRepoPathRef,
       ensureRuntime,
@@ -256,10 +262,12 @@ export function useAgentOrchestratorOperations({
       assistantTurnTiming.recordTurnUserMessageTimestamp,
       assistantTurnTiming.readTurnUserMessageStartedAtMs,
       updateSession,
+      workspaceId,
+      workspaceRepoPath,
     ],
   );
   return useMemo<UseAgentOrchestratorOperationsResult>(() => {
-    const readModelState = { isLoadingSessionReadModel, sessionReadModelError };
+    const readModelState = { sessionReadModelLoadState };
     const operations = createOrchestratorPublicOperations({
       loadAgentSessions,
       loadAgentSessionHistory: async (session) => {
@@ -282,8 +290,7 @@ export function useAgentOrchestratorOperations({
       readModelState,
     };
   }, [
-    isLoadingSessionReadModel,
-    sessionReadModelError,
+    sessionReadModelLoadState,
     sessionStore,
     agentEngine,
     loadAgentSessions,

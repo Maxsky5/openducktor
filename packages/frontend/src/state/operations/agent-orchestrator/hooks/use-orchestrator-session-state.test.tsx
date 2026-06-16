@@ -4,7 +4,6 @@ import { createAgentSessionCollection, listAgentSessions } from "@/state/agent-s
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@/test-utils/react-hook-harness";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { useOrchestratorSessionState } from "./use-orchestrator-session-state";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -52,12 +51,6 @@ const createSessionFixture = (): AgentSessionState => ({
   pendingApprovals: [],
   pendingQuestions: [],
   selectedModel: null,
-});
-
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
 });
 
 type HookArgs = Parameters<typeof useOrchestratorSessionState>[0];
@@ -114,7 +107,7 @@ const createHookHarness = (initialArgs: HookArgs) => {
 describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
   test("clears sessions and drains all unsubscribers on repo change", async () => {
     const harness = createHookHarness({
-      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
     });
     const unsubscribeCalls: string[] = [];
@@ -157,7 +150,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       });
 
       await harness.update({
-        activeWorkspace: createActiveWorkspace("/tmp/repo-b"),
+        workspaceRepoPath: "/tmp/repo-b",
         tasks: [taskFixture],
       });
 
@@ -192,7 +185,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
     };
 
     const harness = createHookHarness({
-      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
     });
 
@@ -201,7 +194,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
 
       expect(harness.getLatest().taskRef.current).toEqual([taskFixture]);
       await harness.update({
-        activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+        workspaceRepoPath: "/tmp/repo-a",
         tasks: [nextTask],
       });
 
@@ -214,7 +207,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
   test("keeps session state owned by the session store", async () => {
     const session = createSessionFixture();
     const harness = createHookHarness({
-      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
     });
 
@@ -247,7 +240,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
 
   test("clears assistant turn timing on workspace change", async () => {
     const harness = createHookHarness({
-      activeWorkspace: createActiveWorkspace("/tmp/repo-a"),
+      workspaceRepoPath: "/tmp/repo-a",
       tasks: [taskFixture],
     });
 
@@ -268,7 +261,7 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
       ).toBe(111);
 
       await harness.update({
-        activeWorkspace: createActiveWorkspace("/tmp/repo-b"),
+        workspaceRepoPath: "/tmp/repo-b",
         tasks: [taskFixture],
       });
 

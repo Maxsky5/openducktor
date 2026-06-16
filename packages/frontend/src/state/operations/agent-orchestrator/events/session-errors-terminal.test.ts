@@ -8,7 +8,6 @@ import {
   getLastSessionMessage,
   getSessionMessages,
   listenToAgentSessionEvents,
-  OPENCODE_RUNTIME_DESCRIPTOR,
   type SessionEventAdapter,
   type SessionUpdateFn,
 } from "./session-events-test-harness";
@@ -71,7 +70,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -155,7 +153,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -256,7 +253,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -313,7 +309,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -402,7 +397,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -473,7 +467,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -590,7 +583,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];
@@ -658,7 +650,6 @@ describe("agent-orchestrator session errors and terminal state", () => {
       resolveTurnDurationMs: () => undefined,
       clearTurnDuration: () => {},
       refreshTaskData: async () => {},
-      resolveRuntimeDefinition: () => OPENCODE_RUNTIME_DESCRIPTOR,
     });
 
     const handleEvent = handlers[0];

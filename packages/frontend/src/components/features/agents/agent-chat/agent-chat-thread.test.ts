@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
@@ -12,7 +12,7 @@ import {
   buildModelSelection,
   buildQuestionRequest,
   buildSession,
-  buildThreadLifecycle,
+  buildThreadTranscriptState,
   buildTodoItem,
 } from "./agent-chat-test-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
@@ -25,7 +25,7 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 
 const buildBaseModel = () => ({
   isSessionWorking: false,
-  sessionLifecycle: buildThreadLifecycle(),
+  transcriptState: buildThreadTranscriptState(),
   runtimeReadiness: {
     readinessState: "ready" as const,
     isReady: true,
@@ -34,7 +34,6 @@ const buildBaseModel = () => ({
     isLoadingChecks: false,
     refreshChecks: async () => {},
   },
-  isTranscriptPending: false,
   isInteractionEnabled: true,
   emptyState: {
     title: "Send a message to start a new session automatically.",
@@ -355,9 +354,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: buildThreadLifecycle({
-            transcriptState: { kind: "runtime_waiting" },
-          }),
+          transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
             readinessState: "blocked",
@@ -405,9 +402,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: buildThreadLifecycle({
-            transcriptState: { kind: "failed" },
-          }),
+          transcriptState: buildThreadTranscriptState({ kind: "failed" }),
           isInteractionEnabled: false,
           session: null,
         },
@@ -424,9 +419,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: buildThreadLifecycle({
-            transcriptState: { kind: "runtime_waiting" },
-          }),
+          transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
           runtimeReadiness: {
             ...buildBaseModel().runtimeReadiness,
             readinessState: "checking",
@@ -451,9 +444,7 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: buildThreadLifecycle({
-            transcriptState: { kind: "runtime_waiting" },
-          }),
+          transcriptState: buildThreadTranscriptState({ kind: "runtime_waiting" }),
           session: buildSession({
             messages: [buildMessage("assistant", "Cached transcript", { id: "assistant-1" })],
           }),
@@ -703,107 +694,65 @@ describe("AgentChatThread", () => {
     expect(html).toContain("border-left-color:#123456");
   });
 
-  test("renders a large attachment transcript through the history window on session switch", async () => {
-    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
-    const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
-    let nextAnimationFrameId = 1;
-
-    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrameCallbacks.set(frameId, callback);
-      return frameId;
-    }) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = ((frameId: number) => {
-      animationFrameCallbacks.delete(frameId);
-    }) as typeof cancelAnimationFrame;
-    const flushAnimationFrames = async () => {
-      const pendingFrames = Array.from(animationFrameCallbacks.entries());
-      animationFrameCallbacks.clear();
-      await act(async () => {
-        for (const [, callback] of pendingFrames) {
-          callback(performance.now());
-        }
-      });
-    };
-    const waitForScheduledTranscriptWork = async () => {
-      await act(async () => {
-        await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-      });
-    };
-
-    try {
-      const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
-        buildMessage(
-          "user",
-          `Attachment message ${index + 1}`,
-          index === 0
-            ? {
-                id: `attachment-message-${index + 1}`,
-                meta: {
-                  kind: "user",
-                  state: "read",
-                  parts: [
-                    {
-                      kind: "attachment",
-                      attachment: {
-                        id: "attachment-1",
-                        name: "spec.md",
-                        kind: "pdf",
-                        path: "/tmp/spec.md",
-                      },
+  test("renders a large attachment transcript immediately through the history window on session switch", () => {
+    const attachmentMessages = Array.from({ length: 140 }, (_, index) =>
+      buildMessage(
+        "user",
+        `Attachment message ${index + 1}`,
+        index === 0
+          ? {
+              id: `attachment-message-${index + 1}`,
+              meta: {
+                kind: "user",
+                state: "read",
+                parts: [
+                  {
+                    kind: "attachment",
+                    attachment: {
+                      id: "attachment-1",
+                      name: "spec.md",
+                      kind: "pdf",
+                      path: "/tmp/spec.md",
                     },
-                  ],
-                },
-              }
-            : {
-                id: `attachment-message-${index + 1}`,
+                  },
+                ],
               },
-        ),
-      );
+            }
+          : {
+              id: `attachment-message-${index + 1}`,
+            },
+      ),
+    );
 
-      const rendered = render(
-        createElement(AgentChatThread, {
-          model: {
-            ...buildBaseModel(),
-            session: buildSession({
-              externalSessionId: "session-normal",
-              messages: [buildMessage("assistant", "Baseline transcript", { id: "assistant-1" })],
-            }),
-          },
-        }),
-      );
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            externalSessionId: "session-normal",
+            messages: [buildMessage("assistant", "Baseline transcript", { id: "assistant-1" })],
+          }),
+        },
+      }),
+    );
 
-      rendered.rerender(
-        createElement(AgentChatThread, {
-          model: {
-            ...buildBaseModel(),
-            session: buildSession({
-              externalSessionId: "session-attachments",
-              messages: attachmentMessages,
-            }),
-          },
-        }),
-      );
+    rendered.rerender(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          session: buildSession({
+            externalSessionId: "session-attachments",
+            messages: attachmentMessages,
+          }),
+        },
+      }),
+    );
 
-      expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(0);
+    expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
+    expect(rendered.queryByText("Attachment message 1")).toBeNull();
+    expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
 
-      expect(animationFrameCallbacks.size).toBeGreaterThan(0);
-      await flushAnimationFrames();
-      await waitForScheduledTranscriptWork();
-
-      await waitFor(() => {
-        expect(rendered.queryByText("Attachment message 140")).not.toBeNull();
-      });
-      expect(rendered.queryByText("Attachment message 1")).toBeNull();
-      expect(rendered.container.querySelector('[style*="content-visibility"]')).toBeNull();
-
-      rendered.unmount();
-    } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
-    }
+    rendered.unmount();
   });
 
   test("keeps stale same-session rows visible without a loading overlay", async () => {
@@ -845,7 +794,7 @@ describe("AgentChatThread", () => {
             ...buildBaseModel(),
             session: {
               ...session,
-              status: "running",
+              activityState: "running",
               messages: createSessionMessagesState("session-streaming", [
                 ...initialMessages,
                 buildMessage("assistant", "Streaming update", { id: "assistant-2" }),
@@ -1088,10 +1037,10 @@ describe("AgentChatThread", () => {
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: buildThreadLifecycle({
-            transcriptState: { kind: "session_loading", reason: "preparing" },
+          transcriptState: buildThreadTranscriptState({
+            kind: "session_loading",
+            reason: "preparing",
           }),
-          isTranscriptPending: true,
           session: buildSession({
             externalSessionId: "session-loading",
             messages: [buildMessage("assistant", "Loading", { id: "assistant-1" })],
@@ -1104,16 +1053,14 @@ describe("AgentChatThread", () => {
     expect(html).toContain("Preparing the selected session view.");
   });
 
-  test("keeps transcript rows visible while the same session history is hydrating", () => {
+  test("keeps transcript rows visible while same-session history is loading", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatThread, {
         model: {
           ...buildBaseModel(),
-          sessionLifecycle: buildThreadLifecycle({
-            transcriptState: { kind: "visible" },
-          }),
+          transcriptState: buildThreadTranscriptState({ kind: "visible" }),
           session: buildSession({
-            externalSessionId: "session-hydrating",
+            externalSessionId: "session-history-loading",
             messages: [buildMessage("assistant", "Old cached message", { id: "assistant-old-1" })],
           }),
         },
@@ -1142,14 +1089,12 @@ describe("AgentChatThread", () => {
       }),
     ];
     const session = buildSession({
-      externalSessionId: "session-tool-hydrating",
+      externalSessionId: "session-tool-history-loading",
       messages,
     });
     const model = {
       ...buildBaseModel(),
-      sessionLifecycle: buildThreadLifecycle({
-        transcriptState: { kind: "visible" },
-      }),
+      transcriptState: buildThreadTranscriptState({ kind: "visible" }),
       session,
     };
 

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { type AgentSessionRecord, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
-import { createAgentSessionFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
 import {
   coerceVisibleSelectionToCatalog,
   emptyDraftSelections,
@@ -13,7 +13,6 @@ import {
   resolveAgentStudioBuilderSessionsForTask,
   resolveAgentStudioDefaultRoleForTask,
   resolveAgentStudioSessionSelection,
-  resolveAgentStudioSessionSelectionFromCandidates,
   resolveAgentStudioTaskId,
   toContextStorageKey,
   toRightPanelStorageKey,
@@ -167,7 +166,7 @@ describe("agents-page-selection", () => {
   });
 
   test("prefers explicit task id over session-derived task id", () => {
-    const session = createAgentSessionFixture({
+    const session = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "session-1",
       taskId: "task-from-session",
@@ -203,13 +202,13 @@ describe("agents-page-selection", () => {
   });
 
   test("keeps active session unresolved when explicit session param does not belong to active task", () => {
-    const plannerSession = createAgentSessionFixture({
+    const plannerSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-1",
       taskId: "task-1",
       role: "planner",
     });
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -228,13 +227,13 @@ describe("agents-page-selection", () => {
   });
 
   test("falls back by role when no explicit session param is present", () => {
-    const plannerSession = createAgentSessionFixture({
+    const plannerSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-1",
       taskId: "task-1",
       role: "planner",
     });
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -253,7 +252,7 @@ describe("agents-page-selection", () => {
   });
 
   test("keeps explicit role selection sessionless when requested", () => {
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -273,41 +272,8 @@ describe("agents-page-selection", () => {
     expect(resolved).toEqual({ activeSession: null, role: "build" });
   });
 
-  test("uses the same selection policy for persisted session records", () => {
-    const persistedSessions: AgentSessionRecord[] = [
-      {
-        externalSessionId: "spec-older",
-        role: "spec",
-        startedAt: "2026-02-22T09:00:00.000Z",
-        runtimeKind: "codex",
-        workingDirectory: "/repo",
-        selectedModel: null,
-      },
-      {
-        externalSessionId: "planner-newer",
-        role: "planner",
-        startedAt: "2026-02-22T12:00:00.000Z",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo",
-        selectedModel: null,
-      },
-    ];
-
-    const selection = resolveAgentStudioSessionSelectionFromCandidates({
-      sessionsForTask: persistedSessions,
-      sessionKey: null,
-      hasExplicitRoleParam: false,
-      roleFromQuery: "spec",
-      selectedTask: createTaskCardFixture({ id: "task-1", status: "ready_for_dev" }),
-      fallbackRole: "spec",
-    });
-
-    expect(selection.activeSession?.externalSessionId).toBe("planner-newer");
-    expect(selection.role).toBe("planner");
-  });
-
   test("prioritizes active running session over status defaults", () => {
-    const olderBuildSession = createAgentSessionFixture({
+    const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
       taskId: "task-1",
@@ -315,7 +281,7 @@ describe("agents-page-selection", () => {
       status: "idle",
       startedAt: "2026-02-22T10:00:00.000Z",
     });
-    const runningSpecSession = createAgentSessionFixture({
+    const runningSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-running",
       taskId: "task-1",
@@ -335,8 +301,49 @@ describe("agents-page-selection", () => {
     expect(resolved?.externalSessionId).toBe("spec-running");
   });
 
+  test("prioritizes waiting-input session over status defaults even when idle", () => {
+    const olderBuildSession = createAgentSessionSummaryFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "build-older",
+      taskId: "task-1",
+      role: "build",
+      status: "idle",
+      startedAt: "2026-02-22T10:00:00.000Z",
+    });
+    const waitingSpecSession = createAgentSessionSummaryFixture({
+      runtimeKind: "opencode",
+      externalSessionId: "spec-waiting",
+      taskId: "task-1",
+      role: "spec",
+      status: "idle",
+      startedAt: "2026-02-22T09:00:00.000Z",
+      pendingQuestions: [
+        {
+          requestId: "question-1",
+          questions: [
+            {
+              header: "Decision",
+              question: "Which path should the agent take?",
+              options: [{ label: "Continue", description: "Continue the session" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const resolved = resolveAgentStudioActiveSession({
+      sessionsForTask: [olderBuildSession, waitingSpecSession],
+      sessionKey: null,
+      hasExplicitRoleParam: false,
+      roleFromQuery: "build",
+      selectedTask: createTaskCardFixture({ id: "task-1", status: "in_progress" }),
+    });
+
+    expect(resolved?.externalSessionId).toBe("spec-waiting");
+  });
+
   test("chooses the most recent running/starting session when multiple active sessions exist", () => {
-    const olderRunningSession = createAgentSessionFixture({
+    const olderRunningSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-running-older",
       taskId: "task-1",
@@ -344,7 +351,7 @@ describe("agents-page-selection", () => {
       status: "running",
       startedAt: "2026-02-22T09:00:00.000Z",
     });
-    const newerStartingSession = createAgentSessionFixture({
+    const newerStartingSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "qa-starting-newer",
       taskId: "task-1",
@@ -365,14 +372,14 @@ describe("agents-page-selection", () => {
   });
 
   test("selects required+available role for open tasks", () => {
-    const specSession = createAgentSessionFixture({
+    const specSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-1",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T11:00:00.000Z",
     });
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -401,7 +408,7 @@ describe("agents-page-selection", () => {
   });
 
   test("returns null for open tasks when no required+available role exists", () => {
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -429,14 +436,14 @@ describe("agents-page-selection", () => {
   });
 
   test("selects latest spec session for spec_ready tasks", () => {
-    const olderSpecSession = createAgentSessionFixture({
+    const olderSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-older",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T09:00:00.000Z",
     });
-    const latestSpecSession = createAgentSessionFixture({
+    const latestSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
       taskId: "task-1",
@@ -456,14 +463,14 @@ describe("agents-page-selection", () => {
   });
 
   test("selects latest planner session for ready_for_dev tasks and falls back to spec", () => {
-    const latestSpecSession = createAgentSessionFixture({
+    const latestSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T11:00:00.000Z",
     });
-    const latestPlannerSession = createAgentSessionFixture({
+    const latestPlannerSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "planner-latest",
       taskId: "task-1",
@@ -492,14 +499,14 @@ describe("agents-page-selection", () => {
   });
 
   test("selects latest build session for in_progress, ai_review, and human_review tasks", () => {
-    const olderBuildSession = createAgentSessionFixture({
+    const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
       taskId: "task-1",
       role: "build",
       startedAt: "2026-02-22T08:00:00.000Z",
     });
-    const latestBuildSession = createAgentSessionFixture({
+    const latestBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-latest",
       taskId: "task-1",
@@ -527,14 +534,14 @@ describe("agents-page-selection", () => {
   });
 
   test("selects latest build session for blocked/closed and falls back to latest overall", () => {
-    const latestSpecSession = createAgentSessionFixture({
+    const latestSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-latest",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T13:00:00.000Z",
     });
-    const latestBuildSession = createAgentSessionFixture({
+    const latestBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-latest",
       taskId: "task-1",
@@ -567,7 +574,7 @@ describe("agents-page-selection", () => {
   });
 
   test("returns null when no selected task is available", () => {
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -600,7 +607,7 @@ describe("agents-page-selection", () => {
   });
 
   test("keeps explicit session authority over task-status defaults", () => {
-    const qaSession = createAgentSessionFixture({
+    const qaSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "qa-1",
       taskId: "task-1",
@@ -622,7 +629,7 @@ describe("agents-page-selection", () => {
   });
 
   test("prioritizes explicit launch action for explicit role selection", () => {
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
@@ -644,14 +651,14 @@ describe("agents-page-selection", () => {
   });
 
   test("uses most recent overall session for blocked fallback even with unsorted input", () => {
-    const olderSpecSession = createAgentSessionFixture({
+    const olderSpecSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "spec-older",
       taskId: "task-1",
       role: "spec",
       startedAt: "2026-02-22T09:00:00.000Z",
     });
-    const newerQaSession = createAgentSessionFixture({
+    const newerQaSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "qa-newer",
       taskId: "task-1",
@@ -673,13 +680,13 @@ describe("agents-page-selection", () => {
   });
 
   test("prefers the current build session when resolving conflict reuse", () => {
-    const activeBuildSession = createAgentSessionFixture({
+    const activeBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
-    const olderBuildSession = createAgentSessionFixture({
+    const olderBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-older",
       taskId: "task-1",
@@ -699,13 +706,13 @@ describe("agents-page-selection", () => {
   });
 
   test("falls back to any existing build session for the viewed task", () => {
-    const buildSession = createAgentSessionFixture({
+    const buildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-1",
       taskId: "task-1",
       role: "build",
     });
-    const otherTaskBuildSession = createAgentSessionFixture({
+    const otherTaskBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-2",
       taskId: "task-2",
@@ -725,19 +732,19 @@ describe("agents-page-selection", () => {
   });
 
   test("returns a deduplicated ordered list of build sessions for the viewed task", () => {
-    const activeBuildSession = createAgentSessionFixture({
+    const activeBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
-    const duplicateBuildSession = createAgentSessionFixture({
+    const duplicateBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-active",
       taskId: "task-1",
       role: "build",
     });
-    const secondaryBuildSession = createAgentSessionFixture({
+    const secondaryBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-secondary",
       taskId: "task-1",
@@ -760,14 +767,14 @@ describe("agents-page-selection", () => {
   });
 
   test("keeps build sessions distinct when only external id matches", () => {
-    const liveBuildSession = createAgentSessionFixture({
+    const liveBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "opencode",
       externalSessionId: "build-shared",
       taskId: "task-1",
       role: "build",
       workingDirectory: "/repo/live",
     });
-    const persistedBuildSession = createAgentSessionFixture({
+    const persistedBuildSession = createAgentSessionSummaryFixture({
       runtimeKind: "codex",
       externalSessionId: "build-shared",
       taskId: "task-1",

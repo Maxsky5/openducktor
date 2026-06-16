@@ -219,11 +219,8 @@ describe("session history loader", () => {
     const harness = createHistoryLoadHarness();
     let receivedSystemPrompt: string | undefined;
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
-      activeWorkspace: {
-        workspaceId: "workspace-1",
-        workspaceName: "Workspace",
-        repoPath: "/repo",
-      },
+      workspaceRepoPath: "/repo",
+      workspaceId: "workspace-1",
       adapter: {
         loadSessionHistory: async (input) => {
           receivedSystemPrompt = input.systemPromptContext?.systemPrompt;
@@ -269,11 +266,8 @@ describe("session history loader", () => {
         >[0]["systemPromptContext"]
       | undefined;
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
-      activeWorkspace: {
-        workspaceId: "workspace-1",
-        workspaceName: "Workspace",
-        repoPath: "/repo",
-      },
+      workspaceRepoPath: "/repo",
+      workspaceId: "workspace-1",
       adapter: {
         loadSessionHistory: async (input) => {
           receivedSystemPrompt = input.systemPromptContext;
@@ -309,11 +303,8 @@ describe("session history loader", () => {
   test("fails selected history loading for an unknown session", async () => {
     const harness = createHistoryLoadHarness();
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
-      activeWorkspace: {
-        workspaceId: "workspace-1",
-        workspaceName: "Workspace",
-        repoPath: "/repo",
-      },
+      workspaceRepoPath: "/repo",
+      workspaceId: "workspace-1",
       adapter: {
         loadSessionHistory: async () => {
           throw new Error("History must not load for an unknown session.");

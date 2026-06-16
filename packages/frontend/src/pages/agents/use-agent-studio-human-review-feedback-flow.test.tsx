@@ -3,7 +3,7 @@ import type { TaskCard } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { withMockedToast } from "@/test-utils/mock-toast";
 import {
-  createAgentSessionFixture,
+  createAgentSessionSummaryFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -22,8 +22,8 @@ const createTask = (overrides: Partial<TaskCard> = {}): TaskCard =>
     ...overrides,
   });
 
-const createSession = (overrides: Partial<ReturnType<typeof createAgentSessionFixture>> = {}) =>
-  createAgentSessionFixture({
+const createSession = (overrides: Parameters<typeof createAgentSessionSummaryFixture>[0] = {}) =>
+  createAgentSessionSummaryFixture({
     externalSessionId: "ext-session-build-1",
     taskId: "task-1",
     role: "build",

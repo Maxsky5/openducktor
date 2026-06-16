@@ -8,7 +8,9 @@ Read-only session transcript surface orchestration for Agent Chat dialogs.
 
 The folder owns the non-composer transcript viewer model. Keep the top-level
 surface hook as orchestration-only and put history loading plus pending
-interaction state in focused hooks.
+interaction state in focused hooks. Empty/loading/error presentation policy and
+displayed-session working state for the read-only transcript live in
+`runtime-transcript-surface-state.ts`, not in the surface hook.
 
 ## Data & Control Flow
 

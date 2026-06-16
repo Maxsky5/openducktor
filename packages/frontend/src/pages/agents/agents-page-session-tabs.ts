@@ -3,6 +3,10 @@ import { type AgentRole, isRecord } from "@openducktor/core";
 import type { AgentStudioTaskTab } from "@/components/features/agents";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import { firstLaunchAction, type SessionLaunchActionId } from "@/features/session-start";
+import {
+  isAgentSessionActivityActive,
+  isAgentSessionActivityWorking,
+} from "@/lib/agent-session-activity-state";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import {
   type AgentSessionOptionSummary,
@@ -11,7 +15,6 @@ import {
   formatAgentSessionOptionDescription,
   formatAgentSessionOptionLabel,
 } from "@/lib/agent-session-options";
-import { isAgentSessionWorkingStatus } from "@/lib/agent-session-status";
 import { errorMessage } from "@/lib/errors";
 import { buildRoleWorkflowMapForTask as resolveRoleWorkflowMapForTask } from "@/lib/task-agent-workflows";
 import { isQaRejectedTask } from "@/lib/task-qa";
@@ -44,7 +47,7 @@ export type SessionCreateOption = {
 };
 
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
-  Pick<AgentSessionSummary, "taskId" | "pendingApprovals" | "pendingQuestions">;
+  Pick<AgentSessionSummary, "taskId">;
 
 type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
   role: AgentRole;
@@ -70,19 +73,7 @@ type RoleSessionSummary = {
 type TaskAttentionState = "none" | "blocked_needs_input";
 
 const toLiveSessionState = (session: AgentSessionWorkflowSummary): AgentWorkflowStepLiveSession => {
-  if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
-    return "waiting_input";
-  }
-  if (isAgentSessionWorkingStatus(session.status)) {
-    return "running";
-  }
-  if (session.status === "error") {
-    return "error";
-  }
-  if (session.status === "stopped") {
-    return "stopped";
-  }
-  return "idle";
+  return session.activityState;
 };
 
 const deriveWorkflowAvailability = (
@@ -107,7 +98,7 @@ const deriveWorkflowTone = (params: {
   if (liveSession === "waiting_input") {
     return "waiting_input";
   }
-  if (liveSession === "running") {
+  if (isAgentSessionActivityWorking(liveSession)) {
     return "in_progress";
   }
   if (liveSession === "error") {
@@ -177,7 +168,7 @@ const deriveWorkflowToneForRole = (params: {
   const allowBlockedTaskWarning =
     params.role === "build" &&
     params.taskAttentionState === "blocked_needs_input" &&
-    params.liveSession !== "running" &&
+    !isAgentSessionActivityWorking(params.liveSession) &&
     params.liveSession !== "error";
 
   if (allowBlockedTaskWarning) {
@@ -351,12 +342,10 @@ export const resolveFallbackTaskId = (params: {
 };
 
 export const canPersistTaskTabs = (
-  persistenceWorkspaceId: string | null,
-  tabsStorageHydratedWorkspaceId: string | null,
+  activeWorkspaceId: string | null,
+  loadedTabsStorageWorkspaceId: string | null,
 ): boolean => {
-  return (
-    Boolean(persistenceWorkspaceId) && tabsStorageHydratedWorkspaceId === persistenceWorkspaceId
-  );
+  return Boolean(activeWorkspaceId) && loadedTabsStorageWorkspaceId === activeWorkspaceId;
 };
 
 export const buildRoleEnabledMapForTask = (task: TaskCard | null): Record<AgentRole, boolean> => {
@@ -397,7 +386,7 @@ export const buildWorkflowStateByRole = (params: {
     const availability = deriveWorkflowAvailability(workflow);
     const liveSession = sessionSummary.liveSession;
     const isLiveSessionActive =
-      liveSession === "running" || liveSession === "waiting_input" || liveSession === "error";
+      isAgentSessionActivityActive(liveSession) || liveSession === "error";
     let completion: AgentWorkflowStepState["completion"] = "not_started";
 
     if (role === "build" && (qaRejected || qaApprovedInBuildCompleteStatus)) {
@@ -575,10 +564,12 @@ const getTabStatusFromSession = (
   if (!session) {
     return "idle";
   }
-  if (session.pendingApprovals.length > 0 || session.pendingQuestions.length > 0) {
+
+  const liveSessionState = toLiveSessionState(session);
+  if (liveSessionState === "waiting_input") {
     return "waiting_input";
   }
-  if (isAgentSessionWorkingStatus(session.status)) {
+  if (isAgentSessionActivityWorking(liveSessionState)) {
     return "working";
   }
   return "idle";

@@ -27,8 +27,7 @@ describe("KanbanTaskCard rerender behavior", () => {
         workingDirectory: "/repo/worktrees/build",
         externalSessionId: "session-1",
         role: "build" as const,
-        status: "running" as const,
-        presentationState: "active" as const,
+        presentationState: "running" as const,
       },
     ];
 
@@ -133,8 +132,7 @@ describe("KanbanTaskCard rerender behavior", () => {
               workingDirectory: "/repo/worktrees/build",
               externalSessionId: "session-1",
               role: "build",
-              status: "running",
-              presentationState: "active",
+              presentationState: "running",
             },
           ]}
           onOpenDetails={noop}
@@ -158,7 +156,6 @@ describe("KanbanTaskCard rerender behavior", () => {
               workingDirectory: "/repo/worktrees/build",
               externalSessionId: "session-1",
               role: "build",
-              status: "running",
               presentationState: "waiting_input",
             },
           ]}
@@ -197,8 +194,7 @@ describe("KanbanTaskCard rerender behavior", () => {
               workingDirectory: "/repo/worktrees/build-a",
               externalSessionId: "shared-session",
               role: "build",
-              status: "running",
-              presentationState: "active",
+              presentationState: "running",
             },
           ]}
           onOpenDetails={noop}
@@ -223,8 +219,7 @@ describe("KanbanTaskCard rerender behavior", () => {
               workingDirectory: "/repo/worktrees/build-b",
               externalSessionId: "shared-session",
               role: "build",
-              status: "running",
-              presentationState: "active",
+              presentationState: "running",
             },
           ]}
           onOpenDetails={noop}

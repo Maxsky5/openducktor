@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { QueryClient } from "@tanstack/react-query";
 import type { DiffDataState } from "@/features/agent-studio-git";
+import { getAgentSessionActivityStateFromSession } from "@/lib/agent-session-activity-state";
 import { clearAppQueryClient, createQueryClient } from "@/lib/query-client";
 import {
   createAgentSessionFixture,
   createDeferred,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -106,14 +107,14 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   viewTaskId: "task-24",
   session: {
     role: "build",
-    status: "running",
+    activityState: "running",
     workingDirectory: null,
     hasActiveSession: true,
   },
   viewSelectedTask: createTaskCardFixture({ id: "task-24" }),
   panelKind: "build_tools",
   isPanelOpen: true,
-  viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
   repoSettings: null,
   worktreeRecoveryKey: "recovery-key-a",
   ...overrides,
@@ -156,7 +157,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         session: {
           role: "build",
-          status: "running",
+          activityState: "running",
           workingDirectory: "/repo/.worktrees/task-24",
           hasActiveSession: true,
         },
@@ -305,7 +306,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         session: {
           role: repoSession.role,
-          status: repoSession.status,
+          activityState: getAgentSessionActivityStateFromSession(repoSession),
           workingDirectory: repoSession.workingDirectory,
           hasActiveSession: true,
         },
@@ -328,7 +329,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
       createBaseArgs({
         session: {
           role: "spec",
-          status: "running",
+          activityState: "running",
           workingDirectory: "/repo",
           hasActiveSession: true,
         },

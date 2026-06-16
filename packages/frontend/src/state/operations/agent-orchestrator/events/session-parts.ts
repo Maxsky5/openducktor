@@ -30,16 +30,13 @@ import { handleToolPart } from "./session-tool-parts";
 
 type PrepareCurrent = (current: AgentSessionState) => AgentSessionState;
 
+const withRunningStatus = (session: AgentSessionState): AgentSessionState =>
+  session.status === "running" ? session : { ...session, status: "running" };
+
 const markSessionRunning = (context: SessionPartEventContext): void => {
   context.store.updateSession(
     context.store.sessionIdentity,
-    (current) =>
-      current.status === "running"
-        ? current
-        : {
-            ...current,
-            status: "running",
-          },
+    (current) => withRunningStatus(current),
     { persist: false },
   );
 };
@@ -190,12 +187,7 @@ const settleSessionBeforeDraftUpdate = (
     context.store.sessionIdentity,
     (current) => {
       const prepared = prepareCurrent(current);
-      return prepared.status === "running"
-        ? prepared
-        : {
-            ...prepared,
-            status: "running",
-          };
+      return withRunningStatus(prepared);
     },
     { persist: false },
   );
@@ -215,12 +207,7 @@ const handleTextPart = (
     (current) => {
       const prepared = prepareCurrent(current);
       if (part.text.trim().length === 0) {
-        return prepared.status === "running"
-          ? prepared
-          : {
-              ...prepared,
-              status: "running",
-            };
+        return withRunningStatus(prepared);
       }
 
       return upsertLiveAssistantMessage({
@@ -409,12 +396,7 @@ const handleStepPart = (
           ? { ...baseContextUsage, contextWindow: part.contextWindow }
           : baseContextUsage;
       if (!nextContextUsage) {
-        return prepared.status === "running"
-          ? prepared
-          : {
-              ...prepared,
-              status: "running",
-            };
+        return withRunningStatus(prepared);
       }
 
       context.turn.turnMetadata.recordContextUsageMessageId(

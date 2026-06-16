@@ -1,4 +1,4 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import type { AgentToolName, RuntimeKind } from "@openducktor/contracts";
 import type {
   AgentEnginePort,
   AgentEvent,
@@ -33,6 +33,9 @@ export type ResolveTurnDuration = (
 
 export type RecordTurnTimestamp = (sessionKey: string, timestamp: string | number) => void;
 export type BuildReadOnlyApprovalRejectionMessage = (role: AgentRole) => Promise<string>;
+export type WorkflowToolAliasesByCanonical = {
+  [ToolName in AgentToolName]?: string[] | undefined;
+};
 export type UpdateSessionTodos = (
   updater: (current: AgentSessionTodoItem[]) => AgentSessionTodoItem[],
 ) => void;
@@ -58,12 +61,15 @@ export type ObserveAgentSessionParams = {
   resolveTurnDurationMs: ResolveTurnDuration;
   clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;
+  canAutoRejectReadOnlyApproval: (runtimeKind: RuntimeKind) => boolean;
   refreshTaskData: (
     repoPath: string,
     taskIdOrIds?: string | string[],
     options?: { forceFreshTaskList?: boolean },
   ) => Promise<void>;
-  resolveRuntimeDefinition?: (runtimeKind: RuntimeKind) => RuntimeDescriptor | null;
+  resolveWorkflowToolAliasesByCanonical: (
+    runtimeKind: RuntimeKind,
+  ) => WorkflowToolAliasesByCanonical | undefined;
 };
 
 type SessionEventTargetContext = {
@@ -98,12 +104,12 @@ export type SessionApprovalContext = {
   repoPath: string;
 } & Pick<
   ObserveAgentSessionParams,
-  "adapter" | "resolveRuntimeDefinition" | "buildReadOnlyApprovalRejectionMessage"
+  "adapter" | "canAutoRejectReadOnlyApproval" | "buildReadOnlyApprovalRejectionMessage"
 >;
 
 export type SessionRefreshContext = { repoPath: string } & Pick<
   ObserveAgentSessionParams,
-  "refreshTaskData" | "resolveRuntimeDefinition"
+  "refreshTaskData" | "resolveWorkflowToolAliasesByCanonical"
 >;
 
 export type SessionLifecycleEventContext = {
@@ -177,9 +183,7 @@ const createRuntimeDataContext = (
 const createRefreshContext = (context: ObserveAgentSessionParams): SessionRefreshContext => ({
   repoPath: context.sessionRef.repoPath,
   refreshTaskData: context.refreshTaskData,
-  ...(context.resolveRuntimeDefinition
-    ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
-    : {}),
+  resolveWorkflowToolAliasesByCanonical: context.resolveWorkflowToolAliasesByCanonical,
 });
 
 export const createSessionEventHandlerContext = (
@@ -203,9 +207,7 @@ export const createSessionEventHandlerContext = (
         repoPath: context.sessionRef.repoPath,
         adapter: context.adapter,
         buildReadOnlyApprovalRejectionMessage: context.buildReadOnlyApprovalRejectionMessage,
-        ...(context.resolveRuntimeDefinition
-          ? { resolveRuntimeDefinition: context.resolveRuntimeDefinition }
-          : {}),
+        canAutoRejectReadOnlyApproval: context.canAutoRejectReadOnlyApproval,
       },
       runtimeData,
     },

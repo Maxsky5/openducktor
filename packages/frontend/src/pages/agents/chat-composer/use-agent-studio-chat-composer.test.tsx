@@ -20,7 +20,7 @@ import type {
   AgentSessionState,
   SessionMessagesState,
 } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDeferred,
@@ -33,12 +33,6 @@ enableReactActEnvironment();
 let messageCounter = 0;
 
 type HookArgs = Parameters<typeof useAgentStudioChatComposer>[0];
-
-const createActiveWorkspace = (repoPath: string): ActiveWorkspace => ({
-  workspaceId: repoPath.replace(/^\//, "").replaceAll("/", "-"),
-  workspaceName: repoPath.split("/").filter(Boolean).at(-1) ?? "repo",
-  repoPath,
-});
 
 const CATALOG: AgentModelCatalog = {
   runtime: OPENCODE_RUNTIME_DESCRIPTOR,
@@ -265,7 +259,7 @@ const createAssistantMessage = (
 };
 
 const createBaseProps = (overrides: Partial<HookArgs> = {}): HookArgs => ({
-  activeWorkspace: createActiveWorkspace("/repo"),
+  workspaceRepoPath: "/repo",
   activeSession: null,
   activeSessionSummary: null,
   activeSessionModelCatalog: null,
@@ -407,6 +401,7 @@ describe("useAgentStudioChatComposer", () => {
           taskId: "task-1",
           role: "spec",
           status: "idle",
+          activityState: "idle",
           startedAt: "2026-02-20T10:00:00.000Z",
           workingDirectory: "/repo",
           runtimeKind: "opencode",
@@ -416,8 +411,8 @@ describe("useAgentStudioChatComposer", () => {
             modelId: "claude-sonnet",
             profileId: "build-agent",
           },
-          pendingApprovals: [],
-          pendingQuestions: [],
+          pendingApprovalCount: 0,
+          pendingQuestionCount: 0,
         },
         loadCatalog: async () => catalogLoad.promise,
         readSessionSlashCommands,
@@ -457,6 +452,7 @@ describe("useAgentStudioChatComposer", () => {
           taskId: "task-1",
           role: "spec",
           status: "idle",
+          activityState: "idle",
           startedAt: "2026-02-20T10:00:00.000Z",
           workingDirectory: "/repo",
           runtimeKind: "codex",
@@ -466,8 +462,8 @@ describe("useAgentStudioChatComposer", () => {
             modelId: "gpt-5",
             profileId: "build-agent",
           },
-          pendingApprovals: [],
-          pendingQuestions: [],
+          pendingApprovalCount: 0,
+          pendingQuestionCount: 0,
         },
         repoSettings: createRepoSettings(null, "opencode"),
         loadCatalog: async () => CODEX_CATALOG,
@@ -1151,7 +1147,7 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        workspaceRepoPath: "/repo-a",
         loadCatalog,
       }),
     );
@@ -1162,7 +1158,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           loadCatalog,
         }),
       );
@@ -1219,7 +1215,7 @@ describe("useAgentStudioChatComposer", () => {
 
     const harness = createHookHarness(
       createBaseProps({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        workspaceRepoPath: "/repo-a",
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1247,7 +1243,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",
@@ -1283,7 +1279,7 @@ describe("useAgentStudioChatComposer", () => {
   test("does not reuse stale repo defaults while waiting for the next repo settings", async () => {
     const harness = createHookHarness(
       createBaseProps({
-        activeWorkspace: createActiveWorkspace("/repo-a"),
+        workspaceRepoPath: "/repo-a",
         repoSettings: createRepoSettings({
           runtimeKind: "opencode",
           providerId: "openai",
@@ -1307,7 +1303,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           repoSettings: null,
           loadCatalog: async () => {
             throw new Error("catalog unavailable");
@@ -1324,7 +1320,7 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          activeWorkspace: createActiveWorkspace("/repo-b"),
+          workspaceRepoPath: "/repo-b",
           repoSettings: createRepoSettings({
             runtimeKind: "opencode",
             providerId: "anthropic",

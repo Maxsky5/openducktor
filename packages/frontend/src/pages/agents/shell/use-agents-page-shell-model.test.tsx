@@ -8,7 +8,7 @@ import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
-  createSelectedSessionLifecycleFixture,
+  createSelectedSessionTranscriptStateFixture,
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
@@ -63,7 +63,7 @@ type SelectionState = {
   availableTabTasks: (typeof task)[];
   taskId: string;
   isActiveTaskReady: boolean;
-  viewSessionLifecycle: ReturnType<typeof createSelectedSessionLifecycleFixture>;
+  viewTranscriptState: ReturnType<typeof createSelectedSessionTranscriptStateFixture>;
   sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
@@ -147,8 +147,7 @@ let tasksState: TasksStateContextValue = {
 };
 let agentSessions = [createSession()];
 let agentSessionReadModelState = {
-  isLoadingSessionReadModel: false,
-  sessionReadModelError: null as string | null,
+  sessionReadModelLoadState: { kind: "idle" as const },
 };
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -199,7 +198,7 @@ let selectionState: SelectionState = {
   availableTabTasks: [task],
   taskId: "task-1",
   isActiveTaskReady: true,
-  viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+  viewTranscriptState: createSelectedSessionTranscriptStateFixture(),
   sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
@@ -419,8 +418,7 @@ beforeEach(async () => {
   const session = createSession();
   agentSessions = [session];
   agentSessionReadModelState = {
-    isLoadingSessionReadModel: false,
-    sessionReadModelError: null,
+    sessionReadModelLoadState: { kind: "idle" },
   };
   agentOperations = {
     loadAgentSessions: mock(async () => undefined),
@@ -465,7 +463,7 @@ beforeEach(async () => {
     availableTabTasks: [task],
     taskId: "task-1",
     isActiveTaskReady: true,
-    viewSessionLifecycle: createSelectedSessionLifecycleFixture(),
+    viewTranscriptState: createSelectedSessionTranscriptStateFixture(),
     sessionsForTask: [session],
     handleCreateTab: mock((_taskId: string) => {}),
     handleCloseTab: mock((_taskId: string) => {}),

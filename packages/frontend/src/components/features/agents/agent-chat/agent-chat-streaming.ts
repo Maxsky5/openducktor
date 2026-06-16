@@ -1,10 +1,11 @@
+import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-state";
 import { findLastSessionMessageByRole } from "@/state/operations/agent-orchestrator/support/messages";
-import type { AgentSessionState } from "@/types/agent-orchestrator";
+import type { AgentChatThreadSession } from "./agent-chat.types";
 
 export const resolveActiveStreamingAssistantMessageId = (
-  session: Pick<AgentSessionState, "externalSessionId" | "messages" | "status"> | null,
+  session: Pick<AgentChatThreadSession, "activityState" | "externalSessionId" | "messages"> | null,
 ): string | null => {
-  if (session?.status !== "running") {
+  if (!isAgentSessionActivityWorking(session?.activityState)) {
     return null;
   }
 

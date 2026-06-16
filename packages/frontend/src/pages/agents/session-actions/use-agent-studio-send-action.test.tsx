@@ -67,11 +67,7 @@ const sessionWorkflowResult = (externalSessionId: string) => ({
 });
 
 const createBaseArgs = (): HookArgs => ({
-  activeWorkspace: {
-    repoPath: "/repo",
-    workspaceId: "workspace-1",
-    workspaceName: "Active Workspace",
-  },
+  workspaceId: "workspace-1",
   taskId: "task-1",
   role: "spec",
   activeSession: sessionIdentity("session-existing"),

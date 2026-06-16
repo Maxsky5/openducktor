@@ -4,9 +4,9 @@ import { createSessionMessagesState } from "../support/messages";
 import { historyToChatMessages } from "../support/persistence";
 import { buildSessionHeaderMessages } from "../support/session-prompt";
 import type {
+  StartAgentSessionInput,
   StartOrReuseResult,
   StartSessionContext,
-  StartSessionCreationInput,
   StartSessionExecutionDependencies,
 } from "./start-session.types";
 import { STALE_START_ERROR } from "./start-session-constants";
@@ -25,7 +25,10 @@ const FORK_START_HISTORY_LIMIT = 600;
 
 type ForkStrategyInput = {
   ctx: StartSessionContext;
-  input: Extract<StartSessionCreationInput, { startMode: "fork" }>;
+  input: Pick<
+    Extract<StartAgentSessionInput, { startMode: "fork" }>,
+    "startMode" | "selectedModel" | "sourceSession"
+  >;
   deps: StartSessionExecutionDependencies;
 };
 

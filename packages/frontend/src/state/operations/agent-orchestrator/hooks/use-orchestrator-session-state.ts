@@ -7,7 +7,6 @@ import {
 } from "@/features/session-start/session-start-gate";
 import { type AgentSessionsStore, createAgentSessionsStore } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
-import type { ActiveWorkspace } from "@/types/state-slices";
 import { createSessionObservers, type SessionObservers } from "../support/session-observers";
 import {
   clearAllSessionTransientState,
@@ -27,7 +26,7 @@ type UseOrchestratorSessionStateRefs = {
 };
 
 type UseOrchestratorSessionStateArgs = {
-  activeWorkspace: ActiveWorkspace | null;
+  workspaceRepoPath: string | null;
   tasks: TaskCard[];
 };
 
@@ -36,10 +35,9 @@ type UseOrchestratorSessionStateResult = {
 } & UseOrchestratorSessionStateRefs;
 
 export const useOrchestratorSessionState = ({
-  activeWorkspace,
+  workspaceRepoPath,
   tasks,
 }: UseOrchestratorSessionStateArgs): UseOrchestratorSessionStateResult => {
-  const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const initialWorkspaceRepoPathRef = useRef(workspaceRepoPath);
   const sessionStore = useMemo(
     () => createAgentSessionsStore(initialWorkspaceRepoPathRef.current),

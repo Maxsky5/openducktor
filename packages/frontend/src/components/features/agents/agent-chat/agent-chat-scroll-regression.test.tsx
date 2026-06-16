@@ -112,7 +112,7 @@ function ChatScrollRegressionHarness(): ReactElement {
   const { isNearBottom } = useAgentChatWindow({
     rows: createRows(80),
     activeSessionKey: "session-1",
-    isSessionViewLoading: false,
+    shouldResetForTranscriptLoad: false,
     messagesContainerRef,
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,
@@ -155,7 +155,7 @@ function ChatEditorScrollRegressionHarness(): ReactElement {
   const { isNearBottom } = useAgentChatWindow({
     rows: createRows(80),
     activeSessionKey: "session-1",
-    isSessionViewLoading: false,
+    shouldResetForTranscriptLoad: false,
     messagesContainerRef,
     messagesContentRef,
     syncBottomAfterComposerLayoutRef,

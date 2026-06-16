@@ -31,11 +31,7 @@ export const useSettingsModalCatalogState = ({
 
   const catalogQueries = useQueries({
     queries: uniqueRuntimeKinds.map((runtimeKind) => ({
-      ...repoRuntimeCatalogQueryOptions(
-        selectedRepoPath ?? "",
-        runtimeKind,
-        loadRepoRuntimeCatalog,
-      ),
+      ...repoRuntimeCatalogQueryOptions(selectedRepoPath, runtimeKind, loadRepoRuntimeCatalog),
       enabled: enabled && Boolean(selectedRepoPath),
     })),
   });
