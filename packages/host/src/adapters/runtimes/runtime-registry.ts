@@ -12,7 +12,6 @@ import {
 } from "../../effect/host-errors";
 import type { CodexAppServerPort } from "../../ports/codex-app-server-port";
 import type {
-  RuntimeEnsureWorkspaceInput,
   RuntimeRegistryError,
   RuntimeRegistryPort,
   RuntimeWorkspaceHandle,
@@ -44,22 +43,6 @@ type RuntimeSessionTargetInput = {
 const workspaceRuntimeKey = (runtimeKind: string, repoPath: string): string =>
   `${runtimeKind}::${normalizePathForComparison(repoPath)}`;
 
-const findWorkspaceRuntime = (
-  runtimes: Iterable<RuntimeInstanceSummary>,
-  input: RuntimeEnsureWorkspaceInput,
-): RuntimeInstanceSummary | undefined => {
-  const key = workspaceRuntimeKey(input.runtimeKind, input.repoPath);
-  for (const runtime of runtimes) {
-    if (
-      workspaceRuntimeKey(runtime.kind, runtime.repoPath) === key &&
-      runtime.role === "workspace"
-    ) {
-      return runtime;
-    }
-  }
-  return undefined;
-};
-
 const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
   Effect.gen(function* () {
     if (runtimeRoute.type === "stdio") {
@@ -80,41 +63,16 @@ export const createRuntimeRegistry = ({
   codexAppServer,
 }: CreateRuntimeRegistryInput = {}): RuntimeRegistryPort => {
   const entries = new Map<string, RuntimeInstanceSummary>();
-  const runtimeIdsByRepo = new Map<string, Set<string>>();
   const handles = new Map<string, RuntimeWorkspaceHandle>();
   const ensureFlights = new Map<string, RuntimeEnsureFlight>();
-  const repoIndexKey = (repoPath: string): string => normalizePathForComparison(repoPath);
-  const addRuntimeToIndexes = (runtime: RuntimeInstanceSummary) => {
-    const key = repoIndexKey(runtime.repoPath);
-    const ids = runtimeIdsByRepo.get(key) ?? new Set<string>();
-    ids.add(runtime.runtimeId);
-    runtimeIdsByRepo.set(key, ids);
-  };
-  const removeRuntimeFromIndexes = (runtime: RuntimeInstanceSummary) => {
-    const key = repoIndexKey(runtime.repoPath);
-    const ids = runtimeIdsByRepo.get(key);
-    if (!ids) {
-      return;
-    }
-    ids.delete(runtime.runtimeId);
-    if (ids.size === 0) {
-      runtimeIdsByRepo.delete(key);
-    }
-  };
   const upsertRuntime = (runtime: RuntimeInstanceSummary) => {
-    const previous = entries.get(runtime.runtimeId);
-    if (previous) {
-      removeRuntimeFromIndexes(previous);
-    }
     entries.set(runtime.runtimeId, runtime);
-    addRuntimeToIndexes(runtime);
   };
   const removeRuntime = (runtimeId: string): RuntimeInstanceSummary | null => {
     const runtime = entries.get(runtimeId);
     if (!runtime) {
       return null;
     }
-    removeRuntimeFromIndexes(runtime);
     entries.delete(runtimeId);
     return runtime;
   };
@@ -125,15 +83,11 @@ export const createRuntimeRegistry = ({
     repoPath: string;
     runtimeKind?: string;
   }): RuntimeInstanceSummary[] => {
-    const ids = runtimeIdsByRepo.get(repoIndexKey(repoPath));
-    if (!ids) {
-      return [];
-    }
+    const normalizedRepoPath = normalizePathForComparison(repoPath);
     const result: RuntimeInstanceSummary[] = [];
-    for (const runtimeId of ids) {
-      const runtime = entries.get(runtimeId);
-      if (!runtime) {
-        throw new Error(`Runtime registry repo index referenced missing runtime: ${runtimeId}`);
+    for (const runtime of entries.values()) {
+      if (normalizePathForComparison(runtime.repoPath) !== normalizedRepoPath) {
+        continue;
       }
       if (runtimeKind && runtime.kind !== runtimeKind) {
         continue;
@@ -147,12 +101,7 @@ export const createRuntimeRegistry = ({
       const runtimes = readRuntimesForRepo({
         repoPath: input.repoPath,
         runtimeKind: input.runtimeKind,
-      }).filter(
-        (runtime) =>
-          runtime.kind === input.runtimeKind &&
-          runtime.role === "workspace" &&
-          runtime.taskId === null,
-      );
+      }).filter((runtime) => runtime.role === "workspace" && runtime.taskId === null);
       if (runtimes.length === 0) {
         return null;
       }
@@ -239,7 +188,10 @@ export const createRuntimeRegistry = ({
   const registry: RuntimeRegistryPort = {
     ensureWorkspaceRuntime(input) {
       return Effect.gen(function* () {
-        const existingRuntime = findWorkspaceRuntime(entries.values(), input);
+        const existingRuntime = readRuntimesForRepo({
+          repoPath: input.repoPath,
+          runtimeKind: input.runtimeKind,
+        }).find((runtime) => runtime.role === "workspace");
         if (existingRuntime) {
           return yield* Effect.try({
             try: () => runtimeInstanceSummarySchema.parse(existingRuntime),

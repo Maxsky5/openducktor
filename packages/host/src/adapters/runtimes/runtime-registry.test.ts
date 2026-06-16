@@ -153,7 +153,7 @@ describe("createRuntimeRegistry", () => {
       },
     ]);
   });
-  test("removes replaced runtime ids from their previous repo index", async () => {
+  test("does not list a replaced runtime under its previous repo", async () => {
     const originalRuntime = createRuntime({
       runtimeId: "runtime-1",
       repoPath: "/old-repo",
