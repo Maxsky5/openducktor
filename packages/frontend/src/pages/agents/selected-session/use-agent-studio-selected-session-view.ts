@@ -5,7 +5,7 @@ import type {
   AgentSessionRef,
   AgentSessionTodoItem,
 } from "@openducktor/core";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import {
   firstLaunchAction,
   resolveBuildContinuationLaunchAction,
@@ -15,7 +15,7 @@ import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import { useAgentSession } from "@/state/app-state-provider";
-import { shouldLoadSelectedSessionHistory } from "@/state/operations/agent-orchestrator/history/session-history-loader";
+import { useSelectedSessionHistoryLoader } from "@/state/operations/agent-orchestrator/history/session-history-loader";
 import type { SessionRuntimeDataState } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import { useSessionRuntimeData } from "@/state/operations/agent-orchestrator/hooks/use-session-runtime-data";
 import {
@@ -156,17 +156,12 @@ export function useAgentStudioSelectedSessionView({
     readSessionTodos,
   });
 
-  const shouldLoadHistory = shouldLoadSelectedSessionHistory({
+  useSelectedSessionHistoryLoader({
+    selectedSessionIdentity,
     repoReadinessState,
     session,
+    loadAgentSessionHistory,
   });
-  useEffect(() => {
-    if (selectedSessionIdentity === null || !shouldLoadHistory) {
-      return;
-    }
-
-    void loadAgentSessionHistory(selectedSessionIdentity);
-  }, [loadAgentSessionHistory, selectedSessionIdentity, shouldLoadHistory]);
 
   return useMemo<AgentStudioSelectedSessionView>(
     () => ({

@@ -163,6 +163,7 @@ Files:
 Owns:
 
 - deciding when a selected session should retry or start its history load
+- running the selected-session history load effect for the Agent Studio view
 - claiming, applying, failing, and releasing session history load state
 - building transient runtime prompt context through the shared prompt helper and
   passing it to history loads without storing it in session state

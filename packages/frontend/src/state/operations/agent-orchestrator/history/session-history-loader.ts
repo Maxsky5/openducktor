@@ -4,7 +4,7 @@ import type {
   AgentSessionHistoryMessage,
   AgentSessionHistorySystemPromptContext,
 } from "@openducktor/core";
-import type { MutableRefObject } from "react";
+import { type MutableRefObject, useEffect } from "react";
 import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import { createRepoStaleGuard } from "../support/core";
@@ -50,6 +50,13 @@ type CreateLoadAgentSessionHistoryArgs = {
   loadRepoPromptOverrides: (workspaceId: string) => Promise<RepoPromptOverrides>;
 };
 
+type UseSelectedSessionHistoryLoaderArgs = {
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  repoReadinessState: RepoRuntimeReadinessState;
+  session: AgentSessionState | null;
+  loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
+};
+
 const INITIAL_SESSION_HISTORY_LIMIT = 600;
 
 export const isSessionHistoryLoaded = (session: AgentSessionState): boolean =>
@@ -62,6 +69,26 @@ export const shouldLoadSelectedSessionHistory = ({
   repoReadinessState: RepoRuntimeReadinessState;
   session: AgentSessionState | null;
 }): boolean => repoReadinessState === "ready" && session?.historyLoadState === "not_requested";
+
+export const useSelectedSessionHistoryLoader = ({
+  selectedSessionIdentity,
+  repoReadinessState,
+  session,
+  loadAgentSessionHistory,
+}: UseSelectedSessionHistoryLoaderArgs): void => {
+  const shouldLoadHistory = shouldLoadSelectedSessionHistory({
+    repoReadinessState,
+    session,
+  });
+
+  useEffect(() => {
+    if (selectedSessionIdentity === null || !shouldLoadHistory) {
+      return;
+    }
+
+    void loadAgentSessionHistory(selectedSessionIdentity);
+  }, [loadAgentSessionHistory, selectedSessionIdentity, shouldLoadHistory]);
+};
 
 const canStartSessionHistoryLoad = (session: AgentSessionState): boolean =>
   session.historyLoadState === "not_requested" || session.historyLoadState === "failed";
