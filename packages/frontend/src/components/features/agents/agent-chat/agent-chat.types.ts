@@ -15,7 +15,7 @@ import type { MutableRefObject, RefObject } from "react";
 import type { ComboboxGroup, ComboboxOption } from "@/components/ui/combobox";
 import type { AgentSessionActivityState } from "@/lib/agent-session-activity-state";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionState, SessionMessagesState } from "@/types/agent-orchestrator";
 
 export type AgentRoleOption = {

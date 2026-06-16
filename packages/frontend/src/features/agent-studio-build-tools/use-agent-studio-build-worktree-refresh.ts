@@ -3,13 +3,13 @@ import type { GitDiffRefresh } from "@/features/agent-studio-git";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { findFirstChangedMessageIndex } from "@/pages/agents/agent-session-message-diff";
 import {
-  type AgentSessionTranscriptState,
-  isAgentSessionTranscriptLoading,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
-import {
   forEachSessionMessage,
   forEachSessionMessageFrom,
 } from "@/state/operations/agent-orchestrator/support/messages";
+import {
+  type AgentSessionTranscriptState,
+  isAgentSessionTranscriptLoading,
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import { shouldRefreshGitPanelAfterToolCompletion } from "./git-panel-refresh-policy";

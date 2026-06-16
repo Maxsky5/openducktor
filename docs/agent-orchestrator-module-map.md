@@ -11,7 +11,7 @@ Workspace records are a UI/app-state concern. Session modules below
 `useAgentOrchestratorOperations` receive the primitive identity they need:
 `workspaceRepoPath` for repo-scoped session state, and `workspaceId` only when
 prompt/runtime startup code needs repository configuration. Do not pass
-`ActiveWorkspace` into session lifecycle, session action, or read-model modules.
+`ActiveWorkspace` into transcript-state, session action, or read-model modules.
 
 ## Owners
 
@@ -265,7 +265,7 @@ Files:
 - `pages/agents/selected-session/use-agent-studio-selected-session-view.ts`
 - `pages/agents/selected-session/selected-session-context.ts`
 - `components/features/agents/agent-chat/use-agent-chat-surface-model.ts`
-- `lifecycle/session-view-lifecycle.ts`
+- `transcript/session-transcript-state.ts`
 - `lifecycle/ensure-ready.ts`
 
 Owns:
@@ -279,13 +279,12 @@ Owns:
 Invariant: live summaries and persisted records must be combined before selection.
 Do not resolve live and persisted selections in separate branches.
 
-Invariant: selected-session lifecycle owns transcript rendering state derived
-from runtime readiness and history load state. History loading policy and
-runtime-data query gating live in their owner modules, not in the lifecycle
-model. Page route/task switching is orchestration state and must not be stored
-in the lifecycle model. The lifecycle value carries `transcriptState` only; do
-not mirror runtime readiness on it.
-Readonly transcript surfaces pass direct facts into the lifecycle owner:
+Invariant: selected-session transcript state owns transcript rendering state
+derived from runtime readiness and history load state. History loading policy and
+runtime-data query gating live in their owner modules, not in the transcript
+state model. Page route/task switching is orchestration state and must not be
+stored in the transcript state model. Do not mirror runtime readiness on it.
+Readonly transcript surfaces pass direct facts into the transcript-state owner:
 whether a transcript is visible, whether a history target exists, and whether
 the history read failed. They must not synthesize session-shaped history
 snapshots or maintain a separate transcript loading state machine.
@@ -297,20 +296,20 @@ Readonly transcript presentation state is derived in
 empty/loading/error or displayed-session working-state policy.
 Agent chat renderable-thread projection, transcript notice copy, and
 reset-window policy are derived in `agent-chat/agent-chat-thread-state.ts`;
-surface hooks and rendering components must not interpret transcript lifecycle
-directly or pass a separate transcript-pending boolean beside lifecycle.
-Agent chat types must reference the canonical selected-session lifecycle and
+surface hooks and rendering components must not interpret transcript state
+directly or pass a separate transcript-pending boolean beside transcript state.
+Agent chat types must reference the canonical selected-session transcript state and
 repo-runtime readiness contracts instead of declaring local lookalike shapes.
-Selected-session lifecycle is the source of truth for transcript loading. Shell,
+Selected-session transcript state is the source of truth for transcript loading. Shell,
 right-panel, and build-tool modules may derive edge booleans from
-`viewSessionLifecycle.transcriptState`, but central selection must not expose a
-second `isSessionViewLoading` field.
+`viewTranscriptState`, but central selection must not expose a second
+`isSessionViewLoading` field.
 Repo-session read-model loading is exposed as one
 `sessionReadModelLoadState` value. Do not split it back into independent
-loading and error fields; selected-session lifecycle is the only place that
+loading and error fields; selected-session transcript state is the only place that
 interprets read-model load state against runtime readiness and route selection.
-The lifecycle module exposes selected-session lifecycle and direct transcript
-lifecycle only; do not add parallel session-source or target lifecycle helpers.
+The transcript-state module exposes selected-session and runtime transcript-state
+derivation only; do not add parallel session-source or target state helpers.
 
 Invariant: subagent waiting badges are derived from child session summaries.
 Selected-session state must not maintain parent-owned pending-input projections.
@@ -375,7 +374,7 @@ Owns:
 
 Must not own:
 
-- selected-session lifecycle or transcript loading state
+- selected-session transcript loading state
 - canonical session status, messages, pending input, or history load state
 - runtime route resolution beyond the already-derived working-directory ref
 
@@ -386,7 +385,7 @@ targets are loading targets, not live-session state. Slash commands, skills, and
 file search must consume the shared prompt-input target instead of recomputing
 session/repo/loading/runtime-error booleans independently.
 
-Invariant: Agent Studio chat surface state receives selected-session lifecycle
+Invariant: Agent Studio chat surface state receives selected-session transcript state
 and already-computed start availability. It must not recompute task workflow
 availability or runtime readiness.
 The generic chat composer may receive an already-computed waiting-input
@@ -420,7 +419,7 @@ Owns:
 Invariant: session-action availability answers whether an action is valid for
 the selected task, role, launch action, and current loaded session. It must not
 gate transcript empty-state actions on selection-resolution or runtime-loading
-timing; selected-session lifecycle owns that loading-vs-empty distinction.
+timing; selected-session transcript state owns that loading-vs-empty distinction.
 Sessionless sends and message-first selection must use the same start-availability
 policy as explicit starts. Parent Agent Studio action wiring owns that predicate;
 sub-hooks receive the resulting boolean/function and must not accept selected-task
@@ -510,7 +509,7 @@ Use these compact tests as the first-line safety net:
 | User messages preserved while repo/session reads are in flight | `lifecycle/load-sessions.test.ts` |
 | Per-session history failure isolation | `lifecycle/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `lifecycle/session-history-loader.test.ts` |
-| Selected-session runtime/history/read-model loading surface | `lifecycle/session-view-lifecycle.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
+| Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Composer summary target cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
 | Runtime preparation failures before session start | `lifecycle/ensure-ready.test.ts` |
 | Runtime snapshot projection onto session state | `lifecycle/session-runtime-snapshot.test.ts` |

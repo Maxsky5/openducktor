@@ -2,7 +2,7 @@ import type { RuntimeApprovalReplyOutcome, RuntimeDescriptor } from "@openduckto
 import { type MutableRefObject, type RefObject, useCallback, useMemo, useState } from "react";
 import { findRuntimeDefinition } from "@/lib/agent-runtime";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentChatEmptyStateModel,
   AgentChatThreadModel,

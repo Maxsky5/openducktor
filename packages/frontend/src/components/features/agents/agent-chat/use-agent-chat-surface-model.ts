@@ -1,7 +1,7 @@
 import type { ChatSettings, RuntimeDescriptor } from "@openducktor/contracts";
 import { useMemo, useRef } from "react";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type {
   AgentChatEmptyStateModel,
   AgentChatSurfaceModel,

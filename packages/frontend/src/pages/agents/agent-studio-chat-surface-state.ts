@@ -1,5 +1,5 @@
 import type { AgentChatEmptyStateModel } from "@/components/features/agents/agent-chat/agent-chat.types";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentStudioSelectedSessionContext } from "./selected-session/selected-session-context";
 
 export type AgentStudioChatSurfaceState = {

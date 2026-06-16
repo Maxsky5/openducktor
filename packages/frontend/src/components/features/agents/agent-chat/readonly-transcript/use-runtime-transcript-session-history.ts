@@ -5,7 +5,7 @@ import type { RepoRuntimeReadinessState } from "@/lib/repo-runtime-health";
 import {
   type AgentSessionTranscriptState,
   deriveRuntimeTranscriptState,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { sessionHistoryQueryOptions } from "@/state/queries/agent-session-runtime";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentChatThreadSession } from "../agent-chat.types";

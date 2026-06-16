@@ -4,7 +4,7 @@ import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
   isAgentSessionTranscriptVisible,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentChatThreadModel, AgentChatThreadSession } from "./agent-chat.types";
 
 export type AgentChatTranscriptNotice = {

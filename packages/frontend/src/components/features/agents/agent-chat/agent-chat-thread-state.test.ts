@@ -33,7 +33,7 @@ describe("getAgentChatThreadState", () => {
     expect(projection.activeSessionKey).toBe(agentSessionIdentityKey(session));
   });
 
-  test("hides the session and marks the transcript pending while lifecycle is loading", () => {
+  test("hides the session and marks the transcript pending while transcript state is loading", () => {
     const session = buildSession();
     const projection = deriveAgentChatThreadProjection({
       session,
@@ -44,7 +44,7 @@ describe("getAgentChatThreadState", () => {
     expect(projection.activeSessionKey).toBeNull();
   });
 
-  test("hides the session without pending state when lifecycle failed", () => {
+  test("hides the session without pending state when transcript state failed", () => {
     const session = buildSession();
     const projection = deriveAgentChatThreadProjection({
       session,
@@ -80,7 +80,7 @@ describe("getAgentChatThreadState", () => {
     expect(state.transcriptNotice?.description).toBe("Loading the selected conversation.");
   });
 
-  test("does not reset the transcript window for a visible lifecycle", () => {
+  test("does not reset the transcript window for a visible transcript state", () => {
     const state = getAgentChatThreadState({
       transcriptState: readyTranscriptState,
       runtimeReadiness: readyRuntimeReadiness,

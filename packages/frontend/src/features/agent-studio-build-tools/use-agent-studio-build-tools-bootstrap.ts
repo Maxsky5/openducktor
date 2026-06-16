@@ -4,7 +4,7 @@ import type { AgentStudioOrchestrationSelectionContext } from "@/pages/agents/us
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 export type BuildToolsSessionDescriptor = {
   role: AgentStudioOrchestrationSelectionContext["viewActiveSession"] extends infer T

@@ -563,7 +563,7 @@ Use **Transcript** for the ordered messages and events of one **Agent Session**.
 
 **Repo Session Read Model vs Session History Load**:
 Use **Repo Session Read Model** for the startup session list built from persisted records plus runtime snapshots. Use **Session History Load** for loading the selected session's runtime-owned transcript and session details.
-Expose Repo Session Read Model loading as one load state, not as separate loading and error facts; selected-session lifecycle owns how that state is rendered.
+Expose Repo Session Read Model loading as one load state, not as separate loading and error facts; selected-session transcript state owns how that state is rendered.
 
 **Session Runtime Snapshot vs Session Status**:
 Use **Session Runtime Snapshot** for the startup runtime signal. Use **Session Status** for OpenDucktor's interaction classification, such as **Running Session**, **Idle Session**, **Stopped Session**, or **Errored Session**.

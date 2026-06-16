@@ -1,7 +1,7 @@
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 type WorktreeRecoverySelection = {
   viewTaskId: string;

@@ -9,7 +9,7 @@ import { hostClient } from "@/lib/host-client";
 import { canonicalTargetBranch, targetBranchFromSelection } from "@/lib/target-branch";
 import { canDetectTaskPullRequest } from "@/lib/task-display";
 import type { useTasksState, useWorkspaceState } from "@/state";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
 import type {

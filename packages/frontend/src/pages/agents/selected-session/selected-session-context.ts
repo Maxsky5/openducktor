@@ -13,7 +13,7 @@ import {
 } from "@/lib/agent-session-waiting-input";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
 import {
   type AgentStudioDocumentsContext,

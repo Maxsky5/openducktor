@@ -5,8 +5,8 @@ import type {
   AgentSessionTodoItem,
 } from "@openducktor/core";
 import { Bot, ShieldCheck, Sparkles, Wrench } from "lucide-react";
-import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
 import { createSessionMessagesState } from "@/state/operations/agent-orchestrator/support/messages";
+import type { AgentSessionTranscriptState } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import { createSessionMessagesFixture } from "@/test-utils/session-message-test-helpers";
 import { TEST_EXTERNAL_SESSION_IDS } from "@/test-utils/shared-test-fixtures";
 import { AGENT_ROLE_LABELS } from "@/types";

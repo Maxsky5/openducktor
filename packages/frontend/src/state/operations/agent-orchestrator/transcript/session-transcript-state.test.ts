@@ -9,7 +9,7 @@ import type {
 import {
   deriveRuntimeTranscriptState,
   deriveSelectedAgentSessionTranscriptState,
-} from "./session-view-lifecycle";
+} from "./session-transcript-state";
 
 type CreateSessionOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: AgentChatMessage[] | SessionMessagesState;

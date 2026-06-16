@@ -38,7 +38,7 @@ describe("deriveAgentStudioChatSurfaceState", () => {
     });
   });
 
-  test("hides the kickoff empty state while transcript lifecycle is not empty", () => {
+  test("hides the kickoff empty state while transcript state is not empty", () => {
     expect(
       deriveAgentStudioChatSurfaceState({
         selectedSession: baseSelectedSession,

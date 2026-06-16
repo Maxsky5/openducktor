@@ -21,7 +21,7 @@ import { shouldLoadSelectedSessionHistory } from "@/state/operations/agent-orche
 import {
   type AgentSessionTranscriptState,
   deriveSelectedAgentSessionTranscriptState,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
 import type { ChecksStateContextValue } from "@/types/state-slices";

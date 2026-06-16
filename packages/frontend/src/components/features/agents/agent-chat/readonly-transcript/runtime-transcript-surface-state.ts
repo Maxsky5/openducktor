@@ -2,7 +2,7 @@ import { isAgentSessionActivityWorking } from "@/lib/agent-session-activity-stat
 import {
   type AgentSessionTranscriptState,
   isAgentSessionTranscriptLoading,
-} from "@/state/operations/agent-orchestrator/lifecycle/session-view-lifecycle";
+} from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentChatEmptyStateModel, AgentChatThreadSession } from "../agent-chat.types";
 import { errorMessageFromUnknown } from "./runtime-transcript-error";
 
