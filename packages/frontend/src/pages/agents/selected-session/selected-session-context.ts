@@ -78,7 +78,6 @@ export type AgentStudioSelectedSessionContext = {
   role: AgentRole;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  allSessionSummaries: AgentSessionSummary[];
   activeSession: AgentSessionState | null;
   workflow: WorkflowModelContext;
   documents: SelectedSessionDocumentsContext;
@@ -189,7 +188,6 @@ export const buildAgentStudioSelectedSessionContext = ({
     role,
     selectedTask,
     sessionsForTask,
-    allSessionSummaries,
     activeSession,
     workflow,
     documents: {
