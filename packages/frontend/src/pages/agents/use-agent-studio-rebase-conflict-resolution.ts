@@ -22,10 +22,7 @@ type AgentStudioRebaseConflictResolutionSelectionContext = {
     AgentStudioSelectionControllerResult["view"],
     "taskId" | "selectedTask" | "activeSession" | "activeSessionSummary" | "sessionsForTask"
   >;
-} & Pick<
-  AgentStudioSelectionControllerResult,
-  "activeSessionSummary" | "selectedSessionFromRoute" | "sessionsForTask"
->;
+};
 
 type UseAgentStudioRebaseConflictResolutionArgs = {
   workspaceId: string | null;
@@ -81,7 +78,7 @@ export function useAgentStudioRebaseConflictResolution({
     startConflictResolutionSession,
     loadPromptOverrides,
   });
-  const { view, activeSessionSummary, selectedSessionFromRoute, sessionsForTask } = selection;
+  const { view } = selection;
 
   const handleResolveRebaseConflict = useCallback(
     async (conflict: GitConflict): Promise<boolean> => {
@@ -91,14 +88,7 @@ export function useAgentStudioRebaseConflictResolution({
 
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
         taskId: view.taskId,
-        candidateSessions: [
-          view.activeSession,
-          view.activeSessionSummary,
-          activeSessionSummary,
-          selectedSessionFromRoute,
-          ...view.sessionsForTask,
-          ...sessionsForTask,
-        ],
+        candidateSessions: [view.activeSession, ...view.sessionsForTask],
       });
       const defaultBuilderSession = builderSessions[0] ?? null;
 
@@ -123,14 +113,7 @@ export function useAgentStudioRebaseConflictResolution({
         },
       });
     },
-    [
-      activeSessionSummary,
-      handleResolveGitConflict,
-      scheduleQueryUpdate,
-      selectedSessionFromRoute,
-      sessionsForTask,
-      view,
-    ],
+    [handleResolveGitConflict, scheduleQueryUpdate, view],
   );
 
   return {

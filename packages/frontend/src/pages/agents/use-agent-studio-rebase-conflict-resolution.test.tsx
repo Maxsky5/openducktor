@@ -74,9 +74,6 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
         activeSessionSummary: plannerSession,
         sessionsForTask: [builderSession],
       },
-      activeSessionSummary: plannerSession,
-      selectedSessionFromRoute: null,
-      sessionsForTask: [builderSession],
     },
     scheduleQueryUpdate: mock(() => {}),
     startSessionRequest: mock(async () => sessionWorkflowResult("build-new-1")),
@@ -138,7 +135,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           ...baseSelection.view,
           sessionsForTask: [matchingBuilderSession, otherBuilderSession],
         },
-        sessionsForTask: [matchingBuilderSession, otherBuilderSession],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-1")),
     });
@@ -188,7 +184,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           ...baseSelection.view,
           sessionsForTask: [builderSession],
         },
-        sessionsForTask: [builderSession],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-new-9")),
     });
@@ -230,7 +225,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           ...baseSelection.view,
           sessionsForTask: [],
         },
-        sessionsForTask: [],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-new-9")),
     });
@@ -319,8 +313,6 @@ describe("useAgentStudioRebaseConflictResolution", () => {
           activeSessionSummary: null,
           sessionsForTask: [],
         },
-        activeSessionSummary: null,
-        sessionsForTask: [],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-live-1")),
     });

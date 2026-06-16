@@ -133,7 +133,7 @@ export function useAgentsPageRouteSessionModel({
     sessionKeyParam,
     sessionFromQuery: selection.selectedSessionFromRoute,
     resolvedTaskId: selection.taskId,
-    resolvedSession: selection.activeSessionSummary,
+    resolvedSession: selection.resolvedRouteSession,
     roleFromQuery,
     scheduleQueryUpdate,
   });

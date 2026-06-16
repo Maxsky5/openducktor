@@ -86,7 +86,7 @@ export type AgentStudioSelectionControllerResult = {
   selectedTask: TaskCard | null;
   allSessionSummaries: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
-  activeSessionSummary: AgentSessionSummary | null;
+  resolvedRouteSession: AgentSessionSummary | null;
   isLoadingTasks: boolean;
   activeTaskTabId: string;
   availableTabTasks: TaskCard[];
@@ -164,7 +164,7 @@ export function useAgentStudioSelectionController({
     return sessionsByTaskId.get(taskId) ?? [];
   }, [sessionsByTaskId, taskId]);
 
-  const activeSessionSummary = useMemo(() => {
+  const resolvedRouteSession = useMemo(() => {
     return resolveAgentStudioSessionSelection({
       sessionsForTask,
       sessionKey: routeSelectionParams.sessionKeyParam,
@@ -282,7 +282,7 @@ export function useAgentStudioSelectionController({
       selectedTask,
       allSessionSummaries: sessions,
       sessionsForTask,
-      activeSessionSummary,
+      resolvedRouteSession,
       isLoadingTasks,
       activeTaskTabId,
       availableTabTasks,
@@ -309,7 +309,6 @@ export function useAgentStudioSelectionController({
       },
     }),
     [
-      activeSessionSummary,
       activeTaskTabId,
       availableTabTasks,
       handleCloseTab,
@@ -318,6 +317,7 @@ export function useAgentStudioSelectionController({
       handleSelectTab,
       isActiveTaskReady,
       isLoadingTasks,
+      resolvedRouteSession,
       selectedSessionView.launchActionId,
       selectedSessionView.transcriptState,
       selectedSessionView.role,

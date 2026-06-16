@@ -184,7 +184,7 @@ describe("useAgentStudioSelectionController", () => {
       const latest = harness.getLatest();
       expect(latest.taskId).toBe("task-2");
       expect(latest.selectedTask?.id).toBe("task-2");
-      expect(latest.activeSessionSummary?.externalSessionId).toBe("session-2");
+      expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-2");
       expect(latest.view.taskId).toBe("task-2");
       expect(latest.view.activeSession?.externalSessionId).toBe("session-2");
     } finally {
@@ -453,7 +453,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.view.role).toBe("planner");
       expect(latest.view.launchActionId).toBe("planner_initial");
       expect(latest.view.activeSession?.externalSessionId).toBe("session-planner");
-      expect(latest.activeSessionSummary?.externalSessionId).toBe("session-planner");
+      expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-planner");
     } finally {
       await harness.unmount();
     }
@@ -484,7 +484,7 @@ describe("useAgentStudioSelectionController", () => {
       await harness.mount();
 
       const latest = harness.getLatest();
-      expect(latest.activeSessionSummary).toBeNull();
+      expect(latest.resolvedRouteSession).toBeNull();
       expect(latest.view.activeSession).toBeNull();
       expect(latest.view.role).toBe("build");
       expect(latest.view.launchActionId).toBe("build_implementation_start");
@@ -521,7 +521,7 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.selectedSessionFromRoute?.externalSessionId).toBe("session-build");
-      expect(latest.activeSessionSummary?.externalSessionId).toBe("session-build");
+      expect(latest.resolvedRouteSession?.externalSessionId).toBe("session-build");
       expect(latest.view.activeSession?.externalSessionId).toBe("session-build");
       expect(latest.view.role).toBe("build");
     } finally {
@@ -664,7 +664,7 @@ describe("useAgentStudioSelectionController", () => {
       expect(latest.selectedSessionFromRoute).toBeNull();
       expect(latest.taskId).toBe("");
       expect(latest.selectedTask).toBeNull();
-      expect(latest.activeSessionSummary).toBeNull();
+      expect(latest.resolvedRouteSession).toBeNull();
       expect(latest.view.taskId).toBe("");
       expect(latest.view.activeSession).toBeNull();
       expect(readSessionModelCatalog).toHaveBeenCalledTimes(0);
