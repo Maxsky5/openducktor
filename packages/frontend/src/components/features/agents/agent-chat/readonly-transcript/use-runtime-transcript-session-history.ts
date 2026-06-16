@@ -47,17 +47,15 @@ export function useRuntimeTranscriptSessionHistory({
         isOpen,
         repoPath,
         target,
-        repoReadinessState,
         liveSession,
       }),
-    [isOpen, liveSession, repoPath, repoReadinessState, target],
+    [isOpen, liveSession, repoPath, target],
   );
   const historySessionRef = historyTarget.kind === "history" ? historyTarget.sessionRef : null;
-  const canReadHistory = historyTarget.kind === "history" && historyTarget.canReadHistory;
 
   const historyQuery = useQuery({
     ...sessionHistoryQueryOptions(historySessionRef, readSessionHistory),
-    enabled: canReadHistory,
+    enabled: historyTarget.kind === "history" && repoReadinessState === "ready",
   });
 
   const session = useMemo(() => {

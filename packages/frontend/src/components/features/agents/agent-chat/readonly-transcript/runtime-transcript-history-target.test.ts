@@ -22,19 +22,17 @@ describe("resolveRuntimeTranscriptHistoryTarget", () => {
       isOpen: true,
       repoPath: "/repo-a",
       target,
-      repoReadinessState: "ready",
       liveSession,
     });
 
     expect(historyTarget).toEqual({ kind: "live", session: liveSession });
   });
 
-  test("builds a runtime history ref for an unloaded target once runtime is ready", () => {
+  test("builds a runtime history ref for an unloaded target", () => {
     const historyTarget = resolveRuntimeTranscriptHistoryTarget({
       isOpen: true,
       repoPath: "/repo-a",
       target,
-      repoReadinessState: "ready",
       liveSession: null,
     });
 
@@ -46,28 +44,6 @@ describe("resolveRuntimeTranscriptHistoryTarget", () => {
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
       },
-      canReadHistory: true,
-    });
-  });
-
-  test("keeps history loading disabled while runtime readiness is unresolved", () => {
-    const historyTarget = resolveRuntimeTranscriptHistoryTarget({
-      isOpen: true,
-      repoPath: "/repo-a",
-      target,
-      repoReadinessState: "checking",
-      liveSession: null,
-    });
-
-    expect(historyTarget).toEqual({
-      kind: "history",
-      sessionRef: {
-        repoPath: "/repo-a",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo-a/worktree",
-        externalSessionId: "session-1",
-      },
-      canReadHistory: false,
     });
   });
 
@@ -83,7 +59,6 @@ describe("resolveRuntimeTranscriptHistoryTarget", () => {
       isOpen: true,
       repoPath: "/repo-a",
       target,
-      repoReadinessState: "ready",
       liveSession,
     });
 
@@ -95,7 +70,6 @@ describe("resolveRuntimeTranscriptHistoryTarget", () => {
         workingDirectory: "/repo-a/worktree",
         externalSessionId: "session-1",
       },
-      canReadHistory: true,
     });
   });
 
@@ -104,7 +78,6 @@ describe("resolveRuntimeTranscriptHistoryTarget", () => {
       isOpen: false,
       repoPath: "/repo-a",
       target,
-      repoReadinessState: "ready",
       liveSession: null,
     });
 

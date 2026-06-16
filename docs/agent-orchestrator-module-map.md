@@ -307,7 +307,8 @@ the history read failed. They must not synthesize session-shaped history
 snapshots or maintain a separate transcript loading state machine.
 Readonly transcript surfaces resolve their live-session/history-session target
 through `readonly-transcript/runtime-transcript-history-target.ts`; hooks must not
-inline that selection logic.
+inline that selection logic. The target resolver does not own runtime readiness or
+query enablement; it only returns `none`, `live`, or a concrete history ref.
 Readonly transcript presentation state is derived in
 `readonly-transcript/runtime-transcript-surface-state.ts`; hooks must not inline
 empty/loading/error or displayed-session working-state policy.
