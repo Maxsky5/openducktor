@@ -52,18 +52,35 @@ type QuerySyncState = {
 };
 
 type SelectionState = {
-  viewTaskId: string;
-  viewRole: "planner";
-  viewLaunchActionId: "planner_initial";
-  viewSelectedTask: typeof task | null;
-  viewSessionsForTask: SessionFixture[];
-  viewActiveSession: SessionFixture | null;
+  view: {
+    taskId: string;
+    role: "planner";
+    launchActionId: "planner_initial";
+    selectedTask: typeof task | null;
+    sessionsForTask: SessionFixture[];
+    activeSessionSummary: SessionFixture | null;
+    activeSession: SessionFixture | null;
+    sessionRuntimeData: {
+      modelCatalog: null;
+      todos: [];
+      isLoadingModelCatalog: false;
+    };
+    sessionRuntimeDataError: null;
+    runtimeReadiness: {
+      readinessState: "ready";
+      isReady: true;
+      isRuntimeStarting: false;
+      blockedReason: null;
+      isLoadingChecks: false;
+      refreshChecks: () => Promise<void>;
+    };
+    isTaskReady: boolean;
+    transcriptState: ReturnType<typeof createSelectedSessionTranscriptStateFixture>;
+  };
   activeTaskTabId: string;
   taskTabs: [];
   availableTabTasks: (typeof task)[];
   taskId: string;
-  isActiveTaskReady: boolean;
-  viewTranscriptState: ReturnType<typeof createSelectedSessionTranscriptStateFixture>;
   sessionsForTask: SessionFixture[];
   handleCreateTab: (taskId: string) => void;
   handleCloseTab: (taskId: string) => void;
@@ -187,18 +204,35 @@ let querySyncState: QuerySyncState = {
 };
 const initialSelectionSession = createSession();
 let selectionState: SelectionState = {
-  viewTaskId: "task-1",
-  viewRole: "planner" as const,
-  viewLaunchActionId: "planner_initial" as const,
-  viewSelectedTask: task,
-  viewSessionsForTask: [initialSelectionSession],
-  viewActiveSession: initialSelectionSession,
+  view: {
+    taskId: "task-1",
+    role: "planner" as const,
+    launchActionId: "planner_initial" as const,
+    selectedTask: task,
+    sessionsForTask: [initialSelectionSession],
+    activeSessionSummary: initialSelectionSession,
+    activeSession: initialSelectionSession,
+    sessionRuntimeData: {
+      modelCatalog: null,
+      todos: [],
+      isLoadingModelCatalog: false,
+    },
+    sessionRuntimeDataError: null,
+    runtimeReadiness: {
+      readinessState: "ready",
+      isReady: true,
+      isRuntimeStarting: false,
+      blockedReason: null,
+      isLoadingChecks: false,
+      refreshChecks: async () => {},
+    },
+    isTaskReady: true,
+    transcriptState: createSelectedSessionTranscriptStateFixture(),
+  },
   activeTaskTabId: "task-1",
   taskTabs: [],
   availableTabTasks: [task],
   taskId: "task-1",
-  isActiveTaskReady: true,
-  viewTranscriptState: createSelectedSessionTranscriptStateFixture(),
   sessionsForTask: [initialSelectionSession],
   handleCreateTab: mock((_taskId: string) => {}),
   handleCloseTab: mock((_taskId: string) => {}),
@@ -452,18 +486,35 @@ beforeEach(async () => {
     updateQuery,
   };
   selectionState = {
-    viewTaskId: "task-1",
-    viewRole: "planner",
-    viewLaunchActionId: "planner_initial",
-    viewSelectedTask: task,
-    viewSessionsForTask: [session],
-    viewActiveSession: session,
+    view: {
+      taskId: "task-1",
+      role: "planner",
+      launchActionId: "planner_initial",
+      selectedTask: task,
+      sessionsForTask: [session],
+      activeSessionSummary: session,
+      activeSession: session,
+      sessionRuntimeData: {
+        modelCatalog: null,
+        todos: [],
+        isLoadingModelCatalog: false,
+      },
+      sessionRuntimeDataError: null,
+      runtimeReadiness: {
+        readinessState: "ready",
+        isReady: true,
+        isRuntimeStarting: false,
+        blockedReason: null,
+        isLoadingChecks: false,
+        refreshChecks: async () => {},
+      },
+      isTaskReady: true,
+      transcriptState: createSelectedSessionTranscriptStateFixture(),
+    },
     activeTaskTabId: "task-1",
     taskTabs: [],
     availableTabTasks: [task],
     taskId: "task-1",
-    isActiveTaskReady: true,
-    viewTranscriptState: createSelectedSessionTranscriptStateFixture(),
     sessionsForTask: [session],
     handleCreateTab: mock((_taskId: string) => {}),
     handleCloseTab: mock((_taskId: string) => {}),
@@ -533,7 +584,7 @@ describe("useAgentsPageShellModel", () => {
       expect(state.onRetryChatSettingsLoad).toBe(retryChatSettingsLoad);
       expect(state.hasSelectedTask).toBe(true);
       expect(state.isRightPanelVisible).toBe(true);
-      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe(selectionState.viewTaskId);
+      expect(state.rightPanelBridge?.rightPanel.viewTaskId).toBe(selectionState.view.taskId);
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(
         orchestrationState.agentStudioWorkspaceSidebarModel,
       );
@@ -559,8 +610,11 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
-      viewTaskId: "",
-      viewSelectedTask: null,
+      view: {
+        ...selectionState.view,
+        taskId: "",
+        selectedTask: null,
+      },
     };
 
     const harness = createHookHarness();
@@ -584,12 +638,16 @@ describe("useAgentsPageShellModel", () => {
     };
     selectionState = {
       ...selectionState,
-      viewTaskId: "",
-      viewSelectedTask: null,
-      viewActiveSession: null,
+      view: {
+        ...selectionState.view,
+        taskId: "",
+        selectedTask: null,
+        activeSessionSummary: null,
+        activeSession: null,
+        sessionsForTask: [],
+      },
       taskId: "",
       sessionsForTask: [],
-      viewSessionsForTask: [],
     };
 
     const harness = createHookHarness();

@@ -80,8 +80,8 @@ type UseAgentStudioOrchestrationControllerResult = {
 };
 
 type AgentStudioPageModelsViewContext = Pick<
-  AgentStudioOrchestrationSelectionContext,
-  "viewTaskId"
+  AgentStudioOrchestrationSelectionContext["view"],
+  "taskId"
 >;
 
 type AgentStudioPageModelsTabsContext = Pick<
@@ -166,7 +166,7 @@ export const buildAgentStudioPageModelsArgs = ({
   } = modelSelection;
 
   return {
-    activeTabValue: activeTaskTabId || view.viewTaskId || "__agent_studio_empty__",
+    activeTabValue: activeTaskTabId || view.taskId || "__agent_studio_empty__",
     selectedSession,
     taskTabs: {
       ...taskTabs,
@@ -200,27 +200,17 @@ export function useAgentStudioOrchestrationController({
   actions,
 }: UseAgentStudioOrchestrationControllerArgs): UseAgentStudioOrchestrationControllerResult {
   const {
-    viewTaskId,
-    viewRole,
-    viewLaunchActionId,
-    viewSelectedTask,
-    viewSessionsForTask,
-    viewActiveSessionSummary,
-    viewActiveSession,
-    viewSessionRuntimeData,
-    viewSessionRuntimeDataError = null,
-    viewRuntimeReadiness,
+    view,
     activeTaskTabId,
     taskTabs,
     availableTabTasks,
     isLoadingTasks,
-    isActiveTaskReady,
     handleSelectTab,
     handleCreateTab,
     handleCloseTab,
     handleReorderTab,
   } = selection;
-  const agentStudioReady = viewRuntimeReadiness.isReady;
+  const agentStudioReady = view.runtimeReadiness.isReady;
   const {
     updateQuery,
     startAgentSession,
@@ -245,9 +235,9 @@ export function useAgentStudioOrchestrationController({
 
   const { specDoc, planDoc, qaDoc } = useAgentStudioDocuments({
     workspaceRepoPath,
-    taskId: viewTaskId,
-    activeSession: viewActiveSession,
-    selectedTask: viewSelectedTask,
+    taskId: view.taskId,
+    activeSession: view.activeSession,
+    selectedTask: view.selectedTask,
   });
 
   const {
@@ -279,11 +269,11 @@ export function useAgentStudioOrchestrationController({
     handleSelectVariant,
   } = useAgentStudioChatComposer({
     workspaceRepoPath,
-    activeSession: viewActiveSession,
-    activeSessionSummary: viewActiveSessionSummary,
-    activeSessionModelCatalog: viewSessionRuntimeData.modelCatalog,
-    activeSessionIsLoadingModelCatalog: viewSessionRuntimeData.isLoadingModelCatalog,
-    role: viewRole,
+    activeSession: view.activeSession,
+    activeSessionSummary: view.activeSessionSummary,
+    activeSessionModelCatalog: view.sessionRuntimeData.modelCatalog,
+    activeSessionIsLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
+    role: view.role,
     reusablePrompts,
     repoSettings,
     updateAgentSessionModel,
@@ -315,18 +305,18 @@ export function useAgentStudioOrchestrationController({
   } = useAgentStudioSessionActions({
     activeWorkspaceId,
     branches,
-    taskId: viewTaskId,
-    role: viewRole,
-    launchActionId: viewLaunchActionId,
-    activeSession: viewActiveSession,
-    activeSessionIsLoadingModelCatalog: viewSessionRuntimeData.isLoadingModelCatalog,
-    activeSessionRuntimeDescriptor: viewSessionRuntimeData.modelCatalog?.runtime ?? null,
+    taskId: view.taskId,
+    role: view.role,
+    launchActionId: view.launchActionId,
+    activeSession: view.activeSession,
+    activeSessionIsLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
+    activeSessionRuntimeDescriptor: view.sessionRuntimeData.modelCatalog?.runtime ?? null,
     selectedModelSelection,
     selectedModelDescriptor,
-    sessionsForTask: viewSessionsForTask,
-    selectedTask: viewSelectedTask,
+    sessionsForTask: view.sessionsForTask,
+    selectedTask: view.selectedTask,
     agentStudioReady,
-    isActiveTaskReady,
+    isActiveTaskReady: view.isTaskReady,
     selectionForNewSession,
     reusablePrompts,
     repoSettings,
@@ -343,8 +333,8 @@ export function useAgentStudioOrchestrationController({
 
   const { isSubmittingApprovalByRequestId, approvalReplyErrorByRequestId, onReplyApproval } =
     useAgentSessionApprovalActions({
-      activeSession: viewActiveSession ? toAgentSessionIdentity(viewActiveSession) : null,
-      pendingApprovals: viewActiveSession?.pendingApprovals ?? [],
+      activeSession: view.activeSession ? toAgentSessionIdentity(view.activeSession) : null,
+      pendingApprovals: view.activeSession?.pendingApprovals ?? [],
       agentStudioReady,
       replyAgentApproval,
     });
@@ -353,21 +343,21 @@ export function useAgentStudioOrchestrationController({
   const selectedSessionContext = useMemo(
     () =>
       buildAgentStudioSelectedSessionContext({
-        taskId: viewTaskId,
-        role: viewRole,
-        selectedTask: viewSelectedTask,
-        sessionsForTask: viewSessionsForTask,
+        taskId: view.taskId,
+        role: view.role,
+        selectedTask: view.selectedTask,
+        sessionsForTask: view.sessionsForTask,
         allSessionSummaries: selection.allSessionSummaries,
-        activeSession: viewActiveSession,
+        activeSession: view.activeSession,
         activeSessionRuntimeData: {
-          todos: viewSessionRuntimeData.todos,
-          isLoadingModelCatalog: viewSessionRuntimeData.isLoadingModelCatalog,
+          todos: view.sessionRuntimeData.todos,
+          isLoadingModelCatalog: view.sessionRuntimeData.isLoadingModelCatalog,
         },
         runtimeDefinitions,
-        sessionRuntimeDataError: viewSessionRuntimeDataError,
+        sessionRuntimeDataError: view.sessionRuntimeDataError,
         hasActiveGitConflict,
-        transcriptState: selection.viewTranscriptState,
-        runtimeReadiness: viewRuntimeReadiness,
+        transcriptState: view.transcriptState,
+        runtimeReadiness: view.runtimeReadiness,
         documents: {
           specDoc,
           planDoc,
@@ -398,23 +388,14 @@ export function useAgentStudioOrchestrationController({
       roleLabelByRole,
       runtimeDefinitions,
       selection.allSessionSummaries,
-      selection.viewTranscriptState,
       specDoc,
-      viewActiveSession,
-      viewSessionRuntimeData.isLoadingModelCatalog,
-      viewSessionRuntimeData.todos,
-      viewRole,
-      viewSelectedTask,
-      viewRuntimeReadiness,
-      viewSessionRuntimeDataError,
-      viewSessionsForTask,
-      viewTaskId,
+      view,
     ],
   );
 
   const pageModelsArgs = buildAgentStudioPageModelsArgs({
     view: {
-      viewTaskId,
+      taskId: view.taskId,
     },
     selectedSession: selectedSessionContext,
     tabs: {

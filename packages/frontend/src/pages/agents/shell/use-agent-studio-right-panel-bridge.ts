@@ -7,10 +7,7 @@ import type {
   UseAgentsPageRightPanelModelArgs,
 } from "../use-agents-page-right-panel-model";
 
-type AgentStudioRightPanelBridgeSelection = Pick<
-  AgentStudioOrchestrationSelectionContext,
-  "viewActiveSession" | "viewRole" | "viewTaskId" | "viewSelectedTask" | "viewTranscriptState"
->;
+type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelectionContext, "view">;
 
 type AgentStudioRightPanelPanelState = Pick<
   UseAgentsPageRightPanelModelArgs,
@@ -62,7 +59,7 @@ export type AgentStudioBuildWorktreeRefreshModel = Pick<
   AgentStudioRightPanelRuntimeModel,
   "panelKind" | "isPanelOpen" | "viewRole"
 > & {
-  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  activeSession: AgentStudioOrchestrationSelectionContext["view"]["activeSession"];
   transcriptState: AgentStudioRightPanelRuntimeModel["transcriptState"];
 };
 
@@ -86,7 +83,7 @@ type BuildAgentStudioRightPanelBridgeModelArgs = Omit<
 };
 
 function useRightPanelSessionDescriptor(
-  activeSession: AgentStudioRightPanelBridgeSelection["viewActiveSession"],
+  activeSession: AgentStudioRightPanelBridgeSelection["view"]["activeSession"],
 ): BuildToolsSessionDescriptor {
   const role = activeSession?.role ?? null;
   const activityState = activeSession
@@ -127,21 +124,21 @@ function buildAgentStudioRightPanelBridgeModel({
     buildWorktreeRefresh: {
       panelKind,
       isPanelOpen,
-      viewRole: selection.viewRole,
-      activeSession: selection.viewActiveSession,
-      transcriptState: selection.viewTranscriptState,
+      viewRole: selection.view.role,
+      activeSession: selection.view.activeSession,
+      transcriptState: selection.view.transcriptState,
     },
     rightPanel: {
       activeWorkspace,
       activeBranch,
       branches,
-      viewRole: selection.viewRole,
-      viewTaskId: selection.viewTaskId,
+      viewRole: selection.view.role,
+      viewTaskId: selection.view.taskId,
       session,
-      viewSelectedTask: selection.viewSelectedTask,
+      viewSelectedTask: selection.view.selectedTask,
       panelKind,
       isPanelOpen,
-      transcriptState: selection.viewTranscriptState,
+      transcriptState: selection.view.transcriptState,
       documentsModel,
       repoSettings,
       worktreeRecoveryKey,
@@ -172,7 +169,7 @@ export function useAgentStudioRightPanelBridge({
   const panelKind = panel.panelKind;
   const isPanelOpen = panel.isPanelOpen;
   const isRightPanelVisible = Boolean(panelKind && isPanelOpen);
-  const session = useRightPanelSessionDescriptor(selection.viewActiveSession);
+  const session = useRightPanelSessionDescriptor(selection.view.activeSession);
 
   const rightPanelBridge = useMemo<AgentStudioRightPanelBridgeModel | null>(() => {
     if (!isRightPanelVisible || !panelKind) {

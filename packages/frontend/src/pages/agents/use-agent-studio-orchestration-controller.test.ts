@@ -83,7 +83,7 @@ const baseActiveSessionRuntimeData = {
 
 const baseArgs: BuildArgs = {
   view: {
-    viewTaskId: "task-1",
+    taskId: "task-1",
   },
   selectedSession: buildAgentStudioSelectedSessionContext({
     taskId: "task-1",
@@ -198,7 +198,7 @@ describe("buildAgentStudioPageModelsArgs", () => {
       },
       view: {
         ...baseArgs.view,
-        viewTaskId: "",
+        taskId: "",
       },
       tabs: {
         ...baseArgs.tabs,

@@ -113,7 +113,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const taskActions = useAgentStudioShellTaskActions({
     activeWorkspace,
     tasks,
-    selectedTaskId: selection.viewSelectedTask?.id ?? null,
+    selectedTaskId: selection.view.selectedTask?.id ?? null,
     detectingPullRequestTaskId,
     linkingMergedPullRequestTaskId,
     pendingMergedPullRequest,
@@ -197,7 +197,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     onTabValueChange: selection.handleSelectTab,
     taskTabsModel: orchestration.agentStudioTaskTabsModel,
     rightPanelToggleModel: orchestration.rightPanel.rightPanelToggleModel,
-    hasSelectedTask: Boolean(selection.viewTaskId),
+    hasSelectedTask: Boolean(selection.view.taskId),
     chatHeaderModel: agentStudioHeaderModel,
     chatModel: orchestration.agentChatModel,
     isRightPanelVisible,

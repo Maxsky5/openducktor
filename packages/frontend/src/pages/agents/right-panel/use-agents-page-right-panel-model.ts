@@ -28,10 +28,10 @@ export type UseAgentsPageRightPanelModelArgs = {
   activeWorkspace: ActiveWorkspace | null;
   branches?: GitBranch[];
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
-  viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
-  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
+  viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
+  viewTaskId: AgentStudioOrchestrationSelectionContext["view"]["taskId"];
   session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   panelKind: Parameters<typeof buildAgentStudioRightPanelModel>[0]["panelKind"];
   isPanelOpen: boolean;
   transcriptState: AgentSessionTranscriptState;
@@ -60,7 +60,7 @@ type BuildAgentsPageDiffModelArgs = {
   branches: GitBranch[];
   buildToolsSnapshot: BuildAgentsPageDiffModelSnapshot;
   gitActions: ReturnType<typeof useAgentStudioGitActions>;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   setTaskTargetBranch?: ReturnType<typeof useTasksState>["setTaskTargetBranch"];
   detectingPullRequestTaskId: string | null;
   onDetectPullRequest: (taskId: string) => void;

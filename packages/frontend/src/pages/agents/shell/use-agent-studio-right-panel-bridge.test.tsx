@@ -19,6 +19,41 @@ const createPanelState = (
   },
 ): HookArgs["panel"] => panel;
 
+const createSelectionView = (
+  overrides: Partial<HookArgs["selection"]["view"]> = {},
+): HookArgs["selection"]["view"] => ({
+  role: "build",
+  taskId: "task-1",
+  selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
+  sessionsForTask: [],
+  activeSessionSummary: null,
+  activeSession: createAgentSessionFixture({
+    externalSessionId: "session-1",
+    taskId: "task-1",
+    role: "build",
+    status: "running",
+    workingDirectory: "/repo/worktrees/task-1",
+  }),
+  sessionRuntimeData: {
+    modelCatalog: null,
+    todos: [],
+    isLoadingModelCatalog: false,
+  },
+  sessionRuntimeDataError: null,
+  runtimeReadiness: {
+    readinessState: "ready",
+    isReady: true,
+    isRuntimeStarting: false,
+    blockedReason: null,
+    isLoadingChecks: false,
+    refreshChecks: async () => {},
+  },
+  launchActionId: "build_implementation_start",
+  isTaskReady: true,
+  transcriptState: createSelectedSessionTranscriptStateFixture(),
+  ...overrides,
+});
+
 const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   activeWorkspace: {
     workspaceId: "workspace-repo",
@@ -28,17 +63,7 @@ const createArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   branches: [],
   activeBranch: null,
   selection: {
-    viewRole: "build",
-    viewTaskId: "task-1",
-    viewSelectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
-    viewActiveSession: createAgentSessionFixture({
-      externalSessionId: "session-1",
-      taskId: "task-1",
-      role: "build",
-      status: "running",
-      workingDirectory: "/repo/worktrees/task-1",
-    }),
-    viewTranscriptState: createSelectedSessionTranscriptStateFixture(),
+    view: createSelectionView(),
   },
   panel: createPanelState(),
   documentsModel: {
@@ -73,13 +98,13 @@ describe("useAgentStudioRightPanelBridge", () => {
       expect(state.rightPanelBridge?.rightPanel.documentsModel).toBe(args.documentsModel);
       expect(state.rightPanelBridge?.rightPanel.repoSettings).toBe(args.repoSettings);
       expect(state.rightPanelBridge?.buildWorktreeRefresh.activeSession).toBe(
-        args.selection.viewActiveSession,
+        args.selection.view.activeSession,
       );
       expect(state.rightPanelBridge?.buildWorktreeRefresh.transcriptState).toBe(
-        args.selection.viewTranscriptState,
+        args.selection.view.transcriptState,
       );
       expect(state.rightPanelBridge?.rightPanel.transcriptState).toBe(
-        args.selection.viewTranscriptState,
+        args.selection.view.transcriptState,
       );
       expect(state.rightPanelBridge?.rightPanel.session).toEqual({
         role: "build",
@@ -97,13 +122,15 @@ describe("useAgentStudioRightPanelBridge", () => {
       createArgs({
         selection: {
           ...createArgs().selection,
-          viewActiveSession: createAgentSessionFixture({
-            externalSessionId: "session-1",
-            taskId: "task-1",
-            role: "build",
-            status: "running",
-            workingDirectory: "/repo/worktrees/task-1",
-            pendingQuestions: [{ requestId: "question-1", questions: [] }],
+          view: createSelectionView({
+            activeSession: createAgentSessionFixture({
+              externalSessionId: "session-1",
+              taskId: "task-1",
+              role: "build",
+              status: "running",
+              workingDirectory: "/repo/worktrees/task-1",
+              pendingQuestions: [{ requestId: "question-1", questions: [] }],
+            }),
           }),
         },
       }),

@@ -366,34 +366,19 @@ export const resolveAgentStudioViewSessionSelection = ({
 
 export const resolveAgentStudioBuilderSessionsForTask = ({
   taskId,
-  viewActiveSession,
-  activeSession,
-  selectedRouteSession,
-  viewSessionsForTask,
-  sessionsForTask,
+  candidateSessions,
 }: {
   taskId: string;
-  viewActiveSession: AgentSessionSummary | null;
-  activeSession: AgentSessionSummary | null;
-  selectedRouteSession: AgentSessionSummary | null;
-  viewSessionsForTask: AgentSessionSummary[];
-  sessionsForTask: AgentSessionSummary[];
+  candidateSessions: Array<AgentSessionSummary | null>;
 }): AgentSessionSummary[] => {
   if (!taskId) {
     return [];
   }
 
   const seenSessionKeys = new Set<string>();
-  const candidates = [
-    viewActiveSession,
-    activeSession,
-    selectedRouteSession,
-    ...viewSessionsForTask,
-    ...sessionsForTask,
-  ];
   const sessions: AgentSessionSummary[] = [];
 
-  for (const session of candidates) {
+  for (const session of candidateSessions) {
     if (session?.role !== "build" || session.taskId !== taskId) {
       continue;
     }
@@ -406,31 +391,4 @@ export const resolveAgentStudioBuilderSessionsForTask = ({
   }
 
   return sessions;
-};
-
-export const resolveAgentStudioBuilderSessionForTask = ({
-  taskId,
-  viewActiveSession,
-  activeSession,
-  selectedRouteSession,
-  viewSessionsForTask,
-  sessionsForTask,
-}: {
-  taskId: string;
-  viewActiveSession: AgentSessionSummary | null;
-  activeSession: AgentSessionSummary | null;
-  selectedRouteSession: AgentSessionSummary | null;
-  viewSessionsForTask: AgentSessionSummary[];
-  sessionsForTask: AgentSessionSummary[];
-}): AgentSessionSummary | null => {
-  return (
-    resolveAgentStudioBuilderSessionsForTask({
-      taskId,
-      viewActiveSession,
-      activeSession,
-      selectedRouteSession,
-      viewSessionsForTask,
-      sessionsForTask,
-    })[0] ?? null
-  );
 };

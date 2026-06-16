@@ -14,19 +14,18 @@ import { agentSessionIdentityKey, matchesAgentSessionIdentity } from "@/lib/agen
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity } from "@/types/agent-orchestrator";
 import { loadEffectivePromptOverrides } from "../../state/operations/prompt-overrides";
-import {
-  resolveAgentStudioBuilderSessionForTask,
-  resolveAgentStudioBuilderSessionsForTask,
-} from "./agents-page-selection";
+import { resolveAgentStudioBuilderSessionsForTask } from "./agents-page-selection";
 import type { AgentStudioQueryUpdate } from "./query-sync/agent-studio-navigation";
 
 type AgentStudioRebaseConflictResolutionSelectionContext = {
-  viewTaskId: string;
-  viewSelectedTask: TaskCard | null;
-  viewActiveSession: AgentSessionSummary | null;
+  view: {
+    taskId: string;
+    selectedTask: TaskCard | null;
+    activeSession: AgentSessionSummary | null;
+    sessionsForTask: AgentSessionSummary[];
+  };
   activeSession: AgentSessionSummary | null;
   selectedSessionFromRoute: AgentSessionSummary | null;
-  viewSessionsForTask: AgentSessionSummary[];
   sessionsForTask: AgentSessionSummary[];
 };
 
@@ -84,49 +83,36 @@ export function useAgentStudioRebaseConflictResolution({
     startConflictResolutionSession,
     loadPromptOverrides,
   });
-  const {
-    viewTaskId,
-    viewSelectedTask,
-    viewActiveSession,
-    activeSession,
-    selectedSessionFromRoute,
-    viewSessionsForTask,
-    sessionsForTask,
-  } = selection;
+  const { view, activeSession, selectedSessionFromRoute, sessionsForTask } = selection;
 
   const handleResolveRebaseConflict = useCallback(
     async (conflict: GitConflict): Promise<boolean> => {
-      if (!viewTaskId) {
+      if (!view.taskId) {
         throw new Error("Cannot resolve a git conflict because no task is selected.");
       }
 
       const builderSessions = resolveAgentStudioBuilderSessionsForTask({
-        taskId: viewTaskId,
-        viewActiveSession,
-        activeSession,
-        selectedRouteSession: selectedSessionFromRoute,
-        viewSessionsForTask,
-        sessionsForTask,
+        taskId: view.taskId,
+        candidateSessions: [
+          view.activeSession,
+          activeSession,
+          selectedSessionFromRoute,
+          ...view.sessionsForTask,
+          ...sessionsForTask,
+        ],
       });
-      const defaultBuilderSession = resolveAgentStudioBuilderSessionForTask({
-        taskId: viewTaskId,
-        viewActiveSession,
-        activeSession,
-        selectedRouteSession: selectedSessionFromRoute,
-        viewSessionsForTask,
-        sessionsForTask,
-      });
+      const defaultBuilderSession = builderSessions[0] ?? null;
 
       return handleResolveGitConflict(conflict, {
-        taskId: viewTaskId,
-        task: viewSelectedTask,
+        taskId: view.taskId,
+        task: view.selectedTask,
         builderSessions,
-        currentViewSession: viewActiveSession?.role === "build" ? viewActiveSession : null,
+        currentViewSession: view.activeSession?.role === "build" ? view.activeSession : null,
         onOpenSession: (session) => {
           const builderSession =
             builderSessions.find((entry) => matchesAgentSessionIdentity(entry, session)) ?? null;
           scheduleQueryUpdate({
-            task: viewTaskId,
+            task: view.taskId,
             session: agentSessionIdentityKey(session),
             agent: builderSession?.role ?? defaultBuilderSession?.role ?? "build",
           });
@@ -139,10 +125,7 @@ export function useAgentStudioRebaseConflictResolution({
       scheduleQueryUpdate,
       selectedSessionFromRoute,
       sessionsForTask,
-      viewActiveSession,
-      viewSelectedTask,
-      viewSessionsForTask,
-      viewTaskId,
+      view,
     ],
   );
 

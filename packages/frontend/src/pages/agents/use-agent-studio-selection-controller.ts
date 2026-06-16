@@ -63,6 +63,21 @@ type UseAgentStudioSelectionControllerArgs = {
   readSessionTodos: (session: AgentSessionRef) => Promise<AgentSessionTodoItem[]>;
 };
 
+export type AgentStudioSelectedView = {
+  taskId: string;
+  selectedTask: TaskCard | null;
+  sessionsForTask: AgentSessionSummary[];
+  activeSessionSummary: AgentSessionSummary | null;
+  activeSession: AgentSessionState | null;
+  sessionRuntimeData: AgentStudioSelectedSessionView["runtimeData"];
+  sessionRuntimeDataError: AgentStudioSelectedSessionView["runtimeDataError"];
+  runtimeReadiness: AgentStudioSelectedSessionView["runtimeReadiness"];
+  role: AgentRole;
+  launchActionId: AgentStudioSelectedSessionView["launchActionId"];
+  isTaskReady: boolean;
+  transcriptState: AgentStudioSelectedSessionView["transcriptState"];
+};
+
 export type AgentStudioSelectionControllerResult = {
   selectedSessionFromRoute: AgentSessionSummary | null;
   taskId: string;
@@ -82,18 +97,7 @@ export type AgentStudioSelectionControllerResult = {
     targetTaskId: string,
     position: "before" | "after",
   ) => void;
-  viewTaskId: string;
-  viewSelectedTask: TaskCard | null;
-  viewSessionsForTask: AgentSessionSummary[];
-  viewActiveSessionSummary: AgentSessionSummary | null;
-  viewActiveSession: AgentSessionState | null;
-  viewSessionRuntimeData: AgentStudioSelectedSessionView["runtimeData"];
-  viewSessionRuntimeDataError?: AgentStudioSelectedSessionView["runtimeDataError"];
-  viewRuntimeReadiness: AgentStudioSelectedSessionView["runtimeReadiness"];
-  viewRole: AgentRole;
-  viewLaunchActionId: AgentStudioSelectedSessionView["launchActionId"];
-  isActiveTaskReady: boolean;
-  viewTranscriptState: AgentStudioSelectedSessionView["transcriptState"];
+  view: AgentStudioSelectedView;
 };
 
 export function useAgentStudioSelectionController({
@@ -225,30 +229,30 @@ export function useAgentStudioSelectionController({
     updateQuery,
   });
 
-  const viewTaskId = activeTaskTabId || taskId;
+  const selectedViewTaskId = activeTaskTabId || taskId;
 
-  const viewSelectedTask = useMemo(
-    () => (viewTaskId ? (tasksById.get(viewTaskId) ?? null) : null),
-    [tasksById, viewTaskId],
+  const selectedViewTask = useMemo(
+    () => (selectedViewTaskId ? (tasksById.get(selectedViewTaskId) ?? null) : null),
+    [tasksById, selectedViewTaskId],
   );
 
-  const viewSessionsForTask = useMemo(() => {
-    if (!viewTaskId) {
+  const selectedViewSessions = useMemo(() => {
+    if (!selectedViewTaskId) {
       return [];
     }
-    return sessionsByTaskId.get(viewTaskId) ?? [];
-  }, [sessionsByTaskId, viewTaskId]);
+    return sessionsByTaskId.get(selectedViewTaskId) ?? [];
+  }, [sessionsByTaskId, selectedViewTaskId]);
 
   const viewSelectionParams = resolveAgentStudioViewSelectionParams({
     baseParams: selectionBaseParams,
     routeTaskId: taskId,
-    viewTaskId,
+    viewTaskId: selectedViewTaskId,
   });
 
   const selectedSessionView = useAgentStudioSelectedSessionView({
     workspaceRepoPath,
-    selectedTask: viewSelectedTask,
-    sessionSummaries: viewSessionsForTask,
+    selectedTask: selectedViewTask,
+    sessionSummaries: selectedViewSessions,
     sessionKey: viewSelectionParams.sessionKeyParam,
     hasExplicitRoleSelection: viewSelectionParams.hasExplicitRoleSelection,
     roleSelection: viewSelectionParams.roleSelection,
@@ -267,7 +271,7 @@ export function useAgentStudioSelectionController({
     readSessionModelCatalog,
     readSessionTodos,
   });
-  const isActiveTaskReady = Boolean(activeWorkspaceId && viewTaskId);
+  const isActiveTaskReady = Boolean(activeWorkspaceId && selectedViewTaskId);
 
   return useMemo<AgentStudioSelectionControllerResult>(
     () => ({
@@ -285,18 +289,20 @@ export function useAgentStudioSelectionController({
       handleCreateTab,
       handleCloseTab,
       handleReorderTab,
-      viewTaskId,
-      viewSelectedTask,
-      viewSessionsForTask,
-      viewActiveSessionSummary: selectedSessionView.sessionSummary,
-      viewActiveSession: selectedSessionView.session,
-      viewSessionRuntimeData: selectedSessionView.runtimeData,
-      viewSessionRuntimeDataError: selectedSessionView.runtimeDataError,
-      viewRuntimeReadiness: selectedSessionView.runtimeReadiness,
-      viewRole: selectedSessionView.role,
-      viewLaunchActionId: selectedSessionView.launchActionId,
-      isActiveTaskReady,
-      viewTranscriptState: selectedSessionView.transcriptState,
+      view: {
+        taskId: selectedViewTaskId,
+        selectedTask: selectedViewTask,
+        sessionsForTask: selectedViewSessions,
+        activeSessionSummary: selectedSessionView.sessionSummary,
+        activeSession: selectedSessionView.session,
+        sessionRuntimeData: selectedSessionView.runtimeData,
+        sessionRuntimeDataError: selectedSessionView.runtimeDataError,
+        runtimeReadiness: selectedSessionView.runtimeReadiness,
+        role: selectedSessionView.role,
+        launchActionId: selectedSessionView.launchActionId,
+        isTaskReady: isActiveTaskReady,
+        transcriptState: selectedSessionView.transcriptState,
+      },
     }),
     [
       activeSessionSummary,
@@ -322,9 +328,9 @@ export function useAgentStudioSelectionController({
       sessionsForTask,
       taskId,
       taskTabs,
-      viewSelectedTask,
-      viewSessionsForTask,
-      viewTaskId,
+      selectedViewTask,
+      selectedViewSessions,
+      selectedViewTaskId,
     ],
   );
 }

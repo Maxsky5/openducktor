@@ -38,10 +38,10 @@ import {
 type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   workspaceRepoPath: string | null;
   activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
-  viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
-  viewTaskId: AgentStudioOrchestrationSelectionContext["viewTaskId"];
+  viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
+  viewTaskId: AgentStudioOrchestrationSelectionContext["view"]["taskId"];
   session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
   transcriptState: AgentSessionTranscriptState;
@@ -71,7 +71,7 @@ export type AgentStudioBuildToolsWorktreeSnapshot = {
     repoPath: string | null;
     taskId: string | null;
     selectedTaskId: string | null;
-    viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
+    viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
     sessionRole: BuildToolsSessionDescriptor["role"];
     sessionWorkingDirectory: string | null;
     isSessionContextStable: boolean;

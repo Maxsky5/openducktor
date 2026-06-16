@@ -68,11 +68,13 @@ export function useAgentsPageOrchestrationShellModel({
   const draftStateKey = useMemo(
     () =>
       [
-        selection.viewTaskId,
-        selection.viewRole,
-        selection.viewActiveSession ? agentSessionIdentityKey(selection.viewActiveSession) : "new",
+        selection.view.taskId,
+        selection.view.role,
+        selection.view.activeSession
+          ? agentSessionIdentityKey(selection.view.activeSession)
+          : "new",
       ].join(":"),
-    [selection.viewActiveSession, selection.viewRole, selection.viewTaskId],
+    [selection.view.activeSession, selection.view.role, selection.view.taskId],
   );
 
   const orchestrationSelection = useMemo<
@@ -113,30 +115,32 @@ export function useAgentsPageOrchestrationShellModel({
   });
 
   const activeSessionSummary = selection.activeSessionSummary;
-  const viewActiveSessionSummary = useMemo(
+  const selectedViewSessionSummary = useMemo(
     () =>
-      selection.viewActiveSessionSummary ??
-      (selection.viewActiveSession ? toAgentSessionSummary(selection.viewActiveSession) : null),
-    [selection.viewActiveSession, selection.viewActiveSessionSummary],
+      selection.view.activeSessionSummary ??
+      (selection.view.activeSession ? toAgentSessionSummary(selection.view.activeSession) : null),
+    [selection.view.activeSession, selection.view.activeSessionSummary],
   );
   const rebaseConflictSelection = useMemo(
     () => ({
-      viewTaskId: selection.viewTaskId,
-      viewSelectedTask: selection.viewSelectedTask,
-      viewActiveSession: viewActiveSessionSummary,
+      view: {
+        taskId: selection.view.taskId,
+        selectedTask: selection.view.selectedTask,
+        activeSession: selectedViewSessionSummary,
+        sessionsForTask: selection.view.sessionsForTask,
+      },
       activeSession: activeSessionSummary,
       selectedSessionFromRoute: selection.selectedSessionFromRoute,
-      viewSessionsForTask: selection.viewSessionsForTask,
       sessionsForTask: selection.sessionsForTask,
     }),
     [
       activeSessionSummary,
       selection.selectedSessionFromRoute,
       selection.sessionsForTask,
-      selection.viewSelectedTask,
-      selection.viewSessionsForTask,
-      selection.viewTaskId,
-      viewActiveSessionSummary,
+      selection.view.selectedTask,
+      selection.view.sessionsForTask,
+      selection.view.taskId,
+      selectedViewSessionSummary,
     ],
   );
 

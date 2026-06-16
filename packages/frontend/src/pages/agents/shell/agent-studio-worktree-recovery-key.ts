@@ -4,17 +4,19 @@ import {
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 type WorktreeRecoverySelection = {
-  viewTaskId: string;
-  viewSelectedTask: {
-    status?: string | null;
-    updatedAt?: string | null;
-  } | null;
-  viewActiveSession: {
-    externalSessionId: string;
-    status: string;
-    workingDirectory: string | null;
-  } | null;
-  viewTranscriptState: AgentSessionTranscriptState;
+  view: {
+    taskId: string;
+    selectedTask: {
+      status?: string | null;
+      updatedAt?: string | null;
+    } | null;
+    activeSession: {
+      externalSessionId: string;
+      status: string;
+      workingDirectory: string | null;
+    } | null;
+    transcriptState: AgentSessionTranscriptState;
+  };
 };
 
 type BuildAgentStudioWorktreeRecoveryKeyArgs = {
@@ -30,12 +32,12 @@ export const buildAgentStudioWorktreeRecoveryKey = ({
 }: BuildAgentStudioWorktreeRecoveryKeyArgs): string =>
   [
     workspaceRepoPath ?? "",
-    selection.viewTaskId ?? "",
-    selection.viewSelectedTask?.updatedAt ?? "",
-    selection.viewSelectedTask?.status ?? "",
-    selection.viewActiveSession?.externalSessionId ?? "",
-    selection.viewActiveSession?.status ?? "",
-    selection.viewActiveSession?.workingDirectory ?? "",
-    isAgentSessionTranscriptLoading(selection.viewTranscriptState) ? "1" : "0",
+    selection.view.taskId ?? "",
+    selection.view.selectedTask?.updatedAt ?? "",
+    selection.view.selectedTask?.status ?? "",
+    selection.view.activeSession?.externalSessionId ?? "",
+    selection.view.activeSession?.status ?? "",
+    selection.view.activeSession?.workingDirectory ?? "",
+    isAgentSessionTranscriptLoading(selection.view.transcriptState) ? "1" : "0",
     isForegroundLoadingTasks ? "1" : "0",
   ].join(":");

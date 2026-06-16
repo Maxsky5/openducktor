@@ -42,7 +42,7 @@ export function AgentsPageBuildWorktreeRefreshRuntime({
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
   viewRole: UseAgentsPageRightPanelModelArgs["viewRole"];
-  activeSession: AgentStudioOrchestrationSelectionContext["viewActiveSession"];
+  activeSession: AgentStudioOrchestrationSelectionContext["view"]["activeSession"];
   transcriptState: UseAgentsPageRightPanelModelArgs["transcriptState"];
   refreshWorktreeRef: WorktreeRefreshRef;
 }): null {

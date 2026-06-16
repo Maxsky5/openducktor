@@ -7,7 +7,7 @@ import {
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 
 export type BuildToolsSessionDescriptor = {
-  role: AgentStudioOrchestrationSelectionContext["viewActiveSession"] extends infer T
+  role: AgentStudioOrchestrationSelectionContext["view"]["activeSession"] extends infer T
     ? T extends { role: infer TRole | null }
       ? TRole | null
       : null
@@ -19,9 +19,9 @@ export type BuildToolsSessionDescriptor = {
 
 type UseAgentStudioBuildToolsBootstrapArgs = {
   workspaceRepoPath: string | null;
-  viewRole: AgentStudioOrchestrationSelectionContext["viewRole"];
+  viewRole: AgentStudioOrchestrationSelectionContext["view"]["role"];
   session: BuildToolsSessionDescriptor;
-  viewSelectedTask: AgentStudioOrchestrationSelectionContext["viewSelectedTask"];
+  viewSelectedTask: AgentStudioOrchestrationSelectionContext["view"]["selectedTask"];
   panelKind: "documents" | "build_tools" | null;
   isPanelOpen: boolean;
   transcriptState: AgentSessionTranscriptState;

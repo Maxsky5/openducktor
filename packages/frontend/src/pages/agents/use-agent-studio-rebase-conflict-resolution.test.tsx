@@ -62,16 +62,18 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
   return {
     workspaceId: "workspace-repo",
     selection: {
-      viewTaskId: "task-1",
-      viewSelectedTask: createTaskCardFixture({
-        id: "task-1",
-        title: "Resolve rebase conflict",
-        description: "Fix the branch divergence.",
-      }),
-      viewActiveSession: plannerSession,
+      view: {
+        taskId: "task-1",
+        selectedTask: createTaskCardFixture({
+          id: "task-1",
+          title: "Resolve rebase conflict",
+          description: "Fix the branch divergence.",
+        }),
+        activeSession: plannerSession,
+        sessionsForTask: [builderSession],
+      },
       activeSession: plannerSession,
       selectedSessionFromRoute: null,
-      viewSessionsForTask: [builderSession],
       sessionsForTask: [builderSession],
     },
     scheduleQueryUpdate: mock(() => {}),
@@ -129,7 +131,10 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     const args = createBaseArgs({
       selection: {
         ...createBaseArgs().selection,
-        viewSessionsForTask: [matchingBuilderSession, otherBuilderSession],
+        view: {
+          ...createBaseArgs().selection.view,
+          sessionsForTask: [matchingBuilderSession, otherBuilderSession],
+        },
         sessionsForTask: [matchingBuilderSession, otherBuilderSession],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-1")),
@@ -170,13 +175,16 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     const args = createBaseArgs({
       selection: {
         ...createBaseArgs().selection,
-        viewSessionsForTask: [
-          buildSession({
-            externalSessionId: "build-1",
-            workingDirectory: "/repo/worktrees/task-1",
-            selectedModel: null,
-          }),
-        ],
+        view: {
+          ...createBaseArgs().selection.view,
+          sessionsForTask: [
+            buildSession({
+              externalSessionId: "build-1",
+              workingDirectory: "/repo/worktrees/task-1",
+              selectedModel: null,
+            }),
+          ],
+        },
         sessionsForTask: [
           buildSession({
             externalSessionId: "build-1",
@@ -220,7 +228,10 @@ describe("useAgentStudioRebaseConflictResolution", () => {
     const args = createBaseArgs({
       selection: {
         ...createBaseArgs().selection,
-        viewSessionsForTask: [],
+        view: {
+          ...createBaseArgs().selection.view,
+          sessionsForTask: [],
+        },
         sessionsForTask: [],
       },
       startSessionRequest: mock(async () => sessionWorkflowResult("build-new-9")),

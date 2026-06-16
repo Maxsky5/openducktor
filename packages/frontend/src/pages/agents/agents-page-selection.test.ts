@@ -9,7 +9,6 @@ import {
   extractCompletionTimestamp,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
-  resolveAgentStudioBuilderSessionForTask,
   resolveAgentStudioBuilderSessionsForTask,
   resolveAgentStudioDefaultRoleForTask,
   resolveAgentStudioSessionSelection,
@@ -693,14 +692,10 @@ describe("agents-page-selection", () => {
       role: "build",
     });
 
-    const resolved = resolveAgentStudioBuilderSessionForTask({
+    const resolved = resolveAgentStudioBuilderSessionsForTask({
       taskId: "task-1",
-      viewActiveSession: activeBuildSession,
-      activeSession: null,
-      selectedRouteSession: null,
-      viewSessionsForTask: [olderBuildSession],
-      sessionsForTask: [],
-    });
+      candidateSessions: [activeBuildSession, null, null, olderBuildSession],
+    })[0];
 
     expect(resolved?.externalSessionId).toBe("build-active");
   });
@@ -719,14 +714,10 @@ describe("agents-page-selection", () => {
       role: "build",
     });
 
-    const resolved = resolveAgentStudioBuilderSessionForTask({
+    const resolved = resolveAgentStudioBuilderSessionsForTask({
       taskId: "task-1",
-      viewActiveSession: null,
-      activeSession: otherTaskBuildSession,
-      selectedRouteSession: null,
-      viewSessionsForTask: [],
-      sessionsForTask: [buildSession, otherTaskBuildSession],
-    });
+      candidateSessions: [null, otherTaskBuildSession, null, buildSession, otherTaskBuildSession],
+    })[0];
 
     expect(resolved?.externalSessionId).toBe("build-1");
   });
@@ -753,11 +744,14 @@ describe("agents-page-selection", () => {
 
     const sessions = resolveAgentStudioBuilderSessionsForTask({
       taskId: "task-1",
-      viewActiveSession: activeBuildSession,
-      activeSession: null,
-      selectedRouteSession: duplicateBuildSession,
-      viewSessionsForTask: [secondaryBuildSession],
-      sessionsForTask: [activeBuildSession, secondaryBuildSession],
+      candidateSessions: [
+        activeBuildSession,
+        null,
+        duplicateBuildSession,
+        secondaryBuildSession,
+        activeBuildSession,
+        secondaryBuildSession,
+      ],
     });
 
     expect(sessions.map((session) => session.externalSessionId)).toEqual([
@@ -784,11 +778,7 @@ describe("agents-page-selection", () => {
 
     const sessions = resolveAgentStudioBuilderSessionsForTask({
       taskId: "task-1",
-      viewActiveSession: liveBuildSession,
-      activeSession: null,
-      selectedRouteSession: persistedBuildSession,
-      viewSessionsForTask: [],
-      sessionsForTask: [],
+      candidateSessions: [liveBuildSession, null, persistedBuildSession],
     });
 
     expect(
