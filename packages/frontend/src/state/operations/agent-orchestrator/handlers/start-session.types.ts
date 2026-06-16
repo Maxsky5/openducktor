@@ -114,11 +114,10 @@ export type StartSessionExecutionDependencies = Pick<
   "session" | "runtime" | "task" | "model"
 >;
 
-export type ResolvedRuntimeAndModel = {
+export type FreshStartRuntimeContext = {
   taskCard: TaskCard;
   runtime: RuntimeInfo;
   systemPrompt: string;
-  promptOverrides: RepoPromptOverrides;
 };
 
 export type StartOrReuseResult =

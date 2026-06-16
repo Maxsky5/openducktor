@@ -8,7 +8,7 @@ import type {
 import { registerStartedSession } from "./start-session-persistence";
 import { resolveStartTask } from "./start-session-policies";
 import { stopSessionOnStaleAndThrow } from "./start-session-rollback";
-import { resolveRuntimeAndModel } from "./start-session-runtime";
+import { resolveFreshStartRuntimeContext } from "./start-session-runtime";
 
 type FreshStrategyInput = {
   ctx: StartSessionContext;
@@ -34,7 +34,7 @@ export const executeFreshStart = async ({
     runtimeKind: selectedModelRuntimeKind,
   };
 
-  const resolved = await resolveRuntimeAndModel({
+  const resolved = await resolveFreshStartRuntimeContext({
     ctx,
     requestedRuntimeKind: selectedModelRuntimeKind,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),

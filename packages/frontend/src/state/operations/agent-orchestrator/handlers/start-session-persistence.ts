@@ -1,8 +1,9 @@
+import type { TaskCard } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { replaceAgentSession } from "@/state/agent-session-collection";
+import type { RuntimeInfo } from "../runtime/runtime";
 import { throwIfRepoStale } from "../support/core";
 import type {
-  ResolvedRuntimeAndModel,
   StartedSessionContext,
   StartOrReuseResult,
   StartSessionContext,
@@ -24,12 +25,12 @@ export const registerStartedSession = async ({
 }: {
   ctx: StartSessionContext;
   startedCtx: StartedSessionContext;
-  runtimeInfo: ResolvedRuntimeAndModel["runtime"];
+  runtimeInfo: RuntimeInfo;
   systemPrompt: string;
   selectedModel: AgentModelSelection;
   initialMessages?: import("@/types/agent-orchestrator").AgentSessionState["messages"];
   deps: Pick<StartSessionExecutionDependencies, "session" | "runtime">;
-  taskCard: ResolvedRuntimeAndModel["taskCard"];
+  taskCard: TaskCard;
 }): Promise<Extract<StartOrReuseResult, { kind: "started" }>> => {
   const initialSession = buildInitialSession({
     startedCtx,

@@ -29,9 +29,7 @@ export type TaskSessionRecords = {
   agentSessions: AgentSessionRecord[];
 };
 
-export type RepoRuntimeSessionSnapshotRead = {
-  snapshotsBySessionKey: Map<string, AgentSessionRuntimeSnapshot>;
-};
+export type RepoRuntimeSessionSnapshots = Map<string, AgentSessionRuntimeSnapshot>;
 
 export type RepoSessionReadModel = {
   sessionCollection: AgentSessionCollection;
@@ -106,7 +104,7 @@ export const readRepoRuntimeSessionSnapshots = async ({
   repoPath: string;
   tasks: TaskSessionRecords[];
   listSessionRuntimeSnapshots: AgentEnginePort["listSessionRuntimeSnapshots"];
-}): Promise<RepoRuntimeSessionSnapshotRead> => {
+}): Promise<RepoRuntimeSessionSnapshots> => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const directoriesByRuntimeKind = new Map<RuntimeKind, Set<string>>();
   for (const { record } of taskSessionRecords) {
@@ -135,7 +133,7 @@ export const readRepoRuntimeSessionSnapshots = async ({
     }),
   );
 
-  return { snapshotsBySessionKey };
+  return snapshotsBySessionKey;
 };
 
 export const buildRepoSessionReadModel = ({
@@ -147,7 +145,7 @@ export const buildRepoSessionReadModel = ({
   repoPath: string;
   tasks: TaskSessionRecords[];
   currentSessionCollection?: AgentSessionCollection;
-  runtimeSnapshots: RepoRuntimeSessionSnapshotRead;
+  runtimeSnapshots: RepoRuntimeSessionSnapshots;
 }): RepoSessionReadModel => {
   const taskSessionRecords = collectTaskSessionRecords(tasks);
   const currentSessions = currentSessionCollection ?? emptyAgentSessionCollection();
@@ -158,9 +156,7 @@ export const buildRepoSessionReadModel = ({
     const ref = toPersistedRuntimeSessionRef({ repoPath, record });
     const sessionKey = agentSessionIdentityKey(ref);
     const current = getAgentSession(currentSessions, record) ?? undefined;
-    const snapshot =
-      runtimeSnapshots.snapshotsBySessionKey.get(sessionKey) ??
-      toMissingAgentSessionRuntimeSnapshot(ref);
+    const snapshot = runtimeSnapshots.get(sessionKey) ?? toMissingAgentSessionRuntimeSnapshot(ref);
     const persistedSessionView = toPersistedSessionView({
       taskId,
       record,

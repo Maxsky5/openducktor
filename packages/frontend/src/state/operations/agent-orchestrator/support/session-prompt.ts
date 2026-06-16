@@ -15,7 +15,6 @@ type SessionPromptInput = {
 };
 
 type SessionPromptContext = {
-  promptOverrides: RepoPromptOverrides;
   systemPrompt: string;
 };
 
@@ -62,7 +61,6 @@ export const loadSessionPromptContext = async ({
   const promptOverrides = await loadRepoPromptOverrides(workspaceId);
 
   return {
-    promptOverrides,
     systemPrompt: buildSessionSystemPrompt({
       role,
       task,

@@ -3,7 +3,7 @@ import type { AgentModelSelection } from "@openducktor/core";
 import { normalizeWorkingDirectory, throwIfRepoStale } from "../support/core";
 import { loadSessionPromptContext } from "../support/session-prompt";
 import type {
-  ResolvedRuntimeAndModel,
+  FreshStartRuntimeContext,
   RuntimeDependencies,
   StartSessionContext,
   StartSessionExecutionDependencies,
@@ -18,8 +18,8 @@ export const resolvePromptContext = async ({
   ctx: StartSessionContext;
   taskCard: TaskCard;
   deps: Pick<StartSessionExecutionDependencies, "model">;
-}): Promise<Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">> => {
-  const { promptOverrides, systemPrompt } = await loadSessionPromptContext({
+}): Promise<Pick<FreshStartRuntimeContext, "systemPrompt">> => {
+  const { systemPrompt } = await loadSessionPromptContext({
     workspaceId: ctx.workspaceId,
     role: ctx.role,
     task: taskCard,
@@ -29,36 +29,10 @@ export const resolvePromptContext = async ({
 
   return {
     systemPrompt,
-    promptOverrides,
   };
 };
 
-const ensureRuntimeAfterPromptContext = async ({
-  ctx,
-  targetWorkingDirectory,
-  requestedRuntimeKind,
-  promptContext,
-  deps,
-}: {
-  ctx: StartSessionContext;
-  targetWorkingDirectory?: string | null;
-  requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
-  promptContext: Pick<ResolvedRuntimeAndModel, "systemPrompt" | "promptOverrides">;
-  deps: Pick<StartSessionExecutionDependencies, "runtime">;
-}): Promise<Omit<ResolvedRuntimeAndModel, "taskCard">> => {
-  const runtimeInfo = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
-    workspaceId: ctx.workspaceId,
-    ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
-  });
-
-  return {
-    runtime: runtimeInfo,
-    ...promptContext,
-  };
-};
-
-export const resolveRuntimeAndModel = async ({
+export const resolveFreshStartRuntimeContext = async ({
   ctx,
   targetWorkingDirectory,
   requestedRuntimeKind,
@@ -69,25 +43,24 @@ export const resolveRuntimeAndModel = async ({
   targetWorkingDirectory?: string | null;
   requestedRuntimeKind?: AgentModelSelection["runtimeKind"] | null;
   taskCard: TaskCard;
-  deps: Pick<StartSessionExecutionDependencies, "runtime" | "task" | "model">;
-}): Promise<ResolvedRuntimeAndModel> => {
+  deps: Pick<StartSessionExecutionDependencies, "runtime" | "model">;
+}): Promise<FreshStartRuntimeContext> => {
   const promptContext = await resolvePromptContext({
     ctx,
     taskCard,
     deps,
   });
-  const runtimeContext = await ensureRuntimeAfterPromptContext({
-    ctx,
+  const runtime = await deps.runtime.ensureRuntime(ctx.repoPath, ctx.taskId, ctx.role, {
+    workspaceId: ctx.workspaceId,
     ...(targetWorkingDirectory !== undefined ? { targetWorkingDirectory } : {}),
-    requestedRuntimeKind,
-    promptContext,
-    deps,
+    ...(requestedRuntimeKind ? { runtimeKind: requestedRuntimeKind } : {}),
   });
   throwIfRepoStale(ctx.isStaleRepoOperation, STALE_START_ERROR);
 
   return {
     taskCard,
-    ...runtimeContext,
+    runtime,
+    systemPrompt: promptContext.systemPrompt,
   };
 };
 
