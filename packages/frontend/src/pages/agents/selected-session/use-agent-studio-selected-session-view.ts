@@ -11,11 +11,6 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
-import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
-import {
-  repoRuntimeReadinessTargetForRuntime,
-  resolvingRepoRuntimeReadinessTarget,
-} from "@/lib/repo-runtime-health";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -34,6 +29,7 @@ import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
 } from "../agents-page-selection";
+import { resolveSelectedSessionRuntimeTarget } from "./selected-session-runtime-target";
 
 type UseAgentStudioSelectedSessionViewArgs = {
   workspaceRepoPath: string | null;
@@ -126,13 +122,13 @@ export function useAgentStudioSelectedSessionView({
 
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
-  const configuredRuntimeKind = resolveConfiguredAgentRuntimeKind(repoSettings, selection.role);
-  const readinessRuntimeKind = selectedSessionIdentity?.runtimeKind ?? configuredRuntimeKind;
-  const isLoadingSessionlessRuntimeKind =
-    selectedTask !== null && selectedSessionIdentity === null && isLoadingRepoSettings;
-  const runtimeTarget = isLoadingSessionlessRuntimeKind
-    ? resolvingRepoRuntimeReadinessTarget
-    : repoRuntimeReadinessTargetForRuntime(readinessRuntimeKind);
+  const runtimeTarget = resolveSelectedSessionRuntimeTarget({
+    hasSelectedTask: selectedTask !== null,
+    selectedSessionIdentity,
+    role: selection.role,
+    repoSettings,
+    isLoadingRepoSettings,
+  });
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeDefinitions,
