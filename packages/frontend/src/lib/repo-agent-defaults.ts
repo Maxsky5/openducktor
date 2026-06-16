@@ -1,4 +1,5 @@
 import type { RuntimeKind } from "@openducktor/contracts";
+import type { RepoSettingsInput } from "@/types/state-slices";
 
 export type RepoAgentDefaultRole = "spec" | "planner" | "build" | "qa";
 
@@ -25,6 +26,12 @@ const trimNonEmpty = (value: string | null | undefined): string | null => {
 export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): string => {
   return `${REPO_AGENT_DEFAULT_LABELS[role]} agent default runtime kind is required when provider and model are configured.`;
 };
+
+export const resolveConfiguredAgentRuntimeKind = (
+  repoSettings: RepoSettingsInput | null,
+  role: RepoAgentDefaultRole,
+): RuntimeKind | null =>
+  repoSettings?.agentDefaults[role]?.runtimeKind ?? repoSettings?.defaultRuntimeKind ?? null;
 
 export const normalizeRepoAgentDefaultForSave = (
   role: RepoAgentDefaultRole,

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
-import { deriveRepoRuntimeReadiness, isRepoRuntimeStarting } from "./repo-runtime-health";
+import {
+  deriveRepoRuntimeReadiness,
+  isRepoRuntimeStarting,
+  repoRuntimeReadinessTargetForRuntime,
+  resolvingRepoRuntimeReadinessTarget,
+} from "./repo-runtime-health";
 
 const RUNTIME_DEFINITIONS = [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR];
 
@@ -92,7 +97,7 @@ describe("repo runtime health", () => {
       isLoadingRuntimeDefinitions: false,
       runtimeDefinitionsError: null,
       isLoadingChecks: false,
-      runtimeKind: "codex",
+      runtimeTarget: repoRuntimeReadinessTargetForRuntime("codex"),
       runtimeHealthByRuntime: {
         opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
         codex: createRepoRuntimeHealthFixture({
@@ -105,5 +110,24 @@ describe("repo runtime health", () => {
     expect(readiness.readinessState).toBe("checking");
     expect(readiness.isReady).toBe(false);
     expect(readiness.isRuntimeStarting).toBe(true);
+  });
+
+  test("keeps readiness checking while the target runtime is still resolving", () => {
+    const readiness = deriveRepoRuntimeReadiness({
+      hasActiveWorkspace: true,
+      runtimeDefinitions: RUNTIME_DEFINITIONS,
+      isLoadingRuntimeDefinitions: false,
+      runtimeDefinitionsError: null,
+      isLoadingChecks: false,
+      runtimeTarget: resolvingRepoRuntimeReadinessTarget,
+      runtimeHealthByRuntime: {
+        opencode: createRepoRuntimeHealthFixture({ status: "ready" }),
+        codex: createRepoRuntimeHealthFixture({ status: "ready" }),
+      },
+    });
+
+    expect(readiness.readinessState).toBe("checking");
+    expect(readiness.isReady).toBe(false);
+    expect(readiness.blockedReason).toBe("Resolving selected agent runtime...");
   });
 });

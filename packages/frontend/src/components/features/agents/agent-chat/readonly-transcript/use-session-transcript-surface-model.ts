@@ -1,3 +1,4 @@
+import { repoRuntimeReadinessTargetForRuntime } from "@/lib/repo-runtime-health";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import { useAgentOperations, useAgentSession, useChecksState } from "@/state/app-state-provider";
@@ -37,7 +38,7 @@ export function useSessionTranscriptSurfaceModel({
     runtimeHealthByRuntime,
     isLoadingChecks,
     refreshChecks,
-    runtimeKind: target?.runtimeKind ?? null,
+    runtimeTarget: repoRuntimeReadinessTargetForRuntime(target?.runtimeKind ?? null),
   });
 
   const sessionHistory = useRuntimeTranscriptSessionHistory({

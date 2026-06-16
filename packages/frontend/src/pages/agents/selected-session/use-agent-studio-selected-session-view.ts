@@ -11,6 +11,11 @@ import {
   resolveBuildContinuationLaunchAction,
   type SessionLaunchActionId,
 } from "@/features/session-start";
+import { resolveConfiguredAgentRuntimeKind } from "@/lib/repo-agent-defaults";
+import {
+  repoRuntimeReadinessTargetForRuntime,
+  resolvingRepoRuntimeReadinessTarget,
+} from "@/lib/repo-runtime-health";
 import type { RepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import { useRepoRuntimeReadiness } from "@/lib/use-repo-runtime-readiness";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
@@ -24,7 +29,7 @@ import {
 } from "@/state/operations/agent-orchestrator/transcript/session-transcript-state";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
-import type { ChecksStateContextValue } from "@/types/state-slices";
+import type { ChecksStateContextValue, RepoSettingsInput } from "@/types/state-slices";
 import {
   type AgentStudioViewSessionSelectionIntent,
   resolveAgentStudioViewSessionSelection,
@@ -42,6 +47,8 @@ type UseAgentStudioSelectedSessionViewArgs = {
   selectionIntent: AgentStudioViewSessionSelectionIntent | null;
   sessionIdentityFromRoute: AgentSessionIdentity | null;
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
   runtimeDefinitions: RuntimeDescriptor[];
   isLoadingRuntimeDefinitions: boolean;
   runtimeDefinitionsError: string | null;
@@ -81,6 +88,8 @@ export function useAgentStudioSelectedSessionView({
   selectionIntent,
   sessionIdentityFromRoute,
   sessionReadModelLoadState,
+  repoSettings,
+  isLoadingRepoSettings,
   runtimeDefinitions,
   isLoadingRuntimeDefinitions,
   runtimeDefinitionsError,
@@ -117,6 +126,13 @@ export function useAgentStudioSelectedSessionView({
 
   const selectedSessionIdentity = selection.sessionIdentity;
   const session = useAgentSession(selectedSessionIdentity);
+  const configuredRuntimeKind = resolveConfiguredAgentRuntimeKind(repoSettings, selection.role);
+  const readinessRuntimeKind = selectedSessionIdentity?.runtimeKind ?? configuredRuntimeKind;
+  const isLoadingSessionlessRuntimeKind =
+    selectedTask !== null && selectedSessionIdentity === null && isLoadingRepoSettings;
+  const runtimeTarget = isLoadingSessionlessRuntimeKind
+    ? resolvingRepoRuntimeReadinessTarget
+    : repoRuntimeReadinessTargetForRuntime(readinessRuntimeKind);
   const runtimeReadiness = useRepoRuntimeReadiness({
     hasWorkspace: workspaceRepoPath !== null,
     runtimeDefinitions,
@@ -125,7 +141,7 @@ export function useAgentStudioSelectedSessionView({
     runtimeHealthByRuntime,
     isLoadingChecks,
     refreshChecks,
-    runtimeKind: selectedSessionIdentity?.runtimeKind ?? null,
+    runtimeTarget,
   });
   const repoReadinessState = runtimeReadiness.readinessState;
 

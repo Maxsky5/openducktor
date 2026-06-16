@@ -23,7 +23,6 @@ import type { AgentStudioSelectionIntent } from "./shell/agent-studio-selection-
 import { useAgentStudioChatSettings } from "./use-agent-studio-chat-settings";
 import { useAgentStudioDocuments } from "./use-agent-studio-documents";
 import { useAgentStudioPageModels } from "./use-agent-studio-page-models";
-import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
 import { useAgentStudioRightPanel } from "./use-agent-studio-right-panel";
 import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-selection-controller";
 import { useAgentStudioSessionActions } from "./use-agent-studio-session-actions";
@@ -55,6 +54,7 @@ type UseAgentStudioOrchestrationControllerArgs = {
   activeWorkspaceId: string | null;
   branches: GitBranch[];
   runtimeDefinitions: RuntimeDescriptor[];
+  repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
   selection: AgentStudioOrchestrationSelectionContext;
   hasActiveGitConflict: boolean;
@@ -193,6 +193,7 @@ export function useAgentStudioOrchestrationController({
   activeWorkspaceId,
   branches,
   runtimeDefinitions,
+  repoSettings,
   workspaceRepoPath,
   selection,
   hasActiveGitConflict,
@@ -227,9 +228,6 @@ export function useAgentStudioOrchestrationController({
     answerAgentQuestion,
     scheduleSelectionIntent,
   } = actions;
-  const { repoSettings } = useAgentStudioRepoSettings({
-    activeWorkspaceId,
-  });
   const { chatSettings, reusablePrompts, chatSettingsLoadError, retryChatSettingsLoad } =
     useAgentStudioChatSettings({ workspaceRepoPath });
 

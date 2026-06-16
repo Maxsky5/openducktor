@@ -9,6 +9,7 @@ import {
   useWorkspaceState,
 } from "@/state/app-state-provider";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
+import { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import { useAgentStudioGitConflictQuickActionState } from "./use-agent-studio-git-conflict-quick-action-state";
 import {
@@ -53,6 +54,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     runtimeDefinitionsError,
   } = useRuntimeAvailabilityContext();
   const { runtimeHealthByRuntime, isLoadingChecks, refreshChecks } = useChecksState();
+  const { repoSettings, isLoadingRepoSettings } = useAgentStudioRepoSettings({
+    activeWorkspaceId,
+  });
   const {
     isForegroundLoadingTasks,
     tasks,
@@ -103,6 +107,8 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     isForegroundLoadingTasks,
     sessions,
     sessionReadModelLoadState,
+    repoSettings,
+    isLoadingRepoSettings,
     loadAgentSessionHistory,
     readSessionModelCatalog,
     readSessionTodos,
@@ -133,6 +139,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     activeWorkspaceId,
     branches: branches ?? [],
     runtimeDefinitions,
+    repoSettings,
     workspaceRepoPath,
     isForegroundLoadingTasks,
     routeSession,

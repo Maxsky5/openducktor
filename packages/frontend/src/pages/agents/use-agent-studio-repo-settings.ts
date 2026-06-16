@@ -12,9 +12,10 @@ export function useAgentStudioRepoSettings(args: {
   hostClient?: RepoConfigQueryHost;
 }): {
   repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
 } {
   const { activeWorkspaceId, hostClient } = args;
-  const { data: repoSettings } = useQuery({
+  const { data: repoSettings, isLoading } = useQuery({
     ...repoConfigQueryOptions(
       activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY,
       hostClient,
@@ -25,5 +26,6 @@ export function useAgentStudioRepoSettings(args: {
 
   return {
     repoSettings: activeWorkspaceId !== null ? (repoSettings ?? null) : null,
+    isLoadingRepoSettings: activeWorkspaceId !== null && isLoading,
   };
 }

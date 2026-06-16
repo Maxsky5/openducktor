@@ -6,6 +6,7 @@ import { createSessionMessagesState } from "@/state/operations/agent-orchestrato
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
 import { createRepoRuntimeHealthFixture } from "@/test-utils/shared-test-fixtures";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createDefaultRuntimeDefinitions,
@@ -39,6 +40,22 @@ const createTask = (id: string) => createTaskCardFixture({ id, title: id });
 
 const activeWorkspaceId = "workspace-1";
 const workspaceRepoPath = "/repo";
+const repoSettings: RepoSettingsInput = {
+  defaultRuntimeKind: "opencode",
+  worktreeBasePath: "",
+  branchPrefix: "",
+  defaultTargetBranch: { remote: "origin", branch: "main" },
+  preStartHooks: [],
+  postCompleteHooks: [],
+  devServers: [],
+  worktreeCopyPaths: [],
+  agentDefaults: {
+    spec: null,
+    planner: null,
+    build: null,
+    qa: null,
+  },
+};
 
 const createSession = (
   taskId: string,
@@ -93,6 +110,8 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   hasExplicitRoleParam: false,
   roleFromQuery: "spec",
   selectionIntent: null,
+  repoSettings,
+  isLoadingRepoSettings: false,
   updateQuery: () => {},
   loadAgentSessionHistory: async () => undefined,
   runtimeDefinitions: createDefaultRuntimeDefinitions(),
@@ -344,6 +363,131 @@ describe("useAgentStudioSelectionController", () => {
 
       const latest = harness.getLatest();
       expect(latest.view.activeSession?.runtimeKind).toBe("codex");
+      expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
+      expect(latest.view.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("scopes sessionless readiness to the configured role runtime kind", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture({
+            status: "checking",
+            runtime: { status: "checking", stage: "waiting_for_runtime" },
+          }),
+          codex: createRepoRuntimeHealthFixture(),
+        },
+        tasks: [task],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionKeyParam: null,
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
+      expect(latest.view.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("does not fall back to another ready runtime when the configured runtime is unavailable", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture(),
+        },
+        repoSettings: {
+          ...repoSettings,
+          defaultRuntimeKind: "codex",
+        },
+        tasks: [task],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionKeyParam: null,
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.view.activeSession).toBeNull();
+      expect(latest.view.runtimeReadiness.readinessState).toBe("blocked");
+      expect(latest.view.runtimeReadiness.blockedReason).toBe(
+        "Runtime 'codex' is not available for agent chat.",
+      );
+      expect(latest.view.transcriptState).toEqual({
+        kind: "runtime_waiting",
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps sessionless selection waiting while repo runtime settings load", async () => {
+    const task = createTaskCardFixture({
+      id: "task-1",
+      title: "task-1",
+      status: "in_progress",
+    });
+    const harness = createHookHarness(
+      createBaseArgs({
+        activeWorkspaceId,
+        workspaceRepoPath,
+        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+        runtimeHealthByRuntime: {
+          opencode: createRepoRuntimeHealthFixture(),
+          codex: createRepoRuntimeHealthFixture(),
+        },
+        repoSettings: null,
+        isLoadingRepoSettings: true,
+        tasks: [task],
+        sessions: [],
+        taskIdParam: "task-1",
+        sessionKeyParam: null,
+        hasExplicitRoleParam: true,
+        roleFromQuery: "build",
+      }),
+    );
+
+    try {
+      await harness.mount();
+
+      const latest = harness.getLatest();
+      expect(latest.view.activeSession).toBeNull();
       expect(latest.view.runtimeReadiness.readinessState).toBe("checking");
       expect(latest.view.transcriptState).toEqual({
         kind: "runtime_waiting",

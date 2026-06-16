@@ -1,8 +1,9 @@
-import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import { useMemo } from "react";
+import type { RuntimeDescriptor } from "@openducktor/contracts";
 import {
+  allRepoRuntimeReadinessTarget,
   deriveRepoRuntimeReadiness,
   type RepoRuntimeReadinessSnapshot,
+  type RepoRuntimeReadinessTarget,
 } from "@/lib/repo-runtime-health";
 import type { RepoRuntimeHealthMap } from "@/types/diagnostics";
 
@@ -14,7 +15,7 @@ type UseRepoRuntimeReadinessArgs = {
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
   refreshChecks: () => Promise<void>;
-  runtimeKind?: RuntimeKind | null;
+  runtimeTarget?: RepoRuntimeReadinessTarget;
 };
 
 export type RepoRuntimeReadiness = RepoRuntimeReadinessSnapshot & {
@@ -29,29 +30,17 @@ export function useRepoRuntimeReadiness({
   runtimeHealthByRuntime,
   isLoadingChecks,
   refreshChecks,
-  runtimeKind = null,
+  runtimeTarget = allRepoRuntimeReadinessTarget,
 }: UseRepoRuntimeReadinessArgs): RepoRuntimeReadiness {
-  const readiness = useMemo(
-    () =>
-      deriveRepoRuntimeReadiness({
-        hasActiveWorkspace: hasWorkspace,
-        runtimeDefinitions,
-        isLoadingRuntimeDefinitions,
-        runtimeDefinitionsError,
-        runtimeHealthByRuntime,
-        isLoadingChecks,
-        runtimeKind,
-      }),
-    [
-      hasWorkspace,
-      isLoadingChecks,
-      isLoadingRuntimeDefinitions,
-      runtimeDefinitions,
-      runtimeDefinitionsError,
-      runtimeHealthByRuntime,
-      runtimeKind,
-    ],
-  );
+  const readiness = deriveRepoRuntimeReadiness({
+    hasActiveWorkspace: hasWorkspace,
+    runtimeDefinitions,
+    isLoadingRuntimeDefinitions,
+    runtimeDefinitionsError,
+    runtimeHealthByRuntime,
+    isLoadingChecks,
+    runtimeTarget,
+  });
 
   return {
     ...readiness,

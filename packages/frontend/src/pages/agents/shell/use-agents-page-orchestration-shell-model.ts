@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useMemo } from "react";
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import type { useAgentOperations, useTasksState } from "@/state/app-state-provider";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
 import { useAgentStudioRebaseConflictResolution } from "../use-agent-studio-rebase-conflict-resolution";
 import type { AgentStudioGitConflictQuickActionContext } from "../use-agents-page-right-panel-model";
@@ -12,6 +13,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
   runtimeDefinitions: Parameters<
     typeof useAgentStudioOrchestrationController
   >[0]["runtimeDefinitions"];
+  repoSettings: RepoSettingsInput | null;
   workspaceRepoPath: string | null;
   isForegroundLoadingTasks: boolean;
   routeSession: AgentsPageRouteSessionModel;
@@ -51,6 +53,7 @@ export function useAgentsPageOrchestrationShellModel({
   activeWorkspaceId,
   branches,
   runtimeDefinitions,
+  repoSettings,
   workspaceRepoPath,
   isForegroundLoadingTasks,
   routeSession,
@@ -90,6 +93,7 @@ export function useAgentsPageOrchestrationShellModel({
     activeWorkspaceId,
     branches,
     runtimeDefinitions,
+    repoSettings,
     workspaceRepoPath,
     selection: orchestrationSelection,
     hasActiveGitConflict,

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoConfig } from "@openducktor/contracts";
+import { createDeferred } from "@/test-utils/shared-test-fixtures";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
@@ -38,6 +39,29 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useAgentStudioRepoSettings, initialProps);
 
 describe("useAgentStudioRepoSettings", () => {
+  test("exposes repo settings loading while the canonical config query is pending", async () => {
+    const config = createDeferred<RepoConfig>();
+    const hostClient = createRepoConfigHost(() => config.promise);
+    const harness = createHookHarness({
+      activeWorkspaceId: "workspace-repo",
+      hostClient,
+    });
+
+    await harness.mount();
+
+    expect(harness.getLatest()).toMatchObject({
+      repoSettings: null,
+      isLoadingRepoSettings: true,
+    });
+
+    config.resolve(createRepoConfig());
+    await harness.waitFor((state) => state.repoSettings !== null);
+
+    expect(harness.getLatest().isLoadingRepoSettings).toBe(false);
+
+    await harness.unmount();
+  });
+
   test("loads repo settings from the canonical repo config query", async () => {
     const hostClient = createRepoConfigHost();
     const harness = createHookHarness({

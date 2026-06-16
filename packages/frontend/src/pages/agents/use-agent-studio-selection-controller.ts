@@ -12,6 +12,7 @@ import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { useRuntimeDefinitionsContext } from "@/state/app-state-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import {
   findAgentStudioSessionSummaryByKey,
   groupSessionsByTaskId,
@@ -44,6 +45,8 @@ type UseAgentStudioSelectionControllerArgs = {
   hasExplicitRoleParam: boolean;
   roleFromQuery: AgentRole;
   selectionIntent: AgentStudioSelectionIntent | null;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
   updateQuery: (updates: QueryUpdate) => void;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -115,6 +118,8 @@ export function useAgentStudioSelectionController({
   hasExplicitRoleParam,
   roleFromQuery,
   selectionIntent,
+  repoSettings,
+  isLoadingRepoSettings,
   updateQuery,
   loadAgentSessionHistory,
   runtimeDefinitions,
@@ -263,6 +268,8 @@ export function useAgentStudioSelectionController({
     selectionIntent: viewSelectionParams.selectionIntent,
     sessionIdentityFromRoute: viewSelectionParams.sessionIdentity,
     sessionReadModelLoadState,
+    repoSettings,
+    isLoadingRepoSettings,
     runtimeDefinitions,
     isLoadingRuntimeDefinitions,
     runtimeDefinitionsError,

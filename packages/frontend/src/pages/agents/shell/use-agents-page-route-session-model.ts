@@ -6,6 +6,7 @@ import type { useChecksState } from "@/state";
 import type { AgentSessionSummary } from "@/state/agent-sessions-store";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { AgentSessionReadModelLoadState } from "@/types/agent-session-read-model";
+import type { RepoSettingsInput } from "@/types/state-slices";
 import type { AgentStudioQueryUpdate } from "../query-sync/agent-studio-navigation";
 import { useAgentStudioQuerySessionSync } from "../query-sync/use-agent-studio-query-session-sync";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
@@ -27,6 +28,8 @@ type UseAgentsPageRouteSessionModelArgs = {
   isForegroundLoadingTasks: boolean;
   sessions: AgentSessionSummary[];
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
   loadAgentSessionHistory: (session: AgentSessionIdentity) => Promise<void>;
   readSessionModelCatalog: (
     repoPath: string,
@@ -57,6 +60,8 @@ export function useAgentsPageRouteSessionModel({
   isForegroundLoadingTasks,
   sessions,
   sessionReadModelLoadState,
+  repoSettings,
+  isLoadingRepoSettings,
   loadAgentSessionHistory,
   readSessionModelCatalog,
   readSessionTodos,
@@ -108,6 +113,8 @@ export function useAgentsPageRouteSessionModel({
     hasExplicitRoleParam,
     roleFromQuery,
     selectionIntent: selectionIntentForController,
+    repoSettings,
+    isLoadingRepoSettings,
     updateQuery: scheduleQueryUpdate,
     loadAgentSessionHistory,
     runtimeDefinitions,

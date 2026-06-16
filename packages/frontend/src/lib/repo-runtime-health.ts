@@ -196,6 +196,29 @@ export type RepoRuntimeReadinessSnapshot = {
   isLoadingChecks: boolean;
 };
 
+export type RepoRuntimeReadinessTarget =
+  | { kind: "all" }
+  | { kind: "runtime"; runtimeKind: RuntimeKind }
+  | { kind: "resolving" };
+
+export const allRepoRuntimeReadinessTarget = {
+  kind: "all",
+} satisfies RepoRuntimeReadinessTarget;
+
+export const resolvingRepoRuntimeReadinessTarget = {
+  kind: "resolving",
+} satisfies RepoRuntimeReadinessTarget;
+
+export const repoRuntimeReadinessTargetForRuntime = (
+  runtimeKind: RuntimeKind | null | undefined,
+): RepoRuntimeReadinessTarget => {
+  if (!runtimeKind) {
+    return allRepoRuntimeReadinessTarget;
+  }
+
+  return { kind: "runtime", runtimeKind };
+};
+
 type DeriveRepoRuntimeReadinessArgs = {
   hasActiveWorkspace: boolean;
   runtimeDefinitions: RuntimeDescriptor[];
@@ -203,7 +226,7 @@ type DeriveRepoRuntimeReadinessArgs = {
   runtimeDefinitionsError: string | null;
   runtimeHealthByRuntime: RepoRuntimeHealthMap;
   isLoadingChecks: boolean;
-  runtimeKind?: RuntimeKind | null;
+  runtimeTarget?: RepoRuntimeReadinessTarget;
 };
 
 const getBlockedRuntimeReason = (
@@ -233,8 +256,10 @@ export const deriveRepoRuntimeReadiness = ({
   runtimeDefinitionsError,
   runtimeHealthByRuntime,
   isLoadingChecks,
-  runtimeKind = null,
+  runtimeTarget = allRepoRuntimeReadinessTarget,
 }: DeriveRepoRuntimeReadinessArgs): RepoRuntimeReadinessSnapshot => {
+  const runtimeKind = runtimeTarget.kind === "runtime" ? runtimeTarget.runtimeKind : null;
+  const isResolvingRuntimeTarget = runtimeTarget.kind === "resolving";
   const targetRuntimeDefinition = findRuntimeDefinition(runtimeDefinitions, runtimeKind);
   const scopedRuntimeDefinitions = targetRuntimeDefinition
     ? [targetRuntimeDefinition]
@@ -265,7 +290,9 @@ export const deriveRepoRuntimeReadiness = ({
   const blockedRuntimeHealth = blockedRuntimeDefinition
     ? (runtimeHealthByRuntime[blockedRuntimeDefinition.kind] ?? null)
     : null;
-  const isReady = Boolean(hasActiveWorkspace && healthyRuntimeDefinition);
+  const isReady = Boolean(
+    hasActiveWorkspace && !isResolvingRuntimeTarget && healthyRuntimeDefinition,
+  );
   const isRuntimeStarting =
     hasActiveWorkspace &&
     scopedRuntimeDefinitions.some((definition) =>
@@ -274,6 +301,9 @@ export const deriveRepoRuntimeReadiness = ({
   const readinessState: RepoRuntimeReadinessState = (() => {
     if (isReady) {
       return "ready";
+    }
+    if (hasActiveWorkspace && isResolvingRuntimeTarget) {
+      return "checking";
     }
     if (hasActiveWorkspace && checkingRuntimeDefinition) {
       return "checking";
@@ -299,6 +329,9 @@ export const deriveRepoRuntimeReadiness = ({
     }
     if (isLoadingRuntimeDefinitions) {
       return "Loading runtime definitions...";
+    }
+    if (isResolvingRuntimeTarget) {
+      return "Resolving selected agent runtime...";
     }
     if (runtimeKind && !targetRuntimeDefinition) {
       return `Runtime '${runtimeKind}' is not available for agent chat.`;

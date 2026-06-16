@@ -5,7 +5,11 @@ import type { HumanReviewFeedbackModalModel } from "@/features/human-review-feed
 import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import * as appStateContexts from "@/state/app-state-contexts";
 import { restoreMockedModules } from "@/test-utils/mock-module-cleanup";
-import type { TasksStateContextValue, WorkspaceStateContextValue } from "@/types/state-slices";
+import type {
+  RepoSettingsInput,
+  TasksStateContextValue,
+  WorkspaceStateContextValue,
+} from "@/types/state-slices";
 import {
   createAgentSessionFixture,
   createSelectedSessionTranscriptStateFixture,
@@ -166,6 +170,13 @@ let agentSessions = [createSession()];
 let agentSessionReadModelState = {
   sessionReadModelLoadState: { kind: "idle" as const },
 };
+let repoSettingsState: {
+  repoSettings: RepoSettingsInput | null;
+  isLoadingRepoSettings: boolean;
+} = {
+  repoSettings: null,
+  isLoadingRepoSettings: false,
+};
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
   runtimeKind: "opencode" as const,
@@ -310,6 +321,7 @@ const mockedModuleResets = [
     "../use-agent-studio-selection-controller",
     () => import("../use-agent-studio-selection-controller"),
   ],
+  ["../use-agent-studio-repo-settings", () => import("../use-agent-studio-repo-settings")],
   [
     "../query-sync/use-agent-studio-query-session-sync",
     () => import("../query-sync/use-agent-studio-query-session-sync"),
@@ -384,6 +396,10 @@ const registerModuleMocks = (): void => {
     useAgentStudioSelectionController: () => selectionState,
   }));
 
+  mock.module("../use-agent-studio-repo-settings", () => ({
+    useAgentStudioRepoSettings: () => repoSettingsState,
+  }));
+
   mock.module("../query-sync/use-agent-studio-query-session-sync", () => ({
     useAgentStudioQuerySessionSync: () => undefined,
   }));
@@ -453,6 +469,10 @@ beforeEach(async () => {
   agentSessions = [session];
   agentSessionReadModelState = {
     sessionReadModelLoadState: { kind: "idle" },
+  };
+  repoSettingsState = {
+    repoSettings: null,
+    isLoadingRepoSettings: false,
   };
   agentOperations = {
     loadAgentSessions: mock(async () => undefined),

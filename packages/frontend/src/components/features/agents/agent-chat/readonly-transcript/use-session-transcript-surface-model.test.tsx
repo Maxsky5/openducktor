@@ -346,7 +346,10 @@ describe("useSessionTranscriptSurfaceModel", () => {
     try {
       await harness.mount();
 
-      expect(runtimeReadinessCalls.at(-1)?.runtimeKind).toBe("codex");
+      expect(runtimeReadinessCalls.at(-1)?.runtimeTarget).toEqual({
+        kind: "runtime",
+        runtimeKind: "codex",
+      });
     } finally {
       await harness.unmount();
     }
