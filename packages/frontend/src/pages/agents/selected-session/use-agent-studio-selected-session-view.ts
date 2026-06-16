@@ -57,7 +57,7 @@ type UseAgentStudioSelectedSessionViewArgs = {
 };
 
 export type AgentStudioSelectedSessionView = {
-  sessionSummary: AgentSessionSummary | null;
+  selectedSessionSummary: AgentSessionSummary | null;
   sessionIdentity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
   selectedModel: AgentSessionState["selectedModel"] | null;
@@ -167,7 +167,7 @@ export function useAgentStudioSelectedSessionView({
 
   return useMemo<AgentStudioSelectedSessionView>(
     () => ({
-      sessionSummary: selection.sessionSummary,
+      selectedSessionSummary: selection.sessionSummary,
       sessionIdentity: selectedSessionIdentity,
       session,
       selectedModel: session

@@ -67,7 +67,7 @@ export type AgentStudioSelectedView = {
   taskId: string;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];
-  activeSessionSummary: AgentSessionSummary | null;
+  selectedSessionSummary: AgentSessionSummary | null;
   selectedSessionIdentity: AgentSessionIdentity | null;
   activeSession: AgentSessionState | null;
   selectedSessionModel: AgentSessionState["selectedModel"] | null;
@@ -295,7 +295,7 @@ export function useAgentStudioSelectionController({
         taskId: selectedViewTaskId,
         selectedTask: selectedViewTask,
         sessionsForTask: selectedViewSessions,
-        activeSessionSummary: selectedSessionView.sessionSummary,
+        selectedSessionSummary: selectedSessionView.selectedSessionSummary,
         selectedSessionIdentity: selectedSessionView.sessionIdentity,
         activeSession: selectedSessionView.session,
         selectedSessionModel: selectedSessionView.selectedModel,
@@ -327,7 +327,7 @@ export function useAgentStudioSelectionController({
       selectedSessionView.session,
       selectedSessionView.sessionIdentity,
       selectedSessionView.selectedModel,
-      selectedSessionView.sessionSummary,
+      selectedSessionView.selectedSessionSummary,
       selectedSessionFromRoute,
       selectedTask,
       sessions,

@@ -58,7 +58,7 @@ type SelectionState = {
     launchActionId: "planner_initial";
     selectedTask: typeof task | null;
     sessionsForTask: SessionFixture[];
-    activeSessionSummary: SessionFixture | null;
+    selectedSessionSummary: SessionFixture | null;
     activeSession: SessionFixture | null;
     sessionRuntimeData: {
       modelCatalog: null;
@@ -210,7 +210,7 @@ let selectionState: SelectionState = {
     launchActionId: "planner_initial" as const,
     selectedTask: task,
     sessionsForTask: [initialSelectionSession],
-    activeSessionSummary: initialSelectionSession,
+    selectedSessionSummary: initialSelectionSession,
     activeSession: initialSelectionSession,
     sessionRuntimeData: {
       modelCatalog: null,
@@ -492,7 +492,7 @@ beforeEach(async () => {
       launchActionId: "planner_initial",
       selectedTask: task,
       sessionsForTask: [session],
-      activeSessionSummary: session,
+      selectedSessionSummary: session,
       activeSession: session,
       sessionRuntimeData: {
         modelCatalog: null,
@@ -644,7 +644,7 @@ describe("useAgentsPageShellModel", () => {
         ...selectionState.view,
         taskId: "",
         selectedTask: null,
-        activeSessionSummary: null,
+        selectedSessionSummary: null,
         activeSession: null,
         sessionsForTask: [],
       },

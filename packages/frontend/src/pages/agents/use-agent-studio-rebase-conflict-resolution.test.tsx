@@ -71,7 +71,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
           description: "Fix the branch divergence.",
         }),
         activeSession: null,
-        activeSessionSummary: plannerSession,
+        selectedSessionSummary: plannerSession,
         sessionsForTask: [builderSession],
       },
     },
@@ -310,7 +310,7 @@ describe("useAgentStudioRebaseConflictResolution", () => {
         view: {
           ...baseSelection.view,
           activeSession: liveBuilderSession,
-          activeSessionSummary: null,
+          selectedSessionSummary: null,
           sessionsForTask: [],
         },
       },

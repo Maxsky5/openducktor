@@ -35,7 +35,7 @@ const createSelectionView = (
     taskId: "task-1",
     selectedTask: createTaskCardFixture({ id: "task-1", title: "Task 1" }),
     sessionsForTask: [],
-    activeSessionSummary: null,
+    selectedSessionSummary: null,
     selectedSessionIdentity: toAgentSessionIdentity(activeSession),
     activeSession,
     selectedSessionModel: activeSession.selectedModel,

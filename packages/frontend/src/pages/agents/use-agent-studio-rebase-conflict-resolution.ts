@@ -20,7 +20,7 @@ import type { AgentStudioSelectionControllerResult } from "./use-agent-studio-se
 type AgentStudioRebaseConflictResolutionSelectionContext = {
   view: Pick<
     AgentStudioSelectionControllerResult["view"],
-    "taskId" | "selectedTask" | "activeSession" | "activeSessionSummary" | "sessionsForTask"
+    "taskId" | "selectedTask" | "activeSession" | "selectedSessionSummary" | "sessionsForTask"
   >;
 };
 
@@ -99,8 +99,8 @@ export function useAgentStudioRebaseConflictResolution({
         currentViewSession:
           view.activeSession?.role === "build"
             ? view.activeSession
-            : view.activeSessionSummary?.role === "build"
-              ? view.activeSessionSummary
+            : view.selectedSessionSummary?.role === "build"
+              ? view.selectedSessionSummary
               : null,
         onOpenSession: (session) => {
           const builderSession =
