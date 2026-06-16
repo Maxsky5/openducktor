@@ -4,11 +4,11 @@ import type { SessionStartGate } from "@/features/session-start/session-start-ga
 import type { AgentSessionCollectionUpdater } from "@/state/agent-session-collection";
 import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
 import type { EnsureRuntime, TaskDocuments } from "../runtime/runtime";
-import { createEnsureSessionReady } from "../session-readiness/ensure-session-ready";
 import type { SessionObservers } from "../support/session-observers";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import type { SessionTransientState } from "../support/session-transient-state";
 import { createPendingInputActions } from "./pending-input-actions";
+import { createPrepareSessionSend } from "./prepare-session-send";
 import { createSendAgentMessage, settleStartingSession } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
 import { createStartAgentSession } from "./start-session";
@@ -81,16 +81,13 @@ export const createAgentSessionActions = ({
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
   const { turnMetadata } = sessionTransientState;
-  const ensureSessionReady = createEnsureSessionReady({
+  const prepareSessionSend = createPrepareSessionSend({
     workspaceRepoPath,
     workspaceId,
-    adapter,
     repoEpochRef,
     currentWorkspaceRepoPathRef,
-    readSessionSnapshot,
     taskRef,
     sessionObserversRef,
-    updateSession,
     observeAgentSession,
     ensureRuntime,
     loadRepoPromptOverrides,
@@ -102,7 +99,7 @@ export const createAgentSessionActions = ({
     readSessionSnapshot,
     taskRef,
     updateSession,
-    ensureSessionReady,
+    prepareSessionSend,
     sessionTransientState,
     recordTurnUserMessageTimestamp,
   });
@@ -171,7 +168,6 @@ export const createAgentSessionActions = ({
   });
 
   return {
-    ensureSessionReady,
     sendAgentMessage,
     startAgentSession,
     settleStartedAgentSession: (session: AgentSessionIdentity): void => {

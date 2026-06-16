@@ -6,7 +6,6 @@ describe("agent-orchestrator/handlers/session-actions", () => {
   test("returns action handlers", () => {
     const actions = createSessionActions({ updateSession: () => null });
 
-    expect(typeof actions.ensureSessionReady).toBe("function");
     expect(typeof actions.sendAgentMessage).toBe("function");
     expect(typeof actions.startAgentSession).toBe("function");
     expect(typeof actions.stopAgentSession).toBe("function");

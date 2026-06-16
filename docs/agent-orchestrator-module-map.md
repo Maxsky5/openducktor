@@ -258,6 +258,24 @@ Owns two shapes:
 Do not pass prompts, task roles, or models into event subscription. A listener opens
 an event stream for an existing runtime session; it is not a session start request.
 
+### Existing Session Send Preparation
+
+File:
+
+- `handlers/prepare-session-send.ts`
+
+Owns:
+
+- ensuring the configured runtime process exists for an existing idle/stopped
+  session before sending
+- starting the event observer for the exact durable session ref when it is not
+  already observed
+- computing transient system prompt context for the next runtime send
+
+It does not read runtime session snapshots, resume runtime sessions, or classify
+pending input. Runtime adapters own local session restoration and event streams.
+Visible pending input comes from startup snapshots or runtime events.
+
 ### Selected Session View
 
 Files:
@@ -268,7 +286,6 @@ Files:
 - `pages/agents/selected-session/selected-session-context.ts`
 - `components/features/agents/agent-chat/use-agent-chat-surface-model.ts`
 - `transcript/session-transcript-state.ts`
-- `session-readiness/ensure-session-ready.ts`
 
 Owns:
 
@@ -276,7 +293,6 @@ Owns:
 - deriving the selected route from that candidate
 - deciding whether the transcript can render, should show runtime loading, should
   show session loading, or failed to load
-- preparing a selected idle/stopped session before active reads or sends
 
 Invariant: live summaries and persisted records must be combined before selection.
 Do not resolve live and persisted selections in separate branches.
@@ -513,7 +529,7 @@ Use these compact tests as the first-line safety net:
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Composer summary target cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
-| Runtime preparation failures before session start | `session-readiness/ensure-session-ready.test.ts` |
+| Existing idle session send preparation | `handlers/prepare-session-send.test.ts` and `handlers/session-actions-send.test.ts` |
 | Runtime snapshot projection onto session state | `session-read-model/session-runtime-snapshot.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
 | Event-driven permission/question lifecycle after startup | `events/session-permissions-questions.test.ts` |

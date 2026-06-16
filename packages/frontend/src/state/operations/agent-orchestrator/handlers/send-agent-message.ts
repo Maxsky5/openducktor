@@ -9,7 +9,11 @@ import { agentSessionIdentityKey } from "@/lib/agent-session-identity";
 import { isAgentSessionWaitingInput } from "@/lib/agent-session-waiting-input";
 import { errorMessage } from "@/lib/errors";
 import { isRoleAvailableForTask, unavailableRoleErrorMessage } from "@/lib/task-agent-workflows";
-import type { AgentSessionIdentity, AgentSessionState } from "@/types/agent-orchestrator";
+import type {
+  AgentSessionIdentity,
+  AgentSessionState,
+  WorkflowAgentSessionState,
+} from "@/types/agent-orchestrator";
 import { now } from "../support/core";
 import { appendSessionMessage } from "../support/messages";
 import { toRuntimeSessionContextRef } from "../support/session-runtime-ref";
@@ -18,6 +22,7 @@ import {
   type SessionTransientState,
 } from "../support/session-transient-state";
 import { isWorkflowAgentSession } from "../support/workflow-session";
+import type { PreparedSessionSend } from "./prepare-session-send";
 import {
   type ReadSessionSnapshot,
   requireLoadedSession,
@@ -36,7 +41,7 @@ export type SendAgentMessageDependencies = {
   readSessionSnapshot: ReadSessionSnapshot;
   taskRef: { current: TaskCard[] };
   updateSession: UpdateSession;
-  ensureSessionReady: (session: AgentSessionIdentity) => Promise<AgentSessionIdentity>;
+  prepareSessionSend: (session: WorkflowAgentSessionState) => Promise<PreparedSessionSend>;
   sessionTransientState: SessionTransientState;
   recordTurnUserMessageTimestamp: (
     sessionKey: string,
@@ -65,19 +70,19 @@ export const settleStartingSession = (
   );
 };
 
-const ensureSessionReadyForSend = async ({
+const prepareIdleSessionForSend = async ({
   session,
-  ensureSessionReady,
+  prepareSessionSend,
   readSessionSnapshot,
   updateSession,
 }: {
-  session: AgentSessionState;
-  ensureSessionReady: (session: AgentSessionIdentity) => Promise<AgentSessionIdentity>;
+  session: WorkflowAgentSessionState;
+  prepareSessionSend: (session: WorkflowAgentSessionState) => Promise<PreparedSessionSend>;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
-}): Promise<AgentSessionIdentity> => {
+}): Promise<PreparedSessionSend> => {
   try {
-    return await ensureSessionReady(session);
+    return await prepareSessionSend(session);
   } catch (error) {
     settleStartingSession(session, "error", readSessionSnapshot, updateSession);
     throw error;
@@ -165,17 +170,23 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
       return;
     }
 
-    const readySessionIdentity = await ensureSessionReadyForSend({
-      session: currentSession,
-      ensureSessionReady: dependencies.ensureSessionReady,
-      readSessionSnapshot: dependencies.readSessionSnapshot,
-      updateSession: dependencies.updateSession,
-    });
+    const sessionWasBusy = currentSession.status === "running";
+    const preparedSend = sessionWasBusy
+      ? {
+          repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
+          systemPrompt: undefined,
+        }
+      : await prepareIdleSessionForSend({
+          session: currentSession,
+          prepareSessionSend: dependencies.prepareSessionSend,
+          readSessionSnapshot: dependencies.readSessionSnapshot,
+          updateSession: dependencies.updateSession,
+        });
 
-    const readySession = dependencies.readSessionSnapshot(readySessionIdentity);
+    const readySession = dependencies.readSessionSnapshot(currentSession);
     if (!readySession || isAgentSessionWaitingInput(readySession)) {
       settleStartingSession(
-        readySessionIdentity,
+        currentSession,
         "idle",
         dependencies.readSessionSnapshot,
         dependencies.updateSession,
@@ -190,12 +201,14 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     }
 
     try {
-      const repoPath = requireWorkspaceRepoPath(dependencies.workspaceRepoPath);
       await dependencies.adapter.sendUserMessage({
-        ...toRuntimeSessionContextRef(repoPath, readySession),
+        ...toRuntimeSessionContextRef(preparedSend.repoPath, readySession),
         externalSessionId: readySession.externalSessionId,
         parts: normalizedParts,
         ...(selectedModel ? { model: selectedModel } : {}),
+        ...(preparedSend.systemPrompt !== undefined
+          ? { systemPrompt: preparedSend.systemPrompt }
+          : {}),
       });
     } catch (error) {
       dependencies.updateSession(

@@ -7,29 +7,26 @@ import {
   sessionMessagesToArray,
 } from "@/test-utils/session-message-test-helpers";
 import type { AgentSessionState } from "@/types/agent-orchestrator";
-import {
-  createAgentSessionRuntimeSnapshotFixture,
-  createSessionObserversRefFixture,
-  createTaskCardFixture,
-} from "../test-utils";
+import { createSessionObserversRefFixture, createTaskCardFixture } from "../test-utils";
 import {
   buildSession,
   createSessionActions,
   createSessionsRef,
   createSessionTransientStateFixture,
   getSession,
-  mockAgentSessionRuntimeSnapshot,
 } from "./session-actions.test-helpers";
 
 describe("agent-orchestrator/handlers/session-actions send", () => {
   test("delegates sent user messages to the runtime transcript stream", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    mockAgentSessionRuntimeSnapshot(adapter);
-    adapter.sendUserMessage = async () => {
+    adapter.readSessionRuntimeSnapshot = async () => {
+      throw new Error("send must not probe runtime snapshots");
+    };
+    adapter.sendUserMessage = async (input) => {
       sendCalls += 1;
+      expect(input.systemPrompt).toContain("Implement the task");
     };
 
     const sessionsRef = createSessionsRef([
@@ -48,7 +45,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -63,24 +59,15 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(getSession(sessionsRef)?.status).toBe("running");
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
     } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
   test("releases held starting sessions to running when sending starts", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
     const committedStatuses: AgentSessionState["status"][] = [];
-    mockAgentSessionRuntimeSnapshot(
-      adapter,
-      createAgentSessionRuntimeSnapshotFixture({
-        ref: { externalSessionId: "session-1" },
-        snapshot: { runtimeActivity: "idle" },
-      }),
-    );
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -90,7 +77,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       updateSession: (identity, updater) => {
         const current = getAgentSession(sessionsRef.current, identity);
@@ -119,7 +105,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(committedStatuses).not.toContain("idle");
       expect(getSession(sessionsRef)?.status).toBe("running");
     } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -147,13 +132,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureRuntime: async () => {
+        throw new Error("runtime unavailable");
+      },
     });
 
     try {
@@ -166,22 +148,10 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("marks held starting sessions as failed when resume preparation fails", async () => {
+  test("marks held starting sessions as failed when send preparation fails", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalSendUserMessage = adapter.sendUserMessage;
     let sendCalls = 0;
-    adapter.readSessionRuntimeSnapshot = async () => ({
-      availability: "missing",
-      classification: "missing",
-      ref: {
-        repoPath: "/tmp/repo",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo/worktree",
-        externalSessionId: "session-1",
-      },
-      pendingApprovals: [],
-      pendingQuestions: [],
-    });
     adapter.sendUserMessage = async () => {
       sendCalls += 1;
     };
@@ -191,19 +161,16 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureRuntime: async () => {
+        throw new Error("runtime unavailable");
+      },
     });
 
     try {
       await expect(
         actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
-      ).rejects.toThrow("Task not found: task-1");
+      ).rejects.toThrow("runtime unavailable");
 
       expect(sendCalls).toBe(0);
       expect(getSession(sessionsRef)?.status).toBe("error");
@@ -214,10 +181,8 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
   test("does not load requested history before sending to a runtime session", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
     const callOrder: string[] = [];
-    mockAgentSessionRuntimeSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       callOrder.push("send");
     };
@@ -233,7 +198,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -252,68 +216,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(sessionMessagesToArray(getSession(sessionsRef))).toHaveLength(0);
       expect(getSession(sessionsRef)?.historyLoadState).toBe("not_requested");
     } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
-      adapter.sendUserMessage = originalSendUserMessage;
-    }
-  });
-
-  test("does not send a free-form message if session readiness reveals pending input", async () => {
-    const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
-    const originalSendUserMessage = adapter.sendUserMessage;
-    let sendCalls = 0;
-    mockAgentSessionRuntimeSnapshot(
-      adapter,
-      createAgentSessionRuntimeSnapshotFixture({
-        ref: { externalSessionId: "session-1", workingDirectory: "/tmp/repo/worktree" },
-        snapshot: {
-          runtimeActivity: "idle",
-          title: "Session 1",
-          startedAt: "2026-02-22T08:00:00.000Z",
-          pendingApprovals: [],
-          pendingQuestions: [
-            {
-              requestId: "question-1",
-              questions: [{ header: "Confirm", question: "Confirm", options: [] }],
-            },
-          ],
-        },
-      }),
-    );
-    adapter.sendUserMessage = async () => {
-      sendCalls += 1;
-    };
-
-    const sessionsRef = createSessionsRef([
-      buildSession({
-        status: "idle",
-        historyLoadState: "not_requested",
-        messages: [],
-      }),
-    ]);
-
-    const actions = createSessionActions({
-      adapter,
-      sessionsRef,
-      taskRef: { current: [] },
-      sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
-    });
-
-    try {
-      await expect(
-        actions.sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "hello" }]),
-      ).rejects.toThrow("Session is waiting for pending runtime input.");
-
-      expect(sendCalls).toBe(0);
-      expect(getSession(sessionsRef)?.status).toBe("idle");
-      expect(getSession(sessionsRef)?.pendingQuestions).toHaveLength(1);
-    } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
@@ -341,7 +243,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -409,9 +310,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
 
   test("marks session as error when send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
-    mockAgentSessionRuntimeSnapshot(adapter);
     adapter.sendUserMessage = async () => {
       throw new Error("send failed");
     };
@@ -428,7 +327,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      taskRef: { current: [] },
       sessionObserversRef: createSessionObserversRefFixture([{ externalSessionId: "session-1" }]),
       ensureRuntime: async () => ({
         kind: "opencode",
@@ -457,26 +355,17 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       ).toBeUndefined();
       expect(sessionTransientState.turnMetadata.readModel(sessionKey)).toBeUndefined();
     } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
   test("preserves active turn drafts and timing for busy queued sends", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
     const sendCalls: Array<{
       externalSessionId: string;
       parts: { kind: string; text?: string }[];
     }> = [];
-    mockAgentSessionRuntimeSnapshot(
-      adapter,
-      createAgentSessionRuntimeSnapshotFixture({
-        ref: { externalSessionId: "session-1" },
-        snapshot: { runtimeActivity: "running" },
-      }),
-    );
     adapter.sendUserMessage = async (input) => {
       sendCalls.push({
         externalSessionId: input.externalSessionId,
@@ -515,11 +404,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         return 1234;
       },
       readTurnUserMessageStartedAtMs: () => 1234,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureRuntime: async () => {
+        throw new Error("running sessions must send without preparation");
+      },
     });
 
     try {
@@ -537,22 +424,13 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(recordUserAnchorCalls).toBe(0);
       expect(sessionTransientState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
     } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
 
   test("keeps the active turn running when a busy queued send fails", async () => {
     const adapter = new OpencodeSdkAdapter();
-    const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;
-    mockAgentSessionRuntimeSnapshot(
-      adapter,
-      createAgentSessionRuntimeSnapshotFixture({
-        ref: { externalSessionId: "session-1" },
-        snapshot: { runtimeActivity: "running" },
-      }),
-    );
     adapter.sendUserMessage = async () => {
       throw new Error("queued send failed");
     };
@@ -586,11 +464,9 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
         return 1234;
       },
       readTurnUserMessageStartedAtMs: () => 1234,
-      ensureRuntime: async () => ({
-        kind: "opencode",
-        runtimeKind: "opencode",
-        workingDirectory: "/tmp/repo",
-      }),
+      ensureRuntime: async () => {
+        throw new Error("running sessions must send without preparation");
+      },
     });
 
     try {
@@ -614,7 +490,6 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
       expect(recordUserAnchorCalls).toBe(0);
       expect(sessionTransientState.turnMetadata.readModel(sessionKey)?.modelId).toBe("gpt-5");
     } finally {
-      adapter.listSessionRuntimeSnapshots = originalListAgentSessionRuntimeSnapshots;
       adapter.sendUserMessage = originalSendUserMessage;
     }
   });
