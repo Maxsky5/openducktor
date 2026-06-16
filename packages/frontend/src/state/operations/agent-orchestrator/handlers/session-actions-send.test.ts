@@ -257,7 +257,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     }
   });
 
-  test("does not send a free-form message if ensure-ready reveals pending input", async () => {
+  test("does not send a free-form message if session readiness reveals pending input", async () => {
     const adapter = new OpencodeSdkAdapter();
     const originalListAgentSessionRuntimeSnapshots = adapter.listSessionRuntimeSnapshots;
     const originalSendUserMessage = adapter.sendUserMessage;

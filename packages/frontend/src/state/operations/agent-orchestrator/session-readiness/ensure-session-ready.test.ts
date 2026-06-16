@@ -24,7 +24,7 @@ import {
   hasSessionObserverFixture,
   updateAgentSessionFixture,
 } from "../test-utils";
-import { createEnsureSessionReady } from "./ensure-ready";
+import { createEnsureSessionReady } from "./ensure-session-ready";
 
 const workspaceFixture = {
   repoPath: "/tmp/repo",
@@ -251,7 +251,7 @@ const createEnsureReadyHarness = ({
   };
 };
 
-describe("agent-orchestrator-ensure-ready", () => {
+describe("agent-orchestrator-session-readiness", () => {
   test("throws when the local session is missing", async () => {
     const { ensureReady } = createEnsureReadyHarness({
       sessions: [],
@@ -267,7 +267,7 @@ describe("agent-orchestrator-ensure-ready", () => {
     let resumeCalls = 0;
 
     adapter.listSessionRuntimeSnapshots = async () => {
-      throw new Error("ensure-ready must use the single-session snapshot read");
+      throw new Error("session readiness must use the single-session snapshot read");
     };
     adapter.readSessionRuntimeSnapshot = async (input) => {
       readSnapshotCalls.push(input);

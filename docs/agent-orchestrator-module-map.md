@@ -268,7 +268,7 @@ Files:
 - `pages/agents/selected-session/selected-session-context.ts`
 - `components/features/agents/agent-chat/use-agent-chat-surface-model.ts`
 - `transcript/session-transcript-state.ts`
-- `lifecycle/ensure-ready.ts`
+- `session-readiness/ensure-session-ready.ts`
 
 Owns:
 
@@ -513,7 +513,7 @@ Use these compact tests as the first-line safety net:
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Composer summary target cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
-| Runtime preparation failures before session start | `lifecycle/ensure-ready.test.ts` |
+| Runtime preparation failures before session start | `session-readiness/ensure-session-ready.test.ts` |
 | Runtime snapshot projection onto session state | `session-read-model/session-runtime-snapshot.test.ts` |
 | Permission/question replies through runtime refs | `handlers/session-actions.test.ts` |
 | Event-driven permission/question lifecycle after startup | `events/session-permissions-questions.test.ts` |
