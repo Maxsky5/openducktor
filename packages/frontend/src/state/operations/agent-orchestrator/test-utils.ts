@@ -51,18 +51,12 @@ const toSessionObserverFixtureRef = ({
 export const createSessionObserversFixture = (
   observers: SessionObserversFixture[] = [],
 ): SessionObservers => {
-  const observersCollection = createSessionObservers();
-  for (const observer of observers) {
-    addSessionObserverFixture(observersCollection, observer);
-  }
-  return observersCollection;
-};
-
-export const addSessionObserverFixture = (
-  observers: SessionObservers,
-  observer: SessionObserversFixture,
-): void => {
-  observers.add(toSessionObserverFixtureRef(observer), observer.unsubscribe ?? (() => {}));
+  return createSessionObservers(
+    observers.map((observer) => ({
+      session: toSessionObserverFixtureRef(observer),
+      unsubscribe: observer.unsubscribe ?? (() => {}),
+    })),
+  );
 };
 
 export const createSessionObserversRefFixture = (

@@ -114,19 +114,19 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
 
     try {
       await harness.mount();
-      await harness.run((hook) => {
+      await harness.run(async (hook) => {
         hook.sessionStore.setSessionCollection(
           createAgentSessionCollection([createSessionFixture()]),
         );
 
         const observers = hook.sessionObserversRef.current;
-        observers.add(
+        await observers.ensureObserver(
           {
             externalSessionId: "first",
             runtimeKind: "opencode",
             workingDirectory: "/tmp/repo-a",
           },
-          () => {
+          async () => () => {
             unsubscribeCalls.push("first");
             observers.removeMany([
               {
@@ -137,13 +137,13 @@ describe("agent-orchestrator/hooks/use-orchestrator-session-state", () => {
             ]);
           },
         );
-        observers.add(
+        await observers.ensureObserver(
           {
             externalSessionId: "second",
             runtimeKind: "opencode",
             workingDirectory: "/tmp/repo-a",
           },
-          () => {
+          async () => () => {
             unsubscribeCalls.push("second");
           },
         );

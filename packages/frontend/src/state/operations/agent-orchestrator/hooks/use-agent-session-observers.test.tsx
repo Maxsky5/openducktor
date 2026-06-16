@@ -148,17 +148,17 @@ describe("useAgentSessionObservers", () => {
     };
     const harness = createHookHarness(Harness, undefined);
     await harness.mount();
-    await harness.run(({ state }) => {
+    await harness.run(async ({ state }) => {
       const session = createSession();
       const sessionKey = agentSessionIdentityKey(session);
       state.sessionStore.setSessionCollection(createAgentSessionCollection([session]));
-      state.sessionObserversRef.current.add(
+      await state.sessionObserversRef.current.ensureObserver(
         {
           externalSessionId: "external-1",
           runtimeKind: "opencode",
           workingDirectory: "/tmp/repo/worktree",
         },
-        unsubscribe,
+        async () => unsubscribe,
       );
       state.sessionTransientState.draftBuffers.writeChannel(sessionKey, "reasoning", {
         raw: "draft",

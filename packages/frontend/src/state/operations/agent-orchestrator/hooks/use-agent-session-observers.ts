@@ -113,43 +113,37 @@ export const useAgentSessionObservers = ({
 
   const observeAgentSession = useCallback<ObserveAgentSession>(
     async (target): Promise<void> => {
-      if (sessionObserversRef.current.has(target)) {
-        return;
-      }
-
       const findRuntimeDefinitionForKind = (runtimeKind: RuntimeKind) =>
         findRuntimeDefinition(agentEngine.listRuntimeDefinitions(), runtimeKind);
 
-      const unsubscribe = await listenToAgentSessionEvents({
-        adapter: agentEngine,
-        sessionRef: target,
-        draftBuffers: sessionTransientState.draftBuffers,
-        turnMetadata: sessionTransientState.turnMetadata,
-        readSession,
-        updateSession,
-        updateSessionTodos: (updater) => updateSessionTodosQueryData(queryClient, target, updater),
-        hasSessionObserver: (candidateSession) => sessionObserversRef.current.has(candidateSession),
-        recordTurnActivityTimestamp,
-        recordTurnUserMessageTimestamp,
-        resolveTurnDurationMs,
-        clearTurnDuration,
-        buildReadOnlyApprovalRejectionMessage,
-        refreshTaskData,
-        canAutoRejectReadOnlyApproval: (runtimeKind) => {
-          const runtimeDefinition = findRuntimeDefinitionForKind(runtimeKind);
-          return runtimeDefinition
-            ? runtimeSupportsCapability(runtimeDefinition, "approvals.readOnlyAutoRejectSafe")
-            : false;
-        },
-        resolveWorkflowToolAliasesByCanonical: (runtimeKind) =>
-          findRuntimeDefinitionForKind(runtimeKind)?.workflowToolAliasesByCanonical,
-      });
-
-      if (sessionObserversRef.current.has(target)) {
-        unsubscribe();
-        return;
-      }
-      sessionObserversRef.current.add(target, unsubscribe);
+      await sessionObserversRef.current.ensureObserver(target, () =>
+        listenToAgentSessionEvents({
+          adapter: agentEngine,
+          sessionRef: target,
+          draftBuffers: sessionTransientState.draftBuffers,
+          turnMetadata: sessionTransientState.turnMetadata,
+          readSession,
+          updateSession,
+          updateSessionTodos: (updater) =>
+            updateSessionTodosQueryData(queryClient, target, updater),
+          hasSessionObserver: (candidateSession) =>
+            sessionObserversRef.current.has(candidateSession),
+          recordTurnActivityTimestamp,
+          recordTurnUserMessageTimestamp,
+          resolveTurnDurationMs,
+          clearTurnDuration,
+          buildReadOnlyApprovalRejectionMessage,
+          refreshTaskData,
+          canAutoRejectReadOnlyApproval: (runtimeKind) => {
+            const runtimeDefinition = findRuntimeDefinitionForKind(runtimeKind);
+            return runtimeDefinition
+              ? runtimeSupportsCapability(runtimeDefinition, "approvals.readOnlyAutoRejectSafe")
+              : false;
+          },
+          resolveWorkflowToolAliasesByCanonical: (runtimeKind) =>
+            findRuntimeDefinitionForKind(runtimeKind)?.workflowToolAliasesByCanonical,
+        }),
+      );
     },
     [
       agentEngine,

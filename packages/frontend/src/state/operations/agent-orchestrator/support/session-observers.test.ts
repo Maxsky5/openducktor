@@ -11,38 +11,81 @@ const createSessionRef = (workingDirectory: string) =>
 
 describe("session observers", () => {
   test("keys observers by full session identity", () => {
-    const observers = createSessionObservers();
     const firstSession = createSessionRef("/tmp/repo/first");
     const secondSession = createSessionRef("/tmp/repo/second");
-
-    observers.add(firstSession, () => {});
+    const observers = createSessionObservers([{ session: firstSession, unsubscribe: () => {} }]);
 
     expect(observers.has(firstSession)).toBe(true);
     expect(observers.has(secondSession)).toBe(false);
   });
 
   test("rejects duplicate observers for the same session identity", () => {
-    const observers = createSessionObservers();
     const session = createSessionRef("/tmp/repo/first");
 
-    observers.add(session, () => {});
-
-    expect(() => observers.add(session, () => {})).toThrow(
-      "Session observer already exists for 'external-1'.",
-    );
+    expect(() =>
+      createSessionObservers([
+        { session, unsubscribe: () => {} },
+        { session, unsubscribe: () => {} },
+      ]),
+    ).toThrow("Session observer already exists for 'external-1'.");
   });
 
-  test("removes all matching observers before callbacks can mutate the collection", () => {
+  test("ensures one observer while a subscription is pending", async () => {
+    const observers = createSessionObservers();
+    const calls: string[] = [];
+    const session = createSessionRef("/tmp/repo/first");
+    let subscriptionCount = 0;
+
+    const createObserver = async () => {
+      subscriptionCount += 1;
+      return subscriptionCount === 1 ? () => calls.push("first") : () => calls.push("second");
+    };
+
+    await Promise.all([
+      observers.ensureObserver(session, createObserver),
+      observers.ensureObserver(session, createObserver),
+    ]);
+
+    expect(subscriptionCount).toBe(1);
+    expect(calls).toEqual([]);
+    expect(observers.has(session)).toBe(true);
+
+    observers.remove(session);
+
+    expect(calls).toEqual(["first"]);
+  });
+
+  test("cancels a pending observer when the session is removed", async () => {
+    const observers = createSessionObservers();
+    const calls: string[] = [];
+    const session = createSessionRef("/tmp/repo/first");
+    let resolveObserver!: (unsubscribe: () => void) => void;
+    const observerPromise = new Promise<() => void>((resolve) => {
+      resolveObserver = resolve;
+    });
+
+    const registration = observers.ensureObserver(session, () => observerPromise);
+    expect(observers.has(session)).toBe(true);
+    observers.remove(session);
+    expect(observers.has(session)).toBe(false);
+    resolveObserver(() => calls.push("pending"));
+    await registration;
+
+    expect(calls).toEqual(["pending"]);
+    expect(observers.has(session)).toBe(false);
+  });
+
+  test("removes all matching observers before callbacks can mutate the collection", async () => {
     const observers = createSessionObservers();
     const calls: string[] = [];
     const firstSession = createSessionRef("/tmp/repo/first");
     const secondSession = createSessionRef("/tmp/repo/second");
 
-    observers.add(firstSession, () => {
+    await observers.ensureObserver(firstSession, async () => () => {
       calls.push("first");
       observers.removeMany([secondSession]);
     });
-    observers.add(secondSession, () => {
+    await observers.ensureObserver(secondSession, async () => () => {
       calls.push("second");
     });
 
@@ -53,17 +96,17 @@ describe("session observers", () => {
     expect(observers.has(secondSession)).toBe(false);
   });
 
-  test("clears all observers before callbacks can mutate the collection", () => {
+  test("clears all observers before callbacks can mutate the collection", async () => {
     const observers = createSessionObservers();
     const calls: string[] = [];
     const firstSession = createSessionRef("/tmp/repo/first");
     const secondSession = createSessionRef("/tmp/repo/second");
 
-    observers.add(firstSession, () => {
+    await observers.ensureObserver(firstSession, async () => () => {
       calls.push("first");
       observers.remove(secondSession);
     });
-    observers.add(secondSession, () => {
+    await observers.ensureObserver(secondSession, async () => () => {
       calls.push("second");
     });
 
