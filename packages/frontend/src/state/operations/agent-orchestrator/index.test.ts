@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { listenToAgentSessionEvents } from "./events/session-events";
 import { createAgentSessionActions } from "./handlers/session-actions";
-import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { createEnsureRuntime } from "./runtime/runtime";
+import { createLoadAgentSessions } from "./session-read-model/load-sessions";
 import { upsertMessage } from "./support/utils";
 
 describe("agent-orchestrator/index", () => {

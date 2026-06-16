@@ -3,17 +3,17 @@ import type { AgentEnginePort } from "@openducktor/core";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MutableRefObject } from "react";
 import type { AgentSessionCollection } from "@/state/agent-session-collection";
+import { createRepoStaleGuard } from "../support/core";
+import type { ObserveAgentSession } from "../support/session-runtime-ref";
 import {
   buildRepoSessionReadModel,
   readRepoRuntimeSessionSnapshots,
   type TaskSessionRecords,
-} from "../session-read-model/repo-session-read-model";
+} from "./repo-session-read-model";
 import {
   loadTaskSessionRecordsForTask,
   loadTaskSessionRecordsForTasks,
-} from "../session-read-model/task-session-records";
-import { createRepoStaleGuard } from "../support/core";
-import type { ObserveAgentSession } from "../support/session-runtime-ref";
+} from "./task-session-records";
 
 type SetSessionCollection = (sessionCollection: AgentSessionCollection) => void;
 type ReadSessionCollection = () => AgentSessionCollection;

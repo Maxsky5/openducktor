@@ -19,8 +19,8 @@ import { createLoadAgentSessionHistory } from "./history/session-history-loader"
 import { useAgentSessionObservers } from "./hooks/use-agent-session-observers";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModelEffects } from "./hooks/use-repo-session-read-model-effects";
-import { createLoadAgentSessions } from "./lifecycle/load-sessions";
 import { createEnsureRuntime, loadRepoPromptOverrides, loadTaskDocuments } from "./runtime/runtime";
+import { createLoadAgentSessions } from "./session-read-model/load-sessions";
 import { runOrchestratorSideEffect } from "./support/async-side-effects";
 import { createDefaultAgentOrchestratorDependencies } from "./support/orchestrator-dependency-defaults";
 import type { AgentOrchestratorDependencies } from "./support/orchestrator-ports";

@@ -9,7 +9,7 @@ import {
   type AgentSessionReadModelLoadState,
   idleAgentSessionReadModelLoadState,
 } from "@/types/agent-session-read-model";
-import { loadRepoAgentSessionsForTasks } from "../lifecycle/load-sessions";
+import { loadRepoAgentSessionsForTasks } from "../session-read-model/load-sessions";
 import { createRepoStaleGuard } from "../support/core";
 import type { ObserveAgentSession } from "../support/session-runtime-ref";
 

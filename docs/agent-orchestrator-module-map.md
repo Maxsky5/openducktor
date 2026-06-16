@@ -95,7 +95,7 @@ Must not own:
 
 Files:
 
-- `lifecycle/load-sessions.ts`
+- `session-read-model/load-sessions.ts`
 - `session-read-model/repo-session-read-model.ts`
 - `hooks/use-repo-session-read-model-effects.ts`
 
@@ -505,10 +505,10 @@ Use these compact tests as the first-line safety net:
 | Active and waiting-input sessions after reload | `session-read-model/repo-session-read-model.test.ts` |
 | Runtime snapshot classification and idle demotion | `session-read-model/repo-session-read-model.test.ts` |
 | Pending input startup snapshots without order churn or stale payloads | `session-read-model/repo-session-read-model.test.ts` |
-| Running-session history baseline after reload | `lifecycle/load-sessions.test.ts` |
+| Running-session history baseline after reload | `session-read-model/load-sessions.test.ts` |
 | Runtime prompt context for startup history loads | `use-agent-orchestrator-operations.session-state.test.tsx` |
-| User messages preserved while repo/session reads are in flight | `lifecycle/load-sessions.test.ts` |
-| Per-session history failure isolation | `lifecycle/load-sessions.test.ts` |
+| User messages preserved while repo/session reads are in flight | `session-read-model/load-sessions.test.ts` |
+| Per-session history failure isolation | `session-read-model/load-sessions.test.ts` |
 | Stale history reads are not reported as success or failure | `history/session-history-loader.test.ts` |
 | Selected-session runtime/history/read-model loading surface | `transcript/session-transcript-state.test.ts`, `pages/agents/use-agent-studio-selection-controller.test.tsx`, `pages/agents/use-agent-studio-page-models.test.tsx`, and `components/features/agents/agent-chat/agent-chat-thread-state.test.ts` |
 | Composer summary target cannot act as loaded session state | `features/agent-chat-composer/prompt-input/chat-composer-prompt-input-target.test.ts` and `pages/agents/chat-composer/use-agent-studio-chat-composer.test.tsx` |
