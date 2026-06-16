@@ -30,7 +30,7 @@ type UseAgentChatSurfaceModelArgs = {
   chatSettings: ChatSettings;
   isSessionWorking: boolean;
   runtimeDefinitions?: RuntimeDescriptor[];
-  sessionRuntimeDataError: string | null;
+  sessionAuxiliaryError: string | null;
   runtimeReadiness: RepoRuntimeReadiness;
   emptyState: AgentChatEmptyStateModel | null;
   pendingQuestions: AgentChatPendingQuestionActions;
@@ -47,7 +47,7 @@ export function useAgentChatSurfaceModel({
   chatSettings,
   isSessionWorking,
   runtimeDefinitions = [],
-  sessionRuntimeDataError,
+  sessionAuxiliaryError,
   runtimeReadiness,
   emptyState,
   pendingQuestions,
@@ -102,7 +102,7 @@ export function useAgentChatSurfaceModel({
     hasComposer,
     composerActivity,
     runtimeDefinitions,
-    sessionRuntimeDataError,
+    sessionAuxiliaryError,
     emptyState,
     pendingQuestions,
     approvals,

@@ -38,7 +38,7 @@ const buildModel = () => ({
     approvalReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
     onReplyApproval: async () => {},
-    sessionRuntimeDataError: null,
+    sessionAuxiliaryError: null,
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),

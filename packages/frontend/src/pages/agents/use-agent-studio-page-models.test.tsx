@@ -409,7 +409,7 @@ describe("useAgentStudioPageModels", () => {
     await harness.unmount();
   });
 
-  test("forwards session runtime data errors into the composer model", async () => {
+  test("forwards session runtime data errors into the chat thread model", async () => {
     const harness = createHookHarness(
       createHookArgs({
         selectedSessionCore: {
@@ -420,7 +420,7 @@ describe("useAgentStudioPageModels", () => {
 
     await harness.mount();
 
-    expect(harness.getLatest().agentChatModel.thread.sessionRuntimeDataError).toContain(
+    expect(harness.getLatest().agentChatModel.thread.sessionAuxiliaryError).toContain(
       "todos unavailable",
     );
 

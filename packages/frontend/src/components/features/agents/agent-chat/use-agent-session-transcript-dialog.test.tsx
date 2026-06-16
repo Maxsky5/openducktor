@@ -51,7 +51,7 @@ const createThreadModel = (
   isSubmittingApprovalByRequestId: {},
   approvalReplyErrorByRequestId: {},
   onReplyApproval: async () => {},
-  sessionRuntimeDataError: null,
+  sessionAuxiliaryError: null,
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),

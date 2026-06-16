@@ -39,7 +39,7 @@ type UseAgentChatThreadModelArgs = {
   hasComposer: boolean;
   composerActivity: AgentChatThreadComposerActivity;
   runtimeDefinitions: RuntimeDescriptor[];
-  sessionRuntimeDataError: string | null;
+  sessionAuxiliaryError: string | null;
   emptyState: AgentChatEmptyStateModel | null;
   pendingQuestions: AgentChatPendingQuestionActions;
   approvals: AgentChatPendingApprovalActions;
@@ -60,7 +60,7 @@ export function useAgentChatThreadModel({
   hasComposer,
   composerActivity,
   runtimeDefinitions,
-  sessionRuntimeDataError,
+  sessionAuxiliaryError,
   emptyState,
   pendingQuestions,
   approvals,
@@ -124,7 +124,7 @@ export function useAgentChatThreadModel({
       isSubmittingApprovalByRequestId: approvals.isSubmittingByRequestId,
       approvalReplyErrorByRequestId: approvals.errorByRequestId,
       onReplyApproval: approvals.onReply,
-      sessionRuntimeDataError,
+      sessionAuxiliaryError,
       todoPanelCollapsed: activeTodoPanelCollapsed,
       onToggleTodoPanel: handleToggleTodoPanel,
       messagesContainerRef,
@@ -148,7 +148,7 @@ export function useAgentChatThreadModel({
       scrollToBottomOnSendRef,
       sessionAgentColors,
       transcriptState,
-      sessionRuntimeDataError,
+      sessionAuxiliaryError,
       subagentPendingApprovalCountBySessionKey,
       subagentPendingQuestionCountBySessionKey,
       syncBottomAfterComposerLayoutRef,

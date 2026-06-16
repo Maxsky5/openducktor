@@ -74,7 +74,7 @@ export function useSessionTranscriptSurfaceModel({
     chatSettings,
     isSessionWorking: isAgentSessionActivityWorking(transcriptInteractions.session?.activityState),
     runtimeDefinitions,
-    sessionRuntimeDataError: transcriptSurfaceState.loadError,
+    sessionAuxiliaryError: transcriptSurfaceState.loadError,
     runtimeReadiness,
     emptyState: transcriptSurfaceState.emptyState,
     pendingQuestions: transcriptInteractions.pendingQuestions,
@@ -83,7 +83,5 @@ export function useSessionTranscriptSurfaceModel({
 
   return {
     model,
-    session: transcriptInteractions.session,
-    runtimeDataError: transcriptSurfaceState.loadError,
   };
 }

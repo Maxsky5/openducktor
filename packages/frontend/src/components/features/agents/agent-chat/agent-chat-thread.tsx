@@ -135,7 +135,7 @@ type AgentChatBottomStackProps = {
   pendingQuestions: AgentSessionState["pendingQuestions"];
   pendingApprovals: AgentSessionState["pendingApprovals"];
   todos: AgentSessionTodoItem[];
-  sessionRuntimeDataError: string | null;
+  sessionAuxiliaryError: string | null;
   canSubmitQuestionAnswers: boolean;
   isSubmittingQuestionByRequestId: AgentChatThreadModel["isSubmittingQuestionByRequestId"];
   onSubmitQuestionAnswers: AgentChatThreadModel["onSubmitQuestionAnswers"];
@@ -365,7 +365,7 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
   pendingQuestions,
   pendingApprovals,
   todos,
-  sessionRuntimeDataError,
+  sessionAuxiliaryError,
   canSubmitQuestionAnswers,
   isSubmittingQuestionByRequestId,
   onSubmitQuestionAnswers,
@@ -412,9 +412,9 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
         </div>
       ))}
 
-      {sessionRuntimeDataError ? (
+      {sessionAuxiliaryError ? (
         <div className="rounded-md border border-destructive-border bg-destructive-surface px-3 py-2 text-sm text-destructive-surface-foreground">
-          {sessionRuntimeDataError}
+          {sessionAuxiliaryError}
         </div>
       ) : null}
 
@@ -449,7 +449,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     isSubmittingApprovalByRequestId,
     approvalReplyErrorByRequestId,
     onReplyApproval,
-    sessionRuntimeDataError,
+    sessionAuxiliaryError,
     isSessionWorking,
     todoPanelCollapsed,
     onToggleTodoPanel,
@@ -522,7 +522,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
     ? getActionableSessionTodo(getVisibleSessionTodos(session.todos)) !== null
     : false;
   const hasBottomStack = Boolean(
-    session && (isAgentSessionWaitingInput(session) || hasVisibleTodo || sessionRuntimeDataError),
+    session && (isAgentSessionWaitingInput(session) || hasVisibleTodo || sessionAuxiliaryError),
   );
 
   const resolveRowRef = useCallback(
@@ -638,7 +638,7 @@ export function AgentChatThread({ model }: { model: AgentChatThreadModel }): Rea
             isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
             approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
             onReplyApproval={onReplyApproval}
-            sessionRuntimeDataError={sessionRuntimeDataError}
+            sessionAuxiliaryError={sessionAuxiliaryError}
             todoPanelCollapsed={todoPanelCollapsed}
             isSessionWorking={isSessionWorking}
             sessionAccentColor={sessionAccentColor}

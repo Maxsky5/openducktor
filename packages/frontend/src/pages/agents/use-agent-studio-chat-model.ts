@@ -245,7 +245,7 @@ export function useAgentStudioChatModel({
     chatSettings,
     isSessionWorking: sessionActions.isSessionWorking,
     runtimeDefinitions: selectedSession.runtime.runtimeDefinitions,
-    sessionRuntimeDataError: selectedSession.runtime.sessionRuntimeDataError,
+    sessionAuxiliaryError: selectedSession.runtime.sessionRuntimeDataError,
     runtimeReadiness,
     emptyState: surfaceState.emptyState,
     pendingQuestions,

@@ -49,7 +49,7 @@ const buildBaseModel = () => ({
   approvalReplyErrorByRequestId: {},
   onSubmitQuestionAnswers: async () => {},
   onReplyApproval: async () => {},
-  sessionRuntimeDataError: null,
+  sessionAuxiliaryError: null,
   todoPanelCollapsed: false,
   onToggleTodoPanel: () => {},
   messagesContainerRef: createRef<HTMLDivElement>(),
@@ -928,7 +928,7 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  test("renders runtime data errors even when the session has no questions, approvals, or todos", async () => {
+  test("renders auxiliary errors even when the session has no questions, approvals, or todos", async () => {
     const rendered = render(
       createElement(AgentChatThread, {
         model: {
@@ -939,7 +939,7 @@ describe("AgentChatThread", () => {
             todos: [],
             selectedModel: null,
           }),
-          sessionRuntimeDataError: "todos unavailable",
+          sessionAuxiliaryError: "todos unavailable",
         },
       }),
     );

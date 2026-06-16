@@ -41,7 +41,7 @@ const buildModel = () => ({
     approvalReplyErrorByRequestId: {},
     onSubmitQuestionAnswers: async () => {},
     onReplyApproval: async () => {},
-    sessionRuntimeDataError: null,
+    sessionAuxiliaryError: null,
     todoPanelCollapsed: false,
     onToggleTodoPanel: () => {},
     messagesContainerRef: createRef<HTMLDivElement>(),
@@ -187,7 +187,7 @@ describe("AgentChat", () => {
     expect(html.indexOf("agent-chat-bottom-stack")).toBeLessThan(html.indexOf("<form"));
   });
 
-  test("renders session runtime data errors in the bottom stack above the composer", () => {
+  test("renders session auxiliary errors in the bottom stack above the composer", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChat, {
         model: {
@@ -198,7 +198,7 @@ describe("AgentChat", () => {
               status: "idle",
               todos: [buildTodoItem({ content: "Keep todo anchored", status: "in_progress" })],
             }),
-            sessionRuntimeDataError: "todos unavailable",
+            sessionAuxiliaryError: "todos unavailable",
           },
         },
       }),
